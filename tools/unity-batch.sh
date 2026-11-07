@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# Usage: tools/unity-batch.sh <BatchSetup|BatchSelfTest|BatchBuild> [max-minutes]
+#
+# One-shot batch Editor on this project (no GUI, exits when done): -executeMethod
+# MetaCodex.EditorTools.MetaCodexSetup.<method>. Run it in the background; it prints a summary at the end.
+# Guards for this machine (16 GB laptop, other Editors and bb running): refuses to start below
+# MIN_MB available RAM (default 4500), stops ITS OWN Unity process (by PID, never by name) if
+# Windows drops below KILL_MB (default 700) or the time limit passes, and refuses if another Editor
+# already has this project open.
+set -uo pipefail
+ROOT="$(cd "$(dirname "$0")/../unity" && pwd)" # the Unity project
+METHOD="${1:?method: BatchSetup | BatchSelfTest | BatchBuild}"
+MAXMIN="${2:-60}"
+MIN_MB="${MIN_MB:-4500}"
+KILL_MB="${KILL_MB:-700}"
+VER=$(sed -n 's/^m_EditorVersion: //p' "$ROOT/ProjectSettings/ProjectVersion.txt")
+EXE_W="C:\\Program Files\\Unity $VER\\Editor\\Unity.exe"
+P_W=$(wslpath -w "$ROOT")
+mkdir -p "$ROOT/Logs"
+LOG="$ROOT/Logs/batch-$METHOD.log"
+LOG_W=$(wslpath -w "$LOG")
+
+avail() { timeout 20 powershell.exe -NoProfile -Command "[int]((Get-Counter '\Memory\Available MBytes').CounterSamples[0].CookedValue)" 2>/dev/null | tr -dc '0-9'; }
+a=$(avail)
+if [[ -z "$a" || "$a" -lt "$MIN_MB" ]]; then echo "NOT STARTED: Windows has ${a:-?} MB available, need $MIN_MB (close Chrome tabs or wait for the other Editor)"; exit 3; fi
+if powershell.exe -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='Unity.exe'\" | Where-Object { \$_.CommandLine -match [regex]::Escape('$P_W') } | Select-Object -First 1 -ExpandProperty ProcessId" 2>/dev/null | tr -dc '0-9' | grep -q .; then
+  echo "NOT STARTED: an Editor already has $P_W open"; exit 3
+fi
+
+rm -f "$LOG"
+ARGS="'-batchmode','-projectPath','$P_W','-buildTarget','Android','-executeMethod','MetaCodex.EditorTools.MetaCodexSetup.$METHOD','-logFile','$LOG_W'"
+PID=$(powershell.exe -NoProfile -Command "\$p = Start-Process -FilePath '$EXE_W' -ArgumentList $ARGS -WindowStyle Hidden -PassThru; \$p.Id" | tr -dc '0-9')
+[[ -n "$PID" ]] || { echo "could not start Unity"; exit 1; }
+echo "started $METHOD: Unity pid $PID, log $LOG, $a MB available"
+t0=$(date +%s); low=$a; killed=""
+while tasklist.exe /FI "PID eq $PID" /NH 2>/dev/null | grep -q "$PID"; do
+  sleep 10
+  m=$(avail); [[ -n "$m" && "$m" -lt "$low" ]] && low=$m
+  if [[ -n "$m" && "$m" -lt "$KILL_MB" ]]; then killed="low memory ($m MB)"; fi
+  if (( $(date +%s) - t0 > MAXMIN * 60 )); then killed="time limit ($MAXMIN min)"; fi
+  if [[ -n "$killed" ]]; then taskkill.exe /PID "$PID" /T /F >/dev/null 2>&1; echo "STOPPED Unity $PID: $killed"; break; fi
+done
+secs=$(( $(date +%s) - t0 ))
+echo "--- $METHOD finished in ${secs}s, lowest available ${low} MB"
+grep -E "\[MetaCodex\]|error CS|Shader error in|Exception|Exiting batchmode|Aborting batchmode|Scripts have compiler errors" "$LOG" 2>/dev/null | tr -d '\r' | grep -v "^UnityEngine\." | tail -40
+if grep -q "Exiting batchmode successfully" "$LOG" 2>/dev/null || grep -q "\[MetaCodex\] SELFTEST OK\|\[MetaCodex\] Succeeded" "$LOG" 2>/dev/null; then
+  [[ -z "$killed" ]] && ! grep -q "\[MetaCodex\] FAILED" "$LOG" && { echo "RESULT: OK"; exit 0; }
+fi
+echo "RESULT: FAILED (see $LOG)"; exit 1

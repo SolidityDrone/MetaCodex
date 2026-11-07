@@ -1,17 +1,20 @@
 # MetaCodex: instructions for coding agents
 
+Monorepo: `unity/` (the Quest app), `mqh/` (the harness, see docs/mqh.md), `userland/`, `native/`,
+`tests/`, `tools/`, `docs/`. The Unity project root is `unity/` (Windows `C:\Users\pnncl\MetaCodex\unity`).
+
 Read first: the unity-skill-set router `/home/drone/projects/unity-skill-set/skills/quest-dev/SKILL.md`
 and its `knowledge/LEARNINGS.md` (search it for your topic). Plan of record:
 `/home/drone/bs/BELVEDERE_PLAN.md`. Project overview and commands: `README.md`.
 
 ## Rules on this machine (16 GB Windows laptop, Editor on Windows, agents in WSL)
 
-- **No GUI Editor** unless the owner asks. Use `Tools/cscheck.sh` (compile check, no Editor) and
-  `Tests/run-core-tests.sh` first; open a batch Editor only through `Tools/unity-batch.sh` (RAM guard,
+- **No GUI Editor** unless the owner asks. Use `tools/cscheck.sh` (compile check, no Editor) and
+  `tests/terminal/run-core-tests.sh` first; open a batch Editor only through `tools/unity-batch.sh` (RAM guard,
   kills only its own PID). Never `taskkill /IM Unity.exe`: the owner runs other headless Editors.
 - **Build an APK only when the owner says so**, and only after the self-test passed and its picture
-  (`Bench/selftest/terminal.png`) looks right. Grep the build log for `error CS` and `Shader error in`.
-- Long commands (batch Editor, builds, `Linux/g0-shell.sh`) run in the background; never wait in a
+  (`unity/Bench/selftest/terminal.png`) looks right. Grep the build log for `error CS` and `Shader error in`.
+- Long commands (batch Editor, builds, `userland/g0-shell.sh`) run in the background; never wait in a
   foreground polling loop.
 - The headset: never scan the network for it. Ask for one USB plug-in, then Wi-Fi adb
   (`adb tcpip 5555`, `adb connect <ip>:5555`, ip from `adb shell ip -f inet addr show wlan0`).
