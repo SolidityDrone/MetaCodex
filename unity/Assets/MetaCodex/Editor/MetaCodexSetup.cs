@@ -31,8 +31,8 @@ namespace MetaCodex.EditorTools
         public const string ScenePath = "Assets/Scenes/MetaCodex.unity";
         public const string PackageId = "com.pnncl.metacodex";
         public const string ApkPath = "Builds/MetaCodex.apk";
-        public const string Version = "0.3.0-studio";
-        public const int VersionCode = 3;
+        public const string Version = "0.4.0-voice";
+        public const int VersionCode = 4;
         public const string PanelMaterialPath = "Assets/MetaCodex/Materials/Panel.mat";
         public const string ShapeMaterialPath = "Assets/MetaCodex/Materials/SciFiUI.mat";
         public const string BeamMaterialPath = "Assets/MetaCodex/Materials/Beam.mat";
@@ -569,8 +569,9 @@ namespace MetaCodex.EditorTools
             PatchManifest();
             ConfigureUrp(); // full resolution + 4x MSAA on the headset's quality level, every build
             // fewer parallel C++ compiles: an IL2CPP build with 8 jobs needs ~6 GB on top of the Editor, which this
-            // laptop rarely has free (browser + WSL); 3 jobs build slower but fit. MCX_IL2CPP_ARGS overrides.
-            PlayerSettings.SetAdditionalIl2CppArgs(Environment.GetEnvironmentVariable("MCX_IL2CPP_ARGS") ?? "--jobs=3 --bee-jobs=3");
+            // laptop rarely has free (browser + WSL); 2 jobs build slower but fit. MCX_IL2CPP_ARGS overrides (only when
+            // set on the Windows side: WSLENV does not carry it into the Editor on this machine).
+            PlayerSettings.SetAdditionalIl2CppArgs(Environment.GetEnvironmentVariable("MCX_IL2CPP_ARGS") ?? "--jobs=2 --bee-jobs=2");
             Directory.CreateDirectory("Builds");
             var report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
             {

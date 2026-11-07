@@ -12,12 +12,13 @@ using UnityEngine.Networking;
 
 namespace MetaCodex.AI
 {
-    /// The local AI service (docs/qvac.md): QVAC speech-to-text, LLM and text-to-speech on the Bare runtime, in
-    /// its own process. On the headset the app starts it the way it starts proot: `libbare.so` (the Bare
-    /// executable, shipped in nativeLibraryDir where exec is allowed) runs the service JS that
-    /// tools/qvac-bundle.sh packs into StreamingAssets/qvac, pinned to cores 0-2 (the cores Android gives
-    /// services; Unity keeps 3-5 to itself) at nice 10, CPU only. HTTP on 127.0.0.1:47810 with a token made at
-    /// every start (the userland reads it from /mnt/quest/qvac.token). Restarted if it dies (3 times in 5 min).
+    /// The local AI service (docs/voice.md): QVAC speech-to-text, LLM and text-to-speech on the Bare runtime, in
+    /// its own process. Horizon OS keeps the immersive app and everything it starts on cores 3-5 (the frame
+    /// loop's cores), so the app asks its own Android service process (":ai", MetaCodexAiService.java), which
+    /// the system places on cores 0-2, to start `libbare.so` (the Bare executable, in nativeLibraryDir where
+    /// exec is allowed) with the service JS that tools/qvac-bundle.sh packs into StreamingAssets/qvac, at
+    /// nice 10, CPU only. HTTP on 127.0.0.1:47810 with a token made at every start (the userland reads it from
+    /// /mnt/quest/qvac.token). Health-checked; restarted when it stops answering (3 times in 5 min).
     /// In the Editor it uses a dev service started by tools/qvac-dev.sh (unity/Bench/qvac-dev.json).
     public sealed class QvacHost : MonoBehaviour
     {
@@ -38,12 +39,14 @@ namespace MetaCodex.AI
         public event Action StateChanged;
 
         private string _filesDir, _nativeLibDir, _sharedDir, _tokenFile;
-        private PtySession _proc;
         private bool _wantRunning;
         private int _restarts;
         private float _restartWindowStart;
         private float _restartAt = -1f;
-        private readonly StringBuilder _line = new StringBuilder();
+        private float _nextHealth;
+        private int _healthFails;
+        private bool _healthPending;
+        public const string ServiceClass = "com.pnncl.metacodex.ai.MetaCodexAiService";
 
         public bool IsRunning => State == HostState.Running;
         public bool IsBusyStarting => State == HostState.Preparing || State == HostState.Starting;
@@ -96,48 +99,54 @@ namespace MetaCodex.AI
             _wantRunning = false;
             _restartAt = -1f;
             if (IsDev) { Set(HostState.Stopped, "dev service left running (tools/qvac-dev.sh … stop)"); return; }
-            if (_proc != null)
-            {
-                Client.Shutdown();
-                var p = _proc;
-                _proc = null;
-                Task.Run(async () => { await Task.Delay(1500); p.Dispose(); });
-            }
+            Client.Shutdown();
+            ServiceIntent("stop", null, null, null, null);
             Set(HostState.Stopped, "stopped");
         }
 
         private void OnApplicationQuit() => StopService();
 
-        private void OnDestroy()
-        {
-            if (_proc != null) { try { _proc.Dispose(); } catch (Exception) { } _proc = null; }
-        }
-
         private void Update()
         {
-            if (_proc == null)
+            if (_restartAt > 0f && Time.unscaledTime >= _restartAt && _wantRunning && !IsBusyStarting)
             {
-                if (_restartAt > 0f && Time.unscaledTime >= _restartAt && _wantRunning) { _restartAt = -1f; StartCoroutine(StartRoutine()); }
+                _restartAt = -1f;
+                StartCoroutine(StartRoutine());
                 return;
             }
-            while (_proc.TryRead(out var chunk))
+            // the service lives in another process: it is alive when it answers
+            if (State != HostState.Running || IsDev || _healthPending || Time.unscaledTime < _nextHealth) return;
+            _nextHealth = Time.unscaledTime + 5f;
+            _healthPending = true;
+            Client.Health((r, e) =>
             {
-                foreach (char ch in Encoding.UTF8.GetString(chunk))
-                {
-                    if (ch == '\n') { var l = _line.ToString().TrimEnd('\r'); _line.Clear(); if (l.Length > 0) Say("ai: " + l); }
-                    else if (_line.Length < 2000) _line.Append(ch);
-                }
-            }
-            if (!_proc.IsRunning)
-            {
-                int code = _proc.ExitCode;
-                _proc.Dispose();
-                _proc = null;
-                if (!_wantRunning) { Set(HostState.Stopped, "stopped"); return; }
+                _healthPending = false;
+                if (r != null && e == null) { _healthFails = 0; return; }
+                if (++_healthFails < 3 || State != HostState.Running || !_wantRunning) return;
+                _healthFails = 0;
                 if (Time.unscaledTime - _restartWindowStart > 300f) { _restartWindowStart = Time.unscaledTime; _restarts = 0; }
-                if (++_restarts > 3) { Fail($"the AI service exited with {code} 4 times in 5 min; see files/qvac/data/service.log"); return; }
-                Set(HostState.Starting, $"the AI service exited with {code}; restarting ({_restarts}/3)");
-                _restartAt = Time.unscaledTime + 2f * _restarts;
+                if (++_restarts > 3) { Fail("the AI service stopped answering 4 times in 5 min; see files/qvac/data/service.log and stdout.log"); return; }
+                Set(HostState.Starting, $"the AI service stopped answering; restarting ({_restarts}/3)");
+                _restartAt = Time.unscaledTime + 1f + 2f * _restarts;
+            });
+        }
+
+        /// startService on MetaCodexAiService (process ":ai"): action null = (re)start the child with argv/env.
+        private void ServiceIntent(string action, string[] argv, string[] env, string cwd, string log)
+        {
+            if (Application.platform != RuntimePlatform.Android) return;
+            using (var player = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+            using (var activity = player.GetStatic<AndroidJavaObject>("currentActivity"))
+            using (var intent = new AndroidJavaObject("android.content.Intent"))
+            {
+                intent.Call<AndroidJavaObject>("setClassName", activity, ServiceClass).Dispose();
+                if (action != null) intent.Call<AndroidJavaObject>("putExtra", "action", action).Dispose();
+                if (argv != null) intent.Call<AndroidJavaObject>("putExtra", "argv", argv).Dispose();
+                if (env != null) intent.Call<AndroidJavaObject>("putExtra", "env", env).Dispose();
+                if (cwd != null) intent.Call<AndroidJavaObject>("putExtra", "cwd", cwd).Dispose();
+                if (log != null) intent.Call<AndroidJavaObject>("putExtra", "log", log).Dispose();
+                using (var cn = activity.Call<AndroidJavaObject>("startService", intent))
+                    if (cn == null && action == null) throw new InvalidOperationException("startService returned null (" + ServiceClass + " missing from the manifest?)");
             }
         }
 
@@ -200,9 +209,8 @@ namespace MetaCodex.AI
 
             string tmp = Path.Combine(DataDir, "tmp");
             Directory.CreateDirectory(tmp);
-            var argv = new[]
+            var argv = new[] // the service adds `taskset 7` (cores 0-2) when its process may use them
             {
-                "/system/bin/taskset", "7", // cores 0-2
                 "/system/bin/nice", "-n", "10",
                 bare, Path.Combine(RuntimeDir, "server", "main.js"),
                 "--data", DataDir, "--token-file", _tokenFile, "--port", Port.ToString(), "--threads", Threads.ToString(),
@@ -214,7 +222,7 @@ namespace MetaCodex.AI
                 "TMPDIR=" + tmp,
                 "PATH=/system/bin",
             };
-            try { _proc = PtySession.Start("/system/bin/taskset", argv, env, RuntimeDir, 24, 160, Say); }
+            try { ServiceIntent(null, argv, env, RuntimeDir, Path.Combine(DataDir, "stdout.log")); }
             catch (Exception ex) { Fail("start: " + ex.Message); yield break; }
             Set(HostState.Starting, "starting the AI service");
             yield return WaitHealthy(30f);
@@ -229,7 +237,6 @@ namespace MetaCodex.AI
                 Client.Health((r, e) => { ok = r != null && e == null; done = true; });
                 while (!done) yield return null;
                 if (ok) { Set(HostState.Running, $"running on 127.0.0.1:{Port}" + (IsDev ? " (dev)" : "")); _restarts = Math.Max(0, _restarts - 1); yield break; }
-                if (!IsDev && _proc == null) yield break; // exited: Update restarts it
                 yield return new WaitForSecondsRealtime(0.5f);
             }
             Fail(IsDev ? "no dev AI service answers (tools/qvac-dev.sh pc start)" : "the AI service did not answer in time; see files/qvac/data/service.log");

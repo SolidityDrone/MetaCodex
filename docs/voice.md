@@ -71,19 +71,23 @@ sha256 of the QVAC model registry.
 | Qwen3 0.6B q4_0 | 364 MB | Hugging Face (unsloth/Qwen3-0.6B-GGUF, pinned revision) | picks commands (tool calling), short answers |
 | Supertonic 3 q4_0 | 81 MB | QVAC model registry (Hyperswarm) | spoken replies, 31 languages |
 
-How the app runs it (`Runtime/AI/QvacHost.cs`): the runtime is unpacked to `files/qvac/runtime` when its
-hash changes; a new token goes to `files/qvac/token` and `/mnt/quest/qvac.token`; then
-`taskset 7 nice -n 10 libbare.so server/main.js --data files/qvac/data --port 47810 --threads 2`, the way
-proot is started (exec is only allowed from `nativeLibraryDir`; the addons are dlopen'ed from the
-unpacked runtime). Cores 0-2 are the ones Android gives background work; Unity keeps 3-5. A dead service
-is restarted (3 times in 5 minutes, then FAILED with the log). Models load on first use and unload after
-idle minutes (speech-to-text 10, LLM 15, voice 3).
+How the app runs it (`Runtime/AI/QvacHost.cs`, `Plugins/Android/MetaCodexAiService.java`): the runtime is
+unpacked to `files/qvac/runtime` when its hash changes; a new token goes to `files/qvac/token` and
+`/mnt/quest/qvac.token`; then the app asks its own Android service process (`:ai`, declared in the manifest)
+to start `taskset 7 nice -n 10 libbare.so server/main.js --data files/qvac/data --port 47810 --threads 2`
+(exec is only allowed from `nativeLibraryDir`; the addons are dlopen'ed from the unpacked runtime). The
+service replaces a running child on every start (new token); the app health-checks it every 5 s and asks
+for a restart after 3 misses (3 times in 5 minutes, then FAILED). Models load on first use and unload after
+idle minutes (speech-to-text 10, LLM 15, voice 3). `GET /status` reports where the system placed the
+process (`placement`: CPU set and allowed cores).
 
-Why a child process and not an Android service hosting BareKit (the first plan in `docs/qvac.md`):
-phase 0 proved the plain `bare` executable with the QVAC addons on Horizon OS; the same isolation (own
-process, CPU only, cores 0-2, low priority) comes from `taskset` + `nice`, with nothing new in Java;
-BareKit 3 is a C library with no Android release to link. The cost is one process of Android's 32
-phantom-process budget. A BareKit service stays possible if that budget gets tight.
+Why a separate Android process (measured on the Quest 3S, 0.4.0): **Horizon OS keeps the running immersive
+app in the `/immersive` CPU set, cores 3-5 only, and every process the app starts inherits it**: the first
+build started the service as a child of the app (like proot) and `taskset 7` failed with EINVAL (cores 0-2
+not allowed). The frame loop (Unity's main, render and job threads) runs on those same cores. A service
+process of the app is placed by the system instead (top-app 0-5 / foreground and background 0-2), so its
+child can be pinned to 0-2. BareKit (Bare inside the service process) has no Android release to link, so
+the service starts the Bare executable as its child.
 
 ### API (127.0.0.1:47810, `Authorization: Bearer <token>`)
 

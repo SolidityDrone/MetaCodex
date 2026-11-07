@@ -4,10 +4,13 @@
 > over adb (numbers in `docs/voice.md`: speech-to-text 0.7 s, an LLM tool call 1.2-2 s, 72 fps held with 2
 > threads at nice 10). The service (`qvac/server`), its packing into the APK (`tools/qvac-bundle.sh`), the
 > app side (QvacHost, microphone, voice pipeline, VOICE panel) and the command registry (shell commands,
-> Lua `voice.command`, control port `voice`) are in; `docs/voice.md` is the reference. One change from the
-> plan below: the app starts the Bare executable as its own child process (like proot), pinned to cores
-> 0-2 at nice 10, instead of a Java service hosting BareKit (no BareKit Android release exists to link; the
-> isolation is the same). Next: the first APK with it, then MQH tools in the registry.
+> Lua `voice.command`, control port `voice`) are in; `docs/voice.md` is the reference. Placement, measured in the
+> first APK: Horizon OS runs the immersive app and all its child processes in the `/immersive` CPU set
+> (cores 3-5, with the frame loop), so the service lives in the app's own Android service process `:ai`
+> (`MetaCodexAiService.java`), which the system places on cores 0-2, and that process starts the Bare
+> executable (no BareKit Android release exists to embed Bare in-process). **The same applies to the Linux
+> userland**: proot, MQH and the agents are children of the app and share cores 3-5 with Unity today (see
+> "Open questions"). Next: MQH tools in the registry.
 
 Status: decision 2026-11-07, replaces PLAN v2 D12 ("R1 first: the SDK in the Linux userland").
 Nothing below is measured on the headset yet; the validation order is at the end.
@@ -97,8 +100,9 @@ iteration speed. So we develop and compare in the userland, and ship native.
    NPU is closed to apps (SELinux, tested in SandyBridge).
 3. **Few threads, low priority, away from Unity's cores.** Start at 2 inference threads at background
    priority, on cores 0-2 (the Quest 3S has 6 cores: 0-1 at 2.05 GHz, 2-5 at 2.36 GHz; Android gives
-   services cores 0-2 and the foreground app all six). The same pinning applies to MQH, the agents and
-   everything else in the Linux userland.
+   services cores 0-2, and Horizon OS gives the immersive app cores 3-5 only, its child processes included:
+   only a separate Android process of ours can reach 0-2). The same should apply to MQH, the agents and
+   everything else in the Linux userland (open question below).
 4. **On demand only.** Push-to-talk speech-to-text, short spoken replies, one clean-up pass per prompt.
    No always-on inference; models unloaded after a few idle minutes.
 5. **Small quantized models.** Whisper tiny/base class for speech, a ~1B Q4 LLM for clean-up, one small
@@ -136,6 +140,12 @@ step before cloud providers, tools for agents).
 4. **Then** the MQH `qvac` plugin (clean-up before providers) and point-and-say.
 
 ## Open questions
+
+- **The userland shares Unity's cores** (found 2026-11-07 on the Quest 3S): `/proc/<app>/cpuset` is
+  `/immersive`, `Cpus_allowed_list` 3-5, for Unity's threads and for proot and everything under it; `taskset
+  -c 0-2` inside the userland fails. Heavy userland work (npm installs, builds, agents) therefore competes with
+  the frame loop. Fix to evaluate: start the userland's sessions from the `:ai`-style service process too (its
+  children land on 0-2), keeping only the pty plumbing in the app.
 
 - Answered (Nov 7): yes. `/dev/cpuset/top-app/cpus` = 0-5, `foreground` and `background` = 0-2. Still
   to check: that a foreground-service process of our APK really lands in `foreground` while the app

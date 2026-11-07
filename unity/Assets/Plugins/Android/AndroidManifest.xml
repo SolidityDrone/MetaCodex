@@ -13,6 +13,9 @@
       </intent-filter>
       <meta-data android:name="com.oculus.vr.focusaware" android:value="true" />
     </activity>
+    <!-- the local AI service runs in its own process: Android places it on cores 0-2, away from the immersive
+         app's cores 3-5 (docs/voice.md) -->
+    <service android:name="com.pnncl.metacodex.ai.MetaCodexAiService" android:process=":ai" android:exported="false" />
     <meta-data android:name="unityplayer.SkipPermissionsDialog" android:value="false" />
     <meta-data android:name="com.oculus.handtracking.frequency" android:value="HIGH" />
     <meta-data android:name="com.oculus.ossplash.background" android:value="black" />

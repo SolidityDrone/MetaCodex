@@ -57,7 +57,14 @@ function status () {
     const m = os.memoryUsage()
     mem = { rssMB: Math.round(m.rss / 1048576), availableMB: Math.round(os.availableMemory() / 1048576) }
   } catch {}
-  return Object.assign({ ok: true, service: 'metacodex-ai', version: VERSION, pid: Bare.pid, uptimeS: Math.round((Date.now() - T0) / 1000), threads: cfg.threads, language: cfg.language, models: models.status() }, engines.status(), mem)
+  return Object.assign({ ok: true, service: 'metacodex-ai', version: VERSION, pid: Bare.pid, uptimeS: Math.round((Date.now() - T0) / 1000), threads: cfg.threads, language: cfg.language, placement: placement(), models: models.status() }, engines.status(), mem)
+}
+
+/** Where the system runs us: the CPU set and the cores this process may use (Horizon OS: 0-2 wanted). */
+function placement () {
+  const read = (f) => { try { return fs.readFileSync(f, 'utf8') } catch { return '' } }
+  const cpus = (/Cpus_allowed_list:\s*(\S+)/.exec(read('/proc/self/status')) || [])[1] || ''
+  return { cpuset: read('/proc/self/cpuset').trim(), cpus }
 }
 
 async function handle (req, res, body) {
