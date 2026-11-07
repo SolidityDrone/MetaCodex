@@ -81,6 +81,16 @@ namespace MetaCodex.Shell
             if (_built) return;
             _built = true;
             Settings = ShellSettings.Load(_settingsPath);
+            if (Settings.settingsVersion < 2)
+            {
+                // readability (first headset test: text too small and soft): bigger panels, supersampling
+                Settings.uiScale = Mathf.Max(Settings.uiScale, 1.2f);
+                Settings.renderScale = Mathf.Max(Settings.renderScale, 1.2f);
+                Settings.foveation = false;
+                Settings.settingsVersion = 2;
+                Settings.Save(_settingsPath);
+                _localSettingsWin = true; // MQH's copy is older: push ours instead of taking it at the first sync
+            }
             var theme = new UiTheme();
             theme.SetAccent(Settings.accent);
             theme.Body = UiTheme.MakeFont(bodyFont, symbolFonts);
@@ -157,6 +167,22 @@ namespace MetaCodex.Shell
                 shapeMaterial.SetFloat("_Grid", Settings.grid ? 1f : 0f);
             }
             if (Sounds != null) { Sounds.Enabled = Settings.sounds; Sounds.Volume = Mathf.Clamp01(Settings.soundVolume); }
+            ApplyDisplaySettings();
+        }
+
+        /// Render resolution and foveation on the headset (the Editor keeps its own: the URP asset is a file there).
+        private void ApplyDisplaySettings()
+        {
+            if (Application.isEditor) return;
+            try
+            {
+                if (UnityEngine.Rendering.GraphicsSettings.currentRenderPipeline is UnityEngine.Rendering.Universal.UniversalRenderPipelineAsset urp)
+                    urp.renderScale = Mathf.Clamp(Settings.renderScale, 1f, 1.6f);
+                var displays = new List<UnityEngine.XR.XRDisplaySubsystem>();
+                SubsystemManager.GetSubsystems(displays);
+                foreach (var d in displays) d.foveatedRenderingLevel = Settings.foveation ? 0.5f : 0f;
+            }
+            catch (Exception ex) { Log("display settings: " + ex.Message); }
         }
 
         private void Update()
@@ -419,7 +445,7 @@ namespace MetaCodex.Shell
             Mqh.BaseUrl = Settings.mqhUrl;
             Mqh.Token = MqhTokenNow();
             ApplyMaterialSettings();
-            foreach (var p in _panels.Values) p.transform.localScale = Vector3.one * Mathf.Clamp(Settings.uiScale, 0.6f, 1.6f);
+            foreach (var p in _panels.Values) p.transform.localScale = Vector3.one * Mathf.Clamp(Settings.uiScale, 0.6f, 1.8f);
             if (rebuild) _rebuildPending = true; // next frame: never destroy panels inside the click that asked for it
             // sliders call this on every step: push to MQH once things are quiet for a moment
             if (Settings.mqhSync) _settingsPushDue = _clock.Elapsed.TotalSeconds + 1.5;
@@ -446,8 +472,16 @@ namespace MetaCodex.Shell
         }
 
         /// Agents can change quest.settings in MQH; poll and apply (keeps local edits when MQH is down).
+        private bool _localSettingsWin;
+
         private void PullRemoteSettings()
         {
+            if (_localSettingsWin)
+            {
+                _localSettingsWin = false;
+                Mqh.PushQuestSettings(Settings.ToJObject(), ok => { if (ok) _remoteRevision = -2; });
+                return;
+            }
             Mqh.Preferences(prefs =>
             {
                 var entry = prefs?["preferences"]?["quest.settings"];

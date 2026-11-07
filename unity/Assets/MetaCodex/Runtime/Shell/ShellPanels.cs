@@ -34,7 +34,7 @@ namespace MetaCodex.Shell
             BuildThread();
             BuildNewThread();
             BuildVault();
-            foreach (var p in _panels.Values) p.transform.localScale = Vector3.one * Mathf.Clamp(Settings.uiScale, 0.6f, 1.6f);
+            foreach (var p in _panels.Values) p.transform.localScale = Vector3.one * Mathf.Clamp(Settings.uiScale, 0.6f, 1.8f);
         }
 
         /// Accent colour changes are baked into shape tints: rebuild every panel, keeping where they are.
@@ -107,7 +107,7 @@ namespace MetaCodex.Shell
                 var b = dock.Add(new UiButton(items[i].label, items[i].act, i == 0 ? UiButtonStyle.Primary : UiButtonStyle.Normal)
                 {
                     Rect = new Rect(pad + col * (bw + gap), pad + row * (bh + gap), bw, bh),
-                    TextSize = 0.0115f,
+                    TextSize = 0.0135f,
                 });
                 if (items[i].label.EndsWith("SELECT")) _selectButton = b;
             }
@@ -575,7 +575,7 @@ end)
             tabs.AddTo(TabDisplay, new UiSegmented("LAYOUT", new[] { "FIXED", "FLOAT" }, s.layout == "float" ? 1 : 0, i => SetLayout(i == 1 ? "float" : "fixed")) { Rect = d.Next(rowH) });
             tabs.AddTo(TabDisplay, new UiSlider("DISTANCE", 0.5f, 1.4f, s.panelDistance, v => { s.panelDistance = v; OnSettingsChanged(); }) { Rect = d.Next(rowH), Format = "0.00 m" });
             tabs.AddTo(TabDisplay, new UiSlider("CAROUSEL RADIUS", 0.6f, 1.6f, s.carouselRadius, v => { s.carouselRadius = v; OnSettingsChanged(); }) { Rect = d.Next(rowH), Format = "0.00 m" });
-            tabs.AddTo(TabDisplay, new UiSlider("UI SCALE", 0.7f, 1.4f, s.uiScale, v => { s.uiScale = v; OnSettingsChanged(); }) { Rect = d.Next(rowH), Format = "0.00" });
+            tabs.AddTo(TabDisplay, new UiSlider("UI SCALE", 0.8f, 1.8f, s.uiScale, v => { s.uiScale = v; OnSettingsChanged(); }) { Rect = d.Next(rowH), Format = "0.00" });
             tabs.AddTo(TabDisplay, new UiToggle("Bend panels in float layout", s.bendPanels, v => { s.bendPanels = v; OnSettingsChanged(); }) { Rect = d.Next(rowH) });
             var lr = d.NextSplit(t.ButtonHeight, 0.5f, out var lr2);
             tabs.AddTo(TabDisplay, new UiButton("SAVE LAYOUT…", () => UiKeyboard.Edit("desk", false, null, n => { if (!string.IsNullOrWhiteSpace(n)) { SaveNamedLayout(n.Trim()); Toast($"Layout '{n.Trim()}' saved", "ok"); } })) { Rect = lr });
@@ -587,6 +587,7 @@ end)
             // LOOK: the console's style
             var k = new UiStack(area, t.Gap);
             tabs.AddTo(TabLook, new UiSegmented("THEME", ThemePresets.Select(x => x.name).ToArray(), -1, i => ApplyThemePreset(i)) { Rect = k.Next(rowH) });
+            tabs.AddTo(TabLook, new UiSlider("SHARPNESS", 1f, 1.6f, s.renderScale, v => { s.renderScale = v; OnSettingsChanged(); }) { Rect = k.Next(rowH), Format = "0.00 x" });
             var accents = UiTheme.Accents.Keys.ToArray();
             _accentButton = tabs.AddTo(TabLook, new UiButton("ACCENT: " + s.accent.ToUpperInvariant() + "  ▸", () =>
             {
@@ -600,6 +601,7 @@ end)
             var tg = k.NextSplit(rowH, 0.5f, out var tg2);
             tabs.AddTo(TabLook, new UiToggle("Scanlines", s.scanlines, v => { s.scanlines = v; OnSettingsChanged(); }) { Rect = tg });
             tabs.AddTo(TabLook, new UiToggle("Grid", s.grid, v => { s.grid = v; OnSettingsChanged(); }) { Rect = tg2 });
+            tabs.AddTo(TabLook, new UiToggle("Foveated rendering (saves GPU, softer edges)", s.foveation, v => { s.foveation = v; OnSettingsChanged(); }) { Rect = k.Next(rowH) });
             var sg = k.NextSplit(rowH, 0.4f, out var sg2);
             tabs.AddTo(TabLook, new UiToggle("Sounds", s.sounds, v => { s.sounds = v; OnSettingsChanged(); if (v) Sounds?.Play("toast"); }) { Rect = sg });
             tabs.AddTo(TabLook, new UiSlider("VOLUME", 0f, 1f, s.soundVolume, v => { s.soundVolume = v; OnSettingsChanged(); }) { Rect = sg2, LabelWidth = 0.08f, Format = "0.00" });

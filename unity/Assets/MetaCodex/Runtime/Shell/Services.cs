@@ -96,7 +96,13 @@ namespace MetaCodex.Shell
         public string layout = "fixed";
         public float carouselRadius = 0.95f;
         public bool bendPanels = true;
-        public float uiScale = 1f;
+        public float uiScale = 1.2f;
+        /// Render resolution x (supersampling): sharper text for some GPU time. 1 = the headset's default.
+        public float renderScale = 1.2f;
+        /// Fixed foveated rendering: saves GPU, blurs the edges of the view (off for a text-heavy app).
+        public bool foveation = false;
+        /// One-time upgrades of saved settings (2: readability defaults, 2026-11-07). 0 in files written before.
+        public int settingsVersion = 0;
         public string accent = "cyan";
         public bool scanlines = true;
         public string mqhUrl = "http://127.0.0.1:38990";

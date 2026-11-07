@@ -177,11 +177,20 @@ namespace MetaCodex.EditorTools
             OVRProjectConfig.CommitProjectConfig(config);
         }
 
+        /// Every quality level's URP asset: the batch Editor runs at the "PC" level while the headset uses
+        /// "Mobile", whose template asset rendered at 0.8 scale without MSAA (blurry text on the Quest).
         private static void ConfigureUrp()
         {
-            var asset = QualitySettings.GetRenderPipelineAssetAt(QualitySettings.GetQualityLevel()) as UniversalRenderPipelineAsset
-                        ?? AssetDatabase.LoadAssetAtPath<UniversalRenderPipelineAsset>("Assets/Settings/Mobile_RPAsset.asset");
-            if (asset == null) return;
+            var assets = new List<UniversalRenderPipelineAsset>();
+            for (int i = 0; i < QualitySettings.count; i++)
+                if (QualitySettings.GetRenderPipelineAssetAt(i) is UniversalRenderPipelineAsset a && !assets.Contains(a)) assets.Add(a);
+            var mobile = AssetDatabase.LoadAssetAtPath<UniversalRenderPipelineAsset>("Assets/Settings/Mobile_RPAsset.asset");
+            if (mobile != null && !assets.Contains(mobile)) assets.Add(mobile);
+            foreach (var asset in assets) ConfigureUrpAsset(asset);
+        }
+
+        private static void ConfigureUrpAsset(UniversalRenderPipelineAsset asset)
+        {
             var so = new SerializedObject(asset);
             void SetBool(string p, bool v) { var x = so.FindProperty(p); if (x != null) x.boolValue = v; }
             void SetInt(string p, int v) { var x = so.FindProperty(p); if (x != null) x.intValue = v; }
@@ -558,6 +567,7 @@ namespace MetaCodex.EditorTools
             ConfigureMetaProjectConfig();
             OVRManifestPreprocessor.GenerateOrUpdateAndroidManifest(silentMode: true);
             PatchManifest();
+            ConfigureUrp(); // full resolution + 4x MSAA on the headset's quality level, every build
             // fewer parallel C++ compiles: an IL2CPP build with 8 jobs needs ~6 GB on top of the Editor, which this
             // laptop rarely has free (browser + WSL); 3 jobs build slower but fit. MCX_IL2CPP_ARGS overrides.
             PlayerSettings.SetAdditionalIl2CppArgs(Environment.GetEnvironmentVariable("MCX_IL2CPP_ARGS") ?? "--jobs=3 --bee-jobs=3");
