@@ -22,6 +22,11 @@ namespace MetaCodex.App
         private char _pendingHigh;
         private TouchScreenKeyboard _sys;
         private string _sysText = "";
+        private float _sysClosedAt = -10f;
+        /// The headset keyboard delivers its text twice: in its text box (read by PollSystemKeyboard) and again
+        /// as text input / key events on Keyboard.current (seen on Quest 3S: "ls" arrived as "lsls"). While it is
+        /// open, and for a moment after it closes, only the text box counts.
+        private bool SystemKeyboardBusy => _sys != null || Time.unscaledTime - _sysClosedAt < 1f;
 
         private static readonly (Key key, TermKey term)[] Specials =
         {
@@ -50,8 +55,10 @@ namespace MetaCodex.App
 
         private void OnText(char ch)
         {
-            // a UI text field has focus: a physical keyboard types there, not into the shell
-            if (MetaCodex.UI.UiKeyboard.Active) { MetaCodex.UI.UiKeyboard.TypePhysical(ch.ToString()); return; }
+            // a UI text field has focus: a physical keyboard types there, not into the shell (the headset keyboard
+            // already fills that field through its own text box)
+            if (MetaCodex.UI.UiKeyboard.Active) { if (!MetaCodex.UI.UiKeyboard.SystemKeyboardBusy) MetaCodex.UI.UiKeyboard.TypePhysical(ch.ToString()); return; }
+            if (SystemKeyboardBusy) return;
             if (ch < 0x20 || ch == 0x7F) return; // Enter, Tab, Backspace arrive as keys
             if (Ctrl) return; // chords are handled from key presses in Update
             if (char.IsHighSurrogate(ch)) { _pendingHigh = ch; return; }
@@ -97,11 +104,12 @@ namespace MetaCodex.App
             Hook(Keyboard.current);
             if (MetaCodex.UI.UiKeyboard.Active)
             {
+                if (MetaCodex.UI.UiKeyboard.SystemKeyboardBusy) return;
                 if (_kb != null && _kb.backspaceKey.wasPressedThisFrame) MetaCodex.UI.UiKeyboard.TypePhysical("\b");
                 if (_kb != null && (_kb.enterKey.wasPressedThisFrame || _kb.numpadEnterKey.wasPressedThisFrame)) MetaCodex.UI.UiKeyboard.TypePhysical("\n");
                 return;
             }
-            if (_kb != null) PollPhysical();
+            if (_kb != null && !SystemKeyboardBusy) PollPhysical();
             PollSystemKeyboard();
         }
 
@@ -129,7 +137,7 @@ namespace MetaCodex.App
         /// reaches the shell at once (tab completion, vim keys) instead of when the field is closed.
         public void ToggleSystemKeyboard()
         {
-            if (_sys != null) { _sys.active = false; _sys = null; return; }
+            if (_sys != null) { _sys.active = false; _sys = null; _sysClosedAt = Time.unscaledTime; return; }
             _sys = TouchScreenKeyboard.Open("", TouchScreenKeyboardType.Default, false, false, false, false, "Type into the terminal");
             _sysText = "";
         }
@@ -151,10 +159,12 @@ namespace MetaCodex.App
                 case TouchScreenKeyboard.Status.Done:
                     PressKey(TermKey.Enter);
                     _sys = null;
+                    _sysClosedAt = Time.unscaledTime;
                     break;
                 case TouchScreenKeyboard.Status.Canceled:
                 case TouchScreenKeyboard.Status.LostFocus:
                     _sys = null;
+                    _sysClosedAt = Time.unscaledTime;
                     break;
             }
         }

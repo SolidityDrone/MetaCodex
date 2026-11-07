@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System;
 using System.IO;
 using System.Linq;
@@ -63,7 +64,8 @@ namespace MetaCodex.EditorTools
 
         public static void BatchSelfTest() => RunBatch(() => Log(SelfTest()));
 
-        public static void BatchBuild() => RunBatch(() => Log(BuildApk()));
+        /// Regenerates the scene first, so a build never ships a scene saved by older code.
+        public static void BatchBuild() => RunBatch(() => { Log(BuildScene()); Log(BuildApk()); });
 
         /// Scene rebuild + both self-tests (terminal and shell UI): what a code change needs before an APK.
         public static void BatchCheck() => RunBatch(() =>
@@ -318,6 +320,7 @@ namespace MetaCodex.EditorTools
             OVRManifestPreprocessor.GenerateOrUpdateAndroidManifest(silentMode: true);
             PatchManifest();
             AssetDatabase.SaveAssets();
+            CheckSceneScripts(ScenePath);
             return "scene built: " + ScenePath;
         }
 
@@ -526,6 +529,26 @@ namespace MetaCodex.EditorTools
         }
 
         // ------------------------------------------------------------------ build
+
+        /// Every component in the scene must point at a real script asset (fileID 11500000 + guid). A component
+        /// whose class does not live in a file of the same name gets an embedded stand-in script instead
+        /// (`m_Script: {fileID: N}`): the Editor accepts it, the player then misreads the scene data and aborts
+        /// with "level0 is corrupted! [Position out of bounds!]" (HandTips in KeyBar.cs, 2026-11-07).
+        public static void CheckSceneScripts(string scenePath)
+        {
+            var bad = new List<string>();
+            var lines = File.ReadAllLines(scenePath);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                var l = lines[i].Trim();
+                if (!l.StartsWith("m_Script:")) continue;
+                if (l.Contains("fileID: 11500000") && l.Contains("guid:")) continue;
+                if (l == "m_Script: {fileID: 0}") { bad.Add($"line {i + 1}: missing script"); continue; }
+                bad.Add($"line {i + 1}: {l}");
+            }
+            if (bad.Count > 0)
+                throw new Exception("scene has components without a script asset (a MonoBehaviour class must live in a file of the same name): " + string.Join("; ", bad));
+        }
 
         public static string BuildApk()
         {

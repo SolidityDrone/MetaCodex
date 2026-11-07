@@ -25,6 +25,12 @@ RSP_ED="$(dirname "$RSP_RT")/Assembly-CSharp-Editor.rsp"
 RSP_DEV=$(ls -t "$BASE_PROJ"/Library/Bee/artifacts/*P.dag/Assembly-CSharp.rsp 2>/dev/null | head -1 || true)
 echo "references from: $(dirname "$RSP_RT")${RSP_DEV:+ and $(dirname "$RSP_DEV")}"
 
+# a MonoBehaviour / ScriptableObject class must live in a file of the same name: otherwise a scene saves it with
+# an embedded stand-in script and the player aborts loading the scene ("level0 is corrupted", 2026-11-07)
+lint=$(cd "$ROOT" && grep -rn --include=*.cs -E "class [A-Za-z0-9_]+ *: *(MonoBehaviour|ScriptableObject)\b" Assets/MetaCodex | \
+  awk -F: '{ n=split($1,p,"/"); f=p[n]; sub(/\.cs$/,"",f); if (match($0,/class [A-Za-z0-9_]+/)) { c=substr($0,RSTART+6,RLENGTH-6); if (c!=f) print $1": class "c" (file name must be "c".cs)" } }')
+if [[ -n "$lint" ]]; then echo "CHECK FAILED (component class / file name):"; echo "$lint"; exit 1; fi
+
 mapfile -t RUNTIME < <(cd "$ROOT" && find Assets -name '*.cs' -not -path '*/Editor/*' | sort)
 mapfile -t EDITOR < <(cd "$ROOT" && find Assets -path '*/Editor/*' -name '*.cs' | sort)
 # managed plugin DLLs of the project (e.g. MoonSharp): a fresh one is not in the Editor's rsp yet

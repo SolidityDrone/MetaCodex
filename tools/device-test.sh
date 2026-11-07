@@ -22,15 +22,23 @@ if (( INSTALL )); then
   echo "APP install: $r ($(( $(date +%s) - t )) s, $(du -m "$ROOT/unity/Builds/MetaCodex.apk" | cut -f1) MB)"
 fi
 adb logcat -c
+# the headset's logcat ring holds about a minute: record the whole run to a file
+adb logcat -v threadtime > "$OUT/logcat.txt" 2>&1 &
+LOGCAT_PID=$!
+trap 'kill $LOGCAT_PID 2>/dev/null' EXIT
 adb shell am force-stop $PKG
 adb shell rm -f /sdcard/Android/data/$PKG/files/control.token
 adb shell am start -n $PKG/com.unity3d.player.UnityPlayerActivity >/dev/null 2>&1
 t0=$(date +%s)
-for i in $(seq 1 60); do
-  adb shell "[ -s /sdcard/Android/data/$PKG/files/control.token ]" 2>/dev/null && break
+up=0
+for i in $(seq 1 90); do
+  adb shell "[ -s /sdcard/Android/data/$PKG/files/control.token ]" 2>/dev/null && { up=1; break; }
   sleep 1
 done
-echo "APP control port up after $(( $(date +%s) - t0 )) s"
+if (( up )); then echo "APP control port up after $(( $(date +%s) - t0 )) s"
+else
+  echo "APP control port NOT up after $(( $(date +%s) - t0 )) s (crashed or still loading): $(grep -a -m1 -E 'is corrupted|Fatal signal|FATAL EXCEPTION' "$OUT/logcat.txt" | cut -c1-200)"
+fi
 
 state=""
 for i in $(seq 1 120); do

@@ -790,6 +790,10 @@ namespace MetaCodex.UI
     public static class UiKeyboard
     {
         public static bool Active => _onDone != null;
+        /// The headset keyboard is open for a field (or just closed): its text box is the only source then; the
+        /// same text also arrives as key/text events, which must not be typed a second time.
+        public static bool SystemKeyboardBusy => _kb != null || Time.unscaledTime - _sysClosedAt < 1f;
+        private static float _sysClosedAt = -10f;
         /// Editor / self-test: returns what the "user" types for a given initial text (null: keep it).
         public static Func<string, string> EditorProvider;
         /// The terminal asked for the keyboard (dock button): the terminal input owns that one.
@@ -849,6 +853,7 @@ namespace MetaCodex.UI
         private static void Finish(string text)
         {
             var done = _onDone;
+            if (_kb != null) _sysClosedAt = Time.unscaledTime;
             _kb = null;
             _onDone = null;
             _onChanged = null;

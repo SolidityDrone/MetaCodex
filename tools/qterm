@@ -46,6 +46,10 @@ def token():
 
 class Port:
     def __init__(self):
+        if not local:  # the adb forward must exist before connecting (it was set up only after, so the first call failed)
+            fwd = adb("forward", "--list")
+            if f"tcp:{port} tcp:{port}" not in fwd:
+                adb("forward", f"tcp:{port}", f"tcp:{port}")
         self.s = socket.create_connection(("127.0.0.1", port), timeout=15)
         self.f = self.s.makefile("rw", encoding="utf-8", newline="\n")
         r = self.call("auth " + token())
