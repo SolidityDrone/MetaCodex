@@ -90,7 +90,7 @@ namespace MetaCodex.AI
             });
         }
 
-        public void Health(Action<JToken, string> cb) => Call(() => Json(HttpMethod.Get, "/health", null, 3), cb);
+        public void Health(Action<JToken, string> cb) => Call(() => Json(HttpMethod.Get, "/health", null, 6), cb);
         public void Status(Action<JToken, string> cb) => Call(() => Json(HttpMethod.Get, "/status", null, 5), cb);
         public void Install(string[] kinds, Action<JToken, string> cb) => Call(() => Json(HttpMethod.Post, "/v1/models/install", new JObject { ["kinds"] = new JArray(kinds) }), cb);
         public void Remove(string[] kinds, Action<JToken, string> cb) => Call(() => Json(HttpMethod.Post, "/v1/models/remove", new JObject { ["kinds"] = new JArray(kinds) }, 30), cb);

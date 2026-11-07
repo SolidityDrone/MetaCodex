@@ -83,15 +83,23 @@ class Engines {
     return this.job('asr', 'asr', async () => {
       const seconds = pcm.length / 16000
       // whisper encodes a fixed 30 s window; commands are short, so encode ~10 s (4x faster, measured)
-      this.asrWant = { actx: seconds <= 9.5 ? 512 : 1500, language: opts.language || null }
+      // whisper encodes a 30 s window (1500 frames); encode only the clip + a margin: frames = 50 per second
+      const actx = Math.min(1500, Math.max(Number(this.cfg.minAudioCtx) || 512, Math.ceil((seconds * 50 + 96) / 64) * 64))
+      this.asrWant = { actx: 0, language: opts.language || null } // actx is not part of the load key: set per run below
       const asr = await this._ensure('asr')
+      if (asr._mcxActx !== actx) {
+        const r0 = Date.now()
+        await asr.reload({ whisperConfig: { audio_ctx: actx } })
+        asr._mcxActx = actx
+        this.last.asrReload = Date.now() - r0
+      }
       const t0 = Date.now()
       const r = await asr.run(pcm)
       let text = ''
       await r.onUpdate((out) => {
         for (const s of Array.isArray(out) ? out : [out]) if (s && typeof s.text === 'string') text += s.text
       }).await()
-      return { text: cleanTranscript(text), ms: Date.now() - t0, audioMs: Math.round(seconds * 1000) }
+      return { text: cleanTranscript(text), ms: Date.now() - t0, audioMs: Math.round(seconds * 1000), audioCtx: actx }
     })
   }
 
@@ -101,9 +109,10 @@ class Engines {
       const llm = await this._ensure('llm')
       const prompt = [...(tools || []).map(toQvacTool), ...(messages || []).map(toQvacMessage)]
       const gen = { temp: opts.temperature != null ? Number(opts.temperature) : 0, predict: opts.max_tokens != null ? Number(opts.max_tokens) : 256 }
+      if (typeof opts.grammar === 'string' && opts.grammar.trim()) gen.grammar = opts.grammar // GBNF: e.g. one command line
       const runOpts = { generationParams: gen }
-      const base = this._prefixFile(tools, messages)
-      if (fs.existsSync(base)) runOpts.baseCacheKey = base // the system prompt + tools, prefilled once (warm)
+      const base = this._prefixFile(tools, (messages || []).slice(0, -1)) // all but the new user turn
+      if (fs.existsSync(base)) runOpts.baseCacheKey = base // system prompt + examples + tools, prefilled once (warm)
       const t0 = Date.now()
       let first = 0
       let out = ''
@@ -124,10 +133,10 @@ class Engines {
   warm (messages, tools) {
     return this.job('llm', 'warmup', async () => {
       const llm = await this._ensure('llm')
-      const base = this._prefixFile(tools, messages)
+      const base = this._prefixFile(tools, messages) // the stable prefix: system prompt, example turns
       if (fs.existsSync(base)) return { ms: 0, cached: true }
-      const system = (messages || []).filter((m) => m && m.role === 'system').map(toQvacMessage)
-      const prompt = [...(tools || []).map(toQvacTool), ...(system.length ? system : [{ role: 'system', content: '' }])]
+      const prefix = (messages || []).filter((m) => m && m.role).map(toQvacMessage)
+      const prompt = [...(tools || []).map(toQvacTool), ...(prefix.length ? prefix : [{ role: 'system', content: '' }])]
       const t0 = Date.now()
       const r = await llm.run(prompt, { prefill: true, cacheKey: base })
       for await (const _ of r.iterate()) {} // eslint-disable-line no-unused-vars
@@ -137,10 +146,10 @@ class Engines {
     })
   }
 
-  /** The cache file for a system prompt + tool set on the loaded LLM. */
-  _prefixFile (tools, messages) {
-    const system = (messages || []).filter((m) => m && m.role === 'system').map((m) => m.content)
-    const key = fnv1a(JSON.stringify([CATALOGUE.llm.id, this.cfg.ctx, (tools || []).map(toQvacTool), system]))
+  /** The cache file for a stable prompt prefix (tools + the messages before the new user turn). */
+  _prefixFile (tools, prefixMessages) {
+    const prefix = (prefixMessages || []).filter((m) => m && m.role).map((m) => [m.role, m.content])
+    const key = fnv1a(JSON.stringify([CATALOGUE.llm.id, this.cfg.ctx, (tools || []).map(toQvacTool), prefix]))
     return path.join(this.cacheDir, 'prefix-' + key + '.kv')
   }
 
@@ -182,7 +191,7 @@ class Engines {
     const c = this.cfg
     if (kind === 'asr') return JSON.stringify([c.threads, this.asrWant.language || c.language, c.prompt, this.asrWant.actx])
     if (kind === 'llm') return JSON.stringify([c.threads, c.ctx])
-    return JSON.stringify([c.threads, this.ttsWant.voice || c.voice, c.ttsLanguage])
+    return JSON.stringify([c.threads, this.ttsWant.voice || c.voice, c.ttsLanguage, c.ttsSteps])
   }
 
   async _ensure (kind) {
@@ -224,7 +233,7 @@ class Engines {
         no_timestamps: true,
         single_segment: true,
         max_tokens: 128,
-        audio_ctx: this.asrWant.actx
+        audio_ctx: 512
       }
       if (c.prompt) whisperConfig.initial_prompt = c.prompt
       m = new ASRGgml({ files: { model: file }, config: { engine: 'whisper', whisperConfig, contextParams: { use_gpu: false } } })
@@ -242,6 +251,7 @@ class Engines {
         files: { supertonicModel: file },
         voice: this.ttsWant.voice || c.voice,
         threads: c.threads,
+        steps: Math.max(1, Math.min(10, Number(c.ttsSteps) || 5)), // diffusion steps: time grows with them (model default 5)
         config: { language: c.ttsLanguage, useGPU: false },
         opts: { stats: true }
       })

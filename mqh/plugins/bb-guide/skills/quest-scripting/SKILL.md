@@ -101,7 +101,12 @@ voice.command{
 }
 ```
 
-Phrase templates: plain words, `(a|b)` one of, `[a|b]` optional, `{param}` captures words for a parameter.
+Phrase templates: plain words, `(a|b)` one of, `[a|b]` optional, `{param}` captures words for a parameter,
+`{param:value}` sets a fixed value ("(make|let) the panels follow me {mode:float}").
+For phrasings no template covers, the local LLM picks a command line: teach it with
+`examples = {{"make it orange", "set_accent amber"}}` (request, then the line: name and arguments in the
+order of `params`). `llm = false` keeps a command to its phrases only (use it for anything that types or
+deletes free text).
 Text is matched lower-case without punctuation, after polite fillers ("hey", "could you", "please") are
 dropped. Enum parameters (`enum = {"cyan","amber"}`) accept spoken synonyms:
 `synonyms = { color = { orange = "amber" } }`. `confirm = true` makes the user approve in VR before

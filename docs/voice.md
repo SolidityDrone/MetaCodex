@@ -1,8 +1,8 @@
 # Voice control and the local AI service
 
-Status: v0.1, 2026-11-07. The service runs on the Quest 3S over adb (phase 0 and the dev path, measured
-below); the Editor self-test drives the whole pipeline against it. The in-APK start (`libbare.so` from
-`nativeLibraryDir`) is built and waits for the next APK.
+Status: v0.2, 2026-11-07. Runs in the APK on the Quest 3S (0.4: service process on cores 0-2, models
+installed on the headset); 0.5 makes the cycle faster (measured below) and fixes the service after the
+headset sleeps.
 
 ## What it does
 
@@ -13,7 +13,8 @@ Push-to-talk, then the headset does the rest, privately, with no cloud:
    -> microphone (Unity, 16 kHz, stops after ~1 s of silence)
    -> speech-to-text (Whisper base, local AI service)
    -> fast path: a phrase template of a command matches        -> run it   (~0 ms)
-      else the local LLM picks one tool from the command list  -> run it   (~1.5 s)
+      else the local LLM writes one command line ("open_panel git"), held to the valid ones by a
+      grammar                                                   -> run it   (~0.5 s)
    -> HUD above the dock ("✓ Opened GIT"), optional spoken reply (Supertonic 3)
 ```
 
@@ -47,11 +48,15 @@ case without punctuation or apostrophes, after fillers ("hey", "could you", "ple
 Enum values accept synonyms and close misspellings of the whole phrase ("provider's" -> agents); a value
 that fits nothing is not forced, the request goes to the LLM instead.
 
-The LLM path: the system prompt and every enabled command as a tool are prefilled once in the service and
-saved to disk (`/v1/warmup`, QVAC's `prefill` + `cacheKey`); each request then decodes only the user's
-words. The app warms it when TALK is pressed (in parallel with the recording) and again when the command
-set changes. The model's answer is validated against the schema (unknown tools, invented arguments,
-enum values mapped) before anything runs.
+The LLM path (0.5): the model answers with one command line, `open_panel git` or `none`, not a JSON tool
+call. The prompt lists the commands in that form (`open_panel PANEL, set_layout fixed|float, ...`), example
+turns teach it ("show me my secrets" → `open_panel vault`), and a GBNF grammar built from the registry only
+lets it write valid lines, so it decodes 1-4 tokens instead of ~20. The system prompt and the example turns
+are prefilled once and saved to disk (`/v1/warmup`, QVAC's `prefill` + `cacheKey`); each request then
+decodes only the user's words. The app warms it when TALK is pressed (in parallel with the recording) and
+again when the command set changes. The line is parsed and validated against the schema (enum values
+mapped) before anything runs. Commands that take free text verbatim (`type_text`, `run_in_terminal`) are
+not offered to the LLM: only their exact phrases ("type …", "run …") run them.
 
 `find_thread` scores MQH thread titles and branch names against the spoken words (stems, one-letter
 slips) and opens the best match; `switch_workspace` matches MQH project names and folder names.
@@ -106,6 +111,22 @@ the service starts the Bare executable as its child.
 From the Linux userland: `mcx-ai status | install | transcribe f.wav | say "text" | chat "prompt" | env`.
 From the app's control port: `mcx-ui voice status | list | match <text> | run <text> | say <text> |
 wav /mnt/quest/f.wav | listen | install | threads N | lang en|it|auto`.
+
+## Faster cycle (0.5, measured)
+
+| Change | Effect |
+|---|---|
+| CPU level Boost while a voice request runs (`OVRManager.suggestedCpuPerfLevel`; back after) | the app's level held cores 2-5 at 1.38 GHz; Boost allows 2.05: speech-to-text 0.80 → 0.66 s, LLM 1.39 → 1.17 s, speech 3.4 → 2.8 s (same requests, API) |
+| LLM writes one command line under a grammar (above) | 1-4 tokens instead of ~20; 9/12 off-template phrasings right vs 5/8 with tool calls; 0.15-0.3 s on the PC (x4-6 on the headset) |
+| 2 inference threads, fixed | 3 threads measured slower (LLM 10 vs 14.5 tok/s: the third core is the slow, shared one), 4 stalls (more threads than the 3 cores): the old THREADS 3/4 options are gone |
+| End of speech after 0.7 s of silence (was 1.0 s) | 0.3 s less on every request |
+| Models stay loaded 30 min (speech 10) | no 1-4 s reloads between requests |
+| Replies' audio cached (64 entries) | the second "Opened GIT" is instant |
+| Whisper encoder window sized to the clip, changed with `reload` (instant) | long clips get a bigger window; below 512 frames Whisper base repeats and mishears (tested 256: "Open the Provider's page. Open the Provider's page.", "MedicoDex"), so 512 stays the minimum |
+| Supertonic steps | kept at 5: 3 and 2 steps are faster but garble words (round trip through speech-to-text: "I don't have a trip partner") |
+| Health checks skip a busy service; 6 s timeout; restarts that actually restart; the app binds to the service | the service is no longer restarted under load, and survives the headset sleeping |
+
+Voices: Supertonic 3 has ten, F1-F5 and M1-M5 (VOICE panel; `mcx-ui voice voice M2`).
 
 ## Measured (Quest 3S, MetaCodex running at 72 fps, nice 10)
 

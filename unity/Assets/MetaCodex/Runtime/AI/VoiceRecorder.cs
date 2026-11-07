@@ -19,7 +19,7 @@ namespace MetaCodex.AI
         public bool HeardSpeech { get; private set; }
         public float MaxSeconds = 12f;
         public bool AutoStop = true;
-        public float SilenceSeconds = 1.0f;
+        public float SilenceSeconds = 0.7f; // end of speech: shorter waits feel faster; 0.7 s still allows a breath
         /// Give up when nothing was said for this long.
         public float NoSpeechSeconds = 6f;
         public string LastError { get; private set; }

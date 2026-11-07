@@ -24,12 +24,18 @@ namespace MetaCodex.AI
         /// Ask in VR before running (commands with side effects you cannot undo, e.g. shell commands).
         public bool Confirm;
         public bool Enabled = true;
+        /// Offered to the local LLM (off for commands that take free text verbatim: typing, shell commands;
+        /// their spoken phrases still work).
+        public bool Llm = true;
+        /// Example requests and the command line they mean ("make it orange" -> "set_accent amber"): they teach
+        /// the small LLM better than descriptions do.
+        public List<(string said, string line)> Examples = new List<(string, string)>();
         /// Runs on the main thread with validated arguments; returns a short reply (shown, optionally spoken),
         /// null for none, or "error: ..." when it failed.
         public Func<JObject, string> Run;
         /// For commands that wait on something (MQH): call `done(reply)` once, within ~15 s. Used instead of Run.
         public Action<JObject, Action<string>> RunAsync;
-        internal List<Regex> Compiled = new List<Regex>();
+        internal List<(Regex rx, Dictionary<string, string> constants)> Compiled = new List<(Regex, Dictionary<string, string>)>();
 
         public IEnumerable<string> Required => (Parameters["required"] as JArray)?.Select(x => (string)x) ?? Enumerable.Empty<string>();
         public JObject Properties => Parameters["properties"] as JObject ?? new JObject();
@@ -63,10 +69,10 @@ namespace MetaCodex.AI
             if (c.Parameters == null) c.Parameters = new JObject { ["type"] = "object", ["properties"] = new JObject() };
             if (c.Parameters["type"] == null) c.Parameters["type"] = "object";
             if (c.Parameters["properties"] == null) c.Parameters["properties"] = new JObject();
-            c.Compiled = new List<Regex>();
+            c.Compiled = new List<(Regex, Dictionary<string, string>)>();
             foreach (var p in c.Phrases ?? new string[0])
             {
-                try { c.Compiled.Add(CompilePhrase(p)); }
+                try { var consts = new Dictionary<string, string>(); c.Compiled.Add((CompilePhrase(p, consts), consts)); }
                 catch (Exception ex) { throw new ArgumentException($"phrase '{p}' of {c.Name}: {ex.Message}"); }
             }
             _all.RemoveAll(x => x.Name == c.Name);
@@ -110,7 +116,7 @@ namespace MetaCodex.AI
         private static readonly string[] LeadingFillers =
         {
             "hey metacodex", "ok metacodex", "okay metacodex", "metacodex", "hey", "ok", "okay", "so", "um", "uh", "please",
-            "can you", "could you", "would you", "will you", "i want to", "i would like to", "id like to", "lets", "now",
+            "can you", "could you", "would you", "will you", "i want to", "i would like to", "id like to", "i would like", "id like", "i want", "lets", "now",
         };
         private static readonly string[] TrailingFillers = { "please", "for me", "now", "thanks", "thank you", "right now" };
 
@@ -152,11 +158,12 @@ namespace MetaCodex.AI
             foreach (var c in _all)
             {
                 if (!c.Enabled) continue;
-                foreach (var rx in c.Compiled)
+                foreach (var (rx, consts) in c.Compiled)
                 {
                     var m = rx.Match(subject);
                     if (!m.Success) continue;
                     var args = new JObject();
+                    foreach (var kv in consts) args[kv.Key] = kv.Value;
                     bool ok = true;
                     foreach (var g in rx.GetGroupNames())
                     {
@@ -172,12 +179,19 @@ namespace MetaCodex.AI
             return null;
         }
 
-        /// Template -> anchored regex over normalized text with one trailing space.
-        public static Regex CompilePhrase(string template)
+        /// Template -> anchored regex over normalized text with one trailing space. `{param:value}` sets a fixed
+        /// value instead of capturing ("(make|let) the panels follow me {mode:float}").
+        public static Regex CompilePhrase(string template, Dictionary<string, string> constants = null)
         {
             var sb = new StringBuilder("^");
             foreach (var tok in Tokens(template))
             {
+                if (tok.StartsWith("{") && tok.Contains(":"))
+                {
+                    var kv = tok.Trim('{', '}').Split(new[] { ':' }, 2);
+                    if (constants != null) constants[kv[0].Trim()] = kv[1].Trim();
+                    continue;
+                }
                 if (tok.StartsWith("{"))
                 {
                     string name = tok.Trim('{', '}').Trim();
@@ -205,7 +219,7 @@ namespace MetaCodex.AI
             var parts = new List<string>();
             foreach (var tok in Tokens(template))
             {
-                if (tok.StartsWith("[")) continue;
+                if (tok.StartsWith("[") || tok.StartsWith("{") && tok.Contains(":")) continue;
                 if (tok.StartsWith("(")) parts.Add(tok.Substring(1, tok.Length - 2).Split('|')[0]);
                 else if (tok.StartsWith("{")) parts.Add("<" + tok.Trim('{', '}') + ">");
                 else parts.Add(tok);
@@ -308,7 +322,105 @@ namespace MetaCodex.AI
             return null;
         }
 
-        // ------------------------------------------------------------------ for the LLM
+        // ------------------------------------------------------------------ for the LLM: one command line
+
+        /// "open_panel PANEL", "set_layout fixed|float": how a command is written on its line (positional arguments
+        /// in the schema's order; small enums spelled out).
+        public static string Usage(VoiceCommand c)
+        {
+            var sb = new StringBuilder(c.Name);
+            foreach (var p in c.Properties.Properties())
+            {
+                var en = (p.Value["enum"] as JArray)?.Select(x => (string)x).ToArray();
+                sb.Append(' ').Append(en != null && en.Length <= 3 ? string.Join("|", en) : p.Name.ToUpperInvariant());
+            }
+            return sb.ToString();
+        }
+
+        /// The system prompt: every LLM command, the shell's legend for its own values, plugin commands described.
+        public string LlmSystem(string shellLegend)
+        {
+            var cmds = _all.Where(c => c.Enabled && c.Llm).ToList();
+            var sb = new StringBuilder("You turn a request to MetaCodex, a VR desktop, into one command line. Commands: ");
+            sb.Append(string.Join(", ", cmds.Where(c => c.Owner == "shell").Select(Usage))).Append(", none. ");
+            sb.Append(shellLegend);
+            var more = cmds.Where(c => c.Owner != "shell").ToList();
+            if (more.Count > 0)
+            {
+                sb.Append(" More commands:");
+                foreach (var c in more)
+                {
+                    sb.Append(' ').Append(Usage(c)).Append(" (").Append((c.Description ?? "").TrimEnd('.'));
+                    foreach (var p in c.Properties.Properties())
+                        if (p.Value["enum"] is JArray en && en.Count > 3) sb.Append("; ").Append(p.Name.ToUpperInvariant()).Append(": ").Append(string.Join(", ", en.Select(x => (string)x)));
+                    sb.Append(").");
+                }
+            }
+            return sb.ToString();
+        }
+
+        /// General example turns (the shell's, in a measured order, including "none" for small talk).
+        public readonly List<(string said, string line)> GeneralExamples = new List<(string, string)>();
+
+        /// Example turns (request -> command line): the general ones, then those of LLM commands.
+        public IEnumerable<(string said, string line)> LlmExamples() =>
+            GeneralExamples.Concat(_all.Where(c => c.Enabled && c.Llm).SelectMany(c => c.Examples));
+
+        /// A GBNF grammar that only lets the model write a valid command line (or "none"): 1-6 tokens to decode
+        /// instead of ~20 for a JSON tool call.
+        public string LlmGrammar()
+        {
+            var alts = new List<string>();
+            var rules = new StringBuilder();
+            int n = 0;
+            foreach (var c in _all.Where(c => c.Enabled && c.Llm))
+            {
+                var parts = new List<string> { Lit(c.Name) };
+                var req = new HashSet<string>(c.Required);
+                var props = c.Properties.Properties().ToList();
+                foreach (var p in props)
+                {
+                    string rule = "v" + (n++);
+                    var en = (p.Value["enum"] as JArray)?.Select(x => (string)x).ToArray();
+                    rules.Append(rule).Append(" ::= ").Append(en != null ? string.Join(" | ", en.Select(Lit)) : "[^\\n]+").Append('\n'); // GBNF: any text up to the end of the line
+                    parts.Add("\" \" " + rule);
+                }
+                alts.Add(string.Join(" ", parts));
+                // optional trailing arguments may be left out
+                for (int k = props.Count - 1; k >= 0 && !req.Contains(props[k].Name); k--) alts.Add(string.Join(" ", parts.Take(k + 1)));
+            }
+            alts.Add(Lit("none"));
+            return "root ::= " + string.Join(" | ", alts.Distinct()) + "\n" + rules;
+        }
+
+        private static string Lit(string s) => "\"" + (s ?? "").Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
+
+        /// The model's line -> a command and its arguments (null for "none" or nothing usable).
+        public VoiceMatch ParseLine(string line, out string error)
+        {
+            error = null;
+            line = (line ?? "").Trim().Trim('`', '"', '\'').Trim();
+            int nl = line.IndexOf('\n');
+            if (nl >= 0) line = line.Substring(0, nl).Trim();
+            if (line.Length == 0 || line == "none") { error = "no command for that"; return null; }
+            int sp = line.IndexOf(' ');
+            string name = sp < 0 ? line : line.Substring(0, sp);
+            string rest = sp < 0 ? "" : line.Substring(sp + 1).Trim();
+            var c = Find(name);
+            if (c == null || !c.Enabled) { error = "the model wrote an unknown command: " + name; return null; }
+            var args = new JObject();
+            var props = c.Properties.Properties().ToList();
+            for (int i = 0; i < props.Count && rest.Length > 0; i++)
+            {
+                bool last = i == props.Count - 1;
+                bool isEnum = props[i].Value["enum"] is JArray;
+                string value;
+                if (last || !isEnum) { value = rest; rest = ""; }
+                else { int s2 = rest.IndexOf(' '); value = s2 < 0 ? rest : rest.Substring(0, s2); rest = s2 < 0 ? "" : rest.Substring(s2 + 1).Trim(); }
+                args[props[i].Name] = value;
+            }
+            return new VoiceMatch { Command = c, Args = args, Via = "llm" };
+        }
 
         /// Every enabled command as an OpenAI-style tool. Order and text stay stable, so the service's prompt
         /// cache keeps hitting between requests.

@@ -622,7 +622,14 @@ namespace MetaCodex.Scripting
                 Description = TStr(t, "description", ""),
                 Owner = e.Key,
                 Confirm = t.Get("confirm").CastToBool(),
+                Llm = t.Get("llm").IsNil() || t.Get("llm").CastToBool(),
             };
+            // examples = {{"make it orange", "set_accent amber"}, ...}: teach the local LLM this command
+            var ex = t.Get("examples");
+            if (ex.Type == DataType.Table)
+                foreach (var v in ex.Table.Values)
+                    if (v.Type == DataType.Table && v.Table.Get(1).Type == DataType.String && v.Table.Get(2).Type == DataType.String)
+                        cmd.Examples.Add((v.Table.Get(1).String, v.Table.Get(2).String));
             // params: {name={type=, description=, enum={...}, required=true}} or an ordered list {{name=..., ...}, ...}
             var ps = new List<(string, string, string[], string, bool)>();
             var pt = t.Get("params");

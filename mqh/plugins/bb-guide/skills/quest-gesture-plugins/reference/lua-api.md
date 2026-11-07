@@ -63,7 +63,7 @@ plugin; removed when it is disabled, reloaded or deleted). Full format and phras
 
 | Call | Does |
 |---|---|
-| `voice.command{name=, description=, params=, phrases=, synonyms=, confirm=, run=function(args) ... end}` | a command: spoken phrases run it at once, other phrasings reach it through the local LLM (it reads `description` and `params`) |
+| `voice.command{name=, description=, params=, phrases=, synonyms=, examples=, llm=, confirm=, run=function(args) ... end}` | a command: spoken phrases run it at once, other phrasings reach it through the local LLM (it reads `description` and `params`) |
 | `voice.remove(name)` | removes one of this plugin's commands |
 | `voice.say(text)` | speaks text with the local voice (text-to-speech on the headset) |
 | `voice.run(text)` | runs text as if the user said it |

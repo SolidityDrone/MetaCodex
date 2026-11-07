@@ -41,7 +41,9 @@ const DEFAULTS = {
   ctx: 2048, // LLM context: system prompt + command tools + the request
   voice: 'F1',
   ttsLanguage: 'en',
-  idleMinutes: { asr: 10, llm: 15, tts: 3 }
+  ttsSteps: 5, // Supertonic diffusion steps (model default): 3 and 2 are faster but garble words (measured)
+  minAudioCtx: 512, // smallest whisper encoder window (frames, 50 per second): 256 repeats and mishears (measured)
+  idleMinutes: { asr: 30, llm: 30, tts: 10 } // keep models loaded while voice is in use: a reload costs 1-4 s
 }
 const cfg = Object.assign({}, DEFAULTS, readJson(CONFIG) || {})
 if (args.threads) cfg.threads = Number(args.threads)
@@ -166,21 +168,39 @@ async function transcriptions (req, res, body, u) {
   send(res, 200, r)
 }
 
+// short replies repeat ("Opened GIT", "Closed 2 panels"): keep their audio, so the second time is instant
+const ttsCache = new Map()
+const TTS_CACHE_MAX = 64
+
 async function speech (res, j) {
   const text = String(j.input || '').trim()
   if (!text) throw httpError(400, 'input is empty')
   if (text.length > 2000) throw httpError(400, 'input longer than 2000 characters')
+  const key = JSON.stringify([j.voice || cfg.voice, cfg.ttsSteps, cfg.ttsLanguage, text])
+  if (j.response_format !== 'pcm' && ttsCache.has(key)) {
+    const wav = ttsCache.get(key)
+    ttsCache.delete(key)
+    ttsCache.set(key, wav) // most recently used last
+    res.setHeader('X-Synthesis-Ms', '0')
+    res.setHeader('X-Cache', 'hit')
+    return sendBytes(res, 200, 'audio/wav', wav)
+  }
   const r = await engines.speak(text, { voice: j.voice })
   log(`tts ${text.length} chars -> ${Math.round(r.pcm.length / r.rate * 1000)} ms audio in ${r.ms} ms`)
   res.setHeader('X-Synthesis-Ms', String(r.ms))
   if (j.response_format === 'pcm') return sendBytes(res, 200, 'audio/pcm; rate=' + r.rate, Buffer.from(r.pcm.buffer, r.pcm.byteOffset, r.pcm.byteLength))
-  sendBytes(res, 200, 'audio/wav', audio.toWav(r.pcm, r.rate))
+  const wav = audio.toWav(r.pcm, r.rate)
+  if (text.length <= 160) {
+    ttsCache.set(key, wav)
+    if (ttsCache.size > TTS_CACHE_MAX) ttsCache.delete(ttsCache.keys().next().value)
+  }
+  sendBytes(res, 200, 'audio/wav', wav)
 }
 
 async function completions (res, j) {
   if (!Array.isArray(j.messages) || !j.messages.length) throw httpError(400, 'messages is required')
   if (j.stream) throw httpError(400, 'stream is not supported yet')
-  const r = await engines.chat(j.messages, Array.isArray(j.tools) ? j.tools : [], { max_tokens: j.max_tokens, temperature: j.temperature })
+  const r = await engines.chat(j.messages, Array.isArray(j.tools) ? j.tools : [], { max_tokens: j.max_tokens, temperature: j.temperature, grammar: j.grammar })
   const calls = r.tool_calls.map((c, i) => ({ id: 'call_' + Date.now().toString(36) + i, type: 'function', function: { name: c.name, arguments: JSON.stringify(c.arguments || {}) } }))
   const st = r.stats || {}
   log(`llm ${r.ms} ms (first ${r.firstMs} ms): ${calls.length ? calls.map((c) => c.function.name + c.function.arguments).join(' ') : JSON.stringify(r.content).slice(0, 120)}`)

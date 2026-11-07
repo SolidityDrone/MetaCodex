@@ -62,10 +62,39 @@ namespace MetaCodex.Shell
         public readonly List<VoiceResult> VoiceRecent = new List<VoiceResult>();
         public JObject QvacStatus { get; private set; }
 
-        /// Measured on the headset (8 phrasings no template covers): this wording 5/8 (6/8 with the bare-name
-        /// fallback), "if no tool fits, answer in a sentence" 3-4/8, extra hints 4/8. Keep it short and stable.
-        public const string VoiceSystem = "You are the voice control of MetaCodex, a VR desktop with panels and Linux terminals. " +
-            "Always answer with exactly one tool call: the tool closest to what the user asks.";
+        /// The shell's legend for its own values (the small LLM picks panels by what they show).
+        public const string VoiceLegend = "PANEL: terminals, files, git (repositories, commits, branches), agents (AI providers, sign-in, accounts, models), " +
+            "threads (agent conversations), browser (web), scripts, gestures, vault (secrets, passwords, API keys), settings, voice.";
+
+        /// The stable prompt prefix: the system prompt and the example turns. Measured on 10 phrasings no template
+        /// covers: one command line taught by example turns 8/10 right with 1-4 tokens to decode, JSON tool calls
+        /// 5/8 with ~20 (docs/voice.md). Rebuilt when the command set changes.
+        private JArray VoicePrefix()
+        {
+            if (_voicePrefix != null && _voicePrefixRev == Voice.Revision) return _voicePrefix;
+            var a = new JArray { new JObject { ["role"] = "system", ["content"] = Voice.LlmSystem(VoiceLegend) } };
+            foreach (var (said, line) in Voice.LlmExamples())
+            {
+                a.Add(new JObject { ["role"] = "user", ["content"] = said });
+                a.Add(new JObject { ["role"] = "assistant", ["content"] = line });
+            }
+            _voicePrefix = a;
+            _voicePrefixRev = Voice.Revision;
+            _voiceGrammar = Voice.LlmGrammar();
+            return a;
+        }
+
+        /// The exact LLM request the pipeline sends for `said` (self-tests replay it against the service).
+        public JObject VoiceLlmRequest(string said)
+        {
+            var msgs = (JArray)VoicePrefix().DeepClone();
+            msgs.Add(new JObject { ["role"] = "user", ["content"] = said });
+            return new JObject { ["messages"] = msgs, ["grammar"] = _voiceGrammar, ["max_tokens"] = 24, ["temperature"] = 0 };
+        }
+
+        private JArray _voicePrefix;
+        private int _voicePrefixRev = -1;
+        private string _voiceGrammar;
         public static readonly string[] VoicePanels = { "terminals", "files", "git", "agents", "threads", "browser", "scripts", "gestures", "vault", "settings", "voice" };
 
         private AudioSource _voiceAudio;
@@ -121,7 +150,7 @@ namespace MetaCodex.Shell
             words.AddRange(_projects.Select(p => (string)p["name"]).Where(n => !string.IsNullOrEmpty(n)).Take(12));
             var cfg = new JObject
             {
-                ["threads"] = Mathf.Clamp(Settings.voice.threads, 1, 4),
+                ["threads"] = Mathf.Clamp(Settings.voice.threads, 1, 2), // measured: 3 and 4 are slower on the 3 cores the service has
                 ["language"] = string.IsNullOrEmpty(Settings.voice.language) ? "en" : Settings.voice.language,
                 ["prompt"] = "Voice commands for MetaCodex: " + string.Join(", ", words.Distinct()) + ".",
                 ["voice"] = Settings.voice.voice,
@@ -133,8 +162,34 @@ namespace MetaCodex.Shell
             Qvac.Client.Config(cfg, (r, e) => { if (e != null) { Log("[ai] config: " + e); _sentConfig = null; } });
         }
 
+        private bool _cpuBoosted;
+        private float _boostUntil;
+        private OVRManager.ProcessorPerformanceLevel _cpuBefore;
+
+        /// Raises the CPU level while a voice request runs (measured: the cores the AI service shares go from
+        /// 1.38 to 2.05 GHz; speech-to-text, LLM and speech 16-18% faster) and gives it back right after.
+        private void BoostCpuFor(float seconds)
+        {
+            _boostUntil = Mathf.Max(_boostUntil, Time.unscaledTime + seconds);
+            if (_cpuBoosted || Application.isEditor) return;
+            try
+            {
+                _cpuBefore = OVRManager.suggestedCpuPerfLevel;
+                OVRManager.suggestedCpuPerfLevel = OVRManager.ProcessorPerformanceLevel.Boost;
+                _cpuBoosted = true;
+            }
+            catch (Exception ex) { Log("[ai] cpu level: " + ex.Message); }
+        }
+
+        private void EndBoostSoon(float seconds = 0.4f) => _boostUntil = Time.unscaledTime + seconds;
+
         private void TickVoice()
         {
+            if (_cpuBoosted && Time.unscaledTime > _boostUntil && (Recorder == null || !Recorder.Recording))
+            {
+                try { OVRManager.suggestedCpuPerfLevel = _cpuBefore; } catch (Exception) { }
+                _cpuBoosted = false;
+            }
             if (Recorder != null && Recorder.Recording)
             {
                 Recorder.Tick();
@@ -178,11 +233,7 @@ namespace MetaCodex.Shell
             if (Qvac == null || !Qvac.IsRunning || _warming) { done?.Invoke("not running"); return; }
             _warming = true;
             int rev = Voice.Revision;
-            var body = new JObject
-            {
-                ["messages"] = new JArray { new JObject { ["role"] = "system", ["content"] = VoiceSystem } },
-                ["tools"] = Voice.ToolSpecs(),
-            };
+            var body = new JObject { ["messages"] = VoicePrefix().DeepClone(), ["tools"] = new JArray() };
             Qvac.Client.Warmup(body, (r, e) =>
             {
                 _warming = false;
@@ -274,49 +325,21 @@ namespace MetaCodex.Shell
             if (Qvac == null || !Qvac.IsRunning) { res.Error = "no command matches, and the AI service is not running"; VoiceDone(res, done); return; }
             SetVoiceState("thinking", "◆ THINKING", "“" + Short(res.Transcript, 70) + "”");
             float l0 = Time.realtimeSinceStartup;
-            var body = new JObject
-            {
-                ["messages"] = new JArray
-                {
-                    new JObject { ["role"] = "system", ["content"] = VoiceSystem },
-                    new JObject { ["role"] = "user", ["content"] = res.Transcript },
-                },
-                ["tools"] = Voice.ToolSpecs(),
-                ["max_tokens"] = 96,
-                ["temperature"] = 0,
-            };
+            var msgs = (JArray)VoicePrefix().DeepClone();
+            msgs.Add(new JObject { ["role"] = "user", ["content"] = res.Transcript });
+            var body = new JObject { ["messages"] = msgs, ["grammar"] = _voiceGrammar, ["max_tokens"] = 24, ["temperature"] = 0 };
             Qvac.Client.Chat(body, (r, e) =>
             {
                 res.LlmMs = (int)((Time.realtimeSinceStartup - l0) * 1000f);
                 res.Via = "llm";
                 if (e != null) { res.Error = "LLM: " + e; VoiceDone(res, done); return; }
-                var msg = r["choices"]?[0]?["message"];
-                var call = (msg?["tool_calls"] as JArray)?.FirstOrDefault();
-                if (call == null)
-                {
-                    string text = ((string)msg?["content"] ?? "").Trim();
-                    // the small model sometimes answers with just a command's name: take it when it needs no arguments
-                    var named = Voice.Find(text.Trim('`', '"', '\'', '.', ' ', '(', ')'));
-                    if (named != null && named.Enabled && !named.Required.Any())
-                    {
-                        VoiceExecute(new VoiceMatch { Command = named, Args = new JObject(), Via = "llm" }, res, done);
-                        return;
-                    }
-                    if (named != null) res.Error = $"the model named {named.Name} without its arguments";
-                    else if (text.Length == 0) res.Error = "no command for that";
-                    else res.Reply = text;
-                    VoiceDone(res, done);
-                    return;
-                }
-                string name = (string)call["function"]?["name"];
-                JObject args;
-                try { args = JObject.Parse((string)call["function"]?["arguments"] ?? "{}"); } catch (Exception) { args = new JObject(); }
-                var c = Voice.Find(name);
-                res.Command = name;
-                if (c == null || !c.Enabled) { res.Error = "the model picked an unknown command: " + name; VoiceDone(res, done); return; }
-                var verr = Voice.Validate(c, args);
-                if (verr != null) { res.Args = args.ToString(Newtonsoft.Json.Formatting.None); res.Error = verr; VoiceDone(res, done); return; }
-                VoiceExecute(new VoiceMatch { Command = c, Args = args, Via = "llm" }, res, done);
+                string line = ((string)r["choices"]?[0]?["message"]?["content"] ?? "").Trim();
+                var m2 = Voice.ParseLine(line, out string perr);
+                if (m2 == null) { res.Error = perr; VoiceDone(res, done); return; }
+                res.Command = m2.Command.Name;
+                var verr = Voice.Validate(m2.Command, m2.Args);
+                if (verr != null) { res.Args = m2.Args.ToString(Newtonsoft.Json.Formatting.None); res.Error = verr; VoiceDone(res, done); return; }
+                VoiceExecute(m2, res, done);
             });
         }
 
@@ -369,6 +392,7 @@ namespace MetaCodex.Shell
             if (res.Ok) SetVoiceState("done", "✓ " + Short(res.Reply ?? res.Command ?? "done", 40), said + (res.Command != null ? $"\n{res.Command} · {res.Via} · {res.TotalMs} ms" : ""));
             else SetVoiceState("error", "⚠ " + Short(res.Error, 46), said);
             Sounds?.Play(res.Ok ? "toast" : "error");
+            EndBoostSoon();
             _vHudCloseAt = Time.unscaledTime + (res.Ok ? 2.5f : 4.5f);
             if (res.Ok && Settings.voice.speak && !string.IsNullOrEmpty(res.Reply)) VoiceSay(res.Reply);
             RefreshVoicePanel();
@@ -381,8 +405,10 @@ namespace MetaCodex.Shell
         {
             if (string.IsNullOrWhiteSpace(text)) { done?.Invoke("empty"); return; }
             if (Qvac == null || !Qvac.IsRunning) { Toast(text, "info"); done?.Invoke("the AI service is not running"); return; }
+            BoostCpuFor(15f);
             Qvac.Client.Speak(text, Settings.voice.voice, (wav, e) =>
             {
+                EndBoostSoon(0.2f);
                 if (e != null)
                 {
                     Log("[ai] speech: " + e);
@@ -528,7 +554,13 @@ namespace MetaCodex.Shell
                 {
                     ["mode"] = new Dictionary<string, string> { ["floating"] = "float", ["carousel"] = "float", ["follow"] = "float", ["follow me"] = "float", ["locked"] = "fixed", ["static"] = "fixed", ["pinned"] = "fixed", ["world"] = "fixed", ["world locked"] = "fixed" },
                 },
-                Phrases = new[] { "(switch|change|set|use|go) [the] layout [to] {mode} [mode|layout]", "(use|switch to|go to) [the] {mode} (layout|mode)", "{mode} (layout|mode)" },
+                Phrases = new[]
+                {
+                    "(switch|change|set|use|go) [the] layout [to] {mode} [mode|layout]", "(use|switch to|go to) [the] {mode} (layout|mode)", "{mode} (layout|mode)",
+                    "(make|let) [the|my] (panels|windows|screens) (follow me|float|float around me|come with me) {mode:float}",
+                    "[the|my] (panels|windows|screens) [to] (follow me|float|come with me) [around] [me] {mode:float}",
+                    "(make|let) [the|my] (panels|windows|screens) (stay|stay put|stay where they are|stop following me) {mode:fixed}",
+                },
                 Run = a => { SetLayout((string)a["mode"]); return "Layout " + ((string)a["mode"]).ToUpperInvariant(); },
             });
             Voice.Register(new VoiceCommand
@@ -544,6 +576,7 @@ namespace MetaCodex.Shell
                 Description = "Type text into the focused terminal (no Enter)",
                 Parameters = VoiceCommands.Schema(("text", "string", null, "the text to type", true)),
                 Phrases = new[] { "(type|write) {text}" },
+                Llm = false, // free text goes verbatim into a terminal: only when said as "type ..."
                 Run = a => { TerminalSend((string)a["text"]); return "Typed"; },
             });
             Voice.Register(new VoiceCommand
@@ -552,6 +585,7 @@ namespace MetaCodex.Shell
                 Description = "Run a shell command in the focused terminal (the user confirms first)",
                 Parameters = VoiceCommands.Schema(("command", "string", null, "the shell command line", true)),
                 Confirm = true,
+                Llm = false,
                 Phrases = new[] { "(run|execute) [the] [command] {command} [in the terminal]" },
                 Run = a => { TerminalSend((string)a["command"] + "\r"); return "Running " + (string)a["command"]; },
             });
@@ -561,6 +595,15 @@ namespace MetaCodex.Shell
                 Description = "Show the keyboard to type into the terminal",
                 Phrases = new[] { "(open|show|bring up) [the] keyboard", "keyboard" },
                 Run = a => { OpenKeyboard(); return "Keyboard"; },
+            });
+            // the LLM's example turns, in the order measured (docs/voice.md): requests no phrase template covers
+            Voice.GeneralExamples.AddRange(new (string, string)[]
+            {
+                ("show me my secrets", "open_panel vault"), ("close everything", "close_all_panels"), ("I need another shell", "new_terminal"),
+                ("which chat was about the login page", "find_thread login page"), ("switch over to the alpha project", "switch_workspace alpha"),
+                ("let the windows float around me", "set_layout float"), ("what's the weather like", "none"), ("good morning", "none"),
+                ("which models can I use", "open_panel agents"), ("show the branches", "open_panel git"), ("hide the files", "close_panel files"),
+                ("bring my stuff back here", "recenter"), ("change the look of the panels", "open_panel settings"),
             });
             Voice.Changed += () => _main.Enqueue(RefreshVoicePanel);
         }
@@ -658,6 +701,7 @@ namespace MetaCodex.Shell
         private void SetVoiceState(string state, string title, string text)
         {
             VoiceState = state;
+            if (state == "listening" || state == "transcribing" || state == "thinking") BoostCpuFor(30f);
             if (Router == null) return;
             EnsureVoiceHud();
             _vHudTitle.Set(title, state == "error" ? UiTheme.Current.Danger : state == "done" ? UiTheme.Current.Ok : state == "listening" ? UiTheme.Current.Warn : UiTheme.Current.Accent);
@@ -722,7 +766,20 @@ namespace MetaCodex.Shell
             p.Add(new UiToggle("Start the AI service with the app", Settings.voice.enabled, v => { Settings.voice.enabled = v; OnSettingsChanged(); }) { Rect = ls.Next(0.03f) });
             string[] langs = { "en", "it", "auto" };
             p.Add(new UiSegmented("LANGUAGE", new[] { "EN", "IT", "AUTO" }, Math.Max(0, Array.IndexOf(langs, Settings.voice.language)), i => { Settings.voice.language = langs[i]; OnSettingsChanged(); PushVoiceConfig(); }) { Rect = ls.Next(0.032f), LabelWidth = 0.09f });
-            p.Add(new UiSegmented("THREADS", new[] { "2", "3", "4" }, Mathf.Clamp(Settings.voice.threads - 2, 0, 2), i => { Settings.voice.threads = 2 + i; Qvac.Threads = Settings.voice.threads; OnSettingsChanged(); PushVoiceConfig(); }) { Rect = ls.Next(0.032f), LabelWidth = 0.09f });
+            // the voice of spoken replies: Supertonic 3 has ten (F1-F5, M1-M5); picking one says a sample
+            string[] fv = { "F1", "F2", "F3", "F4", "F5" }, mv = { "M1", "M2", "M3", "M4", "M5" };
+            UiSegmented female = null, male = null;
+            void PickVoice(string v)
+            {
+                Settings.voice.voice = v;
+                female?.Set(Array.IndexOf(fv, v));
+                male?.Set(Array.IndexOf(mv, v));
+                OnSettingsChanged();
+                PushVoiceConfig();
+                VoiceSay("Hi, this is voice " + v.Substring(1) + ".");
+            }
+            female = p.Add(new UiSegmented("VOICE", fv, Array.IndexOf(fv, Settings.voice.voice), i => PickVoice(fv[i])) { Rect = ls.Next(0.032f), LabelWidth = 0.09f });
+            male = p.Add(new UiSegmented("", mv, Array.IndexOf(mv, Settings.voice.voice), i => PickVoice(mv[i])) { Rect = ls.Next(0.032f), LabelWidth = 0.09f });
 
             var rs = new UiStack(new Rect(c.x + leftW + t.Gap * 2, c.y, c.width - leftW - t.Gap * 2, c.height), t.Gap);
             p.Add(new UiLabel("COMMANDS (say them, or anything close)", t.SmallSize) { Rect = rs.Next(0.018f), UseDisplay = true, Color = t.TextDim });
@@ -818,7 +875,8 @@ namespace MetaCodex.Shell
                 case "start": EnsureVoiceService(); return "ok, " + Qvac.State;
                 case "stop-service": Qvac.StopService(); return "ok";
                 case "install": EnsureVoiceService(); After(0.2f, InstallVoiceModels); return "ok, installing in the background (voice status shows progress)";
-                case "threads": if (int.TryParse(rest, out int n)) { Settings.voice.threads = Mathf.Clamp(n, 1, 4); Qvac.Threads = Settings.voice.threads; OnSettingsChanged(); PushVoiceConfig(); } return "threads=" + Settings.voice.threads;
+                case "threads": if (int.TryParse(rest, out int n)) { Settings.voice.threads = Mathf.Clamp(n, 1, 2); Qvac.Threads = Settings.voice.threads; OnSettingsChanged(); PushVoiceConfig(); } return "threads=" + Settings.voice.threads + " (max 2: more is slower on the service's 3 cores)";
+                case "voice": if (rest.Length > 0) { Settings.voice.voice = rest.Trim().ToUpperInvariant(); OnSettingsChanged(); PushVoiceConfig(); } return "voice=" + Settings.voice.voice + " (F1-F5, M1-M5)";
                 case "lang": if (rest.Length > 0) { Settings.voice.language = rest; OnSettingsChanged(); PushVoiceConfig(); } return "language=" + Settings.voice.language;
                 case "speak": Settings.voice.speak = rest != "off"; OnSettingsChanged(); return "speak=" + Settings.voice.speak;
                 case "llm": Settings.voice.useLlm = rest != "off"; OnSettingsChanged(); return "useLlm=" + Settings.voice.useLlm;
