@@ -27,6 +27,8 @@ echo "references from: $(dirname "$RSP_RT")${RSP_DEV:+ and $(dirname "$RSP_DEV")
 
 mapfile -t RUNTIME < <(cd "$ROOT" && find Assets -name '*.cs' -not -path '*/Editor/*' | sort)
 mapfile -t EDITOR < <(cd "$ROOT" && find Assets -path '*/Editor/*' -name '*.cs' | sort)
+# managed plugin DLLs of the project (e.g. MoonSharp): a fresh one is not in the Editor's rsp yet
+mapfile -t PLUGIN_DLLS < <(cd "$ROOT" && find Assets/Plugins -name '*.dll' -not -path '*/Android/*' 2>/dev/null | sort)
 
 opts() { # rsp without its sources, output and analyzers that point into the other project
   grep -v -E '^"|^-out:|^-refout:|^-analyzer:|^-additionalfile:|^/additionalfile:' "$1" | \
@@ -40,6 +42,7 @@ make_rsp() { # rsp-in, out-name, editor-defines(yes|no), extra-ref, sources...
     echo "-out:\"$(W "$OUT")\\$name.dll\""
     echo "-refout:\"$(W "$OUT")\\$name.ref.dll\""
     [[ -n "$extra" ]] && echo "-r:\"$(W "$OUT")\\$extra.ref.dll\""
+    for d in "${PLUGIN_DLLS[@]}"; do echo "-r:\"$(W "$ROOT/$d")\""; done
     for s in "$@"; do echo "\"$(W "$ROOT/$s")\""; done
   } > "$OUT/$name.rsp"
 }

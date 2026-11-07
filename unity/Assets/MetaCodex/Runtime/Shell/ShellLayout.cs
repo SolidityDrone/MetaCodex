@@ -1,0 +1,164 @@
+using System.Collections.Generic;
+using MetaCodex.UI;
+using UnityEngine;
+
+namespace MetaCodex.Shell
+{
+    /// The two layouts. FIXED: panels are world-locked where you leave them. FLOAT: every panel sits on an
+    /// invisible cylinder around you (a circular screen); the cylinder follows you horizontally as you walk,
+    /// never your head's pitch or roll, and spins freely with inertia (close the hand in empty space and swipe
+    /// sideways; no snapping). Panels bend to the cylinder: the nearer they are, the stronger the curve.
+    public sealed partial class MetaCodexShell
+    {
+        private Transform _carousel;
+        private float _baseYaw, _spin, _spinVel, _carouselY;
+        private readonly Dictionary<Transform, (float angle, float height)> _slots = new Dictionary<Transform, (float, float)>();
+        private readonly bool[] _spinning = new bool[2];
+        private readonly float[] _spinLast = new float[2];
+        private readonly bool[] _wasGrab = new bool[2];
+        private float _dockYaw;
+
+        public bool Floating => Settings != null && Settings.layout == "float";
+        public float CarouselSpin => _spin;
+
+        public void SetLayout(string mode)
+        {
+            mode = mode == "float" ? "float" : "fixed";
+            if (Settings.layout == mode && (mode == "fixed" || _carousel != null)) return;
+            Settings.layout = mode;
+            Settings.Save(_settingsPath);
+            if (mode == "float") EnterFloat(); else ExitFloat();
+            Toast(mode == "float" ? "Float layout: close your hand in empty space and swipe to spin" : "Fixed layout: panels stay where you put them", "info");
+        }
+
+        private IEnumerable<UiPanel> LayoutPanels()
+        {
+            foreach (var kv in _panels) if (kv.Key != "dock") yield return kv.Value;
+            foreach (var f in _frames.Values) yield return f;
+        }
+
+        private void EnterFloat()
+        {
+            var head = Head;
+            Vector3 hp = head != null ? head.position : new Vector3(0, 1.3f, 0);
+            if (_carousel == null) { _carousel = new GameObject("Carousel").transform; _carousel.SetParent(_root, false); }
+            _carousel.position = new Vector3(hp.x, 0f, hp.z);
+            _carouselY = hp.y;
+            var fwd = head != null ? head.forward : Vector3.forward;
+            _baseYaw = Mathf.Atan2(fwd.x, fwd.z) * Mathf.Rad2Deg;
+            _spin = 0f; _spinVel = 0f;
+            _dockYaw = _baseYaw;
+            _slots.Clear();
+            foreach (var p in LayoutPanels()) if (p.IsOpen) Slot(p.transform);
+        }
+
+        /// A panel opened while floating joins the carousel where it appeared (in front of the user).
+        private void OnOpenedFloating(UiPanel p) { if (Floating && p != null) _slots.Remove(p.transform); }
+
+        private void ExitFloat()
+        {
+            _slots.Clear();
+            foreach (var p in LayoutPanels()) p.SetBend(0f);
+        }
+
+        private void ResetCarousel()
+        {
+            if (Floating) EnterFloat();
+        }
+
+        /// Records a panel's place on the cylinder from where it is now (angle around you, height).
+        private void Slot(Transform t)
+        {
+            var c = _carousel.position;
+            var d = t.position - c;
+            float world = Mathf.Atan2(d.x, d.z) * Mathf.Rad2Deg;
+            _slots[t] = (Mathf.DeltaAngle(_baseYaw + _spin, world), t.position.y - _carouselY);
+        }
+
+        private void UpdateLayout() => UpdateLayout(Mathf.Min(Time.unscaledDeltaTime, 0.05f));
+
+        /// Self-tests: run the layout for `steps` frames of `dt` seconds.
+        public void TickLayoutForTest(float dt, int steps) { for (int i = 0; i < steps; i++) UpdateLayout(dt); }
+
+        public Vector3 CarouselCenter => _carousel != null ? new Vector3(_carousel.position.x, _carouselY, _carousel.position.z) : Vector3.zero;
+
+        private void UpdateLayout(float dt)
+        {
+            if (!Floating || Settings == null) return;
+            if (_carousel == null) EnterFloat();
+            var head = Head;
+            if (head != null)
+            {
+                // follow walking (x/z), never head nods (y) or tilts
+                var target = new Vector3(head.position.x, 0f, head.position.z);
+                _carousel.position = Vector3.Lerp(_carousel.position, target, 1f - Mathf.Exp(-dt * 2.5f));
+            }
+            SpinInput(dt);
+            if (!_spinning[0] && !_spinning[1])
+            {
+                _spin += _spinVel * dt;
+                _spinVel *= Mathf.Exp(-dt * 1.6f);
+                if (Mathf.Abs(_spinVel) < 0.5f) _spinVel = 0f;
+            }
+
+            float r = Mathf.Clamp(Settings.carouselRadius, 0.5f, 2f);
+            var c = _carousel.position;
+            foreach (var p in LayoutPanels())
+            {
+                if (p == null || !p.IsOpen) continue;
+                var t = p.transform;
+                if (Router.IsDragging(p)) { _slots.Remove(t); continue; } // re-slotted where it is dropped
+                if (!_slots.TryGetValue(t, out var slot)) { Slot(t); slot = _slots[t]; }
+                float a = (_baseYaw + _spin + slot.angle) * Mathf.Deg2Rad;
+                var dir = new Vector3(Mathf.Sin(a), 0f, Mathf.Cos(a));
+                var pos = new Vector3(c.x, _carouselY + slot.height, c.z) + dir * r;
+                t.SetPositionAndRotation(Vector3.Lerp(t.position, pos, 1f - Mathf.Exp(-dt * 12f)), Quaternion.LookRotation(dir, Vector3.up));
+                bool isFrame = p.Id.StartsWith("term-"); // terminals stay flat: their text grid cannot bend yet
+                p.SetBend(Settings.bendPanels && !isFrame ? r : 0f);
+            }
+
+            // the dock: lower and closer, turns lazily to stay in front of you (it does not spin with the carousel)
+            if (_panels.TryGetValue("dock", out var dock) && dock.IsOpen && head != null && !Router.IsDragging(dock))
+            {
+                var f = head.forward;
+                float headYaw = Mathf.Atan2(f.x, f.z) * Mathf.Rad2Deg;
+                if (Mathf.Abs(Mathf.DeltaAngle(_dockYaw, headYaw)) > 40f) _dockYaw = Mathf.MoveTowardsAngle(_dockYaw, headYaw, 90f * dt);
+                float a = _dockYaw * Mathf.Deg2Rad;
+                var dir = new Vector3(Mathf.Sin(a), 0f, Mathf.Cos(a));
+                var pos = new Vector3(c.x, _carouselY - 0.42f, c.z) + dir * 0.55f;
+                dock.transform.position = Vector3.Lerp(dock.transform.position, pos, 1f - Mathf.Exp(-dt * 6f));
+                dock.transform.rotation = Quaternion.LookRotation((dock.transform.position - head.position).normalized, Vector3.up);
+            }
+        }
+
+        /// Spin: a closed hand that started in empty space (its ray on no panel) and moves sideways.
+        private void SpinInput(float dt)
+        {
+            if (Gestures == null || _carousel == null) return;
+            for (int h = 0; h < 2; h++)
+            {
+                var st = Gestures.Get((MetaCodex.Hands.Handedness)h);
+                bool grab = st.Tracked && st.Grabbing;
+                var d = st.Frame.Palm - _carousel.position;
+                float ang = Mathf.Atan2(d.x, d.z) * Mathf.Rad2Deg;
+                if (grab && !_wasGrab[h] && Router.HandRayPanel(h) == null && !Router.HandBusy(h)) { _spinning[h] = true; _spinLast[h] = ang; _spinVel = 0f; }
+                if (_spinning[h])
+                {
+                    if (!grab) _spinning[h] = false;
+                    else
+                    {
+                        // moving the hand around you turns the carousel with it (amplified: the hand is close)
+                        float delta = Mathf.DeltaAngle(_spinLast[h], ang) * 2.2f;
+                        _spinLast[h] = ang;
+                        _spin += delta;
+                        if (dt > 1e-4f) _spinVel = Mathf.Lerp(_spinVel, delta / dt, 0.35f);
+                    }
+                }
+                _wasGrab[h] = grab;
+            }
+        }
+
+        /// Tests and the control port: spin by degrees (as if swiped), with the given release speed.
+        public void Spin(float degrees, float releaseSpeed = 0f) { _spin += degrees; _spinVel = releaseSpeed; }
+    }
+}

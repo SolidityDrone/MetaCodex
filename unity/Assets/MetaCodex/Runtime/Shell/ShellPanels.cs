@@ -1,0 +1,683 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Net.Sockets;
+using System.Threading.Tasks;
+using MetaCodex.App;
+using MetaCodex.Hands;
+using MetaCodex.UI;
+using Newtonsoft.Json.Linq;
+using TMPro;
+using UnityEngine;
+using ScriptingEntry = MetaCodex.Scripting.ScriptHost.Entry;
+
+namespace MetaCodex.Shell
+{
+    /// The starter panels: dock, terminals, files, git, browser, scripts, settings.
+    public sealed partial class MetaCodexShell
+    {
+        private UiButton _selectButton;
+        private UiLabel _gestureMonitor;
+
+        private void BuildPanels()
+        {
+            BuildDock();
+            BuildTerminals();
+            BuildFiles();
+            BuildGit();
+            BuildBrowser();
+            BuildScripts();
+            BuildSettings();
+            foreach (var p in _panels.Values) p.transform.localScale = Vector3.one * Mathf.Clamp(Settings.uiScale, 0.6f, 1.6f);
+        }
+
+        /// Accent colour changes are baked into shape tints: rebuild every panel, keeping where they are.
+        public void RebuildPanels()
+        {
+            UiTheme.Current.SetAccent(Settings.accent);
+            var poses = _panels.ToDictionary(kv => kv.Key, kv => (kv.Value.transform.position, kv.Value.transform.rotation, kv.Value.IsOpen));
+            foreach (var p in _panels.Values) { Router.Unregister(p); UiToasts.Kill(p.gameObject); }
+            _panels.Clear();
+            BuildPanels();
+            foreach (var kv in poses)
+            {
+                if (!_panels.TryGetValue(kv.Key, out var p)) continue;
+                p.transform.SetPositionAndRotation(kv.Value.position, kv.Value.rotation);
+                if (kv.Value.IsOpen) { p.gameObject.SetActive(true); p.ForceRefresh(); }
+            }
+            foreach (var f in _frames.Values) f.SetHighlight(0f);
+            if (app != null && app.Active != null && _frames.TryGetValue(app.Active, out var af)) af.SetHighlight(0.55f);
+        }
+
+        private void OnPanelOpened(string id)
+        {
+            switch (id)
+            {
+                case "files": FilesNavigate(_filesPath ?? Settings.filesRoot); break;
+                case "git": GitRefreshRepos(); break;
+                case "scripts": RefreshScriptsPanel(); break;
+                case "terminals": RefreshTerminalsPanel(); break;
+                case "browser": RefreshBrowser(); ProbeLocalServers(); break;
+                case "settings": RefreshDaemon(); break;
+            }
+        }
+
+        // ------------------------------------------------------------------ dock
+
+        private void BuildDock()
+        {
+            var t = UiTheme.Current;
+            var items = new (string label, Action act)[]
+            {
+                ("▶\nNEW", () => TerminalNew()),
+                ("▤\nTERMS", () => TogglePanel("terminals")),
+                ("◫\nFILES", () => TogglePanel("files")),
+                ("⎇\nGIT", () => TogglePanel("git")),
+                ("◎\nWEB", () => TogglePanel("browser")),
+                ("ƒ\nSCRIPTS", () => TogglePanel("scripts")),
+                ("⚙\nSETUP", () => TogglePanel("settings")),
+                ("⌨\nKEYS", () => OpenKeyboard()),
+                ("⌖\nSELECT", () => SetSelectionMode(!Router.SelectionMode)),
+                ("⟲\nCENTER", () => app?.Recenter()),
+            };
+            float bw = 0.074f, gap = 0.006f, pad = 0.012f;
+            float w = items.Length * bw + (items.Length - 1) * gap + 2 * pad, h = 0.074f;
+            var dock = UiPanel.Create<UiPanel>("dock", "", w, h, _root, header: false);
+            dock.Closable = false;
+            _panels["dock"] = dock;
+            Router.Register(dock);
+            for (int i = 0; i < items.Length; i++)
+            {
+                var b = dock.Add(new UiButton(items[i].label, items[i].act, i == 0 ? UiButtonStyle.Primary : UiButtonStyle.Normal)
+                {
+                    Rect = new Rect(pad + i * (bw + gap), pad, bw, h - 2 * pad),
+                    TextSize = 0.0125f,
+                });
+                if (items[i].label.EndsWith("SELECT")) _selectButton = b;
+            }
+            dock.gameObject.SetActive(false);
+        }
+
+        // ------------------------------------------------------------------ terminals
+
+        private UiList _termList;
+
+        private void BuildTerminals()
+        {
+            var t = UiTheme.Current;
+            var p = Panel<UiPanel>("terminals", "TERMINALS", 0.52f, 0.40f);
+            var st = new UiStack(p.Content, t.Gap);
+            var bar = st.Next(t.ButtonHeight);
+            string[] names = { "+ NEW", "FOCUS", "CLOSE", "⌨ KEYS" };
+            Action[] acts =
+            {
+                () => TerminalNew(),
+                () => { var s = SelectedTerminal(); if (s != null) app.Focus(s); },
+                () => { var s = SelectedTerminal(); if (s != null) app.CloseTerminal(s); },
+                () => OpenKeyboard(),
+            };
+            float bw = (bar.width - t.Gap * 3) / 4f;
+            for (int i = 0; i < 4; i++)
+                p.Add(new UiButton(names[i], acts[i], i == 0 ? UiButtonStyle.Primary : UiButtonStyle.Normal) { Rect = new Rect(bar.x + i * (bw + t.Gap), bar.y, bw, bar.height) });
+            _termList = p.Add(new UiList(0.034f, (item, idx) => { if (item.Tag is TerminalInstance ti) app.Focus(ti); }) { Rect = st.Rest() });
+            RefreshTerminalsPanel();
+        }
+
+        private TerminalInstance SelectedTerminal() =>
+            _termList != null && _termList.SelectedIndex >= 0 && _termList.SelectedIndex < _termList.Items.Count ? _termList.Items[_termList.SelectedIndex].Tag as TerminalInstance : app?.Active;
+
+        private void RefreshTerminalsPanel()
+        {
+            if (_termList == null || app == null) return;
+            var t = UiTheme.Current;
+            var items = app.Terminals.Select(ti => new UiListItem
+            {
+                Icon = ti == app.Active ? "▶" : "▢",
+                Title = ti.Name,
+                Sub = ti.Session != null ? ti.Session.Description : "no session",
+                Badge = ti == app.Active ? "ACTIVE" : ti.Session != null && ti.Session.IsRunning ? "RUN" : "IDLE",
+                BadgeColor = ti == app.Active ? t.Accent : ti.Session != null && ti.Session.IsRunning ? t.Ok : t.TextDim,
+                Tag = ti,
+            }).ToList();
+            _termList.SetItems(items, keepScroll: true);
+        }
+
+        // ------------------------------------------------------------------ files
+
+        private string _filesPath;
+        private UiLabel _filesPathLabel, _filesInfo;
+        private UiList _filesList;
+        private FileEntry _filesSelected;
+
+        private void BuildFiles()
+        {
+            var t = UiTheme.Current;
+            var p = Panel<UiPanel>("files", "FILES · LINUX", 0.60f, 0.52f);
+            var st = new UiStack(p.Content, t.Gap);
+            var bar = st.Next(t.ButtonHeight);
+            var nav = new (string, Action)[]
+            {
+                ("↑ UP", () => FilesNavigate(FileService.Parent(_filesPath))),
+                ("⌂ ROOT", () => FilesNavigate("/root")),
+                ("QUEST", () => FilesNavigate("/mnt/quest")),
+                ("/", () => FilesNavigate("/")),
+                ("⟳", () => FilesNavigate(_filesPath)),
+            };
+            float bw = (bar.width - t.Gap * (nav.Length - 1)) / nav.Length;
+            for (int i = 0; i < nav.Length; i++) p.Add(new UiButton(nav[i].Item1, nav[i].Item2) { Rect = new Rect(bar.x + i * (bw + t.Gap), bar.y, bw, bar.height) });
+            _filesPathLabel = p.Add(new UiLabel("/", t.SmallSize * 1.1f) { Rect = st.Next(0.022f), UseMono = true, Color = t.TextAccent });
+            var listRect = st.Next(p.Content.yMax - st.Y - t.ButtonHeight - 0.03f - t.Gap * 2);
+            _filesList = p.Add(new UiList(0.030f, (item, idx) => FilesSelect(item.Tag as FileEntry)) { Rect = listRect });
+            _filesInfo = p.Add(new UiLabel("", t.SmallSize) { Rect = st.Next(0.022f), Color = t.TextDim });
+            var acts = st.Next(t.ButtonHeight);
+            var actions = new (string, Action)[]
+            {
+                ("CD HERE", () => TerminalSend($"cd {GitService.Quote(_filesSelected != null && _filesSelected.IsDir ? _filesSelected.LinuxPath : _filesPath)}\r")),
+                ("VIEW", () => { if (_filesSelected != null && !_filesSelected.IsDir) TerminalSend($"less {GitService.Quote(_filesSelected.LinuxPath)}\r"); }),
+                ("EDIT", () => { if (_filesSelected != null && !_filesSelected.IsDir) TerminalSend($"nano {GitService.Quote(_filesSelected.LinuxPath)}\r"); }),
+                ("PATH ⇥", () => TerminalSend(GitService.Quote(_filesSelected?.LinuxPath ?? _filesPath))),
+            };
+            bw = (acts.width - t.Gap * (actions.Length - 1)) / actions.Length;
+            for (int i = 0; i < actions.Length; i++) p.Add(new UiButton(actions[i].Item1, actions[i].Item2) { Rect = new Rect(acts.x + i * (bw + t.Gap), acts.y, bw, acts.height) });
+        }
+
+        public void FilesNavigate(string path)
+        {
+            if (_filesList == null) return;
+            var t = UiTheme.Current;
+            _filesPath = FileService.Normalize(path ?? Settings.filesRoot);
+            _filesSelected = null;
+            var entries = Files.List(_filesPath, out string error);
+            _filesPathLabel.Set(_filesPath);
+            _filesInfo.Set(error != null ? "⚠ " + error : $"{entries.Count(e => e.IsDir)} folders · {entries.Count(e => !e.IsDir)} files", error != null ? t.Danger : t.TextDim);
+            _filesList.SelectedIndex = -1;
+            _filesList.SetItems(entries.Select(e => new UiListItem
+            {
+                Icon = e.IsLink ? "↪" : e.IsDir ? "▸" : "·",
+                Title = e.Name + (e.IsDir ? "/" : ""),
+                TitleColor = e.IsDir ? t.TextAccent : e.Name.StartsWith(".") ? t.TextDim : (Color?)null,
+                Sub = e.IsDir ? "" : FileService.Size(e.Size),
+                Badge = e.Modified.ToString("MM-dd HH:mm"),
+                BadgeColor = t.TextDim,
+                Tag = e,
+            }));
+        }
+
+        private void FilesSelect(FileEntry e)
+        {
+            if (e == null) return;
+            if (e.IsDir && _filesSelected == e) { FilesNavigate(e.LinuxPath); return; } // second tap opens
+            if (e.IsDir && !e.IsLink) { FilesNavigate(e.LinuxPath); return; }
+            _filesSelected = e;
+            _filesInfo.Set($"{e.LinuxPath} · {(e.IsDir ? "folder" : FileService.Size(e.Size))} · {e.Modified:yyyy-MM-dd HH:mm}");
+        }
+
+        // ------------------------------------------------------------------ git
+
+        private UiList _gitRepos, _gitChanges, _gitBranches;
+        private UiLabel _gitHead;
+        private UiGitGraph _gitGraph;
+        private string _gitRepo;
+        private GitStatus _gitStatus;
+
+        private void BuildGit()
+        {
+            var t = UiTheme.Current;
+            var p = Panel<UiPanel>("git", "GIT · WORKSPACES", 0.72f, 0.60f);
+            var c = p.Content;
+            float leftW = 0.20f;
+            var left = new UiStack(new Rect(c.x, c.y, leftW, c.height), t.Gap);
+            p.Add(new UiLabel("REPOSITORIES", t.SmallSize) { Rect = left.Next(0.02f), UseDisplay = true, Color = t.TextDim });
+            _gitRepos = p.Add(new UiList(0.030f, (item, idx) => GitOpen(item.Tag as string)) { Rect = left.Next(c.height - 0.02f - t.ButtonHeight - t.Gap * 2) });
+            p.Add(new UiButton("⟳ SCAN", GitRefreshRepos) { Rect = left.Next(t.ButtonHeight) });
+
+            var rx = c.x + leftW + t.Gap * 2;
+            var right = new UiStack(new Rect(rx, c.y, c.xMax - rx, c.height), t.Gap);
+            _gitHead = p.Add(new UiLabel("Select a repository", t.BodySize * 1.05f) { Rect = right.Next(0.026f), UseMono = false });
+            var lists = right.NextSplit(0.15f, 0.56f, out var brRect);
+            _gitChanges = p.Add(new UiList(0.025f) { Rect = lists, Monospace = true });
+            _gitBranches = p.Add(new UiList(0.025f, (item, idx) => GitBranchPicked(item.Tag as GitBranch)) { Rect = brRect });
+            p.Add(new UiLabel("HISTORY", t.SmallSize) { Rect = right.Next(0.018f), UseDisplay = true, Color = t.TextDim });
+            _gitGraph = p.Add(new UiGitGraph { Rect = right.Next(c.yMax - right.Y - t.ButtonHeight - t.Gap) });
+            var acts = right.Next(t.ButtonHeight);
+            var actions = new (string, Action)[]
+            {
+                ("⟳", () => GitOpen(_gitRepo)),
+                ("FETCH", () => GitAction("fetch --all --prune")),
+                ("PULL", () => GitAction("pull --ff-only")),
+                ("COMMIT…", GitCommitPrompt),
+                ("TERMINAL", () => { if (_gitRepo != null) TerminalSend($"cd {GitService.Quote(_gitRepo)} && git status\r"); }),
+            };
+            float bw = (acts.width - t.Gap * (actions.Length - 1)) / actions.Length;
+            for (int i = 0; i < actions.Length; i++) p.Add(new UiButton(actions[i].Item1, actions[i].Item2) { Rect = new Rect(acts.x + i * (bw + t.Gap), acts.y, bw, acts.height) });
+        }
+
+        private string GitRoot()
+        {
+            if (Git.InUserland) return "/root";
+            // Editor: the repos of this machine's MetaCodex checkout, seen from WSL
+            return GitService.ToLinuxPath(System.IO.Path.GetFullPath(System.IO.Path.Combine(Application.dataPath, "../..")));
+        }
+
+        public void GitRefreshRepos()
+        {
+            if (_gitRepos == null) return;
+            string root = GitRoot();
+            _gitHead.Set("Scanning " + root + " …", UiTheme.Current.TextDim);
+            Task.Run(async () =>
+            {
+                var repos = await Git.FindRepos(root, 2);
+                _main.Enqueue(() =>
+                {
+                    _gitRepos.SetItems(repos.Select(r => new UiListItem { Icon = "⎇", Title = r.Split('/').Last(), Sub = "", Tag = r }));
+                    if (repos.Count == 0) _gitHead.Set("No git repositories under " + root, UiTheme.Current.TextDim);
+                    else if (_gitRepo == null || !repos.Contains(_gitRepo)) { _gitRepos.SelectIndex(0); }
+                    else GitOpen(_gitRepo);
+                });
+            });
+        }
+
+        public void GitOpen(string repo)
+        {
+            if (repo == null) return;
+            _gitRepo = repo;
+            Task.Run(async () =>
+            {
+                var st = await Git.Status(repo);
+                _main.Enqueue(() => GitShow(st));
+            });
+        }
+
+        public GitStatus LastGitStatus => _gitStatus;
+
+        private void GitShow(GitStatus st)
+        {
+            var t = UiTheme.Current;
+            _gitStatus = st;
+            if (st.Error != null) { _gitHead.Set("⚠ " + st.Error, t.Danger); return; }
+            string ab = (st.Ahead > 0 ? $"  <color=#4DFFA6>↑{st.Ahead}</color>" : "") + (st.Behind > 0 ? $"  <color=#FFB547>↓{st.Behind}</color>" : "");
+            string up = string.IsNullOrEmpty(st.Upstream) ? "<color=#7FA9BF>no upstream</color>" : $"<color=#7FA9BF>{st.Upstream}</color>";
+            int changed = st.Entries.Count;
+            _gitHead.Set($"⎇ <b>{st.Branch}</b>{ab}   {up}   " + (changed == 0 ? "<color=#4DFFA6>clean</color>" : $"<color=#FFB547>{changed} changed</color>"), t.Text);
+            _gitChanges.SetItems(st.Entries.Select(e => new UiListItem
+            {
+                Icon = e.Code.Contains("?") ? "+" : e.Code.Contains("D") ? "−" : "●",
+                Title = e.Path,
+                Badge = e.Code,
+                BadgeColor = e.Code.Contains("?") ? t.TextDim : e.Code.Contains("D") ? t.Danger : e.Code.Contains("A") ? t.Ok : t.Warn,
+            }));
+            _gitBranches.SetItems(st.Branches.Select(b => new UiListItem
+            {
+                Icon = b.Current ? "◆" : "◇",
+                Title = b.Name,
+                TitleColor = b.Current ? t.TextAccent : (Color?)null,
+                Sub = b.When,
+                Badge = string.IsNullOrEmpty(b.Track) ? (string.IsNullOrEmpty(b.Upstream) ? "local" : "synced") : b.Track.Trim('[', ']'),
+                BadgeColor = string.IsNullOrEmpty(b.Track) ? (string.IsNullOrEmpty(b.Upstream) ? t.TextDim : t.Ok) : t.Warn,
+                Tag = b,
+            }));
+            _gitGraph.SetCommits(st.Log);
+        }
+
+        private void GitAction(string args)
+        {
+            if (_gitRepo == null) return;
+            Toast("git " + args.Split(' ')[0] + " …", "info");
+            Task.Run(async () =>
+            {
+                var r = await Git.Git(_gitRepo, args, 60000);
+                _main.Enqueue(() =>
+                {
+                    Toast(r.code == 0 ? "git " + args.Split(' ')[0] + " done" : "git: " + Last(r.output), r.code == 0 ? "ok" : "error");
+                    GitOpen(_gitRepo);
+                });
+            });
+        }
+
+        private static string Last(string s) => (s ?? "").Trim().Split('\n').LastOrDefault() ?? "";
+
+        private void GitCommitPrompt()
+        {
+            if (_gitRepo == null) return;
+            UiKeyboard.Edit("", false, null, msg =>
+            {
+                if (string.IsNullOrWhiteSpace(msg)) { Toast("Commit cancelled (empty message)", "warn"); return; }
+                GitAction("commit -a -m " + GitService.Quote(msg));
+            });
+        }
+
+        private void GitBranchPicked(GitBranch b)
+        {
+            if (b == null || b.Current || _gitRepo == null) return;
+            Modal("SWITCH BRANCH", $"Check out '{b.Name}' in {_gitRepo.Split('/').Last()}?", new[] { "CHECKOUT", "CANCEL" }, i =>
+            {
+                if (i == 0) GitAction("checkout " + GitService.Quote(b.Name));
+            });
+        }
+
+        // ------------------------------------------------------------------ browser
+
+        private UiTextField _url;
+        private UiList _bookmarks, _localServers;
+
+        private void BuildBrowser()
+        {
+            var t = UiTheme.Current;
+            var p = Panel<UiPanel>("browser", "BROWSER · HORIZON", 0.56f, 0.50f);
+            var st = new UiStack(p.Content, t.Gap);
+            var row = st.NextSplit(t.ButtonHeight, 0.80f, out var go);
+            _url = p.Add(new UiTextField("", "https://", u => OpenBrowser(u), "type a URL…") { Rect = row });
+            p.Add(new UiButton("GO ▶", () => OpenBrowser(_url.Text), UiButtonStyle.Primary) { Rect = go });
+            p.Add(new UiLabel("BOOKMARKS", t.SmallSize) { Rect = st.Next(0.018f), UseDisplay = true, Color = t.TextDim });
+            _bookmarks = p.Add(new UiList(0.028f, (item, idx) => OpenBrowser(item.Tag as string)) { Rect = st.Next(0.112f) });
+            var bm = st.Next(t.ButtonHeight);
+            float half = (bm.width - t.Gap) / 2f;
+            p.Add(new UiButton("+ ADD URL", () =>
+            {
+                var u = _url.Text?.Trim();
+                if (string.IsNullOrEmpty(u) || u == "https://" || Settings.bookmarks.Contains(u)) return;
+                Settings.bookmarks.Add(u);
+                OnSettingsChanged();
+                RefreshBrowser();
+            }) { Rect = new Rect(bm.x, bm.y, half, bm.height) });
+            p.Add(new UiButton("− REMOVE", () =>
+            {
+                if (_bookmarks.SelectedIndex < 0 || _bookmarks.SelectedIndex >= Settings.bookmarks.Count) return;
+                Settings.bookmarks.RemoveAt(_bookmarks.SelectedIndex);
+                OnSettingsChanged();
+                RefreshBrowser();
+            }) { Rect = new Rect(bm.x + half + t.Gap, bm.y, half, bm.height) });
+            p.Add(new UiLabel("LOCAL SERVERS (127.0.0.1)", t.SmallSize) { Rect = st.Next(0.018f), UseDisplay = true, Color = t.TextDim });
+            _localServers = p.Add(new UiList(0.028f, (item, idx) => OpenBrowser(item.Tag as string)) { Rect = st.Next(0.084f) });
+            var sys = st.Next(t.ButtonHeight);
+            var sysActs = new (string, Action)[]
+            {
+                ("⟳ SCAN", ProbeLocalServers),
+                ("HANDS ⚙", () => Toast(SystemBridge.OpenHandSettings() ? "Opening hand settings" : SystemBridge.LastResult)),
+                ("APP ⚙", () => Toast(SystemBridge.OpenAppSettings() ? "Opening app settings" : SystemBridge.LastResult)),
+                ("FILES APP", () => Toast(SystemBridge.OpenFilesApp() ? "Opening Files" : SystemBridge.LastResult)),
+            };
+            float bw = (sys.width - t.Gap * 3) / 4f;
+            for (int i = 0; i < 4; i++) p.Add(new UiButton(sysActs[i].Item1, sysActs[i].Item2) { Rect = new Rect(sys.x + i * (bw + t.Gap), sys.y, bw, sys.height) });
+            RefreshBrowser();
+        }
+
+        private void RefreshBrowser()
+        {
+            _bookmarks?.SetItems(Settings.bookmarks.Select(b => new UiListItem { Icon = "◎", Title = b, Tag = b }));
+        }
+
+        public static readonly int[] DevPorts = { 3000, 3001, 4173, 4200, 5000, 5173, 5500, 8000, 8080, 8888, 38990 };
+
+        private void ProbeLocalServers()
+        {
+            Task.Run(async () =>
+            {
+                var open = new List<int>();
+                foreach (var port in DevPorts)
+                {
+                    try
+                    {
+                        using (var c = new TcpClient())
+                        {
+                            var task = c.ConnectAsync("127.0.0.1", port);
+                            if (await Task.WhenAny(task, Task.Delay(150)) == task && c.Connected) open.Add(port);
+                        }
+                    }
+                    catch (Exception) { }
+                }
+                _main.Enqueue(() => _localServers?.SetItems(open.Select(port => new UiListItem
+                {
+                    Icon = "▣",
+                    Title = $"http://127.0.0.1:{port}",
+                    Sub = port == 38990 ? "MQH" : port == 5173 || port == 4173 ? "Vite" : port == 3000 ? "dev server" : "",
+                    Badge = "OPEN",
+                    BadgeColor = UiTheme.Current.Ok,
+                    Tag = $"http://127.0.0.1:{port}",
+                })));
+            });
+        }
+
+        // ------------------------------------------------------------------ scripts
+
+        private UiList _scriptList;
+        private UiLabel _scriptDetail;
+        private UiButton _scriptToggle;
+
+        private void BuildScripts()
+        {
+            var t = UiTheme.Current;
+            var p = Panel<UiPanel>("scripts", "SCRIPTS · LIVE BEHAVIOURS", 0.60f, 0.56f);
+            var st = new UiStack(p.Content, t.Gap);
+            _scriptList = p.Add(new UiList(0.032f, (item, idx) => ScriptPicked()) { Rect = st.Next(0.17f) });
+            _scriptDetail = p.Add(new UiLabel("", t.SmallSize) { Rect = st.Next(0.075f), Wrap = true, UseMono = true, Color = t.TextDim, Align = TextAlignmentOptions.TopLeft });
+            var row = st.Next(t.ButtonHeight);
+            var acts = new (string, Action)[]
+            {
+                ("ENABLE", () => { var e = SelectedScript(); if (e != null) Scripts.SetEnabled(e.Name, !e.Enabled); }),
+                ("⟳ RELOAD", () => { Scripts.ReloadAll(); Toast("Scripts reloaded", "ok"); }),
+                ("+ EXAMPLE", () => { Scripts.Save("double-clap", ExampleScript); Toast("Example script: double clap opens TERMINALS", "ok"); }),
+                ("FOLDER", () => TerminalSend("cd /mnt/quest/scripts && ls -la\r")),
+                ("DELETE", () => { var e = SelectedScript(); if (e != null) Modal("DELETE SCRIPT", $"Delete {e.Name}.lua?", new[] { "DELETE", "CANCEL" }, i => { if (i == 0) Scripts.Delete(e.Name); }); }),
+            };
+            float bw = (row.width - t.Gap * (acts.Length - 1)) / acts.Length;
+            for (int i = 0; i < acts.Length; i++)
+            {
+                var b = p.Add(new UiButton(acts[i].Item1, acts[i].Item2, i == 4 ? UiButtonStyle.Danger : UiButtonStyle.Normal) { Rect = new Rect(row.x + i * (bw + t.Gap), row.y, bw, row.height) });
+                if (i == 0) _scriptToggle = b;
+            }
+            p.Add(new UiDivider { Rect = st.Next(0.008f) });
+            p.Add(new UiLabel("GESTURE MONITOR", t.SmallSize) { Rect = st.Next(0.018f), UseDisplay = true, Color = t.TextDim });
+            _gestureMonitor = p.Add(new UiLabel("", t.SmallSize) { Rect = st.Rest(), Wrap = true, UseMono = true, Color = t.TextAccent, Align = TextAlignmentOptions.TopLeft });
+            RefreshScriptsPanel();
+        }
+
+        public const string ExampleScript =
+@"-- description: double clap opens the terminals list
+-- An example behaviour. Edit or replace it: the app reloads it within a second.
+gesture.sequence({""clap"", ""clap""}, 0.8, function(e)
+  ui.toast(""Double clap: terminals"")
+  ui.toggle(""terminals"")
+end)
+";
+
+        private ScriptingEntry SelectedScript() =>
+            _scriptList != null && _scriptList.SelectedIndex >= 0 && _scriptList.SelectedIndex < _scriptList.Items.Count ? _scriptList.Items[_scriptList.SelectedIndex].Tag as ScriptingEntry : null;
+
+        private void ScriptPicked()
+        {
+            var e = SelectedScript();
+            if (e == null || _scriptDetail == null) return;
+            var t = UiTheme.Current;
+            _scriptDetail.Set(e.Error != null ? "ERROR " + e.Error : string.Join("\n", e.Log.Skip(Math.Max(0, e.Log.Count - 4))), e.Error != null ? t.Danger : t.TextDim);
+            _scriptToggle?.SetText(e.Enabled ? "DISABLE" : "ENABLE");
+        }
+
+        private void RefreshScriptsPanel()
+        {
+            if (_scriptList == null || Scripts == null) return;
+            var t = UiTheme.Current;
+            _scriptList.SetItems(Scripts.Entries.Select(e => new UiListItem
+            {
+                Icon = "●",
+                Title = e.Name,
+                TitleColor = e.Error != null ? t.Danger : e.Enabled ? (Color?)null : t.TextDim,
+                Sub = e.Description,
+                Badge = e.Error != null ? "ERROR" : !e.Enabled ? "OFF" : e.Handlers + " ON",
+                BadgeColor = e.Error != null ? t.Danger : !e.Enabled ? t.TextDim : t.Ok,
+                Tag = e,
+            }), keepScroll: true);
+            ScriptPicked();
+        }
+
+        private void RefreshGestureMonitor()
+        {
+            if (_gestureMonitor == null || Gestures == null) return;
+            var lines = Gestures.Recent.Reverse().Take(6).Select(g => $"{g.Time,7:F2}  {g.Name,-8} {g.Hand,-5} {g.Phase}");
+            string l = HandLine(Gestures.Left, "L"), r = HandLine(Gestures.Right, "R");
+            _gestureMonitor.Set(l + "\n" + r + "\n" + string.Join("\n", lines));
+        }
+
+        private static string HandLine(HandState s, string tag) =>
+            !s.Tracked ? $"{tag}: not tracked" : $"{tag}: pinch {s.Pinch:F2} {(s.Pinching ? "PINCH " : "")}{(s.Grabbing ? "GRAB " : "")}{(s.Pointing ? "POINT " : "")}{(s.Open ? "OPEN " : "")}{(s.PalmUp ? "PALM-UP" : "")}";
+
+        // ------------------------------------------------------------------ settings
+
+        private UiLabel _daemonStatus, _gestureLive;
+        private UiList _pluginList;
+
+        private void BuildSettings()
+        {
+            var t = UiTheme.Current;
+            var s = Settings;
+            var p = Panel<UiPanel>("settings", "SETTINGS", 0.62f, 0.58f);
+            var c = p.Content;
+            var tabs = p.Add(new UiTabs("GESTURES", "DISPLAY", "DAEMON", "ABOUT") { Rect = new Rect(c.x, c.y, c.width, t.ButtonHeight) });
+            var area = new Rect(c.x, c.y + t.ButtonHeight + t.Gap * 2, c.width, c.height - t.ButtonHeight - t.Gap * 2);
+            float rowH = 0.034f;
+
+            // GESTURES
+            var g = new UiStack(area, t.Gap);
+            tabs.AddTo(0, new UiSegmented("CLICK", new[] { "PINCH", "POKE", "BOTH" }, s.gestures.clickMode, i => { s.gestures.clickMode = i; OnSettingsChanged(); }) { Rect = g.Next(rowH) });
+            tabs.AddTo(0, new UiSegmented("MOVE PANELS", new[] { "PINCH HEADER", "CLOSED HAND", "BOTH" }, s.gestures.grabMode, i => { s.gestures.grabMode = i; OnSettingsChanged(); }) { Rect = g.Next(rowH) });
+            tabs.AddTo(0, new UiSegmented("POINT RAY", new[] { "ALWAYS", "POINTING POSE" }, s.gestures.pointMode, i => { s.gestures.pointMode = i; OnSettingsChanged(); }) { Rect = g.Next(rowH) });
+            tabs.AddTo(0, new UiToggle("Show hand rays", s.gestures.rayVisible, v => { s.gestures.rayVisible = v; OnSettingsChanged(); }) { Rect = g.Next(rowH) });
+            tabs.AddTo(0, new UiSlider("PINCH AT", 0.6f, 0.98f, s.gestures.pinchOn, v => { s.gestures.pinchOn = v; s.gestures.pinchOff = Mathf.Min(v - 0.15f, 0.8f); OnSettingsChanged(); }) { Rect = g.Next(rowH) });
+            tabs.AddTo(0, new UiToggle("Clap gesture (two hands)", s.gestures.clapEnabled, v => { s.gestures.clapEnabled = v; OnSettingsChanged(); }) { Rect = g.Next(rowH) });
+            tabs.AddTo(0, new UiSlider("CLAP DISTANCE", 0.04f, 0.14f, s.gestures.clapDistance, v => { s.gestures.clapDistance = v; OnSettingsChanged(); }) { Rect = g.Next(rowH), Format = "0.000" });
+            var gb = g.NextSplit(t.ButtonHeight, 0.5f, out var gb2);
+            tabs.AddTo(0, new UiButton("SELECT AREA ⌖", () => SetSelectionMode(!Router.SelectionMode)) { Rect = gb });
+            tabs.AddTo(0, new UiButton("HORIZON HAND SETTINGS", () => Toast(SystemBridge.OpenHandSettings() ? "Opening hand settings" : SystemBridge.LastResult)) { Rect = gb2 });
+            _gestureLive = tabs.AddTo(0, new UiLabel("", t.SmallSize) { Rect = g.Rest(), UseMono = true, Color = t.TextAccent, Wrap = true, Align = TextAlignmentOptions.TopLeft });
+            p.Tick += _ => { if (_gestureLive != null && _gestureLive.Visible && Gestures != null) _gestureLive.Set(HandLine(Gestures.Left, "L") + "\n" + HandLine(Gestures.Right, "R")); };
+
+            // DISPLAY
+            var d = new UiStack(area, t.Gap);
+            tabs.AddTo(1, new UiSegmented("LAYOUT", new[] { "FIXED", "FLOAT" }, s.layout == "float" ? 1 : 0, i => SetLayout(i == 1 ? "float" : "fixed")) { Rect = d.Next(rowH) });
+            tabs.AddTo(1, new UiSlider("DISTANCE", 0.5f, 1.4f, s.panelDistance, v => { s.panelDistance = v; OnSettingsChanged(); }) { Rect = d.Next(rowH), Format = "0.00 m" });
+            tabs.AddTo(1, new UiSlider("CAROUSEL RADIUS", 0.6f, 1.6f, s.carouselRadius, v => { s.carouselRadius = v; OnSettingsChanged(); }) { Rect = d.Next(rowH), Format = "0.00 m" });
+            tabs.AddTo(1, new UiSlider("UI SCALE", 0.7f, 1.4f, s.uiScale, v => { s.uiScale = v; OnSettingsChanged(); }) { Rect = d.Next(rowH), Format = "0.00" });
+            var accents = UiTheme.Accents.Keys.ToArray();
+            tabs.AddTo(1, new UiSegmented("ACCENT", accents.Select(a => a.ToUpperInvariant()).ToArray(), Math.Max(0, Array.IndexOf(accents, s.accent)), i => { s.accent = accents[i]; OnSettingsChanged(rebuild: true); }) { Rect = d.Next(rowH) });
+            tabs.AddTo(1, new UiToggle("Scanlines", s.scanlines, v => { s.scanlines = v; OnSettingsChanged(); }) { Rect = d.Next(rowH) });
+            tabs.AddTo(1, new UiToggle("Bend panels in float layout", s.bendPanels, v => { s.bendPanels = v; OnSettingsChanged(); }) { Rect = d.Next(rowH) });
+            tabs.AddTo(1, new UiButton("⟲ RECENTER EVERYTHING", () => app?.Recenter(), UiButtonStyle.Primary) { Rect = d.Next(t.ButtonHeight) });
+
+            // DAEMON (MQH)
+            var m = new UiStack(area, t.Gap);
+            tabs.AddTo(2, new UiTextField("MQH URL", s.mqhUrl, v => { s.mqhUrl = v.Trim(); OnSettingsChanged(); RefreshDaemon(); }) { Rect = m.Next(rowH) });
+            tabs.AddTo(2, new UiTextField("TOKEN", s.mqhToken, v => { s.mqhToken = v.Trim(); OnSettingsChanged(); RefreshDaemon(); }, "none") { Rect = m.Next(rowH), Secure = true });
+            tabs.AddTo(2, new UiToggle("Sync these settings with MQH", s.mqhSync, v => { s.mqhSync = v; OnSettingsChanged(); }) { Rect = m.Next(rowH) });
+            _daemonStatus = tabs.AddTo(2, new UiLabel("not checked", t.SmallSize) { Rect = m.Next(0.024f), Color = t.TextDim });
+            _pluginList = tabs.AddTo(2, new UiList(0.027f, (item, idx) => PluginPicked(item)) { Rect = m.Next(area.yMax - m.Y - t.ButtonHeight - t.Gap) });
+            var mb = m.NextSplit(t.ButtonHeight, 0.5f, out var mb2);
+            tabs.AddTo(2, new UiButton("⟳ CONNECT", RefreshDaemon, UiButtonStyle.Primary) { Rect = mb });
+            tabs.AddTo(2, new UiButton("PUSH SETTINGS", () => Mqh.PushQuestSettings(Settings.ToJObject(), ok => Toast(ok ? "Settings saved to MQH" : "MQH unreachable", ok ? "ok" : "error"))) { Rect = mb2 });
+
+            // ABOUT
+            var a2 = new UiStack(area, t.Gap);
+            tabs.AddTo(3, new UiLabel($"<b>MetaCodex</b> {Application.version} · {SystemInfo.deviceModel}", t.BodySize) { Rect = a2.Next(0.026f) });
+            tabs.AddTo(3, new UiLabel("Agents and a real Linux userland in VR. Panels, gestures and behaviours are data and Lua: agents change them live.", t.SmallSize) { Rect = a2.Next(0.04f), Wrap = true, Color = t.TextDim });
+            tabs.AddTo(3, new UiLabel("Third-party: MoonSharp (BSD-3-Clause, Marco Mastropaolo) · Orbitron, Rajdhani, Noto (SIL OFL 1.1) · DejaVu fonts · bb (MIT, Michael Yong) for MQH.", t.SmallSize) { Rect = a2.Next(0.05f), Wrap = true, Color = t.TextDim });
+            tabs.AddTo(3, new UiLabel("", t.SmallSize) { Rect = a2.Rest(), UseMono = true, Wrap = true, Color = t.TextDim, Align = TextAlignmentOptions.TopLeft }).Set(string.Join("\n", LogLines.Skip(Math.Max(0, LogLines.Count - 8))));
+        }
+
+        public void RefreshDaemon()
+        {
+            if (_daemonStatus == null) return;
+            var t = UiTheme.Current;
+            _daemonStatus.Set("connecting to " + Settings.mqhUrl + " …", t.TextDim);
+            Mqh.BaseUrl = Settings.mqhUrl;
+            Mqh.Token = Settings.mqhToken;
+            Mqh.Version(v =>
+            {
+                if (v == null) { _daemonStatus.Set("⚠ " + (Mqh.LastError ?? "MQH not reachable"), t.Danger); _pluginList.SetItems(new UiListItem[0]); return; }
+                string ver = v["version"]?.ToString() ?? v["appVersion"]?.ToString() ?? v.ToString(Newtonsoft.Json.Formatting.None);
+                _daemonStatus.Set($"<color=#4DFFA6>● online</color>  MQH {Trim(ver, 60)}", t.Text);
+                Mqh.Plugins(pl =>
+                {
+                    var arr = pl?["plugins"] as JArray;
+                    if (arr == null) return;
+                    _pluginList.SetItems(arr.Select(x => new UiListItem
+                    {
+                        Icon = x["spatial"]?["hasSpatial"]?.Value<bool>() == true ? "◫" : "◆",
+                        Title = (string)x["id"],
+                        Sub = (string)x["name"] ?? "",
+                        Badge = ((string)x["status"] ?? "").ToUpperInvariant(),
+                        BadgeColor = (string)x["status"] == "running" ? t.Ok : (string)x["status"] == "disabled" ? t.TextDim : t.Warn,
+                        Tag = (string)x["id"],
+                    }));
+                });
+            });
+        }
+
+        private static string Trim(string s, int n) => s == null ? "" : s.Length > n ? s.Substring(0, n) + "…" : s;
+
+        private void PluginPicked(UiListItem item)
+        {
+            var id = item.Tag as string;
+            if (id == null) return;
+            bool running = item.Badge == "RUNNING";
+            Modal("PLUGIN " + id.ToUpperInvariant(), running ? "Disable this plugin?" : "Enable this plugin?", new[] { running ? "DISABLE" : "ENABLE", "CANCEL" }, i =>
+            {
+                if (i != 0) return;
+                Mqh.SetPluginEnabled(id, !running, r => { Toast(r != null ? $"{id} {(running ? "disabled" : "enabled")}" : "MQH: " + Mqh.LastError, r != null ? "ok" : "error"); RefreshDaemon(); });
+            });
+        }
+    }
+
+    /// The git history as "metro lines": one vertical line per lane, a dot per commit, refs and subject.
+    public sealed class UiGitGraph : UiElement
+    {
+        public float RowHeight = 0.022f;
+        private readonly List<int> _lanes = new List<int>();
+        private readonly List<(int dot, UiText text)> _rows = new List<(int, UiText)>();
+        private const int MaxLanes = 6;
+        private const float LaneW = 0.012f;
+        private static readonly int[] LaneColors = { 0x35D0FF, 0x4DFFA6, 0xFFB547, 0xB28CFF, 0xFF5468, 0x8FEBFF };
+
+        protected override void Build()
+        {
+            for (int l = 0; l < MaxLanes; l++)
+                _lanes.Add(Panel.Shapes.Add(Panel.Shape(UiShapeKind.Line, new Rect(Rect.x + 0.008f + l * LaneW, Rect.y, 0.003f, Rect.height), UiTheme.Hex(LaneColors[l]), 0, 0, 0.002f)));
+            int n = Mathf.Max(1, Mathf.FloorToInt(Rect.height / RowHeight));
+            for (int i = 0; i < n; i++)
+            {
+                int dot = Panel.Shapes.Add(Panel.Shape(UiShapeKind.Dot, new Rect(Rect.x, Rect.y + i * RowHeight, 0.011f, 0.011f), Theme.Accent, 0, 0, 0.003f, 0.6f));
+                var text = UiText.Create(Panel, new Rect(Rect.x + 0.02f + MaxLanes * LaneW, Rect.y + i * RowHeight, Rect.width - 0.02f - MaxLanes * LaneW, RowHeight), "", Theme.Mono, Theme.SmallSize, Theme.Text);
+                _rows.Add((dot, text));
+            }
+            SetCommits(new List<GitCommit>());
+        }
+
+        public void SetCommits(List<GitCommit> log)
+        {
+            if (Panel == null) return;
+            int lanes = log.Count > 0 ? Mathf.Min(MaxLanes, log[0].Lanes) : 0;
+            for (int l = 0; l < MaxLanes; l++) Panel.Shapes.SetVisible(_lanes[l], Visible && l < lanes);
+            for (int i = 0; i < _rows.Count; i++)
+            {
+                bool has = i < log.Count && Visible;
+                Panel.Shapes.SetVisible(_rows[i].dot, has);
+                _rows[i].text.SetVisible(has);
+                if (!has) continue;
+                var c = log[i];
+                int lane = Mathf.Min(c.Lane, MaxLanes - 1);
+                var center = new Vector2(Rect.x + 0.0095f + lane * LaneW, Rect.y + i * RowHeight + RowHeight * 0.5f);
+                var s = Panel.Shapes.Get(_rows[i].dot);
+                s.Center = Panel.PanelToLocal(center, -0.0004f);
+                s.Tint = UiTheme.Hex(LaneColors[lane]);
+                s.State = c.Parents.Length > 1 ? 1f : 0.5f;
+                Panel.Shapes.Set(_rows[i].dot, s);
+                string refs = string.IsNullOrEmpty(c.Refs) ? "" : $" <color=#FFB547>({c.Refs})</color>";
+                _rows[i].text.Text = $"<color=#8FEBFF>{c.Hash}</color>{refs} <noparse>{c.Subject}</noparse> <color=#7FA9BF>{c.When}</color>";
+            }
+        }
+
+        protected override void OnVisibility(bool v)
+        {
+            foreach (var l in _lanes) Panel.Shapes.SetVisible(l, v);
+            foreach (var r in _rows) { Panel.Shapes.SetVisible(r.dot, v); r.text.SetVisible(v); }
+        }
+    }
+}

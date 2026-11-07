@@ -50,6 +50,8 @@ namespace MetaCodex.App
 
         private void OnText(char ch)
         {
+            // a UI text field has focus: a physical keyboard types there, not into the shell
+            if (MetaCodex.UI.UiKeyboard.Active) { MetaCodex.UI.UiKeyboard.TypePhysical(ch.ToString()); return; }
             if (ch < 0x20 || ch == 0x7F) return; // Enter, Tab, Backspace arrive as keys
             if (Ctrl) return; // chords are handled from key presses in Update
             if (char.IsHighSurrogate(ch)) { _pendingHigh = ch; return; }
@@ -93,6 +95,12 @@ namespace MetaCodex.App
         private void Update()
         {
             Hook(Keyboard.current);
+            if (MetaCodex.UI.UiKeyboard.Active)
+            {
+                if (_kb != null && _kb.backspaceKey.wasPressedThisFrame) MetaCodex.UI.UiKeyboard.TypePhysical("\b");
+                if (_kb != null && (_kb.enterKey.wasPressedThisFrame || _kb.numpadEnterKey.wasPressedThisFrame)) MetaCodex.UI.UiKeyboard.TypePhysical("\n");
+                return;
+            }
             if (_kb != null) PollPhysical();
             PollSystemKeyboard();
         }

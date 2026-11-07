@@ -1,0 +1,4 @@
+<!-- IL2CPP stripping: MoonSharp registers its Lua core modules by reflection; keep the whole interpreter. -->
+<linker>
+  <assembly fullname="MoonSharp.Interpreter" preserve="all" />
+</linker>

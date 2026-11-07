@@ -51,6 +51,22 @@ namespace MetaCodex.Terminal
         private long _lastVersion = -1;
         private float _syncSince = -1f;
 
+        /// A new terminal panel made at runtime takes the fonts, material and cell metrics of an existing one.
+        public void CopyConfigFrom(TerminalView other)
+        {
+            monoFont = other.monoFont;
+            fallbackFonts = other.fallbackFonts;
+            panelMaterial = other.panelMaterial;
+            cellHeight = other.cellHeight;
+            cellAspect = other.cellAspect;
+            padding = other.padding;
+            emFraction = other.emFraction;
+            _font = other._font; // share the runtime SDF atlas (and its fallbacks)
+        }
+
+        public Font MonoFont => monoFont;
+        public Font[] FallbackFonts => fallbackFonts;
+
         public void Attach(VtTerminal terminal)
         {
             Terminal = terminal;

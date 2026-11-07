@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Text;
 using MetaCodex.App;
 using MetaCodex.Linux;
+using MetaCodex.Shell;
 using MetaCodex.Terminal;
 using TMPro;
 using UnityEditor;
@@ -29,9 +30,14 @@ namespace MetaCodex.EditorTools
         public const string ScenePath = "Assets/Scenes/MetaCodex.unity";
         public const string PackageId = "com.pnncl.metacodex";
         public const string ApkPath = "Builds/MetaCodex.apk";
-        public const string Version = "0.1.0-terminal";
-        public const int VersionCode = 1;
+        public const string Version = "0.2.0-shell";
+        public const int VersionCode = 2;
         public const string PanelMaterialPath = "Assets/MetaCodex/Materials/Panel.mat";
+        public const string ShapeMaterialPath = "Assets/MetaCodex/Materials/SciFiUI.mat";
+        public const string BeamMaterialPath = "Assets/MetaCodex/Materials/Beam.mat";
+        public const string DisplayFontPath = "Assets/MetaCodex/Fonts/Orbitron.ttf";
+        public const string BodyFontPath = "Assets/MetaCodex/Fonts/Rajdhani-SemiBold.ttf";
+        public const string ManifestPath = "Assets/Plugins/Android/AndroidManifest.xml";
         public const string MonoFontPath = "Assets/MetaCodex/Fonts/DejaVuSansMono.ttf";
         /// Glyphs DejaVu Sans Mono lacks, in order: general symbols, ⏺ (Symbols 2), ⎿ (Symbols), emoji.
         public static readonly string[] FallbackFontPaths =
@@ -58,6 +64,16 @@ namespace MetaCodex.EditorTools
         public static void BatchSelfTest() => RunBatch(() => Log(SelfTest()));
 
         public static void BatchBuild() => RunBatch(() => Log(BuildApk()));
+
+        /// Scene rebuild + both self-tests (terminal and shell UI): what a code change needs before an APK.
+        public static void BatchCheck() => RunBatch(() =>
+        {
+            Log(BuildScene());
+            Log(SelfTest());
+            Log(MetaCodexUiTest.Run());
+        });
+
+        public static void BatchUiTest() => RunBatch(() => Log(MetaCodexUiTest.Run()));
 
         private static void RunBatch(Action body)
         {
@@ -103,6 +119,8 @@ namespace MetaCodex.EditorTools
             // the userland needs sockets (apt, npm, model APIs); Unity would only add INTERNET on its own
             // when it sees UnityWebRequest to the network
             PlayerSettings.Android.forceInternetPermission = true;
+            // MQH, QVAC and local web apps answer on http://127.0.0.1 (loopback, no TLS)
+            PlayerSettings.insecureHttpOption = InsecureHttpOption.AlwaysAllowed;
             PlayerSettings.SetUseDefaultGraphicsAPIs(BuildTarget.Android, false);
             PlayerSettings.SetGraphicsAPIs(BuildTarget.Android, new[] { GraphicsDeviceType.Vulkan });
             PlayerSettings.colorSpace = ColorSpace.Linear;
@@ -271,6 +289,21 @@ namespace MetaCodex.EditorTools
             so.FindProperty("head").objectReferenceValue = rig.centerEyeAnchor;
             so.ApplyModifiedPropertiesWithoutUndo();
 
+            // the spatial shell: dock, panels, gestures, Lua scripts, MQH link
+            var shell = app.AddComponent<MetaCodexShell>();
+            so = new SerializedObject(shell);
+            so.FindProperty("app").objectReferenceValue = mcx;
+            so.FindProperty("leftHand").objectReferenceValue = leftHand;
+            so.FindProperty("rightHand").objectReferenceValue = rightHand;
+            so.FindProperty("displayFont").objectReferenceValue = AssetDatabase.LoadAssetAtPath<Font>(DisplayFontPath) ?? throw new Exception("font missing: " + DisplayFontPath);
+            so.FindProperty("bodyFont").objectReferenceValue = AssetDatabase.LoadAssetAtPath<Font>(BodyFontPath) ?? throw new Exception("font missing: " + BodyFontPath);
+            var sym = so.FindProperty("symbolFonts");
+            sym.arraySize = FallbackFontPaths.Length;
+            for (int i = 0; i < FallbackFontPaths.Length; i++) sym.GetArrayElementAtIndex(i).objectReferenceValue = AssetDatabase.LoadAssetAtPath<Font>(FallbackFontPaths[i]);
+            so.FindProperty("shapeMaterial").objectReferenceValue = GetOrCreateMaterial(ShapeMaterialPath, "MetaCodex/SciFiUI");
+            so.FindProperty("beamMaterial").objectReferenceValue = GetOrCreateMaterial(BeamMaterialPath, "MetaCodex/Beam");
+            so.ApplyModifiedPropertiesWithoutUndo();
+
             var light = new GameObject("Directional Light").AddComponent<Light>();
             light.type = LightType.Directional;
             light.shadows = LightShadows.None;
@@ -283,6 +316,7 @@ namespace MetaCodex.EditorTools
             EditorSceneManager.SaveScene(scene, ScenePath);
             EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(ScenePath, true) };
             OVRManifestPreprocessor.GenerateOrUpdateAndroidManifest(silentMode: true);
+            PatchManifest();
             AssetDatabase.SaveAssets();
             return "scene built: " + ScenePath;
         }
@@ -347,7 +381,23 @@ namespace MetaCodex.EditorTools
             return hand;
         }
 
-        private static void SetFallbackFonts(SerializedObject so)
+        /// What the OVR manifest generator does not add: (1) package visibility for the Horizon OS shell
+        /// (system deep links: browser, settings, Files) and (2) boundaryless mode (Meta docs "Boundaryless Mode
+        /// for Mixed Reality in Unity": passthrough-only apps may drop the boundary for the whole experience).
+        public static void PatchManifest()
+        {
+            if (!File.Exists(ManifestPath)) throw new Exception("manifest missing: " + ManifestPath);
+            string m = File.ReadAllText(ManifestPath);
+            string before = m;
+            if (!m.Contains("com.oculus.feature.BOUNDARYLESS_APP"))
+                m = m.Replace("<application", "<uses-feature android:name=\"com.oculus.feature.BOUNDARYLESS_APP\" android:required=\"true\" />\n  <application");
+            if (!m.Contains("<queries>"))
+                m = m.Replace("<application", "<queries>\n    <package android:name=\"com.oculus.vrshell\" />\n  </queries>\n  <application");
+            if (m != before) File.WriteAllText(ManifestPath, m);
+            AssetDatabase.ImportAsset(ManifestPath);
+        }
+
+        public static void SetFallbackFonts(SerializedObject so)
         {
             var list = so.FindProperty("fallbackFonts");
             list.arraySize = FallbackFontPaths.Length;
@@ -356,7 +406,7 @@ namespace MetaCodex.EditorTools
                     ?? throw new Exception("font missing: " + FallbackFontPaths[i]);
         }
 
-        private static Material GetOrCreateMaterial(string path, string shaderName)
+        public static Material GetOrCreateMaterial(string path, string shaderName)
         {
             var m = AssetDatabase.LoadAssetAtPath<Material>(path);
             if (m != null) return m;
@@ -484,6 +534,7 @@ namespace MetaCodex.EditorTools
             ConfigurePlayer();
             ConfigureMetaProjectConfig();
             OVRManifestPreprocessor.GenerateOrUpdateAndroidManifest(silentMode: true);
+            PatchManifest();
             Directory.CreateDirectory("Builds");
             var report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
             {

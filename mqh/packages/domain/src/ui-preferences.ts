@@ -52,6 +52,7 @@ export const UI_PREFERENCE_KEYS = [
   "composer.provider",
   "infoPanel.collapsedSections",
   "threadContextCard.pinned",
+  "quest.settings",
 ] as const;
 export type UiPreferenceKey = (typeof UI_PREFERENCE_KEYS)[number];
 const uiPreferenceKeySchema = z.enum(UI_PREFERENCE_KEYS);
@@ -175,6 +176,15 @@ export const uiPreferenceDefinitions = {
     ]),
     [],
     "Thread Info panel section ids that are collapsed, such as forks, threadStorage, or <pluginId>/<sectionId> for plugin sections like bb--git/commits and bb--git/uncommitted-changes. Legacy commits and uncommittedChanges resolve to the Git plugin's sections.",
+  ),
+  // MQH: the headset app's settings (gestures, display, scripts), owned by the Unity client and readable
+  // and editable by agents through the same API. A flat JSON object; size-capped.
+  "quest.settings": defineUiPreference(
+    z
+      .record(z.string().max(128), z.unknown())
+      .refine((value) => JSON.stringify(value).length <= 64_000, "quest.settings is larger than 64 KB"),
+    {},
+    "Settings of the MetaCodex headset app: gesture bindings and thresholds, panel layout and appearance, enabled scripts. Written by the Unity client; agents may read and change them.",
   ),
 } as const satisfies Record<UiPreferenceKey, UiPreferenceDefinition>;
 

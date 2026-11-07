@@ -30,13 +30,18 @@ with tarfile.open(fileobj=raw, mode="w", format=tarfile.PAX_FORMAT) as tf:
             entries.append(os.path.join(dirpath, d))
         for f in sorted(filenames):
             entries.append(os.path.join(dirpath, f))
-    for full in entries:
-        rel = os.path.relpath(full, src).replace(os.sep, "/")
+    # files kept elsewhere in the repo, placed into the rootfs too (one source of truth): the agent skill for
+    # live Lua behaviours, so `claude` in the terminal finds it as well as MQH threads do
+    extra = {"root/.claude/skills/quest-scripting/SKILL.md": os.path.join(root, "mqh", "plugins", "bb-guide", "skills", "quest-scripting", "SKILL.md")}
+    extra_dirs = sorted({"/".join(k.split("/")[:i]) for k in extra for i in range(1, len(k.split("/")))})
+    entries = [(os.path.relpath(f, src).replace(os.sep, "/"), f) for f in entries]
+    entries += [(d, None) for d in extra_dirs if not os.path.isdir(os.path.join(src, d))] + sorted(extra.items())
+    for rel, full in entries:
         ti = tarfile.TarInfo(rel)
         ti.uid = ti.gid = 0
         ti.uname = ti.gname = "root"
         ti.mtime = MTIME
-        if os.path.isdir(full):
+        if full is None or os.path.isdir(full):
             ti.type, ti.mode = tarfile.DIRTYPE, mode_for(rel, True)
             tf.addfile(ti)
         else:
