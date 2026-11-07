@@ -1,0 +1,36 @@
+[?2004hbash-5.2$ printf '\e[1;31mbold red\e[0m normal\n'; ls --color=always /usr/bin | head -32; echo done
+[?2004l[1;31mbold red[0m normal
+[0m[01;36mGET[0m
+[01;36mHEAD[0m
+[01;36mNF[0m
+[01;36mPOST[0m
+[01;36mX11[0m
+[01;32m[[0m
+[01;32maa-enabled[0m
+[01;32maa-exec[0m
+[01;32maa-features-abi[0m
+[01;36maapt[0m
+[01;36maapt2[0m
+[01;36macorn[0m
+[01;32macyclic[0m
+[01;36madb[0m
+[01;32madd-apt-repository[0m
+[01;32maddpart[0m
+[01;36maddr2line[0m
+[01;36maidl[0m
+[01;36mant[0m
+[01;36mapkanalyzer[0m
+[01;36mapksigner[0m
+[01;32mapport-bug[0m
+[01;32mapport-cli[0m
+[01;36mapport-collect[0m
+[01;32mapport-unpack[0m
+[01;32mappres[0m
+[01;32mappstreamcli[0m
+[01;36mapropos[0m
+[01;32mapt[0m
+[01;36mapt-add-repository[0m
+[01;32mapt-cache[0m
+[01;32mapt-cdrom[0m
+done
+[?2004hbash-5.2$ 

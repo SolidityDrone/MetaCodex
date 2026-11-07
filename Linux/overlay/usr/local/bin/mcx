@@ -1,0 +1,3 @@
+#!/bin/sh
+# mcx: MetaCodex Core CLI (bb-style verbs). Shipped by the app (overlay).
+exec node --no-warnings /opt/metacodex/core/src/cli.ts "$@"

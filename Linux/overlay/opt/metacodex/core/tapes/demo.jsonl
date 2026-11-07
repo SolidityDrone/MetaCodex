@@ -1,0 +1,11 @@
+// Demo session for judge builds and tests: one task, one approval, a second turn.
+{"turn":true}
+{"wait":400,"emit":"assistant.message","data":{"text":"I'll add rate limiting to the orders endpoint. First I'll look at the middleware folder."}}
+{"wait":600,"emit":"tool.call","data":{"callId":"c1","name":"read","input":{"path":"middleware/"}}}
+{"wait":300,"emit":"tool.result","data":{"callId":"c1","ok":true,"summary":"auth.js, logging.js"}}
+{"wait":500,"emit":"tool.call","data":{"callId":"c2","name":"edit","input":{"path":"middleware/rate_limit.js"}}}
+{"ask":"approval","payload":{"subject":"file_change","path":"middleware/rate_limit.js","summary":"create rate_limit.js (40 lines)","risk":"low"},"onDeny":[{"emit":"assistant.message","data":{"text":"Understood, I won't write that file. Tell me what to change."}}]}
+{"wait":300,"emit":"tool.result","data":{"callId":"c2","ok":true,"summary":"created middleware/rate_limit.js"}}
+{"wait":400,"emit":"assistant.message","data":{"text":"Done: /api/orders now allows 60 requests a minute per client."}}
+{"turn":true}
+{"wait":300,"emit":"assistant.message","data":{"text":"Making it weekly-configurable now. Updated the setting and the test."}}

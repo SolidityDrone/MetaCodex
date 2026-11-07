@@ -1,0 +1,10 @@
+{
+  "distro": "debian",
+  "tag": "trixie-slim",
+  "arch": "arm64",
+  "manifestDigest": "sha256:24a01011d10eba3a023bc8585b9650b8b29021240d4217c05b905e09ef4a5232",
+  "layerDigest": "sha256:acd43e9bebc37bc4ba7a5f47bd7598913337803e53d468f37d940f11f5d5f1ef",
+  "sizeBytes": 30214037,
+  "entries": 3266,
+  "fetched": "2026-11-06T19:40:49Z"
+}

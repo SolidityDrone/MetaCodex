@@ -1,0 +1,30 @@
+top - 20:59:00 up 1 day, 16:24,  1 user,  load average: 0.17, 0.20, 0.37
+Tasks:  94 total,   1 running,  79 sleeping,  10 stopped,   4 zombie
+%Cpu(s):  0.2 us,  0.1 sy,  0.0 ni, 99.5 id,  0.0 wa,  0.0 hi,  0.1 si,  0.0 st
+MiB Mem :   7943.7 total,   3131.5 free,   1991.7 used,   3130.0 buff/cache
+MiB Swap:   4096.0 total,   4054.5 free,     41.5 used.   5952.0 avail Mem
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+ 650857 drone     20   0 5705328 311156 113260 S   2.0   3.8   1:08.05 claude
+ 627337 drone     20   0   11.9g 149704  59480 S   1.0   1.8   0:55.07 node
+ 628390 drone     20   0 5705324 345208 129832 S   1.0   4.2   3:05.81 claude
+ 631214 drone     20   0 5697128 263280 113204 S   1.0   3.2   1:24.16 claude
+ 665267 drone     20   0    4904   3656   3264 S   1.0   0.0   0:00.07 bash
+ 665405 drone     20   0    9380   5764   3556 R   1.0   0.1   0:00.03 top
+      1 root      20   0   22624  12224   8004 S   0.0   0.2   0:23.73 systemd
+      2 root      20   0    3804   2504   2376 S   0.0   0.0   0:00.20 init-systemd(Ub
+      3 root      20   0    3664   2136   2040 S   0.0   0.0   0:00.00 init-watcher
+      7 root      20   0    4140   2732   2300 S   0.0   0.0   0:26.80 init
+     58 root      19  -1   67056  14296  12940 S   0.0   0.2   0:28.94 systemd-journal
+    104 root      20   0   25312   5804   3892 S   0.0   0.1   1:16.66 systemd-udevd
+    115 root      20   0  227712   1744   1444 S   0.0   0.0   0:00.08 snapfuse
+    123 root      20   0  377240   2292   1428 S   0.0   0.0   0:00.10 snapfuse
+    126 root      20   0  377240   2104   1440 S   0.0   0.0   0:00.12 snapfuse
+    127 root      20   0  452004   2492   1472 S   0.0   0.0   0:00.21 snapfuse
+    137 root      20   0  377240   2088   1440 S   0.0   0.0   0:00.07 snapfuse
+    145 root      20   0  377240   2128   1468 S   0.0   0.0   0:00.06 snapfuse
+    148 root      20   0  377372   2152   1484 S   0.0   0.0   0:00.11 snapfuse
+    151 root      20   0  452004   2140   1432 S   0.0   0.0   0:00.08 snapfuse
+    159 root      20   0  452136   2472   1468 S   0.0   0.0   0:00.17 snapfuse
+    165 root      20   0  377240   2136   1416 S   0.0   0.0   0:00.06 snapfuse
+    170 root      20   0  526768  12532   1456 S   0.0   0.2   0:01.88 snapfuse

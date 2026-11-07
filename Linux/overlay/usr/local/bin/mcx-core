@@ -1,0 +1,4 @@
+#!/bin/sh
+# mcx-core: the MetaCodex control-plane daemon on 127.0.0.1:38990 (token in ~/.metacodex/token).
+# Run in the background: mcx-core >~/.metacodex/core.log 2>&1 &
+exec node --no-warnings /opt/metacodex/core/src/server.ts "$@"

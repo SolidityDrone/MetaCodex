@@ -1,0 +1,10 @@
+[38;5;208m╭──────────────────╮[0m
+[38;5;208m│[0m 中文 宽字符 ✻ ⏺ ⎿ [38;5;208m│[0m
+[38;5;208m╰──────────────────╯[0m
+emoji: 🚀 ok, tabs:	A	B
+[38;2;255;100;0mtrue[48;2;0;60;120m colour[0m [4munder[0m [7minverse[0m [9mstrike[0m
+cursor save7 overwritten8XX
+insert: abcdef[3D[2@__
+delete: abcdef[4D[2P
+erase:  abcdef[3D[1K
+[?2004hbash-5.2$ 

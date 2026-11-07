@@ -1,0 +1,59 @@
+#!/bin/bash
+# mcx-setup: first-run setup of the MetaCodex userland (Debian 13 arm64 under proot, inside the headset app).
+#   mcx-setup          base tools + Node.js 24 LTS (the agents, bb and the local AI CLI all need Node >= 22)
+#   mcx-setup agents   + the cloud agent CLI (official installer, npm fallback) and the open agent CLI (npm)
+#   mcx-setup qvac     + the local AI runtime (QVAC SDK in /root/qvac, its CLI with the local API server)
+#   mcx-setup all      everything above
+# Safe to rerun: each step is skipped when already done. Shipped by the app (overlay); edits are overwritten.
+set -euo pipefail
+# Debian's /etc/profile resets root's PATH and drops ~/.local/bin, where the official installer puts the
+# cloud agent CLI
+export PATH="$HOME/.local/bin:/usr/local/bin:$PATH"
+want="${1:-base}"
+export DEBIAN_FRONTEND=noninteractive
+say() { printf '\033[1;36m==> %s\033[0m\n' "$*"; }
+t0=$(date +%s)
+
+if ! command -v curl >/dev/null || ! command -v git >/dev/null || ! command -v xz >/dev/null; then
+  say "apt: base tools"
+  apt-get update
+  apt-get install -y --no-install-recommends ca-certificates curl git xz-utils python3 procps less nano
+fi
+
+node_major() { node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0; }
+if [ "$(node_major)" -lt 22 ]; then
+  say "Node.js 24 LTS (nodejs.org, linux-arm64)"
+  base=https://nodejs.org/dist/latest-v24.x
+  sums=$(curl -fsSL "$base/SHASUMS256.txt")
+  f=$(printf '%s\n' "$sums" | grep -o 'node-v[0-9.]*-linux-arm64\.tar\.xz' | head -1)
+  cd /tmp
+  curl -fsSLO "$base/$f"
+  printf '%s\n' "$sums" | grep " $f\$" | sha256sum -c -
+  tar -xJf "$f" -C /usr/local --strip-components=1 --no-same-owner
+  rm -f "$f"
+fi
+say "node $(node -v), npm $(npm -v)"
+
+case "$want" in agents|all)
+  if ! command -v claude >/dev/null; then
+    say "cloud agent CLI (official installer)"
+    if ! (curl -fsSL https://claude.ai/install.sh | bash) || ! "$HOME/.local/bin/claude" --version >/dev/null 2>&1; then
+      say "native build did not run here; using the npm package"
+      npm i -g @anthropic-ai/claude-code
+    fi
+  fi
+  command -v opencode >/dev/null || { say "open agent CLI"; npm i -g --allow-scripts=opencode-ai opencode-ai; }
+  say "agents: $(claude --version 2>/dev/null | head -1) | open agent $(opencode --version 2>/dev/null | head -1)"
+  ;;
+esac
+
+case "$want" in qvac|all)
+  say "local AI runtime"
+  command -v qvac >/dev/null || npm i -g @qvac/cli
+  mkdir -p /root/qvac && cd /root/qvac
+  [ -f package.json ] || npm init -y >/dev/null
+  [ -d node_modules/@qvac/sdk ] || npm i @qvac/sdk
+  say "qvac $(qvac --version 2>/dev/null | head -1), sdk $(node -p 'require("/root/qvac/node_modules/@qvac/sdk/package.json").version')"
+  ;;
+esac
+say "done in $(( $(date +%s) - t0 )) s"
