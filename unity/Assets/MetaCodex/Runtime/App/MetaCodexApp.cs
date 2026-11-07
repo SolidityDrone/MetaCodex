@@ -62,6 +62,8 @@ namespace MetaCodex.App
         public event Action<TerminalInstance> FocusChanged;
         /// Extra control-port commands (the shell adds ui/script/gesture commands).
         public Func<string, string, string> ExtraCommand;
+        /// Control-port commands answered later (secret approvals): (line, reply) -> handled.
+        public Func<string, Action<string>, bool> AsyncCommand;
 
         private readonly List<TerminalInstance> _terms = new List<TerminalInstance>();
         private int _active;
@@ -94,7 +96,7 @@ namespace MetaCodex.App
 
             if (controlPort)
             {
-                try { _control = new ControlServer(ControlServer.DefaultPort, HandleCommand); SessionLog.Log($"control port 127.0.0.1:{_control.Port}"); }
+                try { _control = new ControlServer(ControlServer.DefaultPort, HandleCommand) { AsyncHandler = (line, reply) => AsyncCommand != null && AsyncCommand(line, reply) }; SessionLog.Log($"control port 127.0.0.1:{_control.Port}"); }
                 catch (Exception ex) { SessionLog.Log("control port off: " + ex.Message); }
             }
 

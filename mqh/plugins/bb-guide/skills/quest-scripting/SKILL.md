@@ -40,15 +40,20 @@ Handler argument `e`: `name`, `hand` (`left` | `right` | `both`), `phase` (`star
 |---|---|
 | `gesture.on(name, fn)` | `fn(e)` on every event of that gesture (`"*"` = all) |
 | `gesture.sequence({names...}, seconds, fn)` | `fn(e)` when the gestures happen in order within `seconds` |
-| `gesture.names()` | the list above |
-| `hands.state("left"\|"right")` | `{tracked, pinch (0..1), pinching, grabbing, pointing, open, palmUp, x, y, z}` |
+| `gesture.names()` / `gesture.list()` | every gesture the app knows: the built-ins above plus plugins' (`thumbs-up`, `swipe-left`, ...) |
+| `gesture.active(name[, hand])` | true while that gesture is active |
+| `gesture.define(name, opts, detect)` / `gesture.pose(name, spec)` | new gestures: see the skill `quest-gesture-plugins` |
+| `hands.get("left"\|"right")` (alias `hands.state`) | `{tracked, pinch, pinching, grabbing, pointing, open, palmUp, x, y, z, curl = {thumb, index, middle, ring, little}, rel, vel, speed, palmFacing, thumbPointing, ...}` |
+
+New gestures (hand poses, swipes, two-hand shapes) belong in a **plugin** folder
+(`/mnt/quest/plugins/<id>/`, skill `quest-gesture-plugins`); a script can react to them by name.
 
 ## App API
 
 | Call | Does |
 |---|---|
 | `ui.toast(text[, "info"\|"ok"\|"warn"\|"error"])` | a short message in front of the user |
-| `ui.open(id)` `ui.close(id)` `ui.toggle(id)` | panels: `dock`, `terminals`, `files`, `git`, `browser`, `scripts`, `settings`, `term-1`... |
+| `ui.open(id)` `ui.close(id)` `ui.toggle(id)` | panels: `dock`, `terminals`, `files`, `git`, `browser`, `scripts`, `gestures`, `agents`, `threads`, `thread`, `thread-new`, `vault`, `settings`, `term-1`... |
 | `ui.panels()` | ids of all panels |
 | `ui.modal(title, text, {"YES","NO"}, fn)` | a dialog; `fn(index, label)` with the answer |
 | `ui.select(true\|false)` | the select tool (pinch-drag a rectangle on a panel) |
@@ -58,13 +63,18 @@ Handler argument `e`: `name`, `hand` (`left` | `right` | `both`), `phase` (`star
 | `settings.get(key)` / `settings.set(key, value)` | app settings (strings in and out), saved and synced to MQH |
 | `store.get(key)` / `store.set(key, value)` | this script's own persistent strings |
 | `app.after(sec, fn)` / `app.every(sec, fn)` / `app.cancel(id)` / `app.time()` | timers |
+| `app.action("verb:arg")` | one action string: `open:` `close:` `toggle:<panel>`, `toast:`, `run:<cmd>`, `type:<text>`, `url:<url>`, `layout:fixed\|float`, `spin:<deg>`, `select`, `keyboard`, `terminal:new`, `recenter`, `gesture:<name>` |
+| `head.pose()` | `{x, y, z, fx, fy, fz}`: eyes and look direction |
 | `log(...)` / `print(...)` | lines in the script log (`mcx-ui script log <name>`) |
 
 Settings keys: `gestures.clickMode` (0 pinch, 1 poke, 2 both), `gestures.grabMode` (0 pinch the header,
 1 closed hand, 2 both), `gestures.pointMode` (0 ray always, 1 only in the pointing pose),
 `gestures.pinchOn` (0.6-0.98), `gestures.clapEnabled`, `gestures.clapDistance` (m), `gestures.rayVisible`,
-`layout` (`fixed` | `float`), `carouselRadius`, `panelDistance`, `uiScale`, `accent`
-(`cyan` `amber` `green` `violet` `red`), `scanlines`, `bendPanels`.
+`gestures.customEnabled` (plugin gestures on/off), `layout` (`fixed` | `float`), `carouselRadius`,
+`panelDistance`, `uiScale`, `accent` (`cyan` `amber` `green` `violet` `red` `ice` `magenta` `gold` `white`),
+`glow` (0-2), `panelOpacity` (0.3-1), `motion` (0-2), `grid`, `scanlines`, `sounds`, `soundVolume`, `bendPanels`.
+No-code links from a gesture to an action live in Settings too (Gestures panel > BIND, or
+`mcx-ui gesture bind <gesture> <action>`).
 Example: "move panels by closing my hand instead of pinching" = `settings.set("gestures.grabMode", "1")`
 (a one-line script, or the Settings panel).
 

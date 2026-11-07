@@ -159,6 +159,7 @@ namespace MetaCodex.UI
             if (!Enabled) return;
             _flash = 1f;
             Refresh();
+            UiSounds.Fire("click");
             OnClickAction?.Invoke();
         }
 

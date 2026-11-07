@@ -99,7 +99,34 @@ namespace MetaCodex.UI
 
         /// A hand is moving a panel or holding an element.
         public bool HandBusy(int hand) => hand >= 0 && hand < 2 && _hand[hand] != null && (_hand[hand].DragPanel != null || _hand[hand].Captured != null || _hand[hand + 2].Captured != null);
-        public void Unregister(UiPanel p) => Panels.Remove(p);
+        public void Unregister(UiPanel p)
+        {
+            Panels.Remove(p);
+            foreach (var ptr in AllPointers()) Forget(ptr, p);
+        }
+
+        /// Drops a pointer's references to a panel that is gone (unregistered, or destroyed by a rebuild that a
+        /// click on it started: accent / theme changes rebuild every panel).
+        private UiPointer _lastInjected;
+
+        private IEnumerable<UiPointer> AllPointers()
+        {
+            foreach (var h in _hand) if (h != null) yield return h;
+            yield return _mouse;
+            if (_lastInjected != null) yield return _lastInjected;
+        }
+
+        private static void Forget(UiPointer ptr, UiPanel gone)
+        {
+            if (ptr == null) return;
+            bool Dead(UiPanel x) => x == null || (gone != null && x == gone);
+            if (ptr.HitPanel != null && Dead(ptr.HitPanel)) { ptr.HitPanel = null; ptr.HasHit = false; }
+            if (ptr.CapturedPanel != null && Dead(ptr.CapturedPanel)) { ptr.CapturedPanel = null; ptr.Captured = null; }
+            if (ptr.DragPanel != null && Dead(ptr.DragPanel)) ptr.DragPanel = null;
+            if (ptr.SelectPanel != null && Dead(ptr.SelectPanel)) { ptr.SelectPanel = null; ptr.Selecting = false; }
+            if (ptr.HoverElement != null && (ptr.HoverElement.Panel == null || ptr.HoverElement.Panel == gone)) ptr.HoverElement = null;
+            if (ptr.Captured != null && (ptr.Captured.Panel == null || ptr.Captured.Panel == gone)) { ptr.Captured = null; ptr.CapturedPanel = null; }
+        }
 
         private void Update()
         {
@@ -113,7 +140,7 @@ namespace MetaCodex.UI
         }
 
         /// Runs one pointer through the router now (self-tests, control port).
-        public void Inject(UiPointer p) => Process(p);
+        public void Inject(UiPointer p) { _lastInjected = p; Process(p); }
 
         private void CollectHands()
         {
@@ -251,6 +278,7 @@ namespace MetaCodex.UI
                     p.Captured = null;
                     el.OnRelease(ev, inside);
                     if (inside) Clicked?.Invoke(p.CapturedPanel, el);
+                    if (p.CapturedPanel == null) { Forget(p, null); p.HasHit = false; Finish(p); return; } // the click rebuilt or closed it
                 }
                 p.HasHit = ok;
                 if (ok) { p.HitPanel = p.CapturedPanel; p.HitPanelPoint = pt; if (p.Kind != PointerKind.Poke) p.CapturedPanel.ProjectRay(p.Ray, out _); }
@@ -419,6 +447,7 @@ namespace MetaCodex.UI
             var tint = kind == "error" ? t.Danger : kind == "warn" ? t.Warn : kind == "ok" ? t.Ok : t.Accent;
             panel.Add(new UiLabel((kind == "error" ? "⚠ " : kind == "ok" ? "✓ " : "◆ ") + text, t.BodySize) { Rect = new Rect(0.016f, 0.006f, 0.39f, 0.04f), Color = Color.Lerp(tint, Color.white, 0.5f) });
             panel.SetHighlight(0.6f);
+            UiSounds.Fire(kind == "error" ? "error" : "toast");
             _toasts.Insert(0, new Toast { Panel = panel, Until = Time.unscaledTime + seconds });
             while (_toasts.Count > 4) { Kill(_toasts[_toasts.Count - 1].Panel.gameObject); _toasts.RemoveAt(_toasts.Count - 1); }
             Layout(true);

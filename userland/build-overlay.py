@@ -30,9 +30,30 @@ with tarfile.open(fileobj=raw, mode="w", format=tarfile.PAX_FORMAT) as tf:
             entries.append(os.path.join(dirpath, d))
         for f in sorted(filenames):
             entries.append(os.path.join(dirpath, f))
-    # files kept elsewhere in the repo, placed into the rootfs too (one source of truth): the agent skill for
-    # live Lua behaviours, so `claude` in the terminal finds it as well as MQH threads do
-    extra = {"root/.claude/skills/quest-scripting/SKILL.md": os.path.join(root, "mqh", "plugins", "bb-guide", "skills", "quest-scripting", "SKILL.md")}
+    # files kept elsewhere in the repo, placed into the rootfs too (one source of truth): agent skills, so
+    # `claude` / `opencode` in a terminal find them as well as MQH threads do. MetaCodex's own skills come
+    # from the MQH guide plugin; third-party ones from userland/agent-skills (tools/sync-agent-skills.sh).
+    skills_dst = "root/.claude/skills"
+    trees = {}
+    mqh_skills = os.path.join(root, "mqh", "plugins", "bb-guide", "skills")
+    for name in ("quest-scripting", "quest-gesture-plugins", "metacodex-context"):
+        trees[f"{skills_dst}/{name}"] = os.path.join(mqh_skills, name)
+    bundled = os.path.join(root, "userland", "agent-skills")
+    for group in ("unity", "meta"):
+        gdir = os.path.join(bundled, group)
+        for name in sorted(os.listdir(gdir)) if os.path.isdir(gdir) else []:
+            if os.path.isdir(os.path.join(gdir, name)):
+                trees[f"{skills_dst}/{name}"] = os.path.join(gdir, name)
+    extra = {}
+    for dst, srcdir in trees.items():
+        for dp, dn, fn in os.walk(srcdir):
+            dn.sort()
+            for f in sorted(fn):
+                full = os.path.join(dp, f)
+                extra[dst + "/" + os.path.relpath(full, srcdir).replace(os.sep, "/")] = full
+    for f in ("SOURCES.md", "LICENSE-unity-skills.md", "LICENSE-meta-agentic-tools"):
+        if os.path.isfile(os.path.join(bundled, f)):
+            extra[f"{skills_dst}/THIRD-PARTY/{f}"] = os.path.join(bundled, f)
     extra_dirs = sorted({"/".join(k.split("/")[:i]) for k in extra for i in range(1, len(k.split("/")))})
     entries = [(os.path.relpath(f, src).replace(os.sep, "/"), f) for f in entries]
     entries += [(d, None) for d in extra_dirs if not os.path.isdir(os.path.join(src, d))] + sorted(extra.items())

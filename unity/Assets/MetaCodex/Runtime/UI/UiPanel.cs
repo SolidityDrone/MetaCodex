@@ -148,6 +148,7 @@ namespace MetaCodex.UI
         {
             if (!gameObject.activeSelf) gameObject.SetActive(true);
             _openT = 0f;
+            if (Id != "toast") UiSounds.Fire("open");
             Opened?.Invoke(this);
         }
 
@@ -155,6 +156,7 @@ namespace MetaCodex.UI
         {
             if (!gameObject.activeSelf) return;
             gameObject.SetActive(false);
+            if (Id != "toast") UiSounds.Fire("close");
             Closed?.Invoke(this);
         }
 

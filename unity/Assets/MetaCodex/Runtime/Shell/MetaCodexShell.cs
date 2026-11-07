@@ -36,6 +36,7 @@ namespace MetaCodex.Shell
         public FileService Files { get; private set; }
         public UiToasts Toasts { get; private set; }
         public SimulatedHands SimHands { get; private set; }
+        public UiSounds Sounds { get; private set; }
         public IReadOnlyDictionary<string, UiPanel> PanelsById => _panels;
         public MetaCodexApp App => app;
         /// Used when there is no app (Editor self-tests): stands in for the user's head.
@@ -67,6 +68,7 @@ namespace MetaCodex.Shell
                 app.TerminalClosed += OnTerminalClosed;
                 app.FocusChanged += OnFocusChanged;
                 app.ExtraCommand = ControlCommand;
+                app.AsyncCommand = SecretCommand;
                 app.Recentered += OnRecentered;
             }
         }
@@ -100,6 +102,7 @@ namespace MetaCodex.Shell
             if (hands == null) { SimHands = new SimulatedHands(); hands = SimHands; }
             else SimHands = hands as SimulatedHands;
             Gestures = new GestureEngine(hands, Settings.gestures);
+            Gestures.HeadPose = () => Head != null ? new Pose(Head.position, Head.rotation) : new Pose(new Vector3(0f, 1.4f, 0f), Quaternion.identity);
             Gestures.OnGesture += OnGesture;
             Router.Gestures = Gestures;
             Router.Selected += OnSelected;
@@ -107,15 +110,19 @@ namespace MetaCodex.Shell
             Toasts = new GameObject("Toasts").AddComponent<UiToasts>();
             Toasts.transform.SetParent(_root, false);
             Toasts.Head = Head;
+            Sounds = new GameObject("UiSounds").AddComponent<UiSounds>();
+            Sounds.transform.SetParent(_root, false);
 
             Mqh = new MqhClient(Settings.mqhUrl, Settings.mqhToken, _main);
+            InitVault();
             var host = app != null ? app.Host : null;
             Git = new GitService(host);
             Files = new FileService(host, Application.isEditor ? Path.GetFullPath(Path.Combine(Application.dataPath, "../..")) : null);
 
             string dir = scriptsDir ?? DefaultScriptsDir(host);
             Scripts = new ScriptHost(this, dir);
-            Scripts.Changed += () => RefreshScriptsPanel();
+            Scripts.Changed += () => { RefreshScriptsPanel(); RefreshGesturesPanel(); };
+            EnsureStarterPlugins();
             UiKeyboard.TerminalKeyboardRequested += () => app?.Input?.ToggleSystemKeyboard();
 
             BuildPanels();
@@ -141,13 +148,25 @@ namespace MetaCodex.Shell
 
         private void ApplyMaterialSettings()
         {
-            if (shapeMaterial != null) shapeMaterial.SetFloat("_Scanlines", Settings.scanlines ? 1f : 0f);
+            if (shapeMaterial != null)
+            {
+                shapeMaterial.SetFloat("_Scanlines", Settings.scanlines ? 1f : 0f);
+                shapeMaterial.SetFloat("_GlowBoost", Mathf.Clamp(Settings.glow, 0f, 2f));
+                shapeMaterial.SetFloat("_Opacity", Mathf.Clamp(Settings.panelOpacity, 0.3f, 1f));
+                shapeMaterial.SetFloat("_Motion", Mathf.Clamp(Settings.motion, 0f, 2f));
+                shapeMaterial.SetFloat("_Grid", Settings.grid ? 1f : 0f);
+            }
+            if (Sounds != null) { Sounds.Enabled = Settings.sounds; Sounds.Volume = Mathf.Clamp01(Settings.soundVolume); }
         }
 
         private void Update()
         {
             while (_main.TryDequeue(out var a)) { try { a(); } catch (Exception ex) { Log("main-thread callback failed: " + ex.Message); } }
             Scripts?.Tick(Time.unscaledTime);
+            FlushPendingRebuild();
+            RunLater();
+            ScanTerminalLinks();
+            PushSettingsWhenQuiet();
             if (Settings != null && Settings.mqhSync && Time.unscaledTime >= _nextMqhPoll) { _nextMqhPoll = Time.unscaledTime + 5f; PullRemoteSettings(); }
             UpdateLayout();
         }
@@ -210,10 +229,26 @@ namespace MetaCodex.Shell
                 occupied.Add((Mathf.Atan2(d.x, d.z) * Mathf.Rad2Deg, HalfAngle(q, qd)));
             }
             float yaw = FindFreeYaw(gaze, HalfAngle(p, dist), occupied, 75f);
-            if (float.IsNaN(yaw)) { yaw = gaze; dist = Mathf.Max(0.45f, dist - 0.14f); }
+            if (float.IsNaN(yaw)) yaw = FindFreeYaw(gaze, HalfAngle(p, dist), occupied, 110f); // turn your head to see it
+            float lift = 0f;
+            if (float.IsNaN(yaw))
+            {
+                // full circle: cascade in front, each extra panel a bit closer, higher and to the side; take the
+                // first cascade slot no open panel already sits in
+                var taken = _panels.Values.Where(q => q != p && q.IsOpen && q.Id != "dock").Select(q => q.transform.position).ToList();
+                float baseDist = dist;
+                for (int k = 0; k < 16; k++)
+                {
+                    float y = gaze + 4f * k, d = Mathf.Max(0.45f, baseDist - 0.07f * (k + 1)), l = 0.035f * k;
+                    float ar = y * Mathf.Deg2Rad;
+                    var pos = eye + new Vector3(Mathf.Sin(ar), 0f, Mathf.Cos(ar)) * d + Vector3.down * 0.06f + Vector3.up * l;
+                    yaw = y; dist = d; lift = l;
+                    if (!taken.Any(q => Vector3.Distance(q, pos) < 0.05f)) break;
+                }
+            }
             float a = yaw * Mathf.Deg2Rad;
             var dir = new Vector3(Mathf.Sin(a), 0f, Mathf.Cos(a));
-            p.transform.SetPositionAndRotation(eye + dir * dist + Vector3.down * 0.06f, Quaternion.LookRotation(dir, Vector3.up));
+            p.transform.SetPositionAndRotation(eye + dir * dist + Vector3.down * 0.06f + Vector3.up * lift, Quaternion.LookRotation(dir, Vector3.up));
         }
 
         /// Half the angle a panel covers seen from `distance` away (degrees).
@@ -282,6 +317,9 @@ namespace MetaCodex.Shell
             frame.Add(new UiButton("✕", () => app?.CloseTerminal(inst), UiButtonStyle.Ghost) { Rect = new Rect(bx, 0.006f, 0.036f, t.HeaderHeight - 0.010f) });
             frame.Add(new UiButton("+", () => app?.NewTerminal(), UiButtonStyle.Ghost) { Rect = new Rect(bx - 0.042f, 0.006f, 0.036f, t.HeaderHeight - 0.010f) });
             frame.Add(new UiButton("⌨", () => app.Input?.ToggleSystemKeyboard(), UiButtonStyle.Ghost) { Rect = new Rect(bx - 0.084f, 0.006f, 0.036f, t.HeaderHeight - 0.010f) });
+            frame.Add(new UiButton("⎘", () => { app?.Focus(inst); app?.Input?.Paste(GUIUtility.systemCopyBuffer); }, UiButtonStyle.Ghost) { Rect = new Rect(bx - 0.126f, 0.006f, 0.036f, t.HeaderHeight - 0.010f) });
+            var link = frame.Add(new UiButton("⇗", () => OpenTerminalLink(inst), UiButtonStyle.Ghost) { Rect = new Rect(bx - 0.168f, 0.006f, 0.036f, t.HeaderHeight - 0.010f) });
+            _linkButtons[inst] = link;
             // a tap on the terminal area focuses it
             frame.Add(new UiHitArea(() => app?.Focus(inst)) { Rect = new Rect(bezel, t.HeaderHeight + bezel, v.Width, v.Height) });
             _frames[inst] = frame;
@@ -297,6 +335,7 @@ namespace MetaCodex.Shell
         private void OnTerminalClosed(TerminalInstance inst)
         {
             if (_frames.TryGetValue(inst, out var f)) { Router.Unregister(f); _frames.Remove(inst); }
+            _linkButtons.Remove(inst); _links.Remove(inst); _linkVersion.Remove(inst);
             RefreshTerminalsPanel();
         }
 
@@ -311,6 +350,7 @@ namespace MetaCodex.Shell
         private void OnGesture(GestureEvent e)
         {
             Scripts?.Dispatch(e);
+            ApplyBindings(e);
             if (_gestureMonitor != null) RefreshGestureMonitor();
         }
 
@@ -377,10 +417,31 @@ namespace MetaCodex.Shell
             Router.Settings = Settings.gestures;
             Gestures.Settings = Settings.gestures;
             Mqh.BaseUrl = Settings.mqhUrl;
-            Mqh.Token = Settings.mqhToken;
+            Mqh.Token = MqhTokenNow();
             ApplyMaterialSettings();
             foreach (var p in _panels.Values) p.transform.localScale = Vector3.one * Mathf.Clamp(Settings.uiScale, 0.6f, 1.6f);
-            if (rebuild) RebuildPanels();
+            if (rebuild) _rebuildPending = true; // next frame: never destroy panels inside the click that asked for it
+            // sliders call this on every step: push to MQH once things are quiet for a moment
+            if (Settings.mqhSync) _settingsPushDue = _clock.Elapsed.TotalSeconds + 1.5;
+        }
+
+        private bool _rebuildPending;
+
+        /// Runs a requested panel rebuild (accent, theme); Update calls it, tests may too.
+        public void FlushPendingRebuild()
+        {
+            if (!_rebuildPending) return;
+            _rebuildPending = false;
+            RebuildPanels();
+        }
+
+        private readonly System.Diagnostics.Stopwatch _clock = System.Diagnostics.Stopwatch.StartNew();
+        private double _settingsPushDue = -1;
+
+        private void PushSettingsWhenQuiet()
+        {
+            if (_settingsPushDue < 0 || _clock.Elapsed.TotalSeconds < _settingsPushDue) return;
+            _settingsPushDue = -1;
             if (Settings.mqhSync) Mqh.PushQuestSettings(Settings.ToJObject(), ok => { if (ok) _remoteRevision = -2; });
         }
 
@@ -418,7 +479,7 @@ namespace MetaCodex.Shell
 
         // ------------------------------------------------------------------ control port: ui / script / gesture
 
-        private string ControlCommand(string cmd, string arg)
+        public string ControlCommand(string cmd, string arg)
         {
             switch (cmd)
             {
@@ -469,19 +530,132 @@ namespace MetaCodex.Shell
                 }
                 case "gesture":
                 {
-                    // simulate a recognised gesture (tests scripts without hands): gesture clap | gesture pinch right start
-                    var parts = arg.Split(' ');
-                    var e = new GestureEvent
+                    var parts = arg.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                    string sub = parts.Length > 0 ? parts[0] : "clap";
+                    switch (sub)
                     {
-                        Name = parts.Length > 0 ? parts[0] : "clap",
-                        Hand = parts.Length > 1 ? parts[1] : "both",
-                        Phase = parts.Length > 2 ? parts[2] : "tap",
-                        Time = Time.unscaledTime,
-                    };
-                    OnGesture(e);
+                        case "list":
+                            return string.Join("\n", GestureEngine.Names.Select(n => $"{n} built-in") .Concat(Gestures.Custom.Select(c => $"{c.Name} {c.Kind} {c.Owner} active={Gestures.IsActive(c.Name)}")));
+                        case "bindings":
+                            return string.Join("\n", Settings.bindings.Select(b => $"{b.gesture} {b.hand} {b.phase} -> {b.action} {(b.enabled ? "on" : "off")}"));
+                        case "bind":
+                        {
+                            // gesture bind <gesture> <action...>
+                            if (parts.Length < 3) return "error: gesture bind <gesture> <action>";
+                            AddBinding(parts[1], string.Join(" ", parts.Skip(2)));
+                            return "ok";
+                        }
+                        case "unbind":
+                        {
+                            if (parts.Length < 2) return "error: gesture unbind <gesture>";
+                            int n = Settings.bindings.RemoveAll(b => b.gesture == parts[1]);
+                            OnSettingsChanged(); RefreshGesturesPanel();
+                            return "ok, removed " + n;
+                        }
+                        case "record":
+                        {
+                            // gesture record left|right <name>: the hand's pose now (tests: after `hand pose`)
+                            if (parts.Length < 3) return "error: gesture record left|right <name>";
+                            var p = RecordPoseNow(parts[1] == "left" ? Handedness.Left : Handedness.Right, parts[2]);
+                            return p == null ? "error: hand not tracked" : "ok " + p.Summary();
+                        }
+                        case "tick":
+                        {
+                            // gesture tick [seconds]: advance the engine (Editor tests without a frame loop)
+                            float secs = parts.Length > 1 && float.TryParse(parts[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var sv) ? sv : 0.1f;
+                            TickGesturesForTest(secs);
+                            return "ok";
+                        }
+                        default:
+                        {
+                            // simulate a recognised gesture (tests scripts without hands): gesture clap | gesture pinch right start
+                            var e = new GestureEvent
+                            {
+                                Name = sub,
+                                Hand = parts.Length > 1 ? parts[1] : "both",
+                                Phase = parts.Length > 2 ? parts[2] : "tap",
+                                Time = Time.unscaledTime,
+                            };
+                            OnGesture(e);
+                            return "ok";
+                        }
+                    }
+                }
+                case "hand":
+                {
+                    // hand pose left|right T I M R L [thumbDir] | hand hide left|right  (simulated hands only)
+                    if (SimHands == null) return "error: real hands are tracked; simulated poses work in the Editor";
+                    var parts = arg.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                    if (parts.Length >= 2 && parts[0] == "hide") { SimHands.Hide(parts[1] == "left" ? Handedness.Left : Handedness.Right); return "ok"; }
+                    if (parts.Length < 7 || parts[0] != "pose") return "error: hand pose left|right thumb index middle ring little [up|down|left|right|forward|back] | hand hide left|right";
+                    var h = parts[1] == "left" ? Handedness.Left : Handedness.Right;
+                    float F(int i) => float.TryParse(parts[i], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : 0f;
+                    Vector3? dir = parts.Length > 7 ? Gestures.Direction(parts[7], Vector3.zero) : (Vector3?)null;
+                    PoseHand(h, F(2), F(3), F(4), F(5), F(6), dir);
                     return "ok";
                 }
+                case "action": { var err = RunAction(arg); return err == null ? "ok" : "error: " + err; }
+                case "plugin":
+                {
+                    var parts = arg.Split(new[] { ' ' }, 2, StringSplitOptions.RemoveEmptyEntries);
+                    string sub = parts.Length > 0 ? parts[0] : "list";
+                    string id = parts.Length > 1 ? parts[1].Trim() : "";
+                    switch (sub)
+                    {
+                        case "list": return string.Join("\n", Scripts.Entries.Where(e => e.Kind == "plugin").Select(e => $"{e.Name} v{e.Version} enabled={e.Enabled} poses={e.Poses} detectors={e.Detectors} handlers={e.Handlers} error={e.Error ?? "-"}"));
+                        case "new": { var e = NewPlugin(id.Length > 0 ? id : "my-gestures"); return "ok, /mnt/quest/plugins/" + e.Name; }
+                        case "enable": Scripts.SetEnabled("plugin/" + id, true); return "ok";
+                        case "disable": Scripts.SetEnabled("plugin/" + id, false); return "ok";
+                        case "reload": Scripts.ReloadAll(); return "ok";
+                        case "log": { var e = Scripts.Find("plugin/" + id); return e == null ? "error: no plugin " + id : string.Join("\n", e.Log); }
+                        case "delete": return Scripts.Delete("plugin/" + id) ? "ok" : "error: no plugin " + id;
+                        case "dir": return Scripts.PluginsDir;
+                        default: return "error: plugin list | new <id> | enable <id> | disable <id> | reload | log <id> | delete <id> | dir";
+                    }
+                }
                 default: return null;
+            }
+        }
+    }
+
+    public sealed partial class MetaCodexShell
+    {
+        /// Simulated hands: a pose in front of the head (palm facing the other hand's side, fingers forward).
+        public void PoseHand(Handedness h, float thumb, float index, float middle, float ring, float little, Vector3? thumbDir = null)
+        {
+            if (SimHands == null) return;
+            var head = Gestures.Head;
+            Gestures.HeadFrame(out var right, out var up, out var fwd);
+            float side = h == Handedness.Left ? -1f : 1f;
+            var palm = head.position + fwd * 0.35f + right * (0.15f * side) - up * 0.25f;
+            SimHands.SetPose(h, palm, fwd, -right * side, thumb, index, middle, ring, little, thumbDir);
+        }
+
+        /// Editor tests: advance the gesture engine (and Lua detectors) without a frame loop.
+        public void TickGesturesForTest(float seconds, float step = 1f / 36f)
+        {
+            float t0 = _testClock;
+            for (float t = step; t <= seconds + 1e-4f; t += step) { _testClock = t0 + t; Gestures.Tick(_testClock, step); }
+        }
+
+        private float _testClock = 1000f;
+
+        /// Editor tests: run queued main-thread callbacks (MQH replies) until no request is in flight and the
+        /// queue stayed empty for a moment (callbacks may start new requests), or `seconds` passed.
+        public void PumpForTest(float seconds = 3f)
+        {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            int idle = 0;
+            while (sw.Elapsed.TotalSeconds < seconds)
+            {
+                bool any = false;
+                while (_main.TryDequeue(out var a)) { any = true; try { a(); } catch (Exception ex) { Log("callback failed: " + ex.Message); } }
+                FlushPendingRebuild();
+                RunLater();
+                PushSettingsWhenQuiet();
+                idle = any || Mqh.InFlight > 0 ? 0 : idle + 1;
+                if (idle >= 10) break; // 200 ms with nothing in flight and nothing queued
+                System.Threading.Thread.Sleep(20);
             }
         }
     }

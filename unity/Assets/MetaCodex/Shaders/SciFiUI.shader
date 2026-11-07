@@ -12,6 +12,9 @@ Shader "MetaCodex/SciFiUI"
     {
         _Scanlines ("Scanlines", Range(0, 1)) = 1
         _GlowBoost ("Glow", Range(0, 2)) = 1
+        _Opacity ("Panel opacity", Range(0.3, 1)) = 0.9
+        _Motion ("Motion speed", Range(0, 2)) = 1
+        _Grid ("Grid", Range(0, 1)) = 1
     }
     SubShader
     {
@@ -33,6 +36,9 @@ Shader "MetaCodex/SciFiUI"
             CBUFFER_START(UnityPerMaterial)
                 float _Scanlines;
                 float _GlowBoost;
+                float _Opacity;
+                float _Motion;
+                float _Grid;
             CBUFFER_END
 
             struct Attributes
@@ -89,7 +95,7 @@ Shader "MetaCodex/SciFiUI"
                 float2 h = size * 0.5;
                 float2 p = (i.uv - 0.5) * (size + 2.0 * margin); // metres from the shape centre, y up
                 float3 tint = i.color.rgb;
-                float t = _Time.y;
+                float t = _Time.y * _Motion;
 
                 if (kind == 5) // line: soft-edged bar along its longer side, fades at both ends
                 {
@@ -128,12 +134,12 @@ Shader "MetaCodex/SciFiUI"
                     fill = lerp(float3(0.004, 0.012, 0.022), float3(0.016, 0.040, 0.066), yN * 0.5 + 0.5);
                     float2 g = abs(frac(p * 40.0) - 0.5);                        // 2.5 cm grid
                     float grid = step(0.47, max(g.x, g.y));
-                    fill += tint * 0.035 * grid;
+                    fill += tint * 0.035 * grid * _Grid;
                     float scan = 0.94 + 0.06 * sin(p.y * 1400.0 - t * 3.0);
                     fill *= lerp(1.0, scan, _Scanlines);
                     float bevel = saturate(0.5 - (abs(d + border * 3.2) - border * 0.35) / aa);
                     fill += tint * 0.22 * bevel;
-                    fillA = 0.90;
+                    fillA = _Opacity;
                     // corner brackets: brighter frame near the corners
                     float cx = smoothstep(h.x - 0.028, h.x - 0.022, abs(p.x));
                     float cy = smoothstep(h.y - 0.028, h.y - 0.022, abs(p.y));

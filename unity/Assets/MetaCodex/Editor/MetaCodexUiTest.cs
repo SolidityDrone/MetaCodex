@@ -100,7 +100,13 @@ namespace MetaCodex.EditorTools
                 AgentScript(shell, hands, tmp);
                 Services(shell);
                 Layout(shell, head, frame);
+                GesturePlugins(shell, hands, tmp);
+                AgentPlugin(shell, hands, tmp);
+                Vault(shell);
+                Links(shell, term);
+                LookAndLayouts(shell, head);
                 Daemon(shell);
+                AgentsAndThreads(shell);
             }
             catch (Exception ex) { Fail("exception: " + ex); }
             finally
@@ -120,7 +126,7 @@ namespace MetaCodex.EditorTools
 
         private static void Glyphs(MetaCodexShell shell)
         {
-            string needed = "▶▤◫⎇◎ƒ⚙⌨⌖⟲✕↑⌂▸·↪●◆◇◎▣⚠✓▌•↓−⟳";
+            string needed = "▶▤◫⎇◎ƒ⚙⌨⌖⟲✕↑⌂▸·↪●◆◇◎▣⚠✓▌•↓−⟳✋⚿☰⇗⎘◈✎⇢⇣○■▲▼→";
             foreach (var (name, font) in new[] { ("display", UiTheme.Current.Display), ("body", UiTheme.Current.Body) })
             {
                 font.HasCharacters(needed, out uint[] missing, true, true);
@@ -131,12 +137,18 @@ namespace MetaCodex.EditorTools
 
         private static void Panels(MetaCodexShell shell, Transform head, UiPanel frame)
         {
-            foreach (var id in new[] { "dock", "settings", "files", "git", "browser", "scripts", "terminals" })
+            foreach (var id in new[] { "dock", "settings", "files", "git", "browser", "scripts", "terminals", "gestures", "agents", "threads", "vault" })
                 Check(shell.OpenPanel(id), "panel opens: " + id);
             foreach (var p in shell.PanelsById.Values) p.ForceRefresh();
             frame.ForceRefresh();
+            var open = shell.PanelsById.Values.Where(p => p.IsOpen && p.Id != "dock").ToList();
+            int stacked = 0;
+            for (int i = 0; i < open.Count; i++)
+                for (int j = i + 1; j < open.Count; j++)
+                    if (Vector3.Distance(open[i].transform.position, open[j].transform.position) < 0.03f) stacked++;
+            Check(stacked == 0, $"{open.Count} open panels: none placed on top of another ({stacked} pairs within 3 cm)");
             Render(shell, "ui-overview.png", head.position, Quaternion.identity, 100f, 1920, 1080);
-            foreach (var id in new[] { "settings", "files", "browser", "scripts", "terminals", "dock" })
+            foreach (var id in new[] { "settings", "files", "browser", "scripts", "terminals", "dock", "vault" })
                 RenderPanel(shell.PanelsById[id], "ui-" + id + ".png");
             RenderPanel(frame, "ui-terminal.png");
         }
@@ -162,17 +174,24 @@ namespace MetaCodex.EditorTools
         private static void Interactions(MetaCodexShell shell, Transform head)
         {
             var r = shell.Router;
+            // only the panels under test, so no other panel sits between the test ray and its target
+            foreach (var id in shell.PanelIds.ToList()) if (id != "settings" && id != "files") shell.ClosePanel(id);
             var settings = shell.PanelsById["settings"];
             var tabs = settings.Elements.OfType<UiTabs>().First();
             var displayTab = settings.Elements.OfType<UiButton>().First(b => b.Text == "DISPLAY");
             Click(r, settings, displayTab.Rect.center);
             Check(tabs.Selected == 1, "tab click switches to DISPLAY");
+            settings.ForceRefresh();
+            RenderPanel(settings, "ui-settings-display.png");
+            var lookTab = settings.Elements.OfType<UiButton>().First(b => b.Text == "LOOK");
+            Click(r, settings, lookTab.Rect.center);
+            Check(tabs.Selected == 2, "tab click switches to LOOK");
             var scan = settings.Elements.OfType<UiToggle>().First(t => t.Text == "Scanlines");
             bool before = scan.Value;
             Click(r, settings, scan.Rect.center);
             Check(scan.Value != before && shell.Settings.scanlines == scan.Value, "toggle flips Scanlines and the setting");
             settings.ForceRefresh();
-            RenderPanel(settings, "ui-settings-display.png");
+            RenderPanel(settings, "ui-settings-look.png");
             Click(r, settings, scan.Rect.center); // back on
 
             var gestTab = settings.Elements.OfType<UiButton>().First(b => b.Text == "GESTURES");
@@ -332,7 +351,7 @@ end)
             host.SetEnabled("bad", false);
             t += 1.5f;
             Claps(shell, hands, ref t, 3, 0.5f);
-            var host2 = new ScriptHost(shell, dir);
+            var host2 = new ScriptHost(shell, dir, Path.Combine(tmp, "no-plugins-2"));
             host2.Scan();
             string state = File.ReadAllText(Path.Combine(dir, ".state.json"));
             Check(state.Contains("\"n\"") && state.Contains("\"3\""), "script store persisted (3 claps counted)");
@@ -353,7 +372,7 @@ end)
             string dir = Path.Combine(tmp, "agent-scripts");
             Directory.CreateDirectory(dir);
             foreach (var f in Directory.GetFiles(src, "*.lua")) File.Copy(f, Path.Combine(dir, Path.GetFileName(f)), true);
-            var host = new ScriptHost(shell, dir);
+            var host = new ScriptHost(shell, dir, Path.Combine(tmp, "no-plugins-agent"));
             host.Scan();
             Check(host.Entries.Count > 0 && host.Entries.All(e => e.Error == null), $"agent script(s) load: {string.Join(", ", host.Entries.Select(e => e.Name + (e.Error != null ? " ERROR " + e.Error : "")))}");
             foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
@@ -437,6 +456,358 @@ end)
             value["accent"] = "cyan";
             int rev2 = back?["preferences"]?["quest.settings"]?["revision"]?.Value<int>() ?? rev + 1;
             mqh.Send(new HttpMethod("PUT"), "/api/v1/preferences/ui/quest.settings", new JObject { ["expectedRevision"] = rev2, ["value"] = value }).GetAwaiter().GetResult();
+        }
+
+
+        // ------------------------------------------------------------------ gesture plugins
+
+        private static int CountEvents(MetaCodexShell shell, string name, string phase, Action act)
+        {
+            int n = 0;
+            Action<GestureEvent> h = e => { if (e.Name == name && (phase == null || e.Phase == phase)) n++; };
+            shell.Gestures.OnGesture += h;
+            try { act(); } finally { shell.Gestures.OnGesture -= h; }
+            return n;
+        }
+
+        /// A fast move of an open right hand (fingers up, palm `facing`) with velocity `v` (m/s, world) for `secs`.
+        private static void Move(MetaCodexShell shell, SimulatedHands hands, Vector3 start, Vector3 v, Vector3 facing, float secs)
+        {
+            const float dt = 1f / 72f;
+            var p = start;
+            for (float t = 0f; t < secs; t += dt)
+            {
+                hands.SetOpen(Handedness.Right, p, Vector3.up, facing);
+                shell.TickGesturesForTest(dt, dt);
+                p += v * dt;
+            }
+        }
+
+        private static void GesturePlugins(MetaCodexShell shell, SimulatedHands hands, string tmp)
+        {
+            var host = shell.Scripts;
+            host.Scan();
+            var core = host.Find("plugin/core-poses");
+            var swipes = host.Find("plugin/swipes");
+            Check(core != null && core.Error == null && core.Poses == 5, $"starter plugin core-poses loaded ({core?.Poses} poses{(core?.Error != null ? ", " + core.Error : "")})");
+            Check(swipes != null && swipes.Error == null && swipes.Detectors == 3, $"starter plugin swipes loaded ({swipes?.Detectors} Lua detectors{(swipes?.Error != null ? ", " + swipes.Error : "")})");
+            foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
+            hands.Hide(Handedness.Left);
+            hands.Hide(Handedness.Right);
+            shell.TickGesturesForTest(0.1f);
+
+            int ups = CountEvents(shell, "thumbs-up", "start", () => { shell.PoseHand(Handedness.Right, 0, 1, 1, 1, 1, Vector3.up); shell.TickGesturesForTest(0.4f); });
+            Check(ups == 1 && shell.Gestures.IsActive("thumbs-up", "right"), "pose from a plugin file: thumbs-up recognised once (after its hold)");
+            var g = shell.Gestures.Right;
+            Line($"     thumbs-up hand: curls {string.Join(" ", g.Fingers.Select(f => f.ToString("F2")))} thumb {shell.Gestures.Nearest(g.ThumbDir, g.Frame.Palm)} palm {shell.Gestures.Nearest(g.PalmNormal, g.Frame.Palm)}");
+            int downs = CountEvents(shell, "thumbs-down", "start", () => { shell.PoseHand(Handedness.Right, 0, 1, 1, 1, 1, Vector3.down); shell.TickGesturesForTest(0.4f); });
+            Check(downs == 1 && !shell.Gestures.IsActive("thumbs-up", "right"), "thumbs-down recognised, thumbs-up ended");
+            int vic = CountEvents(shell, "victory", "start", () => { shell.PoseHand(Handedness.Right, 1, 0, 0, 1, 1); shell.TickGesturesForTest(0.4f); });
+            Check(vic == 1, "victory recognised");
+            int none = CountEvents(shell, "victory", "start", () => { shell.PoseHand(Handedness.Right, 1, 0, 0, 0, 0); shell.TickGesturesForTest(0.4f); });
+            Check(none == 0, "an open hand is not victory");
+
+            hands.Hide(Handedness.Right);
+            shell.TickGesturesForTest(0.2f);
+            var palm = shell.Gestures.Head.position + new Vector3(0.2f, -0.25f, 0.35f);
+            int left = CountEvents(shell, "swipe-left", "start", () => Move(shell, hands, palm, new Vector3(-1.6f, 0f, 0f), Vector3.forward, 0.3f));
+            Check(left == 1, "Lua detector: a fast open-hand move to the left is swipe-left");
+            int slow = CountEvents(shell, "swipe-left", "start", () => Move(shell, hands, palm, new Vector3(-0.4f, 0f, 0f), Vector3.forward, 0.5f));
+            Check(slow == 0, "a slow move is not a swipe");
+            Check(shell.Scripts.DetectMs < 3.0, $"Lua detectors cost {shell.Scripts.DetectMs:F3} ms per pass");
+
+            // a plugin written to disk, as an agent would: a Lua detector + reaction
+            var push = shell.Scripts.SavePlugin("push-close", new System.Collections.Generic.Dictionary<string, string>
+            {
+                ["plugin.json"] = "{ \"id\": \"push-close\", \"name\": \"Push to close\", \"version\": \"1.0.0\", \"description\": \"push an open palm away to close git\" }",
+                ["main.lua"] = "gesture.define('push', { hand = 'any', hold = 0, cooldown = 0.8 }, function(h) return h.open and h.palmFacing == 'away' and h.vel.z > 1.0 end)\n" +
+                               "gesture.on('push', function(e) if e.phase == 'start' then ui.close('git'); ui.toast('pushed ' .. e.hand) end end)\n",
+            });
+            Check(push.Error == null && push.Detectors == 1 && push.Handlers == 1, "plugin saved and hot-loaded (1 detector, 1 handler)" + (push.Error != null ? ": " + push.Error : ""));
+            shell.OpenPanel("git");
+            hands.Hide(Handedness.Right);
+            shell.TickGesturesForTest(0.2f);
+            Move(shell, hands, palm, new Vector3(0f, 0f, 1.5f), Vector3.forward, 0.25f);
+            Check(!shell.PanelsById["git"].IsOpen && shell.Toasts.Last == "pushed right", "push detector closed git (reaction ran)");
+
+            // no-code binding
+            shell.AddBinding("victory", "open:vault");
+            hands.Hide(Handedness.Right);
+            shell.TickGesturesForTest(0.2f);
+            shell.PoseHand(Handedness.Right, 1, 0, 0, 1, 1);
+            shell.TickGesturesForTest(0.4f);
+            Check(shell.PanelsById["vault"].IsOpen, "binding victory → open:vault works");
+            Check(File.ReadAllText(Path.Combine("Temp", "mcx-uitest", "settings.json")).Contains("open:vault"), "binding persisted in the settings");
+
+            // record a pose from the hand and recognise it
+            shell.PoseHand(Handedness.Right, 0, 0, 1, 1, 1, Vector3.up); // finger gun
+            shell.TickGesturesForTest(0.1f);
+            var rec = shell.RecordPoseNow(Handedness.Right, "finger-gun");
+            Check(rec != null && File.Exists(Path.Combine(shell.Scripts.PluginsDir, "my-poses", "poses", "finger-gun.json")), "RECORD saved my-poses/poses/finger-gun.json: " + rec?.Summary());
+            hands.Hide(Handedness.Right);
+            shell.TickGesturesForTest(0.3f);
+            int guns = CountEvents(shell, "finger-gun", "start", () => { shell.PoseHand(Handedness.Right, 0, 0, 1, 1, 1, Vector3.up); shell.TickGesturesForTest(0.5f); });
+            Check(guns == 1, "the recorded pose is recognised");
+
+            // a runaway detector stops only its plugin
+            var bad = shell.Scripts.SavePlugin("bad-detector", new System.Collections.Generic.Dictionary<string, string>
+            {
+                ["plugin.json"] = "{ \"id\": \"bad-detector\", \"name\": \"bad\" }",
+                ["main.lua"] = "gesture.define('spin', { hand = 'any' }, function(h) while true do end end)\n",
+            });
+            shell.TickGesturesForTest(0.2f);
+            Check(bad.Error != null && bad.Error.Contains("instructions"), "runaway detector stopped: " + bad.Error);
+            int still = CountEvents(shell, "thumbs-up", "start", () => { hands.Hide(Handedness.Right); shell.TickGesturesForTest(0.2f); shell.PoseHand(Handedness.Right, 0, 1, 1, 1, 1, Vector3.up); shell.TickGesturesForTest(0.4f); });
+            Check(still == 1, "other gestures keep working");
+            shell.Scripts.Delete("plugin/bad-detector");
+
+            // control port vocabulary
+            Check(shell.ControlCommand("plugin", "list").Contains("core-poses"), "control port: plugin list");
+            Check(shell.ControlCommand("gesture", "list").Contains("swipe-left lua"), "control port: gesture list shows Lua gestures");
+            Check(shell.ControlCommand("action", "open:git") == "ok" && shell.PanelsById["git"].IsOpen, "control port: action open:git");
+            Check(shell.ControlCommand("gesture", "bind clap toggle:files") == "ok" && shell.ControlCommand("gesture", "bindings").Contains("clap"), "control port: gesture bind");
+            shell.ControlCommand("gesture", "unbind clap");
+
+            // the panel, tab by tab (alone, so the picture shows only it)
+            foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
+            shell.OpenPanel("gestures");
+            var gp = shell.PanelsById["gestures"];
+            var tabs = gp.Elements.OfType<UiTabs>().First();
+            shell.PoseHand(Handedness.Right, 0, 1, 1, 1, 1, Vector3.up);
+            shell.PoseHand(Handedness.Left, 0.2f, 0, 0, 0, 0);
+            shell.TickGesturesForTest(0.4f);
+            string[] names = { "gestures", "live", "bind", "record", "plugins" };
+            for (int i = 0; i < names.Length; i++)
+            {
+                tabs.Select(i);
+                if (i == 1) shell.RefreshGestureLive();
+                gp.ForceRefresh();
+                RenderPanel(gp, $"ui-gestures-{names[i]}.png");
+            }
+            tabs.Select(0);
+            hands.Hide(Handedness.Left);
+            hands.Hide(Handedness.Right);
+            shell.TickGesturesForTest(0.2f);
+        }
+
+        /// A gesture plugin written by a real agent from the skill (tools/agent-plugin-test.sh puts it in Bench/agent/plugins).
+        private static void AgentPlugin(MetaCodexShell shell, SimulatedHands hands, string tmp)
+        {
+            string src = Path.GetFullPath(Path.Combine("Bench", "agent", "plugins"));
+            var dirs = Directory.Exists(src) ? Directory.GetDirectories(src).Where(d => File.Exists(Path.Combine(d, "plugin.json"))).ToArray() : new string[0];
+            if (dirs.Length == 0) { Line("skip agent plugin: none in Bench/agent/plugins (tools/agent-plugin-test.sh)"); return; }
+            foreach (var d in dirs)
+            {
+                var dest = Path.Combine(shell.Scripts.PluginsDir, Path.GetFileName(d));
+                foreach (var f in Directory.GetFiles(d, "*", SearchOption.AllDirectories))
+                {
+                    var rel = f.Substring(d.Length + 1);
+                    Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(dest, rel)));
+                    File.Copy(f, Path.Combine(dest, rel), true);
+                }
+            }
+            shell.Scripts.Scan();
+            var loaded = dirs.Select(d => shell.Scripts.Find("plugin/" + ScriptHost.Sanitize(Path.GetFileName(d)))).ToList();
+            Check(loaded.All(e => e != null && e.Error == null), "agent plugin(s) load: " + string.Join(", ", loaded.Select(e => e == null ? "missing" : e.Name + (e.Error != null ? " ERROR " + e.Error : $" ({e.Poses} poses, {e.Detectors} detectors, {e.Handlers} handlers)"))));
+            // the story the agent was asked for: right thumbs-up opens git; a fast push of an open palm closes it
+            foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
+            hands.Hide(Handedness.Left);
+            hands.Hide(Handedness.Right);
+            shell.TickGesturesForTest(0.3f);
+            shell.PoseHand(Handedness.Right, 0, 1, 1, 1, 1, Vector3.up);
+            shell.TickGesturesForTest(0.6f);
+            Check(shell.PanelsById["git"].IsOpen, "agent plugin: right thumbs-up opened git");
+            hands.Hide(Handedness.Right);
+            shell.TickGesturesForTest(0.5f);
+            var palm = shell.Gestures.Head.position + new Vector3(0.2f, -0.2f, 0.3f);
+            Move(shell, hands, palm, new Vector3(0f, 0f, 1.6f), Vector3.forward, 0.3f);
+            shell.TickGesturesForTest(0.2f);
+            Check(!shell.PanelsById["git"].IsOpen, "agent plugin: pushing an open palm away closed git");
+            // a left thumbs-up must not open it (the user asked for the right hand)
+            hands.Hide(Handedness.Right);
+            shell.TickGesturesForTest(1.2f);
+            shell.PoseHand(Handedness.Left, 0, 1, 1, 1, 1, Vector3.up);
+            shell.TickGesturesForTest(0.6f);
+            Check(!shell.PanelsById["git"].IsOpen, "agent plugin: a LEFT thumbs-up does nothing");
+            hands.Hide(Handedness.Left);
+            shell.TickGesturesForTest(0.2f);
+        }
+
+        // ------------------------------------------------------------------ vault
+
+        private static void Vault(MetaCodexShell shell)
+        {
+            var v = shell.Vault;
+            Check(v != null, "vault opened (" + v?.Sealer.Kind + ", " + v?.Sealer.Level + ")");
+            if (v == null) return;
+            Check(v.Has(MetaCodexShell.MqhTokenName) && shell.Mqh.Token == v.Reveal(MetaCodexShell.MqhTokenName) && shell.Mqh.Token.Length == 64, "MQH API token generated in the vault and used by the client");
+            Check(v.Set("OPENAI_API_KEY", "sk-test-1234567890", "api-key", "allow") == null, "secret stored");
+            string file = File.ReadAllText(v.FilePath);
+            Check(!file.Contains("sk-test-1234567890") && file.Contains("OPENAI_API_KEY"), "vault file holds only sealed values");
+            Check(v.Reveal("OPENAI_API_KEY") == "sk-test-1234567890", "secret unsealed with the right name");
+            var e = v.Find("OPENAI_API_KEY");
+            var keep = e.value;
+            var bytes = Convert.FromBase64String(e.value); bytes[bytes.Length / 2] ^= 1; e.value = Convert.ToBase64String(bytes);
+            Check(v.Reveal("OPENAI_API_KEY") == null, "a tampered value is rejected (authenticated encryption)");
+            e.value = keep;
+
+            string Ask(string line)
+            {
+                string got = null;
+                shell.SecretCommand(line, r => got = r);
+                return got;
+            }
+            Check(Ask("secret get OPENAI_API_KEY test") == "value sk-test-1234567890", "policy allow: handed out");
+            v.SetPolicy("OPENAI_API_KEY", "deny");
+            Check(Ask("secret get OPENAI_API_KEY test").StartsWith("error: denied"), "policy deny: refused");
+            string k1 = Ask("secret ensure test.key 32 mqh"), k2 = Ask("secret ensure test.key 32 agent");
+            Check(k1 != null && k1.StartsWith("value ") && k1.Length == 6 + 64 && k2.StartsWith("error: denied"), "policy once: a new random key handed out once, then refused");
+            Check(Ask("secret rearm test.key").StartsWith("error:"), "re-arming is not possible from Linux");
+            v.SetPolicy("OPENAI_API_KEY", "ask");
+            string answer = null;
+            shell.SecretCommand("secret get OPENAI_API_KEY agent", r => answer = r);
+            Check(answer == null, "policy ask: waits for the user");
+            var modal = shell.GetComponentsInChildren<UiPanel>(true).LastOrDefault(p => p.Id == "modal" && p.IsOpen);
+            Check(modal != null, "approval dialog shown in VR");
+            if (modal != null)
+            {
+                modal.ForceRefresh();
+                RenderPanel(modal, "ui-vault-request.png");
+                modal.Elements.OfType<UiButton>().First(b => b.Text == "ALLOW ONCE").Click();
+            }
+            Check(answer == "value sk-test-1234567890", "approved in VR: handed out");
+            Check(v.Audit.Count >= 4 && v.Audit.Any(a => a.Decision == "DENY"), $"access log: {v.Audit.Count} entries");
+            var list = Ask("secret list");
+            Check(list.Contains("OPENAI_API_KEY") && !list.Contains("sk-test"), "secret list never shows values");
+            var v2 = new MetaCodex.Security.SecretVault(v.FilePath, v.Sealer);
+            Check(v2.Reveal("OPENAI_API_KEY") == "sk-test-1234567890", "vault reopened from disk");
+            foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
+            shell.OpenPanel("vault");
+            shell.RefreshVaultPanel();
+            RenderPanel(shell.PanelsById["vault"], "ui-vault.png");
+            v.Delete("test.key");
+        }
+
+        // ------------------------------------------------------------------ links in terminals, look, layouts
+
+        private static void Links(MetaCodexShell shell, VtTerminal term)
+        {
+            string url = "https://claude.ai/oauth/authorize?code=true&client_id=9d1c250a-e61b-44d9-88ed-5944d1962f5e&response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A54545%2Fcallback&scope=user%3Ainference&state=abcdefghijklmnopqrstuvwxyz0123456789";
+            term.Feed("\r\nBrowser didn't open? Use the url below to sign in:\r\n\r\n" + url + "\r\n\r\nPaste code here if prompted > ");
+            var found = TerminalLinks.Last(term);
+            Check(found == url, $"sign-in link found across {Math.Ceiling(url.Length / (double)term.Cols)} wrapped rows ({found?.Length} chars)");
+        }
+
+        private static void LookAndLayouts(MetaCodexShell shell, Transform head)
+        {
+            shell.ApplyThemePreset(1);
+            var mat = UiTheme.Current.ShapeMaterial;
+            Check(mat != null && Mathf.Abs(mat.GetFloat("_Opacity") - 0.75f) < 0.01f && Mathf.Abs(mat.GetFloat("_GlowBoost") - 0.45f) < 0.01f && shell.Settings.accent == "white", "theme preset STEALTH applied (accent, glow, opacity)");
+            shell.FlushPendingRebuild();
+            Check(UiTheme.Current.Accent == UiTheme.Hex(UiTheme.Accents["white"]), "panels rebuilt with the new accent (next frame, not inside the click)");
+            foreach (var id in new[] { "files", "git", "dock" }) shell.OpenPanel(id);
+            foreach (var p in shell.PanelsById.Values) p.ForceRefresh();
+            Render(shell, "ui-theme-stealth.png", head.position, Quaternion.identity, 100f, 1600, 900);
+            shell.ApplyThemePreset(0);
+            shell.FlushPendingRebuild();
+            Check(shell.Settings.accent == "cyan" && Mathf.Abs(mat.GetFloat("_Motion") - 1f) < 0.01f, "theme preset COMMAND restored");
+            // a theme change clicked on the settings panel itself: the router must not touch the destroyed panel
+            foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
+            shell.OpenPanel("settings");
+            var st = shell.PanelsById["settings"];
+            st.Elements.OfType<UiTabs>().First().Select(2);
+            var theme = st.Elements.OfType<UiSegmented>().First(sg => sg.Text == "THEME");
+            var tr = theme.Rect;
+            float segW = (tr.xMax - (tr.x + theme.LabelWidth)) / MetaCodexShell.ThemePresets.Length;
+            bool threw = false;
+            try
+            {
+                Click(shell.Router, st, new Vector2(tr.x + theme.LabelWidth + segW * 3.5f, tr.center.y)); // SOLAR
+                shell.FlushPendingRebuild();
+                var again = shell.PanelsById["settings"];
+                Click(shell.Router, again, new Vector2(0.3f, 0.2f));
+            }
+            catch (Exception ex) { threw = true; Line("     " + ex.GetType().Name + ": " + ex.Message); }
+            Check(!threw && shell.Settings.accent == "gold", "THEME clicked in VR: panels rebuilt, input keeps working");
+            shell.ApplyThemePreset(0);
+            shell.FlushPendingRebuild();
+
+            foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
+            shell.OpenPanel("files");
+            shell.OpenPanel("git");
+            var files0 = shell.PanelsById["files"].transform.position - head.position;
+            shell.SaveNamedLayout("desk");
+            head.Rotate(0f, 90f, 0f);
+            head.position += new Vector3(1f, 0f, 1f);
+            shell.ClosePanel("git");
+            Check(shell.LoadNamedLayout("desk"), "layout 'desk' loads");
+            var files1 = Quaternion.Euler(0f, -90f, 0f) * (shell.PanelsById["files"].transform.position - head.position);
+            Check(shell.PanelsById["git"].IsOpen && (files1 - files0).magnitude < 0.02f, $"saved layout restored around the user ({(files1 - files0).magnitude * 100f:F1} cm)");
+            head.position -= new Vector3(1f, 0f, 1f);
+            head.rotation = Quaternion.identity;
+        }
+
+        // ------------------------------------------------------------------ agents and threads (MQH)
+
+        private static void AgentsAndThreads(MetaCodexShell shell)
+        {
+            try { shell.Mqh.Send(HttpMethod.Get, "/api/v1/system/version").GetAwaiter().GetResult(); }
+            catch (Exception) { Line("skip agents/threads (MQH not running)"); return; }
+            foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
+            shell.PumpForTest(4f); // settings pushes and earlier calls finish first
+            shell.OpenPanel("agents");
+            shell.PumpForTest(6f);
+            var ap = shell.PanelsById["agents"];
+            var agents = ap.Elements.OfType<UiList>().First();
+            Check(agents.Items.Count >= 3, "AGENTS lists MQH's providers: " + string.Join(", ", agents.Items.Select(i => i.Title + "=" + i.Badge)));
+            int cc = agents.Items.ToList().FindIndex(i => (string)i.Tag == "claude-code");
+            if (cc >= 0) agents.SelectIndex(cc);
+            ap.ForceRefresh();
+            RenderPanel(ap, "ui-agents.png");
+            shell.SignIn("claude-code");
+            Check(shell.Toasts.Last != null && shell.Toasts.Last.Contains("claude auth login"), "SIGN IN uses the provider's own login command: " + shell.Toasts.Last);
+
+            shell.ClosePanel("agents");
+            shell.OpenPanel("threads");
+            shell.PumpForTest(6f);
+            var tp = shell.PanelsById["threads"];
+            var projects = tp.Elements.OfType<UiList>().First();
+            Line($"     projects: {string.Join(", ", projects.Items.Select(i => i.Title))}");
+            tp.ForceRefresh();
+            RenderPanel(tp, "ui-threads.png");
+
+            shell.ClosePanel("threads");
+            shell.OpenNewThread("claude-code");
+            shell.PumpForTest(8f);
+            var np = shell.PanelsById["thread-new"];
+            var models = np.Elements.OfType<UiList>().ElementAt(1);
+            Check(models.Items.Count >= 1, "NEW THREAD lists the provider's models: " + string.Join(", ", models.Items.Take(4).Select(i => i.Title)));
+            np.ForceRefresh();
+            RenderPanel(np, "ui-thread-new.png");
+            if (projects.Items.Count == 0) { Line("skip thread start: no project in MQH (add one: + PROJECT…)"); return; }
+            string projectId = (string)projects.Items[0].Tag;
+            string model = models.Items.Count > 0 ? (string)models.Items[models.Items.Count - 1].Tag : null;
+            JToken created = null;
+            shell.Mqh.CreateThread(shell.NewThreadBody(projectId, "claude-code", model, "MetaCodex self-test: reply with OK"), r => created = r);
+            shell.PumpForTest(8f);
+            Check(created?["id"] != null, "thread created through MQH: " + (created?["id"] ?? shell.Mqh.LastError));
+            if (created?["id"] == null) return;
+            shell.ClosePanel("thread-new");
+            shell.OpenThread((string)created["id"]);
+            for (int i = 0; i < 6; i++) { shell.PumpForTest(2f); System.Threading.Thread.Sleep(800); shell.PollThread(); }
+            shell.PumpForTest(3f);
+            var th = shell.PanelsById["thread"];
+            var tl = th.Elements.OfType<UiLabel>().Select(l => l.Text ?? "").FirstOrDefault(t => t.Contains("YOU"));
+            Check(tl != null && tl.Contains("self-test"), "THREAD shows the timeline (your message" + (tl != null && tl.Contains("AGENT") ? " and the agent's reply" : "") + ")");
+            th.ForceRefresh();
+            RenderPanel(th, "ui-thread.png");
+            JToken env = null;
+            shell.Mqh.SetMachineEnvironment("MCX_SELFTEST_KEY", "value-from-vault", "self-test", r => env = r);
+            shell.PumpForTest(4f);
+            var names = (env?["variables"] as JArray)?.Select(x => (string)x["name"]).ToList();
+            Check(names != null && names.Contains("MCX_SELFTEST_KEY") && !env.ToString().Contains("value-from-vault"), "secret pushed to MQH's machine environment (write-only there)");
+            shell.Mqh.DeleteMachineEnvironment("MCX_SELFTEST_KEY", r => { });
+            shell.PumpForTest(2f);
         }
 
         // ------------------------------------------------------------------ pictures

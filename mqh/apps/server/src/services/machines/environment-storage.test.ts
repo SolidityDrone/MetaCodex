@@ -17,6 +17,8 @@ import {
   decryptMachineEnvironment,
   readMachineEnvironment,
   replaceMachineEnvironment,
+  MACHINE_ENV_KEY_COMMAND_ENV,
+  resetMachineEnvironmentKeyCache,
 } from "./environment-storage.js";
 
 let db: DbConnection;
@@ -278,4 +280,56 @@ it("migrates legacy settings without changing ciphertext or requiring its key", 
     null,
   );
   expect(readMachineEnvironment(db)[0]?.encryptionVersion).toBe(2);
+});
+
+it("MQH: takes the key from MQH_MACHINE_ENV_KEY_COMMAND, once, without a key file", async () => {
+  const hex = randomBytes(32).toString("hex");
+  const counter = join(dataDir, "calls");
+  const previous = process.env[MACHINE_ENV_KEY_COMMAND_ENV];
+  process.env[MACHINE_ENV_KEY_COMMAND_ENV] = `echo x >> '${counter}'; printf %s ${hex}`;
+  resetMachineEnvironmentKeyCache();
+  try {
+    await replaceMachineEnvironment(db, dataDir, {
+      variables: [{ name: "OPENAI_API_KEY", value: "sk-private", note: null }],
+    });
+    const rows = readMachineEnvironment(db);
+    expect(await decryptMachineEnvironment(dataDir, rows[0]!)).toBe("sk-private");
+    // no key on disk: the vault holds it
+    await expect(stat(join(dataDir, "machine-environment-key"))).rejects.toThrow();
+    // the command ran once; later uses come from memory
+    expect((await readFile(counter, "utf8")).trim().split("\n")).toHaveLength(1);
+    // the ciphertext really is under that key
+    const raw = Buffer.from(rows[0]!.ciphertext, "base64");
+    const { createDecipheriv } = await import("node:crypto");
+    const d = createDecipheriv("aes-256-gcm", Buffer.from(hex, "hex"), raw.subarray(0, 12));
+    d.setAAD(Buffer.from(JSON.stringify([null, "OPENAI_API_KEY"])));
+    d.setAuthTag(raw.subarray(12, 28));
+    expect(Buffer.concat([d.update(raw.subarray(28)), d.final()]).toString()).toBe("sk-private");
+  } finally {
+    if (previous === undefined) delete process.env[MACHINE_ENV_KEY_COMMAND_ENV];
+    else process.env[MACHINE_ENV_KEY_COMMAND_ENV] = previous;
+    resetMachineEnvironmentKeyCache();
+  }
+});
+
+it("MQH: a failing key command is an error, retried on the next use", async () => {
+  const previous = process.env[MACHINE_ENV_KEY_COMMAND_ENV];
+  process.env[MACHINE_ENV_KEY_COMMAND_ENV] = "echo 'error: denied: already handed out this session'; exit 1";
+  resetMachineEnvironmentKeyCache();
+  try {
+    await expect(
+      replaceMachineEnvironment(db, dataDir, {
+        variables: [{ name: "TOKEN", value: "v", note: null }],
+      }),
+    ).rejects.toThrow();
+    process.env[MACHINE_ENV_KEY_COMMAND_ENV] = `printf %s ${randomBytes(32).toString("hex")}`;
+    await replaceMachineEnvironment(db, dataDir, {
+      variables: [{ name: "TOKEN", value: "v", note: null }],
+    });
+    expect(readMachineEnvironment(db)).toHaveLength(1);
+  } finally {
+    if (previous === undefined) delete process.env[MACHINE_ENV_KEY_COMMAND_ENV];
+    else process.env[MACHINE_ENV_KEY_COMMAND_ENV] = previous;
+    resetMachineEnvironmentKeyCache();
+  }
 });

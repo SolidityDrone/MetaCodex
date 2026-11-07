@@ -28,6 +28,12 @@ namespace MetaCodex.Shell
             BuildBrowser();
             BuildScripts();
             BuildSettings();
+            BuildGestures();
+            BuildAgents();
+            BuildThreads();
+            BuildThread();
+            BuildNewThread();
+            BuildVault();
             foreach (var p in _panels.Values) p.transform.localScale = Vector3.one * Mathf.Clamp(Settings.uiScale, 0.6f, 1.6f);
         }
 
@@ -59,6 +65,10 @@ namespace MetaCodex.Shell
                 case "terminals": RefreshTerminalsPanel(); break;
                 case "browser": RefreshBrowser(); ProbeLocalServers(); break;
                 case "settings": RefreshDaemon(); break;
+                case "gestures": RefreshGesturesPanel(); break;
+                case "agents": RefreshAgents(); break;
+                case "threads": RefreshThreads(); break;
+                case "vault": RefreshVaultPanel(); break;
             }
         }
 
@@ -73,25 +83,31 @@ namespace MetaCodex.Shell
                 ("▤\nTERMS", () => TogglePanel("terminals")),
                 ("◫\nFILES", () => TogglePanel("files")),
                 ("⎇\nGIT", () => TogglePanel("git")),
+                ("◆\nAGENTS", () => TogglePanel("agents")),
+                ("☰\nTHREADS", () => TogglePanel("threads")),
                 ("◎\nWEB", () => TogglePanel("browser")),
                 ("ƒ\nSCRIPTS", () => TogglePanel("scripts")),
+                ("✋\nGESTURE", () => TogglePanel("gestures")),
+                ("⚿\nVAULT", () => TogglePanel("vault")),
                 ("⚙\nSETUP", () => TogglePanel("settings")),
                 ("⌨\nKEYS", () => OpenKeyboard()),
                 ("⌖\nSELECT", () => SetSelectionMode(!Router.SelectionMode)),
                 ("⟲\nCENTER", () => app?.Recenter()),
             };
-            float bw = 0.074f, gap = 0.006f, pad = 0.012f;
-            float w = items.Length * bw + (items.Length - 1) * gap + 2 * pad, h = 0.074f;
+            const int perRow = 7;
+            float bw = 0.070f, gap = 0.006f, pad = 0.012f, bh = 0.058f;
+            float w = perRow * bw + (perRow - 1) * gap + 2 * pad, h = 2 * bh + gap + 2 * pad;
             var dock = UiPanel.Create<UiPanel>("dock", "", w, h, _root, header: false);
             dock.Closable = false;
             _panels["dock"] = dock;
             Router.Register(dock);
             for (int i = 0; i < items.Length; i++)
             {
+                int row = i / perRow, col = i % perRow;
                 var b = dock.Add(new UiButton(items[i].label, items[i].act, i == 0 ? UiButtonStyle.Primary : UiButtonStyle.Normal)
                 {
-                    Rect = new Rect(pad + i * (bw + gap), pad, bw, h - 2 * pad),
-                    TextSize = 0.0125f,
+                    Rect = new Rect(pad + col * (bw + gap), pad + row * (bh + gap), bw, bh),
+                    TextSize = 0.0115f,
                 });
                 if (items[i].label.EndsWith("SELECT")) _selectButton = b;
             }
@@ -454,11 +470,11 @@ namespace MetaCodex.Shell
             var row = st.Next(t.ButtonHeight);
             var acts = new (string, Action)[]
             {
-                ("ENABLE", () => { var e = SelectedScript(); if (e != null) Scripts.SetEnabled(e.Name, !e.Enabled); }),
+                ("ENABLE", () => { var e = SelectedScript(); if (e != null) Scripts.SetEnabled(e.Key, !e.Enabled); }),
                 ("⟳ RELOAD", () => { Scripts.ReloadAll(); Toast("Scripts reloaded", "ok"); }),
                 ("+ EXAMPLE", () => { Scripts.Save("double-clap", ExampleScript); Toast("Example script: double clap opens TERMINALS", "ok"); }),
                 ("FOLDER", () => TerminalSend("cd /mnt/quest/scripts && ls -la\r")),
-                ("DELETE", () => { var e = SelectedScript(); if (e != null) Modal("DELETE SCRIPT", $"Delete {e.Name}.lua?", new[] { "DELETE", "CANCEL" }, i => { if (i == 0) Scripts.Delete(e.Name); }); }),
+                ("DELETE", () => { var e = SelectedScript(); if (e != null) Modal(e.Kind == "plugin" ? "DELETE PLUGIN" : "DELETE SCRIPT", e.Kind == "plugin" ? $"Delete the plugin folder {e.Name}?" : $"Delete {e.Name}.lua?", new[] { "DELETE", "CANCEL" }, i => { if (i == 0) Scripts.Delete(e.Key); }); }),
             };
             float bw = (row.width - t.Gap * (acts.Length - 1)) / acts.Length;
             for (int i = 0; i < acts.Length; i++)
@@ -499,9 +515,9 @@ end)
             var t = UiTheme.Current;
             _scriptList.SetItems(Scripts.Entries.Select(e => new UiListItem
             {
-                Icon = "●",
+                Icon = e.Kind == "plugin" ? "▣" : "●",
                 IconColor = e.Error != null ? t.Danger : e.Enabled ? t.Ok : t.TextDim,
-                Title = e.Name,
+                Title = e.Kind == "plugin" ? e.Name + " (plugin)" : e.Name,
                 TitleColor = e.Error != null ? t.Danger : e.Enabled ? (Color?)null : t.TextDim,
                 Sub = e.Description,
                 Badge = e.Error != null ? "ERROR" : !e.Enabled ? "OFF" : e.Handlers + " ON",
@@ -533,7 +549,8 @@ end)
             var s = Settings;
             var p = Panel<UiPanel>("settings", "SETTINGS", 0.62f, 0.58f);
             var c = p.Content;
-            var tabs = p.Add(new UiTabs("GESTURES", "DISPLAY", "DAEMON", "ABOUT") { Rect = new Rect(c.x, c.y, c.width, t.ButtonHeight) });
+            var tabs = p.Add(new UiTabs("GESTURES", "DISPLAY", "LOOK", "DAEMON", "ABOUT") { Rect = new Rect(c.x, c.y, c.width, t.ButtonHeight) });
+            const int TabDisplay = 1, TabLook = 2, TabDaemon = 3, TabAbout = 4;
             var area = new Rect(c.x, c.y + t.ButtonHeight + t.Gap * 2, c.width, c.height - t.ButtonHeight - t.Gap * 2);
             float rowH = 0.034f;
 
@@ -546,42 +563,148 @@ end)
             tabs.AddTo(0, new UiSlider("PINCH AT", 0.6f, 0.98f, s.gestures.pinchOn, v => { s.gestures.pinchOn = v; s.gestures.pinchOff = Mathf.Min(v - 0.15f, 0.8f); OnSettingsChanged(); }) { Rect = g.Next(rowH) });
             tabs.AddTo(0, new UiToggle("Clap gesture (two hands)", s.gestures.clapEnabled, v => { s.gestures.clapEnabled = v; OnSettingsChanged(); }) { Rect = g.Next(rowH) });
             tabs.AddTo(0, new UiSlider("CLAP DISTANCE", 0.04f, 0.14f, s.gestures.clapDistance, v => { s.gestures.clapDistance = v; OnSettingsChanged(); }) { Rect = g.Next(rowH), Format = "0.000" });
+            tabs.AddTo(0, new UiToggle("Custom gestures from plugins (poses, Lua detectors)", s.gestures.customEnabled, v => { s.gestures.customEnabled = v; OnSettingsChanged(); }) { Rect = g.Next(rowH) });
             var gb = g.NextSplit(t.ButtonHeight, 0.5f, out var gb2);
             tabs.AddTo(0, new UiButton("SELECT AREA ⌖", () => SetSelectionMode(!Router.SelectionMode)) { Rect = gb });
             tabs.AddTo(0, new UiButton("HORIZON HAND SETTINGS", () => Toast(SystemBridge.OpenHandSettings() ? "Opening hand settings" : SystemBridge.LastResult)) { Rect = gb2 });
             _gestureLive = tabs.AddTo(0, new UiLabel("", t.SmallSize) { Rect = g.Rest(), UseMono = true, Color = t.TextAccent, Wrap = true, Align = TextAlignmentOptions.TopLeft });
             p.Tick += _ => { if (_gestureLive != null && _gestureLive.Visible && Gestures != null) _gestureLive.Set(HandLine(Gestures.Left, "L") + "\n" + HandLine(Gestures.Right, "R")); };
 
-            // DISPLAY
+            // DISPLAY: where panels go
             var d = new UiStack(area, t.Gap);
-            tabs.AddTo(1, new UiSegmented("LAYOUT", new[] { "FIXED", "FLOAT" }, s.layout == "float" ? 1 : 0, i => SetLayout(i == 1 ? "float" : "fixed")) { Rect = d.Next(rowH) });
-            tabs.AddTo(1, new UiSlider("DISTANCE", 0.5f, 1.4f, s.panelDistance, v => { s.panelDistance = v; OnSettingsChanged(); }) { Rect = d.Next(rowH), Format = "0.00 m" });
-            tabs.AddTo(1, new UiSlider("CAROUSEL RADIUS", 0.6f, 1.6f, s.carouselRadius, v => { s.carouselRadius = v; OnSettingsChanged(); }) { Rect = d.Next(rowH), Format = "0.00 m" });
-            tabs.AddTo(1, new UiSlider("UI SCALE", 0.7f, 1.4f, s.uiScale, v => { s.uiScale = v; OnSettingsChanged(); }) { Rect = d.Next(rowH), Format = "0.00" });
+            tabs.AddTo(TabDisplay, new UiSegmented("LAYOUT", new[] { "FIXED", "FLOAT" }, s.layout == "float" ? 1 : 0, i => SetLayout(i == 1 ? "float" : "fixed")) { Rect = d.Next(rowH) });
+            tabs.AddTo(TabDisplay, new UiSlider("DISTANCE", 0.5f, 1.4f, s.panelDistance, v => { s.panelDistance = v; OnSettingsChanged(); }) { Rect = d.Next(rowH), Format = "0.00 m" });
+            tabs.AddTo(TabDisplay, new UiSlider("CAROUSEL RADIUS", 0.6f, 1.6f, s.carouselRadius, v => { s.carouselRadius = v; OnSettingsChanged(); }) { Rect = d.Next(rowH), Format = "0.00 m" });
+            tabs.AddTo(TabDisplay, new UiSlider("UI SCALE", 0.7f, 1.4f, s.uiScale, v => { s.uiScale = v; OnSettingsChanged(); }) { Rect = d.Next(rowH), Format = "0.00" });
+            tabs.AddTo(TabDisplay, new UiToggle("Bend panels in float layout", s.bendPanels, v => { s.bendPanels = v; OnSettingsChanged(); }) { Rect = d.Next(rowH) });
+            var lr = d.NextSplit(t.ButtonHeight, 0.5f, out var lr2);
+            tabs.AddTo(TabDisplay, new UiButton("SAVE LAYOUT…", () => UiKeyboard.Edit("desk", false, null, n => { if (!string.IsNullOrWhiteSpace(n)) { SaveNamedLayout(n.Trim()); Toast($"Layout '{n.Trim()}' saved", "ok"); } })) { Rect = lr });
+            tabs.AddTo(TabDisplay, new UiButton("LOAD NEXT LAYOUT", LoadNextLayout) { Rect = lr2 });
+            _layoutsLabel = tabs.AddTo(TabDisplay, new UiLabel("", t.SmallSize) { Rect = d.Next(0.024f), Color = t.TextDim });
+            tabs.AddTo(TabDisplay, new UiButton("⟲ RECENTER EVERYTHING", () => app?.Recenter(), UiButtonStyle.Primary) { Rect = d.Next(t.ButtonHeight) });
+            RefreshLayoutsLabel();
+
+            // LOOK: the console's style
+            var k = new UiStack(area, t.Gap);
+            tabs.AddTo(TabLook, new UiSegmented("THEME", ThemePresets.Select(x => x.name).ToArray(), -1, i => ApplyThemePreset(i)) { Rect = k.Next(rowH) });
             var accents = UiTheme.Accents.Keys.ToArray();
-            tabs.AddTo(1, new UiSegmented("ACCENT", accents.Select(a => a.ToUpperInvariant()).ToArray(), Math.Max(0, Array.IndexOf(accents, s.accent)), i => { s.accent = accents[i]; OnSettingsChanged(rebuild: true); }) { Rect = d.Next(rowH) });
-            tabs.AddTo(1, new UiToggle("Scanlines", s.scanlines, v => { s.scanlines = v; OnSettingsChanged(); }) { Rect = d.Next(rowH) });
-            tabs.AddTo(1, new UiToggle("Bend panels in float layout", s.bendPanels, v => { s.bendPanels = v; OnSettingsChanged(); }) { Rect = d.Next(rowH) });
-            tabs.AddTo(1, new UiButton("⟲ RECENTER EVERYTHING", () => app?.Recenter(), UiButtonStyle.Primary) { Rect = d.Next(t.ButtonHeight) });
+            _accentButton = tabs.AddTo(TabLook, new UiButton("ACCENT: " + s.accent.ToUpperInvariant() + "  ▸", () =>
+            {
+                int i = (Array.IndexOf(accents, s.accent) + 1) % accents.Length;
+                s.accent = accents[i];
+                OnSettingsChanged(rebuild: true);
+            }) { Rect = k.Next(rowH) });
+            tabs.AddTo(TabLook, new UiSlider("GLOW", 0f, 2f, s.glow, v => { s.glow = v; OnSettingsChanged(); }) { Rect = k.Next(rowH), Format = "0.00" });
+            tabs.AddTo(TabLook, new UiSlider("PANEL OPACITY", 0.3f, 1f, s.panelOpacity, v => { s.panelOpacity = v; OnSettingsChanged(); }) { Rect = k.Next(rowH), Format = "0.00" });
+            tabs.AddTo(TabLook, new UiSlider("MOTION", 0f, 2f, s.motion, v => { s.motion = v; OnSettingsChanged(); }) { Rect = k.Next(rowH), Format = "0.00" });
+            var tg = k.NextSplit(rowH, 0.5f, out var tg2);
+            tabs.AddTo(TabLook, new UiToggle("Scanlines", s.scanlines, v => { s.scanlines = v; OnSettingsChanged(); }) { Rect = tg });
+            tabs.AddTo(TabLook, new UiToggle("Grid", s.grid, v => { s.grid = v; OnSettingsChanged(); }) { Rect = tg2 });
+            var sg = k.NextSplit(rowH, 0.4f, out var sg2);
+            tabs.AddTo(TabLook, new UiToggle("Sounds", s.sounds, v => { s.sounds = v; OnSettingsChanged(); if (v) Sounds?.Play("toast"); }) { Rect = sg });
+            tabs.AddTo(TabLook, new UiSlider("VOLUME", 0f, 1f, s.soundVolume, v => { s.soundVolume = v; OnSettingsChanged(); }) { Rect = sg2, LabelWidth = 0.08f, Format = "0.00" });
 
             // DAEMON (MQH)
             var m = new UiStack(area, t.Gap);
-            tabs.AddTo(2, new UiTextField("MQH URL", s.mqhUrl, v => { s.mqhUrl = v.Trim(); OnSettingsChanged(); RefreshDaemon(); }) { Rect = m.Next(rowH) });
-            tabs.AddTo(2, new UiTextField("TOKEN", s.mqhToken, v => { s.mqhToken = v.Trim(); OnSettingsChanged(); RefreshDaemon(); }, "none") { Rect = m.Next(rowH), Secure = true });
-            tabs.AddTo(2, new UiToggle("Sync these settings with MQH", s.mqhSync, v => { s.mqhSync = v; OnSettingsChanged(); }) { Rect = m.Next(rowH) });
-            _daemonStatus = tabs.AddTo(2, new UiLabel("not checked", t.SmallSize) { Rect = m.Next(0.024f), Color = t.TextDim });
-            _pluginList = tabs.AddTo(2, new UiList(0.027f, (item, idx) => PluginPicked(item)) { Rect = m.Next(area.yMax - m.Y - t.ButtonHeight - t.Gap) });
+            tabs.AddTo(TabDaemon, new UiTextField("MQH URL", s.mqhUrl, v => { s.mqhUrl = v.Trim(); OnSettingsChanged(); RefreshDaemon(); }) { Rect = m.Next(rowH) });
+            tabs.AddTo(TabDaemon, new UiTextField("TOKEN", s.mqhToken, v => { s.mqhToken = v.Trim(); OnSettingsChanged(); RefreshDaemon(); }, "from the vault") { Rect = m.Next(rowH), Secure = true });
+            tabs.AddTo(TabDaemon, new UiToggle("Sync these settings with MQH", s.mqhSync, v => { s.mqhSync = v; OnSettingsChanged(); }) { Rect = m.Next(rowH) });
+            _daemonStatus = tabs.AddTo(TabDaemon, new UiLabel("not checked", t.SmallSize) { Rect = m.Next(0.024f), Color = t.TextDim });
+            _pluginList = tabs.AddTo(TabDaemon, new UiList(0.027f, (item, idx) => PluginPicked(item)) { Rect = m.Next(area.yMax - m.Y - t.ButtonHeight - t.Gap) });
             var mb = m.NextSplit(t.ButtonHeight, 0.5f, out var mb2);
-            tabs.AddTo(2, new UiButton("⟳ CONNECT", RefreshDaemon, UiButtonStyle.Primary) { Rect = mb });
-            tabs.AddTo(2, new UiButton("PUSH SETTINGS", () => Mqh.PushQuestSettings(Settings.ToJObject(), ok => Toast(ok ? "Settings saved to MQH" : "MQH unreachable", ok ? "ok" : "error"))) { Rect = mb2 });
+            tabs.AddTo(TabDaemon, new UiButton("⟳ CONNECT", RefreshDaemon, UiButtonStyle.Primary) { Rect = mb });
+            tabs.AddTo(TabDaemon, new UiButton("PUSH SETTINGS", () => Mqh.PushQuestSettings(Settings.ToJObject(), ok => Toast(ok ? "Settings saved to MQH" : "MQH unreachable", ok ? "ok" : "error"))) { Rect = mb2 });
 
             // ABOUT
             var a2 = new UiStack(area, t.Gap);
-            tabs.AddTo(3, new UiLabel($"<b>MetaCodex</b> {Application.version} · {SystemInfo.deviceModel}", t.BodySize) { Rect = a2.Next(0.026f) });
-            tabs.AddTo(3, new UiLabel("Agents and a real Linux userland in VR. Panels, gestures and behaviours are data and Lua: agents change them live.", t.SmallSize) { Rect = a2.Next(0.04f), Wrap = true, Color = t.TextDim });
-            tabs.AddTo(3, new UiLabel("Third-party: MoonSharp (BSD-3-Clause, Marco Mastropaolo) · Orbitron, Rajdhani, Noto (SIL OFL 1.1) · DejaVu fonts · bb (MIT, Michael Yong) for MQH.", t.SmallSize) { Rect = a2.Next(0.05f), Wrap = true, Color = t.TextDim });
-            tabs.AddTo(3, new UiLabel("", t.SmallSize) { Rect = a2.Rest(), UseMono = true, Wrap = true, Color = t.TextDim, Align = TextAlignmentOptions.TopLeft }).Set(string.Join("\n", LogLines.Skip(Math.Max(0, LogLines.Count - 8))));
+            tabs.AddTo(TabAbout, new UiLabel($"<b>MetaCodex</b> {Application.version} · {SystemInfo.deviceModel}", t.BodySize) { Rect = a2.Next(0.026f) });
+            tabs.AddTo(TabAbout, new UiLabel("Agents and a real Linux userland in VR. Panels, gestures and behaviours are data, Lua and plugins: agents change them live.", t.SmallSize) { Rect = a2.Next(0.04f), Wrap = true, Color = t.TextDim });
+            tabs.AddTo(TabAbout, new UiLabel("Third-party: MoonSharp (BSD-3-Clause, Marco Mastropaolo) · Orbitron, Rajdhani, Noto (SIL OFL 1.1) · DejaVu fonts · bb (MIT, Michael Yong) for MQH.", t.SmallSize) { Rect = a2.Next(0.05f), Wrap = true, Color = t.TextDim });
+            tabs.AddTo(TabAbout, new UiLabel("", t.SmallSize) { Rect = a2.Rest(), UseMono = true, Wrap = true, Color = t.TextDim, Align = TextAlignmentOptions.TopLeft }).Set(string.Join("\n", LogLines.Skip(Math.Max(0, LogLines.Count - 8))));
         }
+
+        private UiButton _accentButton;
+        private UiLabel _layoutsLabel;
+        private int _layoutCursor = -1;
+
+        public static readonly (string name, string accent, float glow, float opacity, float motion, bool scan, bool grid)[] ThemePresets =
+        {
+            ("COMMAND", "cyan", 1f, 0.9f, 1f, true, true),
+            ("STEALTH", "white", 0.45f, 0.75f, 0.4f, false, false),
+            ("ALERT", "red", 1.5f, 0.92f, 1.6f, true, true),
+            ("SOLAR", "gold", 1.15f, 0.88f, 0.8f, false, true),
+            ("CLEAN", "ice", 0.7f, 0.96f, 0.25f, false, false),
+        };
+
+        public void ApplyThemePreset(int i)
+        {
+            if (i < 0 || i >= ThemePresets.Length) return;
+            var p = ThemePresets[i];
+            Settings.accent = p.accent; Settings.glow = p.glow; Settings.panelOpacity = p.opacity; Settings.motion = p.motion;
+            Settings.scanlines = p.scan; Settings.grid = p.grid;
+            OnSettingsChanged(rebuild: true);
+            Toast("Theme " + p.name, "ok");
+        }
+
+        /// Remembers where the open panels are, relative to the head (yaw frame), under a name.
+        public void SaveNamedLayout(string name)
+        {
+            var head = Gestures.Head;
+            Gestures.HeadFrame(out var r, out var u, out var f);
+            float headYaw = Mathf.Atan2(f.x, f.z) * Mathf.Rad2Deg;
+            var lay = new SavedLayout { name = name, mode = Settings.layout };
+            foreach (var kv in _panels)
+            {
+                if (!kv.Value.IsOpen || kv.Key == "dock") continue;
+                var d = kv.Value.transform.position - head.position;
+                var fw = kv.Value.transform.forward;
+                lay.panels.Add(new SavedPanel
+                {
+                    id = kv.Key,
+                    offset = new Vector3(Vector3.Dot(d, r), Vector3.Dot(d, u), Vector3.Dot(d, f)),
+                    yaw = Mathf.DeltaAngle(headYaw, Mathf.Atan2(fw.x, fw.z) * Mathf.Rad2Deg),
+                    bend = kv.Value.BendRadius,
+                });
+            }
+            Settings.layouts.RemoveAll(x => x.name == name);
+            Settings.layouts.Add(lay);
+            OnSettingsChanged();
+            RefreshLayoutsLabel();
+        }
+
+        /// Puts the panels of a saved layout back around where the user is now.
+        public bool LoadNamedLayout(string name)
+        {
+            var lay = Settings.layouts.FirstOrDefault(x => x.name == name);
+            if (lay == null) return false;
+            if (lay.mode != Settings.layout) SetLayout(lay.mode);
+            var head = Gestures.Head;
+            Gestures.HeadFrame(out var r, out var u, out var f);
+            float headYaw = Mathf.Atan2(f.x, f.z) * Mathf.Rad2Deg;
+            foreach (var kv in _panels) if (kv.Key != "dock" && kv.Value.IsOpen && lay.panels.All(x => x.id != kv.Key)) kv.Value.Close();
+            foreach (var sp in lay.panels)
+            {
+                if (!_panels.TryGetValue(sp.id, out var p)) continue;
+                OpenPanel(sp.id);
+                if (Settings.layout == "float") continue; // the carousel places them
+                p.transform.SetPositionAndRotation(head.position + r * sp.offset.x + u * sp.offset.y + f * sp.offset.z, Quaternion.Euler(0f, headYaw + sp.yaw, 0f));
+                _placed.Add(sp.id);
+            }
+            return true;
+        }
+
+        private void LoadNextLayout()
+        {
+            if (Settings.layouts.Count == 0) { Toast("No saved layouts yet: SAVE LAYOUT… first", "warn"); return; }
+            _layoutCursor = (_layoutCursor + 1) % Settings.layouts.Count;
+            var n = Settings.layouts[_layoutCursor].name;
+            LoadNamedLayout(n);
+            Toast($"Layout '{n}'", "ok");
+            RefreshLayoutsLabel();
+        }
+
+        private void RefreshLayoutsLabel() =>
+            _layoutsLabel?.Set(Settings.layouts.Count == 0 ? "saved layouts: none" : "saved layouts: " + string.Join(" · ", Settings.layouts.Select(x => x.name)));
 
         public void RefreshDaemon()
         {
@@ -589,7 +712,7 @@ end)
             var t = UiTheme.Current;
             _daemonStatus.Set("connecting to " + Settings.mqhUrl + " …", t.TextDim);
             Mqh.BaseUrl = Settings.mqhUrl;
-            Mqh.Token = Settings.mqhToken;
+            Mqh.Token = MqhTokenNow();
             Mqh.Version(v =>
             {
                 if (v == null) { _daemonStatus.Set("⚠ " + (Mqh.LastError ?? "MQH not reachable"), t.Danger); _pluginList.SetItems(new UiListItem[0]); return; }

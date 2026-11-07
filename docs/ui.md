@@ -1,6 +1,7 @@
-# MetaCodex spatial UI: style, panels, gestures, live scripts, layouts
+# MetaCodex spatial UI: style, panels, gestures, plugins, agents, layouts
 
-Status: v0, 2026-11-07. Built and tested headless in the Editor (`MetaCodexUiTest`); not yet on the headset.
+Status: v0.3, 2026-11-07. Built and tested headless in the Editor (`MetaCodexUiTest`); not yet on the headset.
+Test list for the headset: `docs/TEST_CHECKLIST.md`.
 
 ## Style
 
@@ -8,71 +9,106 @@ An original sci-fi "command console" look: dark navy glass panels with cut corne
 bottom-right), bevelled glowing frames with brighter corner brackets, a light comet running round the frame,
 a faint 2.5 cm grid and scanlines, cyan accents (amber warnings, green ok, red danger), condensed technical
 type (Orbitron for titles and buttons, Rajdhani for text, DejaVu Sans Mono for paths and code; all OFL /
-free licences). No game assets, names or logos.
+free licences). No game assets, names or logos. Short console sounds (click, open, close, toast, alert,
+error) are synthesised in code; no audio files.
 
 Everything is drawn by one shader, `MetaCodex/SciFiUI`: each panel, button, header, bar, line, dot and
 selection frame is a quad whose shape is computed per pixel from vertex data (size, cut corners, border,
 state), so a whole panel is one mesh and one draw call, crisp at any distance. Text is TextMeshPro with
-runtime SDF fonts. The accent colour, scanlines, distance and scale are settings.
+runtime SDF fonts. Look settings (Settings > LOOK) are material values, so they cost nothing: theme
+presets (COMMAND, STEALTH, ALERT, SOLAR, CLEAN), accent (9 colours), glow, panel opacity, motion speed,
+scanlines, grid, sounds and volume.
 
 ## Code map (`unity/Assets/MetaCodex/Runtime`)
 
 | Folder | What |
 |---|---|
-| `UI/` | `UiTheme` (colours, sizes, fonts), `UiShapeMesh` (batched shapes, bending), `UiPanel` (frame, header, open animation, drag, bend), widgets (`UiButton`, `UiToggle`, `UiSegmented`, `UiSlider`, `UiTextField`, `UiList`, `UiTabs`, `UiProgress`, `UiDivider`), `UiKeyboard` (Horizon OS system keyboard), `UiInputRouter` (pointers, beams, reticles, selection), `UiToasts`, `UiModal` |
-| `Hands/` | `GestureEngine` (pinch, grab, point, open, palm-up, clap), `OvrHandSource` (Meta's OVRHand/OVRSkeleton), `SimulatedHands` (tests) |
-| `Scripting/` | `ScriptHost`: Lua (MoonSharp) behaviours, hot reload, sandbox, instruction budget, persisted state |
-| `Shell/` | `MetaCodexShell` (wiring, panels by id, control-port commands), `ShellPanels` (dock, terminals, files, git, browser, scripts, settings), `ShellLayout` (fixed / float carousel), `Services` (system deep links, settings, MQH client, git, files) |
+| `UI/` | `UiTheme` (colours, sizes, fonts), `UiShapeMesh` (batched shapes, bending), `UiPanel` (frame, header, open animation, drag, bend), widgets (`UiButton`, `UiToggle`, `UiSegmented`, `UiSlider`, `UiTextField`, `UiList`, `UiTabs`, `UiProgress`, `UiDivider`), `UiKeyboard` (Horizon OS system keyboard), `UiInputRouter` (pointers, beams, reticles, selection), `UiToasts`, `UiModal`, `UiSounds` |
+| `Hands/` | `GestureEngine` (built-ins, pose templates, custom gestures with hold/cooldown, head-relative directions), `PoseSpec`, `OvrHandSource` (OVRHand/OVRSkeleton), `SimulatedHands` (any pose, for tests) |
+| `Scripting/` | `ScriptHost`: Lua (MoonSharp) scripts and plugin folders, hot reload, sandbox, instruction budget, detectors as persistent coroutines, persisted state; `PoseJson` |
+| `Security/` | `SecretVault` (Android Keystore sealer, Editor dev sealer, policies, access log) |
+| `Shell/` | `MetaCodexShell` (wiring, panels by id, control-port commands), `ShellPanels` (dock, terminals, files, git, browser, scripts, settings, themes, saved layouts), `ShellGestures` (Gestures studio, bindings, actions, recording, starter plugins), `ShellAgents` (agents, threads, thread, new thread, terminal links), `ShellVault` (vault panel, secret broker), `ShellLayout` (fixed / float carousel), `Services` (system deep links, settings, MQH client, git, files) |
+| `../Plugins/Android/MetaCodexVault.java` | the Keystore bridge (AES-256-GCM, StrongBox or TEE) |
 
 ## Panels
 
 | Panel | Does |
 |---|---|
-| Dock | new terminal, terminals, files, git, web, scripts, setup, keyboard, select tool, recenter |
-| Terminal frames | every terminal in a frame: drag by the header, `⌨` keyboard, `+` new, `✕` close, tap to focus (the key bar follows the focused one) |
+| Dock (two rows) | new terminal, terminals, files, git, agents, threads, web, scripts, gestures, vault, setup, keyboard, select tool, recenter |
+| Terminal frames | every terminal in a frame: drag by the header, `⇗` open the link the terminal printed (sign-in flows), `⎘` paste the clipboard, `⌨` keyboard, `+` new, `✕` close, tap to focus |
 | Terminals | list of terminal instances: new, focus, close |
-| Files | the Linux userland's folders (`/root`, `/mnt/quest`, `/`): open folders, cd / view / edit / paste path into the terminal |
-| Git | repositories under `/root`: branch, ahead/behind, upstream, changed files, branches with tracking state, history as metro lines; fetch, pull (ff-only), commit (keyboard for the message), checkout |
-| Browser | URL field (system keyboard) opens the Horizon OS browser (system deep link `systemux://browser`), bookmarks, local servers found on 127.0.0.1 (dev ports, MQH), shortcuts to Horizon hand settings, app settings, Files app |
-| Scripts | the Lua behaviours: status, enable/disable, reload, example, delete, log; live gesture monitor |
-| Settings | GESTURES (click by pinch/poke/both, move panels by pinching the header or closing the hand, ray always/pointing pose, pinch threshold, clap, select tool), DISPLAY (layout fixed/float, distance, carousel radius, scale, accent, scanlines, bending), DAEMON (MQH URL and token, sync, status, plugins enable/disable), ABOUT |
+| Files | the Linux userland's folders (`/root`, `/mnt/quest`, `/`): open folders, cd / view / edit / paste path |
+| Git | repositories under `/root`: branch, ahead/behind, upstream, changes, branches, history as metro lines; fetch, pull (ff-only), commit, checkout |
+| Browser | URL field (system keyboard) opens the Horizon OS browser (`systemux://browser`), bookmarks, local servers on 127.0.0.1, shortcuts to Horizon settings and Files |
+| Scripts | Lua scripts and plugins: status, enable/disable, reload, example, delete, log; gesture monitor |
+| Gestures | studio: GESTURES (all gestures with source, live state, bindings, TEST, source, delete pose), LIVE (finger curls of both hands, palm/thumb direction, velocity, active gestures, recent events, Lua detector cost), BIND (gesture → action, no code), RECORD (3-2-1, the hand's pose becomes a named gesture in plugin `my-poses`; new plugin from a template), PLUGINS (enable/disable/reload/delete/folder) |
+| Agents | MQH's providers with sign-in state, version, account; SIGN IN runs the provider's own login in a new terminal; INSTALL / UPDATE through MQH; enable/disable; NEW THREAD; OPEN LINK |
+| Threads | MQH projects (+ PROJECT from a Linux folder) and their threads with status (running, error, needs you); new, open, stop |
+| Thread | the timeline (you, agent, commands, tools, file edits, errors; newest at the bottom, ▲▼ to scroll), composer (system keyboard) + SEND, approvals (ALLOW ONCE / SESSION / DENY), STOP, jumps to the workspace's FILES, GIT and a TERMINAL there |
+| New thread | provider, model (from MQH's catalogue for that provider), permissions (EDITS / AUTO / FULL), workspace (project checkout or a new git worktree), first message, START |
+| Vault | secrets (names only), where the key lives (StrongBox / TEE), policy (ASK / ONCE / ALLOW / DENY), new value (secure keyboard), → MQH ENV, re-arm, delete, access log; approval dialogs for requests from Linux (`docs/secrets.md`) |
+| Settings | GESTURES (click by pinch/poke/both, move panels by header pinch or closed hand, ray mode, pinch threshold, clap, plugin gestures on/off, select tool), DISPLAY (layout fixed/float, distance, carousel radius, scale, bending, save / load named layouts, recenter), LOOK (theme presets, accent, glow, opacity, motion, scanlines, grid, sounds), DAEMON (MQH URL and token, sync, status, plugins), ABOUT |
 
-## Hands (Meta's basics; more gestures later)
+## Hands
 
-- Ray: OVR's pointer pose; pinch (OVR pinch strength, hysteresis) clicks and drags.
-- Poke: the index fingertip pushes buttons; near a panel it takes over from that hand's ray.
+- Ray: OVR's pointer pose; pinch clicks and drags. Poke: the index fingertip pushes buttons.
 - Move a panel: pinch its header and move, or close the hand (fist) while pointing at it.
-- Select tool: pinch and drag a rectangle on any panel; raises the `select` gesture (for "point and say").
-- Gestures for scripts: `pinch`, `grab`, `point`, `open`, `palm-up`, `clap`, `select`.
+- Select tool: pinch and drag a rectangle on any panel; raises the `select` gesture.
+- Built-in gestures: `pinch`, `grab`, `point`, `open`, `palm-up` (per hand, start/end), `clap` (two hands,
+  tap), `select`. The engine also measures, per hand: five finger curls (thumb included), thumb direction,
+  palm normal, finger direction, palm velocity in the head's yaw frame, hand size.
 
-## Live behaviours (no rebuild)
+## Gesture plugins (no rebuild)
 
-Agents (or the user) write Lua files into `/mnt/quest/scripts` (the app's shared folder seen from the
-userland). The app reloads a changed file within a second; scripts persist. Skill for agents:
-`mqh/plugins/bb-guide/skills/quest-scripting/SKILL.md` (bundled in MQH and copied into the rootfs at
-`/root/.claude/skills`). From the userland, `mcx-ui gesture clap` simulates a gesture and `mcx-ui script list`
-shows errors, so an agent can test what it wrote. "Save as prefab" on a headset means config: Unity cannot
-create prefabs at runtime, so behaviours are files and settings are JSON (also mirrored to MQH as the UI
-preference `quest.settings`, which agents can edit through the MQH API).
+Folders in `/mnt/quest/plugins/<id>/`: `plugin.json`, `poses/*.json` (named hand shapes: target curl per
+finger, palm / thumb direction, pinch range, hold, cooldown) and `main.lua` (Lua detectors with
+`gesture.define`, reactions with `gesture.on` / `gesture.sequence`). The app reloads a plugin within a
+second of any change. Detectors run as persistent coroutines about 36 times a second under the
+instruction budget; a runaway detector stops only its plugin. First run installs two starter plugins:
+`core-poses` (thumbs-up, thumbs-down, victory, horns, call-me; data only) and `swipes` (swipe left / right /
+up; Lua). Any gesture can be bound to an action without code (Gestures > BIND, or
+`mcx-ui gesture bind <gesture> <action>`); actions are one vocabulary shared by bindings, Lua
+(`app.action`) and the control port: `open:` `close:` `toggle:<panel>`, `toast:`, `run:`, `type:`, `url:`,
+`layout:`, `spin:`, `select`, `keyboard`, `terminal:new`, `recenter`, `gesture:`, `lua:`.
+
+Skills for agents (bundled into the userland at `/root/.claude/skills` and into MQH threads):
+`quest-gesture-plugins` (procedure, formats, hand model, API, recipes, testing), `quest-scripting`,
+`metacodex-context`, plus 36 Unity skills (github.com/Unity-Technologies/skills, refreshed by
+`tools/sync-agent-skills.sh`) and 7 Meta skills for hand tracking, interaction and comfort.
+
+## Live behaviours: single scripts
+
+`/mnt/quest/scripts/*.lua` (skill `quest-scripting`): same Lua API, one file per behaviour. Settings are JSON
+(mirrored to MQH as the UI preference `quest.settings`, which agents can edit through the MQH API; the MQH
+token is not synced).
+
+## Agents and threads (MQH)
+
+All data from MQH's public API on 127.0.0.1:38990: `/system/providers/state` (sign-in state and login
+command per provider), `/system/execution-options?providerId=&hostId=` (models), `/projects`, `/threads`,
+`/threads/:id/timeline`, `/threads/:id/send`, `/threads/:id/stop`, `/threads/:id/interactions`,
+`/settings/machine-environment`. Sign-in never goes through MetaCodex: the provider CLI prints a link,
+the terminal frame offers `⇗`, the Horizon browser opens it, and the CLI keeps its own credentials.
 
 ## Layouts
 
-- **Fixed**: panels are world-locked where you leave them; new panels open where you look, beside the ones
-  already there.
-- **Float**: panels sit on an invisible cylinder around you, like a circular screen. The cylinder follows
-  you horizontally as you walk (x/z, smoothed), never your head's pitch or roll; panels keep their height.
-  Close your hand in empty space and swipe sideways to spin it; it keeps turning and slows down smoothly
-  (no snapping). Panels bend to the cylinder (radius = their distance from you); terminals stay flat for now
-  (their text grid is not bent yet). The dock stays low in front and turns lazily to follow your heading.
-- Boundaryless: the app declares `com.oculus.feature.BOUNDARYLESS_APP` (passthrough only, Meta docs
-  "Boundaryless Mode for Mixed Reality in Unity"). Follow-up from the same doc: world-locked content should be
-  anchored with a spatial anchor rather than the Stage space.
+- **Fixed**: panels are world-locked where you leave them; new panels open where you look, in the
+  nearest free gap (within a head turn, ±110°); when none is left they cascade in front, each a little
+  closer, higher and to the side. Named layouts (Settings > DISPLAY) store the open panels relative to the head and put
+  them back around wherever the user is.
+- **Float**: panels sit on an invisible cylinder around you that follows you horizontally (x/z), never
+  your head's pitch or roll. Close your hand in empty space and swipe to spin it (inertia, no snapping).
+  Panels bend to the cylinder; terminals stay flat. The dock stays low in front.
+- Boundaryless: the app declares `com.oculus.feature.BOUNDARYLESS_APP` (passthrough only).
 
 ## Testing without a headset
 
 `tools/unity-batch.sh BatchCheck` = scene rebuild + terminal self-test + UI self-test
-(`Bench/selftest/ui-report.txt` and `ui-*.png`). The UI test drives the router with test pointers, the gesture
-engine with simulated hands, the double-clap story end to end (including a script written by a real agent:
-`tools/agent-script-test.sh`), git through WSL, the files view, the float carousel, and MQH when
-`tools/mqh-dev.sh start` runs. On the headset, the control port adds `ui ...`, `script ...` and `gesture ...`
-commands (`tools/qterm`, or `mcx-ui` inside the userland).
+(`Bench/selftest/ui-report.txt` and `ui-*.png`). The UI test drives the router with test pointers and the
+gesture engine with simulated hands (any pose and motion), runs the double-clap and gesture-plugin stories
+end to end (including a script and a plugin written by real agents: `tools/agent-script-test.sh`,
+`tools/agent-plugin-test.sh`), the vault (sealing, tamper check, policies, VR approval), sign-in link
+detection, themes, saved layouts, git through WSL, the float carousel, and MQH (providers, models,
+projects, a real thread, machine environment) when `tools/mqh-dev.sh start` runs. On the headset the
+control port adds `ui`, `script`, `plugin`, `gesture`, `hand`, `action` and `secret` commands (`tools/qterm`,
+or `mcx-ui` / `mcx-secret` inside the userland).

@@ -26,6 +26,9 @@ Material:
     m_Ints: []
     m_Floats:
     - _GlowBoost: 1
+    - _Grid: 1
+    - _Motion: 1
+    - _Opacity: 0.9
     - _Scanlines: 1
     m_Colors: []
   m_BuildTextureStacks: []

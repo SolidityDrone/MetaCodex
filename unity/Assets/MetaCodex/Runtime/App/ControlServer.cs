@@ -23,6 +23,10 @@ namespace MetaCodex.App
 
         private readonly TcpListener _listener;
         private readonly Func<string, string> _handler;
+        /// Commands that answer later (e.g. a secret request waiting for the user's approval in VR): return true
+        /// to take the command and call the reply action once, from any thread, within LongWaitSeconds.
+        public Func<string, Action<string>, bool> AsyncHandler;
+        public const int LongWaitSeconds = 120;
         private readonly ConcurrentQueue<(string cmd, Action<string> reply)> _queue = new ConcurrentQueue<(string, Action<string>)>();
         private volatile bool _stop;
 
@@ -45,7 +49,11 @@ namespace MetaCodex.App
             for (int i = 0; i < 8 && _queue.TryDequeue(out var item); i++)
             {
                 string result;
-                try { result = _handler(item.cmd); }
+                try
+                {
+                    if (AsyncHandler != null && AsyncHandler(item.cmd, item.reply)) continue;
+                    result = _handler(item.cmd);
+                }
                 catch (Exception ex) { result = "error: " + ex.Message; }
                 item.reply(result);
             }
@@ -86,8 +94,9 @@ namespace MetaCodex.App
                         if (line.Trim() == "quit") return;
                         var done = new ManualResetEventSlim(false);
                         string result = null;
-                        _queue.Enqueue((line, r => { result = r; done.Set(); }));
-                        if (!done.Wait(TimeSpan.FromSeconds(10))) result = "error: timeout (app paused?)";
+                        _queue.Enqueue((line, r => { if (!done.IsSet) { result = r; done.Set(); } }));
+                        int wait = line.StartsWith("secret ") ? LongWaitSeconds : 10;
+                        if (!done.Wait(TimeSpan.FromSeconds(wait))) result = "error: timeout (app paused, or nobody answered in VR)";
                         writer.WriteLine(result ?? "");
                         writer.WriteLine(".");
                     }

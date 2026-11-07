@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using MetaCodex.Hands;
 using MoonSharp.Interpreter;
+using Newtonsoft.Json.Linq;
 using UnityEngine;
 
 namespace MetaCodex.Scripting
@@ -27,38 +28,63 @@ namespace MetaCodex.Scripting
         string GetSetting(string key);
         bool SetSetting(string key, string value);
         HandState Hand(string hand);
+        GestureEngine Gestures { get; }
+        /// A binding-style action ("open:git", "toggle:files", "run:ls", "url:https://…", …); null = ok, else the error.
+        string RunAction(string action);
         void Log(string line);
     }
 
-    /// Behaviour scripts in Lua (MoonSharp: pure C#, IL2CPP-safe), changed during a session without a rebuild.
-    /// Scripts are `*.lua` files in one folder (on the headset the userland sees it as /mnt/quest/scripts, so
-    /// agents write them there); the host reloads a file within a second of a change. Each script runs in its
-    /// own sandbox (no io/os/load), every call has an instruction budget (a runaway loop disables the script,
-    /// the app keeps its frame rate), and its enabled flag and `store` survive restarts (state.json).
+    /// Behaviours in Lua (MoonSharp: pure C#, IL2CPP-safe), changed during a session without a rebuild.
+    /// Two forms, both hot-reloaded within a second of a change:
+    ///  - scripts: single `*.lua` files in one folder (/mnt/quest/scripts in the userland);
+    ///  - plugins: folders in /mnt/quest/plugins/<id>/ with plugin.json, an optional main.lua and optional
+    ///    poses/*.json (named hand poses). A plugin is enabled, disabled and reloaded as one unit.
+    /// Each runs in its own sandbox (no io/os/load); every call has an instruction budget (a runaway loop
+    /// stops that script, the app keeps its frame rate); enabled flags and `store` survive restarts.
+    /// Gesture detectors (gesture.define) run as persistent coroutines a few dozen times per second.
     public sealed class ScriptHost
     {
         public sealed class Entry
         {
             public string Name, Path, Description = "";
+            /// "script" (one .lua file) or "plugin" (a folder with plugin.json).
+            public string Kind = "script";
+            public string PluginDir, Title = "", Version = "";
+            public JObject Manifest;
             public Script Script;
             public string Error;
             public bool Enabled = true;
             public DateTime Mtime;
             public int Handlers;
             public int Runs;
+            public int Poses, Detectors;
             public readonly List<string> Log = new List<string>();
             internal Table Store;
+            internal Table[] HandTables;
+            /// State key: plugins and scripts may share a name.
+            public string Key => Kind == "plugin" ? "plugin/" + Name : Name;
         }
 
         private sealed class Handler { public Entry Owner; public string Event; public DynValue Fn; }
         private sealed class Sequence { public Entry Owner; public string[] Steps; public float Window; public DynValue Fn; public int Next; public float Start; }
         private sealed class Timer { public Entry Owner; public int Id; public float At, Every; public DynValue Fn; }
+        private sealed class Detector
+        {
+            public Entry Owner; public string Name, Hand; public float Hold, Cooldown; public DynValue Loop;
+            public readonly MoonSharp.Interpreter.Coroutine[] Co = new MoonSharp.Interpreter.Coroutine[3];
+            public double Micros; // average cost per call
+        }
 
         public const int InstructionBudget = 200_000;
+        public const int MaxDetectors = 32;
         public readonly string Dir;
+        public readonly string PluginsDir;
         public IReadOnlyList<Entry> Entries => _entries;
         public event Action Changed;
         public float Now { get; private set; }
+        /// Lua detector time in the last detection pass (ms), for the Gestures panel.
+        public double DetectMs { get; private set; }
+        public int DetectorCount => _detectors.Count;
 
         private readonly IScriptServices _svc;
         private readonly string _statePath;
@@ -66,27 +92,47 @@ namespace MetaCodex.Scripting
         private readonly List<Handler> _handlers = new List<Handler>();
         private readonly List<Sequence> _sequences = new List<Sequence>();
         private readonly List<Timer> _timers = new List<Timer>();
+        private readonly List<Detector> _detectors = new List<Detector>();
         private readonly Dictionary<string, bool> _enabled = new Dictionary<string, bool>();
         private readonly Dictionary<string, Dictionary<string, string>> _stores = new Dictionary<string, Dictionary<string, string>>();
-        private float _nextScan;
+        private float _nextScan, _nextDetect;
         private int _timerIds;
+        private GestureEngine _hookedEngine;
 
-        public ScriptHost(IScriptServices services, string dir)
+        public ScriptHost(IScriptServices services, string dir, string pluginsDir = null)
         {
             _svc = services;
             Dir = dir;
+            PluginsDir = pluginsDir ?? System.IO.Path.Combine(System.IO.Path.GetDirectoryName(dir.TrimEnd('/', '\\')) ?? dir, "plugins");
             Directory.CreateDirectory(dir);
+            try { Directory.CreateDirectory(PluginsDir); } catch (Exception) { }
             _statePath = System.IO.Path.Combine(dir, ".state.json");
             LoadState();
             Script.DefaultOptions.DebugPrint = s => _svc.Log("[lua] " + s);
         }
 
+        private GestureEngine Engine
+        {
+            get
+            {
+                var g = _svc.Gestures;
+                if (g != _hookedEngine)
+                {
+                    if (_hookedEngine != null) _hookedEngine.CustomTick -= OnCustomTick;
+                    _hookedEngine = g;
+                    if (g != null) g.CustomTick += OnCustomTick;
+                }
+                return g;
+            }
+        }
+
         // ------------------------------------------------------------------ loading
 
-        /// Called every frame: runs due timers; rescans the folder once a second.
+        /// Called every frame: runs due timers; rescans the folders once a second.
         public void Tick(float now)
         {
             Now = now;
+            _ = Engine; // keeps the detector hook on the current engine
             if (now >= _nextScan) { _nextScan = now + 1f; Scan(); }
             for (int i = 0; i < _timers.Count; i++)
             {
@@ -97,23 +143,36 @@ namespace MetaCodex.Scripting
             }
         }
 
-        /// Loads new and changed scripts, drops deleted ones.
+        /// Loads new and changed scripts and plugins, drops deleted ones.
         public void Scan()
         {
-            var files = Directory.Exists(Dir) ? Directory.GetFiles(Dir, "*.lua") : new string[0];
             var seen = new HashSet<string>();
             bool changed = false;
+            var files = Directory.Exists(Dir) ? Directory.GetFiles(Dir, "*.lua") : new string[0];
             foreach (var f in files.OrderBy(x => x, StringComparer.Ordinal))
             {
                 string name = System.IO.Path.GetFileNameWithoutExtension(f);
                 seen.Add(name);
                 var mtime = File.GetLastWriteTimeUtc(f);
-                var e = _entries.FirstOrDefault(x => x.Name == name);
+                var e = _entries.FirstOrDefault(x => x.Kind == "script" && x.Name == name);
                 if (e != null && e.Mtime == mtime) continue;
-                Load(f, mtime);
+                Load(e ?? NewEntry("script", name, f), mtime);
                 changed = true;
             }
-            foreach (var e in _entries.Where(x => !seen.Contains(x.Name)).ToList())
+            var dirs = Directory.Exists(PluginsDir) ? Directory.GetDirectories(PluginsDir) : new string[0];
+            foreach (var d in dirs.OrderBy(x => x, StringComparer.Ordinal))
+            {
+                var manifest = System.IO.Path.Combine(d, "plugin.json");
+                if (!File.Exists(manifest)) continue;
+                string name = Sanitize(System.IO.Path.GetFileName(d));
+                seen.Add("plugin/" + name);
+                var mtime = PluginMtime(d);
+                var e = _entries.FirstOrDefault(x => x.Kind == "plugin" && x.Name == name);
+                if (e != null && e.Mtime == mtime) continue;
+                Load(e ?? NewEntry("plugin", name, d), mtime);
+                changed = true;
+            }
+            foreach (var e in _entries.Where(x => !seen.Contains(x.Key)).ToList())
             {
                 Unload(e);
                 _entries.Remove(e);
@@ -122,34 +181,98 @@ namespace MetaCodex.Scripting
             if (changed) Changed?.Invoke();
         }
 
-        private void Load(string path, DateTime mtime)
+        private Entry NewEntry(string kind, string name, string path)
         {
-            string name = System.IO.Path.GetFileNameWithoutExtension(path);
-            var e = _entries.FirstOrDefault(x => x.Name == name);
-            if (e == null) { e = new Entry { Name = name, Path = path }; _entries.Add(e); }
-            else Unload(e);
+            var e = new Entry { Kind = kind, Name = name, Path = path, PluginDir = kind == "plugin" ? path : null };
+            _entries.Add(e);
+            return e;
+        }
+
+        /// A plugin changes when any of its files changes.
+        private static DateTime PluginMtime(string dir)
+        {
+            var t = Directory.GetLastWriteTimeUtc(dir);
+            try
+            {
+                foreach (var f in Directory.GetFiles(dir, "*", SearchOption.AllDirectories))
+                {
+                    var m = File.GetLastWriteTimeUtc(f);
+                    if (m > t) t = m;
+                }
+            }
+            catch (Exception) { }
+            return t;
+        }
+
+        private void Load(Entry e, DateTime mtime)
+        {
+            Unload(e);
             e.Mtime = mtime;
             e.Error = null;
             e.Handlers = 0;
-            e.Enabled = !_enabled.TryGetValue(name, out bool en) || en;
-            string code;
-            try { code = File.ReadAllText(path); }
-            catch (Exception ex) { e.Error = "read failed: " + ex.Message; return; }
-            e.Description = FirstComment(code);
+            e.Poses = 0;
+            e.Detectors = 0;
+            e.Enabled = !_enabled.TryGetValue(e.Key, out bool en) || en;
+            string code = null, chunkName = e.Name + ".lua";
+            if (e.Kind == "plugin")
+            {
+                try
+                {
+                    e.Manifest = JObject.Parse(File.ReadAllText(System.IO.Path.Combine(e.PluginDir, "plugin.json")));
+                    e.Title = (string)e.Manifest["name"] ?? e.Name;
+                    e.Version = (string)e.Manifest["version"] ?? "";
+                    e.Description = (string)e.Manifest["description"] ?? "";
+                }
+                catch (Exception ex) { e.Error = "plugin.json: " + ex.Message; Say(e, "ERROR " + e.Error); return; }
+                if (!e.Enabled) { Say(e, "disabled"); return; }
+                LoadPoses(e);
+                var main = System.IO.Path.Combine(e.PluginDir, (string)e.Manifest["main"] ?? "main.lua");
+                if (File.Exists(main))
+                {
+                    try { code = File.ReadAllText(main); chunkName = e.Name + "/" + System.IO.Path.GetFileName(main); }
+                    catch (Exception ex) { Fail(e, "read failed: " + ex.Message); return; }
+                }
+            }
+            else
+            {
+                try { code = File.ReadAllText(e.Path); }
+                catch (Exception ex) { e.Error = "read failed: " + ex.Message; return; }
+                e.Description = FirstComment(code);
+                if (!e.Enabled) { Say(e, "disabled"); return; }
+            }
             var script = new Script(CoreModules.Preset_SoftSandbox);
             script.Options.DebugPrint = s => Say(e, s);
             e.Script = script;
             e.Store = new Table(script);
             Install(e, script);
-            if (!e.Enabled) { Say(e, "disabled"); return; }
+            if (code == null) { Say(e, $"loaded ({e.Poses} poses)"); return; }
             try
             {
-                var chunk = script.LoadString(code, null, name + ".lua");
+                var chunk = script.LoadString(code, null, chunkName);
                 Run(e, chunk);
-                if (e.Error == null) Say(e, $"loaded ({e.Handlers} handlers)");
+                if (e.Error == null) Say(e, $"loaded ({e.Handlers} handlers, {e.Poses} poses, {e.Detectors} detectors)");
             }
             catch (InterpreterException ex) { Fail(e, ex.DecoratedMessage ?? ex.Message); }
             catch (Exception ex) { Fail(e, ex.Message); }
+        }
+
+        private void LoadPoses(Entry e)
+        {
+            var eng = Engine;
+            if (eng == null) return;
+            var dir = System.IO.Path.Combine(e.PluginDir, (string)e.Manifest?["poses"] ?? "poses");
+            if (!Directory.Exists(dir)) return;
+            foreach (var f in Directory.GetFiles(dir, "*.json").OrderBy(x => x, StringComparer.Ordinal))
+            {
+                try
+                {
+                    var p = PoseJson.Parse(JObject.Parse(File.ReadAllText(f)), e.Key, f);
+                    if (string.IsNullOrEmpty(p.Name)) p.Name = System.IO.Path.GetFileNameWithoutExtension(f);
+                    eng.AddPose(p);
+                    e.Poses++;
+                }
+                catch (Exception ex) { Say(e, $"pose {System.IO.Path.GetFileName(f)} skipped: {ex.Message}"); }
+            }
         }
 
         private void Unload(Entry e)
@@ -157,7 +280,10 @@ namespace MetaCodex.Scripting
             _handlers.RemoveAll(h => h.Owner == e);
             _sequences.RemoveAll(s => s.Owner == e);
             _timers.RemoveAll(t => t.Owner == e);
+            _detectors.RemoveAll(d => d.Owner == e);
+            _svc.Gestures?.RemoveOwnedBy(e.Key);
             e.Script = null;
+            e.HandTables = null;
         }
 
         private static string FirstComment(string code)
@@ -174,19 +300,22 @@ namespace MetaCodex.Scripting
             return "";
         }
 
-        public void SetEnabled(string name, bool enabled)
+        public Entry Find(string nameOrKey) =>
+            _entries.FirstOrDefault(x => x.Key == nameOrKey) ?? _entries.FirstOrDefault(x => x.Name == nameOrKey);
+
+        public void SetEnabled(string nameOrKey, bool enabled)
         {
-            _enabled[name] = enabled;
+            var e = Find(nameOrKey);
+            _enabled[e != null ? e.Key : nameOrKey] = enabled;
             SaveState();
-            var e = _entries.FirstOrDefault(x => x.Name == name);
             if (e == null) return;
-            Load(e.Path, File.Exists(e.Path) ? File.GetLastWriteTimeUtc(e.Path) : e.Mtime);
+            Load(e, e.Kind == "plugin" ? PluginMtime(e.PluginDir) : File.Exists(e.Path) ? File.GetLastWriteTimeUtc(e.Path) : e.Mtime);
             Changed?.Invoke();
         }
 
         public void ReloadAll()
         {
-            foreach (var e in _entries.ToList()) Load(e.Path, File.GetLastWriteTimeUtc(e.Path));
+            foreach (var e in _entries.ToList()) Load(e, e.Kind == "plugin" ? PluginMtime(e.PluginDir) : File.GetLastWriteTimeUtc(e.Path));
             Changed?.Invoke();
         }
 
@@ -196,23 +325,48 @@ namespace MetaCodex.Scripting
             name = Sanitize(name);
             var path = System.IO.Path.Combine(Dir, name + ".lua");
             File.WriteAllText(path, code);
-            Load(path, File.GetLastWriteTimeUtc(path));
+            var e = _entries.FirstOrDefault(x => x.Kind == "script" && x.Name == name) ?? NewEntry("script", name, path);
+            Load(e, File.GetLastWriteTimeUtc(path));
             Changed?.Invoke();
-            return _entries.First(x => x.Name == name);
+            return e;
         }
 
-        public bool Delete(string name)
+        /// Creates (or overwrites files of) a plugin folder and loads it at once. `files` maps relative paths to text.
+        public Entry SavePlugin(string id, IDictionary<string, string> files)
         {
-            var e = _entries.FirstOrDefault(x => x.Name == Sanitize(name));
+            id = Sanitize(id);
+            var dir = System.IO.Path.Combine(PluginsDir, id);
+            Directory.CreateDirectory(dir);
+            foreach (var kv in files)
+            {
+                var path = System.IO.Path.Combine(dir, kv.Key.Replace('/', System.IO.Path.DirectorySeparatorChar));
+                if (!System.IO.Path.GetFullPath(path).StartsWith(System.IO.Path.GetFullPath(dir))) continue; // stays inside
+                Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path));
+                File.WriteAllText(path, kv.Value);
+            }
+            var e = _entries.FirstOrDefault(x => x.Kind == "plugin" && x.Name == id) ?? NewEntry("plugin", id, dir);
+            Load(e, PluginMtime(dir));
+            Changed?.Invoke();
+            return e;
+        }
+
+        public bool Delete(string nameOrKey)
+        {
+            var e = Find(nameOrKey) ?? Find(Sanitize(nameOrKey));
             if (e == null) return false;
             Unload(e);
             _entries.Remove(e);
-            try { File.Delete(e.Path); } catch (Exception) { }
+            try
+            {
+                if (e.Kind == "plugin") Directory.Delete(e.PluginDir, true);
+                else File.Delete(e.Path);
+            }
+            catch (Exception) { }
             Changed?.Invoke();
             return true;
         }
 
-        private static string Sanitize(string name)
+        public static string Sanitize(string name)
         {
             var chars = (name ?? "script").Where(c => char.IsLetterOrDigit(c) || c == '-' || c == '_').ToArray();
             return chars.Length == 0 ? "script" : new string(chars);
@@ -224,7 +378,7 @@ namespace MetaCodex.Scripting
         {
             e.Log.Add(line);
             while (e.Log.Count > 40) e.Log.RemoveAt(0);
-            _svc.Log($"[script {e.Name}] {line}");
+            _svc.Log($"[{e.Kind} {e.Name}] {line}");
         }
 
         private void Fail(Entry e, string message)
@@ -232,7 +386,7 @@ namespace MetaCodex.Scripting
             e.Error = message;
             Unload(e);
             Say(e, "ERROR " + message);
-            _svc.Toast($"Script {e.Name}: {Short(message)}", "error");
+            _svc.Toast($"{(e.Kind == "plugin" ? "Plugin" : "Script")} {e.Name}: {Short(message)}", "error");
             Changed?.Invoke();
         }
 
@@ -304,7 +458,7 @@ namespace MetaCodex.Scripting
         /// Runs a snippet in a throwaway sandbox with the same API (control port, tests). Returns the result or the error.
         public string Eval(string code)
         {
-            var e = new Entry { Name = "eval", Path = "" };
+            var e = new Entry { Name = "eval", Path = "", Kind = "eval" };
             var script = new Script(CoreModules.Preset_SoftSandbox);
             e.Script = script;
             e.Store = new Table(script);
@@ -316,6 +470,119 @@ namespace MetaCodex.Scripting
             }
             catch (InterpreterException ex) { return "error: " + (ex.DecoratedMessage ?? ex.Message); }
             finally { Unload(e); }
+        }
+
+        // ------------------------------------------------------------------ gesture detectors (gesture.define)
+
+        private void OnCustomTick(float time, float dt)
+        {
+            if (_detectors.Count == 0) { DetectMs = 0; return; }
+            var eng = _svc.Gestures;
+            if (eng == null || time < _nextDetect) return;
+            float rate = Mathf.Clamp(eng.Settings.detectorRate, 5f, 120f);
+            _nextDetect = time + 1f / rate - 0.002f;
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            HashSet<Entry> filled = null;
+            foreach (var d in _detectors.ToList())
+            {
+                var e = d.Owner;
+                if (!e.Enabled || e.Error != null || e.Script == null) continue;
+                if (filled == null) filled = new HashSet<Entry>();
+                if (filled.Add(e))
+                {
+                    if (e.HandTables == null) e.HandTables = new[] { new Table(e.Script), new Table(e.Script) };
+                    FillHand(e.HandTables[0], eng.Left, eng, e.Script);
+                    FillHand(e.HandTables[1], eng.Right, eng, e.Script);
+                }
+                if (d.Hand == "both")
+                {
+                    bool raw = eng.Left.Tracked && eng.Right.Tracked && Detect(d, 2, e.HandTables[0], e.HandTables[1]);
+                    if (e.Error != null) continue;
+                    eng.Feed(d.Name, "both", raw, time, (eng.Left.Frame.Palm + eng.Right.Frame.Palm) * 0.5f, d.Hold, d.Cooldown);
+                    continue;
+                }
+                for (int slot = 0; slot < 2; slot++)
+                {
+                    var s = slot == 0 ? eng.Left : eng.Right;
+                    if (d.Hand != "any" && d.Hand != s.Side) continue;
+                    bool raw = s.Tracked && Detect(d, slot, e.HandTables[slot], e.HandTables[1 - slot]);
+                    if (e.Error != null) break;
+                    eng.Feed(d.Name, s.Side, raw, time, s.Frame.Palm, d.Hold, d.Cooldown);
+                }
+            }
+            DetectMs = sw.Elapsed.TotalMilliseconds;
+        }
+
+        private bool Detect(Detector d, int slot, Table a, Table b)
+        {
+            var e = d.Owner;
+            try
+            {
+                var co = d.Co[slot];
+                if (co == null || co.State == CoroutineState.Dead)
+                {
+                    co = e.Script.CreateCoroutine(d.Loop).Coroutine;
+                    co.AutoYieldCounter = InstructionBudget;
+                    d.Co[slot] = co;
+                }
+                long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+                var r = co.Resume(DynValue.NewTable(a), DynValue.NewTable(b));
+                d.Micros = d.Micros * 0.9 + 0.1 * (System.Diagnostics.Stopwatch.GetTimestamp() - t0) * 1e6 / System.Diagnostics.Stopwatch.Frequency;
+                if (co.State == CoroutineState.ForceSuspended)
+                {
+                    Fail(e, $"detector '{d.Name}' ran more than {InstructionBudget} instructions in one frame; stopped");
+                    return false;
+                }
+                if (r.Type == DataType.Tuple) r = r.Tuple.Length > 0 ? r.Tuple[0] : DynValue.Nil;
+                return r.CastToBool();
+            }
+            catch (InterpreterException ex) { Fail(e, $"detector '{d.Name}': " + (ex.DecoratedMessage ?? ex.Message)); }
+            catch (Exception ex) { Fail(e, $"detector '{d.Name}': " + ex.Message); }
+            return false;
+        }
+
+        /// Average cost of each detector (µs per call), for the Gestures panel.
+        public IEnumerable<(string name, string owner, double micros)> DetectorCosts() => _detectors.Select(d => (d.Name, d.Owner.Name, d.Micros));
+
+        private static void SetVec(Table parent, string key, Vector3 v, Script s)
+        {
+            var t = parent.Get(key);
+            Table tt;
+            if (t.Type == DataType.Table) tt = t.Table; else { tt = new Table(s); parent.Set(key, DynValue.NewTable(tt)); }
+            tt.Set("x", DynValue.NewNumber(Math.Round(v.x, 4)));
+            tt.Set("y", DynValue.NewNumber(Math.Round(v.y, 4)));
+            tt.Set("z", DynValue.NewNumber(Math.Round(v.z, 4)));
+        }
+
+        /// The hand as Lua sees it (also what hands.get returns). Head-relative values use the head's yaw
+        /// frame: x = the user's right, y = up, z = forward (looking down or up does not change them).
+        private static void FillHand(Table t, HandState s, GestureEngine eng, Script script)
+        {
+            t.Set("side", DynValue.NewString(s.Side));
+            t.Set("tracked", DynValue.NewBoolean(s.Tracked));
+            t.Set("confident", DynValue.NewBoolean(s.Tracked && s.Frame.HighConfidence));
+            t.Set("pinch", DynValue.NewNumber(Math.Round(s.Pinch, 3)));
+            t.Set("pinching", DynValue.NewBoolean(s.Pinching));
+            t.Set("grabbing", DynValue.NewBoolean(s.Grabbing));
+            t.Set("pointing", DynValue.NewBoolean(s.Pointing));
+            t.Set("open", DynValue.NewBoolean(s.Open));
+            t.Set("palmUp", DynValue.NewBoolean(s.PalmUp));
+            var p = s.Frame.Palm;
+            t.Set("x", DynValue.NewNumber(Math.Round(p.x, 4))); t.Set("y", DynValue.NewNumber(Math.Round(p.y, 4))); t.Set("z", DynValue.NewNumber(Math.Round(p.z, 4)));
+            var ct = t.Get("curl");
+            Table curl;
+            if (ct.Type == DataType.Table) curl = ct.Table; else { curl = new Table(script); t.Set("curl", DynValue.NewTable(curl)); }
+            for (int i = 0; i < 5; i++) curl.Set(PoseSpec.FingerNames[i], DynValue.NewNumber(Math.Round(s.Fingers[i], 3)));
+            var head = eng.Head;
+            SetVec(t, "rel", eng.ToHeadLocal(p - head.position), script);
+            SetVec(t, "vel", eng.ToHeadLocal(s.Velocity), script);
+            t.Set("speed", DynValue.NewNumber(Math.Round(s.Velocity.magnitude, 3)));
+            SetVec(t, "palmDir", s.PalmNormal, script);
+            SetVec(t, "thumbDir", s.ThumbDir, script);
+            SetVec(t, "fingerDir", s.Forward, script);
+            t.Set("palmFacing", DynValue.NewString(s.Tracked ? eng.Nearest(s.PalmNormal, p) : ""));
+            t.Set("thumbPointing", DynValue.NewString(s.Tracked ? eng.Nearest(s.ThumbDir, p) : ""));
+            t.Set("size", DynValue.NewNumber(Math.Round(s.HandSize, 4)));
         }
 
         // ------------------------------------------------------------------ the Lua API
@@ -331,6 +598,9 @@ namespace MetaCodex.Scripting
 
         private static void Set(Table t, string name, Func<CallbackArguments, DynValue> f) =>
             t.Set(name, DynValue.NewCallback((ctx, args) => f(args), name));
+
+        private static string TStr(Table t, string k, string def = null) { var v = t.Get(k); return v.Type == DataType.String ? v.String : def; }
+        private static float? TNum(Table t, string k) { var v = t.Get(k); return v.Type == DataType.Number ? (float)v.Number : (float?)null; }
 
         private void Install(Entry e, Script s)
         {
@@ -357,34 +627,84 @@ namespace MetaCodex.Scripting
                 e.Handlers++;
                 return DynValue.Nil;
             });
+            Set(gesture, "define", a =>
+            {
+                // gesture.define(name, {hand=, hold=, cooldown=, description=}, function(h, other) return bool end)
+                var name = Str(a, 0);
+                Table opts = a.Count > 1 && a[1].Type == DataType.Table ? a[1].Table : null;
+                var fn = Fn(a, opts != null ? 2 : 1);
+                if (name.Length == 0 || fn == null) throw new ScriptRuntimeException("gesture.define(name, {hand=\"right\", hold=0.1, cooldown=0.5}, function(h) return ... end)");
+                if (_detectors.Count >= MaxDetectors) throw new ScriptRuntimeException($"too many detectors (max {MaxDetectors})");
+                string hand = opts != null ? TStr(opts, "hand", "any") : "any";
+                if (hand != "left" && hand != "right" && hand != "any" && hand != "both") throw new ScriptRuntimeException("hand must be left, right, any or both");
+                var factory = s.LoadString("local f = ... return function(a, b) while true do a, b = coroutine.yield(f(a, b)) end end", null, "detector");
+                var loop = s.Call(factory, fn);
+                _detectors.RemoveAll(d => d.Owner == e && d.Name == name);
+                _detectors.Add(new Detector
+                {
+                    Owner = e, Name = name, Hand = hand, Loop = loop,
+                    Hold = Mathf.Clamp(opts != null ? TNum(opts, "hold") ?? 0.08f : 0.08f, 0f, 5f),
+                    Cooldown = Mathf.Clamp(opts != null ? TNum(opts, "cooldown") ?? 0.3f : 0.3f, 0f, 30f),
+                });
+                Engine?.RegisterCustom(name, "lua", e.Key, opts != null ? TStr(opts, "description", "") : "", hand);
+                e.Detectors++;
+                return DynValue.Nil;
+            });
+            Set(gesture, "pose", a =>
+            {
+                // gesture.pose(name, {fingers={thumb=0,index=1,...}, palmFacing="up", thumbPointing="up", tolerance=0.3, hold=0.12, hand="any"})
+                var name = Str(a, 0);
+                if (name.Length == 0 || a.Count < 2 || a[1].Type != DataType.Table) throw new ScriptRuntimeException("gesture.pose(name, {fingers={...}, palmFacing=..., thumbPointing=...})");
+                var p = PoseJson.FromTable(a[1].Table, e.Key);
+                p.Name = name;
+                Engine?.AddPose(p);
+                e.Poses++;
+                return DynValue.Nil;
+            });
+            Set(gesture, "emit", a =>
+            {
+                var name = Str(a, 0);
+                if (name.Length == 0) throw new ScriptRuntimeException("gesture.emit(name, hand, phase, detail)");
+                var eng = Engine;
+                var hand = Str(a, 1, "both");
+                var pos = hand == "left" ? eng?.Left.Frame.Palm : hand == "right" ? eng?.Right.Frame.Palm : null;
+                eng?.RaiseExternal(name, hand, Str(a, 2, "tap"), Now, pos ?? Vector3.zero, Str(a, 3, "emit"));
+                return DynValue.Nil;
+            });
             Set(gesture, "names", a =>
             {
                 var t = new Table(s);
-                foreach (var n in GestureEngine.Names) t.Append(DynValue.NewString(n));
+                foreach (var n in Engine != null ? Engine.AllNames() : GestureEngine.Names) t.Append(DynValue.NewString(n));
                 return DynValue.NewTable(t);
             });
+            gesture.Set("list", gesture.Get("names"));
+            Set(gesture, "active", a => DynValue.NewBoolean(Engine != null && Engine.IsActive(Str(a, 0), a.Count > 1 && !a[1].IsNil() ? Str(a, 1) : null)));
             g.Set("gesture", DynValue.NewTable(gesture));
 
             var hands = new Table(s);
-            Set(hands, "state", a =>
+            Set(hands, "get", a =>
             {
-                var st = _svc.Hand(Str(a, 0, "right"));
                 var t = new Table(s);
-                if (st != null)
-                {
-                    t.Set("tracked", DynValue.NewBoolean(st.Tracked));
-                    t.Set("pinch", DynValue.NewNumber(st.Pinch));
-                    t.Set("pinching", DynValue.NewBoolean(st.Pinching));
-                    t.Set("grabbing", DynValue.NewBoolean(st.Grabbing));
-                    t.Set("pointing", DynValue.NewBoolean(st.Pointing));
-                    t.Set("open", DynValue.NewBoolean(st.Open));
-                    t.Set("palmUp", DynValue.NewBoolean(st.PalmUp));
-                    var p = st.Frame.Palm;
-                    t.Set("x", DynValue.NewNumber(p.x)); t.Set("y", DynValue.NewNumber(p.y)); t.Set("z", DynValue.NewNumber(p.z));
-                }
+                var eng = Engine;
+                var st = _svc.Hand(Str(a, 0, "right"));
+                if (st != null && eng != null) FillHand(t, st, eng, s);
                 return DynValue.NewTable(t);
             });
+            hands.Set("state", hands.Get("get"));
             g.Set("hands", DynValue.NewTable(hands));
+
+            var head = new Table(s);
+            Set(head, "pose", a =>
+            {
+                var t = new Table(s);
+                var eng = Engine;
+                var h = eng != null ? eng.Head : new Pose(Vector3.zero, Quaternion.identity);
+                var f = h.rotation * Vector3.forward;
+                t.Set("x", DynValue.NewNumber(h.position.x)); t.Set("y", DynValue.NewNumber(h.position.y)); t.Set("z", DynValue.NewNumber(h.position.z));
+                t.Set("fx", DynValue.NewNumber(f.x)); t.Set("fy", DynValue.NewNumber(f.y)); t.Set("fz", DynValue.NewNumber(f.z));
+                return DynValue.NewTable(t);
+            });
+            g.Set("head", DynValue.NewTable(head));
 
             var ui = new Table(s);
             Set(ui, "toast", a => { _svc.Toast(Str(a, 0), Str(a, 1, "info")); return DynValue.Nil; });
@@ -433,11 +753,11 @@ namespace MetaCodex.Scripting
             Set(store, "get", a =>
             {
                 var key = Str(a, 0);
-                return _stores.TryGetValue(e.Name, out var d) && d.TryGetValue(key, out var v) ? DynValue.NewString(v) : DynValue.Nil;
+                return _stores.TryGetValue(e.Key, out var d) && d.TryGetValue(key, out var v) ? DynValue.NewString(v) : DynValue.Nil;
             });
             Set(store, "set", a =>
             {
-                if (!_stores.TryGetValue(e.Name, out var d)) _stores[e.Name] = d = new Dictionary<string, string>();
+                if (!_stores.TryGetValue(e.Key, out var d)) _stores[e.Key] = d = new Dictionary<string, string>();
                 d[Str(a, 0)] = Str(a, 1);
                 SaveState();
                 return DynValue.Nil;
@@ -464,7 +784,18 @@ namespace MetaCodex.Scripting
                 return DynValue.NewNumber(t.Id);
             });
             Set(app, "cancel", a => { int id = (int)Num(a, 0, -1); _timers.RemoveAll(t => t.Id == id && t.Owner == e); return DynValue.Nil; });
+            Set(app, "action", a => { var err = _svc.RunAction(Str(a, 0)); return err == null ? DynValue.True : DynValue.NewString(err); });
             g.Set("app", DynValue.NewTable(app));
+
+            if (e.Kind == "plugin")
+            {
+                var plugin = new Table(s);
+                plugin.Set("id", DynValue.NewString(e.Name));
+                plugin.Set("name", DynValue.NewString(e.Title ?? e.Name));
+                plugin.Set("version", DynValue.NewString(e.Version ?? ""));
+                plugin.Set("dir", DynValue.NewString("/mnt/quest/plugins/" + e.Name));
+                g.Set("plugin", DynValue.NewTable(plugin));
+            }
 
             Set(g, "log", a => { Say(e, string.Join(" ", Enumerable.Range(0, a.Count).Select(i => Str(a, i)))); return DynValue.Nil; });
         }
@@ -508,5 +839,69 @@ namespace MetaCodex.Scripting
         }
 
         public static string Number(double d) => d.ToString(CultureInfo.InvariantCulture);
+    }
+
+    /// Pose files (poses/*.json in a plugin) and Lua pose tables to PoseSpec and back.
+    public static class PoseJson
+    {
+        public static PoseSpec Parse(JObject j, string owner, string source)
+        {
+            var p = new PoseSpec { Owner = owner, Source = source };
+            p.Name = (string)j["name"] ?? "";
+            p.Description = (string)j["description"] ?? "";
+            p.Hand = ((string)j["hand"] ?? "any").ToLowerInvariant();
+            if (j["fingers"] is JObject fj)
+                for (int i = 0; i < 5; i++)
+                    if (fj[PoseSpec.FingerNames[i]] != null && fj[PoseSpec.FingerNames[i]].Type != JTokenType.Null) p.Fingers[i] = Mathf.Clamp01((float)fj[PoseSpec.FingerNames[i]]);
+            if (j["tolerance"] != null) p.Tolerance = Mathf.Clamp((float)j["tolerance"], 0.05f, 1f);
+            p.PalmFacing = Dir((string)j["palmFacing"]);
+            p.ThumbPointing = Dir((string)j["thumbPointing"]);
+            if (j["directionMin"] != null) p.DirectionMin = Mathf.Clamp((float)j["directionMin"], -1f, 1f);
+            if (j["pinch"] is JArray pa && pa.Count == 2) { p.PinchMin = (float)pa[0]; p.PinchMax = (float)pa[1]; }
+            if (j["hold"] != null) p.Hold = Mathf.Clamp((float)j["hold"], 0f, 5f);
+            if (j["cooldown"] != null) p.Cooldown = Mathf.Clamp((float)j["cooldown"], 0f, 30f);
+            return p;
+        }
+
+        public static PoseSpec FromTable(Table t, string owner)
+        {
+            var p = new PoseSpec { Owner = owner, Source = "lua" };
+            var desc = t.Get("description"); if (desc.Type == DataType.String) p.Description = desc.String;
+            var hand = t.Get("hand"); if (hand.Type == DataType.String) p.Hand = hand.String.ToLowerInvariant();
+            var f = t.Get("fingers");
+            if (f.Type == DataType.Table)
+                for (int i = 0; i < 5; i++) { var v = f.Table.Get(PoseSpec.FingerNames[i]); if (v.Type == DataType.Number) p.Fingers[i] = Mathf.Clamp01((float)v.Number); }
+            var tol = t.Get("tolerance"); if (tol.Type == DataType.Number) p.Tolerance = Mathf.Clamp((float)tol.Number, 0.05f, 1f);
+            var pf = t.Get("palmFacing"); if (pf.Type == DataType.String) p.PalmFacing = Dir(pf.String);
+            var tp = t.Get("thumbPointing"); if (tp.Type == DataType.String) p.ThumbPointing = Dir(tp.String);
+            var dm = t.Get("directionMin"); if (dm.Type == DataType.Number) p.DirectionMin = Mathf.Clamp((float)dm.Number, -1f, 1f);
+            var pinch = t.Get("pinch");
+            if (pinch.Type == DataType.Table && pinch.Table.Length == 2) { p.PinchMin = (float)pinch.Table.Get(1).CastToNumber(); p.PinchMax = (float)pinch.Table.Get(2).CastToNumber(); }
+            var hold = t.Get("hold"); if (hold.Type == DataType.Number) p.Hold = Mathf.Clamp((float)hold.Number, 0f, 5f);
+            var cd = t.Get("cooldown"); if (cd.Type == DataType.Number) p.Cooldown = Mathf.Clamp((float)cd.Number, 0f, 30f);
+            return p;
+        }
+
+        private static string Dir(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return null;
+            s = s.ToLowerInvariant();
+            if (s == "any") return null;
+            if (Array.IndexOf(PoseSpec.Directions, s) < 0) throw new Exception($"unknown direction '{s}' (use {string.Join(", ", PoseSpec.Directions)})");
+            return s;
+        }
+
+        public static JObject ToJson(PoseSpec p)
+        {
+            var fingers = new JObject();
+            for (int i = 0; i < 5; i++) if (p.Fingers[i].HasValue) fingers[PoseSpec.FingerNames[i]] = Math.Round(p.Fingers[i].Value, 2);
+            var j = new JObject { ["name"] = p.Name, ["description"] = p.Description ?? "", ["hand"] = p.Hand, ["fingers"] = fingers, ["tolerance"] = Math.Round(p.Tolerance, 2) };
+            if (p.PalmFacing != null) j["palmFacing"] = p.PalmFacing;
+            if (p.ThumbPointing != null) j["thumbPointing"] = p.ThumbPointing;
+            if (p.PinchMin.HasValue || p.PinchMax.HasValue) j["pinch"] = new JArray(p.PinchMin ?? 0f, p.PinchMax ?? 1f);
+            j["hold"] = Math.Round(p.Hold, 2);
+            j["cooldown"] = Math.Round(p.Cooldown, 2);
+            return j;
+        }
     }
 }

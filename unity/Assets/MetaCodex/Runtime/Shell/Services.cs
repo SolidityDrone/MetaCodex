@@ -104,6 +104,23 @@ namespace MetaCodex.Shell
         public bool mqhSync = true;
         public string filesRoot = "/root";
         public List<string> bookmarks = new List<string> { "https://developers.meta.com/horizon/", "https://github.com", "http://127.0.0.1:5173" };
+        /// Gesture -> action links (Gestures panel > BIND).
+        public List<GestureBinding> bindings = new List<GestureBinding>();
+        // look and feel
+        public float glow = 1f;
+        public float panelOpacity = 0.9f;
+        public float motion = 1f;
+        public bool grid = true;
+        public bool sounds = true;
+        public float soundVolume = 0.35f;
+        // agents: defaults for new threads
+        public string defaultProvider = "";
+        public string defaultModel = "";
+        public string permissionMode = "accept-edits";
+        public string workspaceMode = "local";
+        public string lastProject = "";
+        /// Named panel layouts (DISPLAY > SAVE / LOAD).
+        public List<SavedLayout> layouts = new List<SavedLayout>();
 
         public static string PathOnDisk => Path.Combine(Application.persistentDataPath, "metacodex-settings.json");
 
@@ -148,7 +165,32 @@ namespace MetaCodex.Shell
             return true;
         }
 
-        public JObject ToJObject() => JObject.Parse(JsonUtility.ToJson(this));
+        /// What is synced to MQH (quest.settings): everything except the MQH token itself.
+        public JObject ToJObject()
+        {
+            var j = JObject.Parse(JsonUtility.ToJson(this));
+            j.Remove("mqhToken");
+            return j;
+        }
+    }
+
+    /// Where the open panels were, relative to the user's head yaw, under a name.
+    [Serializable]
+    public sealed class SavedLayout
+    {
+        public string name = "";
+        public string mode = "fixed";
+        public List<SavedPanel> panels = new List<SavedPanel>();
+    }
+
+    [Serializable]
+    public sealed class SavedPanel
+    {
+        public string id = "";
+        /// position relative to the head (yaw frame: x right, y up, z forward) and yaw relative to the head's yaw
+        public Vector3 offset;
+        public float yaw;
+        public float bend;
     }
 
     /// Talks to MQH's public API on loopback (HttpClient off the main thread; results come back through Post).
@@ -158,10 +200,22 @@ namespace MetaCodex.Shell
         public string Token;
         public string LastError { get; private set; }
         public bool Online { get; private set; }
-        private static readonly HttpClient Http = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+        private static readonly HttpClient Http = new HttpClient { Timeout = System.Threading.Timeout.InfiniteTimeSpan };
         private readonly ConcurrentQueue<Action> _main;
 
+        static MqhClient()
+        {
+            // Mono's HttpClient sits on HttpWebRequest: 2 connections per host by default, so a few slow calls
+            // (provider checks, thread start) queue everything behind them
+            try { System.Net.ServicePointManager.DefaultConnectionLimit = Math.Max(System.Net.ServicePointManager.DefaultConnectionLimit, 16); } catch (Exception) { }
+        }
+
         public MqhClient(string baseUrl, string token, ConcurrentQueue<Action> mainThread) { BaseUrl = baseUrl; Token = token; _main = mainThread; }
+
+        /// Seconds a call may take: quick reads 15 s; starting threads, installs and provider checks longer.
+        private static int TimeoutFor(HttpMethod m, string path) =>
+            path.StartsWith("/api/v1/threads") && m == HttpMethod.Post && path.Length <= "/api/v1/threads".Length + 1 ? 60 :
+            path.Contains("/providers/state") || path.Contains("/execution-options") ? 45 : 15;
 
         private HttpRequestMessage Req(HttpMethod m, string path, JToken body = null)
         {
@@ -175,7 +229,8 @@ namespace MetaCodex.Shell
         {
             try
             {
-                using (var res = await Http.SendAsync(Req(m, path, body)).ConfigureAwait(false))
+                using (var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(TimeoutFor(m, path))))
+                using (var res = await Http.SendAsync(Req(m, path, body), cts.Token).ConfigureAwait(false))
                 {
                     string text = await res.Content.ReadAsStringAsync().ConfigureAwait(false);
                     if (!res.IsSuccessStatusCode) throw new Exception($"{(int)res.StatusCode} {Truncate(text)}");
@@ -187,21 +242,27 @@ namespace MetaCodex.Shell
             catch (Exception ex)
             {
                 Online = false;
-                LastError = ex is HttpRequestException || ex is TaskCanceledException ? "MQH not reachable at " + BaseUrl : ex.Message;
+                LastError = ex is TaskCanceledException ? $"MQH did not answer in {TimeoutFor(m, path)} s ({path.Split('?')[0]})" : ex is HttpRequestException ? "MQH not reachable at " + BaseUrl : ex.Message;
                 throw;
             }
         }
 
         private static string Truncate(string s) => s == null ? "" : s.Length > 160 ? s.Substring(0, 160) : s;
 
+        private int _inFlight;
+        /// Requests sent whose callback has not been queued yet (tests wait for 0).
+        public int InFlight => System.Threading.Volatile.Read(ref _inFlight);
+
         /// Fire-and-forget with a main-thread callback (null result on failure).
         public void Call(HttpMethod m, string path, JToken body, Action<JToken> onMain)
         {
+            System.Threading.Interlocked.Increment(ref _inFlight);
             Task.Run(async () =>
             {
                 JToken r = null;
                 try { r = await Send(m, path, body).ConfigureAwait(false); } catch (Exception) { }
                 _main.Enqueue(() => onMain?.Invoke(r));
+                System.Threading.Interlocked.Decrement(ref _inFlight);
             });
         }
 
@@ -210,6 +271,74 @@ namespace MetaCodex.Shell
         public void Providers(Action<JToken> cb) => Call(HttpMethod.Get, "/api/v1/system/providers", null, cb);
         public void SetPluginEnabled(string id, bool on, Action<JToken> cb) => Call(HttpMethod.Post, $"/api/v1/plugins/{Uri.EscapeDataString(id)}/{(on ? "enable" : "disable")}", new JObject(), cb);
         public void Preferences(Action<JToken> cb) => Call(HttpMethod.Get, "/api/v1/preferences/ui", null, cb);
+
+        private static string E(string s) => Uri.EscapeDataString(s ?? "");
+
+        // ---- agents: providers, sign-in state, models
+        public void ProvidersState(Action<JToken> cb) => Call(HttpMethod.Get, "/api/v1/system/providers/state", null, cb);
+        public void SetProviderEnabled(string id, bool on, Action<JToken> cb) => Call(HttpMethod.Put, $"/api/v1/system/providers/{E(id)}/enabled", new JObject { ["enabled"] = on }, cb);
+        /// Install or update a provider CLI on a host (the daemon runs the vendor's installer). The reply is a
+        /// text event stream; the callback gets a non-null token when the request was accepted.
+        public void InstallProviderCli(string hostId, string providerId, bool update, Action<JToken> cb) =>
+            CallRaw(HttpMethod.Post, $"/api/v1/hosts/{E(hostId)}/provider-clis/install", new JObject { ["provider"] = providerId, ["actionKind"] = update ? "update" : "install" }, cb, 600);
+        public void Models(string providerId, string hostId, Action<JToken> cb) =>
+            Call(HttpMethod.Get, $"/api/v1/system/execution-options?providerId={E(providerId)}" + (string.IsNullOrEmpty(hostId) ? "" : "&hostId=" + E(hostId)), null, cb);
+
+        // ---- workspaces: hosts, projects, environments
+        public void Hosts(Action<JToken> cb) => Call(HttpMethod.Get, "/api/v1/hosts", null, cb);
+        public void Projects(Action<JToken> cb) => Call(HttpMethod.Get, "/api/v1/projects", null, cb);
+        public void CreateProject(string name, string hostId, string path, Action<JToken> cb) =>
+            Call(HttpMethod.Post, "/api/v1/projects", new JObject { ["name"] = name, ["source"] = new JObject { ["hostId"] = hostId, ["type"] = "local_path", ["path"] = path } }, cb);
+        public void Environment(string id, Action<JToken> cb) => Call(HttpMethod.Get, $"/api/v1/environments/{E(id)}", null, cb);
+
+        // ---- threads
+        public void Threads(string projectId, Action<JToken> cb) => Call(HttpMethod.Get, "/api/v1/threads" + (string.IsNullOrEmpty(projectId) ? "" : "?projectId=" + E(projectId)), null, cb);
+        public void Thread(string id, Action<JToken> cb) => Call(HttpMethod.Get, $"/api/v1/threads/{E(id)}", null, cb);
+        public void CreateThread(JObject body, Action<JToken> cb) => Call(HttpMethod.Post, "/api/v1/threads", body, cb);
+        public void Timeline(string id, Action<JToken> cb) => Call(HttpMethod.Get, $"/api/v1/threads/{E(id)}/timeline", null, cb);
+        public void SendMessage(string id, string text, Action<JToken> cb) =>
+            Call(HttpMethod.Post, $"/api/v1/threads/{E(id)}/send", new JObject { ["input"] = new JArray { TextInput(text) }, ["mode"] = "auto" }, cb);
+        public void StopThread(string id, Action<JToken> cb) => Call(HttpMethod.Post, $"/api/v1/threads/{E(id)}/stop", new JObject(), cb);
+        public void Interactions(string id, Action<JToken> cb) => Call(HttpMethod.Get, $"/api/v1/threads/{E(id)}/interactions", null, cb);
+        /// decision: allow_once | allow_for_session | deny
+        public void ResolveApproval(string threadId, string interactionId, string decision, Action<JToken> cb) =>
+            Call(HttpMethod.Post, $"/api/v1/threads/{E(threadId)}/interactions/{E(interactionId)}/resolve",
+                decision == "deny" ? new JObject { ["decision"] = "deny" } : new JObject { ["decision"] = decision, ["grantedPermissions"] = null }, cb);
+        public static JObject TextInput(string text) => new JObject { ["type"] = "text", ["text"] = text ?? "", ["mentions"] = new JArray() };
+
+        // ---- secrets for agents: MQH's machine environment (values are write-only through the API and stored
+        // encrypted; with MQH_MACHINE_ENV_KEY_COMMAND the key comes from the app's Android Keystore vault)
+        public void MachineEnvironment(Action<JToken> cb) => Call(HttpMethod.Get, "/api/v1/settings/machine-environment", null, cb);
+        public void SetMachineEnvironment(string name, string value, string note, Action<JToken> cb) =>
+            Call(HttpMethod.Post, "/api/v1/settings/machine-environment", new JObject { ["name"] = name, ["value"] = value, ["note"] = note }, cb);
+        public void DeleteMachineEnvironment(string name, Action<JToken> cb) =>
+            Call(HttpMethod.Delete, "/api/v1/settings/machine-environment", new JObject { ["name"] = name }, cb);
+
+        /// Like Call, but any 2xx reply counts (text streams); the callback gets the text as a JValue.
+        public void CallRaw(HttpMethod m, string path, JToken body, Action<JToken> onMain, int timeoutSeconds = 30)
+        {
+            System.Threading.Interlocked.Increment(ref _inFlight);
+            Task.Run(async () =>
+            {
+                JToken r = null;
+                try
+                {
+                    using (var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(timeoutSeconds)))
+                    using (var res = await LongHttp.SendAsync(Req(m, path, body), cts.Token).ConfigureAwait(false))
+                    {
+                        string text = await res.Content.ReadAsStringAsync().ConfigureAwait(false);
+                        if (!res.IsSuccessStatusCode) throw new Exception($"{(int)res.StatusCode} {Truncate(text)}");
+                        Online = true; LastError = null;
+                        r = new JValue(text);
+                    }
+                }
+                catch (Exception ex) { LastError = ex.Message; }
+                _main.Enqueue(() => onMain?.Invoke(r));
+                System.Threading.Interlocked.Decrement(ref _inFlight);
+            });
+        }
+
+        private static readonly HttpClient LongHttp = new HttpClient { Timeout = System.Threading.Timeout.InfiniteTimeSpan };
 
         /// Writes quest.settings, retrying once with the server's revision when ours is stale.
         public void PushQuestSettings(JObject value, Action<bool> cb)

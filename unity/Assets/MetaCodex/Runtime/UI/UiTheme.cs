@@ -54,6 +54,7 @@ namespace MetaCodex.UI
         public static readonly Dictionary<string, int> Accents = new Dictionary<string, int>
         {
             { "cyan", 0x35D0FF }, { "amber", 0xFFB547 }, { "green", 0x4DFFA6 }, { "violet", 0xB28CFF }, { "red", 0xFF5468 },
+            { "ice", 0x9FE8FF }, { "magenta", 0xFF5BD8 }, { "gold", 0xFFD34D }, { "white", 0xE8F4FF },
         };
 
         public void SetAccent(string name)

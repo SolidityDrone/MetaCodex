@@ -1,4 +1,5 @@
 import { ApiError } from "../../errors.js";
+import { execFile } from "node:child_process";
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -18,6 +19,42 @@ import {
 import { runSerialized } from "../lib/async-deduper.js";
 
 const keyFile = "machine-environment-key";
+/**
+ * MQH: where the key comes from on the headset. When set, MQH runs this shell command once (on first use),
+ * expects 64 hex characters (32 bytes) on stdout, and keeps the key in memory only: no key file is written.
+ * MetaCodex sets it to `mcx-secret ensure mqh.machine-env-key 32 mqh`, so the key lives in the app's
+ * Android Keystore vault (outside the Linux rootfs) and is handed out once per app session.
+ */
+export const MACHINE_ENV_KEY_COMMAND_ENV = "MQH_MACHINE_ENV_KEY_COMMAND";
+const KEY_COMMAND_TIMEOUT_MS = 150_000; // the app may ask the user in VR first
+let commandKey: { command: string; key: Promise<Buffer> } | null = null;
+
+function keyFromCommand(command: string): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    execFile(
+      "/bin/sh",
+      ["-c", command],
+      { timeout: KEY_COMMAND_TIMEOUT_MS, maxBuffer: 4096, windowsHide: true },
+      (error, stdout) => {
+        if (error) {
+          reject(new Error(`key command failed: ${error.message}`));
+          return;
+        }
+        const value = String(stdout).trim();
+        if (!/^[a-f0-9]{64}$/u.test(value)) {
+          reject(new Error("key command did not print 64 hex characters"));
+          return;
+        }
+        resolve(Buffer.from(value, "hex"));
+      },
+    );
+  });
+}
+
+/** Tests: forget the key obtained from the command. */
+export function resetMachineEnvironmentKeyCache(): void {
+  commandKey = null;
+}
 const encryptedSchema = z.object({
   encryptionVersion: z.union([z.literal(1), z.literal(2)]),
   projectId: z.string().nullable(),
@@ -35,6 +72,24 @@ function scope(projectId: string | null) {
 }
 
 async function encryptionKey(dataDir: string, allowCreate: boolean) {
+  const command = process.env[MACHINE_ENV_KEY_COMMAND_ENV]?.trim();
+  if (command) {
+    if (commandKey === null || commandKey.command !== command) {
+      const key = keyFromCommand(command);
+      commandKey = { command, key };
+      // a failed attempt is retried on the next use (e.g. after the user re-arms the secret in VR)
+      key.catch(() => {
+        if (commandKey?.key === key) commandKey = null;
+      });
+    }
+    try {
+      return Buffer.from(await commandKey.key);
+    } catch (error) {
+      throw new Error(
+        `Machine environment encryption key is unavailable (${MACHINE_ENV_KEY_COMMAND_ENV}): ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
   try {
     const value = allowCreate
       ? await readOrCreateSecretFile({

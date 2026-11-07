@@ -3,12 +3,15 @@
 #   mcx-ui ui list | ui open files | ui toast hello | ui layout float
 #   mcx-ui script list | script log <name> | script eval 'return 1+1' | script dir
 #   mcx-ui gesture clap        (simulates a recognised gesture: test a script without moving your hands)
+#   mcx-ui gesture list | gesture bindings | gesture bind thumbs-up open:git | gesture unbind thumbs-up
+#   mcx-ui plugin list | plugin log <id> | plugin new <id> | plugin enable|disable|delete <id> | plugin reload
+#   mcx-ui action open:git     (any action: open/close/toggle:<panel>, toast:, run:, url:, layout:, spin:, ...)
 #   mcx-ui status | screen
 # The token is new at every app start: /mnt/quest/control.token (the app's shared folder).
 set -euo pipefail
 TOKEN_FILE=${MCX_TOKEN_FILE:-/mnt/quest/control.token}
 PORT=${MCX_CONTROL_PORT:-47800}
-[[ $# -gt 0 ]] || { sed -n 2,7p "$0"; exit 2; }
+[[ $# -gt 0 ]] || { sed -n 2,10p "$0"; exit 2; }
 [[ -r "$TOKEN_FILE" ]] || { echo "mcx-ui: no $TOKEN_FILE (is the MetaCodex app running?)" >&2; exit 1; }
 exec 3<>"/dev/tcp/127.0.0.1/$PORT" || { echo "mcx-ui: control port $PORT closed" >&2; exit 1; }
 printf 'auth %s\n%s\n' "$(cat "$TOKEN_FILE")" "$*" >&3

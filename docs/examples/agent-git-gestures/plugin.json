@@ -1,0 +1,7 @@
+{
+  "id": "git-gestures",
+  "name": "Git gestures",
+  "version": "1.0.0",
+  "kind": "gesture",
+  "description": "Right-hand thumbs up opens the git panel; a fast open-palm push away closes it"
+}
