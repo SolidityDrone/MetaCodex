@@ -10,11 +10,11 @@ const KILL_GRACE_MS = 2_000;
 const CLOSE_GRACE_MS = 1_000;
 export const MAX_CONCURRENT_CLI_PROCESSES = 8;
 const STRIPPED_ENVIRONMENT_KEYS = [
-  "BB_THREAD_ID",
-  "BB_PROJECT_ID",
-  "BB_ENVIRONMENT_ID",
-  "BB_THREAD_STORAGE",
-  "BB_SERVER_HEADERS",
+  "MQH_THREAD_ID",
+  "MQH_PROJECT_ID",
+  "MQH_ENVIRONMENT_ID",
+  "MQH_THREAD_STORAGE",
+  "MQH_SERVER_HEADERS",
 ];
 
 export interface CliRunResult {
@@ -39,7 +39,7 @@ export type CliRunner = (
 export class CliUnavailableError extends Error {
   constructor() {
     super(
-      "The bb CLI could not be found on the bb server's machine, so MCP calls cannot run commands.",
+      "The bb CLI could not be found on the mqh server's machine, so MCP calls cannot run commands.",
     );
     this.name = "CliUnavailableError";
   }
@@ -57,7 +57,7 @@ export function cliEnvironment(
 ): NodeJS.ProcessEnv {
   const next: NodeJS.ProcessEnv = { ...env };
   for (const key of STRIPPED_ENVIRONMENT_KEYS) delete next[key];
-  next.BB_SERVER_URL = serverUrl;
+  next.MQH_SERVER_URL = serverUrl;
   next.NO_COLOR = "1";
   next.FORCE_COLOR = "0";
   return next;

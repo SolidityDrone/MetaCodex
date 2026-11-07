@@ -1170,7 +1170,7 @@ describe("public project skills route", () => {
     });
   });
 
-  it("maps scope, de-dupes shared bb skills, and sorts the listing", async () => {
+  it("maps scope, de-dupes shared mqh skills, and sorts the listing", async () => {
     await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-skills",
@@ -1402,7 +1402,7 @@ describe("public project skills route", () => {
     });
   });
 
-  it("lists and reads a bb plugin skill from the authoritative runtime catalog", async () => {
+  it("lists and reads a mqh plugin skill from the authoritative runtime catalog", async () => {
     const workDir = await mkdtemp(join(tmpdir(), "bb-plugin-skill-route-"));
     try {
       await withTestHarness(async (harness) => {
@@ -1469,7 +1469,7 @@ describe("public project skills route", () => {
     }
   });
 
-  it("deletes a bb skill via the confined daemon primitive", async () => {
+  it("deletes a mqh skill via the confined daemon primitive", async () => {
     await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-skill-delete",

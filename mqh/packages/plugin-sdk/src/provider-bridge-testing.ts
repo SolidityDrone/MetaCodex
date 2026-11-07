@@ -15,7 +15,7 @@
  *   and the **calibration normalizer** that makes whole-session goldens
  *   comparable across runs by interning minted ids;
  * - the **recorded-replay harness**: replay a recording bb made of the
- *   bridge (record mode, `BB_PROVIDER_BRIDGE_RECORD_DIR`) through the bridge
+ *   bridge (record mode, `MQH_PROVIDER_BRIDGE_RECORD_DIR`) through the bridge
  *   again — the recorded runtime lane driven in, the recorded provider lanes
  *   played by the replay child the bridge spawns in place of its provider —
  *   and diff what it emits against the recording (`experimental_compareParity`),

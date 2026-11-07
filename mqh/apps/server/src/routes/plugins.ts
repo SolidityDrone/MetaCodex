@@ -1,8 +1,5 @@
-import { HOST_TAILWIND_VERSION } from "@bb/plugin-build/host-tailwind-version";
 import type { PluginUpdateJobs } from "../services/plugins/plugin-update-jobs.js";
 import { timingSafeEqual } from "node:crypto";
-import { promisify } from "node:util";
-import { brotliCompress, constants as zlibConstants, gzip } from "node:zlib";
 import type { Context, Hono } from "hono";
 import type { createNodeWebSocket } from "@hono/node-ws";
 import type { WSContext, WSMessageReceive, WSEvents } from "hono/ws";
@@ -33,11 +30,6 @@ import {
   prefersRespondAsync,
   respondWithInstallJob,
 } from "./plugin-install-jobs.js";
-import {
-  createAppAssetCompressionCache,
-  type AppAssetCompressionCache,
-} from "../services/plugins/app-asset-compression-cache.js";
-import { rankAcceptedAssetEncodings } from "../asset-content-encoding.js";
 import { declineWebSocketCompression } from "../ws/compression.js";
 import {
   hashedAssetCacheControl,
@@ -121,66 +113,6 @@ export async function pluginCliResponse(
   });
 }
 
-const compressBrotli = promisify(brotliCompress);
-const compressGzip = promisify(gzip);
-const MIN_COMPRESSED_APP_ASSET_BYTES = 1_024;
-const MAX_CACHED_APP_ASSETS = 64;
-const APP_ASSET_ENCODINGS = [
-  {
-    encoding: "br",
-    compress: (bytes: Buffer) =>
-      compressBrotli(bytes, {
-        params: {
-          [zlibConstants.BROTLI_PARAM_QUALITY]: 6,
-        },
-      }),
-  },
-  {
-    encoding: "gzip",
-    compress: (bytes: Buffer) => compressGzip(bytes),
-  },
-] as const;
-
-async function appAssetResponse(
-  context: Context,
-  bytes: Buffer,
-  args: {
-    assetKey: string;
-    cache: AppAssetCompressionCache;
-    cacheControl: string;
-    contentHash: string;
-    contentType: string;
-  },
-): Promise<Response> {
-  const responseHeaders: Record<string, string> = {
-    "cache-control": args.cacheControl,
-    "content-length": String(bytes.length),
-    "content-type": args.contentType,
-  };
-  if (bytes.length < MIN_COMPRESSED_APP_ASSET_BYTES) {
-    return context.body(new Uint8Array(bytes), 200, responseHeaders);
-  }
-
-  responseHeaders.vary = "Accept-Encoding";
-  const candidate = rankAcceptedAssetEncodings(
-    context.req.header("accept-encoding"),
-    APP_ASSET_ENCODINGS,
-  )[0];
-  if (candidate === undefined) {
-    return context.body(new Uint8Array(bytes), 200, responseHeaders);
-  }
-
-  const compressed = await args.cache.getOrCreate({
-    assetKey: args.assetKey,
-    compress: () => candidate.compress(bytes),
-    encoding: candidate.encoding,
-    hash: args.contentHash,
-  });
-  responseHeaders["content-encoding"] = candidate.encoding;
-  responseHeaders["content-length"] = String(compressed.length);
-  return context.body(new Uint8Array(compressed), 200, responseHeaders);
-}
-
 function parsePluginMentionTrigger(
   value: string | undefined,
 ): PluginMentionTrigger | null {
@@ -237,7 +169,7 @@ async function tokenAuthProblem(
       status: 401,
       error:
         'missing or invalid plugin token — send it as the "x-bb-plugin-token" header ' +
-        "or ?token=; print it with `bb plugin token " +
+        "or ?token=; print it with `mqh plugin token " +
         `${id}\``,
     };
   }
@@ -386,9 +318,6 @@ export function registerPluginRoutes(
   updateJobs: PluginUpdateJobs,
   upgradeWebSocket?: UpgradeWebSocket,
 ): void {
-  const appAssetCompressionCache = createAppAssetCompressionCache(
-    MAX_CACHED_APP_ASSETS,
-  );
   const upgradePluginWebSocket = upgradeWebSocket?.(async (context) => {
     declineWebSocketCompression(context);
     const id = context.req.param("id");
@@ -543,49 +472,27 @@ export function registerPluginRoutes(
     );
   });
 
-  const APP_ASSET_CONTENT_TYPES = {
-    "app.js": { kind: "js", contentType: "text/javascript; charset=utf-8" },
-    "app.css": { kind: "css", contentType: "text/css; charset=utf-8" },
-  } as const;
-
-  app.get("/plugin-app-assets/:hash/:file", async (context) => {
-    const file = context.req.param("file");
-    const spec =
-      file === "app.js" || file === "app.css"
-        ? APP_ASSET_CONTENT_TYPES[file]
-        : undefined;
-    if (!spec) {
-      return context.json({ ok: false, error: "unknown plugin asset" }, 404);
-    }
-    const hash = context.req.param("hash");
-    if (!/^[a-f0-9]{16}$/u.test(hash)) {
-      return context.json({ ok: false, error: "unknown plugin asset" }, 404);
-    }
-    const asset = plugins.getAppAssetByHash(hash, spec.kind);
-    if (!asset) {
+  // MQH: the plugin's panel layout for the headset (data only; the Unity client renders it).
+  app.get("/plugins/:id/spatial", async (context) => {
+    let document: unknown;
+    try {
+      document = await plugins.readSpatialDocument(context.req.param("id"));
+    } catch (error) {
       return context.json(
-        { ok: false, error: "plugin has no loadable frontend bundle" },
+        {
+          ok: false,
+          error: `invalid spatial.json: ${error instanceof Error ? error.message : String(error)}`,
+        },
+        422,
+      );
+    }
+    if (document === undefined) {
+      return context.json(
+        { ok: false, error: "plugin is not loaded or has no spatial.json" },
         404,
       );
     }
-    const hostTailwind =
-      spec.kind === "css" &&
-      context.req.query("host-tailwind") === HOST_TAILWIND_VERSION;
-    const ownedRoot =
-      spec.kind === "css" && context.req.query("css-scope") === "owned-root-v1";
-    let bytes: Buffer;
-    try {
-      bytes = await asset.read({ hostTailwind, ownedRoot });
-    } catch {
-      return context.json({ ok: false, error: "bundle file missing" }, 404);
-    }
-    return appAssetResponse(context, bytes, {
-      assetKey: `${hash}:${spec.kind}:${hostTailwind}:${ownedRoot}`,
-      cache: appAssetCompressionCache,
-      contentType: spec.contentType,
-      cacheControl: "public, max-age=31536000, immutable",
-      contentHash: asset.hash,
-    });
+    return context.json(document as object);
   });
 
   app.get("/plugins/:id/assets/icons/:file", (context) => {
@@ -621,42 +528,7 @@ export function registerPluginRoutes(
         hashedAssetCacheControl(context.req.query("h"), asset.hash),
       );
     }
-    const spec =
-      file === "app.js" || file === "app.css"
-        ? APP_ASSET_CONTENT_TYPES[file]
-        : undefined;
-    if (!spec) {
-      return context.json({ ok: false, error: "unknown plugin asset" }, 404);
-    }
-    const asset = plugins.getAppAsset(context.req.param("id"), spec.kind);
-    if (!asset) {
-      return context.json(
-        { ok: false, error: "plugin has no loadable frontend bundle" },
-        404,
-      );
-    }
-    const hostTailwind =
-      spec.kind === "css" &&
-      context.req.query("host-tailwind") === HOST_TAILWIND_VERSION;
-    const ownedRoot =
-      spec.kind === "css" && context.req.query("css-scope") === "owned-root-v1";
-    let bytes: Buffer;
-    try {
-      bytes = await asset.read({ hostTailwind, ownedRoot });
-    } catch {
-      return context.json({ ok: false, error: "bundle file missing" }, 404);
-    }
-    const cacheControl = hashedAssetCacheControl(
-      context.req.query("h"),
-      asset.hash,
-    );
-    return appAssetResponse(context, bytes, {
-      assetKey: `${context.req.param("id")}:${spec.kind}:${hostTailwind}:${ownedRoot}`,
-      cache: appAssetCompressionCache,
-      contentType: spec.contentType,
-      cacheControl,
-      contentHash: asset.hash,
-    });
+    return context.json({ ok: false, error: "unknown plugin asset" }, 404);
   });
 
   app.get("/plugins/:id/logs", async (context) => {

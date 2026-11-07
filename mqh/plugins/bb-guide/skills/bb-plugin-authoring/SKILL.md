@@ -21,7 +21,7 @@ workflow. Install or reload when a live check is needed for the requested work.
 To find where a plugin can extend the app, open the Plugin Guide in bb or
 at https://getbb.app/plugin-guide.
 
-Use bb plugin new <name> for a new plugin. The scaffold includes frontend files.
+Use mqh plugin new <name> for a new plugin. The scaffold includes frontend files.
 Remove `bb.app` and those files when the plugin is headless.
 
 Every new public Plugin SDK surface starts with an experimental\_ prefix and an
@@ -120,8 +120,8 @@ the same change.
 - Keep experimental names until the public API audit stabilizes them.
 - Use current names. Compatibility aliases can warn and can expire after one
   release. Removed APIs can throw.
-- Run bb plugin types when SDK declaration versions can drift.
-- Run bb plugin build before install, release, or marketplace submission.
+- Run mqh plugin types when SDK declaration versions can drift.
+- Run mqh plugin build before install, release, or marketplace submission.
 
 ## Verification
 

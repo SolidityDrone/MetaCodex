@@ -942,19 +942,19 @@ describe("GET /threads/:id/timeline delegated rows", () => {
       const { environment, thread } = seedThreadFixture(harness);
       const recipient = "thr_abcdefghjk";
       const message = "A message for the receiving thread. ".repeat(40);
-      const quoted = `bb thread tell ${recipient} '${message}'`;
-      const heredoc = `bb thread tell ${recipient} --message-file - <<'MESSAGE'\n${message}\nMESSAGE`;
+      const quoted = `mqh thread tell ${recipient} '${message}'`;
+      const heredoc = `mqh thread tell ${recipient} --message-file - <<'MESSAGE'\n${message}\nMESSAGE`;
       const cases = [
         { command: quoted, exitCode: 0, output: "sent", message },
         { command: heredoc, exitCode: 0, output: "sent", message },
         {
-          command: `bb thread tell ${recipient} 'short'`,
+          command: `mqh thread tell ${recipient} 'short'`,
           exitCode: 0,
           output: "acknowledgement".repeat(100),
           message: "short",
         },
         {
-          command: `bb thread tell ${recipient} '${"brief ".repeat(60)}'`,
+          command: `mqh thread tell ${recipient} '${"brief ".repeat(60)}'`,
           exitCode: 0,
           output: "sent",
           message: "brief ".repeat(60),
@@ -967,7 +967,7 @@ describe("GET /threads/:id/timeline delegated rows", () => {
           message: null,
         },
         {
-          command: `bb thread tell ${recipient} --message-file /tmp/message.txt`,
+          command: `mqh thread tell ${recipient} --message-file /tmp/message.txt`,
           exitCode: 0,
           output: "acknowledgement".repeat(100),
           message: null,

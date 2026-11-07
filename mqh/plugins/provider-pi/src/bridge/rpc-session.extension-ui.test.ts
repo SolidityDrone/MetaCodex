@@ -11,8 +11,8 @@ it("auto-cancels extension dialogs in a helper session without a UI handler", as
   const log = join(dir, "responses.jsonl");
   const script = `
     const fs = require("node:fs");
-    const channel = require("node:net").connect(process.env.BB_PI_BRIDGE_CHANNEL);
-    channel.write(process.env.BB_PI_BRIDGE_CHANNEL_TOKEN + "\\n");
+    const channel = require("node:net").connect(process.env.MQH_PI_BRIDGE_CHANNEL);
+    channel.write(process.env.MQH_PI_BRIDGE_CHANNEL_TOKEN + "\\n");
     const input = require("node:readline").createInterface({ input: process.stdin });
     const send = (message) => process.stdout.write(JSON.stringify(message) + "\\n");
     input.on("line", (line) => {
@@ -32,7 +32,7 @@ it("auto-cancels extension dialogs in a helper session without a UI handler", as
   `;
   vi.stubEnv(PI_BRIDGE_COMMAND_ENV, process.execPath);
   vi.stubEnv(PI_BRIDGE_ARGS_ENV, JSON.stringify(["-e", script, "--"]));
-  vi.stubEnv("BB_PI_BRIDGE_READINESS_TIMEOUT_MS", "1000");
+  vi.stubEnv("MQH_PI_BRIDGE_READINESS_TIMEOUT_MS", "1000");
   const session = new PiRpcSession(
     {
       cwd: dir,

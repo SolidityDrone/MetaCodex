@@ -37,7 +37,7 @@ function scratchDir(): string {
 }
 
 const ARGUMENT_ECHO_SCRIPT =
-  "process.stdout.write(JSON.stringify({ args: process.argv.slice(2), dataDir: process.env.BB_DATA_DIR }));\n";
+  "process.stdout.write(JSON.stringify({ args: process.argv.slice(2), dataDir: process.env.MQH_DATA_DIR }));\n";
 
 function writeExecutable(path: string, content: string): void {
   mkdirSync(dirname(path), { recursive: true });
@@ -83,7 +83,7 @@ describe("bb command launcher", () => {
       });
 
       const overridden = await execFileAsync(launcherPath, [], {
-        env: { BB_DATA_DIR: "/elsewhere", PATH: "/nonexistent" },
+        env: { MQH_DATA_DIR: "/elsewhere", PATH: "/nonexistent" },
       });
       expect(JSON.parse(overridden.stdout)).toEqual({
         args: [],
@@ -217,7 +217,7 @@ describe("bb command launcher", () => {
       "@echo off",
       `rem ${CLI_LAUNCHER_MARKER}`,
       "setlocal EnableExtensions DisableDelayedExpansion",
-      'if not defined BB_DATA_DIR set "BB_DATA_DIR=C:\\Users\\me\\.bb"',
+      'if not defined MQH_DATA_DIR set "MQH_DATA_DIR=C:\\Users\\me\\.bb"',
       'set "ELECTRON_RUN_AS_NODE=1"',
       'if not exist "C:\\Program Files (x86)\\bb\\bb.exe" goto moved',
       'if exist "C:\\Program Files (x86)\\bb\\100%%\\dist\\bb.js" goto run',

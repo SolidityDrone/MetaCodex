@@ -23,8 +23,8 @@ function mcpConfig(threadId = "thread-1"): AcpMcpServerConfig {
     command: "/usr/local/bin/node",
     args: ["/app/bridge.js", "--mcp-stdio"],
     env: [
-      { name: "BB_TOKEN", value: "secret" },
-      { name: "BB_THREAD", value: threadId },
+      { name: "MQH_TOKEN", value: "secret" },
+      { name: "MQH_THREAD", value: threadId },
     ],
   };
 }

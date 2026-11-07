@@ -26,7 +26,7 @@ bb.events.on("message.cancelled", ({ entry }) => { ... });                 // ro
 **Events are announcements core makes.** Something already happened, your
 handler is told, and whatever it returns is ignored. Handlers run
 fire-and-forget after the change and can never block or veto it; errors are
-caught, logged, and counted in the plugin's handler stats (`bb plugin list`;
+caught, logged, and counted in the plugin's handler stats (`mqh plugin list`;
 stats survive reloads and reset on remove). The surface that asks is
 `bb.experimental_hooks`, below, where core acts on your answer.
 
@@ -329,8 +329,8 @@ is deleted; rebuilds use fresh path keys. Environment responses expose only
 the read-only lifecycle projection: phase, retireAt, and teardown
 status/attempt/message.
 
-Core runs `.bb-env-setup.sh` on the environment's host after `create` returns
-`ownsPath: true`, and `.bb-env-teardown.sh` before `remove`; providers never
+Core runs `.mqh-env-setup.sh` on the environment's host after `create` returns
+`ownsPath: true`, and `.mqh-env-teardown.sh` before `remove`; providers never
 call these hooks, and attached paths (`ownsPath: false`) never run them. Each
 has a 15-minute timeout, and its output goes to the launch report. Setup
 failure fails the launch. Teardown failure is reported, and removal continues
@@ -352,7 +352,7 @@ Auth modes:
 - `"local"` (default) — accepts no `Origin` header or a trusted BB app origin.
   A non-GET mutation must use `application/json`. Use this mode for the BB
   frontend.
-- `"token"` — requires the per-plugin token (`bb plugin token <id>`;
+- `"token"` — requires the per-plugin token (`mqh plugin token <id>`;
   `--rotate` generates a new one, invalidating the old) via the
   `x-bb-plugin-token` header or `?token=`. Right for external scripts
   and machines you control.
@@ -444,7 +444,7 @@ from `@get-bb/plugin-sdk` for expected refusals:
 `forbidden` → 403, `not_found` → 404, `conflict` → 409, `invalid` → 422.
 Codes and optional `PluginRpcValidationIssue[]` issues reach callers in the error envelope.
 Refusals do not increment handler error counts or change status detail.
-A refused mutation rejects and rolls back shared optimistic updates. `bb plugin rpc call` prints the code and message and exits non-zero.
+A refused mutation rejects and rolls back shared optimistic updates. `mqh plugin rpc call` prints the code and message and exits non-zero.
 Results must be strict JSON values: cyclic objects, bigint,
 undefined/functions, class instances, symbol keys, and non-finite numbers are
 rejected rather than coerced or silently dropped.
@@ -484,7 +484,7 @@ bb.background.schedule("sync", "*/5 * * * *", async () => {
 - Semantics differ on throw: a service throwing `NeedsConfigurationError`
   transitions the whole plugin to `needs-configuration` and stops
   restarting until the next load; a schedule throw (any error) only lands
-  in the schedule's `last_status`/`last_error` shown by `bb plugin list`.
+  in the schedule's `last_status`/`last_error` shown by `mqh plugin list`.
 - `NeedsConfigurationError` is matched **by name**, so no runtime import is
   needed: `throw Object.assign(new Error(msg), { name:
 "NeedsConfigurationError" })`. Pair it with `bb.status.needsConfiguration`
@@ -495,6 +495,6 @@ bb.background.schedule("sync", "*/5 * * * *", async () => {
 const initial = await settings.get();
 if (!initial.apiKey)
   bb.status.needsConfiguration(
-    "Set apiKey with `bb plugin config <id> set apiKey <value>`.",
+    "Set apiKey with `mqh plugin config <id> set apiKey <value>`.",
   );
 ```

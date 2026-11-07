@@ -639,7 +639,7 @@ describe("public project command typeahead route", () => {
     });
   });
 
-  it("keeps inherited bb skill roots out of provider-native discovery", async () => {
+  it("keeps inherited mqh skill roots out of provider-native discovery", async () => {
     await withTestHarness(
       {
         inheritedSkillsRootPaths: ["/tmp/bb-parent-skills"],

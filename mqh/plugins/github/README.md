@@ -5,7 +5,7 @@ GitHub issues and pull requests inside BB, with one-click agent dispatch.
 Install it from the BB Official catalog:
 
 ```sh
-bb plugin install github
+mqh plugin install github
 ```
 
 ## What it does
@@ -43,8 +43,8 @@ it reports needs-configuration. No tokens are stored by the plugin.
 - `defaultProject` setting: where threads spawn for repos with no project.
 
 ```
-bb plugin config github set extraRepos "owner/repo, owner/other"
-bb plugin reload github
+mqh plugin config github set extraRepos "owner/repo, owner/other"
+mqh plugin reload github
 ```
 
 A background service refreshes immediately on startup, then waits 15 minutes

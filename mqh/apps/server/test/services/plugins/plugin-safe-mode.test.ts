@@ -184,13 +184,13 @@ describe("plugin safe mode", () => {
     await expect(
       service.installPath(await writePathPlugin(workDir, "beta")),
     ).rejects.toThrow(
-      'plugin safe mode is on; turn it off with `bb plugin safe-mode off` before you install "beta"',
+      'plugin safe mode is on; turn it off with `mqh plugin safe-mode off` before you install "beta"',
     );
     expect(entry("beta")).toBeUndefined();
     await expect(service.applyUpdate("alpha")).resolves.toEqual({
       ok: false,
       error:
-        'plugin safe mode is on; turn it off with `bb plugin safe-mode off` before you update "alpha"',
+        'plugin safe mode is on; turn it off with `mqh plugin safe-mode off` before you update "alpha"',
     });
 
     await service.setSafeMode(false);

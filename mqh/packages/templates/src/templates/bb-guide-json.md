@@ -7,7 +7,7 @@ editingNotes: Every shape here must match real command output. The CLI help JSON
 ---
 JSON output
 
-Every core command accepts --json except the plugin authoring tools (`bb plugin
+Every core command accepts --json except the plugin authoring tools (`mqh plugin
 new`, `types`, `migrate`, `build`, `dev`, `run`, `logs`, `update`). Success
 prints one JSON value on stdout and exits 0. Nothing else is written to stdout.
 
@@ -35,91 +35,91 @@ List commands do not share one wrapper. Most print a bare array; a few wrap it.
 Fields beyond those shown exist; these are the ones scripts use. The `--help` of
 the most-parsed commands ends with the same shape.
 
-  bb status --json
+  mqh status --json
     {project: {id, name} | null, thread: {id, status, title, parentThreadId, environment: {hostId, display} | null} | null, childThreads: [{id, status, title}] | null, pendingTodos, pluginsNeedingAttention: [{id, status}], dataDir}
 
-  bb thread list --json
+  mqh thread list --json
     [{id, projectId, environmentId, providerId, title, status, parentThreadId, sectionId, visibility, archivedAt, pinnedAt, createdAt, updatedAt, activity}]    (bare array; title can be null)
 
-  bb thread show <id> --json
+  mqh thread show <id> --json
     {thread: {id, status, title, projectId, environmentId, parentThreadId, ...}, environment: {id, hostId, path, branchName, ...} | null, pendingTodos}    (thread fields are under .thread)
 
-  bb thread log <id> --json
+  mqh thread log <id> --json
     [{id, seq, type, createdAt, threadId, scope, data}]    (bare array of raw events, oldest first; page with --after-seq <seq>); with --message: {message, before, after} of conversation rows
 
-  bb thread output <id> --json
+  mqh thread output <id> --json
     {output}
 
-  bb thread spawn ... --json
+  mqh thread spawn ... --json
     the created thread: {id, status, title, projectId, environmentId, ...}
 
-  bb thread tell <id> ... --json
+  mqh thread tell <id> ... --json
     {threadId, ...delivery outcome}
 
-  bb thread wait <id> --json
+  mqh thread wait <id> --json
     {threadId, matched: true, target}
 
-  bb thread count --json
+  mqh thread count --json
     {total}
 
-  bb thread search <query> --json
+  mqh thread search <query> --json
     {active: {total, results}, archived: {total, results}}
 
   bb prompt-history list --json
     {entries: [{id, createdAt, input, projectId, threadId, scope}], nextCursor: string | null}
 
-  bb thread section list --json
+  mqh thread section list --json
     [{id, name, createdAt, updatedAt}]
 
-  bb thread queue list <id> --json, bb thread interactions list <id> --json, bb thread history <id> --json
+  mqh thread queue list <id> --json, mqh thread interactions list <id> --json, mqh thread history <id> --json
     bare arrays
 
-  bb project list --json
+  mqh project list --json
     [{id, kind, name, gitRemoteUrl, sources: [{id, hostId, path, isDefault}]}]    (bare array)
 
-  bb project show <id> --json
+  mqh project show <id> --json
     {id, kind, name, gitRemoteUrl, sources}
 
-  bb machine list --json
+  mqh machine list --json
     [{id, name, type, status, lifecycle, maxPermissionMode, lastSeenAt}]    (bare array)
 
-  bb provider list --json
+  mqh provider list --json
     [{id, displayName, available, capabilities, reasoningLevels, serviceTiers}]    (bare array)
 
-  bb provider models [providerId] --json
+  mqh provider models [providerId] --json
     [{id, model, displayName, supportedReasoningEfforts, defaultReasoningEffort, supportedServiceTiers?, isDefault}]    (bare array)
 
-  bb environment list --json
+  mqh environment list --json
     [{id, name, projectId, hostId, path, branchName, status, lifecycle}]    (bare array)
 
-  bb environment show <id> --json
+  mqh environment show <id> --json
     {id, name, projectId, hostId, path, branchName, baseBranch, status, lifecycle}
 
-  bb terminal list --thread <id> --json
+  mqh terminal list --thread <id> --json
     {sessions: [{id, title, status, exitCode, closeReason, cols, rows}]}    (wrapped in .sessions)
 
-  bb terminal output <terminalId> --json
+  mqh terminal output <terminalId> --json
     {chunks: [{seq, dataBase64}], nextSeq, truncated, status, exitCode, closeReason}    (chunk data is base64; status is "exited" once the command has finished)
 
-  bb terminal run --machine <id-or-name> --cwd <path> ... --json
+  mqh terminal run --machine <id-or-name> --cwd <path> ... --json
     {terminalId, hostId, environmentId, cwd, status, observation, exitCode, closeReason, output, truncated, nextSeq}    (observation is "exited", "matched", or "timed-out"; output is plain text with terminal escapes removed, or null once the machine no longer keeps it)
 
-  bb terminal wait <terminalId> ... --json
+  mqh terminal wait <terminalId> ... --json
     {terminalId, hostId, environmentId, cwd, status, observation, exitCode, closeReason, output, truncated, nextSeq}    (same shape as terminal run)
 
-  bb plugin list --json
+  mqh plugin list --json
     {plugins: [{id, version, enabled, status, source, rootDir}]}    (wrapped in .plugins)
 
-  bb skill list --json
+  mqh skill list --json
     {skills: [{id, name, description, scope, provider, filePath}]}    (wrapped in .skills)
 
-  bb marketplace list --json
+  mqh marketplace list --json
     bare array
 
-  bb settings show --json
+  mqh settings show --json
     one object keyed by settings area (generalSettings, serverAccess, keybindings, experiments, appearance, ...)
 
-  bb guide commands [group] --json
+  mqh guide commands [group] --json
     {chapter, commands: [{path, aliases, arguments, options, description}]}
 
 Commands contributed by plugins document their own JSON in `bb <command> --help`

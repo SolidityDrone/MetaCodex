@@ -112,7 +112,7 @@ import {
   getAllowedToolNames,
   type ToolCallForwarder,
 } from "./tool-proxy-mcp.js";
-import { BB_BRIDGE_MCP_SERVER_NAME } from "../tool-classification.js";
+import { MQH_BRIDGE_MCP_SERVER_NAME } from "../tool-classification.js";
 import {
   type ClaudeInteractiveResponse,
   type ClaudePermissionMode,
@@ -2410,7 +2410,7 @@ function attachThreadSession(
       params.dynamicTools,
       createForwardToolCall(() => threadIdRef.current),
     );
-    sessionOptions.mcpServers = { [BB_BRIDGE_MCP_SERVER_NAME]: mcpServer };
+    sessionOptions.mcpServers = { [MQH_BRIDGE_MCP_SERVER_NAME]: mcpServer };
     sessionOptions.allowedTools = getAllowedToolNames(params.dynamicTools);
   }
 

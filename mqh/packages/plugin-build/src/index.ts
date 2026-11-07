@@ -1,9 +1,4 @@
 export {
-  buildPluginApp,
-  RUNTIME_SLOT_BY_SPECIFIER,
-  SHIMMED_TYPE_PACKAGES,
-} from "./build-plugin-app.js";
-export {
   buildPluginServer,
   PLUGIN_SERVER_EXTERNALS,
 } from "./build-plugin-server.js";
@@ -32,8 +27,3 @@ export {
 } from "./plugin-manifest.js";
 
 export { copyPluginRuntime } from "./prepare-plugin-runtime.js";
-export {
-  dropAnonymousPluginRootScope,
-  dropHostProvidedTailwind,
-  findUnnamedPluginRoots,
-} from "./scope-plugin-utilities.js";

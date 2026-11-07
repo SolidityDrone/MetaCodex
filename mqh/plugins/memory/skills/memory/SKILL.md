@@ -9,18 +9,18 @@ This plugin is provider-independent. When diagnosing duplicate or conflicting
 memories, check whether provider-native memory is also enabled; recommend
 turning it off with the `memoryEnabled` setting of each provider plugin:
 Settings → Plugins → Claude Code provider and Codex provider, or
-`bb plugin config provider-claude-code set memoryEnabled false` and
-`bb plugin config provider-codex set memoryEnabled false`.
+`mqh plugin config provider-claude-code set memoryEnabled false` and
+`mqh plugin config provider-codex set memoryEnabled false`.
 
 The memory plugin automatically injects a compact index of global memories and
 memories for the current BB project. The index contains summaries only.
 Settings → Memory lists every memory for the user to edit or delete.
 
 ```sh
-bb memory catalog [--scope project|global|all] [--json]
-bb memory search <query> [--scope project|global|all] [--json]
-bb memory get <id> [--scope project|global|all] [--json]
-bb memory history <id> [--scope project|global|all] [--limit 1-100] [--json]
+mqh memory catalog [--scope project|global|all] [--json]
+mqh memory search <query> [--scope project|global|all] [--json]
+mqh memory get <id> [--scope project|global|all] [--json]
+mqh memory history <id> [--scope project|global|all] [--limit 1-100] [--json]
 ```
 
 Project-scoped commands use the invoking CLI's current BB project.
@@ -29,8 +29,8 @@ Project-scoped commands use the invoking CLI's current BB project.
 
 When a memory summary may be relevant, inspect it instead of guessing:
 
-1. Search with `bb memory search "<query>" --scope all --json`.
-2. Read the selected record with `bb memory get <id> --scope all --json`.
+1. Search with `mqh memory search "<query>" --scope all --json`.
+2. Read the selected record with `mqh memory get <id> --scope all --json`.
 3. Treat remembered facts as potentially stale. Verify drift-prone facts when
    doing so is cheap or consequential.
 
@@ -58,7 +58,7 @@ When scope is ambiguous, use project scope. Global scope must be explicit.
 Create a memory with:
 
 ```bash
-bb memory add --scope project \
+mqh memory add --scope project \
   --name <stable-kebab-name> \
   --summary "<one-line routing summary>" \
   --details "<complete durable detail>" \
@@ -73,7 +73,7 @@ Before creating a likely-overlapping memory, search by its proposed name and
 topic. Update an existing record instead of creating a contradiction:
 
 ```bash
-bb memory update <id> --expected-version <version> \
+mqh memory update <id> --expected-version <version> \
   --summary "<new summary>" \
   --details "<new details>" \
   --reason "<why the memory changed>" \
@@ -83,13 +83,13 @@ bb memory update <id> --expected-version <version> \
 Forget a revoked or invalid memory with:
 
 ```bash
-bb memory forget <id> --expected-version <version> \
+mqh memory forget <id> --expected-version <version> \
   --reason "<why it no longer applies>" --json
 ```
 
 ## Flags
 
-`bb memory <command> --help` prints every flag with its limits, and the CLI
+`mqh memory <command> --help` prints every flag with its limits, and the CLI
 reports all missing required flags in one error instead of one per run. Unknown
 flags always fail, so nothing is silently dropped: `--summary` is at most 400
 characters, `--details` at most 16000, `--reason` at most 500, `--tag` repeats

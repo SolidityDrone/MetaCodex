@@ -51,7 +51,7 @@ import { allocatePrefix } from "./prefix";
 import { seedDemo } from "./seed";
 
 const TASK_KEY_PATTERN = /^([A-Z][A-Z0-9]{0,9})-(\d+)$/;
-const BB_PROJECT_ID_PATTERN = /^proj_[A-Za-z0-9_-]+$/;
+const MQH_PROJECT_ID_PATTERN = /^proj_[A-Za-z0-9_-]+$/;
 const ACTIVE_THREAD_STATUSES = new Set(["starting", "working"]);
 const DEFAULT_PROJECT_COLOR = "blue";
 const DEFAULT_LABEL_COLOR = "gray";
@@ -74,7 +74,7 @@ const PROJECT_OPTION = {
   type: "string",
   placeholder: "prefix-or-id",
   description:
-    "Tracker project prefix or id such as ABC, never a bb project id (proj_...); run bb tasks project list",
+    "Tracker project prefix or id such as ABC, never a mqh project id (proj_...); run mqh tasks project list",
 } as const;
 
 const REQUIRED_PROJECT_OPTION = {
@@ -278,9 +278,9 @@ function bbProjectIdHint(
   );
   const first = linked[0];
   if (linked.length === 1 && first) {
-    return `${address} is a bb project id; its tracker project is ${first.prefix} — re-run with --project ${first.prefix}`;
+    return `${address} is a mqh project id; its tracker project is ${first.prefix} — re-run with --project ${first.prefix}`;
   }
-  return `${address} is a bb project id, but --project takes a tracker project prefix or id; run bb tasks project list`;
+  return `${address} is a mqh project id, but --project takes a tracker project prefix or id; run mqh tasks project list`;
 }
 
 async function resolveProject(
@@ -297,7 +297,7 @@ async function resolveProject(
     const trimmed = address.trim();
     throw new CliError(`project not found: ${address}`, {
       code: "project_not_found",
-      ...(BB_PROJECT_ID_PATTERN.test(trimmed)
+      ...(MQH_PROJECT_ID_PATTERN.test(trimmed)
         ? { hint: bbProjectIdHint(trimmed, projects) }
         : {}),
     });
@@ -324,7 +324,7 @@ async function defaultProject(
   );
   if (matches.length === 0) {
     throw new CliError(
-      `no tracker project is linked to BB project ${ctx.projectId}; pass --project or link one with bb tasks project update`,
+      `no tracker project is linked to BB project ${ctx.projectId}; pass --project or link one with mqh tasks project update`,
       { code: "project_not_linked" },
     );
   }
@@ -363,8 +363,8 @@ async function requiredProject(
   throw new CliError("missing required option --project", {
     code: "missing_required",
     hint: suggestion
-      ? `this thread's bb project ${ctx.projectId} is linked to tracker project ${suggestion.prefix}; re-run with --project ${suggestion.prefix}`
-      : "pass a tracker project prefix or id; run bb tasks project list to see them",
+      ? `this thread's mqh project ${ctx.projectId} is linked to tracker project ${suggestion.prefix}; re-run with --project ${suggestion.prefix}`
+      : "pass a tracker project prefix or id; run mqh tasks project list to see them",
   });
 }
 
@@ -631,9 +631,9 @@ function resolveInvokingThreadId(
   thread: string | undefined,
   ctx: PluginCliContext,
 ): string {
-  const threadId = thread ?? process.env.BB_THREAD_ID ?? ctx.threadId;
+  const threadId = thread ?? process.env.MQH_THREAD_ID ?? ctx.threadId;
   if (!threadId) {
-    throw new CliError("missing --thread and BB_THREAD_ID is not set", {
+    throw new CliError("missing --thread and MQH_THREAD_ID is not set", {
       code: "missing_required",
     });
   }
@@ -652,7 +652,7 @@ function groupCommand(
     description: [
       "Subcommands:",
       ...subcommands.map(
-        ([name, text]) => `  bb tasks ${group} ${name.padEnd(width)}  ${text}`,
+        ([name, text]) => `  mqh tasks ${group} ${name.padEnd(width)}  ${text}`,
       ),
     ].join("\n"),
     positionals: [
@@ -668,7 +668,7 @@ function groupCommand(
       if (subcommand === undefined) return { exitCode: 1, stdout: input.help };
       throw new CliError(`unknown command: ${group} ${subcommand}`, {
         code: "unknown_command",
-        hint: `run bb tasks ${group} --help for its subcommands`,
+        hint: `run mqh tasks ${group} --help for its subcommands`,
       });
     },
   });
@@ -686,12 +686,12 @@ export function registerTasksCli(
       summary:
         "Create and manage task-tracker projects, tasks, labels, and comments",
       description:
-        "Tasks are addressed by key (ABC-12) or ULID. --project takes a tracker project prefix or id, never a bb project id (proj_...).",
+        "Tasks are addressed by key (ABC-12) or ULID. --project takes a tracker project prefix or id, never a mqh project id (proj_...).",
       commands: {
         status: cliCommand({
           summary: "Show the Tasks plugin name and version",
           description:
-            "Plugin health only. To filter tasks by workflow status run bb tasks list --status <status>; to change one run bb tasks update <key-or-id> --status <status>.",
+            "Plugin health only. To filter tasks by workflow status run mqh tasks list --status <status>; to change one run mqh tasks update <key-or-id> --status <status>.",
           options: { json: JSON_OPTION },
           run(input) {
             return {
@@ -737,7 +737,7 @@ export function registerTasksCli(
               placeholder: "proj_id",
               aliases: ["bb-project", "link-project"],
               description:
-                "bb project id (proj_...) whose threads track this tracker project",
+                "mqh project id (proj_...) whose threads track this tracker project",
             },
             color: {
               type: "string",
@@ -851,11 +851,11 @@ export function registerTasksCli(
               type: "string",
               placeholder: "proj_id",
               aliases: ["bb-project", "link-project"],
-              description: "bb project id (proj_...) to link",
+              description: "mqh project id (proj_...) to link",
             },
             "unlink-bb-project": {
               type: "boolean",
-              description: "Remove the bb project link",
+              description: "Remove the mqh project link",
             },
             "rename-prefix": {
               type: "string",
@@ -1312,7 +1312,7 @@ export function registerTasksCli(
                     ),
                     ...failedAttachments.map(
                       (entry) =>
-                        `Retry with: bb tasks attachment add ${task.key} --file ${entry.path}`,
+                        `Retry with: mqh tasks attachment add ${task.key} --file ${entry.path}`,
                     ),
                   ].join("\n");
               if (failedAttachments.length === 0) return stdout;
@@ -2111,7 +2111,7 @@ export function registerTasksCli(
           positionals: [
             {
               name: "attachment-id",
-              description: "Attachment ULID from bb tasks attachment list",
+              description: "Attachment ULID from mqh tasks attachment list",
               required: true,
             },
           ],
@@ -2193,7 +2193,7 @@ export function registerTasksCli(
           positionals: [
             {
               name: "attachment-id",
-              description: "Attachment ULID from bb tasks attachment list",
+              description: "Attachment ULID from mqh tasks attachment list",
               required: true,
             },
           ],
@@ -2589,7 +2589,7 @@ export function registerTasksCli(
               required: true,
               placeholder: "name-or-id",
               description:
-                "Dispatch preset name or id; run bb tasks preset list to see them",
+                "Dispatch preset name or id; run mqh tasks preset list to see them",
             },
             instructions: {
               type: "string",
@@ -2634,7 +2634,7 @@ export function registerTasksCli(
               placeholder: "thread-id",
               aliases: ["thread-id"],
               description:
-                "Thread to attach; defaults to BB_THREAD_ID or the invoking thread",
+                "Thread to attach; defaults to MQH_THREAD_ID or the invoking thread",
             },
             json: JSON_OPTION,
           },
@@ -2673,7 +2673,7 @@ export function registerTasksCli(
               placeholder: "thread-id",
               aliases: ["thread-id"],
               description:
-                "Thread to detach; defaults to BB_THREAD_ID or the invoking thread",
+                "Thread to detach; defaults to MQH_THREAD_ID or the invoking thread",
             },
             json: JSON_OPTION,
           },

@@ -311,7 +311,7 @@ describe("server move checks", () => {
         afterDelete.response.items.find(
           (item) => item.id === "target-has-server-data",
         )?.title,
-      ).toBe("Desktop already has bb server data");
+      ).toBe("Desktop already has mqh server data");
     }));
 
   it("requires an address other machines can reach in direct mode", () => {
@@ -480,7 +480,7 @@ describe("server move checks", () => {
         id: "managed-config-replaced",
         severity: "info",
         title:
-          "This server's bb skill settings and other configuration will replace matching settings on Desktop",
+          "This server's mqh skill settings and other configuration will replace matching settings on Desktop",
         detail: null,
       });
 
@@ -713,14 +713,14 @@ describe("server move checks", () => {
       await writeFile(
         join(dataDir, "config.json"),
         JSON.stringify({
-          config: { BB_APP_URL: "http://laptop.lan.test:38887" },
+          config: { MQH_APP_URL: "http://laptop.lan.test:38887" },
         }),
       );
       await writeFile(
         join(dataDir, "env.json"),
         JSON.stringify({
           env: {
-            BB_EXTERNAL_URL: "http://127.0.0.1:5173",
+            MQH_EXTERNAL_URL: "http://127.0.0.1:5173",
             CACHE_DIR: "~/tool-cache",
             NAME: "plain value",
             TOOL_HOME: "/opt/tools",
@@ -768,10 +768,10 @@ describe("server move checks", () => {
           "skills/linked-skill",
         );
         expect(byId.get("app-url-rewrite")?.title).toBe(
-          `BB_APP_URL in config.json will change to ${DIRECT_URL}`,
+          `MQH_APP_URL in config.json will change to ${DIRECT_URL}`,
         );
         expect(byId.get("external-url-address")?.title).toBe(
-          "BB_EXTERNAL_URL in env.json points at http://127.0.0.1:5173",
+          "MQH_EXTERNAL_URL in env.json points at http://127.0.0.1:5173",
         );
         expect(byId.get("env-paths-missing")?.detail).toContain(
           "TOOL_HOME (/opt/tools)",

@@ -41,7 +41,7 @@ describe("resolveNewPluginTarget", () => {
   });
 });
 
-describe.sequential("bb plugin new dependency install", () => {
+describe.sequential("mqh plugin new dependency install", () => {
   const originalCwd = process.cwd();
   let workDir: string;
   let logged: string[];
@@ -52,7 +52,7 @@ describe.sequential("bb plugin new dependency install", () => {
     process.chdir(workDir);
     await installFakeNpm(workDir);
     vi.stubEnv("NODE_ENV", "production");
-    vi.stubEnv("BB_THREAD_ID", "");
+    vi.stubEnv("MQH_THREAD_ID", "");
     logged = [];
     warned = [];
     vi.spyOn(console, "log").mockImplementation((line: unknown) => {
@@ -103,7 +103,7 @@ describe.sequential("bb plugin new dependency install", () => {
       join(workDir, "package.json"),
       JSON.stringify({ name: "host", private: true, workspaces: ["*"] }),
     );
-    vi.stubEnv("BB_TEST_NPM_HOIST_TO", workDir);
+    vi.stubEnv("MQH_TEST_NPM_HOIST_TO", workDir);
 
     await runPluginNew(["hoisted"]);
 
@@ -113,7 +113,7 @@ describe.sequential("bb plugin new dependency install", () => {
   });
 
   it("does not report success when npm exits 0 without installing the tree", async () => {
-    vi.stubEnv("BB_TEST_NPM_ALWAYS_OMIT_DEV", "1");
+    vi.stubEnv("MQH_TEST_NPM_ALWAYS_OMIT_DEV", "1");
 
     await runPluginNew(["silent-omit"]);
 
@@ -143,7 +143,7 @@ describe.sequential("bb plugin new dependency install", () => {
   });
 
   it("warns, without failing, when this bb's SDK version is not on npm yet", async () => {
-    vi.stubEnv("BB_TEST_NPM_VIEW", "missing");
+    vi.stubEnv("MQH_TEST_NPM_VIEW", "missing");
 
     await runPluginNew(["unpublished"]);
 
@@ -158,7 +158,7 @@ describe.sequential("bb plugin new dependency install", () => {
   });
 
   it("treats a 404 for the package itself as a positive miss", async () => {
-    vi.stubEnv("BB_TEST_NPM_VIEW", "e404");
+    vi.stubEnv("MQH_TEST_NPM_VIEW", "e404");
 
     await runPluginNew(["missing-package"]);
 
@@ -168,7 +168,7 @@ describe.sequential("bb plugin new dependency install", () => {
   });
 
   it("warns rather than failing when the registry cannot be reached", async () => {
-    vi.stubEnv("BB_TEST_NPM_VIEW", "error");
+    vi.stubEnv("MQH_TEST_NPM_VIEW", "error");
 
     await runPluginNew(["offline"]);
 
@@ -178,7 +178,7 @@ describe.sequential("bb plugin new dependency install", () => {
   });
 
   it("passes npm's own reason through when the install fails", async () => {
-    vi.stubEnv("BB_TEST_NPM_INSTALL", "fail");
+    vi.stubEnv("MQH_TEST_NPM_INSTALL", "fail");
 
     await runPluginNew(["npm-broken"]);
 
@@ -189,7 +189,7 @@ describe.sequential("bb plugin new dependency install", () => {
   });
 
   it("keeps stderr details when a failed install also writes stdout", async () => {
-    vi.stubEnv("BB_TEST_NPM_INSTALL", "fail-noisy-stdout");
+    vi.stubEnv("MQH_TEST_NPM_INSTALL", "fail-noisy-stdout");
 
     await runPluginNew(["npm-noisy"]);
 
@@ -198,7 +198,7 @@ describe.sequential("bb plugin new dependency install", () => {
     expect(warnings).not.toContain("progress line");
   });
 
-  it("records plugin_creation_started with the bb server", async () => {
+  it("records plugin_creation_started with the mqh server", async () => {
     const requests: Request[] = [];
     vi.stubGlobal(
       "fetch",
@@ -222,7 +222,7 @@ describe.sequential("bb plugin new dependency install", () => {
     });
   });
 
-  it("stays silent and succeeds when the bb server is unreachable", async () => {
+  it("stays silent and succeeds when the mqh server is unreachable", async () => {
     const errors = vi.spyOn(console, "error").mockImplementation(() => {});
     vi.stubGlobal(
       "fetch",
@@ -239,17 +239,17 @@ describe.sequential("bb plugin new dependency install", () => {
   });
 
   it("does not record plugin_creation_started inside an agent thread", async () => {
-    vi.stubEnv("BB_THREAD_ID", "thr_agent123");
+    vi.stubEnv("MQH_THREAD_ID", "thr_agent123");
     const telemetryFetch = vi.fn(async () => Response.json({ ok: true }));
     vi.stubGlobal("fetch", telemetryFetch);
 
     await runPluginNew(["agentmade"]);
 
-    expect(logged).toContain("  bb plugin install .");
+    expect(logged).toContain("  mqh plugin install .");
     expect(telemetryFetch).not.toHaveBeenCalled();
   });
 
-  it("gives up on a bb server that never answers", async () => {
+  it("gives up on a mqh server that never answers", async () => {
     let aborted = false;
     vi.stubGlobal(
       "fetch",
@@ -267,7 +267,7 @@ describe.sequential("bb plugin new dependency install", () => {
     await runPluginNew(["stalled"]);
 
     expect(aborted).toBe(true);
-    expect(logged).toContain("  bb plugin install .");
+    expect(logged).toContain("  mqh plugin install .");
     expect(warned).toEqual([]);
   }, 10_000);
 

@@ -106,7 +106,7 @@ export function registerDiagnosticsCommands(program: Command): void {
           return;
         }
         if (!isCliErrorLogEnabled()) {
-          console.log("Recording is off (BB_CLI_ERROR_LOG=0).");
+          console.log("Recording is off (MQH_CLI_ERROR_LOG=0).");
         }
         if (rows.length === 0) {
           console.log(`No failed bb invocations recorded in ${logPath}`);

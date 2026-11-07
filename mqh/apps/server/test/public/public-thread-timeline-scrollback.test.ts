@@ -6,7 +6,7 @@ import {
   recoverLoadedTimelineAfterStaleCursor,
   resolveLoadedTimelineSurfaceKey,
   type LoadedTimelineState,
-} from "@bb/client-core";
+} from "../helpers/client-timeline/timeline-merge.js";
 import { updateThread } from "@bb/db";
 import {
   defaultFeatureFlags,

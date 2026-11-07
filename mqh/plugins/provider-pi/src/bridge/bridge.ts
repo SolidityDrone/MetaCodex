@@ -47,7 +47,7 @@ import {
   type PiSessionParams,
 } from "../session-params.js";
 import { piSessionNeedsRelocation } from "./session-cwd.js";
-import { BB_PI_EXTENSION_SOURCE } from "./bb-pi-extension.js";
+import { MQH_PI_EXTENSION_SOURCE } from "./bb-pi-extension.js";
 import {
   createExtensionUiCoordinator,
   type ExtensionUiCoordinator,
@@ -235,7 +235,7 @@ function requireScratchDir(): string {
 function requireExtensionPath(): string {
   if (extensionPath === null) {
     const path = join(requireScratchDir(), "bb-pi-extension.mjs");
-    writeFileSync(path, BB_PI_EXTENSION_SOURCE, "utf8");
+    writeFileSync(path, MQH_PI_EXTENSION_SOURCE, "utf8");
     extensionPath = path;
   }
   return extensionPath;
@@ -999,7 +999,7 @@ async function reconcileTurnOptions(
   const construction = threadSession.construction;
   const shellEnvOverrides =
     options.envVars && Object.keys(options.envVars).length > 0
-      ? { BB_THREAD_ID: threadId, ...buildShellEnvOverrides(options.envVars) }
+      ? { MQH_THREAD_ID: threadId, ...buildShellEnvOverrides(options.envVars) }
       : undefined;
   const environmentChanged =
     shellEnvOverrides !== undefined &&

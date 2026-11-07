@@ -128,7 +128,7 @@ function isPiCompactionPromptRejection(error: unknown): boolean {
   );
 }
 function readinessTimeoutMs(): number {
-  const configured = Number(process.env.BB_PI_BRIDGE_READINESS_TIMEOUT_MS);
+  const configured = Number(process.env.MQH_PI_BRIDGE_READINESS_TIMEOUT_MS);
   return Number.isFinite(configured) && configured > 0 ? configured : 60_000;
 }
 const CHANNEL_REQUEST_TIMEOUT_MS = 30_000;

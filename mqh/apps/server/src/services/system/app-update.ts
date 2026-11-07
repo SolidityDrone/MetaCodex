@@ -469,7 +469,7 @@ export function createAppUpdateService(
       }
       args.logger.info(
         { targetVersion: available.version, targetCommit: available.commit },
-        "In-app bb update requested",
+        "In-app mqh update requested",
       );
       return getStatus({ forceRefresh: false });
     },

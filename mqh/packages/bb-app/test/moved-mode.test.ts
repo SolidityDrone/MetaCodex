@@ -53,7 +53,7 @@ interface FakeResponders {
 type ResolveExit = (result: NamedProcessExitResult) => void;
 
 const MOVED_NOTICE =
-  "This bb server moved to desk (https://desk.example.com). This computer now runs as a regular machine.";
+  "This mqh server moved to desk (https://desk.example.com). This computer now runs as a regular machine.";
 
 const scratchDirs: string[] = [];
 
@@ -614,7 +614,7 @@ describe("bb-app start after the server moved", () => {
     expect(responders.opens).toHaveLength(1);
     expect(responders.closes).toBe(1);
     expect(output).toContain(
-      "The server lock was removed - starting the bb server on this computer",
+      "The server lock was removed - starting the mqh server on this computer",
     );
     expect(output).toContain("bb is ready");
   });
@@ -661,9 +661,9 @@ describe("bb-app start after the server moved", () => {
         entrypointUrl: pathToFileURL("/repo/packages/bb-app/dist/bb-app.js")
           .href,
         env: {
-          BB_SERVER_HEADERS: '{"x-stale":"1"}',
-          BB_SERVER_URL: "http://127.0.0.1:39886",
-          BB_THREAD_ID: "thr-parent",
+          MQH_SERVER_HEADERS: '{"x-stale":"1"}',
+          MQH_SERVER_URL: "http://127.0.0.1:39886",
+          MQH_THREAD_ID: "thr-parent",
         },
         homeDir: "/home/tester",
         movedFile,
@@ -685,14 +685,14 @@ describe("bb-app start after the server moved", () => {
     expect(connectLaunch.context.dataDir).toBe(dataDir);
     expect(connectLaunch.context.daemonPort).toBe(39911);
     expect(connectLaunch.env).toMatchObject({
-      BB_DATA_DIR: dataDir,
-      BB_HOST_DAEMON_PORT: "39911",
-      BB_SERVER_URL: "https://bb.example.com/desk",
+      MQH_DATA_DIR: dataDir,
+      MQH_HOST_DAEMON_PORT: "39911",
+      MQH_SERVER_URL: "https://bb.example.com/desk",
     });
-    expect(JSON.parse(connectLaunch.env.BB_SERVER_HEADERS ?? "null")).toEqual({
+    expect(JSON.parse(connectLaunch.env.MQH_SERVER_HEADERS ?? "null")).toEqual({
       "x-bb-connect-machine": "bbcm_laptop",
     });
-    expect(connectLaunch.env.BB_THREAD_ID).toBeUndefined();
+    expect(connectLaunch.env.MQH_THREAD_ID).toBeUndefined();
 
     writeFileSync(
       join(dataDir, "config.json"),
@@ -704,10 +704,10 @@ describe("bb-app start after the server moved", () => {
     const rewrittenLaunch = await resolveLaunch();
 
     expect(rewrittenLaunch.serverUrl).toBe("https://desk.tailnet.example");
-    expect(rewrittenLaunch.env.BB_SERVER_URL).toBe(
+    expect(rewrittenLaunch.env.MQH_SERVER_URL).toBe(
       "https://desk.tailnet.example",
     );
-    expect(JSON.parse(rewrittenLaunch.env.BB_SERVER_HEADERS ?? "null")).toEqual(
+    expect(JSON.parse(rewrittenLaunch.env.MQH_SERVER_HEADERS ?? "null")).toEqual(
       { "x-bb-connect-machine": "bbcm_rotated" },
     );
 
@@ -715,7 +715,7 @@ describe("bb-app start after the server moved", () => {
     const fallbackLaunch = await resolveLaunch();
 
     expect(fallbackLaunch.serverUrl).toBe("https://bb.example.com/desk");
-    expect(fallbackLaunch.env.BB_SERVER_URL).toBe(
+    expect(fallbackLaunch.env.MQH_SERVER_URL).toBe(
       "https://bb.example.com/desk",
     );
   });
@@ -1004,7 +1004,7 @@ describe("bb-server after the server moved", () => {
 
     try {
       await expect(runBbServer(args)).rejects.toThrow(
-        'BB_SERVER_BIND_HOST must be "127.0.0.1" or "0.0.0.0"',
+        'MQH_SERVER_BIND_HOST must be "127.0.0.1" or "0.0.0.0"',
       );
       expect(process.exitCode).toBe(previousExitCode);
     } finally {

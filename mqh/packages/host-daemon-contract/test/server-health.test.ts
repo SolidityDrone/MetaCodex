@@ -19,7 +19,7 @@ describe("serverHealthUrl", () => {
 describe("fetchServerHealth", () => {
   const url = "https://desk.example/health";
 
-  it("reads a bb server's health answer with the caller's request options", async () => {
+  it("reads a mqh server's health answer with the caller's request options", async () => {
     const fetchImpl = vi.fn(async () =>
       Response.json({
         ok: true,

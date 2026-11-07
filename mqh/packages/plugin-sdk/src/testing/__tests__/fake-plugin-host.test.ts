@@ -949,7 +949,7 @@ describe("cli", () => {
     expect(await harness.runCli(["crash"])).toEqual({
       exitCode: 1,
       stdout: "",
-      stderr: "bb docs failed: bad flag",
+      stderr: "mqh docs failed: bad flag",
     });
   });
 
@@ -994,7 +994,7 @@ describe("cli", () => {
       expect(reservedHost.harness.logEntries).toEqual([
         {
           level: "warn",
-          message: `CLI command "${name}" collides with core command "bb ${name}"; core keeps the short form. Use "bb plugin run test-plugin" to invoke this plugin.`,
+          message: `CLI command "${name}" collides with core command "mqh ${name}"; core keeps the short form. Use "mqh plugin run test-plugin" to invoke this plugin.`,
         },
       ]);
     }

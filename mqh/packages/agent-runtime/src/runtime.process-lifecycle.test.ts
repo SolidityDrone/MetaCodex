@@ -1308,19 +1308,19 @@ describe("createAgentRuntime process lifecycle", () => {
   });
 
   it("scrubs inherited bb runtime env vars before spawning provider processes", async () => {
-    vi.stubEnv("BB_DATA_DIR", "/tmp/leaked-bb-data");
-    vi.stubEnv("BB_SERVER_PORT", "38886");
+    vi.stubEnv("MQH_DATA_DIR", "/tmp/leaked-bb-data");
+    vi.stubEnv("MQH_SERVER_PORT", "38886");
     vi.stubEnv("NODE_ENV", "development");
     vi.stubEnv("OPENAI_API_KEY", "external-secret");
     const envScript = join(tmpDir, "env-provider.cjs");
     writeFileSync(
       envScript,
       `const values = [
-        process.env.BB_DATA_DIR ?? "missing",
-        process.env.BB_SERVER_PORT ?? "missing",
+        process.env.MQH_DATA_DIR ?? "missing",
+        process.env.MQH_SERVER_PORT ?? "missing",
         process.env.NODE_ENV ?? "missing",
         process.env.OPENAI_API_KEY ?? "missing",
-        process.env.BB_THREAD_ID ?? "missing"
+        process.env.MQH_THREAD_ID ?? "missing"
       ];
       process.stderr.write(values.join("|") + "\\n");
       setInterval(() => {}, 1000);`,
@@ -1328,7 +1328,7 @@ describe("createAgentRuntime process lifecycle", () => {
     const stderrLines: string[] = [];
     const manager = createProviderProcessManager({
       env: {
-        BB_THREAD_ID: "thr_explicit",
+        MQH_THREAD_ID: "thr_explicit",
       },
       onProcessExit: vi.fn(),
       onStderr: (line) => {
@@ -1382,7 +1382,7 @@ describe("createAgentRuntime process lifecycle", () => {
       `const values = [
         process.env.ELECTRON_RUN_AS_NODE ?? "missing",
         process.env.BRIDGE_ONLY ?? "missing",
-        process.env.BB_THREAD_ID ?? "missing"
+        process.env.MQH_THREAD_ID ?? "missing"
       ];
       process.stderr.write(values.join("|") + "\\n");
       setInterval(() => {}, 1000);`,
@@ -1394,7 +1394,7 @@ describe("createAgentRuntime process lifecycle", () => {
         ELECTRON_RUN_AS_NODE: "1",
       },
       env: {
-        BB_THREAD_ID: "thr_explicit",
+        MQH_THREAD_ID: "thr_explicit",
         ELECTRON_RUN_AS_NODE: "runtime",
       },
       onProcessExit: vi.fn(),

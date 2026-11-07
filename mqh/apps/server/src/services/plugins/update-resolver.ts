@@ -215,7 +215,7 @@ export function evaluateCompatibility(args: {
 } {
   const appVersion = semver.coerce(args.appVersion);
   if (!appVersion) {
-    throw new Error(`cannot parse running bb version "${args.appVersion}"`);
+    throw new Error(`cannot parse running mqh version "${args.appVersion}"`);
   }
   const devMode = appVersion.version === "0.0.0";
   const bbProblems: CompatibilityProblem[] = [];
@@ -232,7 +232,7 @@ export function evaluateCompatibility(args: {
         engine: "bb",
         required: args.bbRange,
         actual: appVersion.version,
-        message: `requires bb ${args.bbRange}, running bb is ${appVersion.version}`,
+        message: `requires mqh ${args.bbRange}, running bb is ${appVersion.version}`,
       });
     }
   }

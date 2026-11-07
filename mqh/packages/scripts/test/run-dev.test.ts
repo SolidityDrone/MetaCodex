@@ -106,8 +106,8 @@ describe("run-dev", () => {
       repoRoot: "/Users/tester/.bb-dev/projects/env_q7e5i54kxt/bb",
     });
     const baseEnv: NodeJS.ProcessEnv = {
-      BB_DATA_DIR: "/Users/tester/.bb-dev",
-      BB_SERVER_PORT: "3334",
+      MQH_DATA_DIR: "/Users/tester/.bb-dev",
+      MQH_SERVER_PORT: "3334",
       NODE_ENV: "production",
       OPENAI_API_KEY: "test-key",
     };
@@ -116,17 +116,17 @@ describe("run-dev", () => {
 
     expect(env.OPENAI_API_KEY).toBe("test-key");
     expect(env.NODE_ENV).toBe("development");
-    expect(env.BB_DATA_DIR).toBe(config.dataDir);
-    expect(env.BB_SERVER_PORT).toBe(String(config.ports.serverPort));
-    expect(env.BB_SERVER_URL).toBe(config.serverUrl);
-    expect(env.BB_HOST_DAEMON_PORT).toBe(String(config.ports.hostDaemonPort));
-    expect(env.BB_DEV_APP_PORT).toBe(String(config.ports.appPort));
-    expect(env.BB_DEV_CONNECT_BASE_URL).toBe(
+    expect(env.MQH_DATA_DIR).toBe(config.dataDir);
+    expect(env.MQH_SERVER_PORT).toBe(String(config.ports.serverPort));
+    expect(env.MQH_SERVER_URL).toBe(config.serverUrl);
+    expect(env.MQH_HOST_DAEMON_PORT).toBe(String(config.ports.hostDaemonPort));
+    expect(env.MQH_DEV_APP_PORT).toBe(String(config.ports.appPort));
+    expect(env.MQH_DEV_CONNECT_BASE_URL).toBe(
       `http://bb.localhost:${config.ports.cloudPort}`,
     );
   });
 
-  it("inherits parent bb skills for managed worktree dev apps", () => {
+  it("inherits parent mqh skills for managed worktree dev apps", () => {
     const homeDir = path.resolve("/Users/tester");
     const repoRoot = path.join(
       homeDir,
@@ -145,11 +145,11 @@ describe("run-dev", () => {
       inheritedSkillsRootPaths,
     );
     expect(toDevProcessEnv({ baseEnv: {}, config })).toMatchObject({
-      BB_INHERITED_SKILLS_ROOTS: inheritedSkillsRootPaths.join(path.delimiter),
+      MQH_INHERITED_SKILLS_ROOTS: inheritedSkillsRootPaths.join(path.delimiter),
     });
   });
 
-  it("dedupes inherited bb skills for prod-managed worktree dev apps", () => {
+  it("dedupes inherited mqh skills for prod-managed worktree dev apps", () => {
     const homeDir = path.resolve("/Users/tester");
     const repoRoot = path.join(homeDir, ".bb/worktrees/env_feature/bb");
     const config = resolveDevInstanceConfig({
@@ -161,11 +161,11 @@ describe("run-dev", () => {
       path.join(homeDir, ".bb", "skills"),
     ]);
     expect(toDevProcessEnv({ baseEnv: {}, config })).toMatchObject({
-      BB_INHERITED_SKILLS_ROOTS: path.join(homeDir, ".bb", "skills"),
+      MQH_INHERITED_SKILLS_ROOTS: path.join(homeDir, ".bb", "skills"),
     });
   });
 
-  it("inherits prod bb skills for ordinary checkout dev apps", () => {
+  it("inherits prod mqh skills for ordinary checkout dev apps", () => {
     const homeDir = path.resolve("/Users/tester");
     const repoRoot = path.join(homeDir, "src", "bb");
     const config = resolveDevInstanceConfig({
@@ -177,7 +177,7 @@ describe("run-dev", () => {
       path.join(homeDir, ".bb", "skills"),
     ]);
     expect(toDevProcessEnv({ baseEnv: {}, config })).toMatchObject({
-      BB_INHERITED_SKILLS_ROOTS: path.join(homeDir, ".bb", "skills"),
+      MQH_INHERITED_SKILLS_ROOTS: path.join(homeDir, ".bb", "skills"),
     });
   });
 
@@ -187,18 +187,18 @@ describe("run-dev", () => {
       repoRoot: "/Users/tester/src/bb",
     });
     const baseEnv: NodeJS.ProcessEnv = {
-      BB_ENVIRONMENT_ID: "env_parent",
-      BB_PROJECT_ID: "proj_parent",
-      BB_THREAD_ID: "thr_parent",
-      BB_THREAD_STORAGE: "/Users/tester/.bb/thread-storage/thr_parent",
+      MQH_ENVIRONMENT_ID: "env_parent",
+      MQH_PROJECT_ID: "proj_parent",
+      MQH_THREAD_ID: "thr_parent",
+      MQH_THREAD_STORAGE: "/Users/tester/.bb/thread-storage/thr_parent",
     };
 
     const env = toDevProcessEnv({ baseEnv, config });
 
-    expect(env.BB_ENVIRONMENT_ID).toBeUndefined();
-    expect(env.BB_THREAD_ID).toBeUndefined();
-    expect(env.BB_THREAD_STORAGE).toBeUndefined();
-    expect(env.BB_PROJECT_ID).toBe("proj_parent");
+    expect(env.MQH_ENVIRONMENT_ID).toBeUndefined();
+    expect(env.MQH_THREAD_ID).toBeUndefined();
+    expect(env.MQH_THREAD_STORAGE).toBeUndefined();
+    expect(env.MQH_PROJECT_ID).toBe("proj_parent");
   });
 
   it("passes the account pool marker to a nested dev server", () => {
@@ -207,9 +207,9 @@ describe("run-dev", () => {
       repoRoot: "/Users/tester/src/bb",
     });
     const baseEnv: NodeJS.ProcessEnv = {
-      BB_ACCOUNT_POOL_PARENT_URL:
+      MQH_ACCOUNT_POOL_PARENT_URL:
         "http://127.0.0.1:38886/api/v1/plugins/account-pool/http",
-      BB_ACCOUNT_POOL_PARENT_TOKEN: "parent-hub-token",
+      MQH_ACCOUNT_POOL_PARENT_TOKEN: "parent-hub-token",
       ANTHROPIC_BASE_URL:
         "http://127.0.0.1:38886/api/v1/plugins/account-pool/http",
       ANTHROPIC_AUTH_TOKEN: "parent-hub-token",
@@ -217,12 +217,12 @@ describe("run-dev", () => {
 
     const env = toDevProcessEnv({ baseEnv, config });
 
-    expect(env.BB_ACCOUNT_POOL_PARENT_URL).toBe(
+    expect(env.MQH_ACCOUNT_POOL_PARENT_URL).toBe(
       "http://127.0.0.1:38886/api/v1/plugins/account-pool/http",
     );
-    expect(env.BB_ACCOUNT_POOL_PARENT_TOKEN).toBe("parent-hub-token");
+    expect(env.MQH_ACCOUNT_POOL_PARENT_TOKEN).toBe("parent-hub-token");
     expect(env.ANTHROPIC_AUTH_TOKEN).toBe("parent-hub-token");
-    expect(env.BB_SERVER_URL).toBe(config.serverUrl);
+    expect(env.MQH_SERVER_URL).toBe(config.serverUrl);
   });
 
   it("runs the production-style source launcher for worktree start", () => {
@@ -249,7 +249,7 @@ describe("run-dev", () => {
     );
   });
 
-  it("points bb account and Connect at staging only for pnpm dev --staging", () => {
+  it("points mqh account and Connect at staging only for pnpm dev --staging", () => {
     const config = resolveDevInstanceConfig({
       homeDir: "/Users/tester",
       repoRoot: "/Users/tester/src/bb",
@@ -266,15 +266,15 @@ describe("run-dev", () => {
         cloud: "staging",
         config,
         mode: "vite",
-      }).BB_DEV_CONNECT_BASE_URL,
+      }).MQH_DEV_CONNECT_BASE_URL,
     ).toBe(STAGING_CLOUD_URL);
     expect(
       toDevLaunchProcessEnv({
-        baseEnv: { BB_DEV_CONNECT_BASE_URL: STAGING_CLOUD_URL },
+        baseEnv: { MQH_DEV_CONNECT_BASE_URL: STAGING_CLOUD_URL },
         cloud: "local",
         config,
         mode: "vite",
-      }).BB_DEV_CONNECT_BASE_URL,
+      }).MQH_DEV_CONNECT_BASE_URL,
     ).toBe(`http://bb.localhost:${config.ports.cloudPort}`);
   });
 
@@ -286,13 +286,13 @@ describe("run-dev", () => {
         repoRoot: "/Users/tester/src/bb",
       });
       const env = toDevLaunchProcessEnv({
-        baseEnv: { BB_SKIP_ONBOARDING: "0" },
+        baseEnv: { MQH_SKIP_ONBOARDING: "0" },
         cloud: "local",
         config,
         mode,
       });
 
-      expect(env.BB_SKIP_ONBOARDING).toBe("0");
+      expect(env.MQH_SKIP_ONBOARDING).toBe("0");
     },
   );
 
@@ -304,9 +304,9 @@ describe("run-dev", () => {
 
     const env = toDevLaunchProcessEnv({
       baseEnv: {
-        BB_DATA_DIR: "/Users/tester/.bb",
-        BB_DEV_APP_PORT: "5173",
-        BB_TELEMETRY: "true",
+        MQH_DATA_DIR: "/Users/tester/.bb",
+        MQH_DEV_APP_PORT: "5173",
+        MQH_TELEMETRY: "true",
         NODE_ENV: "development",
         OPENAI_API_KEY: "test-key",
       },
@@ -316,16 +316,16 @@ describe("run-dev", () => {
     });
 
     expect(env).toMatchObject({
-      BB_DATA_DIR: config.dataDir,
-      BB_HOST_DAEMON_PORT: String(config.ports.hostDaemonPort),
-      BB_SERVER_PORT: String(config.ports.serverPort),
-      BB_SERVER_URL: config.serverUrl,
-      BB_SKIP_ONBOARDING: "1",
-      BB_TELEMETRY: "false",
+      MQH_DATA_DIR: config.dataDir,
+      MQH_HOST_DAEMON_PORT: String(config.ports.hostDaemonPort),
+      MQH_SERVER_PORT: String(config.ports.serverPort),
+      MQH_SERVER_URL: config.serverUrl,
+      MQH_SKIP_ONBOARDING: "1",
+      MQH_TELEMETRY: "false",
       NODE_ENV: "production",
       OPENAI_API_KEY: "test-key",
     });
-    expect(env.BB_DEV_APP_PORT).toBeUndefined();
+    expect(env.MQH_DEV_APP_PORT).toBeUndefined();
   });
 
   it("migrates legacy flat dev data into the checkout instance", async () => {

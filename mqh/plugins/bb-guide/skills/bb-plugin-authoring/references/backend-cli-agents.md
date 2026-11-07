@@ -1,16 +1,16 @@
 # CLI, input, agents, and AI services
 
-### bb.cli — an agent-facing `bb` subcommand
+### bb.cli — an agent-facing `mqh` subcommand
 
 One top-level command per plugin; a second `register` in one factory
 execution is rejected.
 Users and agents run `bb <name> …` like any core command; the bb CLI
 proxies it to the server, where `run` executes. Core collisions log an
-activation warning and appear in `bb plugin list` as `bb plugin run <id>`.
+activation warning and appear in `mqh plugin list` as `mqh plugin run <id>`.
 
 ```ts
 bb.cli.register({
-  name: "weather", // lowercase [a-z0-9-]+; core collisions use bb plugin run <id>
+  name: "weather", // lowercase [a-z0-9-]+; core collisions use mqh plugin run <id>
   summary: "Weather lookups",
   commands: [
     // help/skill metadata only; parsing argv is yours
@@ -91,7 +91,7 @@ Command keys are invocation paths, so `"account add"` declares
 option's hidden `aliases`, state limits in each `description` because they
 show in `--help`, and express "exactly one of" and "X requires Y" with
 `constraints`. Set `stdin: true` on a secret-bearing string option so
-callers can pipe it: the `bb` CLI reads exactly one non-empty line (at most
+callers can pipe it: the `mqh` CLI reads exactly one non-empty line (at most
 16 KiB) from piped stdin for `--<name>-stdin` and passes it to the plugin as
 `--<name> <value>`, keeping the value out of process arguments. Keep a
 required ID strict, but when `ctx.projectId` or
@@ -99,7 +99,7 @@ required ID strict, but when `ctx.projectId` or
 prints the exact flag to add. A registration built this way sets
 `rendersHelp`, so `bb weather today --help` reaches the plugin and
 prints its full option help; a hand-written `run` leaves that unset and the
-`bb` CLI answers `--help` from the `commands[].usage` line without calling
+`mqh` CLI answers `--help` from the `commands[].usage` line without calling
 the plugin.
 
 Agents discover plugin commands through the server-generated
@@ -110,7 +110,7 @@ The host rejects a larger result atomically as `plugin_cli_output_too_large`;
 it never clips it. Page growing collections, cap verbose fields, and use
 file/streaming commands for large content. Caveat: under the workspace
 sandbox (Accept Edits / Approve for me), Claude's macOS sandbox permits
-loopback, so `bb` CLI calls (including plugin commands) work sandboxed;
+loopback, so `mqh` CLI calls (including plugin commands) work sandboxed;
 Linux and other provider sandboxes may still block loopback, in which case
 those calls need escalation approval.
 
@@ -255,7 +255,7 @@ data-dir user instructions, then workspace instructions. Tool snippets above
 bb's helper tasks are served by plugins: thread titles (branch names follow the
 title), commit messages, and voice transcripts. Register plain functions in
 `server.ts`. The user picks a service per task in Settings → AI services or
-with `bb settings ai-services set <task> <service-id>`:
+with `mqh settings ai-services set <task> <service-id>`:
 
 ```ts
 bb.experimental_aiServices.register({

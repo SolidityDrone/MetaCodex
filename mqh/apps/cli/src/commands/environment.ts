@@ -402,7 +402,7 @@ export function registerEnvironmentCommands(
       .argument("[args...]")
       .action(async (args: string[]) => {
         process.stderr.write(
-          `bb environment ${name} moved to bb git ${GIT_COMMAND_REPLACEMENTS[name]}.\n`,
+          `mqh environment ${name} moved to bb git ${GIT_COMMAND_REPLACEMENTS[name]}.\n`,
         );
         process.exit(
           await runPluginCliCommand(getUrl(), GIT_PLUGIN_ID, [name, ...args]),

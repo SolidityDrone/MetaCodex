@@ -2,7 +2,7 @@
 
 The typed facade BB plugin authors compile against. The root preserves the
 complete `BbPluginApi` and `BbSdk` contract; `./app` is the frontend runtime
-that `bb plugin build` replaces with BB's shared implementation.
+that `mqh plugin build` replaces with BB's shared implementation.
 
 The authoritative contracts are the exported declarations in
 [`src/backend-contract.ts`](src/backend-contract.ts) and
@@ -232,9 +232,9 @@ embedding a second copy, and no declaration depends on unpublished `@bb/*`
 packages. Genuine npm types (`hono`, `better-sqlite3`, React, and Testing
 Library) remain peer imports. Zod is a runtime dependency of the SDK, so
 plugins only declare it when their own source imports it. Scaffolded plugins depend on this package —
-`bb plugin new` pins it exactly in `devDependencies` — and read the root/app
+`mqh plugin new` pins it exactly in `devDependencies` — and read the root/app
 declarations straight from `node_modules/@get-bb/plugin-sdk/bundled-types/`,
 the same files the testing subpaths reuse. Plugins scaffolded before that
 switch still vendor a copy of the root/app declarations in `types/` and map
-`@get-bb/plugin-sdk` onto them through their `tsconfig.json`; `bb plugin
+`@get-bb/plugin-sdk` onto them through their `tsconfig.json`; `mqh plugin
 types` keeps those refreshed until they migrate.

@@ -88,8 +88,8 @@ describe("codex process topology", () => {
       createAgentRuntime({
         workspacePath: workspaceDir,
         env: {
-          BB_CODEX_BRIDGE_APP_SERVER_COMMAND: process.execPath,
-          BB_CODEX_BRIDGE_APP_SERVER_ARGS: JSON.stringify([
+          MQH_CODEX_BRIDGE_APP_SERVER_COMMAND: process.execPath,
+          MQH_CODEX_BRIDGE_APP_SERVER_ARGS: JSON.stringify([
             fakeAppServerPath,
             scriptPath,
           ]),

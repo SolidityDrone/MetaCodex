@@ -43,8 +43,8 @@ Wants=network-online.target
 
 [Service]
 ExecStart="/opt/node 22/bin/node" "/home/me/.bb-machines/npm/bin/bb-app" host-daemon --auto-update --host-daemon-port "38887" --server-url "${args.serverUrl}"
-Environment="BB_APP_NPM_PREFIX=/home/me/.bb-machines/npm"
-Environment="BB_DATA_DIR=${args.dataDir.replaceAll("\\", "\\\\")}"
+Environment="MQH_APP_NPM_PREFIX=/home/me/.bb-machines/npm"
+Environment="MQH_DATA_DIR=${args.dataDir.replaceAll("\\", "\\\\")}"
 Restart=always
 RestartSec=2
 
@@ -72,8 +72,8 @@ function launchdPlist(args: { dataDir: string; serverUrl: string }): string {
   </array>
   <key>EnvironmentVariables</key>
   <dict>
-    <key>BB_APP_NPM_PREFIX</key><string>/Users/me/.bb-machines/npm</string>
-    <key>BB_DATA_DIR</key><string>${args.dataDir}</string>
+    <key>MQH_APP_NPM_PREFIX</key><string>/Users/me/.bb-machines/npm</string>
+    <key>MQH_DATA_DIR</key><string>${args.dataDir}</string>
   </dict>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
@@ -85,7 +85,7 @@ function launchdPlist(args: { dataDir: string; serverUrl: string }): string {
 }
 
 describe("findServiceDefinition", () => {
-  it("finds the systemd user unit whose BB_DATA_DIR is this daemon's data dir", async () => {
+  it("finds the systemd user unit whose MQH_DATA_DIR is this daemon's data dir", async () => {
     const homeDir = await createRoot();
     const dataDir = join(homeDir, ".bb-machines", "old-server");
     const otherDataDir = join(homeDir, ".bb-machines", "other-server");
@@ -128,8 +128,8 @@ describe("findServiceDefinition", () => {
         "http://old-server.local:38886",
       ],
       environment: {
-        BB_APP_NPM_PREFIX: "/home/me/.bb-machines/npm",
-        BB_DATA_DIR: dataDir,
+        MQH_APP_NPM_PREFIX: "/home/me/.bb-machines/npm",
+        MQH_DATA_DIR: dataDir,
       },
     });
   });
@@ -178,14 +178,14 @@ describe("findServiceDefinition", () => {
     expect(definition).toMatchObject({
       manager: "launchd",
       unitName: "app.getbb.host-daemon.old-server-me",
-      environment: { BB_DATA_DIR: dataDir },
+      environment: { MQH_DATA_DIR: dataDir },
     });
     expect(definition?.programArguments.at(-1)).toBe(
       "https://old.example.test/?a=1&b=2",
     );
   });
 
-  it("reports no definition when BB_SERVER_MOVE_SERVICE_MANAGER=none", async () => {
+  it("reports no definition when MQH_SERVER_MOVE_SERVICE_MANAGER=none", async () => {
     const homeDir = await createRoot();
     const dataDir = join(homeDir, "data");
     const unitDir = join(homeDir, ".config", "systemd", "user");
@@ -201,7 +201,7 @@ describe("findServiceDefinition", () => {
         dataDir,
         homeDir,
         platform: "linux",
-        env: { BB_SERVER_MOVE_SERVICE_MANAGER: "none" },
+        env: { MQH_SERVER_MOVE_SERVICE_MANAGER: "none" },
       }),
     ).resolves.toBeNull();
   });
@@ -246,7 +246,7 @@ describe("service definition rewrites", () => {
       'ExecStart="/opt/node 22/bin/node" "/home/me/.bb-machines/npm/bin/bb-app" "host-daemon" "--auto-update" "--host-daemon-port" "38887" "--server-url" "https://new.example.test"',
     );
     expect(content).toContain(
-      `Environment="BB_DATA_DIR=${dataDir.replace("%", "%%").replaceAll("\\", "\\\\")}"`,
+      `Environment="MQH_DATA_DIR=${dataDir.replace("%", "%%").replaceAll("\\", "\\\\")}"`,
     );
     expect(content).toContain("Restart=always");
     expect(content).toContain("WantedBy=default.target");
@@ -255,7 +255,7 @@ describe("service definition rewrites", () => {
     }
     const reparsed = parseSystemdUnit(content, "bb-host-daemon-x.service");
     expect(reparsed?.programArguments.at(-1)).toBe("https://new.example.test");
-    expect(reparsed?.environment.BB_DATA_DIR).toBe(dataDir);
+    expect(reparsed?.environment.MQH_DATA_DIR).toBe(dataDir);
   });
 
   it("swaps a launch agent to bb-app start with the same label and environment", async () => {
@@ -312,8 +312,8 @@ describe("service definition rewrites", () => {
         "0.0.0.0",
       ],
       environment: {
-        BB_APP_NPM_PREFIX: "/Users/me/.bb-machines/npm",
-        BB_DATA_DIR: dataDir,
+        MQH_APP_NPM_PREFIX: "/Users/me/.bb-machines/npm",
+        MQH_DATA_DIR: dataDir,
       },
     });
     expect(isServerStartDefinition(updated)).toBe(true);
@@ -369,7 +369,7 @@ describe("service definition rewrites", () => {
       "https://new.example.test/?a=1&b=2",
     ]);
     expect(content).toContain(
-      `<key>BB_DATA_DIR</key><string>${dataDir}</string>`,
+      `<key>MQH_DATA_DIR</key><string>${dataDir}</string>`,
     );
   });
 

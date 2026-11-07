@@ -667,17 +667,17 @@ describe("automations server plugin harness", () => {
 
     const topLevel = await harness.runCli(["--help"]);
     expect(topLevel.exitCode, topLevel.stderr).toBe(0);
-    expect(topLevel.stdout).toContain("bb automation list");
-    expect(topLevel.stdout).toContain("bb automation delete");
+    expect(topLevel.stdout).toContain("mqh automation list");
+    expect(topLevel.stdout).toContain("mqh automation delete");
 
     const perCommand = await harness.runCli(["runs", "--help"]);
     expect(perCommand.exitCode, perCommand.stderr).toBe(0);
-    expect(perCommand.stdout).toContain("bb automation runs <automationId>");
+    expect(perCommand.stdout).toContain("mqh automation runs <automationId>");
     expect(perCommand.stdout).toContain("--limit <1-200>");
 
     const bare = await harness.runCli([]);
     expect(bare.exitCode, bare.stderr).toBe(0);
-    expect(bare.stdout).toContain("bb automation <command> [options]");
+    expect(bare.stdout).toContain("mqh automation <command> [options]");
 
     await harness.dispose();
   });
@@ -713,7 +713,7 @@ describe("automations server plugin harness", () => {
     const noContext = await harness.runCli(["list"]);
     expect(noContext.exitCode).toBe(1);
     expect(noContext.stderr).toContain("missing required option --project");
-    expect(noContext.stderr).toContain("bb project list");
+    expect(noContext.stderr).toContain("mqh project list");
 
     const withContext = await harness.runCli(["list"], {
       projectId: PROJECT_ID,
@@ -1837,7 +1837,7 @@ describe("automations server plugin harness", () => {
     expect(harness.sdk.callsTo("threads.spawn")).toHaveLength(1);
     expect(harness.sdk.callsTo("threads.spawn")[0]?.[0]).toMatchObject({
       projectId: PROJECT_ID,
-      prompt: `[bb automation due:${automation.id}]\n\nsummarize the inbox`,
+      prompt: `[mqh automation due:${automation.id}]\n\nsummarize the inbox`,
       title: "Sweep",
       origin: "plugin",
       originPluginId: "automations",

@@ -47,7 +47,7 @@ async function createSourceTree(): Promise<SourceTree> {
     { archivePath: "bb.db", body: randomBytes(300 * 1024), mode: 0o644 },
     {
       archivePath: "config.json",
-      body: Buffer.from(JSON.stringify({ config: { BB_LOG_LEVEL: "debug" } })),
+      body: Buffer.from(JSON.stringify({ config: { MQH_LOG_LEVEL: "debug" } })),
       mode: 0o600,
     },
     { archivePath: "telemetry-id", body: Buffer.alloc(0), mode: 0o644 },
@@ -346,12 +346,12 @@ describe("archive format sniffing", () => {
     );
 
     expect(error.message).toBe(
-      "This export was encrypted by an older bb; re-export it with bb server export",
+      "This export was encrypted by an older bb; re-export it with mqh server export",
     );
     await expect(readdir(destinationDir)).rejects.toThrow(/ENOENT/u);
   });
 
-  it("says a file that is neither gzip nor an old encrypted archive is not a bb server archive", async () => {
+  it("says a file that is neither gzip nor an old encrypted archive is not a mqh server archive", async () => {
     const root = await makeTempDir();
     for (const [name, bytes] of [
       ["junk.bin", Buffer.from("not an archive at all")],
@@ -367,7 +367,7 @@ describe("archive format sniffing", () => {
         ["corrupt"],
       );
 
-      expect(error.message).toBe("File is not a bb server archive");
+      expect(error.message).toBe("File is not a mqh server archive");
       await expect(readdir(destinationDir)).rejects.toThrow(/ENOENT/u);
     }
   });
@@ -535,7 +535,7 @@ describe("extracting crafted archives", () => {
       "unsupported_version",
     ]);
 
-    expect(error.message).toBe("Unsupported bb server archive version 1");
+    expect(error.message).toBe("Unsupported mqh server archive version 1");
     expect(await readdir(older.destinationDir)).toEqual([]);
   });
 });

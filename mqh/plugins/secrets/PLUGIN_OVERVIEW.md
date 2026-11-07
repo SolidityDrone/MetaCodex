@@ -21,4 +21,4 @@ The bundled `secrets` skill tells agents to batch known variables into one reque
 
 ## Requirements
 
-The command must run from a bb thread with a live host.
+The command must run from a mqh thread with a live host.

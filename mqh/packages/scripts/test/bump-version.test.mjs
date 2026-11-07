@@ -58,7 +58,7 @@ function runScript(repoRoot, args) {
     encoding: "utf8",
     env: {
       ...process.env,
-      BB_BUMP_VERSION_REPO_ROOT: repoRoot,
+      MQH_BUMP_VERSION_REPO_ROOT: repoRoot,
     },
   });
 }

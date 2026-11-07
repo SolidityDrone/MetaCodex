@@ -45,7 +45,7 @@ rules.
 ## Workflow
 
 1. Read repository instructions, package.json, Git state, and release state.
-2. Validate the plugin with its package manager and bb plugin build.
+2. Validate the plugin with its package manager and mqh plugin build.
 3. Select and verify one public release source.
 4. Get separate approval before any release mutation.
 5. Create one marketplace entry with a vendored icon.

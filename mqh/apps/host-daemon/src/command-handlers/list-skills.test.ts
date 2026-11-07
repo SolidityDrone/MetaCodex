@@ -113,7 +113,7 @@ afterEach(async () => {
 });
 
 describe("resolveSkillScanRoots + discoverSkills", () => {
-  it("classifies the host-owned bb project root and the declared provider roots only", async () => {
+  it("classifies the host-owned mqh project root and the declared provider roots only", async () => {
     const fixture = await makeWorkspaceFixture();
     const files = {
       "proj-bb": path.join(fixture.cwd, ".bb", "skills", "proj-bb", "SKILL.md"),
@@ -303,7 +303,7 @@ describe("resolveSkillScanRoots + discoverSkills", () => {
     });
   });
 
-  it("classifies configured shared user and project roots without the bb project root", async () => {
+  it("classifies configured shared user and project roots without the mqh project root", async () => {
     const fixture = await makeWorkspaceFixture();
     await writeSkill(
       path.join(fixture.cwd, ".bb", "skills", "bb-project-skill", "SKILL.md"),
@@ -729,7 +729,7 @@ describe("deleteHostSkill", () => {
 });
 
 describe("writeHostSkill", () => {
-  it("atomically replaces a bb skill only at the expected revision", async () => {
+  it("atomically replaces a mqh skill only at the expected revision", async () => {
     const fixture = await makeWorkspaceFixture();
     const filePath = path.join(fixture.dataDir, "skills", "review", "SKILL.md");
     const original = "---\nname: review\ndescription: Review\n---\n";

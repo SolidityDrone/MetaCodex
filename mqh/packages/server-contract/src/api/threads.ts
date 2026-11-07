@@ -364,7 +364,7 @@ export type EditMessageResponse = z.infer<typeof editMessageResponseSchema>;
 
 /**
  * The reason a retry carries when the caller names none. Filled here at the
- * boundary so the queued row, its card and `bb thread queue list` all read the
+ * boundary so the queued row, its card and `mqh thread queue list` all read the
  * same word whether the retry came from a plugin, the CLI or the app.
  */
 
@@ -769,7 +769,7 @@ export type RespondPluginInteractionRequest = z.infer<
 /**
  * Filters for the cross-thread queue list — the replacement for the hold
  * list, and cross-thread for the same reason it was: "what is queued right
- * now" is a whole-workspace question (`bb thread queue list` with no thread, a
+ * now" is a whole-workspace question (`mqh thread queue list` with no thread, a
  * limiter plugin's own bookkeeping, a router recovering its rows after a
  * restart) that no single thread's list can answer.
  *

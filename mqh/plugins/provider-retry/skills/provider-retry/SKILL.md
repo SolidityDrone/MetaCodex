@@ -35,7 +35,7 @@ started, because those run again on their own schedule.
 A turn gets at most four automatic retries. The `maximumWait` setting
 (`6 hours` by default, or `24 hours` or `No limit`) skips a subscription-limit
 retry whose reset is farther away:
-`bb plugin config provider-retry set maximumWait "24 hours"`.
+`mqh plugin config provider-retry set maximumWait "24 hours"`.
 
 A pending retry is an ordinary durable queued row, shown on the thread's queue
 card with its reason and time, and survives restart. A thread keeps one
@@ -44,10 +44,10 @@ retry waits, the waiting retry moves to the new time instead of a second
 "Please continue." row. Input the provider never accepted keeps its own row.
 
 ```sh
-bb provider-retry status [thread-id] [--json]
-bb provider-retry explain [thread-id] [--json]
-bb provider-retry retry <thread-id> [--json]
-bb provider-retry cancel <thread-id> [--json]
+mqh provider-retry status [thread-id] [--json]
+mqh provider-retry explain [thread-id] [--json]
+mqh provider-retry retry <thread-id> [--json]
+mqh provider-retry cancel <thread-id> [--json]
 ```
 
 `status` defaults to the current thread and lists every thread outside one.
@@ -58,5 +58,5 @@ backfilled. The plugin RPC `decision.get` accepts `{ threadId }` and returns
 the same nullable diagnostic.
 `retry` sends the pending row now; `cancel` deletes it. Inspect the failed turn
 before retrying manually, and avoid duplicating an existing queued retry. Use
-the core `bb thread retry` command for an intentional manual retry of a turn
+the core `mqh thread retry` command for an intentional manual retry of a turn
 with no pending row; follow its live help for selection and scheduling flags.

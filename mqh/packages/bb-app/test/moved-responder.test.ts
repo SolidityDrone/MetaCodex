@@ -135,7 +135,7 @@ describe("moved responder", () => {
           serverUrl: "https://desk.example.com",
           toHostName: "desk",
         },
-        message: "This bb server moved to desk (https://desk.example.com).",
+        message: "This mqh server moved to desk (https://desk.example.com).",
       });
     },
   );
@@ -245,7 +245,7 @@ describe("moved responder", () => {
       "default-src 'none'",
     );
     expect(response.body).toContain(
-      "<h1>This bb server moved to &lt;img src=x onerror=alert(1)&gt;</h1>",
+      "<h1>This mqh server moved to &lt;img src=x onerror=alert(1)&gt;</h1>",
     );
     expect(response.body).toContain(
       '<a href="https://bb.example.com/?handle=desk&amp;next=%22x%22%3Cy%3E">',

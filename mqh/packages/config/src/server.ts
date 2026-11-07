@@ -15,25 +15,25 @@ import {
   resolveEnvLoader,
 } from "./env.js";
 import {
-  BB_APP_INSTALL_KIND_ENV,
-  BB_APP_SOURCE_COMMIT_ENV,
-  BB_APP_SOURCE_ORIGIN_ENV,
-  BB_APP_URL_ENV,
-  BB_APP_SURFACE_ENV,
-  BB_APP_VERSION_ENV,
-  BB_CONNECT_GATE_KEYS_URL_ENV,
-  BB_EXTERNAL_URL_ENV,
-  BB_INHERITED_SKILLS_ROOTS_ENV,
-  BB_MARKETPLACE_URL_ENV,
-  BB_POSTHOG_API_KEY_ENV,
-  BB_SERVER_BIND_HOST_ENV,
-  BB_SERVER_LAUNCH_ID_ENV,
-  BB_APP_UPDATE_MODE_ENV,
-  BB_CLI_LAUNCHER_ENV,
-  BB_TELEMETRY_ENV,
-  BB_PERF_DIAGNOSTICS_ENV,
-  BB_SKIP_ONBOARDING_ENV,
-  BB_SETUP_GUIDE_VARIANT_ENV,
+  MQH_APP_INSTALL_KIND_ENV,
+  MQH_APP_SOURCE_COMMIT_ENV,
+  MQH_APP_SOURCE_ORIGIN_ENV,
+  MQH_APP_URL_ENV,
+  MQH_APP_SURFACE_ENV,
+  MQH_APP_VERSION_ENV,
+  MQH_CONNECT_GATE_KEYS_URL_ENV,
+  MQH_EXTERNAL_URL_ENV,
+  MQH_INHERITED_SKILLS_ROOTS_ENV,
+  MQH_MARKETPLACE_URL_ENV,
+  MQH_POSTHOG_API_KEY_ENV,
+  MQH_SERVER_BIND_HOST_ENV,
+  MQH_SERVER_LAUNCH_ID_ENV,
+  MQH_APP_UPDATE_MODE_ENV,
+  MQH_CLI_LAUNCHER_ENV,
+  MQH_TELEMETRY_ENV,
+  MQH_PERF_DIAGNOSTICS_ENV,
+  MQH_SKIP_ONBOARDING_ENV,
+  MQH_SETUP_GUIDE_VARIANT_ENV,
   DEFAULT_BB_APP_URL,
   DEFAULT_BB_APP_SURFACE,
   DEFAULT_BB_APP_VERSION,
@@ -54,27 +54,27 @@ import { loadServerPortConfig, type ServerPortConfig } from "./server-port.js";
 
 export interface ServerConfig
   extends CommonConfig, DatabaseConfig, ServerPortConfig {
-  BB_APP_INSTALL_KIND?: AppInstallKind;
-  BB_APP_SOURCE_COMMIT?: string;
-  BB_APP_SOURCE_ORIGIN?: AppSourceOrigin;
-  BB_APP_URL: string;
-  BB_APP_SURFACE: AppSurface;
-  BB_APP_VERSION: string;
-  BB_CONNECT_GATE_KEYS_URL: string;
-  BB_DEV_APP_PORT?: number;
-  BB_EXTERNAL_URL: string;
-  BB_HOST_DAEMON_PORT: number;
-  BB_INHERITED_SKILLS_ROOTS: string[];
-  BB_POSTHOG_API_KEY: string;
-  BB_MARKETPLACE_URL: string;
-  BB_SERVER_BIND_HOST: ServerBindHost;
-  BB_SERVER_LAUNCH_ID?: string;
-  BB_APP_UPDATE_MODE?: AppUpdateMode;
-  BB_CLI_LAUNCHER?: string;
-  BB_TELEMETRY: boolean;
-  BB_PERF_DIAGNOSTICS: boolean;
-  BB_SKIP_ONBOARDING: boolean;
-  BB_SETUP_GUIDE_VARIANT?: SetupGuideVariant;
+  MQH_APP_INSTALL_KIND?: AppInstallKind;
+  MQH_APP_SOURCE_COMMIT?: string;
+  MQH_APP_SOURCE_ORIGIN?: AppSourceOrigin;
+  MQH_APP_URL: string;
+  MQH_APP_SURFACE: AppSurface;
+  MQH_APP_VERSION: string;
+  MQH_CONNECT_GATE_KEYS_URL: string;
+  MQH_DEV_APP_PORT?: number;
+  MQH_EXTERNAL_URL: string;
+  MQH_HOST_DAEMON_PORT: number;
+  MQH_INHERITED_SKILLS_ROOTS: string[];
+  MQH_POSTHOG_API_KEY: string;
+  MQH_MARKETPLACE_URL: string;
+  MQH_SERVER_BIND_HOST: ServerBindHost;
+  MQH_SERVER_LAUNCH_ID?: string;
+  MQH_APP_UPDATE_MODE?: AppUpdateMode;
+  MQH_CLI_LAUNCHER?: string;
+  MQH_TELEMETRY: boolean;
+  MQH_PERF_DIAGNOSTICS: boolean;
+  MQH_SKIP_ONBOARDING: boolean;
+  MQH_SETUP_GUIDE_VARIANT?: SetupGuideVariant;
   featureFlags: FeatureFlags;
 }
 
@@ -115,82 +115,82 @@ export function loadServerConfig(
     ...commonConfig,
     ...databaseConfig,
     ...serverPortConfig,
-    BB_APP_URL: readEnvVarWithDefault({
+    MQH_APP_URL: readEnvVarWithDefault({
       context: loader.context,
       defaultValue: DEFAULT_BB_APP_URL,
-      definition: BB_APP_URL_ENV,
+      definition: MQH_APP_URL_ENV,
       env: loader.env,
     }),
-    BB_APP_SURFACE: readEnvVarWithDefault({
+    MQH_APP_SURFACE: readEnvVarWithDefault({
       context: loader.context,
       defaultValue: DEFAULT_BB_APP_SURFACE,
-      definition: BB_APP_SURFACE_ENV,
+      definition: MQH_APP_SURFACE_ENV,
       env: loader.env,
     }),
-    BB_APP_VERSION: readEnvVarWithDefault({
+    MQH_APP_VERSION: readEnvVarWithDefault({
       context: loader.context,
       defaultValue: DEFAULT_BB_APP_VERSION,
-      definition: BB_APP_VERSION_ENV,
+      definition: MQH_APP_VERSION_ENV,
       env: loader.env,
     }),
-    BB_CONNECT_GATE_KEYS_URL: readEnvVarWithDefault({
+    MQH_CONNECT_GATE_KEYS_URL: readEnvVarWithDefault({
       context: loader.context,
       defaultValue: DEFAULT_BB_CONNECT_GATE_KEYS_URL,
-      definition: BB_CONNECT_GATE_KEYS_URL_ENV,
+      definition: MQH_CONNECT_GATE_KEYS_URL_ENV,
       env: loader.env,
     }),
-    BB_EXTERNAL_URL: readEnvVarWithDefault({
+    MQH_EXTERNAL_URL: readEnvVarWithDefault({
       context: loader.context,
       defaultValue: DEFAULT_BB_EXTERNAL_URL,
-      definition: BB_EXTERNAL_URL_ENV,
+      definition: MQH_EXTERNAL_URL_ENV,
       env: loader.env,
     }),
-    BB_HOST_DAEMON_PORT: loadHostDaemonPortValue({
+    MQH_HOST_DAEMON_PORT: loadHostDaemonPortValue({
       env: loader.env,
       homeDir: loader.context.homeDir,
       mode: loader.mode,
       repoRoot: args.repoRoot,
     }),
-    BB_INHERITED_SKILLS_ROOTS: readEnvVarWithDefault({
+    MQH_INHERITED_SKILLS_ROOTS: readEnvVarWithDefault({
       context: loader.context,
       defaultValue: [],
-      definition: BB_INHERITED_SKILLS_ROOTS_ENV,
+      definition: MQH_INHERITED_SKILLS_ROOTS_ENV,
       env: loader.env,
     }),
-    BB_MARKETPLACE_URL: readEnvVarWithDefault({
+    MQH_MARKETPLACE_URL: readEnvVarWithDefault({
       context: loader.context,
       defaultValue: DEFAULT_BB_MARKETPLACE_URL,
-      definition: BB_MARKETPLACE_URL_ENV,
+      definition: MQH_MARKETPLACE_URL_ENV,
       env: loader.env,
     }),
-    BB_POSTHOG_API_KEY: readEnvVarWithDefault({
+    MQH_POSTHOG_API_KEY: readEnvVarWithDefault({
       context: loader.context,
       defaultValue: DEFAULT_BB_POSTHOG_API_KEY,
-      definition: BB_POSTHOG_API_KEY_ENV,
+      definition: MQH_POSTHOG_API_KEY_ENV,
       env: loader.env,
     }),
-    BB_SERVER_BIND_HOST: readEnvVarWithDefault({
+    MQH_SERVER_BIND_HOST: readEnvVarWithDefault({
       context: loader.context,
       defaultValue: DEFAULT_BB_SERVER_BIND_HOST,
-      definition: BB_SERVER_BIND_HOST_ENV,
+      definition: MQH_SERVER_BIND_HOST_ENV,
       env: loader.env,
     }),
-    BB_PERF_DIAGNOSTICS: readEnvVarWithDefault({
+    MQH_PERF_DIAGNOSTICS: readEnvVarWithDefault({
       context: loader.context,
-      definition: BB_PERF_DIAGNOSTICS_ENV,
+      definition: MQH_PERF_DIAGNOSTICS_ENV,
       env: loader.env,
       defaultValue: false,
     }),
-    BB_SKIP_ONBOARDING: readEnvVarWithDefault({
+    MQH_SKIP_ONBOARDING: readEnvVarWithDefault({
       context: loader.context,
-      definition: BB_SKIP_ONBOARDING_ENV,
+      definition: MQH_SKIP_ONBOARDING_ENV,
       env: loader.env,
       defaultValue: false,
     }),
-    BB_TELEMETRY: readEnvVarWithDefault({
+    MQH_TELEMETRY: readEnvVarWithDefault({
       context: loader.context,
       defaultValue: DEFAULT_BB_TELEMETRY,
-      definition: BB_TELEMETRY_ENV,
+      definition: MQH_TELEMETRY_ENV,
       env: loader.env,
     }),
     featureFlags: loadFeatureFlags({
@@ -201,70 +201,70 @@ export function loadServerConfig(
   };
 
   assignIfDefined({
-    key: "BB_DEV_APP_PORT",
+    key: "MQH_DEV_APP_PORT",
     target: config,
-    value: devAppConfig.BB_DEV_APP_PORT,
+    value: devAppConfig.MQH_DEV_APP_PORT,
   });
   assignIfDefined({
-    key: "BB_APP_UPDATE_MODE",
+    key: "MQH_APP_UPDATE_MODE",
     target: config,
     value: readOptionalEnvVar({
       context: loader.context,
-      definition: BB_APP_UPDATE_MODE_ENV,
+      definition: MQH_APP_UPDATE_MODE_ENV,
       env: loader.env,
     }),
   });
   assignIfDefined({
-    key: "BB_CLI_LAUNCHER",
+    key: "MQH_CLI_LAUNCHER",
     target: config,
     value: readOptionalEnvVar({
       context: loader.context,
-      definition: BB_CLI_LAUNCHER_ENV,
+      definition: MQH_CLI_LAUNCHER_ENV,
       env: loader.env,
     }),
   });
   assignIfDefined({
-    key: "BB_APP_INSTALL_KIND",
+    key: "MQH_APP_INSTALL_KIND",
     target: config,
     value: readOptionalEnvVar({
       context: loader.context,
-      definition: BB_APP_INSTALL_KIND_ENV,
+      definition: MQH_APP_INSTALL_KIND_ENV,
       env: loader.env,
     }),
   });
   assignIfDefined({
-    key: "BB_APP_SOURCE_ORIGIN",
+    key: "MQH_APP_SOURCE_ORIGIN",
     target: config,
     value: readOptionalEnvVar({
       context: loader.context,
-      definition: BB_APP_SOURCE_ORIGIN_ENV,
+      definition: MQH_APP_SOURCE_ORIGIN_ENV,
       env: loader.env,
     }),
   });
   assignIfDefined({
-    key: "BB_APP_SOURCE_COMMIT",
+    key: "MQH_APP_SOURCE_COMMIT",
     target: config,
     value: readOptionalEnvVar({
       context: loader.context,
-      definition: BB_APP_SOURCE_COMMIT_ENV,
+      definition: MQH_APP_SOURCE_COMMIT_ENV,
       env: loader.env,
     }),
   });
   assignIfDefined({
-    key: "BB_SETUP_GUIDE_VARIANT",
+    key: "MQH_SETUP_GUIDE_VARIANT",
     target: config,
     value: readOptionalEnvVar({
       context: loader.context,
-      definition: BB_SETUP_GUIDE_VARIANT_ENV,
+      definition: MQH_SETUP_GUIDE_VARIANT_ENV,
       env: loader.env,
     }),
   });
   assignIfDefined({
-    key: "BB_SERVER_LAUNCH_ID",
+    key: "MQH_SERVER_LAUNCH_ID",
     target: config,
     value: readOptionalEnvVar({
       context: loader.context,
-      definition: BB_SERVER_LAUNCH_ID_ENV,
+      definition: MQH_SERVER_LAUNCH_ID_ENV,
       env: loader.env,
     }),
   });

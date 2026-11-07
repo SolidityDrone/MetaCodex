@@ -34,7 +34,7 @@ it("keeps bundled stages out of discovery without hiding real plugin packages", 
     const result = graph();
     expect(result.status, result.stderr).toBe(0);
     expect(JSON.parse(result.stdout)).toMatchObject({
-      packages: ["bundled-plugin", "example-plugin"],
+      packages: ["bundled-plugin"],
     });
   };
   try {
@@ -55,9 +55,8 @@ it("keeps bundled stages out of discovery without hiding real plugin packages", 
       JSON.stringify({ tasks: { build: {} } }),
     );
     await writePackage("plugins/real", "bundled-plugin");
-    await writePackage("examples/plugins/real", "example-plugin");
     expectPackages();
-    for (const parent of ["plugins", "examples/plugins"]) {
+    for (const parent of ["plugins"]) {
       await cp(
         join(root, parent, "real"),
         join(root, parent, ".bundled-stage-owned"),
@@ -65,7 +64,7 @@ it("keeps bundled stages out of discovery without hiding real plugin packages", 
       );
     }
     expectPackages();
-    for (const parent of ["plugins", "examples/plugins"]) {
+    for (const parent of ["plugins"]) {
       await rm(join(root, parent, ".bundled-stage-owned"), { recursive: true });
     }
     expectPackages();

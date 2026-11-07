@@ -140,7 +140,7 @@ export function formatWorkflowNotification(
   maximumBytes: number,
 ): string {
   const prefix = `[BB workflow finished · ${run.id}]\n\nRun ${run.id} (${run.name}) ${run.status}.\n`;
-  const suffix = `\nRun \`bb workflows status ${run.id}\` for authoritative details.`;
+  const suffix = `\nRun \`mqh workflows status ${run.id}\` for authoritative details.`;
   const detail =
     run.status === "succeeded"
       ? `Result: ${run.resultJson ?? "null"}`
@@ -157,7 +157,7 @@ export function formatWorkflowNotification(
     return `${prefix}${utf8Prefix(detail, available)}${marker}${suffix}`;
   }
   return utf8Prefix(
-    `[BB workflow ${run.id}] ${run.status} — run bb workflows status ${run.id}`,
+    `[BB workflow ${run.id}] ${run.status} — run mqh workflows status ${run.id}`,
     maximumBytes,
   );
 }

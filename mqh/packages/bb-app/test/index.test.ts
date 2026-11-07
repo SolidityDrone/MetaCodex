@@ -129,7 +129,7 @@ interface FakeSupervisor {
 }
 
 const invalidConfigCommandCases: InvalidConfigCommandCase[] = [
-  ...["BB_INFERENCE", "BB_INFERENCE_FALLBACK", "BB_TRANSCRIPTION"].map(
+  ...["MQH_INFERENCE", "MQH_INFERENCE_FALLBACK", "MQH_TRANSCRIPTION"].map(
     (key) => ({
       expectedError: /were removed\. Choose AI services in Settings/u,
       key,
@@ -137,38 +137,38 @@ const invalidConfigCommandCases: InvalidConfigCommandCase[] = [
     }),
   ),
   {
-    expectedError: /BB_APP_URL must be a valid URL/u,
-    key: "BB_APP_URL",
+    expectedError: /MQH_APP_URL must be a valid URL/u,
+    key: "MQH_APP_URL",
     value: "not-a-url",
   },
   {
-    expectedError: /BB_SERVER_URL must be a valid URL/u,
-    key: "BB_SERVER_URL",
+    expectedError: /MQH_SERVER_URL must be a valid URL/u,
+    key: "MQH_SERVER_URL",
     value: "not-a-url",
   },
   {
-    expectedError: /BB_LOG_LEVEL must be one of/u,
-    key: "BB_LOG_LEVEL",
+    expectedError: /MQH_LOG_LEVEL must be one of/u,
+    key: "MQH_LOG_LEVEL",
     value: "bogus",
   },
 ];
 
 const startupOnlyManagedEnvCases: StartupOnlyManagedEnvCase[] = [
-  { key: "BB_APP_SURFACE", value: "desktop" },
-  { key: "BB_APP_URL", value: "https://app.example.test" },
-  { key: "BB_DATA_DIR", value: "/tmp/bb-managed-data" },
-  { key: "BB_DEV_APP_PORT", value: "4173" },
-  { key: "BB_EXTERNAL_URL", value: "https://external.example.test" },
-  { key: "BB_FF_PLACEHOLDER", value: "true" },
-  { key: "BB_FF_TIMELINE_WINDOW_EVENT_BUDGET", value: "2000" },
-  { key: "BB_HOST_DAEMON_PORT", value: "48887" },
-  { key: "BB_INHERITED_SKILLS_ROOTS", value: "/tmp/bb-skills" },
-  { key: "BB_LOG_LEVEL", value: "debug" },
-  { key: "BB_MANAGED_DEV_BUILTIN_PLUGIN_HOT_RELOAD", value: "1" },
-  { key: "BB_POSTHOG_API_KEY", value: "test-posthog-key" },
-  { key: "BB_SERVER_BIND_HOST", value: "127.0.0.1" },
-  { key: "BB_SERVER_PORT", value: "48886" },
-  { key: "BB_TELEMETRY", value: "false" },
+  { key: "MQH_APP_SURFACE", value: "desktop" },
+  { key: "MQH_APP_URL", value: "https://app.example.test" },
+  { key: "MQH_DATA_DIR", value: "/tmp/bb-managed-data" },
+  { key: "MQH_DEV_APP_PORT", value: "4173" },
+  { key: "MQH_EXTERNAL_URL", value: "https://external.example.test" },
+  { key: "MQH_FF_PLACEHOLDER", value: "true" },
+  { key: "MQH_FF_TIMELINE_WINDOW_EVENT_BUDGET", value: "2000" },
+  { key: "MQH_HOST_DAEMON_PORT", value: "48887" },
+  { key: "MQH_INHERITED_SKILLS_ROOTS", value: "/tmp/bb-skills" },
+  { key: "MQH_LOG_LEVEL", value: "debug" },
+  { key: "MQH_MANAGED_DEV_BUILTIN_PLUGIN_HOT_RELOAD", value: "1" },
+  { key: "MQH_POSTHOG_API_KEY", value: "test-posthog-key" },
+  { key: "MQH_SERVER_BIND_HOST", value: "127.0.0.1" },
+  { key: "MQH_SERVER_PORT", value: "48886" },
+  { key: "MQH_TELEMETRY", value: "false" },
 ];
 
 const packageMetadataSchema = z.object({
@@ -629,19 +629,19 @@ describe("bb-app launcher", () => {
 
   it("honors explicit production ports and data directory", () => {
     const env = {
-      BB_DATA_DIR: "~/custom-bb",
-      BB_HOST_DAEMON_PORT: "48887",
-      BB_SERVER_PORT: "48886",
+      MQH_DATA_DIR: "~/custom-bb",
+      MQH_HOST_DAEMON_PORT: "48887",
+      MQH_SERVER_PORT: "48886",
     };
 
     expect(resolveDataDir({ env, homeDir: "/home/tester" })).toBe(
       resolve("/home/tester/custom-bb"),
     );
     expect(
-      resolvePortFromEnv({ defaultPort: 1, env, name: "BB_SERVER_PORT" }),
+      resolvePortFromEnv({ defaultPort: 1, env, name: "MQH_SERVER_PORT" }),
     ).toBe(48886);
     expect(
-      resolvePortFromEnv({ defaultPort: 1, env, name: "BB_HOST_DAEMON_PORT" }),
+      resolvePortFromEnv({ defaultPort: 1, env, name: "MQH_HOST_DAEMON_PORT" }),
     ).toBe(48887);
   });
 
@@ -763,13 +763,13 @@ describe("bb-app launcher", () => {
         const runtime = await resolveBbAppRuntimeState({
           entrypointUrl: pathToFileURL("/repo/packages/bb-app/dist/bb-app.js")
             .href,
-          env: { BB_DATA_DIR: dataDir },
+          env: { MQH_DATA_DIR: dataDir },
           homeDir: "/home/tester",
           options: parseLauncherArgs(enabled ? ["--perf-diagnostics"] : [])
             .options,
           serverUrlMode: "local",
         });
-        expect(runtime.serverEnv.BB_PERF_DIAGNOSTICS).toBe(
+        expect(runtime.serverEnv.MQH_PERF_DIAGNOSTICS).toBe(
           enabled ? "1" : undefined,
         );
       }
@@ -783,17 +783,17 @@ describe("bb-app launcher", () => {
     const dataDir = mkdtempSync(join(tmpdir(), "bb-app-bind-host-"));
     const runtime = await resolveBbAppRuntimeState({
       entrypointUrl: pathToFileURL("/repo/packages/bb-app/dist/bb-app.js").href,
-      env: { BB_DATA_DIR: dataDir },
+      env: { MQH_DATA_DIR: dataDir },
       homeDir: "/home/tester",
       options: parsedArgs.options,
       serverUrlMode: "local",
     });
 
     expect(parsedArgs.options.serverBindHost).toBe("0.0.0.0");
-    expect(runtime.serverEnv.BB_SERVER_BIND_HOST).toBe("0.0.0.0");
+    expect(runtime.serverEnv.MQH_SERVER_BIND_HOST).toBe("0.0.0.0");
     expect(
       resolveServerListenerUrl({
-        bindHost: runtime.serverEnv.BB_SERVER_BIND_HOST,
+        bindHost: runtime.serverEnv.MQH_SERVER_BIND_HOST,
         port: runtime.context.serverPort,
       }),
     ).toBe("http://0.0.0.0:38886");
@@ -805,35 +805,35 @@ describe("bb-app launcher", () => {
     const runtime = await resolveBbAppRuntimeState({
       entrypointUrl: pathToFileURL("/repo/packages/bb-app/dist/bb-app.js").href,
       env: {
-        BB_DATA_DIR: dataDir,
-        BB_ENVIRONMENT_ID: "env_parent",
-        BB_PROJECT_ID: "proj_parent",
-        BB_THREAD_ID: "thr_parent",
-        BB_THREAD_STORAGE: "/home/tester/.bb/thread-storage/thr_parent",
+        MQH_DATA_DIR: dataDir,
+        MQH_ENVIRONMENT_ID: "env_parent",
+        MQH_PROJECT_ID: "proj_parent",
+        MQH_THREAD_ID: "thr_parent",
+        MQH_THREAD_STORAGE: "/home/tester/.bb/thread-storage/thr_parent",
       },
       homeDir: "/home/tester",
       options: { help: false },
       serverUrlMode: "local",
     });
 
-    expect(runtime.serverEnv.BB_ENVIRONMENT_ID).toBeUndefined();
-    expect(runtime.serverEnv.BB_THREAD_ID).toBeUndefined();
-    expect(runtime.serverEnv.BB_THREAD_STORAGE).toBeUndefined();
-    expect(runtime.serverEnv.BB_PROJECT_ID).toBe("proj_parent");
+    expect(runtime.serverEnv.MQH_ENVIRONMENT_ID).toBeUndefined();
+    expect(runtime.serverEnv.MQH_THREAD_ID).toBeUndefined();
+    expect(runtime.serverEnv.MQH_THREAD_STORAGE).toBeUndefined();
+    expect(runtime.serverEnv.MQH_PROJECT_ID).toBe("proj_parent");
 
     const daemonEnv = createDaemonEnv({
       context: runtime.context,
       env: runtime.env,
       serverUrl: runtime.context.serverUrl,
     });
-    expect(daemonEnv.BB_ENVIRONMENT_ID).toBeUndefined();
-    expect(daemonEnv.BB_THREAD_ID).toBeUndefined();
-    expect(daemonEnv.BB_THREAD_STORAGE).toBeUndefined();
-    expect(daemonEnv.BB_PROJECT_ID).toBe("proj_parent");
+    expect(daemonEnv.MQH_ENVIRONMENT_ID).toBeUndefined();
+    expect(daemonEnv.MQH_THREAD_ID).toBeUndefined();
+    expect(daemonEnv.MQH_THREAD_STORAGE).toBeUndefined();
+    expect(daemonEnv.MQH_PROJECT_ID).toBe("proj_parent");
 
-    expect(runtime.env.BB_ENVIRONMENT_ID).toBe("env_parent");
-    expect(runtime.env.BB_THREAD_ID).toBe("thr_parent");
-    expect(runtime.env.BB_THREAD_STORAGE).toBe(
+    expect(runtime.env.MQH_ENVIRONMENT_ID).toBe("env_parent");
+    expect(runtime.env.MQH_THREAD_ID).toBe("thr_parent");
+    expect(runtime.env.MQH_THREAD_STORAGE).toBe(
       "/home/tester/.bb/thread-storage/thr_parent",
     );
 
@@ -841,11 +841,11 @@ describe("bb-app launcher", () => {
     const exitCode = await runBundledCliCommand({
       args: [
         "-e",
-        "require('node:fs').writeFileSync(process.argv[1], process.env.BB_THREAD_ID ?? 'missing')",
+        "require('node:fs').writeFileSync(process.argv[1], process.env.MQH_THREAD_ID ?? 'missing')",
         cliThreadIdPath,
       ],
       context: runtime.context,
-      env: { ...runtime.env, BB_CLI: process.execPath },
+      env: { ...runtime.env, MQH_CLI: process.execPath },
     });
 
     expect(exitCode).toBe(0);
@@ -857,7 +857,7 @@ describe("bb-app launcher", () => {
 
     await expect(
       runBbApp(["--data-dir", dataDir, "--server-bind-host", "localhost"]),
-    ).rejects.toThrow('BB_SERVER_BIND_HOST must be "127.0.0.1" or "0.0.0.0"');
+    ).rejects.toThrow('MQH_SERVER_BIND_HOST must be "127.0.0.1" or "0.0.0.0"');
   });
 
   it("tells the bundled CLI where the server's machine installer is", async () => {
@@ -867,11 +867,11 @@ describe("bb-app launcher", () => {
     const exitCode = await runBundledCliCommand({
       args: [
         "-e",
-        "require('node:fs').writeFileSync(process.argv[1], process.env.BB_MACHINE_INSTALLER ?? 'missing')",
+        "require('node:fs').writeFileSync(process.argv[1], process.env.MQH_MACHINE_INSTALLER ?? 'missing')",
         outputPath,
       ],
       context: { ...createTestStartContext(), dataDir },
-      env: { BB_CLI: process.execPath },
+      env: { MQH_CLI: process.execPath },
     });
 
     expect(exitCode).toBe(0);
@@ -880,7 +880,7 @@ describe("bb-app launcher", () => {
     );
   });
 
-  it("runs the bundled CLI when a BB_CLI launcher re-enters the bb entry", async () => {
+  it("runs the bundled CLI when a MQH_CLI launcher re-enters the bb entry", async () => {
     const dataDir = mkdtempSync(join(tmpdir(), "bb-app-cli-reentry-"));
     const daemonBundleDir = join(dataDir, "host-daemon");
     mkdirSync(daemonBundleDir);
@@ -899,7 +899,7 @@ describe("bb-app launcher", () => {
           launcherEnvPath,
         ],
         context,
-        env: { BB_CLI: process.execPath },
+        env: { MQH_CLI: process.execPath },
       }),
     ).toBe(0);
 
@@ -921,17 +921,17 @@ describe("bb-app launcher", () => {
     const env = await createHostDaemonJoinEnv({
       context,
       env: {
-        BB_HOST_ENROLL_KEY: "bbde_supplied",
-        BB_HOST_ID: "host_remote",
-        BB_CONNECT_MACHINE_CREDENTIAL: "bbcm_machine",
-        BB_CONNECT_MACHINE_ID: "machine-1",
+        MQH_HOST_ENROLL_KEY: "bbde_supplied",
+        MQH_HOST_ID: "host_remote",
+        MQH_CONNECT_MACHINE_CREDENTIAL: "bbcm_machine",
+        MQH_CONNECT_MACHINE_ID: "machine-1",
       },
       serverUrl: "https://bb.example.test",
     });
 
     expect(env).toMatchObject({
-      BB_HOST_ENROLL_KEY: "bbde_supplied",
-      BB_HOST_ID: "host_remote",
+      MQH_HOST_ENROLL_KEY: "bbde_supplied",
+      MQH_HOST_ID: "host_remote",
     });
     expect(
       JSON.parse(readFileSync(join(dataDir, "config.json"), "utf8")),
@@ -948,7 +948,7 @@ describe("bb-app launcher", () => {
     await expect(
       createHostDaemonJoinEnv({
         context: { ...createTestStartContext(), dataDir },
-        env: { BB_HOST_ENROLL_KEY: "bbde_supplied" },
+        env: { MQH_HOST_ENROLL_KEY: "bbde_supplied" },
         serverUrl: "https://bb.example.test",
       }),
     ).rejects.toThrow("--host-id is required when --join-code is supplied");
@@ -978,7 +978,7 @@ describe("bb-app launcher", () => {
       await resolveBbAppRuntimeState({
         entrypointUrl: pathToFileURL("/repo/packages/bb-app/dist/bb-app.js")
           .href,
-        env: { BB_DATA_DIR: dataDir },
+        env: { MQH_DATA_DIR: dataDir },
         homeDir: "/home/tester",
         options: { help: false },
         serverUrlMode: "managed",
@@ -999,8 +999,8 @@ describe("bb-app launcher", () => {
     const runtime = await resolveBbAppRuntimeState({
       entrypointUrl: pathToFileURL("/repo/packages/bb-app/dist/bb-app.js").href,
       env: {
-        BB_DATA_DIR: dataDir,
-        BB_SERVER_URL: "https://ambient.example.test",
+        MQH_DATA_DIR: dataDir,
+        MQH_SERVER_URL: "https://ambient.example.test",
       },
       homeDir: "/home/tester",
       options: { help: false },
@@ -1008,7 +1008,7 @@ describe("bb-app launcher", () => {
     });
 
     expect(runtime.context.serverUrl).toBe("https://stored.example.test");
-    expect(runtime.env.BB_SERVER_URL).toBe("https://stored.example.test");
+    expect(runtime.env.MQH_SERVER_URL).toBe("https://stored.example.test");
   });
 
   it("keeps full-stack startup local even when managed config has a server URL", async () => {
@@ -1023,7 +1023,7 @@ describe("bb-app launcher", () => {
       await resolveBbAppRuntimeState({
         entrypointUrl: pathToFileURL("/repo/packages/bb-app/dist/bb-app.js")
           .href,
-        env: { BB_DATA_DIR: dataDir },
+        env: { MQH_DATA_DIR: dataDir },
         homeDir: "/home/tester",
         options: { help: false },
         serverUrlMode: "local",
@@ -1039,8 +1039,8 @@ describe("bb-app launcher", () => {
       join(dataDir, "config.json"),
       JSON.stringify({
         config: {
-          BB_APP_URL: "https://bb.example.test",
-          BB_LOG_LEVEL: "debug",
+          MQH_APP_URL: "https://bb.example.test",
+          MQH_LOG_LEVEL: "debug",
         },
       }),
       "utf8",
@@ -1057,16 +1057,16 @@ describe("bb-app launcher", () => {
 
     const runtime = await resolveBbAppRuntimeState({
       entrypointUrl: pathToFileURL("/repo/packages/bb-app/dist/bb-app.js").href,
-      env: { BB_DATA_DIR: dataDir, OPENAI_API_KEY: "ambient-openai-key" },
+      env: { MQH_DATA_DIR: dataDir, OPENAI_API_KEY: "ambient-openai-key" },
       homeDir: "/home/tester",
       options: { help: false },
       serverUrlMode: "local",
     });
 
-    expect(runtime.env.BB_APP_URL).toBe("https://bb.example.test");
-    expect(runtime.env.BB_LOG_LEVEL).toBe("debug");
+    expect(runtime.env.MQH_APP_URL).toBe("https://bb.example.test");
+    expect(runtime.env.MQH_LOG_LEVEL).toBe("debug");
     expect(runtime.env.OPENAI_API_KEY).toBe("stored-openai-key");
-    expect(runtime.serverEnv.BB_LOG_LEVEL).toBe("debug");
+    expect(runtime.serverEnv.MQH_LOG_LEVEL).toBe("debug");
     expect(runtime.serverEnv.OPENAI_API_KEY).toBe("stored-openai-key");
   });
 
@@ -1077,23 +1077,23 @@ describe("bb-app launcher", () => {
       join(dataDir, "env.json"),
       JSON.stringify({
         env: {
-          BB_DATA_DIR: storedDataDir,
-          BB_DEV_APP_PORT: "4173",
-          BB_HOST_DAEMON_PORT: "48887",
-          BB_INHERITED_SKILLS_ROOTS: "/stored/skills",
-          BB_SERVER_BIND_HOST: "0.0.0.0",
-          BB_SERVER_PORT: "48886",
-          BB_TELEMETRY: "true",
+          MQH_DATA_DIR: storedDataDir,
+          MQH_DEV_APP_PORT: "4173",
+          MQH_HOST_DAEMON_PORT: "48887",
+          MQH_INHERITED_SKILLS_ROOTS: "/stored/skills",
+          MQH_SERVER_BIND_HOST: "0.0.0.0",
+          MQH_SERVER_PORT: "48886",
+          MQH_TELEMETRY: "true",
           OPENAI_API_KEY: "stored-openai-key",
         },
       }),
       "utf8",
     );
     const worktreeEnv: NodeJS.ProcessEnv = {
-      BB_DATA_DIR: dataDir,
-      BB_HOST_DAEMON_PORT: "47887",
-      BB_INHERITED_SKILLS_ROOTS: "/worktree/skills",
-      BB_SERVER_PORT: "47886",
+      MQH_DATA_DIR: dataDir,
+      MQH_HOST_DAEMON_PORT: "47887",
+      MQH_INHERITED_SKILLS_ROOTS: "/worktree/skills",
+      MQH_SERVER_PORT: "47886",
     };
 
     const runtime = await resolveBbAppRuntimeState({
@@ -1116,15 +1116,15 @@ describe("bb-app launcher", () => {
     });
     for (const env of [runtime.env, runtime.serverEnv]) {
       expect(env).toMatchObject({
-        BB_DATA_DIR: dataDir,
-        BB_HOST_DAEMON_PORT: "47887",
-        BB_INHERITED_SKILLS_ROOTS: "/worktree/skills",
-        BB_SERVER_BIND_HOST: "127.0.0.1",
-        BB_SERVER_PORT: "47886",
-        BB_TELEMETRY: "false",
+        MQH_DATA_DIR: dataDir,
+        MQH_HOST_DAEMON_PORT: "47887",
+        MQH_INHERITED_SKILLS_ROOTS: "/worktree/skills",
+        MQH_SERVER_BIND_HOST: "127.0.0.1",
+        MQH_SERVER_PORT: "47886",
+        MQH_TELEMETRY: "false",
         OPENAI_API_KEY: "stored-openai-key",
       });
-      expect(env.BB_DEV_APP_PORT).toBeUndefined();
+      expect(env.MQH_DEV_APP_PORT).toBeUndefined();
     }
   });
 
@@ -1139,8 +1139,8 @@ describe("bb-app launcher", () => {
     const runtime = await resolveBbAppRuntimeState({
       entrypointUrl: pathToFileURL("/repo/packages/bb-app/dist/bb-app.js").href,
       env: {
-        BB_DATA_DIR: dataDir,
-        BB_SERVER_URL: "https://ambient.example.test",
+        MQH_DATA_DIR: dataDir,
+        MQH_SERVER_URL: "https://ambient.example.test",
       },
       homeDir: "/home/tester",
       options: {
@@ -1151,7 +1151,7 @@ describe("bb-app launcher", () => {
     });
 
     expect(runtime.context.serverUrl).toBe("https://flag.example.test");
-    expect(runtime.env.BB_SERVER_URL).toBe("https://flag.example.test");
+    expect(runtime.env.MQH_SERVER_URL).toBe("https://flag.example.test");
   });
 
   it("stores managed config values from the config command", async () => {
@@ -1162,7 +1162,7 @@ describe("bb-app launcher", () => {
       dataDir,
       "config",
       "set",
-      "BB_APP_URL",
+      "MQH_APP_URL",
       "https://bb.example.test",
     ]);
     await runBbApp([
@@ -1170,7 +1170,7 @@ describe("bb-app launcher", () => {
       dataDir,
       "config",
       "set",
-      "BB_LOG_LEVEL",
+      "MQH_LOG_LEVEL",
       "debug",
     ]);
     await runBbApp([
@@ -1186,8 +1186,8 @@ describe("bb-app launcher", () => {
       JSON.parse(readFileSync(join(dataDir, "config.json"), "utf8")),
     ).toEqual({
       config: {
-        BB_APP_URL: "https://bb.example.test",
-        BB_LOG_LEVEL: "debug",
+        MQH_APP_URL: "https://bb.example.test",
+        MQH_LOG_LEVEL: "debug",
       },
     });
     expect(JSON.parse(readFileSync(join(dataDir, "env.json"), "utf8"))).toEqual(
@@ -1327,7 +1327,7 @@ describe("bb-app launcher", () => {
       dataDir,
       "config",
       "set",
-      "BB_APP_URL",
+      "MQH_APP_URL",
       "https://bb.example.test",
     ]);
 
@@ -1335,7 +1335,7 @@ describe("bb-app launcher", () => {
       JSON.parse(readFileSync(join(dataDir, "config.json"), "utf8")),
     ).toEqual({
       config: {
-        BB_APP_URL: "https://bb.example.test",
+        MQH_APP_URL: "https://bb.example.test",
       },
     });
   });
@@ -1369,10 +1369,10 @@ describe("bb-app launcher", () => {
         dataDir,
         "env",
         "set",
-        "BB_SERVER_BIND_HOST",
+        "MQH_SERVER_BIND_HOST",
         "localhost",
       ]),
-    ).rejects.toThrow('BB_SERVER_BIND_HOST must be "127.0.0.1" or "0.0.0.0"');
+    ).rejects.toThrow('MQH_SERVER_BIND_HOST must be "127.0.0.1" or "0.0.0.0"');
 
     expect(JSON.parse(readFileSync(envPath, "utf8"))).toEqual(initialEnvFile);
   });
@@ -1382,7 +1382,7 @@ describe("bb-app launcher", () => {
     const envPath = join(dataDir, "env.json");
     writeFileSync(
       envPath,
-      JSON.stringify({ env: { BB_SERVER_BIND_HOST: "localhost" } }),
+      JSON.stringify({ env: { MQH_SERVER_BIND_HOST: "localhost" } }),
       "utf8",
     );
 
@@ -1391,7 +1391,7 @@ describe("bb-app launcher", () => {
       dataDir,
       "env",
       "unset",
-      "BB_SERVER_BIND_HOST",
+      "MQH_SERVER_BIND_HOST",
     ]);
 
     expect(JSON.parse(readFileSync(envPath, "utf8"))).toEqual({});
@@ -1402,7 +1402,7 @@ describe("bb-app launcher", () => {
     const envPath = join(dataDir, "env.json");
     writeFileSync(
       envPath,
-      JSON.stringify({ env: { BB_SERVER_BIND_HOST: "localhost" } }),
+      JSON.stringify({ env: { MQH_SERVER_BIND_HOST: "localhost" } }),
       "utf8",
     );
 
@@ -1414,7 +1414,7 @@ describe("bb-app launcher", () => {
     const envPath = join(dataDir, "env.json");
     writeFileSync(
       envPath,
-      JSON.stringify({ env: { BB_SERVER_BIND_HOST: "localhost" } }),
+      JSON.stringify({ env: { MQH_SERVER_BIND_HOST: "localhost" } }),
       "utf8",
     );
 
@@ -1426,7 +1426,7 @@ describe("bb-app launcher", () => {
     ]).catch((error: unknown) => error);
 
     expect(failure).toBeInstanceOf(Error);
-    expect((failure as Error).message).toContain("BB_SERVER_BIND_HOST");
+    expect((failure as Error).message).toContain("MQH_SERVER_BIND_HOST");
     expect((failure as Error).message).not.toContain(envPath);
   });
 
@@ -1442,20 +1442,20 @@ describe("bb-app launcher", () => {
     const dataDir = mkdtempSync(join(tmpdir(), "bb-app-bind-host-env-"));
     writeFileSync(
       join(dataDir, "env.json"),
-      JSON.stringify({ env: { BB_SERVER_BIND_HOST: "0.0.0.0" } }),
+      JSON.stringify({ env: { MQH_SERVER_BIND_HOST: "0.0.0.0" } }),
       "utf8",
     );
     const parsedArgs = parseLauncherArgs(["--server-bind-host", "127.0.0.1"]);
 
     const runtime = await resolveBbAppRuntimeState({
       entrypointUrl: pathToFileURL("/repo/packages/bb-app/dist/bb-app.js").href,
-      env: { BB_DATA_DIR: dataDir },
+      env: { MQH_DATA_DIR: dataDir },
       homeDir: "/home/tester",
       options: parsedArgs.options,
       serverUrlMode: "local",
     });
 
-    expect(runtime.serverEnv.BB_SERVER_BIND_HOST).toBe("127.0.0.1");
+    expect(runtime.serverEnv.MQH_SERVER_BIND_HOST).toBe("127.0.0.1");
   });
 
   it("rejects invalid managed config values before writing or reloading", async () => {
@@ -1466,7 +1466,7 @@ describe("bb-app launcher", () => {
         const configPath = join(dataDir, "config.json");
         const initialConfig = {
           config: {
-            BB_APP_URL: "https://existing.example.test",
+            MQH_APP_URL: "https://existing.example.test",
           },
         };
         writeFileSync(
@@ -1512,15 +1512,15 @@ describe("bb-app launcher", () => {
           String(server.port),
           "config",
           "set",
-          "BB_LOG_LEVEL",
+          "MQH_LOG_LEVEL",
           "debug",
         ]),
       );
 
       expect(output).toContain(
-        "BB_LOG_LEVEL is startup-only. The running process keeps its current value; a full bb-app restart is required to apply this change. Run `bb-app stop && bb-app start`, or restart the desktop app.",
+        "MQH_LOG_LEVEL is startup-only. The running process keeps its current value; a full bb-app restart is required to apply this change. Run `bb-app stop && bb-app start`, or restart the desktop app.",
       );
-      expect(output).not.toContain("Reloaded running bb server config.");
+      expect(output).not.toContain("Reloaded running mqh server config.");
       expect(server.reloadRequests()).toEqual([
         expectedConfigReloadRequest(server),
       ]);
@@ -1551,7 +1551,7 @@ describe("bb-app launcher", () => {
         expect(output).toContain(
           `${testCase.key} is startup-only. The running process keeps its current value; a full bb-app restart is required to apply this change.`,
         );
-        expect(output).not.toContain("Reloaded running bb server config.");
+        expect(output).not.toContain("Reloaded running mqh server config.");
       }
       expect(server.reloadCount()).toBe(startupOnlyManagedEnvCases.length);
     } finally {
@@ -1563,7 +1563,7 @@ describe("bb-app launcher", () => {
     const dataDir = mkdtempSync(join(tmpdir(), "bb-app-startup-bind-unset-"));
     writeFileSync(
       join(dataDir, "env.json"),
-      JSON.stringify({ env: { BB_SERVER_BIND_HOST: "0.0.0.0" } }),
+      JSON.stringify({ env: { MQH_SERVER_BIND_HOST: "0.0.0.0" } }),
       "utf8",
     );
     const server = await startConfigReloadTestServer();
@@ -1577,17 +1577,17 @@ describe("bb-app launcher", () => {
           String(server.port),
           "env",
           "unset",
-          "BB_SERVER_BIND_HOST",
+          "MQH_SERVER_BIND_HOST",
         ]),
       );
 
       expect(output).toContain(
-        "BB_SERVER_BIND_HOST is startup-only. The running process keeps its current value; a full bb-app restart is required to apply this change. Run `bb-app stop && bb-app start`, or restart the desktop app.",
+        "MQH_SERVER_BIND_HOST is startup-only. The running process keeps its current value; a full bb-app restart is required to apply this change. Run `bb-app stop && bb-app start`, or restart the desktop app.",
       );
       expect(output).toContain(
         "Until then, the server keeps its previous bind address. If it was bound to 0.0.0.0, that network exposure remains open.",
       );
-      expect(output).not.toContain("Reloaded running bb server config.");
+      expect(output).not.toContain("Reloaded running mqh server config.");
       expect(server.reloadRequests()).toEqual([
         expectedConfigReloadRequest(server),
       ]);
@@ -1614,7 +1614,7 @@ describe("bb-app launcher", () => {
         ]),
       );
 
-      expect(output).toContain("Reloaded running bb server config.");
+      expect(output).toContain("Reloaded running mqh server config.");
       expect(output).not.toContain("is startup-only");
     } finally {
       await server.close();
@@ -1635,7 +1635,7 @@ describe("bb-app launcher", () => {
         String(unavailablePort),
         "env",
         "set",
-        "BB_SERVER_BIND_HOST",
+        "MQH_SERVER_BIND_HOST",
         "0.0.0.0",
       ]),
     );
@@ -1648,17 +1648,17 @@ describe("bb-app launcher", () => {
     const dataDir = mkdtempSync(join(tmpdir(), "bb-app-startup-refresh-"));
     writeFileSync(
       join(dataDir, "config.json"),
-      JSON.stringify({ config: { BB_LOG_LEVEL: "debug" } }),
+      JSON.stringify({ config: { MQH_LOG_LEVEL: "debug" } }),
       "utf8",
     );
     writeFileSync(
       join(dataDir, "env.json"),
       JSON.stringify({
         env: {
-          BB_FF_PLACEHOLDER: "true",
-          BB_SERVER_BIND_HOST: "0.0.0.0",
-          BB_SERVER_PORT: "48886",
-          BB_TELEMETRY: "false",
+          MQH_FF_PLACEHOLDER: "true",
+          MQH_SERVER_BIND_HOST: "0.0.0.0",
+          MQH_SERVER_PORT: "48886",
+          MQH_TELEMETRY: "false",
         },
       }),
       "utf8",
@@ -1677,22 +1677,22 @@ describe("bb-app launcher", () => {
         ]),
       );
 
-      expect(output).toContain("Reloaded running bb server config.");
+      expect(output).toContain("Reloaded running mqh server config.");
       expect(output).toContain(
-        "Startup-only settings currently configured (BB_FF_PLACEHOLDER, BB_LOG_LEVEL, BB_SERVER_BIND_HOST, BB_SERVER_PORT, BB_TELEMETRY) apply on the next full bb-app restart.",
+        "Startup-only settings currently configured (MQH_FF_PLACEHOLDER, MQH_LOG_LEVEL, MQH_SERVER_BIND_HOST, MQH_SERVER_PORT, MQH_TELEMETRY) apply on the next full bb-app restart.",
       );
     } finally {
       await server.close();
     }
   });
 
-  it("uses BB_SERVER_URL for config refresh when set", async () => {
+  it("uses MQH_SERVER_URL for config refresh when set", async () => {
     const dataDir = mkdtempSync(join(tmpdir(), "bb-app-config-env-refresh-"));
     const server = await startConfigReloadTestServer();
-    const previousServerUrl = process.env.BB_SERVER_URL;
+    const previousServerUrl = process.env.MQH_SERVER_URL;
 
     try {
-      process.env.BB_SERVER_URL = server.url;
+      process.env.MQH_SERVER_URL = server.url;
 
       await runBbApp(["--data-dir", dataDir, "config", "refresh"]);
 
@@ -1701,15 +1701,15 @@ describe("bb-app launcher", () => {
       ]);
     } finally {
       if (previousServerUrl === undefined) {
-        delete process.env.BB_SERVER_URL;
+        delete process.env.MQH_SERVER_URL;
       } else {
-        process.env.BB_SERVER_URL = previousServerUrl;
+        process.env.MQH_SERVER_URL = previousServerUrl;
       }
       await server.close();
     }
   });
 
-  it("uses persisted BB_SERVER_URL for config refresh without env or flags", async () => {
+  it("uses persisted MQH_SERVER_URL for config refresh without env or flags", async () => {
     const dataDir = mkdtempSync(join(tmpdir(), "bb-app-config-persisted-url-"));
     const server = await startConfigReloadTestServer();
 
@@ -1719,7 +1719,7 @@ describe("bb-app launcher", () => {
         dataDir,
         "config",
         "set",
-        "BB_SERVER_URL",
+        "MQH_SERVER_URL",
         server.url,
       ]);
 
@@ -1745,7 +1745,7 @@ describe("bb-app launcher", () => {
     const configServer = await startConfigReloadTestServer();
     const envServer = await startConfigReloadTestServer();
     const flagServer = await startConfigReloadTestServer();
-    const previousServerUrl = process.env.BB_SERVER_URL;
+    const previousServerUrl = process.env.MQH_SERVER_URL;
 
     try {
       await runBbApp([
@@ -1753,11 +1753,11 @@ describe("bb-app launcher", () => {
         dataDir,
         "config",
         "set",
-        "BB_SERVER_URL",
+        "MQH_SERVER_URL",
         configServer.url,
       ]);
 
-      process.env.BB_SERVER_URL = envServer.url;
+      process.env.MQH_SERVER_URL = envServer.url;
       await runBbApp([
         "--data-dir",
         dataDir,
@@ -1774,9 +1774,9 @@ describe("bb-app launcher", () => {
       ]);
     } finally {
       if (previousServerUrl === undefined) {
-        delete process.env.BB_SERVER_URL;
+        delete process.env.MQH_SERVER_URL;
       } else {
-        process.env.BB_SERVER_URL = previousServerUrl;
+        process.env.MQH_SERVER_URL = previousServerUrl;
       }
       await flagServer.close();
       await envServer.close();
@@ -2019,7 +2019,7 @@ describe("bb-app launcher", () => {
     });
   });
 
-  it("runs a BB_CLI override directly, or through Node when it is extensionless on Windows", () => {
+  it("runs a MQH_CLI override directly, or through Node when it is extensionless on Windows", () => {
     expect(
       resolveBundledCliLaunch({
         args: ["status"],
@@ -2146,7 +2146,7 @@ describe("bb-app launcher", () => {
     const desktopServerEnv = createServerEnv({
       cliLauncherPath: null,
       context,
-      env: { BB_APP_SURFACE: "desktop" },
+      env: { MQH_APP_SURFACE: "desktop" },
       install: { kind: "desktop" },
     });
     const webServerEnv = createServerEnv({
@@ -2158,13 +2158,13 @@ describe("bb-app launcher", () => {
     const invalidSurfaceServerEnv = createServerEnv({
       cliLauncherPath: null,
       context,
-      env: { BB_APP_SURFACE: "bogus" },
+      env: { MQH_APP_SURFACE: "bogus" },
       install: { kind: "npm" },
     });
 
-    expect(desktopServerEnv.BB_APP_SURFACE).toBe("desktop");
-    expect(webServerEnv.BB_APP_SURFACE).toBe("web");
-    expect(invalidSurfaceServerEnv.BB_APP_SURFACE).toBe("web");
+    expect(desktopServerEnv.MQH_APP_SURFACE).toBe("desktop");
+    expect(webServerEnv.MQH_APP_SURFACE).toBe("web");
+    expect(invalidSurfaceServerEnv.MQH_APP_SURFACE).toBe("web");
   });
 
   it("replaces inherited install markers so a fork never reports a stale commit", () => {
@@ -2172,16 +2172,16 @@ describe("bb-app launcher", () => {
       cliLauncherPath: null,
       context: createTestStartContext(),
       env: {
-        BB_APP_INSTALL_KIND: "source",
-        BB_APP_SOURCE_COMMIT: "a".repeat(40),
-        BB_APP_SOURCE_ORIGIN: "official",
+        MQH_APP_INSTALL_KIND: "source",
+        MQH_APP_SOURCE_COMMIT: "a".repeat(40),
+        MQH_APP_SOURCE_ORIGIN: "official",
       },
       install: { kind: "source", origin: "fork" },
     });
 
-    expect(serverEnv.BB_APP_INSTALL_KIND).toBe("source");
-    expect(serverEnv.BB_APP_SOURCE_ORIGIN).toBe("fork");
-    expect(serverEnv).not.toHaveProperty("BB_APP_SOURCE_COMMIT");
+    expect(serverEnv.MQH_APP_INSTALL_KIND).toBe("source");
+    expect(serverEnv.MQH_APP_SOURCE_ORIGIN).toBe("fork");
+    expect(serverEnv).not.toHaveProperty("MQH_APP_SOURCE_COMMIT");
   });
 
   it("tells the server about the bb command launcher only when this start wrote one", () => {
@@ -2191,18 +2191,18 @@ describe("bb-app launcher", () => {
       createServerEnv({
         cliLauncherPath: "/home/me/.bb/bin/bb",
         context,
-        env: { BB_CLI_LAUNCHER: "/stale/bin/bb" },
+        env: { MQH_CLI_LAUNCHER: "/stale/bin/bb" },
         install: { kind: "npm" },
-      }).BB_CLI_LAUNCHER,
+      }).MQH_CLI_LAUNCHER,
     ).toBe("/home/me/.bb/bin/bb");
     expect(
       createServerEnv({
         cliLauncherPath: null,
         context,
-        env: { BB_CLI_LAUNCHER: "/stale/bin/bb" },
+        env: { MQH_CLI_LAUNCHER: "/stale/bin/bb" },
         install: { kind: "source", origin: "none" },
       }),
-    ).not.toHaveProperty("BB_CLI_LAUNCHER");
+    ).not.toHaveProperty("MQH_CLI_LAUNCHER");
   });
 });
 
@@ -2221,13 +2221,13 @@ it("preserves machine identity and access headers through real config set and un
       dataDir,
       "config",
       "set",
-      "BB_APP_URL",
+      "MQH_APP_URL",
       "https://other.example",
     ]);
     expect(
       JSON.parse(readFileSync(join(dataDir, "config.json"), "utf8")),
     ).toMatchObject(identity);
-    await runBbApp(["--data-dir", dataDir, "config", "unset", "BB_APP_URL"]);
+    await runBbApp(["--data-dir", dataDir, "config", "unset", "MQH_APP_URL"]);
     expect(
       JSON.parse(readFileSync(join(dataDir, "config.json"), "utf8")),
     ).toEqual(identity);

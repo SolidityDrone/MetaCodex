@@ -261,7 +261,7 @@ export default async function concurrencyLimitPlugin(
   function unknownHost(hostId: string): PluginCliError {
     return new PluginCliError(`Unknown host: ${hostId}`, {
       code: "unknown_host",
-      hint: "Run `bb machine list` for the enrolled host ids.",
+      hint: "Run `mqh machine list` for the enrolled host ids.",
     });
   }
 
@@ -321,7 +321,7 @@ export default async function concurrencyLimitPlugin(
           positionals: [
             {
               name: "host-id",
-              description: "Enrolled host id, as `bb machine list` prints it",
+              description: "Enrolled host id, as `mqh machine list` prints it",
               required: true,
             },
             {

@@ -39,7 +39,7 @@ function requiredThreadId(
   const threadId = requested ?? context.threadId;
   if (threadId === undefined) {
     throw new PluginCliError(
-      `A thread id is required: bb provider-retry ${command} <thread-id>`,
+      `A thread id is required: mqh provider-retry ${command} <thread-id>`,
       { code: "missing_thread_id", exitCode: 2 },
     );
   }
@@ -58,7 +58,7 @@ async function act(
       `No pending provider retry exists for ${threadId}.`,
       {
         code: "no_pending_retry",
-        hint: "Run `bb provider-retry status` for the threads with a pending retry.",
+        hint: "Run `mqh provider-retry status` for the threads with a pending retry.",
       },
     );
   }

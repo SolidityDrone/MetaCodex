@@ -71,7 +71,7 @@ export function buildPiSessionParams(
   return {
     cwd: args.cwd,
     shellEnvOverrides: {
-      BB_THREAD_ID: args.threadId,
+      MQH_THREAD_ID: args.threadId,
       ...buildShellEnvOverrides(args.options.envVars),
     },
     ...(instructions

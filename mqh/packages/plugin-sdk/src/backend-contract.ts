@@ -47,7 +47,7 @@ import type {
 } from "./host-contract.js";
 
 /**
- * The backend plugin API contract — the `bb` object handed to a plugin's
+ * The backend plugin API contract — the `mqh` object handed to a plugin's
  * `server.ts` factory (`export default function plugin(bb: BbPluginApi)`).
  *
  * Types only: the implementation lives in the BB server
@@ -370,7 +370,7 @@ export interface PluginThreadEventPayloads {
   "turn.failed": PluginTurnFailedEvent;
   /**
    * Fired after a queued row is removed before it ever dispatched — the user
-   * deleted it from the queued card or `bb thread queue`. This is the only
+   * deleted it from the queued card or `mqh thread queue`. This is the only
    * signal for that removal: a plugin holding external resources for a
    * waiting message (a sandbox mid-provision, a reserved slot) releases them
    * here. Rows that dispatch fire `message.dispatched` instead, and rows that
@@ -867,7 +867,7 @@ export interface PluginHttp {
    * `/api/v1/plugins/<id>/http/<path>`. Auth modes (default "local"):
    * - "local": Origin/Host must be a local BB app origin; non-GET requires
    *   content-type application/json (forces a CORS preflight).
-   * - "token": requires the per-plugin token (`bb plugin token <id>`) via
+   * - "token": requires the per-plugin token (`mqh plugin token <id>`) via
    *   the x-bb-plugin-token header or ?token=.
    * - "none": no checks — only for signature-verified webhooks.
    */
@@ -959,7 +959,7 @@ export interface PluginBackground {
    * durable row keyed (pluginId, name) is upserted at load; the periodic
    * sweep claims due rows with a CAS on next_run_at, but only while this
    * plugin is loaded. Failures land in last_status/last_error, visible in
-   * `bb plugin list`.
+   * `mqh plugin list`.
    */
   schedule(name: string, cron: string, fn: () => void | Promise<void>): void;
 }
@@ -1073,7 +1073,7 @@ export interface PluginCliExecutionResult {
 export interface PluginCliRegistration {
   /** Preferred top-level command name (`bb <name> …`): lowercase [a-z0-9-]+.
    * A core collision logs an activation warning and remains available through
-   * `bb plugin run <plugin-id>`. */
+   * `mqh plugin run <plugin-id>`. */
   name: string;
   summary: string;
   /** Subcommand metadata rendered in help and the plugin-commands skill
@@ -1081,7 +1081,7 @@ export interface PluginCliRegistration {
   commands?: PluginCliCommandInfo[];
   /**
    * Set when `run` answers `--help` / `-h` itself, at every level, without
-   * executing a command. The `bb` CLI then forwards help requests to the
+   * executing a command. The `mqh` CLI then forwards help requests to the
    * plugin instead of printing the one-line `usage` from `commands`.
    * `defineCli` sets it. Leave it unset for a hand-written `run`:
    * the host cannot know that such a parser will not act on the other
@@ -1096,7 +1096,7 @@ export interface PluginCliRegistration {
 
 export interface PluginCli {
   /**
-   * Register this plugin's `bb` subcommand. One registration per factory
+   * Register this plugin's `mqh` subcommand. One registration per factory
    * execution; a repeated call is rejected. Core bb commands always win
    * name collisions; the plugin is warned and remains explicitly callable by id.
    */
@@ -1565,7 +1565,7 @@ export interface PluginProviderDeclaration {
    * every row of a finished turn visible, as it was while the turn ran. This
    * is only the provider's default: the user can choose either display for
    * each provider in Settings → Providers or with
-   * `bb settings completed-turns`, and that choice wins.
+   * `mqh settings completed-turns`, and that choice wins.
    */
   completedTurnDisplay?: PluginProviderCompletedTurnDisplay;
   // -------------------------------------------------------------------------
@@ -1935,7 +1935,7 @@ export interface PluginEvents {
 
 export interface PluginServerApi {
   /**
-   * The operator-configured public app URL from `BB_APP_URL`, or `null` when
+   * The operator-configured public app URL from `MQH_APP_URL`, or `null` when
    * the operator has not configured one. This value is not bind-gated.
    */
   readonly experimental_appUrl: string | null;
@@ -2023,7 +2023,7 @@ export interface PluginAiTranscribeOptions {
 
 /**
  * Whether a service can answer right now. `message` is shown to the user
- * beside the service ("Sign in to your bb account") and should say how to
+ * beside the service ("Sign in to your mqh account") and should say how to
  * make it ready.
  */
 export type PluginAiServiceStatus =
@@ -2034,7 +2034,7 @@ export type PluginAiServiceStatus =
  * An AI service bb can use for its helper tasks: thread titles and commit
  * messages (`complete`) and voice input (`transcribe`). The user picks a
  * service per task in Settings → AI services or with
- * `bb settings ai-services set`. The functions run in the plugin's server
+ * `mqh settings ai-services set`. The functions run in the plugin's server
  * process; a plugin that needs host-local state (a login file, a local model)
  * reaches its own `bb.host` entry through `bb.hosts.experimental_client`.
  *
@@ -2206,10 +2206,10 @@ export interface PluginHosts {
 export interface PluginStatusApi {
   /**
    * Mark this plugin `needs-configuration` (with a message shown in
-   * `bb plugin list` and the UI) instead of failing — e.g. a factory or
+   * `mqh plugin list` and the UI) instead of failing — e.g. a factory or
    * service that finds no API key configured. Cleared on the next load;
    * saving settings does not auto-reload in V1, so ask the user to
-   * `bb plugin reload <id>` after configuring.
+   * `mqh plugin reload <id>` after configuring.
    */
   needsConfiguration(message: string): void;
 }
@@ -2271,7 +2271,7 @@ export interface BbPluginApi {
   readonly realtime: PluginRealtime;
   /** Long-lived services + cron schedules (design §4.8). */
   readonly background: PluginBackground;
-  /** Agent-facing `bb` CLI subcommand (design §4.4). */
+  /** Agent-facing `mqh` CLI subcommand (design §4.4). */
   readonly cli: PluginCli;
   /** Per-turn agent context contributions (design §4.4). */
   readonly agents: PluginAgents;

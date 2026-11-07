@@ -116,7 +116,7 @@ export function prepareNodeNetworkLaunch(
     for (const key of unwarned) warnedProxyKeys.add(key);
     process.emitWarning(
       `bb started a Node process without --use-env-proxy because ${unwarned.join(", ")} is not an http:// or https:// URL. Add the scheme, for example http://proxy.example:3128, so bb uses the proxy.`,
-      { code: "BB_INVALID_PROXY_ENV" },
+      { code: "MQH_INVALID_PROXY_ENV" },
     );
   }
   return { nodeArgs: launch.nodeArgs, env: launch.env };

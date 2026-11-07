@@ -109,7 +109,7 @@ describe("MCP route", () => {
   });
 });
 
-describe("bb mcp", () => {
+describe("mqh mcp", () => {
   it("prints the local address, and the remote one only when signed in", async () => {
     const signedOut = await load(SIGNED_OUT);
     expect(

@@ -48,7 +48,7 @@ bb.providers.register({
   serviceTiers: undefined, // e.g. [{ id: "default", label: "Default" }, { id: "fast", label: "Fast" }]; experimental_icon (a host glyph or a declared "<pluginId>/<name>" icon) overrides the selected tier's default Zap glyph
   composerActions: [], // skills typeahead is implicit; ["plan"] opts into plan mode
   models: { fallback: [], scope: "workspace" },
-  env: { passthrough: ["BB_ECHO_AGENT_EXECUTABLE"] },
+  env: { passthrough: ["MQH_ECHO_AGENT_EXECUTABLE"] },
   deriveProviderOptions(ctx) {
     return {
       verbose: ctx.settings.verbose === true,
@@ -81,7 +81,7 @@ icons by its namespaced glyph (`"<pluginId>/<name>"`, an entry of
 `bb.branding.experimental_icons`; the plugin id must be this plugin's and
 the name declared, else the plugin fails to load). A path-shaped SVG is
 served as declared behind `nosniff` and a `default-src 'none'` CSP; it is
-not in the manifest, so `bb plugin build` cannot check it — keep it free of
+not in the manifest, so `mqh plugin build` cannot check it — keep it free of
 the script vectors the build refuses in a logo. A path or a declared icon is
 served to clients as a `logoUrl` and drawn as a `currentColor` mask, so a
 monochrome mark follows the bb theme (and the declared `strings.iconTint`)
@@ -137,7 +137,7 @@ command, and when it lists the provider's models on a host. Its
 no thread. Return at most 32 `ExperimentalPluginProviderEnvEntry` values.
 Names must match `[A-Z_][A-Z0-9_]*`; `reason` is required. A
 literal `value` is forwarded as-is. `{ serverPath: "/..." }` is expanded by
-the selected host against its authenticated `BB_SERVER_URL`, which is the
+the selected host against its authenticated `MQH_SERVER_URL`, which is the
 right form for a server route that must work from enrolled machines.
 
 Contributions override the host shell environment. If multiple plugins return
@@ -262,7 +262,7 @@ checks for parsing, request replies, semantic timeline output, and error
 cases.
 
 **Recorded replay.** Record a real session: start the host daemon with
-`BB_PROVIDER_BRIDGE_RECORD_DIR=<dir>` in its environment and run a thread on
+`MQH_PROVIDER_BRIDGE_RECORD_DIR=<dir>` in its environment and run a thread on
 your provider (a bridge that spawns a CLI also calls
 `experimental_recordProviderChildIo` right after `spawn()`); the layout is in
 `docs/provider-bridge-protocol.md`, "Record mode". Redact and commit the lanes

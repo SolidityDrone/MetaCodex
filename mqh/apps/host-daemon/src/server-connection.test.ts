@@ -372,7 +372,7 @@ describe("ServerConnection", () => {
     const onServerMoved = vi.fn(async () => undefined);
     const movedError = new ServerResponseError({
       action: "open session",
-      bodyMessage: "This bb server moved to studio",
+      bodyMessage: "This mqh server moved to studio",
       code: "server_moved",
       retryable: false,
       serverMoved: {
@@ -414,7 +414,7 @@ describe("ServerConnection", () => {
     });
     const movedError = new ServerResponseError({
       action: "open session",
-      bodyMessage: "This bb server moved to studio",
+      bodyMessage: "This mqh server moved to studio",
       code: "server_moved",
       retryable: false,
       serverMoved: {

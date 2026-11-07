@@ -85,7 +85,7 @@ describe("ServerMoveService.prepare", () => {
       ),
     ).toBe("attachment");
     expect(await readJson(join(fixture.dataDir, "config.json"))).toEqual({
-      config: { BB_LOG_LEVEL: "info" },
+      config: { MQH_LOG_LEVEL: "info" },
       serverUrl: "https://bb.example.test",
       serverHeaders: { "x-bb-connect-machine": "bbcm_target" },
       machineCredential: "bbcm_target",
@@ -117,7 +117,7 @@ describe("ServerMoveService.prepare", () => {
         serverPort: command.serverPort,
         bindHost: null,
         hostDaemonPort: 38_887,
-        env: expect.objectContaining({ BB_HOST_DAEMON_PORT: "38887" }),
+        env: expect.objectContaining({ MQH_HOST_DAEMON_PORT: "38887" }),
         logPath: join(
           fixture.dataDir,
           "logs",
@@ -180,7 +180,7 @@ describe("ServerMoveService.prepare", () => {
   it("abort stops the pending server, restores config backups, and un-archives standalone data", async () => {
     const fixture = await createFixture();
     const originalConfig = {
-      config: { BB_LOG_LEVEL: "debug" },
+      config: { MQH_LOG_LEVEL: "debug" },
       serverUrl: "https://bb.example.test",
       machineCredential: "bbcm_target",
     };
@@ -487,7 +487,7 @@ describe("ServerMoveService own data dir guards", () => {
     const fixture = await createFixture();
     const { dataDir } = fixture;
     const originalConfig = {
-      config: { BB_LOG_LEVEL: "debug" },
+      config: { MQH_LOG_LEVEL: "debug" },
       serverUrl: "https://bb.example.test",
       machineCredential: "bbcm_target",
     };
@@ -499,7 +499,7 @@ describe("ServerMoveService own data dir guards", () => {
     await writeFileWithDirs(
       join(dataDir, "config.json"),
       JSON.stringify({
-        config: { BB_LOG_LEVEL: "info" },
+        config: { MQH_LOG_LEVEL: "info" },
         serverUrl: "http://127.0.0.1:39999",
       }),
     );
@@ -553,7 +553,7 @@ describe("ServerMoveService own data dir guards", () => {
       await readJson(join(dataDir, "server-import-backup", "config.json")),
     ).toEqual(originalConfig);
     expect(await readJson(join(dataDir, "config.json"))).toEqual({
-      config: { BB_LOG_LEVEL: "info" },
+      config: { MQH_LOG_LEVEL: "info" },
       serverUrl: "https://bb.example.test",
       machineCredential: "bbcm_target",
     });
@@ -805,7 +805,7 @@ describe("ServerMoveService.deleteOldCopy", () => {
 describe("ServerMoveService.inspect and probe", () => {
   it("reports the target machine's server-move readiness", async () => {
     const fixture = await createFixture({
-      env: { BB_SERVER_MOVE_SERVICE_MANAGER: "none", BB_APP_VERSION: "1.2.3" },
+      env: { MQH_SERVER_MOVE_SERVICE_MANAGER: "none", MQH_APP_VERSION: "1.2.3" },
     });
     await writeFileWithDirs(join(fixture.homeDir, ".bb", "bb.db"), "12345");
     await writeFileWithDirs(join(fixture.homeDir, ".codex", "auth.json"), "{}");

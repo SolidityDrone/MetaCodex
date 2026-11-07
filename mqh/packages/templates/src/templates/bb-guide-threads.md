@@ -22,8 +22,8 @@ Thread commands are split across four chapters:
 
 Spawning:
 
-  bb thread spawn --project <id> --prompt "..." [options]
-  bb thread spawn --project <id> --prompt-file <path> [options]
+  mqh thread spawn --project <id> --prompt "..." [options]
+  mqh thread spawn --project <id> --prompt-file <path> [options]
 
     --prompt <prompt>              Initial prompt (one of --prompt or --prompt-file is required)
     --prompt-file <path>           Read the prompt from a file; `-` reads stdin. Use this for
@@ -32,7 +32,7 @@ Spawning:
     --title <title>                Thread title
     --project <id>                 Project (required; when omitted the error prints this thread's project ID to add)
     --parent-thread <id>           Parent thread (may be in another project)
-    --parent-self                  Parent to the current thread (BB_THREAD_ID)
+    --parent-self                  Parent to the current thread (MQH_THREAD_ID)
     --lifecycle-owner-thread <id>  Archive/delete with this owner
     --provider <id>                Provider override
     --model <model>                Model override
@@ -44,7 +44,7 @@ Spawning:
                                    --environment-provider takes its branch
                                    through --environment-inputs)
     --environment-provider <id>    Run on an environment provider by id (list them with
-                                   `bb environment providers`). The provider
+                                   `mqh environment providers`). The provider
                                    provisions where the thread runs; its steps show in the
                                    thread's workspace-setup block. Its `requires` names the
                                    facts it consumes: `host` takes --machine (the local
@@ -53,17 +53,17 @@ Spawning:
                                    commits; `gitRemote` needs a project remote;
                                    `projectless` serves only threads with no project.
     --environment-inputs <json>    JSON value for an --environment-provider that declares
-                                   inputs; `bb environment providers --json` prints each
+                                   inputs; `mqh environment providers --json` prints each
                                    provider's inputs as JSON Schema (null when it takes
                                    none). Omitted, it defaults to {} when the schema
                                    accepts an empty object and is otherwise required;
                                    refused when the provider declares no inputs
     --machine <id-or-name>         Run on a machine (--host is an alias)
     --service-tier <tier>          Service tier id the provider lists for the model, such as
-                                   default or fast (see `bb provider models`)
+                                   default or fast (see `mqh provider models`)
     --option <option=value>        Choose a value for an option the provider's model lists, applied
                                    before the first message; true or false for an on/off option
-                                   (repeatable; see `bb provider models`)
+                                   (repeatable; see `mqh provider models`)
     --permission-mode <mode>       Permission mode: accept-edits, auto, or full
     --plan                         Send the prompt as the provider's /plan action (plan first, execute after approval)
     --section <id>                 Create the thread in a section
@@ -101,10 +101,10 @@ Spawning:
   turn that only compacted the child's context (such as /compact) is not
   reported. stuck
   skips completed turns and keeps failures, interruptions, and blockers on an
-  approval or question; the child sends its results with `bb thread tell`, so
+  approval or question; the child sends its results with `mqh thread tell`, so
   say so in its prompt. off reports nothing. Under stuck and off, unassigning
-  the child does not notify the former parent either. `bb status` and
-  `bb thread show` print the value for a child thread.
+  the child does not notify the former parent either. `mqh status` and
+  `mqh thread show` print the value for a child thread.
   A machine selector accepts an exact ID or an unambiguous name. It works with
   an unmanaged --environment path, --new-environment worktree, or the personal
   workspace. It cannot be combined with an existing environment ID because that
@@ -124,20 +124,20 @@ Spawning:
   project's source when the primary host has none. A child of a live thread
   in the same project gets a worktree on its parent's machine; a child of an
   unmanaged non-Git folder reuses its parent's environment.
-  Before selecting a provider, run `bb environment providers --project <id>
+  Before selecting a provider, run `mqh environment providers --project <id>
   --machine <id-or-name>` to see whether it is available, needs setup, or is
   unavailable and why. The first-party providers are Project checkout,
   Worktree, and Personal workspace.
 
 Handoff:
   The app's Handoff to new thread (in the follow-up model picker) starts a new
-  thread that references the source. From the CLI, run bb thread spawn with
+  thread that references the source. From the CLI, run mqh thread spawn with
   --provider, --model, --environment and --prompt 'Continue from
   @thread:THREAD_ID ...'; SDK callers pass the same fields to threads.spawn.
 
 Forking:
 
-  bb thread fork <source-thread-id> [options]
+  mqh thread fork <source-thread-id> [options]
 
     --prompt <prompt>              Optional first prompt; omit for an idle fork
     --prompt-file <path>           Read the first prompt from a file; `-` reads stdin
@@ -171,15 +171,15 @@ Forking:
 
 Editing a sent message:
 
-  bb thread edit-message <id> --message "Replacement text"
+  mqh thread edit-message <id> --message "Replacement text"
     --message-file <path>               Read the replacement from a file; `-` reads stdin
-    --self                              Target the current thread (BB_THREAD_ID)
+    --self                              Target the current thread (MQH_THREAD_ID)
     --expected-request-sequence <seq>   Select the message and reject a stale target
 
   Without --expected-request-sequence, the latest eligible message is edited.
   Codex, Claude Code, and Pi threads are supported, including failed and
   incomplete turns; grouped multi-message requests are not editable.
-  `canEditMessages` on `bb thread show --json` reports whether the thread's
+  `canEditMessages` on `mqh thread show --json` reports whether the thread's
   provider and archive state allow edits. The
   original conversation remains unchanged until the provider prepares the
   replacement history. If the thread is running,
@@ -192,9 +192,9 @@ Editing a sent message:
   replacement turn when their waits clear. An already-sending queued message
   must finish before the edit can start. Retries of turns replaced by the edit
   are removed from the queue. From an agent thread, the command
-  carries `BB_THREAD_ID` so the replacement runs under agent permission policy.
+  carries `MQH_THREAD_ID` so the replacement runs under agent permission policy.
   An edit is refused if removing its history would erase ownership evidence
-  shared with another thread. Use bb thread clear <id> to start a new session
+  shared with another thread. Use mqh thread clear <id> to start a new session
   while keeping the history and its ownership evidence.
 
 Lifecycle ownership:

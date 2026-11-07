@@ -15,7 +15,7 @@ import {
   isIgnoredPluginDevPath,
   type PluginBuildToolchain,
 } from "@bb/plugin-build";
-import { validatePluginArtifactMeta } from "./app-bundle.js";
+import { validatePluginArtifactMeta } from "./plugin-assets.js";
 
 const hostBuildRecordSchema = z.object({
   rootDir: z.string(),
@@ -31,7 +31,7 @@ function hostBuildRecordPath(dataDir: string, pluginId: string): string {
 
 export async function isMutableArtifactStale(
   rootDir: string,
-  artifact: "app" | "host",
+  artifact: "host",
 ): Promise<boolean> {
   let artifactMtimeMs: number;
   try {

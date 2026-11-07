@@ -74,8 +74,8 @@ describe("checkpoint identity through runtime, ingestion, and editing", () => {
           runtime: {
             workspacePath: harness.config.dataDir,
             env: {
-              BB_CODEX_BRIDGE_APP_SERVER_COMMAND: process.execPath,
-              BB_CODEX_BRIDGE_APP_SERVER_ARGS: JSON.stringify([appServerPath]),
+              MQH_CODEX_BRIDGE_APP_SERVER_COMMAND: process.execPath,
+              MQH_CODEX_BRIDGE_APP_SERVER_ARGS: JSON.stringify([appServerPath]),
             },
             onEvent: (event) => events.push(event),
           },

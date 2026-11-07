@@ -176,20 +176,11 @@ export const pluginScheduleEntrySchema = z.object({
   lastError: z.string().nullable(),
 });
 
-export const pluginAppStateSchema = z.object({
-  hasApp: z.boolean(),
-  bundle: z
-    .object({
-      jsUrl: z.string(),
-      cssUrl: z.string().nullable(),
-      jsBytes: z.number().int().nonnegative(),
-      hash: z.string(),
-      sdkMajor: z.number(),
-      sdkVersion: z.string(),
-      compatible: z.boolean(),
-      runtimeSlots: z.array(z.string()),
-    })
-    .nullable(),
+// MQH: plugins have no web app. A plugin that declares `bb.spatial` gets panels in the headset: the
+// Unity client fetches the document at `url` (GET /api/v1/plugins/:id/spatial) and renders it.
+export const pluginSpatialStateSchema = z.object({
+  hasSpatial: z.boolean(),
+  url: z.string().nullable(),
 });
 
 export const pluginCapabilitySchema = z.object({
@@ -242,7 +233,7 @@ export const installedPluginSchema = z.object({
   cliCommand: z.object({ name: z.string(), summary: z.string() }).nullable(),
   capabilities: pluginCapabilitySummarySchema.default([]),
   hasSettings: z.boolean(),
-  app: pluginAppStateSchema,
+  spatial: pluginSpatialStateSchema,
   logoUrl: z.string().nullable(),
   logoDarkUrl: z.string().nullable(),
   providerIds: z.array(z.string()),

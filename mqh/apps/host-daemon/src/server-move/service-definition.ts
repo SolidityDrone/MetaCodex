@@ -7,7 +7,7 @@ import {
   writeFileAtomically,
 } from "./fs.js";
 
-export const SERVER_MOVE_SERVICE_MANAGER_ENV = "BB_SERVER_MOVE_SERVICE_MANAGER";
+export const SERVER_MOVE_SERVICE_MANAGER_ENV = "MQH_SERVER_MOVE_SERVICE_MANAGER";
 
 const LAUNCHD_PLIST_PREFIX = "app.getbb.host-daemon.";
 const LAUNCHD_PLIST_SUFFIX = ".plist";
@@ -138,7 +138,7 @@ export async function findServiceDefinition(
       candidate.manager === "launchd"
         ? parseLaunchdPlist(content)
         : parseSystemdUnit(content, basename(candidate.path));
-    const definitionDataDir = parsed?.environment.BB_DATA_DIR;
+    const definitionDataDir = parsed?.environment.MQH_DATA_DIR;
     if (
       parsed === null ||
       definitionDataDir === undefined ||

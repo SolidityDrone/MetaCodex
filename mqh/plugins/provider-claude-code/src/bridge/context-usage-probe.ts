@@ -3,7 +3,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import type { DynamicTool } from "@get-bb/plugin-sdk/provider-bridge";
 import type { SdkSessionOptions } from "./sdk-session.js";
 import { buildBridgeMcpServer } from "./tool-proxy-mcp.js";
-import { BB_BRIDGE_MCP_SERVER_NAME } from "../tool-classification.js";
+import { MQH_BRIDGE_MCP_SERVER_NAME } from "../tool-classification.js";
 
 async function* promptWithoutMessages(
   signal: AbortSignal,
@@ -54,7 +54,7 @@ export async function readIsolatedClaudeContextUsage(args: {
       ...(args.dynamicTools.length > 0
         ? {
             mcpServers: {
-              [BB_BRIDGE_MCP_SERVER_NAME]: buildBridgeMcpServer(
+              [MQH_BRIDGE_MCP_SERVER_NAME]: buildBridgeMcpServer(
                 args.dynamicTools,
                 async () => ({
                   content: "Context reporting cannot execute tools.",
@@ -77,7 +77,7 @@ export async function readIsolatedClaudeContextUsage(args: {
     await session.initializationResult();
     while (args.dynamicTools.length > 0) {
       const server = (await session.mcpServerStatus()).find(
-        (server) => server.name === BB_BRIDGE_MCP_SERVER_NAME,
+        (server) => server.name === MQH_BRIDGE_MCP_SERVER_NAME,
       );
       if (server?.status === "connected") break;
       if (server && server.status !== "pending") return null;

@@ -5,9 +5,9 @@ import {
   type EnvLoaderArgs,
 } from "./env.js";
 import {
-  BB_FF_PLACEHOLDER_ENV,
-  BB_FF_TIMELINE_WINDOW_EVENT_BUDGET_ENV,
-  BB_FF_INITIATOR_TELEMETRY_ENV,
+  MQH_FF_PLACEHOLDER_ENV,
+  MQH_FF_TIMELINE_WINDOW_EVENT_BUDGET_ENV,
+  MQH_FF_INITIATOR_TELEMETRY_ENV,
   DEFAULT_BB_FF_PLACEHOLDER,
   DEFAULT_BB_FF_TIMELINE_WINDOW_EVENT_BUDGET,
   DEFAULT_BB_FF_INITIATOR_TELEMETRY,
@@ -23,19 +23,19 @@ export function loadFeatureFlags(
     placeholder: readEnvVarWithDefault({
       context: loader.context,
       defaultValue: DEFAULT_BB_FF_PLACEHOLDER,
-      definition: BB_FF_PLACEHOLDER_ENV,
+      definition: MQH_FF_PLACEHOLDER_ENV,
       env: loader.env,
     }),
     initiatorTelemetry: readEnvVarWithDefault({
       context: loader.context,
       defaultValue: DEFAULT_BB_FF_INITIATOR_TELEMETRY,
-      definition: BB_FF_INITIATOR_TELEMETRY_ENV,
+      definition: MQH_FF_INITIATOR_TELEMETRY_ENV,
       env: loader.env,
     }),
     timelineWindowEventBudget: readEnvVarWithDefault({
       context: loader.context,
       defaultValue: DEFAULT_BB_FF_TIMELINE_WINDOW_EVENT_BUDGET,
-      definition: BB_FF_TIMELINE_WINDOW_EVENT_BUDGET_ENV,
+      definition: MQH_FF_TIMELINE_WINDOW_EVENT_BUDGET_ENV,
       env: loader.env,
     }),
   };

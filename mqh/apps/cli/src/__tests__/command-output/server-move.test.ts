@@ -142,8 +142,8 @@ function recovering(): ServerMoveStatus {
 const RECOVERY_GUIDANCE = [
   "bb couldn't confirm that desktop took over (desktop disconnected before confirming).",
   "This server stays up but read-only, and bb finishes the move on its own as soon as desktop answers.",
-  "If desktop isn't running the server, run bb server move cancel --yes to abandon the move and keep the server here.",
-  "If this server stops, run bb server unlock on this computer.",
+  "If desktop isn't running the server, run mqh server move cancel --yes to abandon the move and keep the server here.",
+  "If this server stops, run mqh server unlock on this computer.",
 ];
 
 function statusResponse(
@@ -160,7 +160,7 @@ function errorResponse(status: number, body: object): Response {
   });
 }
 
-describe("bb server move", () => {
+describe("mqh server move", () => {
   setupCommandOutputTestEnvironment();
 
   const register: CommandRegistrar = (program) =>
@@ -188,7 +188,7 @@ describe("bb server move", () => {
     });
     expect(startMove).not.toHaveBeenCalled();
     expect(collectLogPayloads(vi.mocked(console.log))).toEqual([
-      "Moving the bb server to desktop (bb connect)",
+      "Moving the mqh server to desktop (bb connect)",
       "Target data directory: /home/me/.bb-machines/laptop",
       "",
       "Warnings",
@@ -267,7 +267,7 @@ describe("bb server move", () => {
 
     expect(startMove).not.toHaveBeenCalled();
     expect(collectLogPayloads(vi.mocked(console.error))).toEqual([
-      "Error: This bb server uses a direct address, so the new server needs one too. Re-run with --address <url>: the URL every machine and app will use to reach bb on desktop, such as a Tailscale Serve URL.",
+      "Error: This mqh server uses a direct address, so the new server needs one too. Re-run with --address <url>: the URL every machine and app will use to reach bb on desktop, such as a Tailscale Serve URL.",
     ]);
   });
 
@@ -292,7 +292,7 @@ describe("bb server move", () => {
 
     expect(startMove).not.toHaveBeenCalled();
     expect(collectLogPayloads(vi.mocked(console.error))).toEqual([
-      "Error: desktop already has bb server data at /home/me/.bb (5.0 MB). Re-run with --archive-existing-data to move it aside to a .before-move-<date> directory; it is never merged.",
+      "Error: desktop already has mqh server data at /home/me/.bb (5.0 MB). Re-run with --archive-existing-data to move it aside to a .before-move-<date> directory; it is never merged.",
     ]);
   });
 
@@ -384,7 +384,7 @@ describe("bb server move", () => {
     );
 
     expect(readlineMocks.question).toHaveBeenCalledWith(
-      "Stop all running work and move the bb server to desktop? [y/N] ",
+      "Stop all running work and move the mqh server to desktop? [y/N] ",
     );
     expect(startMove).toHaveBeenCalledWith({
       json: {
@@ -522,7 +522,7 @@ describe("bb server move", () => {
       "v1.server.move.$get": vi.fn(async () =>
         errorResponse(410, {
           code: "server_moved",
-          message: "This bb server moved to desktop",
+          message: "This mqh server moved to desktop",
           details: {
             serverUrl: "https://me.getbb.app",
             toHostName: "desktop",
@@ -628,7 +628,7 @@ describe("bb server move", () => {
     ).rejects.toThrow("process.exit:1");
 
     expect(collectLogPayloads(vi.mocked(console.error)).at(-1)).toBe(
-      "Error: The bb server no longer reports this move. A server restart before the switch abandons the move and keeps the server where it was.",
+      "Error: The mqh server no longer reports this move. A server restart before the switch abandons the move and keeps the server where it was.",
     );
   });
 
@@ -649,7 +649,7 @@ describe("bb server move", () => {
 
     expect(getStatus).toHaveBeenCalledTimes(5);
     expect(collectLogPayloads(vi.mocked(console.error)).at(-1)).toBe(
-      "Error: Lost contact with the bb server before the switch (socket hang up). Run bb server move status once it answers again.",
+      "Error: Lost contact with the mqh server before the switch (socket hang up). Run mqh server move status once it answers again.",
     );
   });
 
@@ -694,7 +694,7 @@ describe("bb server move", () => {
           errorResponse(403, {
             code: "server_move_experiment_disabled",
             message:
-              'Moving the server is off. Turn on the "Server move" experiment in Settings → Experiments, or run bb settings experiment serverMove true, then try again.',
+              'Moving the server is off. Turn on the "Server move" experiment in Settings → Experiments, or run mqh settings experiment serverMove true, then try again.',
           }),
         ),
         "v1.server.move.$post": startMove,
@@ -709,7 +709,7 @@ describe("bb server move", () => {
 
       expect(startMove).not.toHaveBeenCalled();
       const message =
-        'Moving the server is off. Turn on the "Server move" experiment in Settings → Experiments, or run bb settings experiment serverMove true, then try again.';
+        'Moving the server is off. Turn on the "Server move" experiment in Settings → Experiments, or run mqh settings experiment serverMove true, then try again.';
       expect(
         collectLogPayloads(vi.mocked(console.log)).map((payload) =>
           JSON.parse(payload),
@@ -737,7 +737,7 @@ describe("bb server move", () => {
   });
 });
 
-describe("bb server move status and cancel", () => {
+describe("mqh server move status and cancel", () => {
   setupCommandOutputTestEnvironment();
 
   const register: CommandRegistrar = (program) =>
@@ -761,13 +761,13 @@ describe("bb server move status and cancel", () => {
     await runCommand(["server", "move", "status"], register);
 
     const payloads = collectLogPayloads(vi.mocked(console.log));
-    expect(payloads[0]).toBe("Moving the bb server to desktop (preparing)");
+    expect(payloads[0]).toBe("Moving the mqh server to desktop (preparing)");
     expect(payloads).toContain("  done     Stop running work");
     expect(payloads).toContain(
       "  running  Export server data: Snapshotting bb.db",
     );
     expect(payloads).toContain("  pending  Switch machines over");
-    expect(payloads.at(-1)).toBe("Cancel it with bb server move cancel.");
+    expect(payloads.at(-1)).toBe("Cancel it with mqh server move cancel.");
   });
 
   it("status --json passes the subcommand's own flag through to JSON output", async () => {
@@ -814,13 +814,13 @@ describe("bb server move status and cancel", () => {
 
     const payloads = collectLogPayloads(vi.mocked(console.log));
     expect(payloads[0]).toBe(
-      "Moving the bb server to desktop (recovery required)",
+      "Moving the mqh server to desktop (recovery required)",
     );
     expect(payloads).toContain(
       "  running  Switch machines over: Waiting for desktop to confirm it took over",
     );
     expect(payloads.slice(-4)).toEqual(RECOVERY_GUIDANCE);
-    expect(payloads).not.toContain("Cancel it with bb server move cancel.");
+    expect(payloads).not.toContain("Cancel it with mqh server move cancel.");
     expect(collectLogPayloads(vi.mocked(console.error))).toEqual([
       "Error: The move to desktop wasn't confirmed and needs recovery.",
     ]);

@@ -792,13 +792,13 @@ function assertCliCommandChangeAllowed(
     throw new ApiError(
       403,
       "forbidden",
-      "Machine credentials cannot change the bb command on the bb server's computer",
+      "Machine credentials cannot change the bb command on the mqh server's computer",
     );
   }
 }
 
 const UPDATE_WHEN_IDLE_EXPERIMENT_DISABLED_MESSAGE =
-  'Updating when idle is off. Turn on the "Update when idle" experiment in Settings → Experiments, or run bb settings experiment updateWhenIdle true, then try again.';
+  'Updating when idle is off. Turn on the "Update when idle" experiment in Settings → Experiments, or run mqh settings experiment updateWhenIdle true, then try again.';
 
 function assertUpdateWhenIdleEnabled(db: ServerAppDeps["db"]): void {
   if (!getExperiments(db).updateWhenIdle) {
@@ -817,7 +817,7 @@ function assertAppUpdateAllowed(
     throw new ApiError(
       403,
       "forbidden",
-      "Machine credentials cannot update the bb server",
+      "Machine credentials cannot update the mqh server",
     );
   }
 }

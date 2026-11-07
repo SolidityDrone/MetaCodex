@@ -6,7 +6,7 @@ description: "Read, edit, or save documents in BB Docs vaults, including documen
 # Docs
 
 Docs is the user's filesystem-first document library. Documents can live on
-the server machine or another connected host, but the `bb docs` command
+the server machine or another connected host, but the `mqh docs` command
 handles that routing through named vaults.
 
 ## Access documents
@@ -14,13 +14,13 @@ handles that routing through named vaults.
 Start with the smallest useful lookup:
 
 ```sh
-bb docs vaults --json
-bb docs list --vault <vault-id> --json
-bb docs read <path> --vault <vault-id>
+mqh docs vaults --json
+mqh docs list --vault <vault-id> --json
+mqh docs read <path> --vault <vault-id>
 ```
 
 Use the path and vault exactly as returned. Paths are relative to the vault;
-do not guess an absolute host path or inspect the vault outside `bb docs`.
+do not guess an absolute host path or inspect the vault outside `mqh docs`.
 
 ## Docs @-mentions
 
@@ -41,23 +41,23 @@ Docs is a good destination for durable plans, specifications, write-ups, and
 HTML artifacts the user should be able to reopen.
 
 ```sh
-bb docs pull plans/release-plan.md --vault personal --into ./docs-work
+mqh docs pull plans/release-plan.md --vault personal --into ./docs-work
 # Edit ./docs-work/plans/release-plan.md with normal file tools.
-bb docs status ./docs-work --diff
-bb docs push ./docs-work
+mqh docs status ./docs-work --diff
+mqh docs push ./docs-work
 ```
 
-`bb docs status` exits 0 when no changes exist. It exits 4 when it finds
+`mqh docs status` exits 0 when no changes exist. It exits 4 when it finds
 changes that the output describes. Exit 4 is a successful status result.
-Review that output, then run `bb docs push` as a separate command. Do not
+Review that output, then run `mqh docs push` as a separate command. Do not
 connect the status and push commands with `&&`.
 
 Pull a folder subtree with `--folder`, or the whole selected vault with
 `--all`:
 
 ```sh
-bb docs pull plans --folder --vault personal --into ./docs-work
-bb docs pull --all --vault personal --into ./docs-work
+mqh docs pull plans --folder --vault personal --into ./docs-work
+mqh docs pull --all --vault personal --into ./docs-work
 ```
 
 Always edit the pulled files with ordinary workspace tools, then run `status`
@@ -79,7 +79,7 @@ The direct `write`, `mkdir`, `move`, and `remove` commands are deprecated. Do
 not use them for agent edits; they remain temporarily available only for
 backward compatibility.
 
-Run `bb docs --help` for the command list and `bb docs <command> --help` for a
+Run `mqh docs --help` for the command list and `mqh docs <command> --help` for a
 command's arguments, options, and rules. Each command accepts only the options
 its help lists; an unknown command, unknown option, or stray argument exits 2
 before touching a vault, and with `--json` the failure also prints
@@ -111,9 +111,9 @@ current file and proposal first, write the complete candidate into a workspace
 Markdown file, then run:
 
 ```sh
-bb docs read letter.md --vault personal --json
-bb docs proposal letter.md --vault personal --json
-bb docs propose letter.md --vault personal --file ./candidate.md --expected-sha256 HASH --version N --json
+mqh docs read letter.md --vault personal --json
+mqh docs proposal letter.md --vault personal --json
+mqh docs propose letter.md --vault personal --file ./candidate.md --expected-sha256 HASH --version N --json
 ```
 
 Use `--version none` only when `proposal` returned null. Otherwise pass its exact
@@ -128,8 +128,8 @@ candidate, or ask for further changes. Do not run `accept` on the user's behalf
 unless explicitly asked.
 
 ```sh
-bb docs proposal-update <path> --content <markdown> --version N [--vault <id>] [--json]
-bb docs accept|reject|undo|redo <path> --version N [--vault <id>] [--json]
+mqh docs proposal-update <path> --content <markdown> --version N [--vault <id>] [--json]
+mqh docs accept|reject|undo|redo <path> --version N [--vault <id>] [--json]
 ```
 
 `proposal-update` replaces only the pending candidate. The resolution commands

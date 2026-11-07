@@ -200,8 +200,8 @@ function statusSummary(page: WorkflowRunInspectionPage) {
     finishedAt: run.finishedAt,
     history: {
       format: "jsonl",
-      pageUsage: `bb workflows history ${run.id} --cursor 0 --limit ${DEFAULT_HISTORY_LIMIT}`,
-      fileUsage: `mkdir -p "$BB_THREAD_STORAGE/workflows" && bb workflows history ${run.id} --cursor 0 --limit ${DEFAULT_HISTORY_LIMIT} > "$BB_THREAD_STORAGE/workflows/${run.id}.jsonl"`,
+      pageUsage: `mqh workflows history ${run.id} --cursor 0 --limit ${DEFAULT_HISTORY_LIMIT}`,
+      fileUsage: `mkdir -p "$MQH_THREAD_STORAGE/workflows" && mqh workflows history ${run.id} --cursor 0 --limit ${DEFAULT_HISTORY_LIMIT} > "$MQH_THREAD_STORAGE/workflows/${run.id}.jsonl"`,
     },
   };
 }
@@ -283,7 +283,7 @@ const JSON_OPTION_DESCRIPTION =
   "Report failures as a JSON envelope on stdout; command output is always JSON";
 const RUN_ID_POSITIONAL = {
   name: "run-id",
-  description: "Workflow run ID returned by bb workflows run",
+  description: "Workflow run ID returned by mqh workflows run",
   required: true,
 } as const;
 const SOURCE_OPTIONS = {

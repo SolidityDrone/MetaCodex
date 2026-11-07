@@ -72,7 +72,7 @@ type ApiHandler = Parameters<typeof stubServerApi>[0][string];
 
 const MACHINE_TARGET = ["--machine", "laptop", "--cwd", "/srv/app"];
 
-describe("bb terminal run and wait command output", () => {
+describe("mqh terminal run and wait command output", () => {
   setupCommandOutputTestEnvironment();
 
   afterEach(() => {
@@ -202,7 +202,7 @@ describe("bb terminal run and wait command output", () => {
 
       expect(write).toHaveBeenCalledWith("Building...\n");
       expect(collectLogLines(vi.mocked(console.error))).toEqual([
-        "Terminal term-1 is still running. Continue with `bb terminal wait term-1 --since-seq 4`, or stop it with `bb terminal close term-1`.",
+        "Terminal term-1 is still running. Continue with `mqh terminal wait term-1 --since-seq 4`, or stop it with `mqh terminal close term-1`.",
       ]);
       expect(process.exitCode).toBe(124);
     });
@@ -234,7 +234,7 @@ describe("bb terminal run and wait command output", () => {
       );
 
       expect(collectLogLines(vi.mocked(console.error))).toEqual([
-        "Terminal term-1 printed the expected output and is still running. Stop it with `bb terminal close term-1`.",
+        "Terminal term-1 printed the expected output and is still running. Stop it with `mqh terminal close term-1`.",
       ]);
       expect(process.exitCode).toBe(0);
     });
@@ -438,7 +438,7 @@ describe("bb terminal run and wait command output", () => {
           code: "terminal_id_conflict",
           message:
             "Terminal term_abcdefghij already exists, so the command was not run again.",
-          hint: "Observe the earlier run with `bb terminal wait term_abcdefghij`.",
+          hint: "Observe the earlier run with `mqh terminal wait term_abcdefghij`.",
         },
       });
     });
@@ -473,7 +473,7 @@ describe("bb terminal run and wait command output", () => {
 
       expect(collectLogLines(vi.mocked(console.error))).toEqual([
         "Error: Terminal term-1 lost its connection to its machine, but its output is unavailable: Terminal output is unavailable because the session is not running",
-        "Continue with `bb terminal wait term-1` once its machine reconnects.",
+        "Continue with `mqh terminal wait term-1` once its machine reconnects.",
       ]);
     });
 
@@ -807,7 +807,7 @@ describe("bb terminal run and wait command output", () => {
 
       expect(collectLogLines(vi.mocked(console.error))).toEqual([
         "Error: Terminal term-1 exited with code 0 before this wait started, so no new output will arrive.",
-        "Match its existing output with --from-start, or read it with `bb terminal output term-1`.",
+        "Match its existing output with --from-start, or read it with `mqh terminal output term-1`.",
       ]);
     });
 
@@ -835,7 +835,7 @@ describe("bb terminal run and wait command output", () => {
       );
 
       expect(collectLogLines(vi.mocked(console.error))).toEqual([
-        "Terminal term-1 is still running. Continue with `bb terminal wait term-1 --since-seq 7 --contains 'ready on'`, or stop it with `bb terminal close term-1`.",
+        "Terminal term-1 is still running. Continue with `mqh terminal wait term-1 --since-seq 7 --contains 'ready on'`, or stop it with `mqh terminal close term-1`.",
       ]);
       expect(process.exitCode).toBe(124);
     });

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  BB_CLI_REEXEC_ENV,
+  MQH_CLI_REEXEC_ENV,
   maybeReexecViaBbCli,
   resolveBbCliLaunch,
 } from "../bb-cli-reexec.js";
@@ -27,7 +27,7 @@ describe("maybeReexecViaBbCli", () => {
     return path;
   }
 
-  it("no-ops when BB_CLI is unset", () => {
+  it("no-ops when MQH_CLI is unset", () => {
     const reexec = vi.fn();
     maybeReexecViaBbCli({
       env: {},
@@ -37,11 +37,11 @@ describe("maybeReexecViaBbCli", () => {
     expect(reexec).not.toHaveBeenCalled();
   });
 
-  it("no-ops when BB_CLI equals the current executable", async () => {
+  it("no-ops when MQH_CLI equals the current executable", async () => {
     const path = await writeExecutable("bb");
     const reexec = vi.fn();
     maybeReexecViaBbCli({
-      env: { BB_CLI: path },
+      env: { MQH_CLI: path },
       currentExecutablePath: path,
       reexec,
     });
@@ -53,19 +53,19 @@ describe("maybeReexecViaBbCli", () => {
     const target = await writeExecutable("target");
     const reexec = vi.fn();
     maybeReexecViaBbCli({
-      env: { BB_CLI: target, [BB_CLI_REEXEC_ENV]: "1" },
+      env: { MQH_CLI: target, [MQH_CLI_REEXEC_ENV]: "1" },
       currentExecutablePath: current,
       reexec,
     });
     expect(reexec).not.toHaveBeenCalled();
   });
 
-  it("re-execs to BB_CLI when it differs from the current entry", async () => {
+  it("re-execs to MQH_CLI when it differs from the current entry", async () => {
     const current = await writeExecutable("current");
     const target = await writeExecutable("target");
     const reexec = vi.fn();
     maybeReexecViaBbCli({
-      env: { BB_CLI: target, BB_SERVER_URL: "http://127.0.0.1:1" },
+      env: { MQH_CLI: target, MQH_SERVER_URL: "http://127.0.0.1:1" },
       currentExecutablePath: current,
       argv: ["status", "--json"],
       reexec,
@@ -75,18 +75,18 @@ describe("maybeReexecViaBbCli", () => {
       target: realpathSync(target),
       argv: ["status", "--json"],
       env: expect.objectContaining({
-        BB_CLI: target,
-        BB_SERVER_URL: "http://127.0.0.1:1",
-        [BB_CLI_REEXEC_ENV]: "1",
+        MQH_CLI: target,
+        MQH_SERVER_URL: "http://127.0.0.1:1",
+        [MQH_CLI_REEXEC_ENV]: "1",
       }),
     });
   });
 
-  it("no-ops when BB_CLI path is missing", async () => {
+  it("no-ops when MQH_CLI path is missing", async () => {
     const current = await writeExecutable("current");
     const reexec = vi.fn();
     maybeReexecViaBbCli({
-      env: { BB_CLI: join(tempRoot, "does-not-exist") },
+      env: { MQH_CLI: join(tempRoot, "does-not-exist") },
       currentExecutablePath: current,
       reexec,
     });
@@ -95,7 +95,7 @@ describe("maybeReexecViaBbCli", () => {
 });
 
 describe("resolveBbCliLaunch", () => {
-  it("runs an extensionless BB_CLI script through Node on Windows", () => {
+  it("runs an extensionless MQH_CLI script through Node on Windows", () => {
     expect(
       resolveBbCliLaunch({
         argv: ["status"],
@@ -109,7 +109,7 @@ describe("resolveBbCliLaunch", () => {
     });
   });
 
-  it("executes BB_CLI directly when the platform can run it", () => {
+  it("executes MQH_CLI directly when the platform can run it", () => {
     expect(
       resolveBbCliLaunch({
         argv: ["status"],

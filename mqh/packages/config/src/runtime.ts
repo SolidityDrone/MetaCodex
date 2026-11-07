@@ -78,12 +78,12 @@ interface ResolvePortFromEnvArgs {
   name: string;
 }
 
-const BB_PROD_DATA_DIR_NAME = ".mqh";
-const BB_DEV_DATA_ROOT_DIR = ".mqh-dev";
-export const BB_PROD_SERVER_PORT = 38990;
-export const BB_PROD_HOST_DAEMON_PORT = 38991;
-export const BB_LOOPBACK_HOST = "127.0.0.1";
-const BB_SQLITE_DATABASE_FILE_NAME = "mqh.db";
+const MQH_PROD_DATA_DIR_NAME = ".mqh";
+const MQH_DEV_DATA_ROOT_DIR = ".mqh-dev";
+export const MQH_PROD_SERVER_PORT = 38990;
+export const MQH_PROD_HOST_DAEMON_PORT = 38991;
+export const MQH_LOOPBACK_HOST = "127.0.0.1";
+const MQH_SQLITE_DATABASE_FILE_NAME = "mqh.db";
 
 const DEV_HASH_LENGTH = 12;
 const DEV_PORT_BUCKETS = 8_000;
@@ -93,9 +93,9 @@ const DEV_HOST_DAEMON_PORT_BASE = 27_000;
 const DEV_CLOUD_PORT_BASE = 35_000;
 const DEV_CLOUD_WORKER_PORT_BASE = 43_000;
 const THREAD_CONTEXT_ENV_KEYS: readonly string[] = [
-  "BB_ENVIRONMENT_ID",
-  "BB_THREAD_ID",
-  "BB_THREAD_STORAGE",
+  "MQH_ENVIRONMENT_ID",
+  "MQH_THREAD_ID",
+  "MQH_THREAD_STORAGE",
 ];
 
 const MANAGED_WORKTREE_DIR_NAME = "worktrees";
@@ -139,8 +139,8 @@ function resolvePortOffset(repoRootPath: string): number {
 }
 
 function reservePackagedAppPorts(port: number): number {
-  if (port === BB_PROD_SERVER_PORT) return 59_000;
-  if (port === BB_PROD_HOST_DAEMON_PORT) return 59_001;
+  if (port === MQH_PROD_SERVER_PORT) return 59_000;
+  if (port === MQH_PROD_HOST_DAEMON_PORT) return 59_001;
   return port;
 }
 
@@ -177,13 +177,13 @@ export function resolveRuntimeMode(
 }
 
 export function resolveProdDataDir(args: ResolveProdDataDirArgs): string {
-  return join(args.homeDir, BB_PROD_DATA_DIR_NAME);
+  return join(args.homeDir, MQH_PROD_DATA_DIR_NAME);
 }
 
 export function parseDataDirEnvValue(args: ParseDataDirEnvValueArgs): string {
   const trimmedDataDir = args.rawDataDir.trim();
   if (trimmedDataDir.length === 0) {
-    throw new Error("BB_DATA_DIR must not be empty");
+    throw new Error("MQH_DATA_DIR must not be empty");
   }
 
   return expandHomeDirectory(trimmedDataDir, args.homeDir);
@@ -192,7 +192,7 @@ export function parseDataDirEnvValue(args: ParseDataDirEnvValueArgs): string {
 export function resolveConfiguredDataDir(
   args: ResolveConfiguredDataDirArgs,
 ): string {
-  const rawDataDir = args.env.BB_DATA_DIR;
+  const rawDataDir = args.env.MQH_DATA_DIR;
   if (rawDataDir === undefined) {
     return args.defaultDataDir;
   }
@@ -207,9 +207,9 @@ export function resolveDevInstanceConfig(
   args: ResolveDevInstanceConfigArgs,
 ): DevInstanceConfig {
   const instanceId = resolveInstanceId(args);
-  const dataDir = join(args.homeDir, BB_DEV_DATA_ROOT_DIR, instanceId);
+  const dataDir = join(args.homeDir, MQH_DEV_DATA_ROOT_DIR, instanceId);
   const ports = resolvePorts(args.repoRoot);
-  const serverUrl = `http://${BB_LOOPBACK_HOST}:${ports.serverPort}`;
+  const serverUrl = `http://${MQH_LOOPBACK_HOST}:${ports.serverPort}`;
   return {
     dataDir,
     homeDir: args.homeDir,
@@ -248,10 +248,10 @@ export function resolveInheritedDevSkillsRootPaths(
 }
 
 export function resolveRuntimeDataDir(args: ResolveRuntimeDataDirArgs): string {
-  if (args.env.BB_DATA_DIR !== undefined) {
+  if (args.env.MQH_DATA_DIR !== undefined) {
     return parseDataDirEnvValue({
       homeDir: args.homeDir,
-      rawDataDir: args.env.BB_DATA_DIR,
+      rawDataDir: args.env.MQH_DATA_DIR,
     });
   }
 
@@ -260,7 +260,7 @@ export function resolveRuntimeDataDir(args: ResolveRuntimeDataDirArgs): string {
   }
 
   if (args.repoRoot === undefined) {
-    throw new Error("repoRoot is required to resolve development BB_DATA_DIR");
+    throw new Error("repoRoot is required to resolve development MQH_DATA_DIR");
   }
 
   return resolveDevInstanceConfig({
@@ -272,7 +272,7 @@ export function resolveRuntimeDataDir(args: ResolveRuntimeDataDirArgs): string {
 export function resolveDataDirDatabasePath(
   args: ResolveDataDirDatabasePathArgs,
 ): string {
-  return join(args.dataDir, BB_SQLITE_DATABASE_FILE_NAME);
+  return join(args.dataDir, MQH_SQLITE_DATABASE_FILE_NAME);
 }
 
 export function parsePortValue(args: ParsePortValueArgs): number {
@@ -325,13 +325,13 @@ export function toDevProcessEnv(args: DevProcessEnvArgs): NodeJS.ProcessEnv {
   });
   return {
     ...env,
-    BB_DATA_DIR: args.config.dataDir,
-    BB_DEV_APP_PORT: String(args.config.ports.appPort),
-    BB_DEV_CONNECT_BASE_URL: `http://bb.localhost:${args.config.ports.cloudPort}`,
-    BB_HOST_DAEMON_PORT: String(args.config.ports.hostDaemonPort),
-    BB_INHERITED_SKILLS_ROOTS: inheritedSkillsRootPaths.join(delimiter),
-    BB_SERVER_PORT: String(args.config.ports.serverPort),
-    BB_SERVER_URL: args.config.serverUrl,
+    MQH_DATA_DIR: args.config.dataDir,
+    MQH_DEV_APP_PORT: String(args.config.ports.appPort),
+    MQH_DEV_CONNECT_BASE_URL: `http://bb.localhost:${args.config.ports.cloudPort}`,
+    MQH_HOST_DAEMON_PORT: String(args.config.ports.hostDaemonPort),
+    MQH_INHERITED_SKILLS_ROOTS: inheritedSkillsRootPaths.join(delimiter),
+    MQH_SERVER_PORT: String(args.config.ports.serverPort),
+    MQH_SERVER_URL: args.config.serverUrl,
     NODE_ENV: "development",
   };
 }

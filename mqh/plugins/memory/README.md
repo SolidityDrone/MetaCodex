@@ -13,7 +13,7 @@ Code, and bb.
 - global and current-project memory scopes;
 - an automatically injected, 3,900-character summary catalog through
   `bb.agents.contributeInstructions`;
-- CLI-only agent access through `bb memory` (no native agent tools);
+- CLI-only agent access through `mqh memory` (no native agent tools);
 - FTS5 search followed by full-record reads;
 - explicit provenance, tags, kinds, importance, pinning, and version history;
 - optimistic update/forget operations and soft deletion;
@@ -27,14 +27,14 @@ Code, and bb.
 Install Memory from the BB Official catalog:
 
 ```bash
-bb plugin install memory
-bb plugin list
+mqh plugin install memory
+mqh plugin list
 ```
 
 ## Try it
 
 ```bash
-bb memory add \
+mqh memory add \
   --scope project \
   --name turbo-validation \
   --summary "Use Turbo for builds and typechecks" \
@@ -46,8 +46,8 @@ bb memory add \
   --reason "Durable repository validation convention" \
   --json
 
-bb memory search "Turbo typecheck" --scope all --json
-bb memory get <id> --scope all --json
+mqh memory search "Turbo typecheck" --scope all --json
+mqh memory get <id> --scope all --json
 ```
 
 Project writes take the invoking CLI's BB project context. Global writes must
@@ -69,5 +69,5 @@ next turn.
 
 ```bash
 pnpm exec turbo run test typecheck --filter=bb-plugin-memory
-bb plugin dev ./plugins/memory
+mqh plugin dev ./plugins/memory
 ```

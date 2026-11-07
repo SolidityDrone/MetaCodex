@@ -10,7 +10,7 @@ import {
 import * as fixtures from "../helpers/command-output-fixtures.js";
 import { registerEnvironmentCommands } from "../../commands/environment.js";
 
-describe("bb environment command output", () => {
+describe("mqh environment command output", () => {
   setupCommandOutputTestEnvironment();
 
   const register: CommandRegistrar = (program) =>
@@ -22,7 +22,7 @@ describe("bb environment command output", () => {
     expect(help).not.toContain("squash-merge");
   });
 
-  it("bb environment providers lists selectable ids and required inputs", async () => {
+  it("mqh environment providers lists selectable ids and required inputs", async () => {
     stubServerApi({
       "v1.system.environment-providers.$get": vi.fn(async () => ({
         providers: [
@@ -79,7 +79,7 @@ describe("bb environment command output", () => {
     ]);
   });
 
-  it("bb environment providers requests eligibility for a project and machine", async () => {
+  it("mqh environment providers requests eligibility for a project and machine", async () => {
     const getProviders = vi.fn(async () => ({ providers: [] }));
     stubServerApi({
       "v1.hosts.$get": vi.fn(async () => [
@@ -113,7 +113,7 @@ describe("bb environment command output", () => {
     });
   });
 
-  it("bb environment providers prints each provider's availability on the chosen machine", async () => {
+  it("mqh environment providers prints each provider's availability on the chosen machine", async () => {
     const provider = {
       displayName: "Provider",
       description: "Prepare a workspace for this thread.",
@@ -184,7 +184,7 @@ describe("bb environment command output", () => {
     ]);
   });
 
-  it("bb environment list names the provider that produced each row", async () => {
+  it("mqh environment list names the provider that produced each row", async () => {
     const list = vi.fn(async () => [
       fixtures.makeEnvironment({
         id: "env-worktree",
@@ -211,7 +211,7 @@ describe("bb environment command output", () => {
   });
 
   it.each(["--limit", "--offset"])(
-    "bb environment list names invalid %s as a non-negative integer",
+    "mqh environment list names invalid %s as a non-negative integer",
     async (flag) => {
       const list = vi.fn(async () => []);
       stubServerApi({ "v1.environments.$get": list });
@@ -227,7 +227,7 @@ describe("bb environment command output", () => {
     },
   );
 
-  it("bb environment delete reports requested cleanup and its lifecycle", async () => {
+  it("mqh environment delete reports requested cleanup and its lifecycle", async () => {
     const remove = vi.fn(async () => ({ ok: true as const }));
     const get = vi.fn(async () =>
       fixtures.makeEnvironment({
@@ -254,7 +254,7 @@ describe("bb environment command output", () => {
     ]);
   });
 
-  it("bb environment paths targets the environment and path kinds", async () => {
+  it("mqh environment paths targets the environment and path kinds", async () => {
     const response = {
       paths: [
         {
@@ -299,7 +299,7 @@ describe("bb environment command output", () => {
     ]);
   });
 
-  it("bb environment commit prefixes failures with environment context", async () => {
+  it("mqh environment commit prefixes failures with environment context", async () => {
     const post = vi.fn(async () => {
       throw new Error("HTTP 500: boom");
     });
@@ -314,7 +314,7 @@ describe("bb environment command output", () => {
     );
   });
 
-  it("bb environment commit posts the action without a thread id", async () => {
+  it("mqh environment commit posts the action without a thread id", async () => {
     const post = vi.fn(async () => ({
       ok: true,
       action: "commit",
@@ -332,7 +332,7 @@ describe("bb environment command output", () => {
     });
   });
 
-  it("bb environment update sets the merge base branch", async () => {
+  it("mqh environment update sets the merge base branch", async () => {
     const environment = fixtures.makeEnvironment({
       id: "env-update-1",
       projectId: "proj-1",
@@ -367,7 +367,7 @@ describe("bb environment command output", () => {
     );
   });
 
-  it("bb environment update clears the merge base branch", async () => {
+  it("mqh environment update clears the merge base branch", async () => {
     const environment = fixtures.makeEnvironment({
       id: "env-update-2",
       projectId: "proj-1",
@@ -393,7 +393,7 @@ describe("bb environment command output", () => {
     );
   });
 
-  it("bb environment update renames the environment", async () => {
+  it("mqh environment update renames the environment", async () => {
     const environment = fixtures.makeEnvironment({
       id: "env-update-name",
       projectId: "proj-1",
@@ -428,7 +428,7 @@ describe("bb environment command output", () => {
     );
   });
 
-  it("bb environment update clears the environment name", async () => {
+  it("mqh environment update clears the environment name", async () => {
     const environment = fixtures.makeEnvironment({
       id: "env-clear-name",
       projectId: "proj-1",
@@ -452,7 +452,7 @@ describe("bb environment command output", () => {
     expect(collectLogLines(vi.mocked(console.log))).toContain("Name cleared");
   });
 
-  it("bb environment update sets name and merge base together", async () => {
+  it("mqh environment update sets name and merge base together", async () => {
     const environment = fixtures.makeEnvironment({
       id: "env-update-combined",
       projectId: "proj-1",
@@ -490,7 +490,7 @@ describe("bb environment command output", () => {
     );
   });
 
-  it("bb environment update rejects name and clear-name together", async () => {
+  it("mqh environment update rejects name and clear-name together", async () => {
     const patch = vi.fn();
     stubServerApi({ "v1.environments.:id.$patch": patch });
 
@@ -514,7 +514,7 @@ describe("bb environment command output", () => {
     expect(patch).not.toHaveBeenCalled();
   });
 
-  it("bb environment update rejects an empty name", async () => {
+  it("mqh environment update rejects an empty name", async () => {
     const patch = vi.fn();
     stubServerApi({ "v1.environments.:id.$patch": patch });
 
@@ -531,7 +531,7 @@ describe("bb environment command output", () => {
     expect(patch).not.toHaveBeenCalled();
   });
 
-  it("bb environment update --json prints the updated environment", async () => {
+  it("mqh environment update --json prints the updated environment", async () => {
     const environment = fixtures.makeEnvironment({
       id: "env-json-update",
       projectId: "proj-1",
@@ -594,7 +594,7 @@ describe("bb environment command output", () => {
       argv: ["diff-files", "env-1", "--target", "uncommitted", "--json"],
     });
     expect(stderr).toHaveBeenCalledWith(
-      "bb environment diff-files moved to bb git files.\n",
+      "mqh environment diff-files moved to bb git files.\n",
     );
     expect(stdout.mock.calls[0]?.[0]).toBe("State: clean\n");
     stderr.mockRestore();

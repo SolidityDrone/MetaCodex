@@ -9,7 +9,7 @@ editingNotes: Keep flags accurate against the CLI implementation. Theme details 
 Customization commands
 
 Bundled plugins such as Keep Awake, Concurrency limit, Thread list, and Push
-notifications own their settings and commands; run `bb guide plugins`.
+notifications own their settings and commands; run `mqh guide plugins`.
 
 Theming — the app-wide palette and typography
 
@@ -58,20 +58,20 @@ Server-backed settings
 
 Settings stored server-side apply to every window and survive restarts.
 
-bb settings show
-bb settings ai-services
-bb settings ai-services set <thread-title|commit-message|voice> <automatic|off|service-id> [--plugin <plugin-id>]
-bb settings ai-services test <thread-title|commit-message>
-bb settings general <key> <value>
-bb settings replay-onboarding
-bb settings completed-turns [provider-id] [collapse|flat|default]
-bb settings experiment <key> <value>
-bb settings usage [--machine <id-or-name>] [--refresh]
-bb settings cli-command [install|remove]
-bb settings version [--force]
-bb settings reload Reload bb-managed configuration
+mqh settings show
+mqh settings ai-services
+mqh settings ai-services set <thread-title|commit-message|voice> <automatic|off|service-id> [--plugin <plugin-id>]
+mqh settings ai-services test <thread-title|commit-message>
+mqh settings general <key> <value>
+mqh settings replay-onboarding
+mqh settings completed-turns [provider-id] [collapse|flat|default]
+mqh settings experiment <key> <value>
+mqh settings usage [--machine <id-or-name>] [--refresh]
+mqh settings cli-command [install|remove]
+mqh settings version [--force]
+mqh settings reload Reload bb-managed configuration
 
-AI services: `bb settings ai-services` shows which AI service writes thread
+AI services: `mqh settings ai-services` shows which AI service writes thread
 titles (and so branch names), commit messages, and voice transcripts, plus
 every service a plugin registers and whether it is ready. `set` picks
 `automatic` (bb cloud first, then all other compatible services by plugin id
@@ -80,16 +80,16 @@ or one service id; a picked service is never swapped for another. A service is
 identified by its plugin and its id, so two plugins may use the same id; pass
 `--plugin <plugin-id>` when they do. `test` runs a sample title or commit
 message through the current choice. Settings → AI services has the same
-controls. Each plugin chooses its own model. The removed `BB_INFERENCE`,
-`BB_INFERENCE_FALLBACK`, and `BB_TRANSCRIPTION` variables are ignored with a
+controls. Each plugin chooses its own model. The removed `MQH_INFERENCE`,
+`MQH_INFERENCE_FALLBACK`, and `MQH_TRANSCRIPTION` variables are ignored with a
 warning in `~/.bb/config.json`, and `bb-app config set` refuses them.
 
-General keys: `bb settings general` accepts any key from `generalSettings` in
-`bb settings show`; an unknown key or wrongly shaped value is rejected with the
+General keys: `mqh settings general` accepts any key from `generalSettings` in
+`mqh settings show`; an unknown key or wrongly shaped value is rejected with the
 list of known keys. Boolean preferences take `true`, `false`, `on`, or `off`,
 and `null` clears a preference that can be unset. Most appear in Settings →
 General. Machine-related keys (`machineServerUrl`, `defaultMachineAccess`,
-`machineGitCredentialsEnabled`) are covered in `bb guide machines`.
+`machineGitCredentialsEnabled`) are covered in `mqh guide machines`.
 
 - `showDiagnosticEvents` (default false) shows provider environment resolution
   and unhandled provider events in the timeline. Warnings, errors, and model
@@ -100,9 +100,9 @@ General. Machine-related keys (`machineServerUrl`, `defaultMachineAccess`,
   reversed. Shift+Enter inserts a newline.
 - Git changes above the composer, the Commit button (off by default) and the
   pull request above the composer are plugin settings:
-  `bb plugin config bb--git set showGitChanges false`,
-  `bb plugin config bb--git set showCommitButton true` and
-  `bb plugin config bb--github-pr-status set showPullRequest false`.
+  `mqh plugin config bb--git set showGitChanges false`,
+  `mqh plugin config bb--git set showCommitButton true` and
+  `mqh plugin config bb--github-pr-status set showPullRequest false`.
 - `keepHistoryAfterContextClear` (default false; Settings → General → Show
   messages from before a context clear): true keeps a cleared thread's earlier
   messages above the `Context cleared` boundary in the timeline, outline, and
@@ -118,12 +118,12 @@ General. Machine-related keys (`machineServerUrl`, `defaultMachineAccess`,
 - `terminalCopyOnSelect` (default true; Settings → General → Terminals → Copy
   on select) copies completed terminal selections exactly and shows "Selection
   copied". Text elsewhere in the app is unchanged. Set it with
-  `bb settings general terminalCopyOnSelect <true|false|on|off>` or SDK
+  `mqh settings general terminalCopyOnSelect <true|false|on|off>` or SDK
   `system.updateGeneralSettings`. Explicit Copy/Paste work when off. Supported
   Linux browsers use native primary selection for middle-click paste,
   independently of this preference, never the regular clipboard as a fallback.
 - `streamerMode` (default false) hides every `customModels` entry from
-  `~/.bb/config.json` in all model lists (pickers, `bb provider models`, and
+  `~/.bb/config.json` in all model lists (pickers, `mqh provider models`, and
   the SDK) during a screen share. The entries stay in the config file; a
   request that names a hidden model still runs with it, and default model
   resolution still sees the full list.
@@ -141,36 +141,36 @@ General. Machine-related keys (`machineServerUrl`, `defaultMachineAccess`,
 - `providerOrder` (default `[]`) is a JSON array of provider ids, and
   `defaultProviderId` (default `null`) names the default provider; `null`
   clears it.
-- `idleProviderSessionTimeoutMinutes` (default `30`; Settings → Providers → Configuration → Release idle agent sessions) sets how long an agent can sit idle after its last turn before every machine stops its provider process. Allowed values are `0` (ASAP), `5`, `10`, `30`, and `60`, for example `bb settings general idleProviderSessionTimeoutMinutes 5`. Machines check every five minutes, so release can take up to five minutes beyond the timeout. Changes apply live and on reconnect. Only restorable sessions without active or pending work are eligible; threads keep their history and resume on the next message. `bb thread stop` still releases a runtime manually. This is not a limit on loaded processes or memory. Read the value with `bb settings show`; SDK callers use `system.config()` and `system.updateGeneralSettings({ ...config.generalSettings, idleProviderSessionTimeoutMinutes: 5 })`.
+- `idleProviderSessionTimeoutMinutes` (default `30`; Settings → Providers → Configuration → Release idle agent sessions) sets how long an agent can sit idle after its last turn before every machine stops its provider process. Allowed values are `0` (ASAP), `5`, `10`, `30`, and `60`, for example `mqh settings general idleProviderSessionTimeoutMinutes 5`. Machines check every five minutes, so release can take up to five minutes beyond the timeout. Changes apply live and on reconnect. Only restorable sessions without active or pending work are eligible; threads keep their history and resume on the next message. `mqh thread stop` still releases a runtime manually. This is not a limit on loaded processes or memory. Read the value with `mqh settings show`; SDK callers use `system.config()` and `system.updateGeneralSettings({ ...config.generalSettings, idleProviderSessionTimeoutMinutes: 5 })`.
 - `telemetryEnabled`: see Telemetry below.
 
-`bb settings replay-onboarding` clears `onboardingCompletedAt`, so the
+`mqh settings replay-onboarding` clears `onboardingCompletedAt`, so the
 first-run setup guide (connect an agent, add projects, pick plugins, set up
 devices) shows again in every open client. Settings → General → Setup guide has
 the same button.
 
-`bb settings usage --refresh` fetches fresh provider usage; ordinary reads may
+`mqh settings usage --refresh` fetches fresh provider usage; ordinary reads may
 reuse results for 10 seconds. The SDK equivalent is
 `bb.sdk.system.usageLimits({ refresh: true })`.
 
-Command line: Settings → General → Command line puts the `bb` command on PATH
-on the computer that runs the bb server, so the user, a script, or an agent
+Command line: Settings → General → Command line puts the `mqh` command on PATH
+on the computer that runs the mqh server, so the user, a script, or an agent
 running outside bb (such as Claude Code or Codex) can control bb; threads in bb
-already have `bb`. `bb settings cli-command` shows the state, and `install` or
+already have `mqh`. `mqh settings cli-command` shows the state, and `install` or
 `remove` changes it. Install links the launcher at `~/.bb/bin/bb` into a PATH
 folder such as `~/.local/bin` (on Windows it adds `~/.bb/bin` to the user
-PATH). bb never replaces another `bb`: install is refused while one runs first
+PATH). bb never replaces another `mqh`: install is refused while one runs first
 in a new terminal. Only an installed bb (`npx bb-app` or the desktop app)
 offers this; a source checkout does not.
 
-Completed turns: `bb settings completed-turns` lists how each provider shows a
+Completed turns: `mqh settings completed-turns` lists how each provider shows a
 finished turn: `collapse` folds the turn's work into one "Worked for" row and
 keeps the final answer visible, and `flat` keeps every step visible. Each
 provider has a default (Claude Code is `flat`, the other first-party providers
 `collapse`); `--json` shows whether each value comes from your setting or that
-default. `bb settings completed-turns <provider-id> <collapse|flat>` overrides
+default. `mqh settings completed-turns <provider-id> <collapse|flat>` overrides
 it for that provider, and `default` removes the override. It applies to
-existing threads too, including `bb thread log`. Settings → Providers has the
+existing threads too, including `mqh thread log`. Settings → Providers has the
 same per-provider switch.
 
 App links: explicit Markdown links to apps such as Linear and Reflect open on
@@ -182,26 +182,26 @@ across devices or server addresses. The Plugin SDK can list and revoke the
 viewing client's approvals; there is no CLI command that reads or modifies a
 remote client's localStorage.
 
-Experiments: `bb settings experiment <key> <true|false>` toggles a default-off
+Experiments: `mqh settings experiment <key> <true|false>` toggles a default-off
 experiment (Settings → Experiments). Experiments that
-gate a feature are documented with it: `serverMove` in `bb guide machines`,
+gate a feature are documented with it: `serverMove` in `mqh guide machines`,
 `performanceDiagnostics` under Server performance diagnostics below.
 `timelinePush` sends an open thread's timeline updates over the live
 connection as row deltas instead of reloading the latest window after each
 update. `compactExpiredCache` offers a Compact chip in the composer when an idle
 thread's prompt cache has expired and its context holds at least 100k tokens;
-see `bb guide thread-messaging` for `--compact-first`.
+see `mqh guide thread-messaging` for `--compact-first`.
 `narrowPluginCss` serves each plugin a stylesheet that matches only that
 plugin's own UI, which makes style updates cheaper with many plugins; it
 applies after a reload.
 `resumeThreadsAfterRestart` retries a turn that a quit, crash, update, or
 machine restart cut off, and wakes idle threads whose background work it
-stopped, a few seconds after the machine's daemon comes back; see `bb guide
+stopped, a few seconds after the machine's daemon comes back; see `mqh guide
 thread-lifecycle`.
 `dismissReadNotifications` removes a thread's push, web, and desktop
 notifications once the thread is read on any client.
 `pluginUpdates` lists plugin updates on Settings → Updates with Update and
-Update all, and counts them in the sidebar updates badge; see `bb guide plugins`.
+Update all, and counts them in the sidebar updates badge; see `mqh guide plugins`.
 `skipFocusedThreadNotifications` skips the web and desktop system notification
 for a thread open in a visible, focused bb window or tab. It defaults on for
 early adopters.
@@ -214,8 +214,8 @@ request number. It defaults on for early adopters.
 `updateWhenIdle` adds a "Restart and update bb automatically" switch to
 Settings → Updates (`bb updates app auto on|off`) that has bb check for updates
 every hour and restart into a new version once no thread is running, and
-enables `bb updates app apply --when-idle`; see `bb guide machines`. It defaults on for early adopters.
-`bb settings general earlyAdopter on` (Settings → Experiments → Become an early
+enables `bb updates app apply --when-idle`; see `mqh guide machines`. It defaults on for early adopters.
+`mqh settings general earlyAdopter on` (Settings → Experiments → Become an early
 adopter) turns on the experiments marked Early adopter, currently
 `timelinePush`, `compactExpiredCache`, `pluginUpdates`,
 `skipFocusedThreadNotifications`, `threadRowMetadata`, and `updateWhenIdle`; an
@@ -226,16 +226,16 @@ Launcher settings
 `bb-app config` and `bb-app env` reload runtime settings in a running server,
 but the CLI identifies settings that are startup-only, including binding/ports,
 data and the dev-app port, telemetry, inherited skill roots, and
-`BB_LOG_LEVEL`. Use `bb-app config`, not `bb-app env`, to change `BB_APP_URL`
+`MQH_LOG_LEVEL`. Use `bb-app config`, not `bb-app env`, to change `MQH_APP_URL`
 live. After a startup-only change, run `bb-app stop && bb-app start` or restart
-the desktop app; until then, changing or unsetting `BB_SERVER_BIND_HOST` does
+the desktop app; until then, changing or unsetting `MQH_SERVER_BIND_HOST` does
 not close a previous `0.0.0.0` listener.
 
-`--server-bind-host 0.0.0.0` (or `BB_SERVER_BIND_HOST=0.0.0.0`) listens on
+`--server-bind-host 0.0.0.0` (or `MQH_SERVER_BIND_HOST=0.0.0.0`) listens on
 every interface for direct remote access; containers must also publish the
 port. BB accepts request hosts that are `localhost`, IP addresses (including
-LAN and Tailscale IPs), or the hostname in `BB_APP_URL`. For a custom DNS name
-or reverse proxy, run `npx bb-app config set BB_APP_URL https://bb.example.com`
+LAN and Tailscale IPs), or the hostname in `MQH_APP_URL`. For a custom DNS name
+or reverse proxy, run `npx bb-app config set MQH_APP_URL https://bb.example.com`
 before connecting, including from the CLI or SDK; forwarded host headers cannot
 authorize an unconfigured name. BB Connect needs no additional configuration.
 
@@ -247,10 +247,10 @@ accelerators. Reset removes an override and returns to bb's current default;
 `disabled` explicitly unbinds a command. `Mod` means Command on macOS and
 Control on Windows/Linux. The complete default table is in docs/configuration.md.
 
-bb settings keyboard list
-bb settings keyboard hints <true|false>
-bb settings keyboard set <command> <shortcut|disabled> [--platform mac|windows|linux]
-bb settings keyboard reset [command] [--platform mac|windows|linux]
+mqh settings keyboard list
+mqh settings keyboard hints <true|false>
+mqh settings keyboard set <command> <shortcut|disabled> [--platform mac|windows|linux]
+mqh settings keyboard reset [command] [--platform mac|windows|linux]
 
 `keyboard list` prints core command ids with their effective bindings, plus
 every saved override; examples include `panel.previousTab` / `panel.nextTab`,
@@ -284,7 +284,7 @@ clears every scope for the command (or every command if omitted). The SDK uses
 `system.updateKeyboardSettings` to write and `system.config` to read bindings.
 
 Plugin commands use `plugin:<plugin-id>/<command-id>` as their binding ID, for
-example `bb settings keyboard set plugin:example/open-issue Mod+Shift+I`;
+example `mqh settings keyboard set plugin:example/open-issue Mod+Shift+I`;
 `reset` restores the plugin's default. Overrides survive plugin disable,
 re-enable, and reload. Commands without defaults start unbound, and
 conflicting plugin defaults stay unbound. Plugin defaults resolve in each app
@@ -293,15 +293,15 @@ explicit bindings in the same update.
 
 Sidebar preferences
 
-`bb settings ui` reads and writes server-side sidebar preferences shared by
+`mqh settings ui` reads and writes server-side sidebar preferences shared by
 every window, device, and the CLI. The same registry stores which thread Info
 panel sections are collapsed (`infoPanel.collapsedSections`) and whether a
 thread pane's thread context card stays pinned open (`threadContextCard.pinned`).
 
-bb settings ui list [--json]
-bb settings ui get <key> [--json]
-bb settings ui set <key> <value> [--json]
-bb settings ui reset <key> [--json]
+mqh settings ui list [--json]
+mqh settings ui get <key> [--json]
+mqh settings ui set <key> <value> [--json]
+mqh settings ui reset <key> [--json]
 
 `list` prints every key with its value, revision, and a short description.
 `set` takes plain strings for enum and provider keys and JSON for lists and
@@ -313,16 +313,16 @@ The thread list is drawn by `sidebar.threadListProvider`, which defaults to
 `__automatic__`: the first installed thread list plugin other than the bundled
 Thread list plugin (`thread-list/thread-list`), or the bundled plugin when
 there is none, so installing a thread list plugin switches to it. Select one
-with `bb settings ui set sidebar.threadListProvider <plugin-id>/<slot-id>`, or
+with `mqh settings ui set sidebar.threadListProvider <plugin-id>/<slot-id>`, or
 reset to restore Automatic. The bundled Thread list plugin keeps its own
 layout (organization mode, sort, grouping, hidden and collapsed groups) and
 copies the legacy `sidebar.*` layout keys from here only once; change its
-layout with `bb thread-list prefs` (see `bb guide plugins`).
+layout with `mqh thread-list prefs` (see `mqh guide plugins`).
 
 The composer's input box is drawn by `composer.provider`, which defaults to
 `__automatic__`: the first composer plugin you installed, or the bundled
 Composer plugin (`bb--composer/composer`) when there is none. Pick one with
-`bb settings ui set composer.provider <plugin-id>/<slot-id>`, or reset to
+`mqh settings ui set composer.provider <plugin-id>/<slot-id>`, or reset to
 restore Automatic. With no composer plugin enabled, no composer is shown.
 
 A vertical rail of destinations sits on the left edge of the sidebar on every
@@ -347,8 +347,8 @@ the thread list), another navigation plugin as `<plugin-id>/<slot-id>`, or
 `__automatic__` (the default: the first navigation from another plugin, else
 `navigation/rail`). Pick one in Settings → Appearance → Navigation, or:
 
-bb settings ui set sidebar.navigationProvider navigation/top-list
-bb settings ui reset sidebar.navigationProvider
+mqh settings ui set sidebar.navigationProvider navigation/top-list
+mqh settings ui reset sidebar.navigationProvider
 
 The top list puts the visible destinations, New thread among them, and More
 above the thread list, moves Settings into the footer, and adds a Back to app
@@ -365,8 +365,8 @@ string lists of `builtin:settings` (top list only), `builtin:mobile`,
 `plugin:<encoded pluginId>/<encoded registrationId>`. They survive plugin
 reloads and temporarily unavailable plugins; new items are visible by default.
 
-bb settings ui set sidebar.hiddenFooterItems '["plugin:bb--provider-usage/usage"]'
-bb settings ui reset sidebar.hiddenFooterItems
+mqh settings ui set sidebar.hiddenFooterItems '["plugin:bb--provider-usage/usage"]'
+mqh settings ui reset sidebar.hiddenFooterItems
 
 In the app, the sidebar footer's More menu holds hidden actions and actions
 that don't fit; Settings → Appearance → Sidebar footer, or right-clicking an
@@ -381,31 +381,31 @@ Sidebar width and open state are per window and stay local to the browser.
 
 Host files and voice transcription
 
-bb file read|write|list|paths|mkdir|move|remove ...
-bb voice transcribe <audio-file> [--type <mime>] [--prompt <context>]
+mqh file read|write|list|paths|mkdir|move|remove ...
+mqh voice transcribe <audio-file> [--type <mime>] [--prompt <context>]
 --type defaults to audio/webm
 
-`bb file` supports `--host` for remote machines and `--root` on mutating
-commands to confine access beneath an absolute directory. `bb file write`
-takes exactly one of `--content` or `--stdin`; `bb file paths` lists files and
-directories unless `--files` or `--directories` narrows it. `bb file list` and
-`bb file paths` include dot-prefixed entries; pass `--no-hidden` to skip them.
+`mqh file` supports `--host` for remote machines and `--root` on mutating
+commands to confine access beneath an absolute directory. `mqh file write`
+takes exactly one of `--content` or `--stdin`; `mqh file paths` lists files and
+directories unless `--files` or `--directories` narrows it. `mqh file list` and
+`mqh file paths` include dot-prefixed entries; pass `--no-hidden` to skip them.
 Both skip a default set of dependency and cache directories such as
 `node_modules`, `.venv`, `.pnpm-store`, and root-relative `.claude/worktrees`;
 `--exclude <names...>` replaces that set. Entries match basenames at any depth
 or exact root-relative paths using `/` separators. Use
 `--json` for metadata and machine-readable results.
 
-`bb file remove` needs `--yes` without a terminal. `bb file remove --recursive`
+`mqh file remove` needs `--yes` without a terminal. `mqh file remove --recursive`
 and `sdk.files.remove({ recursive: true, ... })` first stop processes whose
 working directory is inside the directory, including dev servers in nested
 checkouts (macOS and Linux only).
 
 Voice transcription uses the Voice input service chosen with
-`bb settings ai-services set voice <automatic|off|service-id>`. bb accepts
+`mqh settings ai-services set voice <automatic|off|service-id>`. bb accepts
 recordings up to 25 MB, and each service may set a lower limit; Codex takes up
 to 20 MB. These limits apply to the app, SDK, and CLI. The app's microphone
-choice is per browser and has no `bb` command. Right-click the composer
+choice is per browser and has no `mqh` command. Right-click the composer
 microphone, press Shift+F10, or click the Microphone control in Settings →
 Voice Input to open preferences in a desktop popover or mobile drawer.
 Opening starts a local waveform preview; closing releases it. Recording
@@ -422,9 +422,9 @@ inputs or stopping capture. Preview audio is never saved or transcribed.
 Telemetry
 
 Anonymous usage telemetry is controlled by Settings → General → Privacy &
-diagnostics, `bb settings general telemetryEnabled false`, or SDK
+diagnostics, `mqh settings general telemetryEnabled false`, or SDK
 `system.updateGeneralSettings` with `telemetryEnabled`. The saved preference
-takes effect immediately. `BB_TELEMETRY=false` always disables telemetry, even
+takes effect immediately. `MQH_TELEMETRY=false` always disables telemetry, even
 when the saved preference is enabled.
 
 Mobile app downloads
@@ -432,7 +432,7 @@ Mobile app downloads
 Settings → Mobile links the iOS TestFlight
 (https://testflight.apple.com/join/T9MayTMb) and the Android APK from the
 public `get-bb/bb` GitHub `android-testing` release (`bb-android.apk`), and
-pairs either app through Add mobile device. `bb settings mobile-app --json` or
+pairs either app through Add mobile device. `mqh settings mobile-app --json` or
 SDK `system.mobileAppDownloads()` returns both links. Add `--details --json`
 or call `system.mobileAppReleases()` for the Android version, build, size, and
 upload date; `android` is `null` when that metadata is unavailable, and the
@@ -443,10 +443,10 @@ CLI and SDK metadata report the published APK.
 
 Server performance diagnostics
 
-Start with `bb-app --perf-diagnostics` or `BB_PERF_DIAGNOSTICS=1` (restart to
-change), then run `bb settings experiment performanceDiagnostics true|false`.
+Start with `bb-app --perf-diagnostics` or `MQH_PERF_DIAGNOSTICS=1` (restart to
+change), then run `mqh settings experiment performanceDiagnostics true|false`.
 Collection needs both; it adds overhead and writes CPU profiles every 30 seconds
-to `$BB_DATA_DIR/logs/performance/` (kept 12 hours), which contain local paths.
+to `$MQH_DATA_DIR/logs/performance/` (kept 12 hours), which contain local paths.
 Open a `.cpuprofile` in Chrome DevTools.
 
 Desktop Settings → Server → **Show This Mac** (or **Show This Computer** off macOS)

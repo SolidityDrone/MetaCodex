@@ -21,18 +21,14 @@ export const NODE_ESM_REQUIRE_BANNER = [
   "var __dirname = __pathDirname(__filename);",
 ].join("\n");
 
+// MQH: plugins build server and host bundles only (no web app, so no Tailwind): esbuild is the whole
+// toolchain the server fetches on first plugin build.
 export const PLUGIN_TOOLCHAIN_PINS = {
   esbuild: "0.28.2",
-  "@tailwindcss/node": "4.3.0",
-  "@tailwindcss/oxide": "4.3.0",
-  tailwindcss: "4.3.0",
 } as const;
 
 export interface PluginBuildToolchain {
   esbuild: string;
-  tailwindNode: string;
-  tailwindOxide: string;
-  tailwindCssDir: string;
 }
 
 function pinKey(): string {
@@ -99,14 +95,7 @@ function toolchainFrom(require: NodeRequire): PluginBuildToolchain | null {
     if (readVersion(require, name) !== pinned) return null;
   }
   try {
-    const tailwindCssDir = packageDir(require, "tailwindcss");
-    if (tailwindCssDir === null) return null;
-    return {
-      esbuild: pathToFileURL(require.resolve("esbuild")).href,
-      tailwindNode: pathToFileURL(require.resolve("@tailwindcss/node")).href,
-      tailwindOxide: pathToFileURL(require.resolve("@tailwindcss/oxide")).href,
-      tailwindCssDir,
-    };
+    return { esbuild: pathToFileURL(require.resolve("esbuild")).href };
   } catch {
     return null;
   }

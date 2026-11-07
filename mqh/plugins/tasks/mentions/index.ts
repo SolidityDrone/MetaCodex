@@ -105,7 +105,7 @@ function formatAttachments(
     .map(
       (attachment) =>
         `- ${attachment.id} · ${attachment.fileName}\n` +
-        `  Fetch with: bb tasks attachment get ${attachment.id} --out <path>`,
+        `  Fetch with: mqh tasks attachment get ${attachment.id} --out <path>`,
     )
     .join("\n");
 }
@@ -184,7 +184,7 @@ ${formatThreads(store.tasks.listTaskThreads(task.id))}
 
 ## Action contract
 
-You can act on this task with the bb tasks CLI. If you begin working on it, first run: bb tasks attach ${task.key} (attaches THIS thread so the task shows you as working). Comment substantive updates via bb tasks comment ${task.key} --body ... and set status via bb tasks update ${task.key} --status ...
+You can act on this task with the mqh tasks CLI. If you begin working on it, first run: mqh tasks attach ${task.key} (attaches THIS thread so the task shows you as working). Comment substantive updates via mqh tasks comment ${task.key} --body ... and set status via mqh tasks update ${task.key} --status ...
 `;
 }
 

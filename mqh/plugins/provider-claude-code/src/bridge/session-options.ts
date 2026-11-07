@@ -56,7 +56,7 @@ const SUMMARIZED_ADAPTIVE_THINKING = {
   type: "adaptive",
   display: "summarized",
 } satisfies Exclude<Options["thinking"], undefined>;
-const CLAUDE_CODE_EXECUTABLE_ENV = "BB_CLAUDE_CODE_EXECUTABLE";
+const CLAUDE_CODE_EXECUTABLE_ENV = "MQH_CLAUDE_CODE_EXECUTABLE";
 
 export function toSdkEffort(
   reasoningLevel: ReasoningLevel,

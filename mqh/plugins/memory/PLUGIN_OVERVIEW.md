@@ -10,10 +10,10 @@ Give your agents a memory that survives across threads, projects, and providers.
 
 ## How it works
 
-The agent uses the `bb memory` CLI. `bb memory search` finds summaries with keyword search. `bb memory get` reads one complete record. `bb memory add`, `bb memory update`, and `bb memory forget` change the store with version checks. `bb memory catalog` and `bb memory history` list summaries and past versions.
+The agent uses the `mqh memory` CLI. `mqh memory search` finds summaries with keyword search. `mqh memory get` reads one complete record. `mqh memory add`, `mqh memory update`, and `mqh memory forget` change the store with version checks. `mqh memory catalog` and `mqh memory history` list summaries and past versions.
 
 Project writes use the project of the current thread. Global writes must pass `--scope global`. The bundled `memory` skill teaches the agent when to search and what to save. The plugin rejects text that looks like a secret or a prompt injection.
 
 ## Requirements
 
-Disable provider-native memory (Settings → Plugins → Claude Code provider or Codex provider) to avoid duplicate or conflicting stores. The CLI connects to the local bb server. Some provider sandboxes ask for approval before they allow that connection.
+Disable provider-native memory (Settings → Plugins → Claude Code provider or Codex provider) to avoid duplicate or conflicting stores. The CLI connects to the local mqh server. Some provider sandboxes ask for approval before they allow that connection.

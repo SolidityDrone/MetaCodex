@@ -598,7 +598,7 @@ export default function githubPrStatusPlugin(bb: BbPluginApi): void {
     {
       experimental_discoverable: true,
       experimental_description:
-        "GitHub pull request status and actions for bb environments.",
+        "GitHub pull request status and actions for mqh environments.",
     },
   );
 

@@ -38,7 +38,8 @@ export interface PluginManifest {
   bbPluginSdkRange: string | undefined;
   providerCatalog: Array<{ id: string; displayName: string }>;
   serverEntry: string;
-  appEntry: string | undefined;
+  /** MQH: the plugin's spatial.json (panels for the Unity client), if it declares one. */
+  spatialEntry: string | undefined;
   hostEntry: string | undefined;
   themes: Array<{
     id: string;
@@ -236,8 +237,8 @@ export async function readPluginManifest(
       ({ id, displayName }) => ({ id, displayName }),
     ),
     serverEntry,
-    appEntry: bb.app
-      ? resolveManifestPath(rootDir, bb.app, "bb.app")
+    spatialEntry: bb.spatial
+      ? resolveManifestPath(rootDir, bb.spatial, "bb.spatial")
       : undefined,
     hostEntry,
     themes,

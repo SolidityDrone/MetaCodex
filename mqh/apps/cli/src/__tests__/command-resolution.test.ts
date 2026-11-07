@@ -79,13 +79,13 @@ describe("resolveInvocation", () => {
 
 describe("suggestCommand", () => {
   const cases: Array<[string[], string | null]> = [
-    [["thread", "message"], "bb thread tell"],
-    [["thread", "timeline"], "bb thread log"],
-    [["thread", "create"], "bb thread spawn"],
-    [["thread", "shwo"], "bb thread show"],
-    [["terminal", "read"], "bb terminal output"],
-    [["host"], "bb machine"],
-    [["models"], "bb provider models"],
+    [["thread", "message"], "mqh thread tell"],
+    [["thread", "timeline"], "mqh thread log"],
+    [["thread", "create"], "mqh thread spawn"],
+    [["thread", "shwo"], "mqh thread show"],
+    [["terminal", "read"], "mqh terminal output"],
+    [["host"], "mqh machine"],
+    [["models"], "mqh provider models"],
     [["thread", "zzzzzz"], null],
     [["tasks"], null],
   ];
@@ -135,7 +135,7 @@ describe("usage formatting", () => {
       new Command().createOption("--thread <id>").hideHelp(),
     );
     expect(formatUsageLine(invocation)).toBe(
-      "Usage: bb terminal output [options] <terminalId>",
+      "Usage: mqh terminal output [options] <terminalId>",
     );
     expect(formatOptionList(invocation.command)).toBe(
       "--tail-bytes <n>, --json",

@@ -204,7 +204,7 @@ const DAEMON_ERROR_SUMMARIES: Record<string, string> = {
   server_move_download_failed: "The machine couldn't download the export",
   server_move_install_failed: "Installing bb on the machine failed",
   server_move_rejected: "The machine rejected the move",
-  server_move_server_entry_unavailable: "The machine can't run the bb server",
+  server_move_server_entry_unavailable: "The machine can't run the mqh server",
   server_move_start_failed: "The new server didn't start",
 };
 
@@ -592,7 +592,7 @@ export function createServerMoveCoordinator(
     );
     if (inspect.dataDirHasServerData) {
       throw new Error(
-        `${targetName} already has bb server data in ${inspect.dataDir}`,
+        `${targetName} already has mqh server data in ${inspect.dataDir}`,
       );
     }
     if (!inspect.portAvailable) {
@@ -614,7 +614,7 @@ export function createServerMoveCoordinator(
         move,
         "update-target",
         "skipped",
-        `${targetName} already runs bb ${appVersion}`,
+        `${targetName} already runs mqh ${appVersion}`,
       );
       return;
     }
@@ -622,7 +622,7 @@ export function createServerMoveCoordinator(
       move,
       "update-target",
       "running",
-      `Packing bb ${appVersion} for ${targetName}`,
+      `Packing mqh ${appVersion} for ${targetName}`,
     );
     const bbApp = await untilCancelled(move, environment.fullArtifact.build());
     move.bbApp = bbApp;
@@ -630,7 +630,7 @@ export function createServerMoveCoordinator(
       move,
       "update-target",
       "done",
-      `bb ${bbApp.version} will be installed on ${targetName}`,
+      `mqh ${bbApp.version} will be installed on ${targetName}`,
     );
   }
 

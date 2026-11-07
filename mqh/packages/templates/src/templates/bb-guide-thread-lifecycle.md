@@ -11,11 +11,11 @@ Lifecycle commands require an explicit thread ID or --self.
 
 Lifecycle:
 
-  bb thread stop [id]                      Stop work and release the agent runtime
-  bb thread compact [id]                   Request compaction of an idle or errored thread's context
-  bb thread clear [id]                     Clear model context for an idle or failed thread
-  bb thread cancel-plan [id]               Exit the provider's active Plan mode
-  bb thread clear-goal [id]                Clear the provider's Goal
+  mqh thread stop [id]                      Stop work and release the agent runtime
+  mqh thread compact [id]                   Request compaction of an idle or errored thread's context
+  mqh thread clear [id]                     Clear model context for an idle or failed thread
+  mqh thread cancel-plan [id]               Exit the provider's active Plan mode
+  mqh thread clear-goal [id]                Clear the provider's Goal
     --self                                 Target current thread
 
   cancel-plan and clear-goal wait for the provider to confirm.
@@ -25,13 +25,13 @@ Lifecycle:
   sticky execution settings. Its active timeline starts at one visible
   `Context cleared` boundary, and its next prompt starts a fresh provider
   conversation in the same thread. With
-  `bb settings general keepHistoryAfterContextClear true`, earlier messages
+  `mqh settings general keepHistoryAfterContextClear true`, earlier messages
   stay visible above that boundary. It is also the recovery for a send refused
   with `provider_session_unavailable` (`details.reason` foreign, ambiguous, or
   invalid: the recorded provider session belongs to another thread or has no
   usable identity).
 
-  bb thread retry [id]                     Retry the thread's failed turn
+  mqh thread retry [id]                     Retry the thread's failed turn
     --self                                 Target current thread
     --turn <requestId>                     Retry this turn request id specifically; fails when it is not the thread's failed turn
     --send-at <when>                       Dispatch at an ISO 8601 timestamp or a duration from now (30s, 10m, 2h, 7d)
@@ -69,13 +69,13 @@ Lifecycle:
   approval, and archived threads are left in error. After three of these in a
   row, bb stops retrying the turn. The parent of a child that resumes hears
   about it when the child finishes, not when it was cut off. The experiment
-  also puts every queued retry, including `bb thread retry` and provider-retry
+  also puts every queued retry, including `mqh thread retry` and provider-retry
   ones, at the front of the thread's queue: the thread's other queued rows wait
   behind it (as `thread-busy`) until it sends or is dropped, so messages queued
   or steered during a restart go out after the resume. A message you send
   directly, or Send now, still overtakes it.
 
-  bb thread archive [id]                   Archive a thread (and children/hidden forks)
+  mqh thread archive [id]                   Archive a thread (and children/hidden forks)
     --self                                 Archive current thread
 
   Archive is not a hard stop: for 30 seconds a running turn and the thread's
@@ -92,13 +92,13 @@ Lifecycle:
   that is still running: when the machine still runs a turn for a thread the app
   shows as idle or failed, or a turn starts while the stop is being delivered,
   the stop interrupts that turn and waits for the attempt. If the interrupt
-  fails, the thread remains stopping; check `bb thread show <id> --json` before
+  fails, the thread remains stopping; check `mqh thread show <id> --json` before
   treating the stop as confirmed.
 
-  bb thread unarchive [id]                 Unarchive a thread
+  mqh thread unarchive [id]                 Unarchive a thread
     --self                                 Unarchive current thread
 
-  bb thread restore-environment [id]       Restore a destroyed workspace
+  mqh thread restore-environment [id]       Restore a destroyed workspace
     --self                                 Restore current thread
 
   Archiving a thread retires its environment, and a managed workspace is removed
@@ -108,20 +108,20 @@ Lifecycle:
   Each provider decides what that means: a worktree is re-created on the branch
   it held, a project checkout switches back to that branch, and a personal
   workspace cannot be restored. It starts no turn — the thread settles back to
-  idle with a live workspace (check `canRestoreEnvironment` on `bb thread show
+  idle with a live workspace (check `canRestoreEnvironment` on `mqh thread show
   --json`). Unarchive the thread first; the command is refused while the thread
   is archived, while its workspace is still there, and when the provider does
   not restore, is gone, or its machine is gone. Uncommitted changes in the
   removed workspace are not recoverable.
 
-  bb thread delete <id>                    Delete permanently
+  mqh thread delete <id>                    Delete permanently
     --yes                                  Skip confirmation
 
   Deleting a thread permanently deletes its sidebar children and lifecycle
   dependents recursively, including hidden and archived descendants. This also
   applies to SDK `threads.delete`; set `childThreadsConfirmed: true` to confirm
   child deletion. Provider-owned environment cleanup is asynchronous. Use
-  `bb environment show <id>` to inspect teardown until the lifecycle reaches
+  `mqh environment show <id>` to inspect teardown until the lifecycle reaches
   destroyed. Deleting thread
   storage first stops processes whose working directory is inside it,
   including dev servers in nested checkouts (macOS and Linux only).

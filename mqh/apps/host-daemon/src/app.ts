@@ -1,4 +1,3 @@
-import path from "node:path";
 import { HOST_DAEMON_RESTART_EXIT_CODE } from "@bb/config/machine-service";
 import { startDesktopBrowserBroker } from "./desktop-browser-broker.js";
 import { MachineEnvironment } from "./machine-environment.js";
@@ -32,11 +31,9 @@ import {
 } from "./runtime-manager.js";
 import { WatchManager } from "./watch-manager.js";
 import {
-  ConnectTunnelClient,
-  resolveTrustedConnectGate,
-} from "./connect-tunnel/index.js";
-import { MachineNextTunnel, machineNextFrpDir } from "./connect-next/index.js";
-import { defaultTrustedCertificates, resolveFrpc } from "@bb/frp-client";
+  DisabledConnectTunnel,
+  DisabledMachineNextTunnel,
+} from "./remote-access-disabled.js";
 import { TerminalManager } from "./terminals/terminal-manager.js";
 import {
   createServerClient,
@@ -177,8 +174,8 @@ export interface HostDaemonApp {
   localApi: LocalApiServer | null;
   runtimeManager: RuntimeManager;
   watchManager: WatchManager;
-  connectTunnel: ConnectTunnelClient;
-  machineNextTunnel: MachineNextTunnel;
+  connectTunnel: DisabledConnectTunnel;
+  machineNextTunnel: DisabledMachineNextTunnel;
   terminalManager: TerminalManager;
   router: CommandRouter;
   connection: ServerConnection;
@@ -531,47 +528,8 @@ export async function createHostDaemonApp(
       });
     },
   });
-  const connectTunnel = new ConnectTunnelClient({
-    serverUrl: options.serverUrl,
-    hostName: options.hostName,
-    machineCredential: options.serverHeaders?.["x-bb-connect-machine"],
-    fetchFn: options.fetchFn,
-    logger: options.logger,
-    onIdentity: (identity) => {
-      sendServerMessage({
-        type: "connect-tunnel.identity",
-        identity,
-      });
-    },
-    onStatusChange: (status) => {
-      options.logger.debug(
-        { connectTunnelStatus: status },
-        "Machine tunnel status",
-      );
-    },
-  });
-  const machineNextTunnel = new MachineNextTunnel({
-    frpDir: machineNextFrpDir(options.dataDir),
-    trustedBaseDomain: () => {
-      try {
-        return resolveTrustedConnectGate(options.serverUrl).baseDomain;
-      } catch {
-        return null;
-      }
-    },
-    machineCredential: options.serverHeaders?.["x-bb-connect-machine"],
-    ensureIdentity: () => connectTunnel.ensureTunnelIdentity(),
-    resolveBinary: () =>
-      resolveFrpc({
-        dataDir: path.dirname(machineNextFrpDir(options.dataDir)),
-        env: process.env,
-      }),
-    trustedCertificates: () => defaultTrustedCertificates(process.env),
-    logger: options.logger,
-    onStatusChange: (status) => {
-      sendServerMessage({ type: "connect-next.status", status });
-    },
-  });
+  const connectTunnel = new DisabledConnectTunnel();
+  const machineNextTunnel = new DisabledMachineNextTunnel();
   const skillTreeTransport: SkillTreeTransport = {
     fetchManifest: (treeHash) =>
       runSessionRequest({
@@ -899,7 +857,8 @@ export async function createHostDaemonApp(
     serverClient,
     protocolSelfUpdater: createProtocolSelfUpdater({
       dataDir: options.dataDir,
-      enabled: options.autoUpdate ?? false,
+      // MQH: never replace itself; the harness ships as one bundle with the app.
+      enabled: false,
       fetchFn: options.fetchFn,
       logger: options.logger,
       serverHeaders: options.serverHeaders ?? {},
@@ -1026,7 +985,6 @@ export async function createHostDaemonApp(
         devAppPort: options.devAppPort,
         appUrl: options.appUrl,
         getConnected: () => connection.sessionId != null,
-        shellEnv: () => runtimeManager.getShellEnv(),
       })
     : null;
   const eventLoopStallMonitor = startEventLoopStallMonitor({

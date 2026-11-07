@@ -795,7 +795,7 @@ function writeEnvironmentTeardownFailure(
     .set({
       teardownStatus: "failed",
       teardownMessage: exhausted
-        ? `Needs recovery: ${message} Inspect the workspace, then run bb environment cleanup ${environmentId} --recover.`
+        ? `Needs recovery: ${message} Inspect the workspace, then run mqh environment cleanup ${environmentId} --recover.`
         : message,
       retireAt: exhausted
         ? null
@@ -999,7 +999,7 @@ export function cleanupEnvironment(deps: Deps, environmentId: string): boolean {
     throw new ApiError(
       409,
       "invalid_request",
-      `Needs recovery. Inspect the workspace, then run bb environment cleanup ${environmentId} --recover.`,
+      `Needs recovery. Inspect the workspace, then run mqh environment cleanup ${environmentId} --recover.`,
     );
   writeEnvironment(deps, environmentId, { retireAt: Date.now() });
   void sweepProviderEnvironment(deps, environmentId).catch((error) => {
@@ -1855,7 +1855,7 @@ async function runEnvironmentProvisionCommand(
     if (existing !== undefined && existing.finishedAt === null) {
       interruptUnrecoverableEnvironmentProvisioning(deps, {
         environmentId: environment.id,
-        reason: `An earlier setup has an unknown outcome. Archive its threads, inspect the workspace, then run bb environment cleanup ${environment.id} --recover.`,
+        reason: `An earlier setup has an unknown outcome. Archive its threads, inspect the workspace, then run mqh environment cleanup ${environment.id} --recover.`,
       });
       return;
     }

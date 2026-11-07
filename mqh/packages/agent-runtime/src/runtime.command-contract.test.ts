@@ -113,7 +113,7 @@ describe("createAgentRuntime command contracts", () => {
 
   it("expands contributed provider environment for model list against the server URL", async () => {
     const { record, runtime } = createContractRuntime({
-      shellEnv: { BB_SERVER_URL: "http://server.test" },
+      shellEnv: { MQH_SERVER_URL: "http://server.test" },
     });
 
     try {

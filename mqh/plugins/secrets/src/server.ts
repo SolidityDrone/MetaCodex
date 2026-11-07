@@ -194,7 +194,7 @@ async function runRequest(
   ctx: PluginCliContext,
 ): Promise<PluginCliResult> {
   if (!ctx.threadId)
-    cliError("bb secret request must run from a bb thread.", "missing_thread");
+    cliError("bb secret request must run from a mqh thread.", "missing_thread");
   if (!ctx.cwd) {
     cliError(
       "bb secret request requires the invoking working directory.",

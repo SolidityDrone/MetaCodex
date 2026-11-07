@@ -849,7 +849,7 @@ describe.concurrent("worktree host entry", () => {
       await createSourceRepository(onTestFinished);
     const setupMarker = join(root, "setup.marker");
     await writeFile(
-      join(sourcePath, ".bb-env-setup.sh"),
+      join(sourcePath, ".mqh-env-setup.sh"),
       `#!/usr/bin/env bash\necho resumed > ${setupMarker}\n`,
     );
     await git(sourcePath, "add", ".");
@@ -881,7 +881,7 @@ describe.concurrent("worktree host entry", () => {
 
     expect(resumed).toMatchObject({ status: "created", path: targetPath });
     expect(existsSync(setupMarker)).toBe(false);
-    expect(progressText(harness)).not.toContain("Running .bb-env-setup.sh");
+    expect(progressText(harness)).not.toContain("Running .mqh-env-setup.sh");
     await harness.experimental_dispose();
   });
 
@@ -915,7 +915,7 @@ describe.concurrent("worktree host entry", () => {
     const { sourcePath, dataDir } =
       await createSourceRepository(onTestFinished);
     await writeFile(
-      join(sourcePath, ".bb-env-setup.sh"),
+      join(sourcePath, ".mqh-env-setup.sh"),
       "#!/usr/bin/env bash\necho setup-line-one\necho setup-line-two\n",
     );
     await git(sourcePath, "add", ".");
@@ -932,7 +932,7 @@ describe.concurrent("worktree host entry", () => {
         }),
       ),
     ).toMatchObject({ status: "created" });
-    expect(progressText(harness)).not.toContain("Running .bb-env-setup.sh");
+    expect(progressText(harness)).not.toContain("Running .mqh-env-setup.sh");
     expect(progressText(harness)).not.toContain("setup-line-one");
     expect(progressText(harness)).not.toContain("setup-line-two");
     expect(
@@ -988,7 +988,7 @@ describe.concurrent("worktree host entry", () => {
     const { root, sourcePath, dataDir } =
       await createSourceRepository(onTestFinished);
     await writeFile(
-      join(sourcePath, ".bb-env-teardown.sh"),
+      join(sourcePath, ".mqh-env-teardown.sh"),
       `#!/usr/bin/env bash\necho teardown-ran > ${join(root, "teardown.marker")}\necho tearing-down\n`,
     );
     await git(sourcePath, "add", ".");

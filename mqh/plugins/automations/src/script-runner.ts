@@ -27,8 +27,8 @@ const SCRIPT_INTERRUPTED_REASON =
 
 let verifiedBbPath: string | null = null;
 
-const BB_NOT_INJECTED_WARNING =
-  "[bb] warning: could not locate the bb CLI, so `bb` is not on PATH for this script.";
+const MQH_NOT_INJECTED_WARNING =
+  "[bb] warning: could not locate the bb CLI, so `mqh` is not on PATH for this script.";
 
 async function commandWorks(command: string, args: string[]): Promise<boolean> {
   try {
@@ -347,18 +347,18 @@ export async function executeStoredScript(args: {
   const interpreter =
     args.interpreter ?? resolveDefaultInterpreter(args.scriptFile);
   const bbPath = await resolveBbBinary();
-  const warning = bbPath === null ? `${BB_NOT_INJECTED_WARNING}\n` : "";
+  const warning = bbPath === null ? `${MQH_NOT_INJECTED_WARNING}\n` : "";
   const scriptEnv: NodeJS.ProcessEnv = {
     ...process.env,
     ...(args.env ?? {}),
     PATH: scriptPathEnv(bbPath, process.env.PATH),
-    BB_SERVER_URL: args.serverUrl,
-    BB_PROJECT_ID: args.projectId,
-    BB_AUTOMATION_ID: args.automationId,
-    BB_AUTOMATION_RUN_ID: args.runId,
+    MQH_SERVER_URL: args.serverUrl,
+    MQH_PROJECT_ID: args.projectId,
+    MQH_AUTOMATION_ID: args.automationId,
+    MQH_AUTOMATION_RUN_ID: args.runId,
   };
   if (bbPath !== null) {
-    scriptEnv.BB_CLI = bbPath;
+    scriptEnv.MQH_CLI = bbPath;
   }
   await mkdir(scriptsRoot(args.pluginDataDir), { recursive: true });
   if (!(await isDirectory(args.workingDir))) {

@@ -584,7 +584,7 @@ describe("delegation seed prompt", () => {
       ## Project context
 
       - Name: Tasks plugin
-      - Linked bb project: proj_tasks
+      - Linked mqh project: proj_tasks
 
       ## Sub-tasks
 
@@ -593,7 +593,7 @@ describe("delegation seed prompt", () => {
       ## Attachments
 
       - delegation-notes.md · 01J00000000000000000000006
-        Fetch with: bb tasks attachment get 01J00000000000000000000006 --out <path>
+        Fetch with: mqh tasks attachment get 01J00000000000000000000006 --out <path>
 
       ## Recent comments
 
@@ -607,7 +607,7 @@ describe("delegation seed prompt", () => {
 
       ## Report-back contract
 
-      You are working on task TASK-1. Use the bb tasks CLI: comment substantive updates (bb tasks comment TASK-1 --body ...), attach result artifacts, set status when done (bb tasks update TASK-1 --status in_review) or explain blockage in a comment. Your thread is already attached to the task.
+      You are working on task TASK-1. Use the mqh tasks CLI: comment substantive updates (mqh tasks comment TASK-1 --body ...), attach result artifacts, set status when done (mqh tasks update TASK-1 --status in_review) or explain blockage in a comment. Your thread is already attached to the task.
 
       ## Preset instructions
 

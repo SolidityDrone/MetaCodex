@@ -9,7 +9,7 @@ export default function plugin(bb: BbPluginApi) {
       type: "boolean",
       label: "Claude Code memory",
       description:
-        "Allow Claude Code to read and write its native auto-memory for bb threads.",
+        "Allow Claude Code to read and write its native auto-memory for mqh threads.",
       default: true,
     },
     subagentsDisabled: {
@@ -22,7 +22,7 @@ export default function plugin(bb: BbPluginApi) {
     workflowsDisabled: {
       type: "boolean",
       label: "Disable Workflow tool",
-      description: "Hide Claude Code's native Workflow tool for bb threads.",
+      description: "Hide Claude Code's native Workflow tool for mqh threads.",
       default: false,
     },
     disable1MContext: {
@@ -119,7 +119,7 @@ export default function plugin(bb: BbPluginApi) {
     completedTurnDisplay: "flat",
     internal_DO_NOT_USE_guidedSignIn: true,
     env: {
-      passthrough: ["BB_CLAUDE_CODE_EXECUTABLE", "CLAUDE_CODE_OAUTH_TOKEN"],
+      passthrough: ["MQH_CLAUDE_CODE_EXECUTABLE", "CLAUDE_CODE_OAUTH_TOKEN"],
     },
     models: { scope: "host" },
     deriveProviderOptions(context) {

@@ -38,9 +38,9 @@ export interface ClaudeInjectedTool {
   presentation?: DeltaPresentation;
 }
 
-export const BB_BRIDGE_MCP_SERVER_NAME = "bb-bridge";
+export const MQH_BRIDGE_MCP_SERVER_NAME = "bb-bridge";
 
-const BB_TOOL_SERVER = "bb";
+const MQH_TOOL_SERVER = "bb";
 
 const claudeBackgroundFlagSchema = z
   .object({ run_in_background: z.boolean().optional() })
@@ -344,7 +344,7 @@ function bbTool(
     shape: {
       type: "tool",
       tool,
-      server: BB_TOOL_SERVER,
+      server: MQH_TOOL_SERVER,
       ...(toolArguments ? { args: toolArguments } : {}),
     },
     presentation: injected?.presentation ?? toolPresentation(tool),
@@ -469,7 +469,7 @@ export function classifyClaudeToolUse(args: {
       if (mcp === null) {
         return genericTool(toolName, input);
       }
-      if (mcp.server === BB_BRIDGE_MCP_SERVER_NAME) {
+      if (mcp.server === MQH_BRIDGE_MCP_SERVER_NAME) {
         return bbTool(mcp.tool, input, args.injectedTools.get(mcp.tool));
       }
       return mcpTool(mcp.server, mcp.tool, input);

@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { loadServerConfig } from "@bb/config/server";
 
 const serverConfig = loadServerConfig();
-const diagnosticsLogsDir = join(serverConfig.BB_DATA_DIR, "logs");
+const diagnosticsLogsDir = join(serverConfig.MQH_DATA_DIR, "logs");
 
 installSafeProcessDiagnostics({
   logsDir: diagnosticsLogsDir,

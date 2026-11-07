@@ -172,7 +172,7 @@ describe("server move coordinator", () => {
     withTestHarness(async (harness) => {
       seedTopology(harness);
       const config = await writeConfig(harness, {
-        config: { BB_LOG_LEVEL: "debug" },
+        config: { MQH_LOG_LEVEL: "debug" },
         machineCredential: "stale-credential",
         serverHeaders: { "x-stale": "1" },
       });
@@ -382,7 +382,7 @@ describe("server move coordinator", () => {
       });
       expect(moved?.oldCopyEntries).toEqual(["auth-secret", "bb.db"]);
       expect(JSON.parse(await readFile(config.path, "utf8"))).toEqual({
-        config: { BB_LOG_LEVEL: "debug" },
+        config: { MQH_LOG_LEVEL: "debug" },
         serverUrl: DIRECT_URL,
       });
       expect(old.movedMessages).toEqual([
@@ -429,7 +429,7 @@ describe("server move coordinator", () => {
     withTestHarness(async (harness) => {
       seedTopology(harness);
       const config = await writeConfig(harness, {
-        config: { BB_LOG_LEVEL: "info" },
+        config: { MQH_LOG_LEVEL: "info" },
       });
       const { environment, events, retired } =
         createTestServerMoveEnvironment(harness);
@@ -721,7 +721,7 @@ describe("server move coordinator", () => {
     withTestHarness(async (harness) => {
       seedTopology(harness);
       const config = await writeConfig(harness, {
-        config: { BB_LOG_LEVEL: "info" },
+        config: { MQH_LOG_LEVEL: "info" },
       });
       const { environment, events, plugins } =
         createTestServerMoveEnvironment(harness);
@@ -1124,7 +1124,7 @@ describe("server move coordinator", () => {
     withTestHarness(async (harness) => {
       seedTopology(harness);
       const config = await writeConfig(harness, {
-        config: { BB_LOG_LEVEL: "info" },
+        config: { MQH_LOG_LEVEL: "info" },
       });
       const { environment, events, plugins, retired } =
         createTestServerMoveEnvironment(harness, { timings: RECOVERY_TIMINGS });
@@ -1314,7 +1314,7 @@ describe("server move coordinator", () => {
     withTestHarness(async (harness) => {
       seedTopology(harness);
       const config = await writeConfig(harness, {
-        config: { BB_LOG_LEVEL: "info" },
+        config: { MQH_LOG_LEVEL: "info" },
       });
       const { environment, events, plugins } = createTestServerMoveEnvironment(
         harness,
@@ -1396,7 +1396,7 @@ describe("server move coordinator", () => {
     withTestHarness(async (harness) => {
       seedTopology(harness);
       const config = await writeConfig(harness, {
-        config: { BB_LOG_LEVEL: "info" },
+        config: { MQH_LOG_LEVEL: "info" },
       });
       const { environment, events, plugins } = createTestServerMoveEnvironment(
         harness,

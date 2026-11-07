@@ -16,8 +16,8 @@ Worker threads stay hidden from the sidebar. Expired runs are archived after the
 
 ## For agents
 
-Agents start runs with the `bb_workflow_run` tool and inspect them with the `bb workflows` CLI: `validate`, `run`, `status`, `history`, `list`, and `stop`. Scripts come from an inline `--script`, a `--file`, or a `--name` under `.bb/workflows/`. Structured workers return results with `bb_workflow_result`. The bundled `workflows` skill covers authoring, validation, and safe inspection.
+Agents start runs with the `bb_workflow_run` tool and inspect them with the `mqh workflows` CLI: `validate`, `run`, `status`, `history`, `list`, and `stop`. Scripts come from an inline `--script`, a `--file`, or a `--name` under `.bb/workflows/`. Structured workers return results with `bb_workflow_result`. The bundled `workflows` skill covers authoring, validation, and safe inspection.
 
 ## Requirements
 
-The plugin is off by default. Commands must run inside a bb project thread.
+The plugin is off by default. Commands must run inside a mqh project thread.

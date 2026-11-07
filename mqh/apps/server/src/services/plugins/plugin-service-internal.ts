@@ -1,4 +1,8 @@
-import type { TunnelIngressLease } from "../connect-next/tunnel-ingress.js";
+/** Upstream's bb connect tunnel lease. MQH has no remote access, so nothing provides one (kept for the plugin API shape). */
+export interface TunnelIngressLease {
+  baseUrl: string;
+  close(): Promise<void>;
+}
 import type { EnvironmentRemoval } from "@bb/domain";
 import type { MachineEnrollmentService } from "../machines/machine-services.js";
 import type { AiServiceRegistry } from "../ai/ai-service-registry.js";

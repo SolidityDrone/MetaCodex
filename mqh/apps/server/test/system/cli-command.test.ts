@@ -172,7 +172,7 @@ describe("bb command on PATH", () => {
   });
 
   posixIt(
-    "recognises the command a bb machine install added and leaves it",
+    "recognises the command a mqh machine install added and leaves it",
     async () => {
       const fixture = createUnixFixture();
       const machineShim = join(fixture.localBin, "bb");

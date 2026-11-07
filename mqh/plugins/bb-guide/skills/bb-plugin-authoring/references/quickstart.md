@@ -3,22 +3,22 @@
 ## Quickstart
 
 ```
-bb plugin new hello            # scaffolds ./bb-plugin-hello: a todo list with a sidebar page, `bb hello` CLI, and a skill
+mqh plugin new hello            # scaffolds ./bb-plugin-hello: a todo list with a sidebar page, `bb hello` CLI, and a skill
 cd bb-plugin-hello
-bb plugin install .            # registers the directory in place (--yes to skip the prompt)
-bb plugin dev                  # rebuild app/host bundles + reload on every save
+mqh plugin install .            # registers the directory in place (--yes to skip the prompt)
+mqh plugin dev                  # rebuild app/host bundles + reload on every save
 ```
 
-`bb plugin new` needs no running server. It installs the scaffold's npm
+`mqh plugin new` needs no running server. It installs the scaffold's npm
 dependencies, including `@get-bb/plugin-sdk` pinned to this bb's exact SDK
 version, and warns when that SDK version is not on npm yet. When npm leaves a
 package out, it prints the manual `npm install --include=dev` step to run
-before `bb plugin build`.
+before `mqh plugin build`.
 
-A plugin installed from `$BB_THREAD_STORAGE` or from a bb-managed workspace
+A plugin installed from `$MQH_THREAD_STORAGE` or from a bb-managed workspace
 (such as a thread's worktree) keeps working after bb deletes that folder: bb
 first copies it to `<dataDir>/plugins/<id>/preserved-source` and moves the
-install there. `bb plugin install` prints a `note:` line when this applies.
+install there. `mqh plugin install` prints a `note:` line when this applies.
 Later edits belong in that copy.
 
 ## Manifest
@@ -83,7 +83,7 @@ the current engine values and the entries for its generated surfaces.
   logo where space permits, such as roomy Settings rows and cards. Logo paths
   are explicit plugin-relative `.svg`, `.png`, or `.webp` files: nulls, empty
   strings, missing/escaping files, unsupported extensions, and a dark logo
-  without a light logo fail the manifest. `bb plugin build` refuses an SVG
+  without a light logo fail the manifest. `mqh plugin build` refuses an SVG
   logo that carries a script vector (a `script`, `handler` or `listener`
   element, an `on*` attribute, or a `javascript:` href). Every SVG BB serves
   carries `nosniff` and a `default-src 'none'` CSP. There is
@@ -93,7 +93,7 @@ the current engine values and the entries for its generated surfaces.
   Compact sidebar, menu, action, mention, and panel-title surfaces prefer the
   plugin-owned icon asset, then a named manifest icon, then a contribution's
   local `icon` hint, then Zap. Branding changes are picked up on
-  `bb plugin reload`.
+  `mqh plugin reload`.
 - `bb.branding.experimental_icons` (optional) — the plugin's own icon
   vocabulary for timeline rows, tool presentations, and provider marks: a map
   of declared name → plugin-relative SVG, such as
@@ -139,14 +139,14 @@ namespaces routes, storage, settings, and CLI commands.
 
 ## Builds, installs, and dependencies
 
-- Path installs load `bb.server` as TypeScript directly. `bb plugin build`
+- Path installs load `bb.server` as TypeScript directly. `mqh plugin build`
   also emits `dist/server.js` + `server.js.map` + `server.meta.json`; the
   server bundle externalizes the SDK and `better-sqlite3` (use
   `bb.storage.database()` for plugin-owned SQLite). Builtin, official, git,
   and npm installs whose `dist/server.js` was built for the running SDK major
   load that bundle instead of the TypeScript source.
-- `bb plugin build` compiles `bb.app` into minified `dist/app.js`, `app.css`,
-  and `app.meta.json` (`bb plugin dev` keeps them readable) and bundles
+- `mqh plugin build` compiles `bb.app` into minified `dist/app.js`, `app.css`,
+  and `app.meta.json` (`mqh plugin dev` keeps them readable) and bundles
   `bb.host` into `dist/host.js`, its source map, and `host.meta.json`. Path
   and git installs build automatically at install time, and a build failure
   fails the install. A committed `dist/` is always replaced by the bundles bb
@@ -159,7 +159,7 @@ namespaces routes, storage, settings, and CLI commands.
   metadata. An npm plugin must publish `dist/app.js` + `dist/app.meta.json`
   when it declares `bb.app`, and its host bundle and metadata when it declares
   `bb.host`.
-- `bb plugin build` stamps every declared artifact's `dist/*.meta.json` with
+- `mqh plugin build` stamps every declared artifact's `dist/*.meta.json` with
   `sdkMajor`, `sdkVersion`, `artifactFormatVersion` (currently `1`),
   `pluginId`, `pluginVersion`, and `builtWith: { bbVersion, pluginSdkVersion }`.
   Managed installs reject artifacts whose `pluginId`/`pluginVersion` disagree
@@ -170,7 +170,7 @@ namespaces routes, storage, settings, and CLI commands.
 - Give every mount and portal your plugin id. Current `lib/portal-scope`
   and the shared overlays set `data-bb-plugin` next to `data-bb-plugin-root`.
   If `app.js` sets `data-bb-plugin-root` without it, as copies of
-  `lib/portal-scope` from before July 2026 do, `bb plugin build` warns. The
+  `lib/portal-scope` from before July 2026 do, `mqh plugin build` warns. The
   `narrowPluginCss` experiment then still serves that plugin the slower
   stylesheet, whose utilities also match any id-less root. Refresh it with
   `npx shadcn add @bb/portal-scope`.
@@ -183,13 +183,13 @@ namespaces routes, storage, settings, and CLI commands.
   runtime (listed in frontend-hooks-and-ui.md) is the opposite: the build
   never bundles it, but `tsc` still resolves its declarations, so each one you
   import needs a type-only `devDependencies` entry at the host's version
-  (`bb plugin new` writes all of them; `bb plugin types` repins them). Never
+  (`mqh plugin new` writes all of them; `mqh plugin types` repins them). Never
   put one in `dependencies` — that bundles a second copy beside the host's.
   Host entries have one exception for the SDK itself; see backend-foundation.md.
 - Building yourself (CI, or verifying a build without a running bb): add
-  `bb-app` to `devDependencies` and set `"build": "bb plugin build"`.
-  `bb plugin build` needs no running server, but the manifest still needs
-  `bb.server`; only `bb plugin dev` needs a running bb, because it reloads the
+  `bb-app` to `devDependencies` and set `"build": "mqh plugin build"`.
+  `mqh plugin build` needs no running server, but the manifest still needs
+  `bb.server`; only `mqh plugin dev` needs a running bb, because it reloads the
   installed plugin. Depending on `bb-app@X` builds against exactly that
   release's shim configuration. bb downloads a pinned esbuild and Tailwind
   toolchain on a machine's first git or path build (never for a prebuilt npm

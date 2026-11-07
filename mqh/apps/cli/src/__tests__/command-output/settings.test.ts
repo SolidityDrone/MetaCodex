@@ -10,7 +10,7 @@ import {
 import type { CommandRegistrar } from "../helpers/command-output-harness.js";
 import { registerSettingsCommands } from "../../commands/settings.js";
 
-describe("bb settings commands", () => {
+describe("mqh settings commands", () => {
   setupCommandOutputTestEnvironment();
 
   const register: CommandRegistrar = (program) =>

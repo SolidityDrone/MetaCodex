@@ -9,29 +9,29 @@ const BUNDLED_PROVIDER_IDS = [
   "acp-cursor",
 ] as const;
 
-const BB_APP_CONFIG_FILE_NAME = "config.json";
-const BB_APP_ENV_FILE_NAME = "env.json";
+const MQH_APP_CONFIG_FILE_NAME = "config.json";
+const MQH_APP_ENV_FILE_NAME = "env.json";
 
-export type BbAppManagedConfigKey = "BB_APP_URL" | "BB_LOG_LEVEL";
+export type BbAppManagedConfigKey = "MQH_APP_URL" | "MQH_LOG_LEVEL";
 
-export const BB_APP_MANAGED_CONFIG_KEYS: BbAppManagedConfigKey[] = [
-  "BB_APP_URL",
-  "BB_LOG_LEVEL",
+export const MQH_APP_MANAGED_CONFIG_KEYS: BbAppManagedConfigKey[] = [
+  "MQH_APP_URL",
+  "MQH_LOG_LEVEL",
 ];
 
 export const REMOVED_AI_SERVICE_CONFIG_KEYS: readonly string[] = [
-  "BB_INFERENCE",
-  "BB_INFERENCE_FALLBACK",
-  "BB_TRANSCRIPTION",
+  "MQH_INFERENCE",
+  "MQH_INFERENCE_FALLBACK",
+  "MQH_TRANSCRIPTION",
 ];
 
 export const REMOVED_AI_SERVICE_CONFIG_MESSAGE =
-  "BB_INFERENCE, BB_INFERENCE_FALLBACK, and BB_TRANSCRIPTION were removed. Choose AI services in Settings → AI services or with `bb settings ai-services set <task> <automatic|off|service>`.";
+  "MQH_INFERENCE, MQH_INFERENCE_FALLBACK, and MQH_TRANSCRIPTION were removed. Choose AI services in Settings → AI services or with `mqh settings ai-services set <task> <automatic|off|service>`.";
 
 export const PORTABLE_ENV_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/u;
 const REMOVED_CUSTOM_ACP_AGENTS_CONFIG_KEY = "customAcpAgents";
 const REMOVED_CUSTOM_ACP_AGENTS_MESSAGE =
-  "customAcpAgents in config.json is no longer read. Declare the agents with `bb plugin config provider-acp set customAgents '<json>'`.";
+  "customAcpAgents in config.json is no longer read. Declare the agents with `mqh plugin config provider-acp set customAgents '<json>'`.";
 
 interface BbAppManagedConfigWarningLogger {
   warn(fields: Record<string, unknown>, message: string): void;
@@ -43,8 +43,8 @@ interface ParseBbAppManagedConfigOptions {
 
 const bbAppManagedConfigValuesSchema = z
   .object({
-    BB_APP_URL: z.string().optional(),
-    BB_LOG_LEVEL: z.string().optional(),
+    MQH_APP_URL: z.string().optional(),
+    MQH_LOG_LEVEL: z.string().optional(),
   })
   .strict();
 
@@ -204,9 +204,9 @@ export function parseBbAppManagedConfig(
 }
 
 export function formatBbAppConfigPath(dataDir: string): string {
-  return join(dataDir, BB_APP_CONFIG_FILE_NAME);
+  return join(dataDir, MQH_APP_CONFIG_FILE_NAME);
 }
 
 export function formatBbAppEnvPath(dataDir: string): string {
-  return join(dataDir, BB_APP_ENV_FILE_NAME);
+  return join(dataDir, MQH_APP_ENV_FILE_NAME);
 }

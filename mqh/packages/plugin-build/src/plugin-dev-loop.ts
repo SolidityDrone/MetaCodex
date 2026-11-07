@@ -8,14 +8,12 @@ export function isIgnoredPluginDevPath(relativePath: string): boolean {
 }
 
 export interface PluginDevLoopTargets {
-  hasApp: boolean;
   hasHost: boolean;
 }
 
 interface PluginDevLoopDeps {
   pluginId: string;
   targets: () => Promise<PluginDevLoopTargets>;
-  buildApp: () => Promise<void>;
   buildHost: () => Promise<void>;
   reloadPlugin: () => Promise<void>;
   log: (line: string) => void;
@@ -48,19 +46,6 @@ export function createPluginDevLoop(deps: PluginDevLoopDeps): PluginDevLoop {
       parts.push(`manifest read failed: ${errorMessage(error)}`);
       deps.log(`${parts.join(" · ")} — fix and save to retry`);
       return;
-    }
-    if (targets.hasApp) {
-      const startedAt = Date.now();
-      try {
-        await deps.buildApp();
-        parts.push(
-          `rebuilt app in ${Math.max(0, Math.round(Date.now() - startedAt))}ms`,
-        );
-      } catch (error) {
-        parts.push(`build failed: ${errorMessage(error)}`);
-        deps.log(`${parts.join(" · ")} — fix and save to retry`);
-        return;
-      }
     }
     if (targets.hasHost) {
       const startedAt = Date.now();

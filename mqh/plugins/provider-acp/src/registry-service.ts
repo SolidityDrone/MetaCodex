@@ -274,7 +274,7 @@ export function registerAcpRegistry(deps: AcpRegistryServiceDeps): void {
         }),
         add: cliCommand({
           summary:
-            "Add a registry agent as a bb provider, or move an added one to the registry's current version",
+            "Add a registry agent as a mqh provider, or move an added one to the registry's current version",
           positionals: [
             {
               name: "agent-id",

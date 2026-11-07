@@ -2145,7 +2145,7 @@ describe("host-daemon command schemas", () => {
         fork: "tip",
       },
       providerOptions: { launch: { command: "echo-agent" } },
-      envPassthrough: ["BB_ECHO_AGENT_EXECUTABLE"],
+      envPassthrough: ["MQH_ECHO_AGENT_EXECUTABLE"],
     };
 
     const providerListModelsCommand = {

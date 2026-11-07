@@ -12,9 +12,9 @@ export function operationEnvironment(
   for (const entry of entries) {
     if (typeof entry.value === "string") env[entry.name] = entry.value;
     else {
-      if (!base.BB_SERVER_URL)
-        throw new Error("Host environment requires BB_SERVER_URL");
-      env[entry.name] = `${base.BB_SERVER_URL}${entry.value.serverPath}`;
+      if (!base.MQH_SERVER_URL)
+        throw new Error("Host environment requires MQH_SERVER_URL");
+      env[entry.name] = `${base.MQH_SERVER_URL}${entry.value.serverPath}`;
     }
   }
   return env;

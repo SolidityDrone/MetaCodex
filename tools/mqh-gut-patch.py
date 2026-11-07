@@ -55,9 +55,9 @@ for rel in ["plugins/automations/src/server.ts", "packages/plugin-sdk/src/backen
     open(p, "w", encoding="utf-8").write(t.replace("127.0.0.1:38886", "127.0.0.1:38990"))
 
 # pnpm refuses to install when a patched package is no longer in the graph (ERR_PNPM_PATCH_NOT_APPLIED):
-# drop the patches of what the gut step removed (mobile, desktop packaging, mermaid in the web app)
+# drop the patches of what the gut step removed (mobile, desktop packaging, the web UI's libraries)
 UNUSED_PATCHES = ["@react-native-cookies/cookies@6.2.1", "react-native-webview@14.0.1", "@hugeicons/react-native@1.0.16",
-                  "mermaid@11.17.2", "app-builder-lib@26.18.0"]
+                  "mermaid@11.17.2", "app-builder-lib@26.18.0", "@dnd-kit/core@6.3.1", "sonner@1.7.4"]
 rp = os.path.join(mqh, "package.json")
 rj = json.load(open(rp, encoding="utf-8"))
 patched = rj.get("pnpm", {}).get("patchedDependencies", {})
@@ -66,6 +66,13 @@ for k in UNUSED_PATCHES:
     if f and os.path.exists(os.path.join(mqh, f)):
         os.remove(os.path.join(mqh, f))
 open(rp, "w", encoding="utf-8").write(json.dumps(rj, indent=2) + "\n")
+
+# The bundled catalog (plugins/bb-official.json): only plugins we keep, and no screenshots (they are
+# getbb.app URLs; the headset never fetches bb's site).
+cat = os.path.join(mqh, "plugins", "bb-official.json")
+c = json.load(open(cat, encoding="utf-8"))
+c = {k: {**v, "screenshots": []} for k, v in c.items() if os.path.isdir(os.path.join(mqh, "plugins", k))}
+open(cat, "w", encoding="utf-8").write(json.dumps(c, indent=2) + "\n")
 
 ws = os.path.join(mqh, "pnpm-workspace.yaml")
 w = open(ws, encoding="utf-8").read()

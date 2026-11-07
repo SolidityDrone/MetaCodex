@@ -39,7 +39,7 @@ const claudeAccountFileSchema = z.object({
 });
 
 async function claudeExecutable(): Promise<string> {
-  const explicit = process.env.BB_CLAUDE_CODE_EXECUTABLE?.trim();
+  const explicit = process.env.MQH_CLAUDE_CODE_EXECUTABLE?.trim();
   if (explicit) return explicit;
   return (await resolveExecutablePath("claude")) ?? "claude";
 }

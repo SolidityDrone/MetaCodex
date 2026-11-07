@@ -65,13 +65,13 @@ describe.skipIf(process.platform === "win32")(
             throw new Error("Missing fixture address");
           const env: NodeJS.ProcessEnv = {
             ...process.env,
-            BB_SERVER_URL: `http://127.0.0.1:${address.port}`,
+            MQH_SERVER_URL: `http://127.0.0.1:${address.port}`,
           };
           for (const key of [
-            "BB_CLI",
-            "BB_CLI_REEXEC",
-            "BB_PROJECT_ID",
-            "BB_THREAD_ID",
+            "MQH_CLI",
+            "MQH_CLI_REEXEC",
+            "MQH_PROJECT_ID",
+            "MQH_THREAD_ID",
           ])
             delete env[key];
           const injection =

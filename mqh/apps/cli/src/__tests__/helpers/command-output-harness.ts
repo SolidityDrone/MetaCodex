@@ -108,8 +108,8 @@ export function setupCommandOutputTestEnvironment(): void {
     readlineState.question.mockReset();
     readlineState.close.mockReset();
 
-    vi.stubEnv("BB_PROJECT_ID", undefined);
-    vi.stubEnv("BB_THREAD_ID", undefined);
+    vi.stubEnv("MQH_PROJECT_ID", undefined);
+    vi.stubEnv("MQH_THREAD_ID", undefined);
   });
 
   afterEach(() => {

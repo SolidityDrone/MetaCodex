@@ -125,7 +125,7 @@ describe("createServerClient", () => {
         Response.json(
           {
             code: "server_moved",
-            message: "This bb server moved to studio",
+            message: "This mqh server moved to studio",
             details,
           },
           { status: 410 },

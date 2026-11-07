@@ -180,7 +180,7 @@ export function createScheduledAppUpdateService(args: {
       if (!startInFlight) {
         args.logger.info(
           { runningThreadCount },
-          "Deferred the scheduled bb update until threads finish again",
+          "Deferred the scheduled mqh update until threads finish again",
         );
       }
       starting = null;
@@ -229,13 +229,13 @@ export function createScheduledAppUpdateService(args: {
         if (starting === schedule) {
           args.logger.info(
             { requestedAt: schedule.requestedAt },
-            "Starting the bb update scheduled for when threads finish",
+            "Starting the mqh update scheduled for when threads finish",
           );
         }
       } catch (error) {
         args.logger.warn(
           { error: errorMessage(error) },
-          "Could not start the scheduled bb update",
+          "Could not start the scheduled mqh update",
         );
       }
       args.notifyChanged();
@@ -254,7 +254,7 @@ export function createScheduledAppUpdateService(args: {
   function dropWhenDisabled(): void {
     if (!forget()) return;
     args.logger.info(
-      "Dropped the scheduled bb update because the updateWhenIdle experiment is off",
+      "Dropped the scheduled mqh update because the updateWhenIdle experiment is off",
     );
     args.notifyChanged();
   }
@@ -300,7 +300,7 @@ export function createScheduledAppUpdateService(args: {
         checkIdle(runningThreadCount);
         args.logger.info(
           { requiredIdleMs: autoIdleMs },
-          "Scheduled the automatic bb update for when bb has been idle long enough",
+          "Scheduled the automatic mqh update for when bb has been idle long enough",
         );
         args.notifyChanged();
         return withSchedule(current);
@@ -310,7 +310,7 @@ export function createScheduledAppUpdateService(args: {
     if (waiting === schedule) {
       args.logger.info(
         { runningThreadCount: status.runningThreadCount },
-        "Scheduled the bb update for when threads finish",
+        "Scheduled the mqh update for when threads finish",
       );
     }
     args.notifyChanged();
@@ -337,13 +337,13 @@ export function createScheduledAppUpdateService(args: {
       if (skipReason !== null) {
         args.logger.debug(
           { reason: skipReason },
-          "Not starting an automatic bb update",
+          "Not starting an automatic mqh update",
         );
         return;
       }
       args.logger.info(
         { targetVersion: status.available?.version ?? null },
-        "Found a bb update; updating once bb has been idle long enough",
+        "Found a mqh update; updating once bb has been idle long enough",
       );
       await scheduleNow("automatic");
     });
@@ -352,7 +352,7 @@ export function createScheduledAppUpdateService(args: {
     void checkForUpdate().catch((error: unknown) => {
       args.logger.warn(
         { error: errorMessage(error) },
-        "Could not start an automatic bb update",
+        "Could not start an automatic mqh update",
       );
     });
   };
@@ -419,7 +419,7 @@ export function createScheduledAppUpdateService(args: {
         }
         args.logger.info(
           { skippedVersion: status.available?.version ?? null },
-          "Cancelled the scheduled bb update",
+          "Cancelled the scheduled mqh update",
         );
         args.notifyChanged();
       }
@@ -452,7 +452,7 @@ export function createScheduledAppUpdateService(args: {
         waiting = null;
         clearSettleTimer();
         args.logger.info(
-          "Dropped the waiting bb update because automatic updates are off",
+          "Dropped the waiting mqh update because automatic updates are off",
         );
       }
       args.notifyChanged();

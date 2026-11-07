@@ -159,15 +159,15 @@ const DIALECTS = {
    * `pi --mode rpc`: commands carry `{ id, type }`, responses are
    * `{ id, type: "response", command, success }`, and every other line is a
    * raw AgentSessionEvent (or an `extension_ui_request`). The bb extension's
-   * channel (the socket the bridge names in `BB_PI_BRIDGE_CHANNEL`) is
+   * channel (the socket the bridge names in `MQH_PI_BRIDGE_CHANNEL`) is
    * recorded on the same lanes wrapped as `{ bbChannel: <message> }`; this
    * dialect routes those back onto that socket.
    */
   "pi-rpc": {
     channel: {
       key: "bbChannel",
-      addressEnv: "BB_PI_BRIDGE_CHANNEL",
-      tokenEnv: "BB_PI_BRIDGE_CHANNEL_TOKEN",
+      addressEnv: "MQH_PI_BRIDGE_CHANNEL",
+      tokenEnv: "MQH_PI_BRIDGE_CHANNEL_TOKEN",
     },
     classify(message) {
       const channel = message.bbChannel;

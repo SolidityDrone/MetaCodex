@@ -604,7 +604,7 @@ describe("Docs mention provider", () => {
 
     await expect(provider.resolve("personal:ideas.md")).resolves.toEqual({
       context:
-        "Docs document (personal/ideas.md):\nSHA-256: test-sha\n\n# Fresh Ideas\n\nBuild the mention flow.\n\nProposal version: none. Use bb docs propose to suggest changes for approval.",
+        "Docs document (personal/ideas.md):\nSHA-256: test-sha\n\n# Fresh Ideas\n\nBuild the mention flow.\n\nProposal version: none. Use mqh docs propose to suggest changes for approval.",
     });
     expect(harness.sdk.callsTo("files.read")).toEqual([
       [
@@ -1070,14 +1070,14 @@ describe("Docs vault operations", () => {
 
     const help = await harness.runCli(["--help"]);
     expect(help).toMatchObject({ exitCode: 0 });
-    expect(help.stdout).toContain("bb docs pull");
-    expect(help.stdout).toContain("bb docs status");
-    expect(help.stdout).toContain("bb docs push");
+    expect(help.stdout).toContain("mqh docs pull");
+    expect(help.stdout).toContain("mqh docs status");
+    expect(help.stdout).toContain("mqh docs push");
 
     const statusHelp = await harness.runCli(["status", "--help"]);
     expect(statusHelp).toMatchObject({ exitCode: 0 });
     expect(statusHelp.stdout).toContain("Exit 4: changes present");
-    expect(statusHelp.stdout).toContain("run bb docs push separately");
+    expect(statusHelp.stdout).toContain("run mqh docs push separately");
     expect(statusHelp.stdout).toContain("[<workspace-dir>]");
 
     const unsafePull = await harness.runCli(
@@ -1106,7 +1106,7 @@ describe("Docs vault operations", () => {
 
     const noCommand = await harness.runCli([]);
     expect(noCommand.exitCode).toBe(2);
-    expect(noCommand.stdout).toContain("bb docs <command> [options]");
+    expect(noCommand.stdout).toContain("mqh docs <command> [options]");
 
     const strayArgument = await harness.runCli(["vaults", "personal"]);
     expect(strayArgument.exitCode).toBe(2);

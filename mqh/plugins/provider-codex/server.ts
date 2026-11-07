@@ -15,7 +15,7 @@ export default function plugin(bb: BbPluginApi) {
       type: "boolean",
       label: "Codex memory",
       description:
-        "Allow Codex to recall existing memories and generate new memories from bb threads.",
+        "Allow Codex to recall existing memories and generate new memories from mqh threads.",
       default: true,
     },
     subagentsDisabled: {

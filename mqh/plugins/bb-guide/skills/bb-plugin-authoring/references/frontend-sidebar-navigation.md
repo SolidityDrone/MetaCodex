@@ -153,7 +153,7 @@ app.slots.experimental_sidebarNavigation({
 To turn your navigation on when your plugin is installed, set
 `sidebar.navigationProvider` to `<plugin-id>/<slot-id>` from `bb.onInstall`
 (see backend-ui-lifecycle.md); later choices in Settings → Appearance stick.
-Users do the same with `bb settings ui set`.
+Users do the same with `mqh settings ui set`.
 
 Existing plugin bundles using `activate(id, { openInSplit })` map `true`
 to `target: "split"` and `false` to `target: "current"`, using the same

@@ -91,7 +91,7 @@ function setTty(value: boolean): void {
   });
 }
 
-describe("bb plugin migrate", () => {
+describe("mqh plugin migrate", () => {
   it("prints the plan and changes nothing without --yes on a non-TTY", async () => {
     await writeVendoredPlugin();
     setTty(false);
@@ -240,7 +240,7 @@ describe("bb plugin migrate", () => {
   );
 });
 
-describe("bb plugin dev stale-pin warning", () => {
+describe("mqh plugin dev stale-pin warning", () => {
   function stubEmptyPluginList(): void {
     vi.mocked(fetch).mockResolvedValueOnce(
       new Response(JSON.stringify({ plugins: [] }), {
@@ -296,10 +296,10 @@ describe("bb plugin dev stale-pin warning", () => {
 describe("legacy vendored SDK layout", () => {
   const message =
     "This plugin uses the legacy vendored SDK layout. Its SDK types will not be updated.\n" +
-    "Please run `bb plugin migrate` to update to the latest SDK types.";
+    "Please run `mqh plugin migrate` to update to the latest SDK types.";
 
   it.each([false, true])(
-    "requires migration for bb plugin types with check=%s",
+    "requires migration for mqh plugin types with check=%s",
     async (check) => {
       await writeVendoredPlugin();
       const declarationsPath = join(rootDir, "types", "bb-plugin-sdk.d.ts");
@@ -317,7 +317,7 @@ describe("legacy vendored SDK layout", () => {
     },
   );
 
-  it("warns and continues bb plugin dev", async () => {
+  it("warns and continues mqh plugin dev", async () => {
     await writeVendoredPlugin();
     vi.mocked(fetch).mockResolvedValueOnce(
       new Response(JSON.stringify({ plugins: [] }), {
@@ -335,7 +335,7 @@ describe("legacy vendored SDK layout", () => {
     );
   });
 
-  it("warns and continues bb plugin build", async () => {
+  it("warns and continues mqh plugin build", async () => {
     await writeVendoredPlugin();
     await writeFile(join(rootDir, "server.ts"), "export default () => {};\n");
 
@@ -348,7 +348,7 @@ describe("legacy vendored SDK layout", () => {
   });
 });
 
-describe("bb plugin types on a package-layout plugin", () => {
+describe("mqh plugin types on a package-layout plugin", () => {
   async function writeHostPlugin(
     field: "dependencies" | "devDependencies",
     hostSource: string,
@@ -383,7 +383,7 @@ describe("bb plugin types on a package-layout plugin", () => {
     ).rejects.toThrow("process.exit:1");
 
     expect(vi.mocked(console.error).mock.calls.flat().join("\n")).toContain(
-      'Move "@get-bb/plugin-sdk" from devDependencies to dependencies — host.ts imports "@get-bb/plugin-sdk/provider-bridge", which the build bundles from the plugin\'s own SDK install, and Git installs omit devDependencies (`bb plugin types` does it for you).',
+      'Move "@get-bb/plugin-sdk" from devDependencies to dependencies — host.ts imports "@get-bb/plugin-sdk/provider-bridge", which the build bundles from the plugin\'s own SDK install, and Git installs omit devDependencies (`mqh plugin types` does it for you).',
     );
 
     await runCommand(["plugin", "types", rootDir], register);
@@ -399,7 +399,7 @@ describe("bb plugin types on a package-layout plugin", () => {
   });
 
   const providerBridgeReason =
-    'host.ts imports "@get-bb/plugin-sdk/provider-bridge", which the build bundles from the plugin\'s own SDK install, and Git installs omit devDependencies (`bb plugin types` does it for you).';
+    'host.ts imports "@get-bb/plugin-sdk/provider-bridge", which the build bundles from the plugin\'s own SDK install, and Git installs omit devDependencies (`mqh plugin types` does it for you).';
 
   it.each([
     {

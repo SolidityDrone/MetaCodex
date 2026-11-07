@@ -92,7 +92,7 @@ const pageAddress = browserServer.address();
 assert(pageAddress && typeof pageAddress !== "string");
 const pageUrl = `http://127.0.0.1:${pageAddress.port}/fixture`;
 const broker = await startDesktopBrowserBroker({
-  dataDir: process.env.BB_DATA_DIR ?? join(config.artifacts, "bb-data"),
+  dataDir: process.env.MQH_DATA_DIR ?? join(config.artifacts, "bb-data"),
   hostId: seeded.host.id,
   serverUrl: server.baseUrl,
   onChanged(event) {
@@ -128,7 +128,7 @@ await writeFile(
   electronConfig,
   JSON.stringify({
     artifacts: config.artifacts,
-    dataDir: process.env.BB_DATA_DIR,
+    dataDir: process.env.MQH_DATA_DIR,
     serverUrl: server.baseUrl,
   }),
   { mode: 0o600 },
@@ -137,8 +137,8 @@ const childEnv = {
   PATH: process.env.PATH,
   HOME: process.env.HOME,
   LANG: process.env.LANG,
-  BB_DATA_DIR: process.env.BB_DATA_DIR,
-  BB_SERVER_URL: server.baseUrl,
+  MQH_DATA_DIR: process.env.MQH_DATA_DIR,
+  MQH_SERVER_URL: server.baseUrl,
   DEV_BROWSER_HOME: join(config.artifacts, "dev-browser-state"),
   NODE_ENV: "test",
 };

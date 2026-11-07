@@ -19,7 +19,7 @@ DROP_PACKAGES=(connect-db connect-db-pg mobile-bridge provider-parity
 DROP_PLUGINS=(account-pool agent-annotations bb-ai browser-automation connect drafts environment-modal-sandbox
   github-star inline-vis keep-awake monaco-editor navigation pdf-preview plugin-api-tester push-notifications
   side-chat theme-preview thread-list
-  bb-account connect-next plugin-api-docs composer scheduled-send)
+  bb-account connect-next plugin-api-docs composer scheduled-send prompt-library)
 DROP_TOP=(docs assets qa examples tests/integration tests/qa CHANGELOG.md changelog-metadata.ts changelog-parser.ts
   CONTRIBUTING.md SECURITY.md CLAUDE.md .github .bb .bb-env-setup.sh)
 # ours, never taken from upstream (upstream's AGENTS.md/README.md describe bb)

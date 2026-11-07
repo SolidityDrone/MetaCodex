@@ -201,7 +201,7 @@ it.runIf(process.platform === "win32")(
       command: process.execPath,
       args: [
         "-e",
-        "process.stdout.write(JSON.stringify([process.env.BB_DATA_DIR ?? null, process.env.BB_HOST_DAEMON_PORT ?? null, process.env.NODE_ENV ?? null, process.env.PROVIDER_TOKEN]));",
+        "process.stdout.write(JSON.stringify([process.env.MQH_DATA_DIR ?? null, process.env.MQH_HOST_DAEMON_PORT ?? null, process.env.NODE_ENV ?? null, process.env.PROVIDER_TOKEN]));",
       ],
       env,
     });

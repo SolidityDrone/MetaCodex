@@ -95,7 +95,7 @@ export async function runSourceShim(args: RunSourceShimArgs): Promise<number> {
       return true;
     } catch (error) {
       args.output.error(
-        `Rebuilding bb ${formatRevision(pending.to)} failed: ${errorMessage(error)} Fix the build and run pnpm start again.`,
+        `Rebuilding mqh ${formatRevision(pending.to)} failed: ${errorMessage(error)} Fix the build and run pnpm start again.`,
       );
       return false;
     }

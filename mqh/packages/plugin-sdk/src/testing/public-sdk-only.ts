@@ -25,10 +25,10 @@ const SOURCE_EXTENSIONS = /\.(?:[cm]?[jt]s|tsx)$/u;
 const TEST_FILE_PATTERN = /\.test\.[cm]?[jt]sx?$/u;
 const PRIVATE_PACKAGE_PREFIX = "@bb/";
 
-/** Specifiers plugin code (server, host, bridge, app) may import. */
+/** Specifiers plugin code (server, host, bridge) may import. */
 const PLUGIN_IMPORT_ALLOWLIST: readonly RegExp[] = [
   /^@get-bb\/plugin-sdk$/u,
-  /^@get-bb\/plugin-sdk\/(?:host|app|provider-bridge|provider-bridge\/acp)$/u,
+  /^@get-bb\/plugin-sdk\/(?:host|provider-bridge|provider-bridge\/acp)$/u,
   /^zod$/u,
   /^node:/u,
   /^\.\.?\//u,
@@ -36,7 +36,7 @@ const PLUGIN_IMPORT_ALLOWLIST: readonly RegExp[] = [
 
 /** What a test file may import beyond the plugin allowlist. */
 const TEST_IMPORT_ALLOWLIST: readonly RegExp[] = [
-  /^@get-bb\/plugin-sdk\/(?:testing|testing\/app|testing\/host|provider-bridge\/testing)$/u,
+  /^@get-bb\/plugin-sdk\/(?:testing|testing\/host|provider-bridge\/testing)$/u,
   /^vitest$/u,
 ];
 

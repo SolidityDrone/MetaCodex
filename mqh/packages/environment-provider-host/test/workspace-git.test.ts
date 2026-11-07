@@ -150,14 +150,14 @@ describe("runGit", () => {
 
   it("scrubs inherited bb runtime env vars and node mode", async () => {
     const repoPath = await initEmptyRepo();
-    vi.stubEnv("BB_DATA_DIR", "/tmp/leaked-bb-data");
+    vi.stubEnv("MQH_DATA_DIR", "/tmp/leaked-bb-data");
     vi.stubEnv("NODE_ENV", "development");
     vi.stubEnv("OPENAI_API_KEY", "external-secret");
 
     const result = await runGit(
       [
         "-c",
-        `alias.env-probe=!printf '%s|%s|%s' "\${BB_DATA_DIR-missing}" "\${NODE_ENV-missing}" "\${OPENAI_API_KEY-missing}"`,
+        `alias.env-probe=!printf '%s|%s|%s' "\${MQH_DATA_DIR-missing}" "\${NODE_ENV-missing}" "\${OPENAI_API_KEY-missing}"`,
         "env-probe",
       ],
       { cwd: repoPath },

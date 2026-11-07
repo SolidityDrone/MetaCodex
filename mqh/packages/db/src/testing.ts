@@ -5,7 +5,7 @@ import { createConnection } from "./connection.js";
 import type { CreateConnectionOptions, DbConnection } from "./connection.js";
 import { migrate } from "./migrate.js";
 
-const TEMPLATE_PATH_ENV = "BB_TEST_MIGRATED_DB_TEMPLATE";
+const TEMPLATE_PATH_ENV = "MQH_TEST_MIGRATED_DB_TEMPLATE";
 
 let migratedTemplate: Buffer | null = null;
 

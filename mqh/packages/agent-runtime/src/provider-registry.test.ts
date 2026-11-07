@@ -189,7 +189,7 @@ describe("provider registry", () => {
         permissionScope: "full",
         approvalReviewer: null,
         permissionEscalation: null,
-        envVars: { BB_THREAD_ID: "thread-1" },
+        envVars: { MQH_THREAD_ID: "thread-1" },
       },
       instructionMode: "append",
     });

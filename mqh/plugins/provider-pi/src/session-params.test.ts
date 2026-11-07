@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildPiSessionParams } from "./session-params.js";
 
 describe("buildPiSessionParams", () => {
-  it("injects the bb thread id into the shell env and drops invalid keys", () => {
+  it("injects the mqh thread id into the shell env and drops invalid keys", () => {
     expect(
       buildPiSessionParams({
         threadId: "bb-thread-1",
@@ -16,7 +16,7 @@ describe("buildPiSessionParams", () => {
         },
       }).shellEnvOverrides,
     ).toEqual({
-      BB_THREAD_ID: "bb-thread-1",
+      MQH_THREAD_ID: "bb-thread-1",
       TEST_VAR: "123",
     });
   });

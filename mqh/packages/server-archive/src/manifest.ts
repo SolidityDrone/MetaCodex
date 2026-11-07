@@ -66,13 +66,13 @@ export function parseServerArchiveManifest(
   if (!probe.success) {
     throw new ServerArchiveError(
       "corrupt",
-      "Archive manifest is not a bb server archive manifest",
+      "Archive manifest is not a mqh server archive manifest",
     );
   }
   if (probe.data.version !== SERVER_ARCHIVE_VERSION) {
     throw new ServerArchiveError(
       "unsupported_version",
-      `Unsupported bb server archive version ${String(probe.data.version)}`,
+      `Unsupported mqh server archive version ${String(probe.data.version)}`,
     );
   }
   const parsed = serverArchiveManifestSchema.safeParse(value);

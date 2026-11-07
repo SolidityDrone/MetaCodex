@@ -357,7 +357,7 @@ export default function gitPlugin(bb: BbPluginApi): void {
     {
       experimental_discoverable: true,
       experimental_description:
-        "Git status, changed files, diffs and Viewed marks for bb environments.",
+        "Git status, changed files, diffs and Viewed marks for mqh environments.",
     },
   );
 

@@ -374,7 +374,7 @@ describe("protocol self-update", () => {
   });
 
   it("updates an installer-managed bb-app inside its machine-specific prefix", async () => {
-    vi.stubEnv("BB_APP_NPM_PREFIX", "/machine-data/npm");
+    vi.stubEnv("MQH_APP_NPM_PREFIX", "/machine-data/npm");
     const test = await createFixture({ useDefaultInstaller: true });
 
     await expect(test.updater.handleProtocolMismatch()).resolves.toBe(
@@ -397,7 +397,7 @@ describe("protocol self-update", () => {
   });
 
   it("keeps legacy global updates when the installer prefix is blank", async () => {
-    vi.stubEnv("BB_APP_NPM_PREFIX", " ");
+    vi.stubEnv("MQH_APP_NPM_PREFIX", " ");
     const test = await createFixture({ useDefaultInstaller: true });
 
     await expect(test.updater.handleProtocolMismatch()).resolves.toBe(

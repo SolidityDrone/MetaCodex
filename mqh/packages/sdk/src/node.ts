@@ -42,14 +42,14 @@ function resolveCliConfig(cliConfig?: CliConfig): CliConfig {
 
 function resolveHostDaemonUrl(cliConfig?: CliConfig): string {
   const config = resolveCliConfig(cliConfig);
-  return `http://${DEFAULT_HOST_DAEMON_LOCAL_BIND_HOST}:${config.BB_HOST_DAEMON_PORT}`;
+  return `http://${DEFAULT_HOST_DAEMON_LOCAL_BIND_HOST}:${config.MQH_HOST_DAEMON_PORT}`;
 }
 
 export function createNodeTransport(
   args: CreateNodeTransportArgs = {},
 ): BbSdkTransport {
   return createHttpTransport({
-    baseUrl: args.baseUrl ?? resolveCliConfig(args.cliConfig).BB_SERVER_URL,
+    baseUrl: args.baseUrl ?? resolveCliConfig(args.cliConfig).MQH_SERVER_URL,
     fetch:
       args.fetch ??
       createRequestTimeoutFetch({

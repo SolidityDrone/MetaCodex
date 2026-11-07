@@ -228,9 +228,9 @@ export function registerMachineCommands(
     .option("--json", "Print machine-readable JSON output")
     .action(
       action(async () => {
-        throw new CliExitError("bb machine join-code has been removed.", 1, {
+        throw new CliExitError("mqh machine join-code has been removed.", 1, {
           code: "removed_command",
-          hint: "Use `bb machine create --provider manual` and run the printed enrollment command.",
+          hint: "Use `mqh machine create --provider manual` and run the printed enrollment command.",
         });
       }),
     );
@@ -318,7 +318,7 @@ export function registerMachineCommands(
         } catch (error) {
           if (controller.signal.aborted) {
             throw new CliExitError(
-              "Stopped following; creation continues. Use bb machine remove <host-id> to cancel.",
+              "Stopped following; creation continues. Use mqh machine remove <host-id> to cancel.",
               130,
             );
           }

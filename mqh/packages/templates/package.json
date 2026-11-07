@@ -23,7 +23,6 @@
   "scripts": {
     "clean": "rimraf dist tsconfig.tsbuildinfo",
     "generate:templates": "node ./scripts/generate-templates.mjs",
-    "generate:plugin-scaffold": "node ./scripts/generate-plugin-scaffold.mjs",
     "typecheck": "tsrs --noEmit",
     "test": "vitest run --config vitest.config.ts"
   },

@@ -19,12 +19,12 @@ Settings → Installed plugins → Provider usage contains the usage page, using
 full-size provider groups with email-labeled accounts and fetching only resources in the selected pool or machine. Both surfaces share the plugin’s aggregation and cache. Neither display is required for source
 plugins to publish their usage.
 
-Use `bb plugin rpc list --method provider-usage.v1.listResources --json` to find sources
-and `bb plugin rpc inspect <plugin-id> provider-usage.v1.listResources --json`
+Use `mqh plugin rpc list --method provider-usage.v1.listResources --json` to find sources
+and `mqh plugin rpc inspect <plugin-id> provider-usage.v1.listResources --json`
 to inspect their published contracts. RPC calls accept JSON through
 `--input-file`. See the Plugin Guide for the contract API.
 
-`bb settings usage --json` and `bb.sdk.system.usageLimits()` remain the
+`mqh settings usage --json` and `bb.sdk.system.usageLimits()` remain the
 host-local provider-maintenance view; they do not aggregate shared pool accounts.
 
 Codex, Claude Code, and ACP provider plugins explicitly implement the usage contract

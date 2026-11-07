@@ -667,8 +667,8 @@ function renderCatalog(store: MemoryStore, projectId: string): string {
   const { memories, total } = store.list("all", projectId, MAX_RESULT_LIMIT);
   const header = [
     "Memory index",
-    "The entries below are summaries, not full records. Use `bb memory search <query> --scope all --json` and `bb memory get <id> --json` to progressively disclose details.",
-    "You may proactively save durable learning with `bb memory add`. Use project scope for repository-specific facts and global scope only for broadly applicable user preferences or workflows. Never store secrets, transient status, guesses, or rules already guaranteed by AGENTS.md.",
+    "The entries below are summaries, not full records. Use `mqh memory search <query> --scope all --json` and `mqh memory get <id> --json` to progressively disclose details.",
+    "You may proactively save durable learning with `mqh memory add`. Use project scope for repository-specific facts and global scope only for broadly applicable user preferences or workflows. Never store secrets, transient status, guesses, or rules already guaranteed by AGENTS.md.",
     "",
   ].join("\n");
   if (memories.length === 0) return `${header}No memories are stored yet.`;
@@ -689,7 +689,7 @@ function renderCatalog(store: MemoryStore, projectId: string): string {
     const finalShown = finalLines.length;
     footer =
       finalShown < total
-        ? `\nShowing ${finalShown} of ${total}; run \`bb memory catalog --scope all --json\` for the rest.`
+        ? `\nShowing ${finalShown} of ${total}; run \`mqh memory catalog --scope all --json\` for the rest.`
         : "";
     if (
       `${header}${finalLines.join("\n")}${footer}`.length <= CATALOG_MAX_CHARS

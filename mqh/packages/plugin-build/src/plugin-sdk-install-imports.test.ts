@@ -17,7 +17,7 @@ async function writePlugin(files: Record<string, string>): Promise<string> {
     join(rootDir, "package.json"),
     JSON.stringify({
       name: "bb-plugin-fixture",
-      bb: { server: "./server.ts", host: "./host.ts", app: "./app.tsx" },
+      bb: { server: "./server.ts", host: "./host.ts" },
     }),
   );
   for (const [path, contents] of Object.entries(files)) {
@@ -118,10 +118,6 @@ describe("findPluginSdkInstallImports", () => {
       ].join("\n"),
       "contract/index.ts":
         'export { experimental_nativeRootsHostContract } from "@get-bb/plugin-sdk/host";\n',
-      "app.tsx":
-        'import { definePluginApp } from "@get-bb/plugin-sdk/app";\nimport { createTestApp } from "./panel.js";\nexport default definePluginApp(createTestApp);\n',
-      "panel.tsx":
-        'export { createTestApp } from "@get-bb/plugin-sdk/testing/app";\n',
     });
 
     await expect(findPluginSdkInstallImports(dir)).resolves.toEqual([
@@ -134,11 +130,6 @@ describe("findPluginSdkInstallImports", () => {
         entry: "host",
         file: "contract/index.ts",
         specifier: "@get-bb/plugin-sdk/host",
-      },
-      {
-        entry: "app",
-        file: "panel.tsx",
-        specifier: "@get-bb/plugin-sdk/testing/app",
       },
     ]);
   });

@@ -2,7 +2,7 @@
 
 The bundled Git plugin (`bb--git`) owns an environment's git status, changed
 files, diffs and branch lists. Copy the part of its contract you read;
-`bb plugin rpc inspect bb--git` prints every method's schema. Reads run git on
+`mqh plugin rpc inspect bb--git` prints every method's schema. Reads run git on
 the environment's machine and never wake a sleeping one.
 
 - `status` is a keyed read: pass environment ids as `keys` and get one row per

@@ -89,7 +89,7 @@ function renderAutomationDueMessage(args: {
   automationId: string;
   prompt: string;
 }): string {
-  return `[bb automation due:${args.automationId}]\n\n${args.prompt}`;
+  return `[mqh automation due:${args.automationId}]\n\n${args.prompt}`;
 }
 
 function unusableThreadReason(thread: SdkThread): string | null {
@@ -296,7 +296,7 @@ async function runScript(
     );
     if (workingDir === null) {
       throw new Error(
-        `Project ${args.automation.projectId} has no source on the bb server host`,
+        `Project ${args.automation.projectId} has no source on the mqh server host`,
       );
     }
     const result = await executeStoredScript({

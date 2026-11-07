@@ -46,7 +46,7 @@ function assertServerManagementAllowed(context: GateAuthHeaderReader): void {
 }
 
 export const SERVER_MOVE_EXPERIMENT_DISABLED_MESSAGE =
-  'Moving the server is off. Turn on the "Server move" experiment in Settings → Experiments, or run bb settings experiment serverMove true, then try again.';
+  'Moving the server is off. Turn on the "Server move" experiment in Settings → Experiments, or run mqh settings experiment serverMove true, then try again.';
 
 function assertServerMoveExperimentEnabled(deps: AppDeps): void {
   if (!getExperiments(deps.db).serverMove) {

@@ -206,25 +206,25 @@ export const defaultRunProcess: SelfUpdateProcessRunner = async (
   await execFileAsync(command, args, options);
 };
 
-const BB_APP_ALLOW_SCRIPTS_ARG =
+const MQH_APP_ALLOW_SCRIPTS_ARG =
   "--allow-scripts=better-sqlite3,node-pty,@parcel/watcher";
 
 export async function defaultInstallTarball(
   tarballPath: string,
   runProcess: SelfUpdateProcessRunner,
 ): Promise<void> {
-  const rawConfiguredPrefix = process.env.BB_APP_NPM_PREFIX?.trim();
+  const rawConfiguredPrefix = process.env.MQH_APP_NPM_PREFIX?.trim();
   const configuredPrefix =
     rawConfiguredPrefix === "" ? undefined : rawConfiguredPrefix;
   if (configuredPrefix !== undefined && !isAbsolute(configuredPrefix)) {
-    throw new Error("BB_APP_NPM_PREFIX must be an absolute path");
+    throw new Error("MQH_APP_NPM_PREFIX must be an absolute path");
   }
   const prefixArgs =
     configuredPrefix === undefined ? [] : ["--prefix", configuredPrefix];
   const args = [
     "install",
     "-g",
-    BB_APP_ALLOW_SCRIPTS_ARG,
+    MQH_APP_ALLOW_SCRIPTS_ARG,
     ...prefixArgs,
     tarballPath,
   ];

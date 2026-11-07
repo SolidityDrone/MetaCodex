@@ -278,7 +278,7 @@ export function defineRpcContract<
  * Who invoked an rpc method. `plugin` means another loaded plugin (or this
  * one) called through its own `bb.sdk.plugins.callRpc`; the host verifies
  * that with a per-load token only the server knows. Every other caller — the
- * app, the `bb` CLI, agents, and bb itself — is `client`.
+ * app, the `mqh` CLI, agents, and bb itself — is `client`.
  */
 export type ExperimentalPluginRpcCaller =
   | { readonly kind: "plugin"; readonly pluginId: string }

@@ -38,7 +38,7 @@ beforeAll(async () => {
 import { appendFileSync, readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { join } from "node:path";
-const starts = join(process.env.BB_DATA_DIR, "starts");
+const starts = join(process.env.MQH_DATA_DIR, "starts");
 appendFileSync(starts, "started\\n");
 if (readFileSync(starts, "utf8") === "started\\n") {
   if (process.env.TEST_FIRST_EXIT === "signal") {
@@ -51,11 +51,11 @@ if (readFileSync(starts, "utf8") === "started\\n") {
 createServer((_request, response) => {
   response.end(JSON.stringify({
     connected: true,
-    hostId: process.env.BB_HOST_ID,
-    serverUrl: process.env.BB_SERVER_URL,
+    hostId: process.env.MQH_HOST_ID,
+    serverUrl: process.env.MQH_SERVER_URL,
   }));
   setTimeout(() => process.exit(0), 200);
-}).listen(Number(process.env.BB_HOST_DAEMON_PORT), "127.0.0.1");
+}).listen(Number(process.env.MQH_HOST_DAEMON_PORT), "127.0.0.1");
 `,
   );
 }, 30_000);
@@ -123,7 +123,7 @@ it.for([75, 1, 0, "signal"])(
       expect(await readFile(join(dataDir, "starts"), "utf8")).toBe(
         restarts ? "started\nstarted\n" : "started\n",
       );
-      expect(output.includes("bb host-daemon is ready")).toBe(restarts);
+      expect(output.includes("mqh host-daemon is ready")).toBe(restarts);
     } finally {
       clearTimeout(timeout);
       child.kill("SIGTERM");

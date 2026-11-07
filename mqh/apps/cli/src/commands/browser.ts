@@ -298,11 +298,11 @@ export function registerBrowserCommands(
   )
     .requiredOption(
       "--from <source>",
-      "Source browser ID from `bb browser import-sources`",
+      "Source browser ID from `mqh browser import-sources`",
     )
     .requiredOption(
       "--profile <directory>",
-      "Source profile directory as printed by `bb browser import-sources`",
+      "Source profile directory as printed by `mqh browser import-sources`",
     )
     .action(
       action(

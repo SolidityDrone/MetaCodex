@@ -62,9 +62,9 @@ function localMcpUrl(bb: BbPluginApi): string {
 }
 
 function notSignedIn(): PluginCliError {
-  return new PluginCliError("This bb is not signed in to a bb account.", {
+  return new PluginCliError("This bb is not signed in to a mqh account.", {
     code: "not_signed_in",
-    hint: "Run `bb account login`, then try again. Remote MCP access goes through bb connect.",
+    hint: "Run `mqh account login`, then try again. Remote MCP access goes through bb connect.",
   });
 }
 
@@ -135,7 +135,7 @@ export default async function mcpPlugin(bb: BbPluginApi): Promise<void> {
     if (result.status === 401) throw notSignedIn();
     if (result.status !== 200) {
       throw new PluginCliError(
-        `The bb account service answered ${result.status}.`,
+        `The mqh account service answered ${result.status}.`,
         { code: "account_request_failed" },
       );
     }
@@ -147,7 +147,7 @@ export default async function mcpPlugin(bb: BbPluginApi): Promise<void> {
       name: "mcp",
       summary: "Let ChatGPT, Claude and other MCP clients control this bb",
       description:
-        "While this plugin is enabled, bb serves a Model Context Protocol endpoint. Remote apps sign in through your bb account and reach it at your bb connect address; apps on this machine can use the local address directly.",
+        "While this plugin is enabled, bb serves a Model Context Protocol endpoint. Remote apps sign in through your mqh account and reach it at your bb connect address; apps on this machine can use the local address directly.",
       commands: {
         status: cliCommand({
           summary: "Show the MCP addresses for this bb",
@@ -172,10 +172,10 @@ export default async function mcpPlugin(bb: BbPluginApi): Promise<void> {
               exitCode: 0,
               stdout: [
                 remoteUrl === null
-                  ? `Remote: unavailable (${accountError ?? "sign in with `bb account login` and turn on bb connect"})`
+                  ? `Remote: unavailable (${accountError ?? "sign in with `mqh account login` and turn on bb connect"})`
                   : `Remote: ${remoteUrl}`,
                 `Local:  ${localUrl}`,
-                "Add the remote address as a custom connector in ChatGPT or Claude; you approve access on a bb account page.",
+                "Add the remote address as a custom connector in ChatGPT or Claude; you approve access on a mqh account page.",
               ].join("\n"),
             };
           },
@@ -203,7 +203,7 @@ export default async function mcpPlugin(bb: BbPluginApi): Promise<void> {
           positionals: [
             {
               name: "grant-id",
-              description: "The id `bb mcp clients` prints",
+              description: "The id `mqh mcp clients` prints",
               required: true,
             },
           ],
@@ -217,7 +217,7 @@ export default async function mcpPlugin(bb: BbPluginApi): Promise<void> {
             if (!revoked) {
               throw new PluginCliError(`No connected app has id ${grantId}.`, {
                 code: "unknown_grant",
-                hint: "Run `bb mcp clients` for the ids.",
+                hint: "Run `mqh mcp clients` for the ids.",
               });
             }
             return {

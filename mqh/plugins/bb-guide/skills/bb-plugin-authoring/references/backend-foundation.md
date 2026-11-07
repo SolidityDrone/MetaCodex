@@ -40,12 +40,12 @@ Listeners are different: `bb.events.on`, settings `onChange`, `onDispose`, and
 
 `bb.log.debug|info|warn|error(message: string)` — goes to the server log
 (prefixed `[plugin:<id>]`) and to the per-plugin JSONL file behind
-`bb plugin logs <id> [-n N] [-f]`.
+`mqh plugin logs <id> [-n N] [-f]`.
 
 ### bb.settings
 
 `bb.settings.define(descriptors)` declares settings descriptors (rendered
-in Settings → Installed plugins and editable via `bb plugin config <id> set <key>
+in Settings → Installed plugins and editable via `mqh plugin config <id> set <key>
 <value>`). Five descriptor types:
 
 ```ts
@@ -106,12 +106,12 @@ from `get()`; without one the value is `string | number | boolean | undefined`
 descriptors accept finite numbers and render a numeric input; use
 `experimental_schema` for integer and range constraints.
 `experimental_optionLabels` maps select option values to display labels;
-stored values, defaults, `get()`, and `bb plugin config` keep using the option
+stored values, defaults, `get()`, and `mqh plugin config` keep using the option
 values, and a label keyed by anything outside `options` is refused.
 
 `experimental_schema` accepts a synchronous, non-transforming Standard Schema
 validator; Zod schemas qualify. It runs on the server for settings-page
-autosaves, `bb plugin config`, `experimental_set`, and fake-host writes. The
+autosaves, `mqh plugin config`, `experimental_set`, and fake-host writes. The
 first validation issue is shown beneath the field, and the schema is not sent
 to the browser. `experimental_set` accepts only the fields defined by that
 handle, accepts `null` to unset one, fires `onChange`, and returns the handle's
@@ -119,7 +119,7 @@ effective values.
 
 Saving settings does not reload a healthy or degraded plugin; its `onChange`
 listeners receive the new values. A save retries the load of a plugin in
-`needs-configuration`. Use `bb plugin reload <id>` only when the change or
+`needs-configuration`. Use `mqh plugin reload <id>` only when the change or
 plugin requires it.
 
 ### bb.storage
@@ -152,7 +152,7 @@ the SPA + `/api` + `/ws` — for plugins that proxy or relay traffic back to
 the server itself. **Bind-gated** like `bb.sdk`: reading it before the server is
 listening throws, so prefer reading it from handlers, services, and timers.
 `bb.server.experimental_appUrl` gives the operator-configured public app URL,
-or `null` when `BB_APP_URL` is empty. It is not bind-gated.
+or `null` when `MQH_APP_URL` is empty. It is not bind-gated.
 `bb.server.experimental_dataDir` gives the exact server data directory for a
 migration from BB-managed files. Do not write plugin state there. Use
 `bb.storage` for plugin-owned state.
@@ -321,7 +321,7 @@ published `@get-bb/plugin-sdk/host` contract such as
 install, so that plugin lists the SDK under `dependencies`. Every provider
 plugin does this. A server entry is the same: bb provides only the bare
 `@get-bb/plugin-sdk` at load time, so a runtime import of any SDK subpath
-needs the SDK under `dependencies`. `bb plugin types` reads the entries'
+needs the SDK under `dependencies`. `mqh plugin types` reads the entries'
 imports and keeps or moves the SDK to the right field, and `--check` fails
 when it is in the wrong one. Either way the daemon never resolves the SDK or private BB
 packages from the plugin at runtime.

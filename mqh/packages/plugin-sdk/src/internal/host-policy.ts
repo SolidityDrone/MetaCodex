@@ -86,7 +86,7 @@ export function pluginCliCollisionWarning(
   commandName: string,
 ): string | null {
   if (!RESERVED_BB_CLI_COMMANDS.includes(commandName)) return null;
-  return `CLI command "${commandName}" collides with core command "bb ${commandName}"; core keeps the short form. Use "bb plugin run ${pluginId}" to invoke this plugin.`;
+  return `CLI command "${commandName}" collides with core command "mqh ${commandName}"; core keeps the short form. Use "mqh plugin run ${pluginId}" to invoke this plugin.`;
 }
 
 /**

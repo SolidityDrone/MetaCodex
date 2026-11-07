@@ -1,9 +1,8 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { tmpdir } from "node:os";
 import { basename, join, sep } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { buildPluginApp } from "./build-plugin-app.js";
 import {
   PLUGIN_TOOLCHAIN_PINS,
   resolvePluginBuildToolchain,
@@ -38,8 +37,6 @@ describe("plugin build toolchain", () => {
 
     expect(toolchain.esbuild).toMatch(/^file:\/\//);
     expect(toolchain.esbuild).toContain("esbuild");
-    expect(toolchain.tailwindNode).toContain("@tailwindcss/node");
-    expect(toolchain.tailwindOxide).toContain("@tailwindcss/oxide");
     expect(
       await rm(toolchainCacheDir(baseDir), { recursive: true }).then(
         () => true,
@@ -49,56 +46,6 @@ describe("plugin build toolchain", () => {
   });
 
   describe("fetched toolchain", () => {
-    it.runIf(process.env.BB_TEST_TOOLCHAIN_FETCH === "1")(
-      "builds a plugin frontend with nothing resolvable locally",
-      async () => {
-        const fetchEvents: string[] = [];
-        const toolchain = await resolvePluginBuildToolchain(baseDir, {
-          ignoreLocal: true,
-          onFetchStart: () => fetchEvents.push("start"),
-          onFetchDone: (ms) => fetchEvents.push(`done:${ms > 0}`),
-        });
-
-        expect(fetchEvents).toEqual(["start", "done:true"]);
-
-        expect(toolchain.esbuild).toContain("toolchain-");
-        expect(toolchain.tailwindCssDir).toContain("toolchain-");
-
-        const pluginDir = join(baseDir, "plugin");
-        await mkdir(pluginDir, { recursive: true });
-        await writeFile(
-          join(pluginDir, "package.json"),
-          JSON.stringify({
-            name: "bb-plugin-fetched",
-            version: "0.1.0",
-            bb: {
-              name: "Fetched",
-              description: "Fetched toolchain fixture.",
-              branding: { icon: "Zap" },
-              server: "./server.ts",
-              app: "./app.tsx",
-            },
-          }),
-        );
-        await writeFile(
-          join(pluginDir, "server.ts"),
-          "export default function plugin() {}",
-        );
-        await writeFile(
-          join(pluginDir, "app.tsx"),
-          `import { definePluginApp } from "@get-bb/plugin-sdk/app";\n` +
-            `export default definePluginApp({});\n`,
-        );
-
-        const result = await buildPluginApp(pluginDir, "0.9.0-test", toolchain);
-        const css = await readFile(result.cssPath, "utf8");
-
-        expect(css.length).toBeGreaterThan(0);
-        expect(css).toContain("--");
-      },
-      600_000,
-    );
-
     it.skipIf(process.platform === "win32")(
       "fetches with the shipped npm and excludes script-policy config without PATH executables",
       async () => {

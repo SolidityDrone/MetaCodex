@@ -141,7 +141,7 @@ const ACTIVATION_SESSION_CLOSE_TIMEOUT_MS = 90_000;
 const SESSION_CLOSE_POLL_INTERVAL_MS = 250;
 const PROBE_TIMEOUT_MS = 10_000;
 const PROGRESS_INTERVAL_MS = 1_000;
-const BB_APP_MAX_DOWNLOAD_BYTES = 2 * 1024 * 1024 * 1024;
+const MQH_APP_MAX_DOWNLOAD_BYTES = 2 * 1024 * 1024 * 1024;
 const SERVER_DATABASE_PATHS = ["bb.db", "bb.db-wal", "bb.db-shm"] as const;
 const HOST_ARTIFACT_DIGEST_FILE_NAME = "host-artifact.sha256";
 const STANDALONE_DATA_DIR_NAME = ".bb";
@@ -406,7 +406,7 @@ export class ServerMoveService {
         reachable: false,
         message:
           health === null
-            ? `${command.url} answered, but it is not the new bb server`
+            ? `${command.url} answered, but it is not the new mqh server`
             : `${command.url} answered for a different server move`,
         state: null,
       };
@@ -572,7 +572,7 @@ export class ServerMoveService {
     });
     this.options.logger.info(
       { moveId: marker.moveId, entries: marker.oldCopyEntries.length },
-      "Deleted the old bb server copy",
+      "Deleted the old mqh server copy",
     );
     return { deleted: true };
   }
@@ -676,7 +676,7 @@ export class ServerMoveService {
     await rm(join(dataDir, SERVER_IMPORT_FILE_NAME), { force: true });
     this.options.logger.info(
       { moveId: state.moveId, plan: plan.kind },
-      "Activated the imported bb server; switching this machine to run it",
+      "Activated the imported mqh server; switching this machine to run it",
     );
     if (plan.kind === "launcher") {
       await rm(join(dataDir, SERVER_MOVED_FILE_NAME), { force: true });
@@ -708,7 +708,7 @@ export class ServerMoveService {
     const { dataDir } = this.options;
     if ((await this.resolveServerEntry()) === null) {
       throw rejectActivation(
-        "This machine's bb installation does not include the bb server",
+        "This machine's bb installation does not include the mqh server",
       );
     }
     if (fixedKind === "launcher") {
@@ -754,7 +754,7 @@ export class ServerMoveService {
         return { kind: "service", definition, programArguments };
       } catch (error) {
         throw rejectActivation(
-          `Cannot switch ${definition.path} to run the bb server: ${errorMessage(error)}`,
+          `Cannot switch ${definition.path} to run the mqh server: ${errorMessage(error)}`,
         );
       }
     }
@@ -865,7 +865,7 @@ export class ServerMoveService {
     } catch (error) {
       this.options.logger.error(
         { err: error, moveId: state.moveId },
-        "The old bb server moved to this machine, but this machine cannot start the server",
+        "The old mqh server moved to this machine, but this machine cannot start the server",
       );
       return true;
     }
@@ -888,7 +888,7 @@ export class ServerMoveService {
     await writeIncomingMoveState(dataDir, activatingState);
     this.options.logger.warn(
       { moveId: state.moveId, serverUrl },
-      "The old bb server committed the move to this machine without confirming; finishing activation",
+      "The old mqh server committed the move to this machine without confirming; finishing activation",
     );
     void this.startActivation(activatingState, false);
     return true;
@@ -1058,7 +1058,7 @@ export class ServerMoveService {
   }
 
   private npmPrefix(): string | null {
-    const npmPrefix = this.options.env.BB_APP_NPM_PREFIX?.trim();
+    const npmPrefix = this.options.env.MQH_APP_NPM_PREFIX?.trim();
     return npmPrefix !== undefined && npmPrefix !== "" && isAbsolute(npmPrefix)
       ? npmPrefix
       : null;
@@ -1095,12 +1095,12 @@ export class ServerMoveService {
     const sanitized = sanitizeInheritedChildProcessEnv({
       env: this.options.env,
     });
-    const npmPrefix = this.options.env.BB_APP_NPM_PREFIX;
+    const npmPrefix = this.options.env.MQH_APP_NPM_PREFIX;
     return {
       ...sanitized,
       PATH: hostToolchain.environment(sanitized).PATH,
-      BB_DATA_DIR: this.options.dataDir,
-      ...(npmPrefix === undefined ? {} : { BB_APP_NPM_PREFIX: npmPrefix }),
+      MQH_DATA_DIR: this.options.dataDir,
+      ...(npmPrefix === undefined ? {} : { MQH_APP_NPM_PREFIX: npmPrefix }),
       ...(forcesNoServiceManager(this.options.env)
         ? { [SERVER_MOVE_SERVICE_MANAGER_ENV]: "none" }
         : {}),
@@ -1232,7 +1232,7 @@ export class ServerMoveService {
       if (serverEntry === null) {
         throw new CommandDispatchError(
           "server_move_server_entry_unavailable",
-          "This machine's bb installation does not include the bb server",
+          "This machine's bb installation does not include the mqh server",
         );
       }
       const archivePath = join(moveDir, ARCHIVE_FILE_NAME);
@@ -1377,26 +1377,26 @@ export class ServerMoveService {
     await this.download({
       moveId: command.moveId,
       step: "update-target",
-      label: `bb ${bbApp.version}`,
+      label: `mqh ${bbApp.version}`,
       downloadPath: bbApp.downloadPath,
       destinationPath: tarballPath,
       sha256: bbApp.sha256,
       sizeBytes: bbApp.sizeBytes,
-      maxSizeBytes: BB_APP_MAX_DOWNLOAD_BYTES,
+      maxSizeBytes: MQH_APP_MAX_DOWNLOAD_BYTES,
       signal,
     });
     signal.throwIfAborted();
     this.emitProgress(
       command.moveId,
       "update-target",
-      `Installing bb ${bbApp.version}`,
+      `Installing mqh ${bbApp.version}`,
     );
     try {
       await this.options.installBbApp(tarballPath);
     } catch (error) {
       throw new CommandDispatchError(
         "server_move_install_failed",
-        `Could not install bb ${bbApp.version}: ${errorMessage(error)}`,
+        `Could not install mqh ${bbApp.version}: ${errorMessage(error)}`,
       );
     }
     await rm(join(this.options.dataDir, HOST_ARTIFACT_DIGEST_FILE_NAME), {
@@ -1406,7 +1406,7 @@ export class ServerMoveService {
     this.emitProgress(
       command.moveId,
       "update-target",
-      `Installed bb ${bbApp.version}`,
+      `Installed mqh ${bbApp.version}`,
     );
   }
 
@@ -1467,7 +1467,7 @@ export class ServerMoveService {
     this.emitProgress(
       moveId,
       "start-target",
-      `Archiving the existing bb server data in ${originalPath}`,
+      `Archiving the existing mqh server data in ${originalPath}`,
     );
     const archivedPath = await archiveExistingServerData({
       dataDir: originalPath,
@@ -1593,7 +1593,7 @@ export class ServerMoveService {
     ) {
       this.options.logger.info(
         { serverUrl },
-        "The bb server moved; exiting so the bb-app launcher reconnects to the new server",
+        "The mqh server moved; exiting so the bb-app launcher reconnects to the new server",
       );
       await this.options.requestShutdown("server-moved", 0);
       return;
@@ -1602,7 +1602,7 @@ export class ServerMoveService {
     if (supervisor !== null) {
       this.options.logger.warn(
         { serverUrl, supervisor },
-        "The bb server moved, but this daemon runs under a service bb does not manage; updated config.json and exiting instead of starting a second daemon",
+        "The mqh server moved, but this daemon runs under a service bb does not manage; updated config.json and exiting instead of starting a second daemon",
       );
       await this.options.requestShutdown("server-moved", 0);
       return;
@@ -1611,7 +1611,7 @@ export class ServerMoveService {
     if (launcherEntry === null) {
       this.options.logger.warn(
         { serverUrl },
-        "The bb server moved, but this daemon has no bb-app launcher to restart through; exiting",
+        "The mqh server moved, but this daemon has no bb-app launcher to restart through; exiting",
       );
       await this.options.requestShutdown("server-moved", 0);
       return;

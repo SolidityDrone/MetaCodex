@@ -131,7 +131,7 @@ async function connectLikeOpenCode(port: number): Promise<Client> {
     if (value !== undefined) env[key] = value;
   }
   for (const { name, value } of config.env) env[name] = value;
-  env.BB_ACP_DYNAMIC_TOOL_PROGRESS_INTERVAL_MS = "200";
+  env.MQH_ACP_DYNAMIC_TOOL_PROGRESS_INTERVAL_MS = "200";
   const transport = new StdioClientTransport({
     command: config.command,
     args: config.args,

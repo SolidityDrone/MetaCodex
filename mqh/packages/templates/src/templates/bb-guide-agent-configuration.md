@@ -59,30 +59,30 @@ Skills (.bb/skills/):
   registration. Linked registrations are read-only. Codex receives a selected
   skill as a structured name/path input, including when steering an active turn.
 
-  Use `bb skill list` to inspect installed and discovered skills and copy the
-  opaque skill ID. `bb skill show|files <skill-id>` reads that exact skill;
-  `bb skill show <skill-id> --json` returns the revision required by `bb skill
-  update <skill-id> --revision <sha256>`. `bb skill delete <skill-id>` and
+  Use `mqh skill list` to inspect installed and discovered skills and copy the
+  opaque skill ID. `mqh skill show|files <skill-id>` reads that exact skill;
+  `mqh skill show <skill-id> --json` returns the revision required by `mqh skill
+  update <skill-id> --revision <sha256>`. `mqh skill delete <skill-id>` and
   update are restricted to editable, user-owned skills. These workspace-scoped
-  commands default to `BB_PROJECT_ID`, then the personal project; pass
+  commands default to `MQH_PROJECT_ID`, then the personal project; pass
   `--project` or `--environment` when a different workspace is required.
 
-  Use `bb skill search [query]` to browse skills.sh (no query lists what is
+  Use `mqh skill search [query]` to browse skills.sh (no query lists what is
   trending; `--page` starts at 0 and `--per-page` defaults to 24). JSON
-  `installs` counts the `ranking` window; `lifetimeInstalls` may be null. Use `bb skill registry detail
+  `installs` counts the `ranking` window; `lifetimeInstalls` may be null. Use `mqh skill registry detail
   <registry-skill-id>` to inspect metadata and the bounded file preview, and
-  `bb skill install <registry-skill-id>` to install that canonical registry
+  `mqh skill install <registry-skill-id>` to install that canonical registry
   identity into bb user skills. Registry commands are server-wide and do not
   accept workspace selectors.
 
-  Use `bb skill install-cli-skills` to copy bb's built-in CLI skills into a
+  Use `mqh skill install-cli-skills` to copy bb's built-in CLI skills into a
   machine's global agent skill roots (`~/.agents/skills` and
   `~/.claude/skills`) so agents running outside bb can drive it. It installs on
   every connected persistent machine unless you pass `--machine <id-or-name>`
   (repeatable; required for a sandbox) (Settings → Skills has the same action). Machines install
   independently, so the command reports each machine's outcome and exits
   non-zero if any failed. The install replaces a previously installed copy of
-  the same skill and leaves other skills alone. `bb skill cli-skills-status`
+  the same skill and leaves other skills alone. `mqh skill cli-skills-status`
   reports whether each machine is installed, out of date, missing, or unknown
   (disconnected or unreachable).
 
@@ -95,12 +95,12 @@ BB guide plugin:
   plugins → BB guide exposes introduction, a master skills switch, and one
   switch per skill. All default to true. Use:
 
-    bb plugin config bb-guide set introduction false
-    bb plugin config bb-guide set skills false
-    bb plugin config bb-guide set bbCli false
-    bb plugin config bb-guide set pluginAuthoring false
-    bb plugin config bb-guide set skillCreator false
-    bb plugin config bb-guide set submitPlugin false
+    mqh plugin config bb-guide set introduction false
+    mqh plugin config bb-guide set skills false
+    mqh plugin config bb-guide set bbCli false
+    mqh plugin config bb-guide set pluginAuthoring false
+    mqh plugin config bb-guide set skillCreator false
+    mqh plugin config bb-guide set submitPlugin false
 
   Changes apply when agent configuration is next assembled. They do not erase
   existing conversation text or disable independently installed copies.

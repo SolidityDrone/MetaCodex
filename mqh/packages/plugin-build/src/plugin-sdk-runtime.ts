@@ -1,7 +1,6 @@
 import { PLUGIN_SDK_PACKAGE_NAME } from "./plugin-sdk-install.js";
-import { RUNTIME_SLOT_BY_SPECIFIER } from "./runtime-shims.mjs";
 
-export type PluginEntryKind = "server" | "host" | "app";
+export type PluginEntryKind = "server" | "host";
 
 export const PLUGIN_SDK_ROOT_FILTER = /^@get-bb\/plugin-sdk$|^@bb\/plugin-sdk$/;
 export const PLUGIN_SDK_HOST_FALLBACK_SPECIFIER = "@get-bb/plugin-sdk/host";
@@ -24,7 +23,5 @@ export function isPluginSdkImportProvided(
         (specifier === PLUGIN_SDK_HOST_FALLBACK_SPECIFIER &&
           names.every((name) => PLUGIN_SDK_HOST_FALLBACK_EXPORTS.has(name)))
       );
-    case "app":
-      return Object.hasOwn(RUNTIME_SLOT_BY_SPECIFIER, specifier);
   }
 }

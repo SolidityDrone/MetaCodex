@@ -234,7 +234,7 @@ describe("target threads whose last turn failed", () => {
       input: [
         {
           type: "text",
-          text: `[bb automation due:${first.id}]\n\nrun the check`,
+          text: `[mqh automation due:${first.id}]\n\nrun the check`,
         },
       ],
     });

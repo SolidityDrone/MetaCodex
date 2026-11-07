@@ -2,7 +2,7 @@
 
 A standalone agent workstation for Meta Quest 3 / 3S. A real Linux userland (Debian 13, arm64) runs
 inside the app; agents work in it; Unity shows it all as spatial panels you read, poke and talk to.
-Three parts, in build order: the **terminal** (Linux in VR), **local AI** (QVAC in the userland), and
+Three parts, in build order: the **terminal** (Linux in VR), **local AI** (QVAC, native on Horizon OS in its own process: [docs/qvac.md](docs/qvac.md)), and
 **MQH**, the Meta Quest Harness (threads, plugins, skills, providers), with Unity as its client.
 
 Plan and decisions: `/home/drone/bs/BELVEDERE_PLAN.md` (v2). Harness: [docs/mqh.md](docs/mqh.md).

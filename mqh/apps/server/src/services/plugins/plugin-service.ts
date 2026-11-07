@@ -9,7 +9,7 @@ import type {
 } from "@bb/server-contract";
 import type Database from "better-sqlite3";
 import { watch } from "node:fs";
-import { readFile, rm } from "node:fs/promises";
+import { readFile, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import type { Context } from "hono";
@@ -47,7 +47,7 @@ import {
   validateRpcValue,
   validateSettingsUpdate,
 } from "@get-bb/plugin-sdk/internal/host-policy";
-import { buildPluginApp, createPluginDevLoop } from "@bb/plugin-build";
+import { createPluginDevLoop } from "@bb/plugin-build";
 import { getPluginBuildToolchain } from "./build-toolchain.js";
 import { buildMutablePluginHost } from "./mutable-plugin-artifacts.js";
 import {
@@ -111,12 +111,10 @@ import {
 } from "../threads/thread-data.js";
 import { buildTurnFailedEvent } from "../threads/turn-failed.js";
 import {
-  pluginAppAsset,
-  type PluginAppAsset,
   type PluginBrandingAssetSet,
   type PluginBrandingAssetSnapshot,
   type PluginBrandingAssetVariant,
-} from "./app-bundle.js";
+} from "./plugin-assets.js";
 import { readPluginThemeCodeTheme } from "../system/code-themes.js";
 import {
   npmInstallPrefix,
@@ -148,7 +146,7 @@ import {
   syncPluginCommandsSkill,
   type PluginCliContribution,
 } from "./plugin-commands-skill.js";
-import { logPluginBuildWarnings, readPluginLogTail } from "./plugin-log.js";
+import { readPluginLogTail } from "./plugin-log.js";
 import {
   buildPluginSettingsView,
   pluginSecretsDir,
@@ -344,17 +342,11 @@ export interface PluginService {
    */
   listOpenPluginDatabases(): OpenPluginDatabase[];
   /**
-   * Asset backing GET /plugins/:id/assets/app.{js,css}: a reader for its
-   * bytes (app.js from disk, app.css as loaded, without the Tailwind rules the
-   * host app already provides) plus the current content hash (the route
-   * compares ?h against it for cache policy). Undefined when the plugin has no
-   * loadable bundle, or no CSS for kind "css".
+   * MQH: the plugin's spatial.json (panels the Unity client renders), parsed, for
+   * GET /plugins/:id/spatial. Undefined when the plugin is not loaded or declares none;
+   * throws when the file is missing, too large or not JSON.
    */
-  getAppAsset(id: string, kind: "js" | "css"): PluginAppAsset | undefined;
-  getAppAssetByHash(
-    hash: string,
-    kind: "js" | "css",
-  ): PluginAppAsset | undefined;
+  readSpatialDocument(id: string): Promise<unknown | undefined>;
   getBrandingAsset(
     id: string,
     variant: PluginBrandingAssetVariant,
@@ -489,6 +481,8 @@ export interface PluginService {
   dueScheduleSweep(now: number): ItemSweep;
 }
 
+/** spatial.json is layout data, not content: keep it small. */
+const SPATIAL_DOCUMENT_MAX_BYTES = 256 * 1024;
 const DEFAULT_MENTION_SEARCH_TIMEOUT_MS = 2_000;
 const DEFAULT_MENTION_RESOLVE_TIMEOUT_MS = 10_000;
 const DEFAULT_PROVIDER_ENV_RESOLVE_TIMEOUT_MS = 5_000;
@@ -672,7 +666,6 @@ export function createPluginService(deps: PluginServiceDeps): PluginService {
   const {
     REGISTRATION_MUTATION_KEY,
     agentToolProblems,
-    appBundles,
     bindSdk: bindRuntimeSdk,
     resolveRpcCaller,
     buildThreadDto,
@@ -1137,7 +1130,10 @@ export function createPluginService(deps: PluginServiceDeps): PluginService {
           hasSettings:
             loadedPlugin !== undefined &&
             Object.keys(loadedPlugin.handle.settings.descriptors).length > 0,
-          app: appBundles.get(row.id)?.state ?? { hasApp: false, bundle: null },
+          spatial:
+            (loadedPlugin?.manifest ?? identity?.manifest)?.spatialEntry !== undefined
+              ? { hasSpatial: true, url: `/api/v1/plugins/${row.id}/spatial` }
+              : { hasSpatial: false, url: null },
           logoUrl: brandingSet?.logo?.url ?? null,
           logoDarkUrl: brandingSet?.logoDark?.url ?? null,
           providerIds:
@@ -1563,39 +1559,11 @@ export function createPluginService(deps: PluginServiceDeps): PluginService {
             pluginId: row.id,
             targets: async () => {
               const manifest = await readPluginManifest(bundled.rootDir);
-              const hasApp = manifest.appEntry !== undefined;
               const hasHost = manifest.hostEntry !== undefined;
               // A dropped entry can no longer rebuild, so its last build
               // problem would otherwise stick forever.
-              if (!hasApp) setDevBuildProblem(row.id, "frontend", null);
               if (!hasHost) setDevBuildProblem(row.id, "host", null);
-              return { hasApp, hasHost };
-            },
-            buildApp: async () => {
-              try {
-                const app = await buildPluginApp(
-                  bundled.rootDir,
-                  deps.appVersion,
-                  await getPluginBuildToolchain(deps),
-                  { minify: true, hostProvidedZod: true },
-                );
-                logPluginBuildWarnings({
-                  dataDir: deps.dataDir,
-                  logger,
-                  pluginId: row.id,
-                  warnings: app.migrationWarnings,
-                });
-                setDevBuildProblem(row.id, "frontend", null);
-                notifyPluginsChanged();
-              } catch (error) {
-                setDevBuildProblem(
-                  row.id,
-                  "frontend",
-                  error instanceof Error ? error.message : String(error),
-                );
-                notifyPluginsChanged();
-                throw error;
-              }
+              return { hasHost };
             },
             buildHost: async () => {
               try {
@@ -1775,7 +1743,6 @@ export function createPluginService(deps: PluginServiceDeps): PluginService {
         statuses.delete(id);
         handlerStats.delete(id);
         agentToolProblems.delete(id);
-        appBundles.delete(id);
         brandingAssets.delete(id);
         identities.delete(id);
         const removed = row
@@ -1942,19 +1909,16 @@ export function createPluginService(deps: PluginServiceDeps): PluginService {
       );
     },
 
-    getAppAsset(id, kind) {
-      if (!loaded.has(id)) return undefined;
-      const assets = appBundles.get(id)?.assets;
-      return assets ? pluginAppAsset(assets, kind) : undefined;
-    },
-
-    getAppAssetByHash(hash, kind) {
-      for (const [id, snapshot] of appBundles) {
-        if (!loaded.has(id) || snapshot.assets?.hash !== hash) continue;
-        const asset = pluginAppAsset(snapshot.assets, kind);
-        if (asset !== undefined) return asset;
+    async readSpatialDocument(id) {
+      const manifest = loaded.get(id)?.manifest;
+      if (manifest?.spatialEntry === undefined) return undefined;
+      const info = await stat(manifest.spatialEntry);
+      if (info.size > SPATIAL_DOCUMENT_MAX_BYTES) {
+        throw new Error(
+          `spatial.json of plugin ${id} is ${info.size} bytes (limit ${SPATIAL_DOCUMENT_MAX_BYTES})`,
+        );
       }
-      return undefined;
+      return JSON.parse(await readFile(manifest.spatialEntry, "utf8")) as unknown;
     },
 
     getBrandingAsset(id, variant) {
@@ -2310,7 +2274,7 @@ export function createPluginService(deps: PluginServiceDeps): PluginService {
         ctx.signal,
       );
       if (outcome.ok) return outcome.value;
-      return fail(`bb ${registration.name} failed: ${outcome.error}`);
+      return fail(`mqh ${registration.name} failed: ${outcome.error}`);
     },
 
     listSkillRootContributions() {

@@ -17,7 +17,7 @@ import {
 import * as fixtures from "../helpers/command-output-fixtures.js";
 import { registerThreadCommands } from "../../commands/thread/index.js";
 
-describe("bb thread show command output", () => {
+describe("mqh thread show command output", () => {
   setupCommandOutputTestEnvironment();
 
   const register: CommandRegistrar = (program) =>
@@ -106,7 +106,7 @@ describe("bb thread show command output", () => {
       label: "Pinned:",
     },
   ])(
-    "bb thread show prints $flag timestamp for $flag threads",
+    "mqh thread show prints $flag timestamp for $flag threads",
     async ({ flag, stamp, label }) => {
       const thread: domain.Thread = fixtures.makeThread({
         id: `thread-${flag}-1`,
@@ -138,8 +138,8 @@ describe("bb thread show command output", () => {
     },
   );
 
-  it("bb thread show --self resolves from BB_THREAD_ID", async () => {
-    vi.stubEnv("BB_THREAD_ID", "thread-show-self");
+  it("mqh thread show --self resolves from MQH_THREAD_ID", async () => {
+    vi.stubEnv("MQH_THREAD_ID", "thread-show-self");
     const thread: domain.Thread = fixtures.makeThread({
       id: "thread-show-self",
       projectId: "proj-1",
@@ -163,7 +163,7 @@ describe("bb thread show command output", () => {
     expect(collectLogLines(vi.mocked(console.error))).toEqual([]);
   });
 
-  it("bb thread show --work-status prints non-git environment message", async () => {
+  it("mqh thread show --work-status prints non-git environment message", async () => {
     const thread: domain.Thread = fixtures.makeThread({
       id: "thread-show-work-status",
       projectId: "proj-1",
@@ -210,11 +210,11 @@ describe("bb thread show command output", () => {
       "Work status: Workspace is not a Git repository.",
     );
     expect(collectLogLines(vi.mocked(console.error))).toEqual([
-      "bb thread show --work-status is deprecated and will be removed. Use:\n  bb git status env-work-status --merge-base-branch main",
+      "mqh thread show --work-status is deprecated and will be removed. Use:\n  bb git status env-work-status --merge-base-branch main",
     ]);
   });
 
-  it("bb thread show hides the deprecated git flags from help", async () => {
+  it("mqh thread show hides the deprecated git flags from help", async () => {
     const help = await getHelpOutput(["thread", "show"], register);
 
     expect(help).toContain("--json");
@@ -229,8 +229,8 @@ describe("bb thread show command output", () => {
     }
   });
 
-  it("bb thread show rejects combining a thread id with --self", async () => {
-    vi.stubEnv("BB_THREAD_ID", "thread-show-self");
+  it("mqh thread show rejects combining a thread id with --self", async () => {
+    vi.stubEnv("MQH_THREAD_ID", "thread-show-self");
 
     await expect(
       runCommand(["thread", "show", "thread-explicit", "--self"], register),
@@ -242,7 +242,7 @@ describe("bb thread show command output", () => {
     expect(createClientMock).not.toHaveBeenCalled();
   });
 
-  it("bb thread show --git-diff uses the environment base branch before the repository default", async () => {
+  it("mqh thread show --git-diff uses the environment base branch before the repository default", async () => {
     const thread: domain.Thread = fixtures.makeThread({
       id: "thread-show-diff-base",
       projectId: "proj-1",
@@ -291,11 +291,11 @@ describe("bb thread show command output", () => {
       },
     ]);
     expect(collectLogLines(vi.mocked(console.error))).toEqual([
-      "bb thread show --git-diff is deprecated and will be removed. Use:\n  bb git diff env-diff-base --target all --merge-base-branch release",
+      "mqh thread show --git-diff is deprecated and will be removed. Use:\n  bb git diff env-diff-base --target all --merge-base-branch release",
     ]);
   });
 
-  it("bb thread show names the bb git commands for every deprecated git flag", async () => {
+  it("mqh thread show names the bb git commands for every deprecated git flag", async () => {
     const thread: domain.Thread = fixtures.makeThread({
       id: "thread-show-deprecated",
       projectId: "proj-1",
@@ -342,7 +342,7 @@ describe("bb thread show command output", () => {
 
     expect(collectLogLines(vi.mocked(console.error))).toEqual([
       [
-        "bb thread show --work-status, --git-diff, --diff-target, --diff-sha are deprecated and will be removed. Use:",
+        "mqh thread show --work-status, --git-diff, --diff-target, --diff-sha are deprecated and will be removed. Use:",
         "  bb git status env-deprecated --merge-base-branch develop --json",
         "  bb git diff env-deprecated --target commit --sha abc1234 --json",
       ].join("\n"),
@@ -353,7 +353,7 @@ describe("bb thread show command output", () => {
     expect(payload).toMatchObject({ workStatus: null, gitDiff: null });
   });
 
-  it("bb thread show --git-diff renders an available uncommitted diff response", async () => {
+  it("mqh thread show --git-diff renders an available uncommitted diff response", async () => {
     const thread: domain.Thread = fixtures.makeThread({
       id: "thread-show-uncommitted-diff",
       projectId: "proj-1",
@@ -411,7 +411,7 @@ describe("bb thread show command output", () => {
     expect(output).toContain("diff --git a/smoke.txt b/smoke.txt");
   });
 
-  it("bb thread show prints pull request details for the thread environment", async () => {
+  it("mqh thread show prints pull request details for the thread environment", async () => {
     const thread: domain.Thread = fixtures.makeThread({
       id: "thread-show-pr",
       projectId: "proj-1",
@@ -469,7 +469,7 @@ describe("bb thread show command output", () => {
     expect(output).toContain("Merge:        mergeable");
   });
 
-  it("bb thread show reports a failed pull request lookup distinctly from none", async () => {
+  it("mqh thread show reports a failed pull request lookup distinctly from none", async () => {
     const thread: domain.Thread = fixtures.makeThread({
       id: "thread-show-pr-down",
       projectId: "proj-1",
@@ -507,7 +507,7 @@ describe("bb thread show command output", () => {
     expect(output).not.toContain("Pull request: none");
   });
 
-  it("bb thread show --json includes pull request details", async () => {
+  it("mqh thread show --json includes pull request details", async () => {
     const thread: domain.Thread = fixtures.makeThread({
       id: "thread-json-show-pr",
       projectId: "proj-1",
@@ -558,7 +558,7 @@ describe("bb thread show command output", () => {
     });
   });
 
-  it("bb thread show --json prints the thread in status payload format", async () => {
+  it("mqh thread show --json prints the thread in status payload format", async () => {
     const thread: domain.Thread = fixtures.makeThread({
       id: "thread-json-show",
       projectId: "proj-1",

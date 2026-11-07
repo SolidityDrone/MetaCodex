@@ -14,7 +14,7 @@ import {
 
 describe("provider maintenance kit", () => {
   it("reads a CLI version through a native launcher after closing stdin", async () => {
-    const dir = await mkdtemp(path.join(tmpdir(), "bb cli version é-"));
+    const dir = await mkdtemp(path.join(tmpdir(), "mqh cli version é-"));
     try {
       const script = path.join(dir, "version.cjs");
       await writeFile(

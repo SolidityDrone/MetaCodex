@@ -37,7 +37,7 @@ async function writeHold(dataDir: string): Promise<void> {
 }
 
 describe("bb connect hold", () => {
-  it("holds the builtin connect and bb account plugins while server-connect-hold.json exists, even when it can't be read", async () => {
+  it("holds the builtin connect and mqh account plugins while server-connect-hold.json exists, even when it can't be read", async () => {
     const dataDir = await makeDataDir();
     const logger = { warn: vi.fn() };
     const hold = createConnectHold({ dataDir, logger });

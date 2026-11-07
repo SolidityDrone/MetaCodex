@@ -4,7 +4,7 @@ import {
   mergeLoadedTimelineWithLatest,
   prependOlderTimelineRows,
   resolveLoadedTimelineSurfaceKey,
-} from "@bb/client-core";
+} from "../helpers/client-timeline/timeline-merge.js";
 import {
   defaultAppSettings,
   defaultFeatureFlags,

@@ -17,7 +17,6 @@ import type {
 const SETUP_GUIDE_FLAG_KEY = "setup-guide-redesign";
 export const SETUP_GUIDE_FLAG_TIMEOUT_MS = 3_000;
 export const SETUP_GUIDE_ASSIGNMENT_FILE_NAME = "setup-guide-assignment.json";
-const POSTHOG_FLAGS_URL = "https://us.i.posthog.com/flags?v=2";
 
 type SetupGuideAssignmentSource = "override" | "flag" | "default";
 
@@ -59,15 +58,6 @@ const persistedAssignmentsSchema = z.object({
 
 type PersistedAssignments = z.infer<typeof persistedAssignmentsSchema>;
 
-const flagsResponseSchema = z.object({
-  flags: z.record(z.string(), z.unknown()),
-});
-
-const flagDetailSchema = z.object({
-  enabled: z.boolean(),
-  variant: z.string().nullable().optional(),
-});
-
 function isSetupGuideTelemetryEvent(
   event: RecordTelemetryEventRequest,
 ): boolean {
@@ -83,27 +73,6 @@ function parseJsonText(text: string): unknown {
   } catch {
     return undefined;
   }
-}
-
-function flagVariant(
-  flags: Record<string, unknown>,
-  key: string,
-): SetupGuideVariant | null {
-  const flag = flagDetailSchema.safeParse(flags[key]);
-  if (!flag.success || !flag.data.enabled) return null;
-  const variant = setupGuideVariantSchema.safeParse(flag.data.variant);
-  return variant.success ? variant.data : null;
-}
-
-function assignmentsFromFlagsResponse(body: unknown): SetupGuideAssignments {
-  const response = flagsResponseSchema.safeParse(body);
-  if (!response.success) {
-    return { guide: DEFAULT_GUIDE };
-  }
-  const guide = flagVariant(response.data.flags, SETUP_GUIDE_FLAG_KEY);
-  return {
-    guide: guide === null ? DEFAULT_GUIDE : { variant: guide, source: "flag" },
-  };
 }
 
 function persistedFromJson(json: unknown): PersistedAssignments | null {
@@ -179,30 +148,10 @@ export async function createSetupGuideExperiment(
   }
 
   async function fetchFlagAssignments(
-    identity: FeatureFlagIdentity,
+    _identity: FeatureFlagIdentity,
   ): Promise<SetupGuideAssignments> {
-    try {
-      const response = await args.fetch(POSTHOG_FLAGS_URL, {
-        body: JSON.stringify({
-          api_key: identity.apiKey,
-          distinct_id: identity.distinctId,
-        }),
-        headers: { "content-type": "application/json" },
-        method: "POST",
-        signal: AbortSignal.timeout(args.flagTimeoutMs),
-      });
-      if (!response.ok) {
-        args.logger.debug(
-          { status: response.status },
-          "Setup guide flag evaluation failed",
-        );
-        return { guide: DEFAULT_GUIDE };
-      }
-      return assignmentsFromFlagsResponse(await response.json());
-    } catch (error) {
-      args.logger.debug({ err: error }, "Setup guide flag evaluation failed");
-      return { guide: DEFAULT_GUIDE };
-    }
+    // MQH: feature flags are never fetched from PostHog; everyone gets the default guide.
+    return { guide: DEFAULT_GUIDE };
   }
 
   async function resolveAssignments(): Promise<SetupGuideAssignments> {

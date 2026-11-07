@@ -115,7 +115,7 @@ export function printServerMoveCheckItems(
 
 export function printServerMoveCheck(check: ServerMoveCheckResponse): void {
   console.log(
-    `Moving the bb server to ${check.targetHostName} (${describeMode(check.mode)})`,
+    `Moving the mqh server to ${check.targetHostName} (${describeMode(check.mode)})`,
   );
   if (check.serverUrl !== null) console.log(`New address: ${check.serverUrl}`);
   if (check.targetDataDir !== null) {
@@ -123,7 +123,7 @@ export function printServerMoveCheck(check: ServerMoveCheckResponse): void {
   }
   if (check.existingTargetServerData !== null) {
     console.log(
-      `Existing bb server data on ${check.targetHostName}: ${check.existingTargetServerData.path} (${formatServerDataSize(check.existingTargetServerData.sizeBytes)})`,
+      `Existing mqh server data on ${check.targetHostName}: ${check.existingTargetServerData.path} (${formatServerDataSize(check.existingTargetServerData.sizeBytes)})`,
     );
   }
   printServerMoveCheckItems(check.items);
@@ -131,7 +131,7 @@ export function printServerMoveCheck(check: ServerMoveCheckResponse): void {
 }
 
 export function missingAddressGuidance(check: ServerMoveCheckResponse): string {
-  return `This bb server uses a direct address, so the new server needs one too. Re-run with --address <url>: the URL every machine and app will use to reach bb on ${check.targetHostName}, such as a Tailscale Serve URL.`;
+  return `This mqh server uses a direct address, so the new server needs one too. Re-run with --address <url>: the URL every machine and app will use to reach bb on ${check.targetHostName}, such as a Tailscale Serve URL.`;
 }
 
 export function existingDataGuidance(check: ServerMoveCheckResponse): string {
@@ -140,7 +140,7 @@ export function existingDataGuidance(check: ServerMoveCheckResponse): string {
     existing === null
       ? ""
       : ` at ${existing.path} (${formatServerDataSize(existing.sizeBytes)})`;
-  return `${check.targetHostName} already has bb server data${location}. Re-run with --archive-existing-data to move it aside to a .before-move-<date> directory; it is never merged.`;
+  return `${check.targetHostName} already has mqh server data${location}. Re-run with --archive-existing-data to move it aside to a .before-move-<date> directory; it is never merged.`;
 }
 
 export function blockedStartItems(
@@ -191,8 +191,8 @@ export function serverMoveRecoveryGuidance(status: ServerMoveStatus): string[] {
   return [
     `bb couldn't confirm that ${name} took over${problem}.`,
     `This server stays up but read-only, and bb finishes the move on its own as soon as ${name} answers.`,
-    `If ${name} isn't running the server, run bb server move cancel --yes to abandon the move and keep the server here.`,
-    "If this server stops, run bb server unlock on this computer.",
+    `If ${name} isn't running the server, run mqh server move cancel --yes to abandon the move and keep the server here.`,
+    "If this server stops, run mqh server unlock on this computer.",
   ];
 }
 
@@ -261,7 +261,7 @@ export async function followServerMove(
       consecutiveFailures += 1;
       if (consecutiveFailures >= MAX_CONSECUTIVE_STATUS_FAILURES) {
         throw new Error(
-          `Lost contact with the bb server before the switch (${getErrorMessage(error)}). Run bb server move status once it answers again.`,
+          `Lost contact with the mqh server before the switch (${getErrorMessage(error)}). Run mqh server move status once it answers again.`,
         );
       }
       continue;
@@ -275,7 +275,7 @@ export async function followServerMove(
       return { kind: "moved", status };
     }
     throw new Error(
-      "The bb server no longer reports this move. A server restart before the switch abandons the move and keeps the server where it was.",
+      "The mqh server no longer reports this move. A server restart before the switch abandons the move and keeps the server where it was.",
     );
   }
 }
@@ -292,7 +292,7 @@ export function formatServerMoveFailure(status: ServerMoveStatus): string {
 
 export function printServerMoveStatus(status: ServerMoveStatus): void {
   console.log(
-    `Moving the bb server to ${status.targetHostName} (${STATE_LABELS[status.state]})`,
+    `Moving the mqh server to ${status.targetHostName} (${STATE_LABELS[status.state]})`,
   );
   console.log(`Address: ${status.serverUrl} (${describeMode(status.mode)})`);
   console.log(`Started: ${new Date(status.startedAt).toLocaleString()}`);
@@ -316,7 +316,7 @@ export function printServerMoveStatus(status: ServerMoveStatus): void {
   }
   if (status.cancellable) {
     console.log("");
-    console.log("Cancel it with bb server move cancel.");
+    console.log("Cancel it with mqh server move cancel.");
   }
 }
 

@@ -16,7 +16,7 @@ function registeredDeclaration() {
 describe("the pi plugin's environment passthrough", () => {
   it("declares the bridge command override variables so a host-set value reaches the bridge", () => {
     expect(registeredDeclaration().env).toEqual({
-      passthrough: ["BB_PI_BRIDGE_COMMAND", "BB_PI_BRIDGE_ARGS"],
+      passthrough: ["MQH_PI_BRIDGE_COMMAND", "MQH_PI_BRIDGE_ARGS"],
     });
   });
 });

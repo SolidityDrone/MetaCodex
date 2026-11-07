@@ -5,16 +5,16 @@ description: "Configure or troubleshoot BB-specific Claude Code provider setting
 
 # Claude Code provider
 
-Read settings with `bb plugin config provider-claude-code`; change a declared key
-with `bb plugin config provider-claude-code set <key> <value>`.
+Read settings with `mqh plugin config provider-claude-code`; change a declared key
+with `mqh plugin config provider-claude-code set <key> <value>`.
 
 - `subagentsDisabled` defaults to `false`. Enable with
-  `bb plugin config provider-claude-code set subagentsDisabled true` to remove
+  `mqh plugin config provider-claude-code set subagentsDisabled true` to remove
   native Agent, Task, and ListAgents tools from the model context. Changes
   restart Claude before the next turn, preserving the conversation. A deny hook
   also blocks native delegation during an active turn after disabling it.
 - `disable1MContext` defaults to `false`. Enable with
-  `bb plugin config provider-claude-code set disable1MContext true` to set
+  `mqh plugin config provider-claude-code set disable1MContext true` to set
   `CLAUDE_CODE_DISABLE_1M_CONTEXT=1` (`0` when off). Changes restart the
   thread's Claude process before its next turn, preserving context.
 - `chromeEnabled` defaults to `false`. It starts Claude Code with `--chrome` for
@@ -22,7 +22,7 @@ with `bb plugin config provider-claude-code set <key> <value>`.
   A change restarts the thread's Claude process before its next turn, preserving
   context.
 - `artifactsEnabled` defaults to `false`. Enable with
-  `bb plugin config provider-claude-code set artifactsEnabled true` to set
+  `mqh plugin config provider-claude-code set artifactsEnabled true` to set
   `CLAUDE_CODE_ARTIFACT=1`, which gives threads Claude Code's `Artifact`,
   `ArtifactComments`, and `ArtifactData` tools for reading `claude.ai/artifact/`
   links and publishing pages. Claude Code withholds them from SDK sessions
@@ -32,8 +32,8 @@ with `bb plugin config provider-claude-code set <key> <value>`.
   environment, or `~/.claude/settings.json` `env`) untouched. A change restarts
   the thread's Claude process before its next turn, preserving context.
 - Select the Fast service tier in the model picker or pass `--service-tier fast`
-  to `bb thread spawn` for supported Opus models. Use
-  `bb thread tell --service-tier fast` to change a thread on its next turn;
+  to `mqh thread spawn` for supported Opus models. Use
+  `mqh thread tell --service-tier fast` to change a thread on its next turn;
   `default` turns it off. Fast mode requires eligible Claude access;
   subscription accounts need usage credits. It is billed at premium rates.
   The provider passes the selection as a session-scoped SDK setting, so it
@@ -54,12 +54,12 @@ with `bb plugin config provider-claude-code set <key> <value>`.
   description of the command instead; approval prompts and the expanded row
   still show the command. It takes effect from each thread's next message;
   existing rows keep their titles.
-- bb passes only `BB_CLAUDE_CODE_EXECUTABLE` and `CLAUDE_CODE_OAUTH_TOKEN` to
+- bb passes only `MQH_CLAUDE_CODE_EXECUTABLE` and `CLAUDE_CODE_OAUTH_TOKEN` to
   the CLI. Mint the token with `claude setup-token` for machines with no
   interactive login.
 - Claude Code's own slash commands, including bundled skills such as
   `/simplify` and `/code-review`, appear in the composer's `/` menu,
-  `bb project commands`, and `bb thread commands`. The provider reads them from
+  `mqh project commands`, and `mqh thread commands`. The provider reads them from
   Claude Code for the project folder without sending a prompt. With **No project**
   selected, it uses an empty catalog folder on the selected machine so global
   commands appear before a workspace exists. Each thread refreshes them when a
@@ -67,7 +67,7 @@ with `bb plugin config provider-claude-code set <key> <value>`.
   `/model`, `/config`, `/fast`), terminal-only commands (such as `/doctor`),
   and bb's own skills are left out.
 - Structured plan, message editing, and compaction are supported through the
-  corresponding `bb thread` commands. Unlisted model IDs are accepted by the
+  corresponding `mqh thread` commands. Unlisted model IDs are accepted by the
   provider; verify actual availability on the target host.
 
 Inspect the thread and provider state after a change; do not restart unrelated

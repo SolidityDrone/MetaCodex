@@ -49,14 +49,14 @@ export const bundleTargets = [
     banner: NODE_ESM_REQUIRE_BANNER,
     entryPoint: resolve(workspaceRoot, "apps", "cli", "src", "index.ts"),
     executable: true,
-    label: "bb cli",
-    outfile: resolve(packageRoot, "dist", "bb"),
+    label: "mqh cli",
+    outfile: resolve(packageRoot, "dist", "mqh"),
     // The CLI `import()`s each command group on demand; chunks land in
-    // dist/bb-chunks, which packages/bb-app ships next to this entry.
+    // dist/mqh-chunks, which packages/bb-app ships next to this entry.
     splitting: true,
   },
   {
-    // Forked child that runs @parcel/watcher in isolation (BB_WATCHER_SUBPROCESS=1).
+    // Forked child that runs @parcel/watcher in isolation (MQH_WATCHER_SUBPROCESS=1).
     // Emitted next to the daemon bundle so fork-channel resolves it as a sibling.
     banner: NODE_ESM_REQUIRE_BANNER,
     entryPoint: resolve(

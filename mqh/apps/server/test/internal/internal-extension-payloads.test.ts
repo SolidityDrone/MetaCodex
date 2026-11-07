@@ -700,7 +700,7 @@ describe("extension kind ownership at ingest", () => {
     }
   });
 
-  it("replaces a bb thread state whose payload does not match bb's schema with provider/unhandled", async () => {
+  it("replaces a mqh thread state whose payload does not match bb's schema with provider/unhandled", async () => {
     const { harness, session, thread } = await setup();
     try {
       const response = await post(harness, session.id, [

@@ -37,7 +37,6 @@ import { action, CliExitError } from "../action.js";
 import { cliFetch, createCliBbSdk } from "../client.js";
 import { resolveContextThreadId } from "../context-env.js";
 import {
-  buildPluginApp,
   buildPluginHost,
   buildPluginServer,
   createPluginDevLoop,
@@ -98,7 +97,7 @@ function formatCacheBytes(bytes: number): string {
 }
 
 function toolchainBaseDir(): string {
-  const configured = process.env.BB_DATA_DIR;
+  const configured = process.env.MQH_DATA_DIR;
   const dataDir =
     configured === undefined || configured.trim().length === 0
       ? resolveProdDataDir({ homeDir: homedir() })
@@ -185,7 +184,7 @@ async function readPluginManifest(
 
 const LEGACY_PLUGIN_SDK_LAYOUT_MESSAGE =
   "This plugin uses the legacy vendored SDK layout. Its SDK types will not be updated.\n" +
-  "Please run `bb plugin migrate` to update to the latest SDK types.";
+  "Please run `mqh plugin migrate` to update to the latest SDK types.";
 
 async function checkPluginSdkLayout(rootDir: string): Promise<void> {
   const layout = await resolvePluginSdkLayout(rootDir);
@@ -202,7 +201,7 @@ function warnIfSdkPinIsStale(pin: string | null): void {
   if (pin === null || !EXACT_VERSION_PATTERN.test(pin)) return;
   if (pin === PLUGIN_SDK_VERSION) return;
   console.warn(
-    `This plugin pins @get-bb/plugin-sdk ${pin}; this bb's SDK is ${PLUGIN_SDK_VERSION} — \`bb plugin types\` updates the pin.`,
+    `This plugin pins @get-bb/plugin-sdk ${pin}; this bb's SDK is ${PLUGIN_SDK_VERSION} — \`mqh plugin types\` updates the pin.`,
   );
 }
 
@@ -261,7 +260,7 @@ function describePendingSdkPin(
     installImport === undefined
       ? "bb provides its runtime"
       : `${installImport.file} imports "${installImport.specifier}", which the build bundles from the plugin's own SDK install, and Git installs omit devDependencies`;
-  const fix = "(`bb plugin types` does it for you)";
+  const fix = "(`mqh plugin types` does it for you)";
   switch (pending.sdkRelocation) {
     case "moved":
       return pending.pin === null
@@ -298,7 +297,7 @@ async function requirePluginManifest(
   }
   if (typeof manifest.bb?.server !== "string") {
     console.error(
-      `${rootDir} is not a bb plugin — package.json has no "bb.server" entry.`,
+      `${rootDir} is not a mqh plugin — package.json has no "bb.server" entry.`,
     );
     process.exit(1);
   }
@@ -461,14 +460,14 @@ async function installScaffoldDependencies(
     });
   } catch (cause) {
     console.warn(
-      `Could not run npm install — run it in the plugin directory before \`bb plugin build\`.${npmFailureDetail(cause)}`,
+      `Could not run npm install — run it in the plugin directory before \`mqh plugin build\`.${npmFailureDetail(cause)}`,
     );
     return false;
   }
   const problem = await unresolvedScaffoldPackages(targetDir);
   if (problem !== null) {
     console.warn(
-      `npm install reported success but ${problem} — run \`npm install --include=dev\` in the plugin directory before \`bb plugin build\`.`,
+      `npm install reported success but ${problem} — run \`npm install --include=dev\` in the plugin directory before \`mqh plugin build\`.`,
     );
     return false;
   }
@@ -765,7 +764,7 @@ function printPlugin(plugin: PluginEntry): void {
     const collisionNote = RESERVED_BB_CLI_COMMANDS.includes(
       plugin.cliCommand.name,
     )
-      ? ` (core command "bb ${plugin.cliCommand.name}" takes precedence)`
+      ? ` (core command "mqh ${plugin.cliCommand.name}" takes precedence)`
       : "";
     console.log(
       `  command: ${pluginCliCall(plugin.id, plugin.cliCommand.name)} — ${plugin.cliCommand.summary}${collisionNote}`,
@@ -1120,7 +1119,7 @@ export function registerPluginCommands(
     .option("--yes", "Skip the confirmation prompt")
     .option(
       "--no-wait",
-      "Start the install in the background and print its job; follow it with `bb plugin install-jobs`",
+      "Start the install in the background and print its job; follow it with `mqh plugin install-jobs`",
     )
     .option("--json", "Output JSON")
     .action(
@@ -1244,7 +1243,7 @@ export function registerPluginCommands(
               `Installing ${job.displayName} in the background (job ${job.id}).`,
             );
             console.log(
-              `Follow it with \`bb plugin install-jobs\`; cancel it with \`bb plugin cancel-install ${job.id}\`.`,
+              `Follow it with \`mqh plugin install-jobs\`; cancel it with \`mqh plugin cancel-install ${job.id}\`.`,
             );
             return;
           }
@@ -1449,7 +1448,7 @@ export function registerPluginCommands(
             if (!shouldAttempt) {
               if (result.outcome === "pinned") {
                 console.log(
-                  `${result.id}: skipped — pinned${detail ? ` (${detail})` : ""}; remove and reinstall with a tracking npm range, git branch, or git semver range to receive updates (remove deletes the plugin's settings, secrets, and schedules). A local path plugin updates with \`bb plugin reload\`; move it with \`bb plugin install path:<new directory>\`.`,
+                  `${result.id}: skipped — pinned${detail ? ` (${detail})` : ""}; remove and reinstall with a tracking npm range, git branch, or git semver range to receive updates (remove deletes the plugin's settings, secrets, and schedules). A local path plugin updates with \`mqh plugin reload\`; move it with \`mqh plugin install path:<new directory>\`.`,
                 );
               } else if (result.outcome === "incompatible") {
                 console.log(
@@ -1485,7 +1484,7 @@ export function registerPluginCommands(
                 `Updating ${job.displayName} in the background (job ${job.id}).`,
               );
               console.log(
-                `Follow it with \`bb plugin update-jobs ${job.id}\`.`,
+                `Follow it with \`mqh plugin update-jobs ${job.id}\`.`,
               );
               continue;
             }
@@ -1542,7 +1541,7 @@ export function registerPluginCommands(
         if (!installed) {
           console.log("  npm install --include=dev");
         }
-        console.log("  bb plugin install .");
+        console.log("  mqh plugin install .");
         await creationTelemetry;
       }),
     );
@@ -1559,8 +1558,7 @@ export function registerPluginCommands(
     .action(
       action(async (path: string | undefined, opts: { check?: boolean }) => {
         const rootDir = resolve(process.cwd(), path ?? ".");
-        const manifest = await requirePluginManifest(rootDir);
-        const hasApp = typeof manifest.bb?.app === "string";
+        await requirePluginManifest(rootDir);
         const layout = await resolvePluginSdkLayout(rootDir);
         if (layout.kind === "vendored") {
           console.error(LEGACY_PLUGIN_SDK_LAYOUT_MESSAGE);
@@ -1590,8 +1588,8 @@ export function registerPluginCommands(
             for (const shim of pending.shimmedTypePins) {
               console.error(
                 shim.movedFromDependencies
-                  ? `Move "${shim.name}" from dependencies to devDependencies at ${shim.to} — bb shims it at runtime and never bundles it (\`bb plugin types\` does it for you).`
-                  : `Set "${shim.name}" to ${shim.to} in devDependencies — the version this bb shims at runtime (\`bb plugin types\` does it for you).`,
+                  ? `Move "${shim.name}" from dependencies to devDependencies at ${shim.to} — bb shims it at runtime and never bundles it (\`mqh plugin types\` does it for you).`
+                  : `Set "${shim.name}" to ${shim.to} in devDependencies — the version this bb shims at runtime (\`mqh plugin types\` does it for you).`,
               );
             }
             process.exit(1);
@@ -1603,7 +1601,7 @@ export function registerPluginCommands(
           });
           if (changed === null) {
             console.log(
-              `@get-bb/plugin-sdk is already pinned to ${PLUGIN_SDK_VERSION} — this bb's SDK version${hasApp ? ", and the declared runtime-shimmed packages are at this bb's versions" : ""}.`,
+              `@get-bb/plugin-sdk is already pinned to ${PLUGIN_SDK_VERSION} — this bb's SDK version.`,
             );
             console.log(
               "The declarations are in node_modules/@get-bb/plugin-sdk/bundled-types/ — read them for exact signatures.",
@@ -1641,7 +1639,7 @@ export function registerPluginCommands(
   plugin
     .command("migrate [path]")
     .description(
-      "Switch a plugin that vendors types/ to the @get-bb/plugin-sdk npm package (default: cwd): pin the SDK where `bb plugin types` would, drop the tsconfig path map, delete the vendored declarations, and rewrite pre-rename @bb/plugin-sdk imports in the plugin's sources; prints the plan and asks first",
+      "Switch a plugin that vendors types/ to the @get-bb/plugin-sdk npm package (default: cwd): pin the SDK where `mqh plugin types` would, drop the tsconfig path map, delete the vendored declarations, and rewrite pre-rename @bb/plugin-sdk imports in the plugin's sources; prints the plan and asks first",
     )
     .option("--yes", "Skip the confirmation prompt")
     .action(
@@ -1684,7 +1682,7 @@ export function registerPluginCommands(
         });
         if (!samePlan(plan, confirmedPlan)) {
           console.error(
-            "The plugin changed while awaiting confirmation — nothing was written. Re-run `bb plugin migrate` to see the current plan.",
+            "The plugin changed while awaiting confirmation — nothing was written. Re-run `mqh plugin migrate` to see the current plan.",
           );
           process.exit(1);
         }
@@ -1709,14 +1707,13 @@ export function registerPluginCommands(
   plugin
     .command("build [path]")
     .description(
-      "Compile the plugin into dist/: the bb.server backend bundle (server.js, server.meta.json), plus, when declared, the bb.app frontend bundle (app.js, app.css, app.meta.json) and the self-contained bb.host daemon bundle (host.js, host.js.map, host.meta.json) — which carries the plugin's host RPC entry, its provider bridge, or both; each *.meta.json stamps SDK/identity metadata; no server required",
+      "Compile the plugin into dist/: the bb.server backend bundle (server.js, server.meta.json), plus, when declared, the self-contained bb.host daemon bundle (host.js, host.js.map, host.meta.json) — which carries the plugin's host RPC entry, its provider bridge, or both; each *.meta.json stamps SDK/identity metadata; no server required",
     )
     .action(
       action(async (path: string | undefined) => {
         const rootDir = resolve(process.cwd(), path ?? ".");
         const bbVersion = resolveBbCliVersion();
         const manifest = await readPluginManifest(rootDir);
-        const hasApp = typeof manifest?.bb?.app === "string";
         const hasHost = typeof manifest?.bb?.host === "string";
         await checkPluginSdkLayout(rootDir);
         const toolchain = await cliBuildToolchain();
@@ -1724,12 +1721,6 @@ export function registerPluginCommands(
         for (const warning of server.migrationWarnings)
           console.warn(`warning: ${warning}`);
         const files = [server.jsPath, server.mapPath, server.metaPath];
-        if (hasApp) {
-          const app = await buildPluginApp(rootDir, bbVersion, toolchain);
-          for (const warning of app.migrationWarnings)
-            console.warn(`warning: ${warning}`);
-          files.push(app.jsPath, app.cssPath, app.metaPath);
-        }
         if (hasHost) {
           const host = await buildPluginHost(rootDir, bbVersion, toolchain);
           files.push(host.jsPath, host.mapPath, host.metaPath);
@@ -1743,13 +1734,12 @@ export function registerPluginCommands(
   plugin
     .command("dev [path]")
     .description(
-      "Watch a plugin's sources: rebuild its frontend (unminified, for readable stack traces), host, and provider-bridge bundles when declared, then reload it on every change (Ctrl+C to stop)",
+      "Watch a plugin's sources: rebuild its host and provider-bridge bundles when declared, then reload it on every change (Ctrl+C to stop)",
     )
     .action(
       action(async (path: string | undefined) => {
         const rootDir = resolve(process.cwd(), path ?? ".");
         const manifest = await requirePluginManifest(rootDir);
-        const hasApp = typeof manifest.bb?.app === "string";
         const hasHost = typeof manifest.bb?.host === "string";
         await checkPluginSdkLayout(rootDir);
         const realDir = await realpath(rootDir).catch(() => rootDir);
@@ -1760,31 +1750,18 @@ export function registerPluginCommands(
         );
         if (!entry) {
           console.error(
-            `This directory is not installed as a plugin — run \`bb plugin install ${path ?? "."}\` first, then re-run \`bb plugin dev\`.`,
+            `This directory is not installed as a plugin — run \`mqh plugin install ${path ?? "."}\` first, then re-run \`mqh plugin dev\`.`,
           );
           process.exit(1);
         }
         const loop = createPluginDevLoop({
           pluginId: entry.id,
-          // Re-read per cycle: a plugin can add or drop bb.app/bb.host while
-          // being watched, and a stale snapshot would demand a build that can
-          // never succeed again.
+          // Re-read per cycle: a plugin can add or drop bb.host while being
+          // watched, and a stale snapshot would demand a build that can never
+          // succeed again.
           targets: async () => {
             const current = await requirePluginManifest(rootDir);
-            return {
-              hasApp: typeof current.bb?.app === "string",
-              hasHost: typeof current.bb?.host === "string",
-            };
-          },
-          buildApp: async () => {
-            const app = await buildPluginApp(
-              rootDir,
-              resolveBbCliVersion(),
-              await cliBuildToolchain(),
-              { minify: false, hostProvidedZod: false },
-            );
-            for (const warning of app.migrationWarnings)
-              console.warn(`warning: ${warning}`);
+            return { hasHost: typeof current.bb?.host === "string" };
           },
           buildHost: async () => {
             await buildPluginHost(
@@ -1815,7 +1792,7 @@ export function registerPluginCommands(
           },
         );
         console.log(
-          `Watching ${rootDir} for plugin "${entry.id}"${hasApp || hasHost ? ` (${[hasApp ? "frontend" : null, hasHost ? "host" : null].filter(Boolean).join(" + ")} rebuild + reload on change)` : " (reload on change)"} — Ctrl+C to stop.`,
+          `Watching ${rootDir} for plugin "${entry.id}"${hasHost ? " (host rebuild + reload on change)" : " (reload on change)"} — Ctrl+C to stop.`,
         );
         await new Promise<void>((resolveDone) => {
           const stop = (): void => {
@@ -2016,15 +1993,15 @@ export function registerPluginCommands(
           ) {
             console.error(
               actionName === "set"
-                ? "Usage: bb plugin config <id> set <key> <value>"
-                : "Usage: bb plugin config <id> unset <key>",
+                ? "Usage: mqh plugin config <id> set <key> <value>"
+                : "Usage: mqh plugin config <id> unset <key>",
             );
             process.exit(1);
           }
           let parsedValue: string | number | boolean | null = null;
           if (actionName === "set") {
             if (value === undefined) {
-              console.error("Usage: bb plugin config <id> set <key> <value>");
+              console.error("Usage: mqh plugin config <id> set <key> <value>");
               process.exit(1);
             }
             const current = pluginSettingsResultSchema.parse(

@@ -113,7 +113,7 @@ function json(value: object, status = 200): Response {
   });
 }
 
-describe("bb plugin catalog", () => {
+describe("mqh plugin catalog", () => {
   setupCommandOutputTestEnvironment();
   const register: CommandRegistrar = (program) =>
     registerPluginCommands(program, () => "http://server");

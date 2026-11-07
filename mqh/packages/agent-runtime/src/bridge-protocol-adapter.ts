@@ -443,7 +443,7 @@ export function createBridgeProtocolAdapter(
             method: BRIDGE_REQUEST_METHODS.initialize,
             params: {
               protocolVersion: PROVIDER_BRIDGE_PROTOCOL_VERSION,
-              client: { name: "bb", version: "1.0.0" },
+              client: { name: "mqh", version: "1.0.0" },
               grammarVersions: ASSEMBLER_GRAMMAR_VERSIONS,
             },
           },

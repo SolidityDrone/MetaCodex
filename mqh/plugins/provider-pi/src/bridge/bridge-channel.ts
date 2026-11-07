@@ -5,8 +5,8 @@ import os from "node:os";
 import path from "node:path";
 import { experimental_readBoundedLines } from "@get-bb/plugin-sdk/provider-bridge";
 
-export const PI_BRIDGE_CHANNEL_ENV = "BB_PI_BRIDGE_CHANNEL";
-export const PI_BRIDGE_CHANNEL_TOKEN_ENV = "BB_PI_BRIDGE_CHANNEL_TOKEN";
+export const PI_BRIDGE_CHANNEL_ENV = "MQH_PI_BRIDGE_CHANNEL";
+export const PI_BRIDGE_CHANNEL_TOKEN_ENV = "MQH_PI_BRIDGE_CHANNEL_TOKEN";
 
 interface PiBridgeChannelHandlers {
   onLine: (line: string) => void;

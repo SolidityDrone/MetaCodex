@@ -29,7 +29,7 @@ Every script stores `execution.workingDirectory` as one of these policies:
   `<data dir>/plugins/automations/scripts/`. Every automation on this policy
   shares it; each automation's stored script lives in a subdirectory of it,
   not in the working directory itself.
-- `{"type":"project"}` uses the project's source on the bb server host.
+- `{"type":"project"}` uses the project's source on the mqh server host.
 - `{"type":"path","path":"/absolute/path"}` uses that directory on the bb
   server host.
 
@@ -64,20 +64,20 @@ available unchanged in run output.
 The plugin injects these variables:
 
 ```text
-BB_SERVER_URL          The BB server API base URL
-BB_PROJECT_ID          The automation project
-BB_AUTOMATION_ID       The automation ID
-BB_AUTOMATION_RUN_ID   The run ID
-BB_CLI                 The absolute BB CLI path, when available
+MQH_SERVER_URL          The BB server API base URL
+MQH_PROJECT_ID          The automation project
+MQH_AUTOMATION_ID       The automation ID
+MQH_AUTOMATION_RUN_ID   The run ID
+MQH_CLI                 The absolute BB CLI path, when available
 ```
 
-The plugin does not inject `BB_ENVIRONMENT_ID` or `BB_HOST_DAEMON_PORT`.
+The plugin does not inject `MQH_ENVIRONMENT_ID` or `MQH_HOST_DAEMON_PORT`.
 
-The plugin resolves `bb` from `BB_CLI`, `BB_CLI_DIR`, `PATH`, and common macOS
+The plugin resolves `mqh` from `MQH_CLI`, `MQH_CLI_DIR`, `PATH`, and common macOS
 install paths. It adds the selected directory to `PATH`.
 
-If the plugin cannot find `bb`, the script still starts. Its output starts with
-a `[bb] warning:` line. A later `bb` call then fails normally.
+If the plugin cannot find `mqh`, the script still starts. Its output starts with
+a `[bb] warning:` line. A later `mqh` call then fails normally.
 
 ## Execution safety
 

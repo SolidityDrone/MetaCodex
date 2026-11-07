@@ -43,14 +43,14 @@ bb git viewed list|mark|unmark|clear <environment-id> --target <target> ...
   un-view it. `viewed mark` records the current revision unless you pass
   `--revision`; `viewed list --path` takes up to 500 paths. Mutations print
   `{ "ok": true }` with `--json`.
-- The old `bb environment status|diff|diff-files|diff-file|diff-patch|branches|diff-viewed`
+- The old `mqh environment status|diff|diff-files|diff-file|diff-patch|branches|diff-viewed`
   commands still run and print the `bb git` command that replaced them. So do
-  the deprecated `bb thread show --work-status|--git-diff` flags.
+  the deprecated `mqh thread show --work-status|--git-diff` flags.
 
 `showGitChanges` (default true) shows the composer's changed-files segment;
-turn it off with `bb plugin config bb--git set showGitChanges false`.
+turn it off with `mqh plugin config bb--git set showGitChanges false`.
 `showCommitButton` (default false) shows the thread header's Commit action;
-turn it on with `bb plugin config bb--git set showCommitButton true`.
+turn it on with `mqh plugin config bb--git set showCommitButton true`.
 
 Other plugins read the same data through RPC. `status` is a keyed read: pass
 environment ids and get one row per id, refreshed after the workspace's files
@@ -65,6 +65,6 @@ experimental_useRpcKeyedQuery({
 });
 ```
 
-`bb plugin rpc inspect bb--git` prints the input and output schemas.
+`mqh plugin rpc inspect bb--git` prints the input and output schemas.
 
 Branch targets resolve the requested ref first, then fall back to `origin/<branch>`. If no merge base with HEAD resolves, diff reads report an error instead of an empty diff.

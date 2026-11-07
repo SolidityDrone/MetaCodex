@@ -302,7 +302,7 @@ describe("readJsonResponse()", () => {
     });
 
     await expect(readJsonResponse(Promise.reject(connError))).rejects.toThrow(
-      "Cannot connect to BB server. Ensure it is running and BB_SERVER_URL is correct.",
+      "Cannot connect to BB server. Ensure it is running and MQH_SERVER_URL is correct.",
     );
   });
 

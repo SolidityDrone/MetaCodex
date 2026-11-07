@@ -3,7 +3,7 @@
 ## Frontend (`bb.app` entry)
 
 `app.tsx` default-exports `definePluginApp` from `@get-bb/plugin-sdk/app`.
-React and the SDK are **never bundled** — `bb plugin build` shims them to
+React and the SDK are **never bundled** — `mqh plugin build` shims them to
 the host's shared runtime, so the bundle only works inside bb.
 
 ```tsx
@@ -165,7 +165,7 @@ app.slots.experimental_threadAction({ id: "deploy", title: "Deploy", icon: "Rock
 ```
 
 `app.slots.experimental_threadHeaderAction` is retired: existing callers keep
-rendering and `bb plugin build` warns. Use a header thread action instead.
+rendering and `mqh plugin build` warns. Use a header thread action instead.
 
 ### Rows and sections in the thread Info tab
 
@@ -321,7 +321,7 @@ component: ({ experimental_page: page }) => {
 JSON-cloned value. The default `isolated` world shares the DOM but not page
 globals and binds `bb.postMessage(data)`; `onMessage` receives those values for
 this plugin and tab. `world: "main"` runs beside page scripts (for example to
-read framework state on DOM nodes) and binds `bb` to `null`. Anything installed
+read framework state on DOM nodes) and binds `mqh` to `null`. Anything installed
 is lost when the document navigates; check again when `url` changes.
 
 ### Sidebar navigation and header

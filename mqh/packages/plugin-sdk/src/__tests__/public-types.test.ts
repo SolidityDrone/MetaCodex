@@ -4,16 +4,8 @@ import type {
   BbPluginApi,
   JsonValue,
   PluginAgentConfigurationContext,
-  PluginEnvironmentProviderDeclaration,
-  PluginEnvironments,
   ReadonlyJsonValue,
 } from "../index.js";
-import type {
-  ComposerAttachment,
-  ComposerDraftReplacement,
-  ComposerDraftSnapshot,
-  PluginProviderIconRegistration,
-} from "../app-contract.js";
 
 type ExpectedBbPluginApiKey =
   | "internal_DO_NOT_USE_recordPluginUse"
@@ -400,42 +392,4 @@ describe("backend plugin SDK public surface", () => {
       expect(rootValueExports.has(exportName), exportName).toBe(true);
     }
   });
-});
-
-it("requires provider presentation fields in author-facing declarations", () => {
-  expectTypeOf<
-    Pick<PluginProviderIconRegistration, "providerKind">
-  >().toEqualTypeOf<{
-    providerKind: "agent" | "machine" | "environment";
-  }>();
-  expectTypeOf<
-    Pick<PluginEnvironmentProviderDeclaration, "description" | "icon">
-  >().toEqualTypeOf<{
-    description: string;
-    icon: string;
-  }>();
-  expectTypeOf<
-    Pick<Parameters<PluginEnvironments["register"]>[0], "description" | "icon">
-  >().toEqualTypeOf<{
-    description: string;
-    icon: string;
-  }>();
-});
-
-it("gives composer attachments one owner and round-trips draft snapshots", () => {
-  const base = {
-    type: "localFile",
-    path: "/tmp/a.txt",
-    name: "a.txt",
-  } as const;
-  expectTypeOf({
-    ...base,
-    hostId: "host_1",
-    sourceProjectId: "proj_1",
-  }).not.toMatchTypeOf<ComposerAttachment>();
-  expectTypeOf({
-    ...base,
-    hostId: "host_1",
-  }).toMatchTypeOf<ComposerAttachment>();
-  expectTypeOf<ComposerDraftSnapshot>().toMatchTypeOf<ComposerDraftReplacement>();
 });

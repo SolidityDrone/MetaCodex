@@ -62,7 +62,7 @@ Not listed, by design:
 
 ## Environment
 
-`BB_PI_BRIDGE_COMMAND` and `BB_PI_BRIDGE_ARGS` point the bridge (and its
+`MQH_PI_BRIDGE_COMMAND` and `MQH_PI_BRIDGE_ARGS` point the bridge (and its
 version probe) at a pi executable other than the `pi` on `PATH` — a pinned
 install in a temporary prefix, say. The plugin declares them as environment
 passthrough, so a value set on the host daemon's environment reaches the
@@ -74,7 +74,7 @@ Besides pi's RPC stdin and stdout, the injected extension talks to the bridge
 over its own channel: tool calls and results, fork and leaf requests, and
 settlement reports. The bridge listens on a Unix socket in a private temporary
 directory (a named pipe on Windows) and passes its address and a one-time token
-to pi in `BB_PI_BRIDGE_CHANNEL` and `BB_PI_BRIDGE_CHANNEL_TOKEN`. The extension
+to pi in `MQH_PI_BRIDGE_CHANNEL` and `MQH_PI_BRIDGE_CHANNEL_TOKEN`. The extension
 removes both from its environment, connects once per pi process, and sends the
 token first; the bridge drops any connection that does not. Environment
 variables survive launchers, so pi works behind `cmd.exe` shims (npm, pnpm,

@@ -1216,7 +1216,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         category: "config",
         summary: `Dropped environment variable "${contribution.name}" from plugin "${contribution.plugin}".`,
         details:
-          "BB_SERVER_URL is unavailable, so its serverPath contribution was not applied.",
+          "MQH_SERVER_URL is unavailable, so its serverPath contribution was not applied.",
         scope: { kind: "thread" },
       });
     }
@@ -1259,7 +1259,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
 
       if (!resolvedBbThreadId) {
         options.onStderr?.(
-          `Dropping unscoped provider event ${event.type}; no bb thread could be resolved`,
+          `Dropping unscoped provider event ${event.type}; no mqh thread could be resolved`,
         );
         continue;
       }

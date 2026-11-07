@@ -23,7 +23,7 @@ const CLOSED_PR_PAGE = 30;
 
 const GH_HINT =
   "Install the GitHub CLI (https://cli.github.com) and run `gh auth login`, " +
-  "then `bb plugin reload github`.";
+  "then `mqh plugin reload github`.";
 
 const repoNameSchema = z.string().regex(/^[\w.-]+\/[\w.-]+$/);
 const itemNumberSchema = z.number().int().positive();

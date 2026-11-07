@@ -464,7 +464,7 @@ function registerAppUpdateCommands(
 
   app
     .command("apply")
-    .description("Download the available bb update and restart bb into it")
+    .description("Download the available mqh update and restart bb into it")
     .option("--yes", "Update without asking about running threads")
     .option(
       "--when-idle",

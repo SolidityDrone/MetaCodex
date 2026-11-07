@@ -23,22 +23,22 @@ Making your repo work with bb:
   environment; BB does not silently replace an isolated worktree with a checkout.
   Host-dependent preflight checks require the selected machine to be connected.
 
-  Commit a .bb-env-setup.sh script at the repo root when new bb worktrees need
+  Commit a .mqh-env-setup.sh script at the repo root when new bb worktrees need
   repo-specific setup. After bb creates a new managed worktree environment, it
-  looks for .bb-env-setup.sh inside that new workspace. If the file is absent,
+  looks for .mqh-env-setup.sh inside that new workspace. If the file is absent,
   provisioning continues with no error.
 
   The script must be tracked by git. A fresh worktree only checks out tracked
-  files, so an untracked .bb-env-setup.sh in your source checkout will not be
+  files, so an untracked .mqh-env-setup.sh in your source checkout will not be
   present and will not run.
 
-  BB runs the hook as `env bash .bb-env-setup.sh` with cwd set to the new
+  BB runs the hook as `env bash .mqh-env-setup.sh` with cwd set to the new
   workspace. On Windows it runs the script with the bash that Git for Windows
   installs, so the same script works there; without Git for Windows the hook
   fails with a message naming it. The hook
   inherits the host daemon's sanitized environment: NODE_ENV and every BB_*
-  variable are removed, and bb does not inject BB_PROJECT_ID, BB_ENVIRONMENT_ID,
-  or BB_SOURCE_PATH.
+  variable are removed, and bb does not inject MQH_PROJECT_ID, MQH_ENVIRONMENT_ID,
+  or MQH_SOURCE_PATH.
 
   Hooks run only in paths bb created and owns, such as new worktrees and
   checkouts bb cloned; attached project checkouts and personal workspaces never
@@ -50,12 +50,12 @@ Making your repo work with bb:
   hook outcome blocks automatic cleanup and requires inspection before recovery.
   Keep optional setup steps non-fatal inside the
   script if the environment should still open. Provisioning progress reports
-  "Running .bb-env-setup.sh" and then ".bb-env-setup.sh finished",
-  ".bb-env-setup.sh failed", or ".bb-env-setup.sh cancelled".
+  "Running .mqh-env-setup.sh" and then ".mqh-env-setup.sh finished",
+  ".mqh-env-setup.sh failed", or ".mqh-env-setup.sh cancelled".
 
-  Commit a .bb-env-teardown.sh script at the repo root when setup creates
+  Commit a .mqh-env-teardown.sh script at the repo root when setup creates
   resources outside the managed worktree. BB runs the hook as
-  `env bash .bb-env-teardown.sh` from the worktree before it removes the
+  `env bash .mqh-env-teardown.sh` from the worktree before it removes the
   worktree. The hook receives the same sanitized environment as the setup
   hook, and stdin is closed.
 
@@ -78,17 +78,17 @@ Making your repo work with bb:
 
   bb copies files only. It follows no symlinks, and it replaces nothing that
   the worktree already has. The copy runs after `git worktree add` and before
-  .bb-env-setup.sh, so the setup script can read the copied files. A pattern
+  .mqh-env-setup.sh, so the setup script can read the copied files. A pattern
   that matches nothing, or a file bb cannot read, is reported in the
   provisioning transcript and does not fail provisioning.
 
   Large directories such as node_modules are copied file by file. Install
-  dependencies in .bb-env-setup.sh instead of listing them here.
+  dependencies in .mqh-env-setup.sh instead of listing them here.
 
   For files that customize agent instructions and skills (AGENTS.md,
-  .bb/AGENTS.md, .bb/skills/), run `bb guide agent-configuration`.
+  .bb/AGENTS.md, .bb/skills/), run `mqh guide agent-configuration`.
 
-  bb environment providers                List registered environment providers in picker order:
+  mqh environment providers                List registered environment providers in picker order:
                                           Project checkout, Worktree, then other installed providers
                                           by display name; includes id, name, the `requires` facts (host,
                                           projectCheckout, gitCheckout, gitRemote, projectless), and whether
@@ -105,7 +105,7 @@ Making your repo work with bb:
   reason, or `unknown` while the background check has not answered. Listing
   never waits on a machine; results can be up to ten minutes old, and thread
   creation checks the selected provider and machine afresh.
-  bb environment list                     List environments that are not destroyed
+  mqh environment list                     List environments that are not destroyed
     --project <id>                        Only environments in this project
     --provider <id>                       Only environments this environment provider produced
     --host <id-or-name>                   Only environments on this machine
@@ -116,34 +116,34 @@ Making your repo work with bb:
                                           ready, error, destroyed (the only way to see
                                           destroyed rows)
     --limit <n> / --offset <n>            Page through the rows, oldest first
-  bb environment delete <id>              Request provider cleanup; refused while threads are
+  mqh environment delete <id>              Request provider cleanup; refused while threads are
                                           live or stopping. The command returns with cleanup
                                           requested; lifecycle becomes destroyed only after
                                           provider removal completes
-  bb environment cleanup <id>             Remove an unused provider-managed environment now
+  mqh environment cleanup <id>             Remove an unused provider-managed environment now
     --recover                             After inspection, acknowledge interrupted hooks and
                                           retry failed cleanup (Linux same-user process guard)
-  bb environment show <id>                Show environment details (path, branch, status, lifecycle, retirement deadline and teardown attempts)
+  mqh environment show <id>                Show environment details (path, branch, status, lifecycle, retirement deadline and teardown attempts)
 
-  bb environment paths <id>               Search workspace paths
+  mqh environment paths <id>               Search workspace paths
     --query <query>                       Fuzzy path query
     --limit <count>                       Maximum results
     --files                               Include only files unless combined with --directories
     --directories                         Include only directories unless combined with --files
 
-  bb environment update <id>              Update environment metadata
+  mqh environment update <id>              Update environment metadata
     --merge-base-branch <branch>          Set merge-base branch override
     --clear-merge-base-branch             Clear merge-base override
     --name <name>                         Set display name
     --clear-name                          Clear display name
 
-  bb environment commit <id>              Create a commit in the environment
+  mqh environment commit <id>              Create a commit in the environment
 
-  bb environment archive-threads <id>     Archive all threads in an environment
+  mqh environment archive-threads <id>     Archive all threads in an environment
 
   After the last live thread is archived, the environment provider's policy
   sets a retirement deadline; checkout environments never retire. A worktree
-  waits five minutes and then tears down: it runs .bb-env-teardown.sh, stops
+  waits five minutes and then tears down: it runs .mqh-env-teardown.sh, stops
   every process whose working directory is inside the worktree (the agent
   process, background jobs it left behind, and also shells, editors, or
   servers you started there yourself), removes the worktree, and records the
@@ -153,16 +153,16 @@ Making your repo work with bb:
   explicit environment or project deletion, skips the grace (including a
   never-retire policy). Failed teardown retries after 1, 2, 4, and 8 minutes, then stops after
   five failed attempts with a "Needs recovery" message;
-  `bb environment show <id>` reports the lifecycle phase, deadline, teardown
+  `mqh environment show <id>` reports the lifecycle phase, deadline, teardown
   attempt, and failure message.
 
-  `bb environment cleanup <id> [--json]` overrides retention and retry backoff
+  `mqh environment cleanup <id> [--json]` overrides retention and retry backoff
   to remove an unused provider-managed environment early. It is not a routine
   end-of-task step. It rejects live threads and unmanaged environments,
   succeeds if already removed, and completes asynchronously. It cannot bypass
-  "Needs recovery"; `bb environment list` includes the failure message.
+  "Needs recovery"; `mqh environment list` includes the failure message.
 
-  `bb environment cleanup <id> --recover [--json]` is an explicit acknowledgement
+  `mqh environment cleanup <id> --recover [--json]` is an explicit acknowledgement
   after inspecting a failed environment. It marks interrupted hooks finished,
   resets the retry budget, and retries removal. It also handles interrupted
   setup without a recorded hook operation. A teardown hook that never started
@@ -177,7 +177,7 @@ Making your repo work with bb:
   first. Unsupported platforms and unavailable daemons refuse recovery.
   Existing cleanup callers can use the additive `recover` option on
   `sdk.environments.experimental_cleanup({ environmentId, recover: true })`.
-  Inspect `bb environment show <id>` after recovery to confirm removal.
+  Inspect `mqh environment show <id>` after recovery to confirm removal.
 
   Pull requests moved to the bundled GitHub PR Status plugin:
   `bb pull-request show|ready|draft|merge <environment-id>`. See its
@@ -185,7 +185,7 @@ Making your repo work with bb:
 
   Git status, branches, diffs and Viewed marks moved to the bundled Git
   plugin: `bb git status|branches|diff|files|file|patch|viewed
-  <environment-id>`. See its git skill. The old `bb environment status`,
+  <environment-id>`. See its git skill. The old `mqh environment status`,
   `branches`, `diff`, `diff-files`, `diff-file`, `diff-patch` and
   `diff-viewed` commands still run and print the command that replaced them.
 

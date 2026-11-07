@@ -17,10 +17,10 @@ it("strips daemon-private inherited variables and returns clone failures as-is",
     `env > '${capture}'\nprintf '%s\\n' "$CONTRIBUTED_SECRET" 'private-daemon-token' >&2\nexit 77\n`,
   );
   vi.stubEnv(
-    "BB_SERVER_HEADERS",
+    "MQH_SERVER_HEADERS",
     JSON.stringify({ "x-bb-connect-machine": "private-daemon-token" }),
   );
-  vi.stubEnv("BB_PRIVATE_TEST", "other-daemon-private");
+  vi.stubEnv("MQH_PRIVATE_TEST", "other-daemon-private");
   const contributedEnv = Object.entries({
     GIT_SSH_COMMAND: `/bin/sh '${helper}'`,
     CONTRIBUTED_SECRET: "contributed-private",
@@ -47,8 +47,8 @@ it("strips daemon-private inherited variables and returns clone failures as-is",
     failure = error instanceof Error ? error.message : String(error);
   }
   const environment = await readFile(capture, "utf8");
-  expect(environment).not.toContain("BB_SERVER_HEADERS");
-  expect(environment).not.toContain("BB_PRIVATE_TEST");
+  expect(environment).not.toContain("MQH_SERVER_HEADERS");
+  expect(environment).not.toContain("MQH_PRIVATE_TEST");
   expect(environment).toContain("CONTRIBUTED_SECRET=contributed-private");
   expect(failure).toContain("private-daemon-token");
   expect(failure).toContain("contributed-private");

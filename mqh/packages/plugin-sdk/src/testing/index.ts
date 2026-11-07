@@ -1,6 +1,6 @@
 /**
  * `@get-bb/plugin-sdk/testing` — the backend plugin test harness: a fake BB
- * plugin host (`createFakePluginHost`) whose `bb` satisfies `BbPluginApi`,
+ * plugin host (`createFakePluginHost`) whose `mqh` satisfies `BbPluginApi`,
  * plus fixtures. The package ships executable JavaScript and portable
  * declarations for use from external plugin repositories.
  *
@@ -42,7 +42,6 @@ export {
   makeQueueEntry,
   makeThreadResponse,
   makeTurnFailedEvent,
-  makePanelController as experimental_makePanelController,
 } from "./fixtures.js";
 export {
   scanPublicSdkOnly as experimental_scanPublicSdkOnly,

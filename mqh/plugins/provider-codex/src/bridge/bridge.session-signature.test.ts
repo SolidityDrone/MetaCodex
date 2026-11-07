@@ -83,7 +83,7 @@ it("keeps the constructed session for a turn whose options carry no envVars", as
 }, 30_000);
 
 it("rebuilds the session only when a turn changes or removes an env var", async () => {
-  const original = { BB_TEST_SECRET: "original", BB_TEST_REMOVED: "gone" };
+  const original = { MQH_TEST_SECRET: "original", MQH_TEST_REMOVED: "gone" };
   harness.sendRequest(1, "thread/start", {
     threadId: THREAD_ID,
     cwd: workspaceDir,
@@ -96,10 +96,10 @@ it("rebuilds the session only when a turn changes or removes an env var", async 
     .parse(started.result);
 
   const turnEnvVars: Record<string, string>[] = [
-    { BB_TEST_REMOVED: "gone", BB_TEST_SECRET: "original" },
-    { BB_TEST_SECRET: "rotated", BB_TEST_REMOVED: "gone" },
-    { BB_TEST_SECRET: "rotated" },
-    { BB_TEST_SECRET: "rotated" },
+    { MQH_TEST_REMOVED: "gone", MQH_TEST_SECRET: "original" },
+    { MQH_TEST_SECRET: "rotated", MQH_TEST_REMOVED: "gone" },
+    { MQH_TEST_SECRET: "rotated" },
+    { MQH_TEST_SECRET: "rotated" },
   ];
   const replacementsAfterTurn: number[] = [];
   for (const [index, envVars] of turnEnvVars.entries()) {
@@ -130,16 +130,16 @@ it("rebuilds the session only when a turn changes or removes an env var", async 
     .map(({ config }) =>
       Object.fromEntries(
         Object.entries(config).filter(([key]) =>
-          key.startsWith("shell_environment_policy.set.BB_TEST_"),
+          key.startsWith("shell_environment_policy.set.MQH_TEST_"),
         ),
       ),
     );
   expect(resumeConfigs).toEqual([
     {
-      "shell_environment_policy.set.BB_TEST_SECRET": "rotated",
-      "shell_environment_policy.set.BB_TEST_REMOVED": "gone",
+      "shell_environment_policy.set.MQH_TEST_SECRET": "rotated",
+      "shell_environment_policy.set.MQH_TEST_REMOVED": "gone",
     },
-    { "shell_environment_policy.set.BB_TEST_SECRET": "rotated" },
+    { "shell_environment_policy.set.MQH_TEST_SECRET": "rotated" },
   ]);
 }, 30_000);
 

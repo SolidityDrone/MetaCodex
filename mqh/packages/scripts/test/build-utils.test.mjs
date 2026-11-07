@@ -95,7 +95,7 @@ describe("pruneUnreferencedChunks", () => {
     const entry = join(dist, "bb");
     // A chunk extension the specifier regex does not recognise: every chunk
     // then looks unreferenced, and a wipe here would only surface later as
-    // ERR_MODULE_NOT_FOUND from the packed `bb`.
+    // ERR_MODULE_NOT_FOUND from the packed `mqh`.
     writeFileSync(entry, 'import{a}from"./bb-chunks/chunk-A.mjs";\n');
     writeFileSync(join(chunkDir, "chunk-A.mjs"), "export var a=1;\n");
 

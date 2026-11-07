@@ -10,7 +10,7 @@ plugins → BB guide. The plugin and all six settings default to enabled.
 - `skillCreator`: include `skill-creator`.
 - `submitPlugin`: include `submit-a-plugin`.
 
-Use `bb plugin config bb-guide set <key> true|false` from the CLI, or
+Use `mqh plugin config bb-guide set <key> true|false` from the CLI, or
 `bb.sdk.plugins.updateSettings({ pluginId: "bb-guide", values: { ... } })`
 through the SDK. Changes apply when agent configuration is next assembled;
 they do not erase instructions from an existing conversation.

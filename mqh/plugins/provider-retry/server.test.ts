@@ -715,7 +715,7 @@ describe("provider retry plugin", () => {
     const missing = await host.harness.runCli(["cancel"]);
     expect(missing.exitCode).toBe(2);
     expect(missing.stderr).toContain(
-      "A thread id is required: bb provider-retry cancel <thread-id>",
+      "A thread id is required: mqh provider-retry cancel <thread-id>",
     );
     await host.harness.dispose();
   });
@@ -725,7 +725,7 @@ describe("provider retry plugin", () => {
     await plugin(host.bb);
 
     const help = (await host.harness.runCli(["retry", "--help"])).stdout;
-    expect(help).toContain("bb provider-retry retry");
+    expect(help).toContain("mqh provider-retry retry");
     expect(help).toContain("[<thread-id>]");
 
     const stray = await host.harness.runCli(["retry", THREAD_ID, "extra"]);

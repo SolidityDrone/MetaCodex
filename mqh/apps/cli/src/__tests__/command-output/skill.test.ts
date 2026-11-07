@@ -8,7 +8,7 @@ import {
 } from "../helpers/command-output-harness.js";
 import { registerSkillCommands } from "../../commands/skill.js";
 
-describe("bb skill commands", () => {
+describe("mqh skill commands", () => {
   setupCommandOutputTestEnvironment();
 
   const register: CommandRegistrar = (program) =>

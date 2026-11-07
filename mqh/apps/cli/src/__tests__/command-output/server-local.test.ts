@@ -72,7 +72,7 @@ async function buildArchive(
     { archivePath: "bb.db", body: "sqlite database" },
     {
       archivePath: "config.json",
-      body: JSON.stringify({ config: { BB_LOG_LEVEL: "debug" } }),
+      body: JSON.stringify({ config: { MQH_LOG_LEVEL: "debug" } }),
     },
     { archivePath: "auth-secret", body: "secret" },
     { archivePath: "attachments/thr_1/image.png", body: "png" },
@@ -210,7 +210,7 @@ afterAll(async () => {
   );
 });
 
-describe("bb server import", () => {
+describe("mqh server import", () => {
   setupCommandOutputTestEnvironment();
 
   const createdDirs: string[] = [];
@@ -230,7 +230,7 @@ describe("bb server import", () => {
   }
 
   beforeEach(() => {
-    vi.stubEnv("BB_APP_VERSION", "0.50.0");
+    vi.stubEnv("MQH_APP_VERSION", "0.50.0");
   });
 
   it("installs a plain export and marks it for a manual import boot", async () => {
@@ -283,11 +283,11 @@ describe("bb server import", () => {
     expect(await readdir(parent)).toEqual(["bb-data"]);
     const output = collectLogPayloads(vi.mocked(console.log));
     expect(output[0]).toBe(
-      `Imported the bb server into ${dataDir} (5 files from /home/old/.bb, exported by bb 0.50.0).`,
+      `Imported the mqh server into ${dataDir} (5 files from /home/old/.bb, exported by bb 0.50.0).`,
     );
     expect(output.slice(2)).toEqual([
-      "Stop the original bb server before you start this one. Two servers holding the same bb connect credential take each other's tunnel.",
-      `bb connect stays off in this copy until you run bb server allow-connect --data-dir ${dataDir}.`,
+      "Stop the original mqh server before you start this one. Two servers holding the same bb connect credential take each other's tunnel.",
+      `bb connect stays off in this copy until you run mqh server allow-connect --data-dir ${dataDir}.`,
       `Then start it with npx bb-app --data-dir ${dataDir}.`,
     ]);
   });
@@ -330,7 +330,7 @@ describe("bb server import", () => {
     ).rejects.toThrow("process.exit:1");
 
     expect(collectLogPayloads(vi.mocked(console.error))[0]).toBe(
-      `Error: ${dataDir} already has a bb server database (bb.db). Import into a data directory without a server, such as --data-dir ~/.bb-imported.`,
+      `Error: ${dataDir} already has a mqh server database (bb.db). Import into a data directory without a server, such as --data-dir ~/.bb-imported.`,
     );
     expect(await readFile(join(dataDir, "bb.db"), "utf8")).toBe(
       "existing server",
@@ -400,7 +400,7 @@ describe("bb server import", () => {
     );
 
     expect(readlineMocks.question).toHaveBeenCalledWith(
-      `Import the bb server from ${plainArchive} into ${dataDir}? [y/N] `,
+      `Import the mqh server from ${plainArchive} into ${dataDir}? [y/N] `,
     );
     expect(await readdir(parent)).toEqual([]);
   });
@@ -436,7 +436,7 @@ describe("bb server import", () => {
     ).rejects.toThrow("process.exit:1");
 
     expect(collectLogPayloads(vi.mocked(console.error))).toEqual([
-      'Error: This export came from a server with the "Server move" experiment off. Turn on the "Server move" experiment in Settings → Experiments, or run bb settings experiment serverMove true, on that server, then export again.',
+      'Error: This export came from a server with the "Server move" experiment off. Turn on the "Server move" experiment in Settings → Experiments, or run mqh settings experiment serverMove true, on that server, then export again.',
     ]);
     expect(await readdir(parent)).toEqual([]);
   });
@@ -448,13 +448,13 @@ describe("bb server import", () => {
       dataDir,
       "config.json",
       JSON.stringify({
-        config: { BB_APP_URL: "https://desktop.ts.net", BB_LOG_LEVEL: "trace" },
+        config: { MQH_APP_URL: "https://desktop.ts.net", MQH_LOG_LEVEL: "trace" },
       }),
     );
     await writeDataFile(
       dataDir,
       "server-import-backup/config.json",
-      JSON.stringify({ config: { BB_APP_URL: "https://desktop.ts.net" } }),
+      JSON.stringify({ config: { MQH_APP_URL: "https://desktop.ts.net" } }),
     );
     await writeDataFile(dataDir, "bb.db", "interrupted import database");
     await writeDataFile(
@@ -494,7 +494,7 @@ describe("bb server import", () => {
     expect(
       JSON.parse(await readFile(join(dataDir, "config.json"), "utf8")),
     ).toEqual({
-      config: { BB_APP_URL: "https://desktop.ts.net", BB_LOG_LEVEL: "debug" },
+      config: { MQH_APP_URL: "https://desktop.ts.net", MQH_LOG_LEVEL: "debug" },
     });
     expect(await readServerImportFile(dataDir)).toMatchObject({
       kind: "manual",
@@ -546,7 +546,7 @@ describe("bb server import", () => {
     ).rejects.toThrow("process.exit:1");
 
     expect(collectLogPayloads(vi.mocked(console.error))[0]).toBe(
-      `Error: ${dataDir} already has a bb server database (bb.db). Import into a data directory without a server, such as --data-dir ~/.bb-imported.`,
+      `Error: ${dataDir} already has a mqh server database (bb.db). Import into a data directory without a server, such as --data-dir ~/.bb-imported.`,
     );
     expect(await readFile(join(dataDir, "bb.db"), "utf8")).toBe(
       "imported database",
@@ -569,7 +569,7 @@ describe("bb server import", () => {
     await writeDataFile(
       dataDir,
       "config.json",
-      JSON.stringify({ config: { BB_APP_URL: "https://desktop.ts.net" } }),
+      JSON.stringify({ config: { MQH_APP_URL: "https://desktop.ts.net" } }),
     );
 
     await runCommand(
@@ -582,7 +582,7 @@ describe("bb server import", () => {
     expect(
       JSON.parse(await readFile(join(dataDir, "config.json"), "utf8")),
     ).toEqual({
-      config: { BB_APP_URL: "https://desktop.ts.net", BB_LOG_LEVEL: "debug" },
+      config: { MQH_APP_URL: "https://desktop.ts.net", MQH_LOG_LEVEL: "debug" },
     });
   });
 
@@ -625,7 +625,7 @@ describe("isNewerBbVersion", () => {
   });
 });
 
-describe("bb server unlock", () => {
+describe("mqh server unlock", () => {
   setupCommandOutputTestEnvironment();
 
   beforeEach(() => {
@@ -716,7 +716,7 @@ describe("bb server unlock", () => {
         Promise.resolve(
           healthResponse(410, {
             code: "server_moved",
-            message: "This bb server moved",
+            message: "This mqh server moved",
             details: {
               serverUrl: "https://me.getbb.app",
               toHostName: "desktop",
@@ -764,7 +764,7 @@ describe("bb server unlock", () => {
   });
 
   const connectGrantConfig = {
-    config: { BB_LOG_LEVEL: "debug" },
+    config: { MQH_LOG_LEVEL: "debug" },
     serverUrl: "https://me.getbb.app",
     serverHeaders: { "x-bb-connect-machine": "grant-secret" },
   };
@@ -855,7 +855,7 @@ describe("bb server unlock", () => {
       );
       expect(await readServerMovedFile(dataDir)).toBeNull();
       expect(JSON.parse(await readFile(configPath, "utf8"))).toEqual({
-        config: { BB_LOG_LEVEL: "debug" },
+        config: { MQH_LOG_LEVEL: "debug" },
       });
       expect(
         collectLogPayloads(vi.mocked(console.error)).filter((line) =>
@@ -929,11 +929,11 @@ describe("bb server unlock", () => {
     expect(await readFile(join(dataDir, "bb.db"), "utf8")).toBe("old server");
     const warnings = collectLogPayloads(vi.mocked(console.error));
     expect(warnings[0]).toMatch(
-      /^This bb server moved to desktop \(https:\/\/me\.getbb\.app\) on /u,
+      /^This mqh server moved to desktop \(https:\/\/me\.getbb\.app\) on /u,
     );
     expect(warnings.slice(1)).toEqual([
       "Unlocking starts this old copy again. Everything since the move is lost here: threads, settings, and plugin data changed on desktop stay there.",
-      "Stop the bb server on desktop first. Two servers holding the same bb connect credential take each other's tunnel.",
+      "Stop the mqh server on desktop first. Two servers holding the same bb connect credential take each other's tunnel.",
     ]);
     expect(collectLogPayloads(vi.mocked(console.log))).toEqual([
       `Unlocked ${dataDir}. bb on this computer starts the old server again within a few seconds; if bb isn't running, start it with npx bb-app --data-dir ${dataDir}.`,
@@ -977,7 +977,7 @@ describe("bb server unlock", () => {
     ).rejects.toThrow("process.exit:1");
 
     expect(collectLogPayloads(vi.mocked(console.error))).toEqual([
-      `Error: The old server copy in ${dataDir} was deleted, so there is nothing to unlock. Unlocking would start an empty bb server.`,
+      `Error: The old server copy in ${dataDir} was deleted, so there is nothing to unlock. Unlocking would start an empty mqh server.`,
     ]);
     expect(await readServerMovedFile(dataDir)).not.toBeNull();
   });
@@ -1004,7 +1004,7 @@ describe("bb server unlock", () => {
       dataDir,
       "config.json",
       JSON.stringify({
-        config: { BB_LOG_LEVEL: "debug", BB_APP_URL: "https://laptop.ts.net" },
+        config: { MQH_LOG_LEVEL: "debug", MQH_APP_URL: "https://laptop.ts.net" },
         customModels: [{ providerId: "codex", model: "gpt-5.4" }],
         customAcpAgents: [{ id: "not a valid agent" }],
         serverUrl: "https://me.getbb.app",
@@ -1022,7 +1022,7 @@ describe("bb server unlock", () => {
 
     expect(await readServerMovedFile(dataDir)).toBeNull();
     expect(JSON.parse(await readFile(configPath, "utf8"))).toEqual({
-      config: { BB_LOG_LEVEL: "debug", BB_APP_URL: "https://laptop.ts.net" },
+      config: { MQH_LOG_LEVEL: "debug", MQH_APP_URL: "https://laptop.ts.net" },
       customModels: [{ providerId: "codex", model: "gpt-5.4" }],
       customAcpAgents: [{ id: "not a valid agent" }],
     });
@@ -1083,10 +1083,10 @@ describe("bb server unlock", () => {
     ]);
   });
 
-  it("uses BB_DATA_DIR when --data-dir is omitted", async () => {
+  it("uses MQH_DATA_DIR when --data-dir is omitted", async () => {
     const dataDir = await makeTempDir("bb-cli-server-lock-");
     await writeServerMovedFile(dataDir, movedLock());
-    vi.stubEnv("BB_DATA_DIR", dataDir);
+    vi.stubEnv("MQH_DATA_DIR", dataDir);
 
     await runCommand(["server", "unlock", "--yes"], register);
 
@@ -1094,7 +1094,7 @@ describe("bb server unlock", () => {
   });
 });
 
-describe("bb server allow-connect", () => {
+describe("mqh server allow-connect", () => {
   setupCommandOutputTestEnvironment();
 
   function hold() {
@@ -1121,10 +1121,10 @@ describe("bb server allow-connect", () => {
       "imported server",
     );
     expect(collectLogPayloads(vi.mocked(console.error))).toEqual([
-      "Stop the original bb server first. Two servers holding the same bb account credential take each other's tunnel and spend the same hosted quota.",
+      "Stop the original mqh server first. Two servers holding the same mqh account credential take each other's tunnel and spend the same hosted quota.",
     ]);
     expect(collectLogPayloads(vi.mocked(console.log))).toEqual([
-      `Removed the bb connect hold from ${dataDir}. bb account and bb connect start the next time this server starts; restart bb if it's already running.`,
+      `Removed the bb connect hold from ${dataDir}. mqh account and bb connect start the next time this server starts; restart bb if it's already running.`,
     ]);
   });
 
@@ -1176,7 +1176,7 @@ describe("bb server allow-connect", () => {
   });
 });
 
-describe("bb server delete-old-copy", () => {
+describe("mqh server delete-old-copy", () => {
   setupCommandOutputTestEnvironment();
 
   it("deletes the listed server entries and sidecars but keeps the lock and host-owned files", async () => {
@@ -1217,7 +1217,7 @@ describe("bb server delete-old-copy", () => {
     );
 
     expect(readlineMocks.question).toHaveBeenCalledWith(
-      `Delete the old bb server copy in ${dataDir} (5 entries)? The server now runs on desktop; this cannot be undone. [y/N] `,
+      `Delete the old mqh server copy in ${dataDir} (5 entries)? The server now runs on desktop; this cannot be undone. [y/N] `,
     );
     expect((await readdir(dataDir)).sort()).toEqual([
       "auth.json",
@@ -1235,7 +1235,7 @@ describe("bb server delete-old-copy", () => {
       movedLock({ oldCopyEntries: [] }),
     );
     expect(collectLogPayloads(vi.mocked(console.log))).toEqual([
-      `Deleted the old bb server copy from ${dataDir} (3 entries). This computer keeps running as a regular machine.`,
+      `Deleted the old mqh server copy from ${dataDir} (3 entries). This computer keeps running as a regular machine.`,
     ]);
   });
 

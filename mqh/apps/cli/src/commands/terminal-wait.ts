@@ -168,8 +168,8 @@ export async function observeTerminal(args: {
           code: "terminal_output_unavailable",
           hint:
             session.status === "disconnected"
-              ? `Continue with \`bb terminal wait ${session.id}\` once its machine reconnects.`
-              : `Inspect it with \`bb terminal show ${session.id}\`.`,
+              ? `Continue with \`mqh terminal wait ${session.id}\` once its machine reconnects.`
+              : `Inspect it with \`mqh terminal show ${session.id}\`.`,
         },
       );
     }
@@ -256,7 +256,7 @@ function observationStatusLines(report: TerminalObservationReport): string[] {
   }
   if (result.truncated) {
     lines.push(
-      `Earlier output is not shown; read what the machine still has with \`bb terminal output ${id}\`.`,
+      `Earlier output is not shown; read what the machine still has with \`mqh terminal output ${id}\`.`,
     );
   }
   switch (result.observation) {
@@ -264,12 +264,12 @@ function observationStatusLines(report: TerminalObservationReport): string[] {
       lines.push(
         result.status === "exited"
           ? `Terminal ${id} printed the expected output, then exited.`
-          : `Terminal ${id} printed the expected output and is still running. Stop it with \`bb terminal close ${id}\`.`,
+          : `Terminal ${id} printed the expected output and is still running. Stop it with \`mqh terminal close ${id}\`.`,
       );
       break;
     case "timed-out":
       lines.push(
-        `Terminal ${id} is still running. Continue with \`bb terminal wait ${id} --since-seq ${result.nextSeq}${conditionFlag(report.condition)}\`, or stop it with \`bb terminal close ${id}\`.`,
+        `Terminal ${id} is still running. Continue with \`mqh terminal wait ${id} --since-seq ${result.nextSeq}${conditionFlag(report.condition)}\`, or stop it with \`mqh terminal close ${id}\`.`,
       );
       break;
     case "exited":

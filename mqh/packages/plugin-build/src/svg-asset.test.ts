@@ -16,7 +16,7 @@ const REPO_ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 
 function discoverFirstPartyBrandingSvgs(): string[] {
   const files: string[] = [];
-  for (const pluginsDir of ["plugins", "examples/plugins"]) {
+  for (const pluginsDir of ["plugins"]) {
     for (const plugin of readdirSync(join(REPO_ROOT, pluginsDir))) {
       const iconsDir = join(REPO_ROOT, pluginsDir, plugin, "icons");
       if (!existsSync(iconsDir)) continue;

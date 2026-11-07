@@ -188,9 +188,9 @@ describe("cross-provider permission changes: Codex", () => {
     requestLogPath = join(workspaceDir, "requests.jsonl");
     const scriptPath = join(workspaceDir, "script.json");
     writeFileSync(scriptPath, JSON.stringify({ requestLogPath }));
-    vi.stubEnv("BB_CODEX_BRIDGE_APP_SERVER_COMMAND", process.execPath);
+    vi.stubEnv("MQH_CODEX_BRIDGE_APP_SERVER_COMMAND", process.execPath);
     vi.stubEnv(
-      "BB_CODEX_BRIDGE_APP_SERVER_ARGS",
+      "MQH_CODEX_BRIDGE_APP_SERVER_ARGS",
       JSON.stringify([
         join(
           checkout,

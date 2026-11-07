@@ -217,7 +217,7 @@ message, Original }` — render fenced code blocks of chosen languages in
   `message` is a narrow stable reference
   `{ id, threadId, role: "user" | "assistant", text, sourceSeqEnd, experimental_messageSeq }` (never
   an internal timeline row); `experimental_messageSeq` is the recorded message
-  sequence used by `?msg=`, `sdk.threads.message`, and `bb thread log --message`,
+  sequence used by `?msg=`, `sdk.threads.message`, and `mqh thread log --message`,
   while `sourceSeqEnd` anchors provider-history forks; `selectedText` is present only for
   selection-menu invocations and holds the exact highlighted text; and
   `experimental_panel` is the thread view's

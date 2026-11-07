@@ -8,13 +8,13 @@ Start a thread, pick Codex, and let it write and review code in your repository 
 - A Daybreak switch in the model picker for accounts that have Daybreak, usable with any model that supports it.
 - Checkpoint forks, manual compaction, thread rename, and thread archive.
 - Question cards for the questions Codex asks while it keeps working. Your answer reaches Codex as a message.
-- Codex skills from your home directory and project, listed next to bb skills.
+- Codex skills from your home directory and project, listed next to mqh skills.
 - Health, usage, and install status on each host, with an install or update action.
 - A Codex AI service for inference and voice that other bb features can use.
 
 ## Settings
 
-- `Codex memory`: let Codex recall and create memories from bb threads.
+- `Codex memory`: let Codex recall and create memories from mqh threads.
 - `Disable provider subagents`: stop native subagents so the agent delegates through bb.
 
 ## Requirements

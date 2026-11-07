@@ -93,8 +93,10 @@ const pluginBbManifestSchema = z
       )
       .optional(),
     server: requiredManifestString,
-    app: requiredManifestString.optional(),
     host: requiredManifestString.optional(),
+    // MQH: plugins have no web app; the Unity client renders their data, laid out by this file
+    // (panels, widgets, gestures; docs/mqh-spatial.md in the MetaCodex repo).
+    spatial: requiredManifestString.optional(),
     skills: z.array(requiredManifestString).optional(),
     themes: z
       .array(

@@ -144,9 +144,9 @@ public Host; `inputs: null` is for a provider that accepts no inputs. Supply a
 stable `key` for idempotent retries. Creation does not create an environment
 or a thread; project source setup happens later when an environment needs it.
 By default it waits until the host is active; `wait: false` returns the
-creating host for polling with `bb.sdk.hosts.get`. `bb machine create`
-(`--no-wait`) and `bb machine show` are the CLI equivalents. Deleting the host
-(`bb.sdk.hosts.delete`, `bb machine remove`) cancels creation; closing a
+creating host for polling with `bb.sdk.hosts.get`. `mqh machine create`
+(`--no-wait`) and `mqh machine show` are the CLI equivalents. Deleting the host
+(`bb.sdk.hosts.delete`, `mqh machine remove`) cancels creation; closing a
 client or aborting its signal only stops following.
 
 With `wait: false` the manual enrollment command may not be ready yet. Poll
@@ -234,7 +234,7 @@ Machines settings select the default provider. Without a saved selection,
 core uses the first registered provider, or direct when none are registered,
 and it keeps the selected provider for later enrollment of the same machine.
 The direct provider reads `machineServerUrl`, falling back to
-`BB_EXTERNAL_URL`. Declaring a URL does not prove reachability from a sandbox.
+`MQH_EXTERNAL_URL`. Declaring a URL does not prove reachability from a sandbox.
 
 Call `recheck()` when access is gained or lost. Clients then reload
 configuration, which checks provider availability in parallel with a

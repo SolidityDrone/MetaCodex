@@ -334,7 +334,7 @@ async function spawnCatalog(
 }
 
 function catalogIdleMs(): number {
-  const configured = Number(process.env.BB_PI_CATALOG_IDLE_MS);
+  const configured = Number(process.env.MQH_PI_CATALOG_IDLE_MS);
   return Number.isFinite(configured) && configured > 0
     ? configured
     : 5 * 60_000;

@@ -34,7 +34,7 @@ import {
   type PluginMarketplace,
   type PluginMarketplaceRefreshResult,
 } from "@bb/server-contract";
-import { brandingAssetHash } from "../plugins/app-bundle.js";
+import { brandingAssetHash } from "../plugins/plugin-assets.js";
 import {
   builtinPluginSource,
   listBundledPluginRegistrations,

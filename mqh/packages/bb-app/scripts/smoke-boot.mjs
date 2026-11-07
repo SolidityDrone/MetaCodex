@@ -155,10 +155,10 @@ const serverPort = await reserveFreePort();
 const daemonPort = await reserveFreePort();
 const serverUrl = `http://127.0.0.1:${serverPort}`;
 const cliEnv = {
-  BB_DATA_DIR: dataDir,
-  BB_HOST_DAEMON_PORT: String(daemonPort),
-  BB_SERVER_URL: serverUrl,
-  BB_TELEMETRY: "false",
+  MQH_DATA_DIR: dataDir,
+  MQH_HOST_DAEMON_PORT: String(daemonPort),
+  MQH_SERVER_URL: serverUrl,
+  MQH_TELEMETRY: "false",
 };
 let output = "";
 const launcher = spawn(
@@ -175,7 +175,7 @@ const launcher = spawn(
   ],
   {
     detached: process.platform !== "win32",
-    env: { ...process.env, BB_TELEMETRY: "false", NODE_ENV: "production" },
+    env: { ...process.env, MQH_TELEMETRY: "false", NODE_ENV: "production" },
     stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true,
   },
@@ -190,7 +190,7 @@ try {
       throw new Error(`bb-app exited with ${launcher.exitCode} before /health`);
     }
     if (Date.now() > healthDeadline) {
-      throw new Error("Timed out waiting for the bb server /health");
+      throw new Error("Timed out waiting for the mqh server /health");
     }
     await delay(POLL_INTERVAL_MS);
   }
@@ -198,7 +198,7 @@ try {
 
   const status = await runCli(["status"], cliEnv);
   if (!status.includes(dataDir)) {
-    throw new Error(`bb status did not report the data dir:\n${status}`);
+    throw new Error(`mqh status did not report the data dir:\n${status}`);
   }
   process.stdout.write("bb-app boot smoke: bundled bb CLI answered status\n");
 
@@ -234,6 +234,6 @@ try {
 }
 
 if (await isHealthy(serverUrl)) {
-  throw new Error("The bb server kept answering after bb-app was stopped");
+  throw new Error("The mqh server kept answering after bb-app was stopped");
 }
 process.stdout.write("bb-app boot smoke: passed\n");

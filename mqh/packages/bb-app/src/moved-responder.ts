@@ -34,7 +34,7 @@ interface ServerMovedErrorBody {
 }
 
 export function formatServerMovedNotice(movedFile: ServerMovedFile): string {
-  return `This bb server moved to ${movedFile.toHostName} (${movedFile.serverUrl}). This computer now runs as a regular machine.`;
+  return `This mqh server moved to ${movedFile.toHostName} (${movedFile.serverUrl}). This computer now runs as a regular machine.`;
 }
 
 function createServerMovedErrorBody(
@@ -42,7 +42,7 @@ function createServerMovedErrorBody(
 ): ServerMovedErrorBody {
   return {
     code: MOVED_ERROR_CODE,
-    message: `This bb server moved to ${movedFile.toHostName} (${movedFile.serverUrl}).`,
+    message: `This mqh server moved to ${movedFile.toHostName} (${movedFile.serverUrl}).`,
     details: {
       serverUrl: movedFile.serverUrl,
       toHostName: movedFile.toHostName,
@@ -114,7 +114,7 @@ function renderMovedPage(movedFile: ServerMovedFile, serverUrl: URL): string {
     "<title>bb moved</title>",
     "</head>",
     "<body>",
-    `<h1>This bb server moved to ${hostName}</h1>`,
+    `<h1>This mqh server moved to ${hostName}</h1>`,
     `<p><a href="${href}">Open bb at ${href}</a></p>`,
     "</body>",
     "</html>",

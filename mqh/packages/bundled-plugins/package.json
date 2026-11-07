@@ -26,7 +26,6 @@
     "bb-plugin-provider-retry": "workspace:*",
     "bb-plugin-bb--provider-usage": "workspace:*",
     "bb-plugin-bb--mcp": "workspace:*",
-    "bb-plugin-bb--prompt-library": "workspace:*",
     "bb-plugin-secrets": "workspace:*",
     "bb-plugin-simple-notes": "workspace:*",
     "bb-plugin-tasks": "workspace:*",

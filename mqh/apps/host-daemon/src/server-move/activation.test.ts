@@ -73,7 +73,7 @@ describe("server_move.activate pre-validation", () => {
         });
       },
       fixtureArgs: { env: {} },
-      message: "to run the bb server",
+      message: "to run the mqh server",
     },
     {
       name: "the host daemon port is unknown",
@@ -82,19 +82,19 @@ describe("server_move.activate pre-validation", () => {
       message: "host daemon port is unknown",
     },
     {
-      name: "the bb server package is missing",
+      name: "the mqh server package is missing",
       setup: async (fixture: Fixture) => {
         await rm(join(fixture.packageRoot, "server", "dist", "index.js"));
       },
       fixtureArgs: {},
-      message: "does not include the bb server",
+      message: "does not include the mqh server",
     },
     {
       name: "an unrecognized supervisor runs the daemon",
       setup: async () => undefined,
       fixtureArgs: {
         env: {
-          BB_SERVER_MOVE_SERVICE_MANAGER: "none",
+          MQH_SERVER_MOVE_SERVICE_MANAGER: "none",
           INVOCATION_ID: "0123456789abcdef",
         },
       },
@@ -233,7 +233,7 @@ describe("server_move.activate sequencing", () => {
     ]);
     await expectMarkersRemoved(fixture);
     expect(await readJson(join(fixture.dataDir, "config.json"))).toEqual({
-      config: { BB_LOG_LEVEL: "info" },
+      config: { MQH_LOG_LEVEL: "info" },
       serverUrl: `http://127.0.0.1:${command.serverPort}`,
     });
     expect(await exists(join(fixture.dataDir, "bb.db"))).toBe(true);
@@ -244,8 +244,8 @@ describe("server_move.activate sequencing", () => {
     const fixture = await createFixture();
     const service = fixture.createService({
       env: {
-        BB_SERVER_MOVE_SERVICE_MANAGER: "none",
-        BB_APP_NPM_PREFIX: fixture.npmPrefix,
+        MQH_SERVER_MOVE_SERVICE_MANAGER: "none",
+        MQH_APP_NPM_PREFIX: fixture.npmPrefix,
       },
     });
     await writeFile(
@@ -276,9 +276,9 @@ describe("server_move.activate sequencing", () => {
           "0.0.0.0",
         ],
         env: expect.objectContaining({
-          BB_DATA_DIR: fixture.dataDir,
-          BB_APP_NPM_PREFIX: fixture.npmPrefix,
-          BB_SERVER_MOVE_SERVICE_MANAGER: "none",
+          MQH_DATA_DIR: fixture.dataDir,
+          MQH_APP_NPM_PREFIX: fixture.npmPrefix,
+          MQH_SERVER_MOVE_SERVICE_MANAGER: "none",
         }),
         logPath: join(fixture.dataDir, "logs", "server-move.log"),
       },
@@ -293,8 +293,8 @@ describe("server_move.activate sequencing", () => {
     const fixture = await createFixture();
     const service = fixture.createService({
       env: {
-        BB_SERVER_MOVE_SERVICE_MANAGER: "none",
-        BB_APP_NPM_PREFIX: fixture.npmPrefix,
+        MQH_SERVER_MOVE_SERVICE_MANAGER: "none",
+        MQH_APP_NPM_PREFIX: fixture.npmPrefix,
       },
     });
     await writeFile(
@@ -430,7 +430,7 @@ describe("activation resume", () => {
     expect(fixture.shutdownRequests).toEqual([["server-move-activated", 0]]);
     await expectMarkersRemoved(fixture);
     expect(await readJson(join(fixture.dataDir, "config.json"))).toEqual({
-      config: { BB_LOG_LEVEL: "info" },
+      config: { MQH_LOG_LEVEL: "info" },
       serverUrl: `http://127.0.0.1:${command.serverPort}`,
     });
   });
@@ -495,7 +495,7 @@ describe("server move redirects during a move", () => {
     ]);
     expect(fixture.shutdownRequests).toEqual([["server-move-activated", 0]]);
     expect(await readJson(join(fixture.dataDir, "config.json"))).toEqual({
-      config: { BB_LOG_LEVEL: "info" },
+      config: { MQH_LOG_LEVEL: "info" },
       serverUrl: `http://127.0.0.1:${command.serverPort}`,
     });
   });

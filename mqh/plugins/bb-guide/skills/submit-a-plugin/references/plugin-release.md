@@ -14,7 +14,7 @@ Read this file before you validate or release the submitted plugin.
    subdirectory.
 8. Run focused tests, type checks, and builds with the repository package
    manager.
-9. Run bb plugin build from the plugin directory.
+9. Run mqh plugin build from the plugin directory.
 
 The ID algorithm removes the npm scope and a lowercase bb-plugin- prefix. It
 converts the remaining value to lowercase, replaces other characters with
@@ -108,7 +108,7 @@ An exact ref prevents automatic selection of later compatible releases.
 An npm source must refer to a published package. The package must contain the
 prebuilt BB files. A Git install can build source during installation.
 
-1. Run bb plugin build.
+1. Run mqh plugin build.
 2. Run tests and type checks.
 3. Run npm pack --dry-run --ignore-scripts.
 4. Confirm that the package contains its manifest and required dist files.

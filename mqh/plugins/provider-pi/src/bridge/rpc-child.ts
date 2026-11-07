@@ -12,8 +12,8 @@ import {
 
 import { PiBridgeChannel } from "./bridge-channel.js";
 
-export const PI_BRIDGE_COMMAND_ENV = "BB_PI_BRIDGE_COMMAND";
-export const PI_BRIDGE_ARGS_ENV = "BB_PI_BRIDGE_ARGS";
+export const PI_BRIDGE_COMMAND_ENV = "MQH_PI_BRIDGE_COMMAND";
+export const PI_BRIDGE_ARGS_ENV = "MQH_PI_BRIDGE_ARGS";
 
 export const PI_CHANNEL_RECORDING_KEY = "bbChannel";
 

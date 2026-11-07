@@ -162,7 +162,7 @@ const runtimeOptionsTemplates = {
 
 const INTEGRATION_REASONING_LEVEL = "low" satisfies ReasoningLevel;
 const PI_CODING_AGENT_DIR_ENV = "PI_CODING_AGENT_DIR";
-const PI_BRIDGE_SESSION_DIR_ENV = "BB_PI_BRIDGE_SESSION_DIR";
+const PI_BRIDGE_SESSION_DIR_ENV = "MQH_PI_BRIDGE_SESSION_DIR";
 
 function piAgentDir(): string {
   return (

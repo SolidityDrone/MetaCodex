@@ -10,7 +10,7 @@ describe("@bb/templates", () => {
   it("documents project creation machine routing", () => {
     const guide = renderTemplate("bbGuideProjects", {});
 
-    expect(guide).toContain("bb project create --name");
+    expect(guide).toContain("mqh project create --name");
     expect(guide).toContain("--machine <id-or-name>");
     expect(guide).toContain("--host <id-or-name>");
     expect(guide).toContain("local CLI machine fallback");

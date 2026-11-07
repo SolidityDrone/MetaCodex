@@ -1,4 +1,4 @@
-export const BB_PI_EXTENSION_SOURCE = String.raw`
+export const MQH_PI_EXTENSION_SOURCE = String.raw`
 import { readFileSync, renameSync } from "node:fs";
 import { connect } from "node:net";
 import { StringDecoder } from "node:string_decoder";
@@ -11,8 +11,8 @@ function supportsAgentSettlement(version) {
 }
 import { Type } from "typebox";
 
-const BRIDGE_CHANNEL_ENV = "BB_PI_BRIDGE_CHANNEL";
-const BRIDGE_CHANNEL_TOKEN_ENV = "BB_PI_BRIDGE_CHANNEL_TOKEN";
+const BRIDGE_CHANNEL_ENV = "MQH_PI_BRIDGE_CHANNEL";
+const BRIDGE_CHANNEL_TOKEN_ENV = "MQH_PI_BRIDGE_CHANNEL_TOKEN";
 const BRIDGE_CHANNEL = Symbol.for("bb.pi.bridgeChannel");
 
 function openBridgeChannel() {

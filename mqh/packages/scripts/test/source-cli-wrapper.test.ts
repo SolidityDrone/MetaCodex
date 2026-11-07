@@ -13,10 +13,10 @@ interface SourceCliResult {
 const testDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(testDir, "..", "..", "..");
 const contextEnvKeys: string[] = [
-  "BB_ENVIRONMENT_ID",
-  "BB_PROJECT_ID",
-  "BB_THREAD_ID",
-  "BB_THREAD_STORAGE",
+  "MQH_ENVIRONMENT_ID",
+  "MQH_PROJECT_ID",
+  "MQH_THREAD_ID",
+  "MQH_THREAD_STORAGE",
 ];
 const spawnedChildren: ChildProcessWithoutNullStreams[] = [];
 
@@ -25,7 +25,7 @@ function buildCleanEnv(): NodeJS.ProcessEnv {
   for (const key of contextEnvKeys) {
     delete env[key];
   }
-  env.BB_SERVER_URL = "http://127.0.0.1:9";
+  env.MQH_SERVER_URL = "http://127.0.0.1:9";
   return env;
 }
 

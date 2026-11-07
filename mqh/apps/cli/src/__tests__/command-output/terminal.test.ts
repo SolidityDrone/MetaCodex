@@ -48,7 +48,7 @@ function makeHost(overrides: Record<string, unknown> = {}) {
   };
 }
 
-describe("bb terminal command output", () => {
+describe("mqh terminal command output", () => {
   setupCommandOutputTestEnvironment();
 
   const register: CommandRegistrar = (program) =>
@@ -500,7 +500,7 @@ describe("bb terminal command output", () => {
   });
 
   it("fills in this thread when terminal list has no scope", async () => {
-    vi.stubEnv("BB_THREAD_ID", "thr_current");
+    vi.stubEnv("MQH_THREAD_ID", "thr_current");
 
     await expect(
       runCommand(["terminal", "list", "--json"], register),

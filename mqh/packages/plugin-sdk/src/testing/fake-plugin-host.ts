@@ -132,7 +132,7 @@ import {
 /**
  * `createFakePluginHost` — an in-process stand-in for the BB server's plugin
  * runtime (apps/server/src/services/plugins/plugin-api.ts), for unit-testing
- * a plugin's `server.ts` without a server. `bb` satisfies {@link BbPluginApi};
+ * a plugin's `server.ts` without a server. `mqh` satisfies {@link BbPluginApi};
  * `harness` drives and inspects it.
  *
  * Faithful where a plugin can observe it: registration name validation and
@@ -527,7 +527,7 @@ export interface FakePluginLifecycleControls {
   /**
    * Dispose like a host reload/disable: abort services started via
    * runService, run onDispose hooks LIFO (isolated), close database handles,
-   * then poison the `bb` handle (further use throws
+   * then poison the `mqh` handle (further use throws
    * PluginContextStaleError). Idempotent.
    */
   dispose(): Promise<void>;
@@ -2028,7 +2028,7 @@ function createFakePluginHostInternal(
           {
             exitCode: 1,
             stdout: "",
-            stderr: `bb ${registration.name} failed: ${errorMessage(error)}`,
+            stderr: `mqh ${registration.name} failed: ${errorMessage(error)}`,
           },
           argv.includes("--json"),
         );

@@ -418,7 +418,7 @@ function buildTerminalEnv(args: BuildTerminalEnvArgs): NodeJS.ProcessEnv {
   return {
     ...sanitizeInheritedChildProcessEnv({ env: process.env }),
     ...args.shellEnv,
-    BB_TERMINAL_SESSION_ID: args.terminalId,
+    MQH_TERMINAL_SESSION_ID: args.terminalId,
     COLORTERM: "truecolor",
     DISABLE_AUTO_TITLE: "true",
     FORCE_HYPERLINK: "1",

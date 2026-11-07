@@ -468,7 +468,7 @@ async function verifyNativeModules(root) {
 }
 
 function daemonEnvironment({ dataDir, npmPrefix }) {
-  return { ...process.env, BB_APP_NPM_PREFIX: npmPrefix, BB_DATA_DIR: dataDir };
+  return { ...process.env, MQH_APP_NPM_PREFIX: npmPrefix, MQH_DATA_DIR: dataDir };
 }
 
 function spawnDaemon({ args, dataDir, logFile, npmPrefix, root }) {
@@ -919,7 +919,7 @@ async function runInstall(options) {
     throw new InstallError(`${options.bootstrapEnv} is not set.`);
   }
   const bootstrap = parseBootstrap(rawBootstrap);
-  process.stdout.write("\n  bb machine setup\n\n");
+  process.stdout.write("\n  mqh machine setup\n\n");
   step(
     `Setting up this machine as ${bootstrap.hostId} for ${bootstrap.serverUrl}`,
   );
@@ -931,14 +931,14 @@ async function runInstall(options) {
     );
   }
 
-  const configuredDataDir = process.env.BB_DATA_DIR?.trim();
+  const configuredDataDir = process.env.MQH_DATA_DIR?.trim();
   const dataDir =
     configuredDataDir !== undefined && configuredDataDir.length > 0
       ? configuredDataDir
       : (bootstrap.dataDir ??
         join(homedir(), ".bb-machines", serverHostSlug(bootstrap.serverUrl)));
   if (!isAbsolute(dataDir)) {
-    throw new InstallError("BB_DATA_DIR must be an absolute path.");
+    throw new InstallError("MQH_DATA_DIR must be an absolute path.");
   }
   const existingHostId = installedHostId(dataDir);
   if (existingHostId !== "" && existingHostId !== bootstrap.hostId) {
@@ -947,7 +947,7 @@ async function runInstall(options) {
       [
         bootstrap.reconnect
           ? `Run this command on the computer where machine ${bootstrap.hostId} runs.`
-          : "To add another machine on this computer, set BB_DATA_DIR to a new directory and run the command again.",
+          : "To add another machine on this computer, set MQH_DATA_DIR to a new directory and run the command again.",
       ],
     );
   }
@@ -993,13 +993,13 @@ async function runInstall(options) {
       "machine",
       "enroll",
       "--bootstrap-env",
-      "BB_ENROLLMENT",
+      "MQH_ENROLLMENT",
     ],
     {
       env: {
         ...process.env,
-        BB_DATA_DIR: canonicalDataDir,
-        BB_ENROLLMENT: rawBootstrap,
+        MQH_DATA_DIR: canonicalDataDir,
+        MQH_ENROLLMENT: rawBootstrap,
       },
     },
   );

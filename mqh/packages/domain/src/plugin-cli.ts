@@ -24,6 +24,6 @@ export const RESERVED_BB_CLI_COMMANDS: readonly string[] = [
 
 export function pluginCliCall(pluginId: string, name: string): string {
   if (RESERVED_BB_CLI_COMMANDS.includes(name))
-    return `bb plugin run ${pluginId}`;
-  return `bb ${name}`;
+    return `mqh plugin run ${pluginId}`;
+  return `mqh ${name}`;
 }

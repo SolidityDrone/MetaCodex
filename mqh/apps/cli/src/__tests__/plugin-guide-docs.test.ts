@@ -19,22 +19,22 @@ function buildPluginCommand(): Command {
 }
 
 describe("plugins guide chapter", () => {
-  it("mentions every bb plugin subcommand", () => {
+  it("mentions every mqh plugin subcommand", () => {
     const plugin = buildPluginCommand();
     const names = plugin.commands.map((command) => command.name());
     expect(names.length).toBeGreaterThan(0);
 
     const guide = renderTemplate("bbGuidePlugins", {});
     for (const name of names) {
-      const pattern = new RegExp(`bb plugin (?:[a-z-]+\\|)*${name}\\b`);
+      const pattern = new RegExp(`mqh plugin (?:[a-z-]+\\|)*${name}\\b`);
       expect(
         guide,
-        `"bb plugin ${name}" is not documented in bb-guide-plugins.md`,
+        `"mqh plugin ${name}" is not documented in bb-guide-plugins.md`,
       ).toMatch(pattern);
     }
   });
 
-  it("mentions every declared bb plugin option flag", () => {
+  it("mentions every declared mqh plugin option flag", () => {
     const plugin = buildPluginCommand();
     const guide = renderTemplate("bbGuidePlugins", {});
     let optionCount = 0;
@@ -47,14 +47,14 @@ describe("plugins guide chapter", () => {
         expect(forms.length).toBeGreaterThan(0);
         expect(
           forms.some((form) => guide.includes(form)),
-          `"bb plugin ${command.name()}" flag "${option.flags}" is not documented in bb-guide-plugins.md`,
+          `"mqh plugin ${command.name()}" flag "${option.flags}" is not documented in bb-guide-plugins.md`,
         ).toBe(true);
       }
     }
     expect(optionCount).toBeGreaterThan(0);
   });
 
-  it("mentions every bb marketplace subcommand", () => {
+  it("mentions every mqh marketplace subcommand", () => {
     const marketplace = buildGroupCommand("marketplace");
     const names = marketplace.commands.map((command) => command.name());
     expect(names.length).toBeGreaterThan(0);
@@ -63,8 +63,8 @@ describe("plugins guide chapter", () => {
     for (const name of names) {
       expect(
         guide,
-        `"bb marketplace ${name}" is not documented in bb-guide-plugins.md`,
-      ).toMatch(new RegExp(`bb marketplace ${name}\\b`));
+        `"mqh marketplace ${name}" is not documented in bb-guide-plugins.md`,
+      ).toMatch(new RegExp(`mqh marketplace ${name}\\b`));
     }
   });
 });

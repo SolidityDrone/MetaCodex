@@ -20,7 +20,7 @@ import { createAutomationService } from "./service.js";
 import { sleep, sweepDueAutomations, SWEEP_INTERVAL_MS } from "./sweep.js";
 
 function resolveServerUrl(): string {
-  return process.env.BB_SERVER_URL?.trim() || "http://127.0.0.1:38990";
+  return process.env.MQH_SERVER_URL?.trim() || "http://127.0.0.1:38990";
 }
 
 export default async function plugin(bb: BbPluginApi) {

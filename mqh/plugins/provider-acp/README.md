@@ -7,7 +7,7 @@ OpenCode Go usage appears under OpenCode in the Provider usage panel for the
 selected machine. It reads the official Go endpoint using the machine's OpenCode
 Console account or API credentials and reports the five-hour, weekly, and monthly
 windows with their reset times. Sign in to Go in OpenCode on that machine.
-The same data is available through `bb settings usage --machine <id> --json`
+The same data is available through `mqh settings usage --machine <id> --json`
 and `bb.sdk.system.usageLimits({ hostId, providerId: "acp-opencode" })`.
 Other OpenCode providers and pay-as-you-go spending are not included.
 

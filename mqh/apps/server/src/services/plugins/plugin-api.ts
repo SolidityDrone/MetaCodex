@@ -136,7 +136,7 @@ import {
 import type { ServerLogger } from "../../types.js";
 import type { PluginInteractionResult } from "../interactions/pending-interactions.js";
 import { appendPluginLogLine } from "./plugin-log.js";
-import type { TunnelIngressLease } from "../connect-next/tunnel-ingress.js";
+import type { TunnelIngressLease } from "./plugin-service-internal.js";
 import {
   readPluginSettingsValues,
   writePluginSettingsUpdate,

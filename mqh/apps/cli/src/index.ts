@@ -19,7 +19,7 @@ maybeReexecViaBbCli();
 const program = new Command();
 
 program
-  .name("bb")
+  .name("mqh")
   .description("BB CLI - manage your AI coding agents")
   .enablePositionalOptions()
   .exitOverride()
@@ -78,8 +78,8 @@ async function tryPluginCommandProxy(
     );
     if (disabledId !== null) {
       console.error(
-        `bb ${candidate} is provided by the "${disabledId}" plugin, which is disabled — ` +
-          `run \`bb plugin enable ${disabledId}\` or enable it in Plugins.`,
+        `mqh ${candidate} is provided by the "${disabledId}" plugin, which is disabled — ` +
+          `run \`mqh plugin enable ${disabledId}\` or enable it in Plugins.`,
       );
       process.exit(1);
     }
@@ -127,7 +127,7 @@ async function logCliError(args: {
     code: args.code,
     command: args.command ?? commandPathLabel(program, process.argv),
     exitCode: args.exitCode,
-    threadId: process.env.BB_THREAD_ID ?? null,
+    threadId: process.env.MQH_THREAD_ID ?? null,
     token: args.token,
   });
 }
@@ -195,7 +195,7 @@ async function addJsonShapeHelp(): Promise<void> {
   for (const commandPath of Object.keys(JSON_SHAPE_BY_COMMAND_PATH)) {
     const invocation = resolution.resolveInvocation(program, [
       "node",
-      "bb",
+      "mqh",
       ...commandPath.split(" "),
     ]);
     const help = jsonShapeHelp(commandPath);
@@ -226,15 +226,15 @@ async function main(): Promise<void> {
     return `
 
 Current context:
-  BB_PROJECT_ID: ${project}
-  BB_THREAD_ID: ${thread}
-  BB_SERVER_URL: ${context.serverUrl}
+  MQH_PROJECT_ID: ${project}
+  MQH_THREAD_ID: ${thread}
+  MQH_SERVER_URL: ${context.serverUrl}
 
 Quick start:
-  bb status
-  bb project list
-  bb thread show <id>
-  bb thread spawn --project <id> --provider codex --prompt "..."
+  mqh status
+  mqh project list
+  mqh thread show <id>
+  mqh thread spawn --project <id> --provider codex --prompt "..."
 `;
   });
 

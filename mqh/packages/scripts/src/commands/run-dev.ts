@@ -101,16 +101,16 @@ export function toDevLaunchProcessEnv(args: {
     baseEnv: args.baseEnv,
     config: args.config,
   });
-  env.BB_SKIP_ONBOARDING ??= "1";
+  env.MQH_SKIP_ONBOARDING ??= "1";
   if (args.cloud === "staging") {
-    env.BB_DEV_CONNECT_BASE_URL = STAGING_CLOUD_URL;
+    env.MQH_DEV_CONNECT_BASE_URL = STAGING_CLOUD_URL;
   }
   if (args.mode === "vite") {
     return env;
   }
 
-  delete env.BB_DEV_APP_PORT;
-  env.BB_TELEMETRY = "false";
+  delete env.MQH_DEV_APP_PORT;
+  env.MQH_TELEMETRY = "false";
   env.NODE_ENV = "production";
   return env;
 }
@@ -132,7 +132,7 @@ function formatConfig(
     `${prefix} Server ${config.serverUrl}`,
     `${prefix} Host daemon http://127.0.0.1:${config.ports.hostDaemonPort}`,
     ...(cloud === "staging"
-      ? [`${prefix} bb account and Connect use ${STAGING_CLOUD_URL}`]
+      ? [`${prefix} mqh account and Connect use ${STAGING_CLOUD_URL}`]
       : []),
   ].join("\n");
 }

@@ -9,10 +9,7 @@ import {
 } from "./services/system/app-update-send-hold.js";
 import { createDesktopUpdateChannel } from "./services/system/desktop-update-channel.js";
 import { serve } from "@hono/node-server";
-import { existsSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import type { ServerConfig } from "@bb/config/server";
 import { isLoopbackHostname } from "@bb/config/loopback";
 import { toOptionalString } from "@bb/config/strings";
@@ -94,13 +91,13 @@ import {
 
 interface StartHttpListenerArgs {
   fetch: Parameters<typeof serve>[0]["fetch"];
-  serverConfig: Pick<ServerConfig, "BB_SERVER_BIND_HOST" | "BB_SERVER_PORT">;
+  serverConfig: Pick<ServerConfig, "MQH_SERVER_BIND_HOST" | "MQH_SERVER_PORT">;
 }
 
 export function startHttpListener(args: StartHttpListenerArgs) {
   return serve({
-    hostname: args.serverConfig.BB_SERVER_BIND_HOST,
-    port: args.serverConfig.BB_SERVER_PORT,
+    hostname: args.serverConfig.MQH_SERVER_BIND_HOST,
+    port: args.serverConfig.MQH_SERVER_PORT,
     fetch: args.fetch,
   });
 }
@@ -131,21 +128,21 @@ export function startServerPlugins(
 export async function runServer(serverConfig: ServerConfig): Promise<void> {
   const logger = createLogger({
     component: "server",
-    dataDir: serverConfig.BB_DATA_DIR,
+    dataDir: serverConfig.MQH_DATA_DIR,
   });
   await refuseInterruptedServerImport({
-    dataDir: serverConfig.BB_DATA_DIR,
+    dataDir: serverConfig.MQH_DATA_DIR,
     logger,
   });
   let diagnosticsEnabled = () => false;
   const db = initDb(serverConfig.databasePath, {
     slowQueryThresholdMs: () => (diagnosticsEnabled() ? 25 : 100),
     slowQueryDiagnosticsEnabled: () => diagnosticsEnabled(),
-    dataDir: serverConfig.BB_DATA_DIR,
+    dataDir: serverConfig.MQH_DATA_DIR,
     logger,
   });
   const serverImport = await applyServerImportAtBoot({
-    dataDir: serverConfig.BB_DATA_DIR,
+    dataDir: serverConfig.MQH_DATA_DIR,
     db,
     logger,
     now: Date.now(),
@@ -153,12 +150,12 @@ export async function runServer(serverConfig: ServerConfig): Promise<void> {
   const pendingServerMove = serverImport.pendingMove;
   if (pendingServerMove === null) {
     await repairLastServerMoveHostName({
-      dataDir: serverConfig.BB_DATA_DIR,
+      dataDir: serverConfig.MQH_DATA_DIR,
       db,
       logger,
     });
   }
-  if (serverConfig.BB_SKIP_ONBOARDING) {
+  if (serverConfig.MQH_SKIP_ONBOARDING) {
     const settings = getAppSettings(db);
     if (settings.onboardingCompletedAt === null) {
       setAppSettings(db, {
@@ -170,7 +167,7 @@ export async function runServer(serverConfig: ServerConfig): Promise<void> {
   const serverMoveRun =
     pendingServerMove === null
       ? await reconcileServerMoveRunAtBoot({
-          dataDir: serverConfig.BB_DATA_DIR,
+          dataDir: serverConfig.MQH_DATA_DIR,
           logger,
           now: Date.now(),
         })
@@ -179,27 +176,22 @@ export async function runServer(serverConfig: ServerConfig): Promise<void> {
   const watchInterests = new WatchInterestCoordinator({ db, hub });
   const sharedPorts = new HostSharedPortCoordinator({ db, hub });
   const lifecycleDedupers = createLifecycleDedupers();
-  const appUrl = toOptionalString(serverConfig.BB_APP_URL);
+  const appUrl = toOptionalString(serverConfig.MQH_APP_URL);
 
-  const selfDir = dirname(fileURLToPath(import.meta.url));
-  const appDir = resolve(selfDir, "../../app");
-  const appDistDir = join(appDir, "dist");
   const isProduction = process.env.NODE_ENV === "production";
-  const staticDir =
-    isProduction && existsSync(appDistDir) ? appDistDir : undefined;
   const runtimeConfig: ServerRuntimeConfig = {
-    appVersion: serverConfig.BB_APP_VERSION,
+    appVersion: serverConfig.MQH_APP_VERSION,
     builtinSkillsRootPath: resolveBuiltinSkillsRootPath(),
-    marketplaceUrl: serverConfig.BB_MARKETPLACE_URL,
-    connectGateKeysUrl: serverConfig.BB_CONNECT_GATE_KEYS_URL,
+    marketplaceUrl: serverConfig.MQH_MARKETPLACE_URL,
+    connectGateKeysUrl: serverConfig.MQH_CONNECT_GATE_KEYS_URL,
     customModels: [],
-    dataDir: serverConfig.BB_DATA_DIR,
+    dataDir: serverConfig.MQH_DATA_DIR,
     featureFlags: serverConfig.featureFlags,
-    hostDaemonPort: serverConfig.BB_HOST_DAEMON_PORT,
-    inheritedSkillsRootPaths: serverConfig.BB_INHERITED_SKILLS_ROOTS,
+    hostDaemonPort: serverConfig.MQH_HOST_DAEMON_PORT,
+    inheritedSkillsRootPaths: serverConfig.MQH_INHERITED_SKILLS_ROOTS,
     isDevelopment: !isProduction,
-    performanceDiagnosticsAvailable: serverConfig.BB_PERF_DIAGNOSTICS,
-    serverPort: serverConfig.BB_SERVER_PORT,
+    performanceDiagnosticsAvailable: serverConfig.MQH_PERF_DIAGNOSTICS,
+    serverPort: serverConfig.MQH_SERVER_PORT,
     sharedSkillRoots: { user: [], project: [] },
   };
 
@@ -218,11 +210,11 @@ export async function runServer(serverConfig: ServerConfig): Promise<void> {
   if (appUrl !== undefined) {
     runtimeConfig.appUrl = appUrl;
   }
-  if (serverConfig.BB_DEV_APP_PORT !== undefined) {
-    runtimeConfig.devAppPort = serverConfig.BB_DEV_APP_PORT;
+  if (serverConfig.MQH_DEV_APP_PORT !== undefined) {
+    runtimeConfig.devAppPort = serverConfig.MQH_DEV_APP_PORT;
   }
-  if (serverConfig.BB_SERVER_LAUNCH_ID !== undefined) {
-    runtimeConfig.launchId = serverConfig.BB_SERVER_LAUNCH_ID;
+  if (serverConfig.MQH_SERVER_LAUNCH_ID !== undefined) {
+    runtimeConfig.launchId = serverConfig.MQH_SERVER_LAUNCH_ID;
   }
   const terminalSessions = new TerminalSessionLifecycle({
     config: runtimeConfig,
@@ -237,27 +229,27 @@ export async function runServer(serverConfig: ServerConfig): Promise<void> {
   });
 
   const telemetry = await createTelemetryService({
-    apiKey: serverConfig.BB_POSTHOG_API_KEY,
+    apiKey: serverConfig.MQH_POSTHOG_API_KEY,
     appInstall: appInstallFromServerConfig(serverConfig),
-    appSurface: serverConfig.BB_APP_SURFACE,
-    appVersion: serverConfig.BB_APP_VERSION,
-    dataDir: serverConfig.BB_DATA_DIR,
+    appSurface: serverConfig.MQH_APP_SURFACE,
+    appVersion: serverConfig.MQH_APP_VERSION,
+    dataDir: serverConfig.MQH_DATA_DIR,
     enabled:
-      serverConfig.BB_TELEMETRY && isProduction && pendingServerMove === null,
+      serverConfig.MQH_TELEMETRY && isProduction && pendingServerMove === null,
     telemetryEnabled: getAppSettings(db).telemetryEnabled,
     logger,
   });
   const setupGuideExperiment = await createSetupGuideExperiment({
-    dataDir: serverConfig.BB_DATA_DIR,
+    dataDir: serverConfig.MQH_DATA_DIR,
     fetch: globalThis.fetch,
     flagTimeoutMs: SETUP_GUIDE_FLAG_TIMEOUT_MS,
     logger,
-    override: serverConfig.BB_SETUP_GUIDE_VARIANT ?? null,
+    override: serverConfig.MQH_SETUP_GUIDE_VARIANT ?? null,
     telemetry,
   });
 
   const machineAuth = await createMachineAuthService({
-    dataDir: serverConfig.BB_DATA_DIR,
+    dataDir: serverConfig.MQH_DATA_DIR,
     db,
     logger,
   });
@@ -287,14 +279,14 @@ export async function runServer(serverConfig: ServerConfig): Promise<void> {
   setPluginToolCallRegistry(new PluginToolCallRegistry({ logger }));
 
   const appVersion = createAppVersionService({
-    installKind: serverConfig.BB_APP_INSTALL_KIND ?? null,
-    sourceCommit: serverConfig.BB_APP_SOURCE_COMMIT ?? null,
+    installKind: serverConfig.MQH_APP_INSTALL_KIND ?? null,
+    sourceCommit: serverConfig.MQH_APP_SOURCE_COMMIT ?? null,
     config: runtimeConfig,
     logger,
   });
-  const appUpdateMode = serverConfig.BB_APP_UPDATE_MODE ?? null;
+  const appUpdateMode = serverConfig.MQH_APP_UPDATE_MODE ?? null;
   const desktopUpdateChannel =
-    serverConfig.BB_APP_SURFACE === "desktop"
+    serverConfig.MQH_APP_SURFACE === "desktop"
       ? createDesktopUpdateChannel(process)
       : null;
   const countRunningThreads = (): number => listRunningThreads(db).length;
@@ -322,10 +314,10 @@ export async function runServer(serverConfig: ServerConfig): Promise<void> {
     desktopUpdateChannel === null
       ? createAppUpdateService({
           currentCommit:
-            serverConfig.BB_APP_INSTALL_KIND === "source"
-              ? (serverConfig.BB_APP_SOURCE_COMMIT ?? null)
+            serverConfig.MQH_APP_INSTALL_KIND === "source"
+              ? (serverConfig.MQH_APP_SOURCE_COMMIT ?? null)
               : null,
-          appSurface: serverConfig.BB_APP_SURFACE,
+          appSurface: serverConfig.MQH_APP_SURFACE,
           appVersion,
           config: runtimeConfig,
           countRunningThreads,
@@ -340,7 +332,7 @@ export async function runServer(serverConfig: ServerConfig): Promise<void> {
       : createDesktopAppUpdateService({
           channel: desktopUpdateChannel,
           currentVersion: runtimeConfig.appVersion,
-          dataDir: serverConfig.BB_DATA_DIR,
+          dataDir: serverConfig.MQH_DATA_DIR,
           countRunningThreads,
           notifyChanged: notifyAppUpdateChanged,
           logger,
@@ -367,7 +359,7 @@ export async function runServer(serverConfig: ServerConfig): Promise<void> {
   const cliCommand = createCliCommandService({
     env: process.env,
     homeDir: homedir(),
-    launcherPath: serverConfig.BB_CLI_LAUNCHER ?? null,
+    launcherPath: serverConfig.MQH_CLI_LAUNCHER ?? null,
     platform: process.platform,
     windowsUserPath: createWindowsUserPath(process.env),
   });
@@ -378,7 +370,6 @@ export async function runServer(serverConfig: ServerConfig): Promise<void> {
     pluginCatalogService,
     pluginService,
     serverMove,
-    tunnelIngress,
   } = createApp(
     {
       appUpdate,
@@ -406,14 +397,13 @@ export async function runServer(serverConfig: ServerConfig): Promise<void> {
     },
     {
       serverMove: {
-        appSurface: serverConfig.BB_APP_SURFACE,
-        bindHost: serverConfig.BB_SERVER_BIND_HOST,
+        appSurface: serverConfig.MQH_APP_SURFACE,
+        bindHost: serverConfig.MQH_SERVER_BIND_HOST,
         manualImportPending: serverImport.manualImportPending,
         pending: pendingServerMove,
         restoredRun: serverMoveRun,
         retireProcess: retireServerProcess,
       },
-      staticDir,
       performanceDiagnosticsEnabled: () => diagnosticsEnabled(),
     },
   );
@@ -436,8 +426,8 @@ export async function runServer(serverConfig: ServerConfig): Promise<void> {
     { sessions: serverImport.importedDaemonSessions },
   );
   const performanceDiagnostics = await startGatedPerformanceDiagnostics({
-    allowed: serverConfig.BB_PERF_DIAGNOSTICS,
-    dataDir: serverConfig.BB_DATA_DIR,
+    allowed: serverConfig.MQH_PERF_DIAGNOSTICS,
+    dataDir: serverConfig.MQH_DATA_DIR,
     db,
     hub,
     logger,
@@ -496,9 +486,9 @@ export async function runServer(serverConfig: ServerConfig): Promise<void> {
     });
   }
 
-  if (!isLoopbackHostname(serverConfig.BB_SERVER_BIND_HOST)) {
+  if (!isLoopbackHostname(serverConfig.MQH_SERVER_BIND_HOST)) {
     logger.warn(
-      { bindHost: serverConfig.BB_SERVER_BIND_HOST },
+      { bindHost: serverConfig.MQH_SERVER_BIND_HOST },
       "SECURITY WARNING: The public API is unauthenticated and permits command execution and file reads. Wildcard server binding must only be used behind a trusted network boundary.",
     );
   }
@@ -511,14 +501,14 @@ export async function runServer(serverConfig: ServerConfig): Promise<void> {
 
   logger.info(
     {
-      bindHost: serverConfig.BB_SERVER_BIND_HOST,
-      port: serverConfig.BB_SERVER_PORT,
-      dataDir: serverConfig.BB_DATA_DIR,
+      bindHost: serverConfig.MQH_SERVER_BIND_HOST,
+      port: serverConfig.MQH_SERVER_PORT,
+      dataDir: serverConfig.MQH_DATA_DIR,
     },
     "Server listening",
   );
   pluginService.bindSdk({
-    baseUrl: `http://127.0.0.1:${serverConfig.BB_SERVER_PORT}`,
+    baseUrl: `http://127.0.0.1:${serverConfig.MQH_SERVER_PORT}`,
   });
   let sweepInterval: ReturnType<typeof setInterval> | null = null;
   if (pendingServerMove === null) {
@@ -531,7 +521,7 @@ export async function runServer(serverConfig: ServerConfig): Promise<void> {
       providerRegistry.markRegistrationsSettled();
     } else {
       void startServerPlugins({
-        dataDir: serverConfig.BB_DATA_DIR,
+        dataDir: serverConfig.MQH_DATA_DIR,
         logger,
         pluginService,
         providerRegistry,
@@ -539,7 +529,11 @@ export async function runServer(serverConfig: ServerConfig): Promise<void> {
         void serverMove.handlePluginsStarted();
       });
     }
-    pluginCatalogService.startPeriodicRefresh();
+    // MQH: no background calls to bb's public marketplace (getbb.app). The plugins MQH ships are bundled
+    // and work offline; opt in to periodic catalog refresh with MQH_MARKETPLACE_REFRESH=1.
+    if (process.env.MQH_MARKETPLACE_REFRESH === "1") {
+      pluginCatalogService.startPeriodicRefresh();
+    }
     sweepInterval = setInterval(() => {
       if (!isServerMoveFrozen(db)) {
         void runPeriodicSweeps(sweepDeps);
@@ -586,7 +580,6 @@ export async function runServer(serverConfig: ServerConfig): Promise<void> {
           resolve();
         });
       });
-      await tunnelIngress.closeAll();
       await closeWebSockets();
       await closeServer;
     })();

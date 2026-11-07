@@ -1818,7 +1818,7 @@ export const publicApiRoutes = {
     /**
      * Every live queued row, optionally narrowed to one thread or one
      * wait holder. Cross-thread because "what is queued right now" is a
-     * whole-workspace question (`bb thread queue list` with no thread, a
+     * whole-workspace question (`mqh thread queue list` with no thread, a
      * limiter plugin's own bookkeeping, a router recovering its rows after a
      * restart) that no single thread's list can answer.
      */

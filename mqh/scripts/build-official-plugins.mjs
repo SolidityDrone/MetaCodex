@@ -1,7 +1,6 @@
 import { readFile, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import {
-  buildPluginApp,
   buildPluginHost,
   buildPluginServer,
   resolvePluginBuildToolchain,
@@ -53,16 +52,10 @@ for (const plugin of selected) {
     bbPackage.version,
     toolchain,
   );
-  const app = manifest.bb?.app
-    ? await buildPluginApp(rootDirectory, bbPackage.version, toolchain)
-    : null;
   const host = manifest.bb?.host
     ? await buildPluginHost(rootDirectory, bbPackage.version, toolchain)
     : null;
   const outputs = [server.jsPath, server.metaPath];
-  if (app !== null) {
-    outputs.push(app.jsPath, app.cssPath, app.metaPath);
-  }
   if (host !== null) outputs.push(host.jsPath, host.mapPath, host.metaPath);
   console.log(`${plugin}: built ${outputs.join(", ")}`);
 }

@@ -275,10 +275,10 @@ describe("createAgentRuntime lifecycle", () => {
           env: record.env,
           shellEnv: {
             PATH: "/tmp/bb-bin:/usr/bin",
-            BB_HOST_DAEMON_PORT: "3002",
-            BB_PROJECT_ID: "wrong-project",
-            BB_SERVER_URL: "http://127.0.0.1:3334",
-            BB_THREAD_ID: "wrong-thread",
+            MQH_HOST_DAEMON_PORT: "3002",
+            MQH_PROJECT_ID: "wrong-project",
+            MQH_SERVER_URL: "http://127.0.0.1:3334",
+            MQH_THREAD_ID: "wrong-thread",
           },
           onEvent: (event) => events.push(event),
         },
@@ -303,12 +303,12 @@ describe("createAgentRuntime lifecycle", () => {
             envVars: {
               PATH: "/plugin/bin",
               AUTH_PROXY_URL: "http://127.0.0.1:3334/plugins/env-test/auth",
-              BB_HOST_DAEMON_PORT: "3002",
-              BB_PROJECT_ID: "p1",
-              BB_SERVER_URL: "http://127.0.0.1:3334",
-              BB_THREAD_STORAGE: join(threadStorageRootPath, "t1"),
-              BB_THREAD_ID: "t1",
-              BB_ENVIRONMENT_ID: "env-1",
+              MQH_HOST_DAEMON_PORT: "3002",
+              MQH_PROJECT_ID: "p1",
+              MQH_SERVER_URL: "http://127.0.0.1:3334",
+              MQH_THREAD_STORAGE: join(threadStorageRootPath, "t1"),
+              MQH_THREAD_ID: "t1",
+              MQH_ENVIRONMENT_ID: "env-1",
             },
           }),
         }),
@@ -468,7 +468,7 @@ describe("createAgentRuntime lifecycle", () => {
           contributedEnv: [],
         });
         const options = record.last("turn/start")?.params?.options;
-        expect(options).toHaveProperty("envVars.BB_PROJECT_ID", "project-a");
+        expect(options).toHaveProperty("envVars.MQH_PROJECT_ID", "project-a");
         expect(options).not.toHaveProperty("envVars.PROJECT_SECRET");
         expect(
           JSON.stringify(
@@ -528,7 +528,7 @@ describe("createAgentRuntime lifecycle", () => {
             source: { plugin: "env-test" },
             value: { masked: true },
             reason:
-              "Use the authenticated server proxy (dropped: no BB_SERVER_URL)",
+              "Use the authenticated server proxy (dropped: no MQH_SERVER_URL)",
           },
         ]),
       });
@@ -711,8 +711,8 @@ describe("createAgentRuntime lifecycle", () => {
           env: record.env,
           shellEnv: {
             PATH: "/tmp/bb-bin:/usr/bin",
-            BB_HOST_DAEMON_PORT: "3002",
-            BB_SERVER_URL: "http://127.0.0.1:3334",
+            MQH_HOST_DAEMON_PORT: "3002",
+            MQH_SERVER_URL: "http://127.0.0.1:3334",
           },
           onEvent: () => undefined,
         },
@@ -737,11 +737,11 @@ describe("createAgentRuntime lifecycle", () => {
           options: expect.objectContaining({
             envVars: {
               PATH: "/tmp/bb-bin:/usr/bin",
-              BB_HOST_DAEMON_PORT: "3002",
-              BB_SERVER_URL: "http://127.0.0.1:3334",
-              BB_PROJECT_ID: "p1",
-              BB_THREAD_ID: "t1",
-              BB_ENVIRONMENT_ID: "env-1",
+              MQH_HOST_DAEMON_PORT: "3002",
+              MQH_SERVER_URL: "http://127.0.0.1:3334",
+              MQH_PROJECT_ID: "p1",
+              MQH_THREAD_ID: "t1",
+              MQH_ENVIRONMENT_ID: "env-1",
             },
           }),
         }),

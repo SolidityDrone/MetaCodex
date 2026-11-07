@@ -1,4 +1,4 @@
-import { prependOlderTimelineRows } from "@bb/client-core";
+import { prependOlderTimelineRows } from "../../helpers/client-timeline/timeline-merge.js";
 import { describe, expect, it } from "vitest";
 import {
   encodeClientTurnRequestIdNumber,

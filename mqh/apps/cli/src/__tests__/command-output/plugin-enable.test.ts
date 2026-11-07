@@ -39,7 +39,7 @@ const enableResponse = (status: string, statusDetail: string | null) =>
     },
   });
 
-describe("bb plugin enable", () => {
+describe("mqh plugin enable", () => {
   setupCommandOutputTestEnvironment();
 
   const register: CommandRegistrar = (program) =>

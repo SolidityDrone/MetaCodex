@@ -103,7 +103,7 @@ export function registerInternalSessionRoutes(
       throw new ApiError(
         410,
         SERVER_MOVED_ERROR_CODE,
-        `This bb server moved to ${movedTo.toHostName} (${movedTo.serverUrl})`,
+        `This mqh server moved to ${movedTo.toHostName} (${movedTo.serverUrl})`,
         { details: movedTo, retryable: false },
       );
     }

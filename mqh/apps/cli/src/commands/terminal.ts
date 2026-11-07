@@ -34,7 +34,7 @@ const DEFAULT_COLS = 200;
 const DEFAULT_ROWS = 50;
 const WAIT_POLL_DELAYS_MS = [100, 200, 400, 800, 1000] as const;
 const RUN_USAGE_EXAMPLE =
-  "For example: bb terminal run --machine <id-or-name> --cwd /path/to/repo -- pnpm test";
+  "For example: mqh terminal run --machine <id-or-name> --cwd /path/to/repo -- pnpm test";
 
 interface TerminalJsonOptions {
   json?: boolean;
@@ -864,7 +864,7 @@ async function createRunTerminal(args: {
         1,
         {
           code: "terminal_id_conflict",
-          hint: `Observe the earlier run with \`bb terminal wait ${args.id}\`.`,
+          hint: `Observe the earlier run with \`mqh terminal wait ${args.id}\`.`,
         },
       );
     }
@@ -882,7 +882,7 @@ async function resolveTerminalWaitPlan(args: {
   if (opts.exit === true && condition !== null) {
     throw new CliUsageError({
       code: "invalid_value",
-      hint: `For example: bb terminal wait ${args.terminalId}, or --contains "ready".`,
+      hint: `For example: mqh terminal wait ${args.terminalId}, or --contains "ready".`,
       message: "Provide only one of --contains, --regex, or --exit",
     });
   }
@@ -930,7 +930,7 @@ async function resolveTerminalWaitPlan(args: {
       1,
       {
         code: "terminal_exited",
-        hint: `Match its existing output with --from-start, or read it with \`bb terminal output ${args.terminalId}\`.`,
+        hint: `Match its existing output with --from-start, or read it with \`mqh terminal output ${args.terminalId}\`.`,
       },
     );
   }

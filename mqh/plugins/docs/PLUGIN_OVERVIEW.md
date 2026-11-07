@@ -14,6 +14,6 @@ Collaborate with agents on editing Markdown docs inline. Edit directly inside th
 
 ## For agents
 
-Agents get the `docs` skill and the `bb docs` command. They list vaults with `bb docs vaults` and read files with `bb docs read`. They edit with `bb docs pull`, `bb docs status`, and `bb docs push`. Push uses version checks, so a concurrent edit is reported as a conflict instead of being overwritten.
+Agents get the `docs` skill and the `mqh docs` command. They list vaults with `mqh docs vaults` and read files with `mqh docs read`. They edit with `mqh docs pull`, `mqh docs status`, and `mqh docs push`. Push uses version checks, so a concurrent edit is reported as a conflict instead of being overwritten.
 
-Agents can propose changes with `bb docs propose` without replacing the saved document. Proposal updates and approval actions check versions to protect concurrent edits.
+Agents can propose changes with `mqh docs propose` without replacing the saved document. Proposal updates and approval actions check versions to protect concurrent edits.

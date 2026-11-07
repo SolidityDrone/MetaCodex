@@ -322,9 +322,9 @@ export class HostToolchain {
         : (options.cwd ?? process.cwd());
     if (command === "bb") {
       for (const candidate of [
-        env.BB_CLI_LAUNCHER,
-        env.BB_CLI,
-        env.BB_CLI_DIR ? join(env.BB_CLI_DIR, "bb") : undefined,
+        env.MQH_CLI_LAUNCHER,
+        env.MQH_CLI,
+        env.MQH_CLI_DIR ? join(env.MQH_CLI_DIR, "bb") : undefined,
       ]) {
         if (
           candidate?.trim() &&

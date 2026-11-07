@@ -345,7 +345,7 @@ export function createPluginRegistration(context: PluginRegistrationContext) {
       identity.sourceIntent.kind === "git"
     ) {
       throw new Error(
-        `plugin "${pluginId}" is already installed; use \`bb plugin update ${pluginId}\` or remove it before reinstalling`,
+        `plugin "${pluginId}" is already installed; use \`mqh plugin update ${pluginId}\` or remove it before reinstalling`,
       );
     }
   }
@@ -557,7 +557,7 @@ export function createPluginRegistration(context: PluginRegistrationContext) {
         );
       } catch (error) {
         logger.warn(
-          `plugin ${plugin.id} was installed from ${plugin.sourcePath}, which bb is deleting; its files were copied to ${preservedPath}, but moving the plugin there failed: ${error instanceof Error ? error.message : String(error)}. Run \`bb plugin install ${preservedPath}\` to run it from the copy.`,
+          `plugin ${plugin.id} was installed from ${plugin.sourcePath}, which bb is deleting; its files were copied to ${preservedPath}, but moving the plugin there failed: ${error instanceof Error ? error.message : String(error)}. Run \`mqh plugin install ${preservedPath}\` to run it from the copy.`,
         );
       }
     }

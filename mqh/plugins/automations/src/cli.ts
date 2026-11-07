@@ -52,7 +52,7 @@ const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/u;
 
 const DESCRIPTION = `Automations run agent prompts or server-side scripts on a schedule.
 
-Scripts run on the bb server host. New standard-project scripts use the
+Scripts run on the mqh server host. New standard-project scripts use the
 project source on that host when one exists; Personal and projects without a
 server-host source run in the plugin's shared script storage directory.
 Existing scripts without a saved policy also run there. Select
@@ -68,12 +68,12 @@ const PROJECT_OPTION = {
   type: "string",
   placeholder: "id",
   description:
-    "Required. Project that owns the automation; `bb project list --include-personal --json` lists ids",
+    "Required. Project that owns the automation; `mqh project list --include-personal --json` lists ids",
 } as const;
 
 const AUTOMATION_ID_POSITIONAL = {
   name: "automationId",
-  description: "Automation id from `bb automation list`",
+  description: "Automation id from `mqh automation list`",
   required: true,
 } as const;
 
@@ -205,7 +205,7 @@ const SCRIPT_OPTIONS = {
     type: "string",
     placeholder: "automation-storage|project|path",
     description:
-      "Where the script runs: automation-storage, project, or an absolute path on the bb server host",
+      "Where the script runs: automation-storage, project, or an absolute path on the mqh server host",
   },
 } as const;
 
@@ -280,7 +280,7 @@ function requireProjectId(
     code: "missing_required",
     hint:
       known === undefined
-        ? "Pass --project <id>; `bb project list --include-personal --json` lists project ids."
+        ? "Pass --project <id>; `mqh project list --include-personal --json` lists project ids."
         : `This thread's project is ${known}; re-run with --project ${known}`,
   });
 }
@@ -381,7 +381,7 @@ function parseScriptWorkingDirectory(
   }
   if (isAbsolute(value)) return { type: "path", path: value };
   throw cliError(
-    "Invalid --working-directory. Expected automation-storage, project, or an absolute path on the bb server host.",
+    "Invalid --working-directory. Expected automation-storage, project, or an absolute path on the mqh server host.",
     "invalid_value",
   );
 }
@@ -555,7 +555,7 @@ async function resolveScriptFileHostId(
       );
     }
     throw cliError(
-      `Unknown host "${query}"; run \`bb machine list\` to list hosts.`,
+      `Unknown host "${query}"; run \`mqh machine list\` to list hosts.`,
       "invalid_value",
     );
   }

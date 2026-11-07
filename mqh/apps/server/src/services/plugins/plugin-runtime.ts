@@ -32,12 +32,10 @@ import { createRequire, registerHooks } from "node:module";
 import { performance } from "node:perf_hooks";
 import semver from "semver";
 import { HOST_ARTIFACT_MAX_BYTES } from "@bb/host-daemon-contract/protocol";
-import { buildPluginApp } from "@bb/plugin-build";
 import { PluginHostArtifactRegistry } from "./plugin-host-artifact-registry.js";
 import { getPluginBuildToolchain } from "./build-toolchain.js";
 import {
   buildMutablePluginHost,
-  isMutableArtifactStale,
   isMutablePluginHostReusable,
 } from "./mutable-plugin-artifacts.js";
 import { createNodeBbSdk, type BbSdk } from "@bb/sdk";
@@ -52,14 +50,11 @@ import {
 import { toThreadResponseFromThread } from "../threads/thread-runtime-display.js";
 import {
   brandingAssetHash,
-  loadPluginAppBundle,
   loadPluginBrandingAssets,
-  parsePluginAppBundleMeta,
-  readPluginAppBundleMeta,
+  parsePluginArtifactMetaFile,
   validatePluginArtifactMeta,
-  type PluginAppBundleSnapshot,
   type PluginBrandingAssetSet,
-} from "./app-bundle.js";
+} from "./plugin-assets.js";
 import { parsePluginSource } from "./install-sources.js";
 import { readPluginManifest, type PluginManifest } from "./manifest.js";
 import { buildPluginProviderRegistration } from "../providers/plugin-provider-registration.js";
@@ -423,7 +418,6 @@ export function createPluginRuntime(context: PluginRuntimeContext) {
     Set<(status: PluginRuntimeStatus, detail: string | null) => void>
   >();
   const stabilizingPluginIds = new Set<string>();
-  const appBundles = new Map<string, PluginAppBundleSnapshot>();
   const hostArtifacts =
     deps.pluginHostArtifacts ?? new PluginHostArtifactRegistry();
   const brandingAssets = new Map<string, PluginBrandingAssetSet>();
@@ -1075,7 +1069,7 @@ export function createPluginRuntime(context: PluginRuntimeContext) {
       return undefined;
     }
     if (!semver.satisfies(version, manifest.bbEngineRange)) {
-      return `requires bb ${manifest.bbEngineRange}, this is ${version.version}`;
+      return `requires mqh ${manifest.bbEngineRange}, this is ${version.version}`;
     }
     return undefined;
   }
@@ -1111,10 +1105,9 @@ export function createPluginRuntime(context: PluginRuntimeContext) {
     kind: ReturnType<typeof sourceKind>;
     manifest: PluginManifest;
     rootDir: string;
-    artifact: "app" | "server" | "host";
+    artifact: "server" | "host";
   }): boolean {
     const entry = {
-      app: args.manifest.appEntry,
       server: args.manifest.serverEntry,
       host: args.manifest.hostEntry,
     }[args.artifact];
@@ -1140,7 +1133,7 @@ export function createPluginRuntime(context: PluginRuntimeContext) {
       return null;
     }
     async function validate(
-      artifact: "server" | "app" | "host",
+      artifact: "server" | "host",
     ): Promise<string | null> {
       let raw: string;
       try {
@@ -1160,17 +1153,6 @@ export function createPluginRuntime(context: PluginRuntimeContext) {
     }
     const serverProblem = await validate("server");
     if (serverProblem !== null) return serverProblem;
-    if (
-      isPackagedBuiltinEntry({
-        kind,
-        manifest,
-        rootDir: row.rootDir,
-        artifact: "app",
-      })
-    ) {
-      const appProblem = await validate("app");
-      if (appProblem !== null) return appProblem;
-    }
     if (
       isPackagedBuiltinEntry({
         kind,
@@ -1299,7 +1281,7 @@ export function createPluginRuntime(context: PluginRuntimeContext) {
     }
     let meta: { sdkMajor: number; sdkVersion: string } | null = null;
     try {
-      meta = parsePluginAppBundleMeta(
+      meta = parsePluginArtifactMetaFile(
         await readFile(join(row.rootDir, "dist", "server.meta.json"), "utf8"),
       );
     } catch {}
@@ -1314,71 +1296,6 @@ export function createPluginRuntime(context: PluginRuntimeContext) {
       return { path: distJsPath, digest, loader: "esm" };
     }
     return buildSource(distJsPath);
-  }
-
-  async function loadAppBundleCandidate(
-    row: InstalledPluginRow,
-    manifest: PluginManifest,
-  ): Promise<{
-    snapshot: PluginAppBundleSnapshot;
-    problem: string | null;
-  }> {
-    if (manifest.appEntry === undefined) {
-      return {
-        snapshot: { state: { hasApp: false, bundle: null }, assets: null },
-        problem: null,
-      };
-    }
-    const kind = row.sourceKind;
-    if (
-      (kind === "path" || kind === "builtin") &&
-      !isPackagedBuiltinEntry({
-        kind,
-        manifest,
-        rootDir: row.rootDir,
-        artifact: "app",
-      })
-    ) {
-      const meta = await readPluginAppBundleMeta(row.rootDir);
-      const sdkChanged = meta?.sdkVersion !== PLUGIN_SDK_VERSION;
-      const sourceChanged =
-        !sdkChanged && (await isMutableArtifactStale(row.rootDir, "app"));
-      if (sdkChanged || sourceChanged) {
-        const reason = sdkChanged
-          ? `built with SDK ${meta?.sdkVersion ?? "unknown"}, running SDK is ${PLUGIN_SDK_VERSION}`
-          : "plugin source is newer than dist/app.js";
-        logger.info(`plugin ${row.id}: rebuilding frontend bundle (${reason})`);
-        try {
-          const app = await buildPluginApp(
-            row.rootDir,
-            deps.appVersion,
-            await getPluginBuildToolchain(deps),
-            { minify: true, hostProvidedZod: true },
-          );
-          logPluginBuildWarnings({
-            dataDir: deps.dataDir,
-            logger,
-            pluginId: row.id,
-            warnings: app.migrationWarnings,
-          });
-          setDevBuildProblem(row.id, "frontend", null);
-        } catch (error) {
-          const message =
-            error instanceof Error ? error.message : String(error);
-          logger.warn(
-            `plugin ${row.id}: frontend bundle rebuild failed: ${message}`,
-          );
-          return {
-            snapshot: { state: { hasApp: true, bundle: null }, assets: null },
-            problem: `frontend bundle rebuild failed: ${message}`,
-          };
-        }
-      }
-    }
-    return {
-      snapshot: await loadPluginAppBundle(row.id, row.rootDir),
-      problem: null,
-    };
   }
 
   async function loadHostArtifactCandidate(
@@ -1656,7 +1573,7 @@ export function createPluginRuntime(context: PluginRuntimeContext) {
     args: SafeModeActivationRefusalArgs,
   ): string | null {
     if (isSafeModeExempt(args) || !getPluginSafeMode(deps.db)) return null;
-    return `plugin safe mode is on; turn it off with \`bb plugin safe-mode off\` before you ${args.action} "${args.pluginId}"`;
+    return `plugin safe mode is on; turn it off with \`mqh plugin safe-mode off\` before you ${args.action} "${args.pluginId}"`;
   }
 
   async function loadOne(row: InstalledPluginRow): Promise<string | null> {
@@ -1732,7 +1649,6 @@ export function createPluginRuntime(context: PluginRuntimeContext) {
     if (artifactProblem !== null) {
       return failBeforeFactory("incompatible", artifactProblem);
     }
-    const appBundleCandidate = await loadAppBundleCandidate(row, manifest);
     let hostArtifactCandidate: PluginHostArtifactSnapshot | null = null;
     let hostArtifactProblem: string | null = null;
     try {
@@ -2081,7 +1997,6 @@ export function createPluginRuntime(context: PluginRuntimeContext) {
     disposeUnavailableProviderRegistrations(row.id);
     deps.hub.notifyPluginChanged(row.id, null);
     loaded.set(row.id, plugin);
-    appBundles.set(row.id, appBundleCandidate.snapshot);
     if (hostArtifactCandidate === null) hostArtifacts.delete(row.id);
     else hostArtifacts.set(row.id, hostArtifactCandidate);
     brandingAssets.set(row.id, brandingAssetCandidate);
@@ -2106,10 +2021,9 @@ export function createPluginRuntime(context: PluginRuntimeContext) {
       runService(row.id, service);
     }
     if (!needsConfiguration.has(row.id)) {
-      const details = [
-        agentToolProblems.get(row.id),
-        appBundleCandidate.problem,
-      ].filter((detail): detail is string => typeof detail === "string");
+      const details = [agentToolProblems.get(row.id)].filter(
+        (detail): detail is string => typeof detail === "string",
+      );
       setStatus(
         row.id,
         "running",
@@ -2237,7 +2151,6 @@ export function createPluginRuntime(context: PluginRuntimeContext) {
   return {
     REGISTRATION_MUTATION_KEY,
     agentToolProblems,
-    appBundles,
     hostArtifacts,
     bindSdk,
     resolveRpcCaller: rpcCallers.resolve,

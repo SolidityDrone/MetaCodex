@@ -347,7 +347,7 @@ describe("configuration", () => {
       error: {
         code: "unknown_host",
         message: "Unknown host: host-b",
-        hint: "Run `bb machine list` for the enrolled host ids.",
+        hint: "Run `mqh machine list` for the enrolled host ids.",
       },
     });
     expect(envelope.stderr).toContain("Unknown host: host-b");

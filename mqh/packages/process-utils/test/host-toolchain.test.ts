@@ -179,7 +179,7 @@ describe.skipIf(process.platform === "win32")("host toolchain recovery", () => {
     const claude = join(root, ".local", "bin", "claude");
     await script(bb, "#!/usr/bin/env node\nconsole.log('bb works');\n");
     await script(claude, "#!/bin/sh\nprintf native-claude");
-    const env = { HOME: root, PATH: "/usr/bin:/bin", BB_CLI: bb };
+    const env = { HOME: root, PATH: "/usr/bin:/bin", MQH_CLI: bb };
     const toolchain = new HostToolchain(env);
     expect(run(toolchain, "bb", [], env).trim()).toBe("bb works");
     expect(run(toolchain, "claude", [], env)).toBe("native-claude");
@@ -195,8 +195,8 @@ describe.skipIf(process.platform === "win32")("host toolchain recovery", () => {
     const env = {
       HOME: root,
       PATH: "relative",
-      BB_CLI: "./relative/bb",
-      BB_CLI_DIR: "relative",
+      MQH_CLI: "./relative/bb",
+      MQH_CLI_DIR: "relative",
       SHELL: "/bin/sh",
     };
     const toolchain = new HostToolchain(env);

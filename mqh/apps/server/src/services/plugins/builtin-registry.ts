@@ -23,7 +23,7 @@ export const BUILTIN_PLUGINS_DIRECTORY_NAME = "builtin-plugins";
 
 export const BUILTIN_PLUGIN_ID_PREFIX = "bb--";
 
-const ACCOUNT_POOL_PARENT_URL_ENV = "BB_ACCOUNT_POOL_PARENT_URL";
+const ACCOUNT_POOL_PARENT_URL_ENV = "MQH_ACCOUNT_POOL_PARENT_URL";
 
 export function accountPoolDefaultEnabled(
   env: NodeJS.ProcessEnv = process.env,
@@ -119,11 +119,6 @@ export const BUILTIN_PLUGINS = [
     name: "secrets",
     pluginId: "secrets",
     defaultEnabled: true,
-  },
-  {
-    name: "prompt-library",
-    pluginId: "bb--prompt-library",
-    defaultEnabled: false,
   },
   {
     name: "mcp",

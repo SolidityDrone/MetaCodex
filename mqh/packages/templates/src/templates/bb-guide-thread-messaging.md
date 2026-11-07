@@ -11,8 +11,8 @@ Messaging commands require an explicit thread ID or --self.
 
 Messaging:
 
-  bb thread tell <id> <message>            Send a follow-up message
-  bb thread tell <id> --message-file <path>
+  mqh thread tell <id> <message>            Send a follow-up message
+  mqh thread tell <id> --message-file <path>
                                            Read the message from a file; `-` reads stdin. Use this for
                                            multi-line or Markdown messages: inside double quotes the
                                            shell runs `backticks` and $(...) before bb sees them
@@ -43,14 +43,14 @@ Messaging:
   Code and Codex threads). Providers without a declared plan action reject
   --plan with an error for both spawn and tell. Plain "/plan ..." text is not
   recognized; it reaches the provider as literal text. Approve or deny the proposed plan with
-  `bb thread interactions`; `bb thread cancel-plan` leaves Plan mode early.
+  `mqh thread interactions`; `mqh thread cancel-plan` leaves Plan mode early.
   SDK callers build the same input with
   `createBuiltinPlanCommandTextInput(text)` from `@bb/sdk` and pass it as
   `input` to `threads.spawn` or `threads.send`.
 
 Ownership:
 
-  bb thread update [id]                    Update thread metadata
+  mqh thread update [id]                    Update thread metadata
     --self                                 Target current thread
     --title <title>                        Set title
     --parent-thread <id>                   Assign to a parent thread
@@ -70,7 +70,7 @@ Ownership:
   validates them against that provider's current model catalog, applies them on
   the next turn, and keeps using them on later turns until changed.
 
-  bb thread regenerate-title [id]          Replace the title with a generated one
+  mqh thread regenerate-title [id]          Replace the title with a generated one
     --self                                 Target current thread
 
   regenerate-title asks the thread-title AI service (Settings → AI services)
@@ -81,24 +81,24 @@ Ownership:
   fails, and the error says why. bb never regenerates on its own.
   SDK: `threads.experimental_regenerateTitle({ threadId })`.
 
-  bb thread read [id]                      Mark read
-  bb thread unread [id]                    Mark unread
-  bb thread reorder-pinned <id> [--after <id>] [--before <id>]
+  mqh thread read [id]                      Mark read
+  mqh thread unread [id]                    Mark unread
+  mqh thread reorder-pinned <id> [--after <id>] [--before <id>]
 
 Interactions:
 
-  bb thread interactions list [id]         List a thread's pending and past interactions
-  bb thread interactions show <interaction-id> [id]
+  mqh thread interactions list [id]         List a thread's pending and past interactions
+  mqh thread interactions show <interaction-id> [id]
                                            Show one interaction (approval details, questions, or a plugin form's data)
-  bb thread interactions approve <interaction-id> [id]
+  mqh thread interactions approve <interaction-id> [id]
                                            Allow a command, file-change, plan, or tool-use approval
-  bb thread interactions deny <interaction-id> [id]
+  mqh thread interactions deny <interaction-id> [id]
                                            Deny an approval
-  bb thread interactions grant <interaction-id> [id] --scope turn|session
+  mqh thread interactions grant <interaction-id> [id] --scope turn|session
                                            Grant a permission interaction
-  bb thread interactions answer <interaction-id> [id] --choice <questionId=value> --text <questionId=text>
+  mqh thread interactions answer <interaction-id> [id] --choice <questionId=value> --text <questionId=text>
                                            Answer a provider's user question
-  bb thread interactions respond <interaction-id> [id] --value '<json>'
+  mqh thread interactions respond <interaction-id> [id] --value '<json>'
                                            Answer a plugin form: a plugin's own request, or a request the agent raised through a provider (kind `<pluginId>/<name>`)
     --self                                 Target current thread (every subcommand)
     --json                                 Machine-readable output (every subcommand)
@@ -110,17 +110,17 @@ Interactions:
 
 Queued messages:
 
-  bb thread queue list [<thread-id>] [--wait-holder plugin:<plugin-id>]
-  bb thread queue create <thread-id> <message> [--file <path>] [--image <path>]
-  bb thread queue update <thread-id> <message-id> [<message>] [--file <path>] [--image <path>]
+  mqh thread queue list [<thread-id>] [--wait-holder plugin:<plugin-id>]
+  mqh thread queue create <thread-id> <message> [--file <path>] [--image <path>]
+  mqh thread queue update <thread-id> <message-id> [<message>] [--file <path>] [--image <path>]
                          [--send-at <when> | --clear-send-at] [--model <model>]
                          [--reasoning-level <level>] [--permission-mode <mode>]
                          [--service-tier <tier>]
                                            create and update also take --message-file <path>
-  bb thread queue send <thread-id> <message-id> [--mode auto|steer]
-  bb thread queue reorder <thread-id> <message-id> [--after <id>] [--before <id>]
-  bb thread queue group <thread-id> <boundary-id> --prefix <comma-separated-ids>
-  bb thread queue delete <thread-id> <message-id>
+  mqh thread queue send <thread-id> <message-id> [--mode auto|steer]
+  mqh thread queue reorder <thread-id> <message-id> [--after <id>] [--before <id>]
+  mqh thread queue group <thread-id> <boundary-id> --prefix <comma-separated-ids>
+  mqh thread queue delete <thread-id> <message-id>
 
   The `Sender` column identifies agent threads and system notices; user messages
   leave it blank. The SDK and `--json` include `initiator` and `senderThreadId`.
@@ -144,7 +144,7 @@ Queued messages:
   attempt is sending it).
 
   Failed rows show their failure reason instead of their previous wait, followed
-  by a recovery command: `bb thread queue send <thread-id> <message-id>`.
+  by a recovery command: `mqh thread queue send <thread-id> <message-id>`.
   Use it to retry immediately, including after automatic retries are exhausted.
   Editing the message does not clear its failure or trigger a retry; setting a
   new send time with `--send-at` does, and the row retries at that time.
@@ -176,7 +176,7 @@ Queued messages:
   queued until the workspace is ready.
   `queue delete` discards it instead. Both are always permitted.
 
-  --compact-first runs the same /compact turn as `bb thread compact` and queues
+  --compact-first runs the same /compact turn as `mqh thread compact` and queues
   the message behind it, so it needs an idle or errored thread whose provider
   supports manual compaction; it cannot be combined with --send-at. The SDK
   takes `compactFirst: true` on `threads.send`, which also rejects

@@ -9,7 +9,7 @@ import {
 import { z } from "zod";
 
 const CODEX_FAST_SERVICE_TIER = "priority";
-const BB_FAST_SERVICE_TIER = "fast";
+const MQH_FAST_SERVICE_TIER = "fast";
 
 export const CODEX_DAYBREAK_OPTION_ID = "daybreak";
 const CODEX_CYBER_PROGRAMS = [
@@ -99,7 +99,7 @@ function parseSupportedReasoningEfforts(raw: unknown): ModelReasoningEffort[] {
 }
 
 function mapCodexServiceTierToBb(id: string): string {
-  return id === CODEX_FAST_SERVICE_TIER ? BB_FAST_SERVICE_TIER : id;
+  return id === CODEX_FAST_SERVICE_TIER ? MQH_FAST_SERVICE_TIER : id;
 }
 
 function parseServiceTierOption(raw: unknown): ModelServiceTier | null {
@@ -133,7 +133,7 @@ function parseSupportedServiceTiers(
       ? raw.additionalSpeedTiers
       : null;
   if (listed === null) {
-    return [{ id: BB_FAST_SERVICE_TIER }];
+    return [{ id: MQH_FAST_SERVICE_TIER }];
   }
   const tiers: ModelServiceTier[] = [];
   const seen = new Set<string>();

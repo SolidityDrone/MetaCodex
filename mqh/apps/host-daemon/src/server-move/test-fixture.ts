@@ -201,7 +201,7 @@ async function createSourceServer(root: string): Promise<SourceServer> {
   await writeFileWithDirs(
     join(sourceDir, "config.json"),
     JSON.stringify({
-      config: { BB_LOG_LEVEL: "info" },
+      config: { MQH_LOG_LEVEL: "info" },
       serverUrl: "https://bb.example.test",
       serverHeaders: { "x-bb-connect-machine": "bbcm_source" },
     }),
@@ -354,8 +354,8 @@ export async function writeSystemdUnit(args: {
     [
       "[Service]",
       `ExecStart=${args.execStart}`,
-      'Environment="BB_APP_NPM_PREFIX=/opt/npm"',
-      `Environment="BB_DATA_DIR=${args.dataDir.replaceAll("\\", "\\\\")}"`,
+      'Environment="MQH_APP_NPM_PREFIX=/opt/npm"',
+      `Environment="MQH_DATA_DIR=${args.dataDir.replaceAll("\\", "\\\\")}"`,
       "Restart=always",
       "",
     ].join("\n"),
@@ -414,7 +414,7 @@ export async function createFixture(args: FixtureArgs = {}) {
       args.hostDaemonPort === undefined ? 38_887 : args.hostDaemonPort,
     autoUpdate: args.autoUpdate ?? false,
     supervised: args.supervised ?? false,
-    env: args.env ?? { BB_SERVER_MOVE_SERVICE_MANAGER: "none" },
+    env: args.env ?? { MQH_SERVER_MOVE_SERVICE_MANAGER: "none" },
     platform: "linux",
     uid: 1000,
     parentPid: PARENT_PID,

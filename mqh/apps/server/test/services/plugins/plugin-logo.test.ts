@@ -5,7 +5,7 @@ import {
   createTestAppHarness,
   type TestAppHarness,
 } from "../../helpers/test-app.js";
-import { loadPluginBrandingAssets } from "../../../src/services/plugins/app-bundle.js";
+import { loadPluginBrandingAssets } from "../../../src/services/plugins/plugin-assets.js";
 
 const BASE = "http://127.0.0.1:3334";
 

@@ -37,7 +37,7 @@ async function resolveHostId(options: ResolveHostIdOptions): Promise<string> {
   if (existing) {
     if (options.providedHostId && existing !== options.providedHostId) {
       throw new Error(
-        `Configured BB_HOST_ID ${options.providedHostId} does not match persisted host ID ${existing}`,
+        `Configured MQH_HOST_ID ${options.providedHostId} does not match persisted host ID ${existing}`,
       );
     }
     return existing;

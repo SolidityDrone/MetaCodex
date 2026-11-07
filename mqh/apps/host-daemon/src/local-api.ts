@@ -9,40 +9,20 @@ import {
   formatClientConfigPath,
   normalizeClientServerOrigin,
   parseClientConfig,
-  resolveClientSshAuthority,
   type ClientConfig,
 } from "@bb/config/client-config";
 import { assignIfDefined } from "@bb/config/objects";
 import {
   healthResponseSchema,
   HOST_DAEMON_PROTOCOL_VERSION,
-  openInTargetRequestSchema,
   typedRoutes,
-  workspaceOpenTargetsQuerySchema,
   type HostDaemonLocalSchema,
-  type OpenInTargetRequest,
-  type WorkspaceOpenTarget,
 } from "@bb/host-daemon-contract";
-import {
-  createWorkspaceOpenTargetRuntime,
-  listWorkspaceOpenTargetsWithRuntime,
-  openPathInTargetWithRuntime,
-  type OpenPathInTargetArgs,
-  type ListWorkspaceOpenTargetsOptions,
-  WorkspaceOpenTargetError,
-} from "@bb/local-open-targets";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { HTTPException } from "hono/http-exception";
 import { isFsErrorWithCode } from "./fs-errors.js";
 import type { HostDaemonLocalApiConfig } from "./local-api-config.js";
 import { resolveHostPlatform } from "./host-platform.js";
-import { userExecutableProcessOptions } from "./user-executable-env.js";
-
-type WorkspaceOpenTargetListHandler = (
-  query: ListWorkspaceOpenTargetsOptions,
-) => Promise<WorkspaceOpenTarget[]>;
-type OpenInTargetHandler = (request: OpenPathInTargetArgs) => Promise<void>;
 
 interface StartLocalApiServerOptions {
   dataDir?: string;
@@ -53,9 +33,6 @@ interface StartLocalApiServerOptions {
   devAppPort?: number;
   appUrl?: string;
   getConnected: () => boolean;
-  listWorkspaceOpenTargets?: WorkspaceOpenTargetListHandler;
-  openInTarget?: OpenInTargetHandler;
-  shellEnv?: () => NodeJS.ProcessEnv;
 }
 
 export interface LocalApiServer {
@@ -68,13 +45,7 @@ interface ClientConfigLoader {
   load(): Promise<ClientConfig>;
 }
 
-interface ResolveOpenPathInTargetArgs {
-  configLoader: ClientConfigLoader;
-  request: OpenInTargetRequest;
-}
-
 const CLIENT_CONFIG_CACHE_TTL_MS = 1_000;
-const WORKSPACE_OPEN_TARGETS_CACHE_TTL_MS = 60_000;
 const EMPTY_CLIENT_CONFIG: ClientConfig = { servers: {} };
 
 function isSelfEvidentLocalHostname(hostname: string): boolean {
@@ -133,83 +104,11 @@ async function isConfiguredClientOrigin(
   }
 }
 
-async function resolveOpenPathInTargetArgs({
-  configLoader,
-  request,
-}: ResolveOpenPathInTargetArgs): Promise<OpenPathInTargetArgs> {
-  if (request.context.kind === "local") {
-    return {
-      columnNumber: request.columnNumber,
-      context: { kind: "local" },
-      lineNumber: request.lineNumber,
-      path: request.path,
-      targetId: request.targetId,
-    };
-  }
-
-  const serverOrigin = normalizeClientServerOrigin(
-    request.context.serverOrigin,
-  );
-  const config = await configLoader.load();
-  const sshAuthority = resolveClientSshAuthority(config, {
-    serverOrigin,
-    hostId: request.context.hostId,
-  });
-  if (sshAuthority === null) {
-    throw new WorkspaceOpenTargetError({
-      code: "remote_mapping_missing",
-      message: `No SSH target configured for host ${request.context.hostId} on ${serverOrigin}. Run: bb-app client ssh-target set ${serverOrigin} <ssh-target> --host-id ${request.context.hostId}`,
-    });
-  }
-
-  return {
-    columnNumber: request.columnNumber,
-    context: {
-      kind: "remote-ssh",
-      sshAuthority,
-    },
-    lineNumber: request.lineNumber,
-    path: request.path,
-    targetId: request.targetId,
-  };
-}
-
-function workspaceOpenTargetRuntime(options: StartLocalApiServerOptions) {
-  return createWorkspaceOpenTargetRuntime({
-    ...userExecutableProcessOptions(options.shellEnv?.() ?? {}),
-  });
-}
-
-function createWorkspaceOpenTargetLoader(
-  options: StartLocalApiServerOptions,
-): WorkspaceOpenTargetListHandler {
-  const cache = createAsyncTtlMemo<string | undefined, WorkspaceOpenTarget[]>({
-    ttlMs: WORKSPACE_OPEN_TARGETS_CACHE_TTL_MS,
-    maxEntries: 1,
-    staleWhileRevalidate: true,
-  });
-
-  return async (query) => {
-    const runtime = workspaceOpenTargetRuntime(options);
-    const load = (query: ListWorkspaceOpenTargetsOptions) =>
-      options.listWorkspaceOpenTargets
-        ? options.listWorkspaceOpenTargets(query)
-        : listWorkspaceOpenTargetsWithRuntime(runtime, query);
-    const shellPath = runtime.env?.PATH;
-    cache.invalidateWhere((key) => key !== shellPath);
-    const baseTargets = await cache.run(shellPath, () => load({}));
-    return query.path === undefined
-      ? baseTargets
-      : load({ path: query.path, baseTargets });
-  };
-}
-
 export async function startLocalApiServer(
   options: StartLocalApiServerOptions,
 ): Promise<LocalApiServer> {
   const app = new Hono();
   const clientConfigLoader = createClientConfigLoader(options.dataDir);
-  const listWorkspaceOpenTargets = createWorkspaceOpenTargetLoader(options);
   const originArgs: BuildLocalAppOriginsArgs = {
     serverPort: options.serverPort,
   };
@@ -274,7 +173,7 @@ export async function startLocalApiServer(
     await next();
   });
 
-  const { get, post } = typedRoutes<HostDaemonLocalSchema>(app);
+  const { get } = typedRoutes<HostDaemonLocalSchema>(app);
   const platform = resolveHostPlatform();
 
   get("/status", (c) =>
@@ -288,39 +187,7 @@ export async function startLocalApiServer(
     }),
   );
 
-  get(
-    "/workspace-open-targets",
-    workspaceOpenTargetsQuerySchema,
-    async (c, query) =>
-      c.json({
-        targets: await listWorkspaceOpenTargets(query),
-      }),
-  );
-
-  post("/open-in-target", openInTargetRequestSchema, async (c, payload) => {
-    try {
-      await (
-        options.openInTarget ??
-        ((args) =>
-          openPathInTargetWithRuntime(
-            args,
-            workspaceOpenTargetRuntime(options),
-          ))
-      )(
-        await resolveOpenPathInTargetArgs({
-          configLoader: clientConfigLoader,
-          request: payload,
-        }),
-      );
-    } catch (error) {
-      if (error instanceof WorkspaceOpenTargetError) {
-        throw new HTTPException(400, { message: error.message });
-      }
-      throw error;
-    }
-
-    return c.json({});
-  });
+  // MQH: no desktop "open in editor / file manager" targets on a headset.
 
   let boundServer: {
     server: ReturnType<typeof serve>;

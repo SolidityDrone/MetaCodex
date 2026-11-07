@@ -94,22 +94,22 @@ that the user can open in bb.
 
 ## CLI
 
-The plugin registers the agent-discoverable `bb docs` command:
+The plugin registers the agent-discoverable `mqh docs` command:
 
 ```sh
-bb docs vaults --json
-bb docs vault-add Work /home/me/work-docs host_workstation
-bb docs list --vault personal --json
-bb docs read projects/plan.md --vault personal
-bb docs pull projects/plan.md --vault personal --into ./docs-work
+mqh docs vaults --json
+mqh docs vault-add Work /home/me/work-docs host_workstation
+mqh docs list --vault personal --json
+mqh docs read projects/plan.md --vault personal
+mqh docs pull projects/plan.md --vault personal --into ./docs-work
 # Edit ./docs-work/projects/plan.md with an ordinary editor or agent file tool.
-bb docs status ./docs-work --diff
-bb docs push ./docs-work
+mqh docs status ./docs-work --diff
+mqh docs push ./docs-work
 
-bb docs pull projects --folder --vault personal --into ./docs-work
-bb docs pull --all --vault personal --into ./docs-work
-bb docs push ./docs-work --dry-run --diff
-bb docs push ./docs-work --delete
+mqh docs pull projects --folder --vault personal --into ./docs-work
+mqh docs pull --all --vault personal --into ./docs-work
+mqh docs push ./docs-work --dry-run --diff
+mqh docs push ./docs-work --delete
 ```
 
 ### Sync workspace contract
@@ -172,8 +172,8 @@ success/no-op, 1 validation or operational/partial failure, 2 usage error, 3
 stale/conflict, and 4 `status` found changes or ignored deletions. Options are
 command-specific; an unknown command, an option not shown in a command's usage,
 and a stray argument are all rejected before any mutation, with the nearest
-declared name suggested. `bb docs --help` lists the commands and
-`bb docs <command> --help` prints that command's arguments, options, and rules.
+declared name suggested. `mqh docs --help` lists the commands and
+`mqh docs <command> --help` prints that command's arguments, options, and rules.
 
 The legacy `write`, `mkdir`, `move`, and `remove` CLI commands remain for one
 backward-compatibility window and emit a deprecation warning. New agent
@@ -183,7 +183,7 @@ its existing compare-and-swap behavior.
 ## Token-authenticated HTTP API
 
 The stable internal plugin ID remains `simple-notes`. Generate or inspect its
-token with `bb plugin token simple-notes`, then send it in
+token with `mqh plugin token simple-notes`, then send it in
 `x-bb-plugin-token` to these JSON endpoints:
 
 ```text
@@ -214,9 +214,9 @@ state client-side.
 ## Install
 
 ```sh
-bb plugin install simple-notes
-bb plugin config simple-notes set directory "~/Notes"
-bb plugin reload simple-notes
+mqh plugin install simple-notes
+mqh plugin config simple-notes set directory "~/Notes"
+mqh plugin reload simple-notes
 ```
 
 ## Inline editing and proposed revisions
@@ -225,9 +225,9 @@ Markdown document cards support inline editing and opening the same file in a
 Docs tab. An agent can propose a complete revision without modifying the file:
 
 ```sh
-bb docs read letter.md --vault personal --json
-bb docs proposal letter.md --vault personal --json
-bb docs propose letter.md --vault personal --file ./candidate.md --expected-sha256 HASH --version none --json
+mqh docs read letter.md --vault personal --json
+mqh docs proposal letter.md --vault personal --json
+mqh docs propose letter.md --vault personal --file ./candidate.md --expected-sha256 HASH --version none --json
 ```
 
 Use the returned proposal version instead of `none` when replacing a previous
@@ -236,8 +236,8 @@ overrides that host. The expected hash must come from the document used to
 write the candidate. Every proposal mutation checks its version, including
 replacement after rejection, so a delayed response cannot restore stale work.
 
-`bb docs proposal-update letter.md --version N --content MARKDOWN` updates only
-the pending candidate. `bb docs accept|reject|undo|redo letter.md --version N`
+`mqh docs proposal-update letter.md --version N --content MARKDOWN` updates only
+the pending candidate. `mqh docs accept|reject|undo|redo letter.md --version N`
 performs the same actions as the card. All accept `--vault` and `--json`.
 Accept saves only when the original file hash still matches. Reject leaves the
 file alone. Undo after rejection restores the pending proposal; undo after

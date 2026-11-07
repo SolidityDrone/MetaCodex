@@ -35,7 +35,7 @@ export async function findPluginSdkInstallImports(
   const bb = isRecord(manifest) && isRecord(manifest.bb) ? manifest.bb : {};
   const pluginRoot = await realpath(rootDir);
   const found: PluginSdkInstallImport[] = [];
-  for (const entry of ["server", "host", "app"] as const) {
+  for (const entry of ["server", "host"] as const) {
     const entryPath = bb[entry];
     if (typeof entryPath !== "string") continue;
     const pending = [resolve(pluginRoot, entryPath)];

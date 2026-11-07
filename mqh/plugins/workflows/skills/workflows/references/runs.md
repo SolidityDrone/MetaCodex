@@ -2,7 +2,7 @@
 
 ## Running and resuming
 
-`bb_workflow_run` and `bb workflows validate` accept exactly one source mode:
+`bb_workflow_run` and `mqh workflows validate` accept exactly one source mode:
 
 - `script`: inline JavaScript.
 - `scriptPath`: a relative path or an absolute path confined to the workflow
@@ -18,9 +18,9 @@ rejected. QuickJS receives source text only; it never gets filesystem access.
 Plugin-bundled workflow discovery is not supported.
 
 `bb_workflow_run` also accepts optional JSON `args` and optional `resumeRunId`.
-It returns a durable run ID immediately. Use the compact `bb workflows status`
-summary, paged `bb workflows history`, `bb workflows list`, and
-`bb workflows stop` afterward. Completion is sent back as an agent-only input:
+It returns a durable run ID immediately. Use the compact `mqh workflows status`
+summary, paged `mqh workflows history`, `mqh workflows list`, and
+`mqh workflows stop` afterward. Completion is sent back as an agent-only input:
 it steers an active origin immediately or starts a turn when the origin is idle,
 without rendering a user-facing message. Delivery is duplicate-tolerant
 at-least-once because `threads.send` has no idempotency key. CLI status polling
@@ -35,10 +35,10 @@ JSONL page on the execution host, then use normal file-navigation tools:
 
 ```bash
 run=<run-id>
-mkdir -p "$BB_THREAD_STORAGE/workflows"
-bb workflows history "$run" --cursor 0 --limit 100 \
-  > "$BB_THREAD_STORAGE/workflows/$run.jsonl"
-jq -c 'select(.type == "page")' "$BB_THREAD_STORAGE/workflows/$run.jsonl"
+mkdir -p "$MQH_THREAD_STORAGE/workflows"
+mqh workflows history "$run" --cursor 0 --limit 100 \
+  > "$MQH_THREAD_STORAGE/workflows/$run.jsonl"
+jq -c 'select(.type == "page")' "$MQH_THREAD_STORAGE/workflows/$run.jsonl"
 ```
 
 The last `page` record supplies `nextCursor`; fetch that cursor and append the
@@ -73,18 +73,18 @@ persisted and visible in workflow history.
 The CLI equivalents are:
 
 ```bash
-bb workflows validate --script '<javascript>'
-bb workflows validate --file .bb/workflows/review-change.js
-bb workflows validate --name review-change
-bb workflows run --script '<javascript>' --args '<json>'
-bb workflows run --file .bb/workflows/review-change.js --resume <run-id>
-bb workflows run --name review-change
-bb workflows status <run-id>
-bb workflows history <run-id> --cursor 0 --limit 100
-bb workflows list --limit 20
-bb workflows stop <run-id>
-bb provider list --environment "$BB_ENVIRONMENT_ID" --json
-bb provider models <provider-id> --environment "$BB_ENVIRONMENT_ID" --json
+mqh workflows validate --script '<javascript>'
+mqh workflows validate --file .bb/workflows/review-change.js
+mqh workflows validate --name review-change
+mqh workflows run --script '<javascript>' --args '<json>'
+mqh workflows run --file .bb/workflows/review-change.js --resume <run-id>
+mqh workflows run --name review-change
+mqh workflows status <run-id>
+mqh workflows history <run-id> --cursor 0 --limit 100
+mqh workflows list --limit 20
+mqh workflows stop <run-id>
+mqh provider list --environment "$MQH_ENVIRONMENT_ID" --json
+mqh provider models <provider-id> --environment "$MQH_ENVIRONMENT_ID" --json
 ```
 
 The CLI's `--file` maps to the agent tool's `scriptPath`, but a relative CLI
@@ -93,7 +93,7 @@ the resolved file must remain inside the origin workspace. `--source` remains
 an inline alias for `--script`. Run and validate require exactly one of
 `--script`, `--file`, or `--name` (counting `--source` as `--script`).
 
-`bb workflows --help` and `bb workflows <command> --help` print the arguments,
+`mqh workflows --help` and `mqh workflows <command> --help` print the arguments,
 option limits, and rules for a command and exit 0. Command output is JSON;
 adding `--json` also reports a failure as `{"ok":false,"error":{…}}` on stdout,
 alongside the readable message on stderr.
@@ -108,7 +108,7 @@ temporary Workflow folder.
 
 ## Settings
 
-Change limits with `bb plugin config workflows set <key> <value>`; no plugin
+Change limits with `mqh plugin config workflows set <key> <value>`; no plugin
 reload is needed.
 
 | Key                    | Default  | Range           |

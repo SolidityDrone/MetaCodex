@@ -24,7 +24,7 @@ describe("JSON shape help", () => {
     )) {
       expect(guide, commandPath).toContain(`\n    ${shape}\n`);
       expect(guide, commandPath).toMatch(
-        new RegExp(`\\n  bb ${commandPath}[^\\n]* --json\\n`),
+        new RegExp(`\\n  mqh ${commandPath}[^\\n]* --json\\n`),
       );
     }
   });

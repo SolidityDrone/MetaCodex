@@ -85,7 +85,7 @@ signatures (see "Looking up the exact API" in distribution.md).
 - `experimental_server`: `checkMove` `startMove` `moveStatus` `cancelMove`
   `export`
 - `subscribe` — realtime entity-change subscriptions (below)
-- `guide`: `render` (the `bb guide` text; local, no request)
+- `guide`: `render` (the `mqh guide` text; local, no request)
 
 Prefer your own `bb.settings` and `bb.storage` over `sdk.system` and
 `sdk.plugins` for your plugin's own configuration. The `system` and `plugins`

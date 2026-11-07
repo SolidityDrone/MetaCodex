@@ -19,7 +19,7 @@ afterEach(() => {
 describe("reset-bb-data", () => {
   it("documents the NODE_ENV-based reset contract", () => {
     expect(renderHelpText()).not.toContain("--mode");
-    expect(renderHelpText()).toContain("Production resets respect BB_DATA_DIR");
+    expect(renderHelpText()).toContain("Production resets respect MQH_DATA_DIR");
     expect(renderHelpText()).toContain(
       "Development resets always target this checkout's dev data directory",
     );
@@ -36,9 +36,9 @@ describe("reset-bb-data", () => {
     ]);
   });
 
-  it("ignores BB_DATA_DIR for the development target", () => {
+  it("ignores MQH_DATA_DIR for the development target", () => {
     vi.stubEnv("NODE_ENV", "development");
-    vi.stubEnv("BB_DATA_DIR", "~/custom-bb");
+    vi.stubEnv("MQH_DATA_DIR", "~/custom-bb");
 
     expect(resolveResetTargets(new Set())).toEqual([
       expectedDevDataDir({
@@ -63,9 +63,9 @@ describe("reset-bb-data", () => {
     expect(targets).not.toContain(join(os.homedir(), ".bb-dev"));
   });
 
-  it("lets BB_DATA_DIR override the production target for --all", () => {
+  it("lets MQH_DATA_DIR override the production target for --all", () => {
     vi.stubEnv("NODE_ENV", "production");
-    vi.stubEnv("BB_DATA_DIR", "~/custom-bb");
+    vi.stubEnv("MQH_DATA_DIR", "~/custom-bb");
 
     expect(resolveResetTargets(new Set(["--all"]))).toEqual([
       join(os.homedir(), "custom-bb"),
@@ -76,9 +76,9 @@ describe("reset-bb-data", () => {
     ]);
   });
 
-  it("lets BB_DATA_DIR override the single reset target", () => {
+  it("lets MQH_DATA_DIR override the single reset target", () => {
     vi.stubEnv("NODE_ENV", "production");
-    vi.stubEnv("BB_DATA_DIR", "~/custom-bb");
+    vi.stubEnv("MQH_DATA_DIR", "~/custom-bb");
 
     expect(resolveResetTargets(new Set())).toEqual([
       join(os.homedir(), "custom-bb"),

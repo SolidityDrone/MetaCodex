@@ -12,7 +12,7 @@ import {
   marketplaceErrorMessage,
   type MarketplaceFetch,
 } from "./marketplace-http.js";
-import { brandingAssetHash } from "../plugins/app-bundle.js";
+import { brandingAssetHash } from "../plugins/plugin-assets.js";
 import { realPathInside } from "../plugins/install-sources.js";
 import {
   resolveEntryIcon,

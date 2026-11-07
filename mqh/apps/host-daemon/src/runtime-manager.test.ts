@@ -1007,7 +1007,7 @@ describe("RuntimeManager", () => {
   });
 
   it("forwards the bridge record-mode directory to provider processes but not the shell env", async () => {
-    vi.stubEnv("BB_PROVIDER_BRIDGE_RECORD_DIR", "/tmp/provider-recordings/raw");
+    vi.stubEnv("MQH_PROVIDER_BRIDGE_RECORD_DIR", "/tmp/provider-recordings/raw");
     const provisionWorkspace = createProvisionWorkspaceMock("/tmp/env-1");
     const createRuntime = vi.fn(() => createFakeRuntime());
     const manager = new RuntimeManager({
@@ -1027,7 +1027,7 @@ describe("RuntimeManager", () => {
       expect.objectContaining({
         env: {
           PATH: "/tmp/bb-bin:/usr/bin",
-          BB_PROVIDER_BRIDGE_RECORD_DIR: "/tmp/provider-recordings/raw",
+          MQH_PROVIDER_BRIDGE_RECORD_DIR: "/tmp/provider-recordings/raw",
         },
         shellEnv: { PATH: "/tmp/bb-bin:/usr/bin" },
       }),
@@ -1065,7 +1065,7 @@ describe("RuntimeManager", () => {
       createRuntime,
       shellEnv: {
         PATH: "/tmp/bb-bin:/home/me/.local/bin:/usr/bin",
-        BB_SERVER_URL: "http://127.0.0.1:3334",
+        MQH_SERVER_URL: "http://127.0.0.1:3334",
         OPENAI_API_KEY: "test-openai-key",
       },
     });
@@ -1082,7 +1082,7 @@ describe("RuntimeManager", () => {
         },
         shellEnv: {
           PATH: "/tmp/bb-bin:/home/me/.local/bin:/usr/bin",
-          BB_SERVER_URL: "http://127.0.0.1:3334",
+          MQH_SERVER_URL: "http://127.0.0.1:3334",
           OPENAI_API_KEY: "test-openai-key",
         },
       }),
@@ -1109,7 +1109,7 @@ describe("RuntimeManager", () => {
     ).resolves.toBe(firstRuntime);
     await manager.replaceBaseShellEnv({
       PATH: "/new/bin:/usr/bin",
-      BB_SERVER_URL: "http://127.0.0.1:3334",
+      MQH_SERVER_URL: "http://127.0.0.1:3334",
     });
     await expect(
       manager.ensureProviderMaintenanceRuntime({ dataDir }),
@@ -1124,7 +1124,7 @@ describe("RuntimeManager", () => {
         },
         shellEnv: {
           PATH: "/new/bin:/usr/bin",
-          BB_SERVER_URL: "http://127.0.0.1:3334",
+          MQH_SERVER_URL: "http://127.0.0.1:3334",
         },
       }),
     );

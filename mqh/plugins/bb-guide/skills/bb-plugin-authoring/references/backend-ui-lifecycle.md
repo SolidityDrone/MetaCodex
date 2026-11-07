@@ -39,7 +39,7 @@ ships as a `skills/` entry instead.
 ### bb.status
 
 `bb.status.needsConfiguration(message)` — mark the plugin
-`needs-configuration` (shown in `bb plugin list` and the UI) instead of
+`needs-configuration` (shown in `mqh plugin list` and the UI) instead of
 failing. Cleared on the next load; saving settings retries the load.
 
 ### bb.onInstall
@@ -80,10 +80,10 @@ failed hook does not stop later cleanup), and in-flight HTTP, RPC, CLI and
 event handlers get five seconds to finish. Callers still waiting after that
 get an error saying the plugin was reloaded or disabled; the handler itself
 keeps running until it stops on its signal. Then database handles close and
-the old `bb` object is invalidated. Requests that arrive during this teardown
+the old `mqh` object is invalidated. Requests that arrive during this teardown
 are still served by the old generation. Disable, removal and shutdown use the
 same sequence without a replacement, and also interrupt every pending input
-the plugin owns. A captured `bb` from a previous load throws
+the plugin owns. A captured `mqh` from a previous load throws
 `PluginContextStaleError` on use — never stash the API object in
 module-level state that outlives a load. bb logs that error, and any other
 uncaught exception thrown from plugin code, against the plugin and keeps

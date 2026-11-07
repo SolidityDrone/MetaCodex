@@ -10,12 +10,12 @@ ships runtime JavaScript and portable
 declarations for all three testing entrypoints. A current scaffold already declares
 `@get-bb/plugin-sdk` as an exact devDependency, so the harness is on disk after
 `npm install`; an older plugin that still vendors `types/` must add that
-devDependency (or run `bb plugin migrate`) before tests can import the harness.
+devDependency (or run `mqh plugin migrate`) before tests can import the harness.
 Either way, install its optional peers too: `better-sqlite3` for backend tests,
 and React, React DOM, and Testing Library for frontend tests. Add jsdom as a
 test-runner development dependency.
 
-The fake plugin host's `bb` satisfies `BbPluginApi` with host-faithful
+The fake plugin host's `mqh` satisfies `BbPluginApi` with host-faithful
 semantics: real better-sqlite3 temporary storage (never mock the db), the kv
 256KB cap, schema-RPC validation/error/strict-JSON behavior, additive events,
 keyed registration failures, atomic reload, conditional agent configuration,
@@ -221,22 +221,22 @@ arbitration. Use a live loop for those host boundaries.
 
 ### Live loop against a running bb
 
-- `bb plugin dev` is the loop: save → rebuild declared `bb.app` and `bb.host`
+- `mqh plugin dev` is the loop: save → rebuild declared `bb.app` and `bb.host`
   artifacts → reload; open app pages pick new UI up live and
   host workers move to the new generation on their next call. Build/reload
   failures print and keep watching (a failed build skips that cycle's
-  reload). The directory must already be installed (`bb plugin install .`);
+  reload). The directory must already be installed (`mqh plugin install .`);
   the watcher ignores `dist/`, `node_modules/`, and `.git/`, batches saves,
   and prints one line per cycle. The dev loop writes readable (unminified)
-  `dist/app.js` + `app.css`; `bb plugin build` and installs minify them.
-- `bb plugin list` shows status, services, schedules (with last_error),
-  handler stats, and the CLI command; `bb plugin logs <id> -f` follows
+  `dist/app.js` + `app.css`; `mqh plugin build` and installs minify them.
+- `mqh plugin list` shows status, services, schedules (with last_error),
+  handler stats, and the CLI command; `mqh plugin logs <id> -f` follows
   `bb.log` output. Use `--json` only when live help lists that option.
 - Exercise wire surfaces directly: `curl -X POST -H "content-type:
 application/json" -d '{}' <server>/api/v1/plugins/<id>/rpc/<method>`,
-  `bb <command> …` for the CLI, `bb plugin run <id> …` as the explicit form.
+  `bb <command> …` for the CLI, `mqh plugin run <id> …` as the explicit form.
 - Keep pure logic in plain functions/modules so it is unit-testable without
-  a bb server; the factory file should mostly wire registrations.
+  a mqh server; the factory file should mostly wire registrations.
 
 BB Official plugins in `plugins/` (a bb checkout):
 

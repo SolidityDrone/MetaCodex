@@ -327,11 +327,11 @@ describe("secrets plugin server", () => {
       ok: false,
       error: {
         code: "missing_thread",
-        message: "bb secret request must run from a bb thread.",
+        message: "bb secret request must run from a mqh thread.",
       },
     });
     expect(result.stderr).toBe(
-      "bb secret request must run from a bb thread.\n",
+      "bb secret request must run from a mqh thread.\n",
     );
     expect(host.harness.pendingInteractions).toEqual([]);
   });

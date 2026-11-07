@@ -4,7 +4,7 @@ import {
   prependOlderTimelineRows,
   resolveLoadedTimelineSurfaceKey,
   type LoadedTimelineState,
-} from "@bb/client-core";
+} from "../../helpers/client-timeline/timeline-merge.js";
 import { getThread } from "@bb/db";
 import {
   encodeClientTurnRequestIdNumber,

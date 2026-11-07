@@ -33,7 +33,7 @@ bb pull-request merge <environment-id> [--method merge|squash|rebase] [--json]
 
 The `showPullRequest` setting (default true) shows the pull request segment
 above the composer. Turn it off with
-`bb plugin config bb--github-pr-status set showPullRequest false`; the Info
+`mqh plugin config bb--github-pr-status set showPullRequest false`; the Info
 panel's Pull request row stays.
 
 Other plugins read the same data through RPC. `pullRequests` is a keyed read:
@@ -50,5 +50,5 @@ experimental_useRpcKeyedQuery({
 });
 ```
 
-`bb plugin rpc inspect bb--github-pr-status` prints the input and output schemas
+`mqh plugin rpc inspect bb--github-pr-status` prints the input and output schemas
 for `pullRequests`, `markReady`, `markDraft` and `merge`.

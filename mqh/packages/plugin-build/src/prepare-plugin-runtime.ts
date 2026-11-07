@@ -11,7 +11,6 @@ import {
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { isPluginOwnedIconPath, pluginPackageJsonSchema } from "@bb/domain";
-import { buildPluginApp } from "./build-plugin-app.js";
 import { buildPluginServer } from "./build-plugin-server.js";
 import { buildPluginHost } from "./build-plugin-host.js";
 import { pathExists } from "./plugin-sdk-install.js";
@@ -42,7 +41,6 @@ async function writeRuntimePackageJson(args: {
         bb: {
           ...packageJson.bb,
           server: "./dist/server.js",
-          ...(packageJson.bb.app === undefined ? {} : { app: "./dist/app.js" }),
           ...(packageJson.bb.host === undefined
             ? {}
             : { host: "./dist/host.js" }),
@@ -144,11 +142,6 @@ export async function preparePluginRuntime(args: {
     await buildPluginServer(buildRoot, args.bbVersion, args.toolchain, {
       hostProvidedZod: true,
     });
-    if (manifest.bb.app !== undefined)
-      await buildPluginApp(buildRoot, args.bbVersion, args.toolchain, {
-        minify: true,
-        hostProvidedZod: true,
-      });
     if (manifest.bb.host !== undefined)
       await buildPluginHost(buildRoot, args.bbVersion, args.toolchain);
     await runStageAssets(buildRoot);

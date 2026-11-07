@@ -6,8 +6,8 @@ inside QuickJS while delegating actual reasoning to ordinary BB threads.
 
 The author-facing native surface is intentionally one tool:
 `bb_workflow_run`. Validation, inspection, listing, and cancellation use the
-`bb workflows` CLI documented below. Provider and model discovery uses BB's
-built-in `bb provider` commands. Structured workers separately
+`mqh workflows` CLI documented below. Provider and model discovery uses BB's
+built-in `mqh provider` commands. Structured workers separately
 receive only `bb_workflow_result`; ordinary authoring agents never receive that
 worker tool.
 
@@ -78,7 +78,7 @@ an inline `script`, a workspace `scriptPath`, or a workflow `name`. The older
 `.bb/workflows/<name>.js`. There is no plugin-bundled workflow discovery.
 
 File and name sources are resolved on the workflow origin environment's host,
-not on the bb server machine. BB reads them through the environment `hostId`
+not on the mqh server machine. BB reads them through the environment `hostId`
 with `rootPath` confinement to its workspace. Traversal and outside absolute or
 UNC paths, missing workspace roots, non-UTF-8 content, and sources larger than
 512 KiB are rejected. QuickJS receives only the resolved source text and never
@@ -161,24 +161,24 @@ Useful checks:
 ```bash
 pnpm exec turbo run typecheck --filter=bb-plugin-workflows
 pnpm exec turbo run test --filter=bb-plugin-workflows --force
-bb plugin build plugins/workflows
+mqh plugin build plugins/workflows
 ```
 
 User-facing commands (run these from a BB project thread) are:
 
 ```bash
-bb workflows validate --script '<javascript>'
-bb workflows validate --file .bb/workflows/review.js
-bb workflows validate --name review
-bb workflows run --script '<javascript>' --args '<json>'
-bb workflows run --file .bb/workflows/review.js --resume <run-id>
-bb workflows run --name review
-bb workflows status <run-id>
-bb workflows history <run-id> --cursor 0 --limit 100
-bb workflows list --limit 20
-bb workflows stop <run-id>
-bb provider list --environment "$BB_ENVIRONMENT_ID" --json
-bb provider models <provider-id> --environment "$BB_ENVIRONMENT_ID" --json
+mqh workflows validate --script '<javascript>'
+mqh workflows validate --file .bb/workflows/review.js
+mqh workflows validate --name review
+mqh workflows run --script '<javascript>' --args '<json>'
+mqh workflows run --file .bb/workflows/review.js --resume <run-id>
+mqh workflows run --name review
+mqh workflows status <run-id>
+mqh workflows history <run-id> --cursor 0 --limit 100
+mqh workflows list --limit 20
+mqh workflows stop <run-id>
+mqh provider list --environment "$MQH_ENVIRONMENT_ID" --json
+mqh provider models <provider-id> --environment "$MQH_ENVIRONMENT_ID" --json
 ```
 
 Every command accepts `--help` (printed from the declarative CLI spec, exit 0)
@@ -199,9 +199,9 @@ transcript:
 
 ```bash
 run=<run-id>
-mkdir -p "$BB_THREAD_STORAGE/workflows"
-bb workflows history "$run" --cursor 0 --limit 100 \
-  > "$BB_THREAD_STORAGE/workflows/$run.jsonl"
+mkdir -p "$MQH_THREAD_STORAGE/workflows"
+mqh workflows history "$run" --cursor 0 --limit 100 \
+  > "$MQH_THREAD_STORAGE/workflows/$run.jsonl"
 ```
 
 The final `page` record reports `hasMore` and `nextCursor`. Fetch the next page
@@ -214,7 +214,7 @@ detailed view is needed.
 
 This redirection intentionally happens in the invoking agent's shell. The
 canonical state remains in the plugin's server-side SQLite database, while the
-JSONL file lands in `$BB_THREAD_STORAGE` on that thread's execution host. The
+JSONL file lands in `$MQH_THREAD_STORAGE` on that thread's execution host. The
 same flow therefore works for local and remote environments without granting
 the server arbitrary filesystem-write access.
 

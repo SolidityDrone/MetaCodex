@@ -174,7 +174,7 @@ function validateScriptWorkingDirectory(
   if (workingDirectory.type !== "path") return;
   if (!isAbsolute(workingDirectory.path)) {
     throw new Error(
-      "A script working directory must be automation-storage, project, or an absolute path on the bb server host",
+      "A script working directory must be automation-storage, project, or an absolute path on the mqh server host",
     );
   }
   if (!isPrintableWorkingDirectoryPath(workingDirectory.path)) {

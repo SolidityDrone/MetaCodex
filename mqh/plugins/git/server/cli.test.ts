@@ -679,7 +679,7 @@ describe("bb git", () => {
 });
 
 describe("bb git errors", () => {
-  it("reports a missing environment with the old bb environment error envelope", async () => {
+  it("reports a missing environment with the old mqh environment error envelope", async () => {
     const fake = createFakePluginHost({
       pluginId: "bb--git",
       sdk: {

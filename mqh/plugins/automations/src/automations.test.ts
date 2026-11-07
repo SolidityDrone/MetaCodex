@@ -1261,7 +1261,7 @@ describe("automation service", () => {
             workingDirectory: { type: "path", path: "relative/path" },
           },
         }),
-      ).rejects.toThrow("absolute path on the bb server host");
+      ).rejects.toThrow("absolute path on the mqh server host");
       await expect(
         service.update({
           projectId: "proj_test",
@@ -1778,7 +1778,7 @@ describe("automation CLI --script-file", () => {
       expect(created.stdout).toContain(`Copied ${sourcePath}`);
       expect(created.stdout).toContain(`to ${storedPath}`);
       expect(created.stdout).toContain(
-        `bb automation update ${automationId} --project proj_test --script-file ${pastedShellArg(sourcePath)}\n`,
+        `mqh automation update ${automationId} --project proj_test --script-file ${pastedShellArg(sourcePath)}\n`,
       );
       expect(created.stdout).toContain("Working dir: /server/project");
 
@@ -1997,7 +1997,7 @@ describe("automation CLI --script-file", () => {
       expect(created.exitCode).toBe(0);
       const automationId = idFrom(created.stdout);
       expect(created.stdout).toContain(
-        `bb automation update ${automationId} --project proj_test --script-file '${sourcePath}'\n`,
+        `mqh automation update ${automationId} --project proj_test --script-file '${sourcePath}'\n`,
       );
 
       await writeFile(sourcePath, "echo two\n");
@@ -2361,7 +2361,7 @@ describe("script project context", () => {
     output: string | null | undefined,
   ): string | null | undefined {
     return output?.replace(
-      /^\[bb\] warning: could not locate the bb CLI, so `bb` is not on PATH for this script\.\n/u,
+      /^\[bb\] warning: could not locate the bb CLI, so `mqh` is not on PATH for this script\.\n/u,
       "",
     );
   }
@@ -2613,7 +2613,7 @@ describe("script project context", () => {
       });
       expect(result.closed).toMatchObject({
         status: "failed",
-        error: "Project proj_test has no source on the bb server host",
+        error: "Project proj_test has no source on the mqh server host",
       });
     } finally {
       await rm(remoteProjectDir, { recursive: true, force: true });
@@ -2629,7 +2629,7 @@ describe("script project context", () => {
     });
     expect(result.closed).toMatchObject({
       status: "failed",
-      error: "Project proj_test has no source on the bb server host",
+      error: "Project proj_test has no source on the mqh server host",
     });
   });
 

@@ -6,7 +6,7 @@
 #
 #   scripts/provider-recordings/convert-claude-transcripts-sample.sh [<out-dir>]
 #
-# Every session below is one of the owner's own bb threads (the provider
+# Every session below is one of the owner's own mqh threads (the provider
 # corpus, ~/.bb/provider-corpus). The turn windows keep the committed set under
 # 2 MB after redaction while covering each tool family the bridge classifies.
 set -euo pipefail

@@ -29,7 +29,7 @@ it("introduces bb without user-question guidance", async () => {
       "Reference a BB thread as `@thread:thr_abc123`",
     );
     expect(introduction).toContain("Do not construct thread URLs manually");
-    expect(introduction).toContain("`bb voice transcribe <path>`");
+    expect(introduction).toContain("`mqh voice transcribe <path>`");
     expect(introduction).not.toContain(
       "Ask the user a blocking question only when",
     );
@@ -75,7 +75,7 @@ it("keeps the introduction and skill switches independent across reloads", async
     expect(instructions()).toBeNull();
     expect(await skills()).toEqual([]);
     await harness.behavior.setSettings({ introduction: true, skills: true });
-    expect(instructions()).toContain("bb status");
+    expect(instructions()).toContain("mqh status");
     expect(await skills()).toEqual([
       "bb-cli",
       "skill-creator",

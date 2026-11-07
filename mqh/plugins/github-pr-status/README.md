@@ -1,6 +1,6 @@
 # GitHub PR Status
 
-Owns GitHub pull request data and actions for bb environments. Bundled and enabled by default.
+Owns GitHub pull request data and actions for mqh environments. Bundled and enabled by default.
 
 - `host.ts` batches GraphQL reads through `gh api graphql` and runs `gh pr ready|merge` in the environment's workspace on its machine.
 - `server.ts` resolves environments, assembles the status, serves the keyed `pullRequests` read and the `refresh`, `markReady`, `markDraft` and `merge` mutations, and registers `bb pull-request`.

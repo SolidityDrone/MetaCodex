@@ -49,7 +49,7 @@ import {
   type AppSurface,
 } from "@bb/config/app-surface";
 import {
-  BB_APP_MANAGED_CONFIG_KEYS,
+  MQH_APP_MANAGED_CONFIG_KEYS,
   bbAppManagedEnvFileSchema,
   formatBbAppConfigPath,
   formatBbAppEnvPath,
@@ -73,9 +73,9 @@ import { validateOptionalUrl } from "@bb/config/public-url";
 import { parseServerBindHost, type ServerBindHost } from "@bb/config/server";
 import { toOptionalString } from "@bb/config/strings";
 import {
-  BB_PROD_HOST_DAEMON_PORT,
-  BB_LOOPBACK_HOST,
-  BB_PROD_SERVER_PORT,
+  MQH_PROD_HOST_DAEMON_PORT,
+  MQH_LOOPBACK_HOST,
+  MQH_PROD_SERVER_PORT,
   parseDataDirEnvValue,
   parsePortValue,
   resolveConfiguredDataDir,
@@ -156,7 +156,7 @@ const HOST_DAEMON_RESTART_STABLE_UPTIME_MS = 60_000;
 const MOVED_SERVER_EXIT_POLL_INTERVAL_MS = 1_000;
 const MOVED_SERVER_EXIT_GRACE_MS = 20_000;
 const MOVED_MODE_MARKER_POLL_INTERVAL_MS = 1_000;
-const BB_SERVER_MOVED_EXIT_CODE = 3;
+const MQH_SERVER_MOVED_EXIT_CODE = 3;
 const START_COMMAND = "start";
 const STOP_COMMAND = "stop";
 const STOP_TIMEOUT_MS = 15_000;
@@ -174,11 +174,11 @@ const CONFIG_LIST_COMMAND = "list";
 const CONFIG_REFRESH_COMMAND = "refresh";
 
 type ManagedConfigValueKey = BbAppManagedConfigKey;
-type ManagedConfigKey = "BB_SERVER_URL" | "serverUrl" | ManagedConfigValueKey;
+type ManagedConfigKey = "MQH_SERVER_URL" | "serverUrl" | ManagedConfigValueKey;
 
-const MANAGED_CONFIG_KEYS = BB_APP_MANAGED_CONFIG_KEYS;
+const MANAGED_CONFIG_KEYS = MQH_APP_MANAGED_CONFIG_KEYS;
 const MANAGED_CONFIG_KEY_VALUES = new Set<string>(MANAGED_CONFIG_KEYS);
-const STARTUP_ONLY_MANAGED_CONFIG_KEYS = new Set<string>(["BB_LOG_LEVEL"]);
+const STARTUP_ONLY_MANAGED_CONFIG_KEYS = new Set<string>(["MQH_LOG_LEVEL"]);
 const STARTUP_ONLY_MANAGED_ENV_KEYS = new Set<string>([
   "NODE_USE_ENV_PROXY",
   "NODE_USE_SYSTEM_CA",
@@ -189,20 +189,20 @@ const STARTUP_ONLY_MANAGED_ENV_KEYS = new Set<string>([
   "http_proxy",
   "https_proxy",
   "no_proxy",
-  "BB_APP_SURFACE",
-  "BB_APP_URL",
-  "BB_DATA_DIR",
-  "BB_DEV_APP_PORT",
-  "BB_EXTERNAL_URL",
-  "BB_HOST_DAEMON_PORT",
-  "BB_INHERITED_SKILLS_ROOTS",
-  "BB_LOG_LEVEL",
-  "BB_PERF_DIAGNOSTICS",
-  "BB_MANAGED_DEV_BUILTIN_PLUGIN_HOT_RELOAD",
-  "BB_POSTHOG_API_KEY",
-  "BB_SERVER_BIND_HOST",
-  "BB_SERVER_PORT",
-  "BB_TELEMETRY",
+  "MQH_APP_SURFACE",
+  "MQH_APP_URL",
+  "MQH_DATA_DIR",
+  "MQH_DEV_APP_PORT",
+  "MQH_EXTERNAL_URL",
+  "MQH_HOST_DAEMON_PORT",
+  "MQH_INHERITED_SKILLS_ROOTS",
+  "MQH_LOG_LEVEL",
+  "MQH_PERF_DIAGNOSTICS",
+  "MQH_MANAGED_DEV_BUILTIN_PLUGIN_HOT_RELOAD",
+  "MQH_POSTHOG_API_KEY",
+  "MQH_SERVER_BIND_HOST",
+  "MQH_SERVER_PORT",
+  "MQH_TELEMETRY",
 ]);
 const PORTABLE_ENV_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/u;
 const SECRET_SHAPED_ENV_NAME_PATTERN =
@@ -811,7 +811,7 @@ function isManagedConfigValueKey(
 }
 
 function supportedConfigKeysText(): string {
-  return ["BB_SERVER_URL", ...MANAGED_CONFIG_KEYS].join(", ");
+  return ["MQH_SERVER_URL", ...MANAGED_CONFIG_KEYS].join(", ");
 }
 
 function createDefaultLauncherOptions(): LauncherCliOptions {
@@ -955,18 +955,18 @@ function requireWorktreePolicyEnvValue(
 export function resolveWorktreeRuntimePolicy(
   args: ResolveWorktreeRuntimePolicyArgs,
 ): WorktreeRuntimePolicy {
-  const rawDataDir = requireWorktreePolicyEnvValue(args.env, "BB_DATA_DIR");
+  const rawDataDir = requireWorktreePolicyEnvValue(args.env, "MQH_DATA_DIR");
   const rawHostDaemonPort = requireWorktreePolicyEnvValue(
     args.env,
-    "BB_HOST_DAEMON_PORT",
+    "MQH_HOST_DAEMON_PORT",
   );
   const inheritedSkillsRoots = requireWorktreePolicyEnvValue(
     args.env,
-    "BB_INHERITED_SKILLS_ROOTS",
+    "MQH_INHERITED_SKILLS_ROOTS",
   );
   const rawServerPort = requireWorktreePolicyEnvValue(
     args.env,
-    "BB_SERVER_PORT",
+    "MQH_SERVER_PORT",
   );
   return {
     dataDir: parseDataDirEnvValue({
@@ -974,15 +974,15 @@ export function resolveWorktreeRuntimePolicy(
       rawDataDir,
     }),
     hostDaemonPort: parsePortValue({
-      name: "BB_HOST_DAEMON_PORT",
+      name: "MQH_HOST_DAEMON_PORT",
       rawPort: rawHostDaemonPort,
     }),
     inheritedSkillsRoots,
     serverBindHost: parseServerBindHost(
-      args.env.BB_SERVER_BIND_HOST ?? BB_LOOPBACK_HOST,
+      args.env.MQH_SERVER_BIND_HOST ?? MQH_LOOPBACK_HOST,
     ),
     serverPort: parsePortValue({
-      name: "BB_SERVER_PORT",
+      name: "MQH_SERVER_PORT",
       rawPort: rawServerPort,
     }),
   };
@@ -994,14 +994,14 @@ function applyWorktreeRuntimePolicy(
 ): NodeJS.ProcessEnv {
   const nextEnv: NodeJS.ProcessEnv = {
     ...env,
-    BB_DATA_DIR: policy.dataDir,
-    BB_HOST_DAEMON_PORT: String(policy.hostDaemonPort),
-    BB_INHERITED_SKILLS_ROOTS: policy.inheritedSkillsRoots,
-    BB_SERVER_BIND_HOST: policy.serverBindHost,
-    BB_SERVER_PORT: String(policy.serverPort),
-    BB_TELEMETRY: "false",
+    MQH_DATA_DIR: policy.dataDir,
+    MQH_HOST_DAEMON_PORT: String(policy.hostDaemonPort),
+    MQH_INHERITED_SKILLS_ROOTS: policy.inheritedSkillsRoots,
+    MQH_SERVER_BIND_HOST: policy.serverBindHost,
+    MQH_SERVER_PORT: String(policy.serverPort),
+    MQH_TELEMETRY: "false",
   };
-  delete nextEnv.BB_DEV_APP_PORT;
+  delete nextEnv.MQH_DEV_APP_PORT;
   return nextEnv;
 }
 
@@ -1010,37 +1010,37 @@ function createEnvFromOptions(
 ): NodeJS.ProcessEnv {
   const env = { ...args.env };
   if (args.options.performanceDiagnostics === true) {
-    env.BB_PERF_DIAGNOSTICS = "1";
+    env.MQH_PERF_DIAGNOSTICS = "1";
   }
   if (args.options.dataDir !== undefined) {
-    env.BB_DATA_DIR = args.options.dataDir;
+    env.MQH_DATA_DIR = args.options.dataDir;
   }
   if (args.options.autoUpdate === true) {
-    env.BB_HOST_DAEMON_AUTO_UPDATE = "1";
+    env.MQH_HOST_DAEMON_AUTO_UPDATE = "1";
   }
   if (args.options.supervise === true) {
-    env.BB_HOST_DAEMON_SUPERVISED = "1";
+    env.MQH_HOST_DAEMON_SUPERVISED = "1";
   }
   if (args.options.hostDaemonPort !== undefined) {
-    env.BB_HOST_DAEMON_PORT = args.options.hostDaemonPort;
+    env.MQH_HOST_DAEMON_PORT = args.options.hostDaemonPort;
   }
   if (args.options.serverBindHost !== undefined) {
-    env.BB_SERVER_BIND_HOST = args.options.serverBindHost;
+    env.MQH_SERVER_BIND_HOST = args.options.serverBindHost;
   }
   if (args.options.serverPort !== undefined) {
-    env.BB_SERVER_PORT = args.options.serverPort;
+    env.MQH_SERVER_PORT = args.options.serverPort;
   }
   if (args.options.serverUrl !== undefined) {
-    env.BB_SERVER_URL = args.options.serverUrl;
+    env.MQH_SERVER_URL = args.options.serverUrl;
   }
   if (args.options.hostId !== undefined) {
-    env.BB_HOST_ID = args.options.hostId;
+    env.MQH_HOST_ID = args.options.hostId;
   }
   if (args.options.joinCode !== undefined) {
-    env.BB_HOST_ENROLL_KEY = args.options.joinCode;
+    env.MQH_HOST_ENROLL_KEY = args.options.joinCode;
   }
   if (args.options.enrollKey !== undefined) {
-    env.BB_HOST_ENROLL_KEY = args.options.enrollKey;
+    env.MQH_HOST_ENROLL_KEY = args.options.enrollKey;
   }
   return env;
 }
@@ -1049,7 +1049,7 @@ function resolveServerUrl(args: ResolveServerUrlArgs): string {
   return (
     toOptionalString(args.optionServerUrl) ??
     args.config.serverUrl ??
-    toOptionalString(args.env.BB_SERVER_URL) ??
+    toOptionalString(args.env.MQH_SERVER_URL) ??
     args.defaultServerUrl
   );
 }
@@ -1057,7 +1057,7 @@ function resolveServerUrl(args: ResolveServerUrlArgs): string {
 export function resolveServerListenerUrl(
   args: ResolveServerListenerUrlArgs,
 ): string {
-  const bindHost = parseServerBindHost(args.bindHost ?? BB_LOOPBACK_HOST);
+  const bindHost = parseServerBindHost(args.bindHost ?? MQH_LOOPBACK_HOST);
   return `http://${bindHost}:${String(args.port)}`;
 }
 
@@ -1069,7 +1069,7 @@ function applyManagedConfigEnv(
     ...(args.config.serverHeaders !== undefined ||
     args.config.machineCredential !== undefined
       ? {
-          BB_SERVER_HEADERS: JSON.stringify(
+          MQH_SERVER_HEADERS: JSON.stringify(
             args.config.serverHeaders ?? {
               "x-bb-connect-machine": args.config.machineCredential,
             },
@@ -1087,10 +1087,10 @@ function createServerBaseEnv(args: CreateServerBaseEnvArgs): NodeJS.ProcessEnv {
     ...args.config.config,
     ...args.envFile.env,
     ...(args.performanceDiagnostics === true
-      ? { BB_PERF_DIAGNOSTICS: "1" }
+      ? { MQH_PERF_DIAGNOSTICS: "1" }
       : {}),
     ...(args.serverBindHostOverride !== undefined
-      ? { BB_SERVER_BIND_HOST: args.serverBindHostOverride }
+      ? { MQH_SERVER_BIND_HOST: args.serverBindHostOverride }
       : {}),
   };
 }
@@ -1308,17 +1308,17 @@ async function mutateClientConfig(
 
 function validateManagedConfigForWrite(config: ManagedConfigForWrite): void {
   if (config.serverUrl !== undefined) {
-    validateOptionalUrl("BB_SERVER_URL", config.serverUrl);
+    validateOptionalUrl("MQH_SERVER_URL", config.serverUrl);
   }
   const configValues = config.config;
   if (configValues === undefined) {
     return;
   }
-  if (configValues.BB_APP_URL !== undefined) {
-    validateOptionalUrl("BB_APP_URL", configValues.BB_APP_URL);
+  if (configValues.MQH_APP_URL !== undefined) {
+    validateOptionalUrl("MQH_APP_URL", configValues.MQH_APP_URL);
   }
-  if (configValues.BB_LOG_LEVEL !== undefined) {
-    validateLogLevel(configValues.BB_LOG_LEVEL);
+  if (configValues.MQH_LOG_LEVEL !== undefined) {
+    validateLogLevel(configValues.MQH_LOG_LEVEL);
   }
 }
 
@@ -1329,7 +1329,7 @@ async function writeManagedConfig(args: WriteManagedConfigArgs): Promise<void> {
   );
 }
 
-const BB_APP_VERSION_DEV_FALLBACK = "0.0.0-dev";
+const MQH_APP_VERSION_DEV_FALLBACK = "0.0.0-dev";
 
 export function readBbAppPackageVersion(packageRoot: string): string {
   try {
@@ -1337,7 +1337,7 @@ export function readBbAppPackageVersion(packageRoot: string): string {
     const rawContents = readFileSync(packageJsonPath, "utf8");
     return bbAppPackageJsonSchema.parse(JSON.parse(rawContents)).version;
   } catch {
-    return BB_APP_VERSION_DEV_FALLBACK;
+    return MQH_APP_VERSION_DEV_FALLBACK;
   }
 }
 
@@ -1355,14 +1355,14 @@ export function resolveBbAppStartContext(
   const fromSourceCheckout = runsFromSourceCheckout(args.entrypointUrl);
   const dataDir = resolveDataDir({ env: args.env, homeDir: args.homeDir });
   const serverPort = resolvePortFromEnv({
-    defaultPort: BB_PROD_SERVER_PORT,
+    defaultPort: MQH_PROD_SERVER_PORT,
     env: args.env,
-    name: "BB_SERVER_PORT",
+    name: "MQH_SERVER_PORT",
   });
   const daemonPort = resolvePortFromEnv({
-    defaultPort: BB_PROD_HOST_DAEMON_PORT,
+    defaultPort: MQH_PROD_HOST_DAEMON_PORT,
     env: args.env,
-    name: "BB_HOST_DAEMON_PORT",
+    name: "MQH_HOST_DAEMON_PORT",
   });
   const appDistDir = fromSourceCheckout
     ? resolve(workspaceRoot, "apps", "app", "dist")
@@ -1391,8 +1391,8 @@ export function resolveBbAppStartContext(
     serverEntry,
     serverPort,
     serverUrl:
-      toOptionalString(args.env.BB_SERVER_URL) ??
-      `http://${BB_LOOPBACK_HOST}:${serverPort}`,
+      toOptionalString(args.env.MQH_SERVER_URL) ??
+      `http://${MQH_LOOPBACK_HOST}:${serverPort}`,
   };
 }
 
@@ -1434,8 +1434,8 @@ export async function resolveBbAppRuntimeState(
         }),
       ),
     );
-    delete localEnv.BB_SERVER_URL;
-    delete localServerEnv.BB_SERVER_URL;
+    delete localEnv.MQH_SERVER_URL;
+    delete localServerEnv.MQH_SERVER_URL;
     return {
       config,
       context: resolveBbAppStartContext({
@@ -1450,7 +1450,7 @@ export async function resolveBbAppRuntimeState(
 
   const finalEnv = {
     ...managedEnv,
-    BB_SERVER_URL: resolveServerUrl({
+    MQH_SERVER_URL: resolveServerUrl({
       config,
       defaultServerUrl: initialContext.serverUrl,
       env: managedEnv,
@@ -1563,7 +1563,7 @@ Supported keys:
   ${supportedConfigKeysText()}
 
 Startup-only:
-  BB_LOG_LEVEL changes require a full bb-app restart with
+  MQH_LOG_LEVEL changes require a full bb-app restart with
   bb-app stop && bb-app start, or a desktop app restart.
 
 Config file:
@@ -1581,14 +1581,14 @@ Usage:
   bb-app env unset <key>
 
 Startup-only server and launcher keys:
-  BB_APP_SURFACE, BB_APP_URL, BB_DATA_DIR, BB_DEV_APP_PORT,
-  BB_EXTERNAL_URL, BB_HOST_DAEMON_PORT, BB_INHERITED_SKILLS_ROOTS,
-  BB_LOG_LEVEL, BB_MANAGED_DEV_BUILTIN_PLUGIN_HOT_RELOAD, BB_PERF_DIAGNOSTICS,
-  BB_POSTHOG_API_KEY,
-  BB_SERVER_BIND_HOST, BB_SERVER_PORT, BB_TELEMETRY, and BB_FF_* feature
+  MQH_APP_SURFACE, MQH_APP_URL, MQH_DATA_DIR, MQH_DEV_APP_PORT,
+  MQH_EXTERNAL_URL, MQH_HOST_DAEMON_PORT, MQH_INHERITED_SKILLS_ROOTS,
+  MQH_LOG_LEVEL, MQH_MANAGED_DEV_BUILTIN_PLUGIN_HOT_RELOAD, MQH_PERF_DIAGNOSTICS,
+  MQH_POSTHOG_API_KEY,
+  MQH_SERVER_BIND_HOST, MQH_SERVER_PORT, MQH_TELEMETRY, and MQH_FF_* feature
   flags.
   Changes require a full bb-app restart with bb-app stop && bb-app start,
-  or a desktop app restart. BB_APP_URL can instead be changed live with
+  or a desktop app restart. MQH_APP_URL can instead be changed live with
   bb-app config.
 
 Env file:
@@ -1611,7 +1611,7 @@ Config file:
 
 function resolveManagedConfigKey(rawKey: string): ManagedConfigKey {
   const key = rawKey.trim();
-  if (key === "BB_SERVER_URL" || key === "serverUrl") {
+  if (key === "MQH_SERVER_URL" || key === "serverUrl") {
     return key;
   }
   if (isManagedConfigValueKey(key)) {
@@ -1634,7 +1634,7 @@ function createManagedConfigPatch(
   key: ManagedConfigKey,
   value: string,
 ): ManagedConfig {
-  if (key === "BB_SERVER_URL" || key === "serverUrl") {
+  if (key === "MQH_SERVER_URL" || key === "serverUrl") {
     return { serverUrl: value };
   }
   return { config: createManagedConfigValuePatch(key, value) };
@@ -1647,7 +1647,7 @@ function unsetManagedConfigKey(
   const nextConfig: ManagedConfigForWrite = {
     ...config,
   };
-  if (key === "BB_SERVER_URL" || key === "serverUrl") {
+  if (key === "MQH_SERVER_URL" || key === "serverUrl") {
     delete nextConfig.serverUrl;
     return pruneManagedConfig(nextConfig);
   }
@@ -1695,7 +1695,7 @@ function unsetManagedEnvKey(
 function formatManagedConfig(config: ManagedConfig): string {
   const lines: string[] = [];
   if (config.serverUrl !== undefined) {
-    lines.push(`BB_SERVER_URL=${config.serverUrl}`);
+    lines.push(`MQH_SERVER_URL=${config.serverUrl}`);
   }
   for (const key of MANAGED_CONFIG_KEYS) {
     const value = config.config?.[key];
@@ -1842,7 +1842,7 @@ async function refreshRunningServerConfig(
     response = await fetch(reloadUrl, { method: "POST" });
   } catch {
     if (args.required) {
-      throw new Error(`Could not reach bb server at ${args.serverUrl}`);
+      throw new Error(`Could not reach mqh server at ${args.serverUrl}`);
     }
     return false;
   }
@@ -1851,7 +1851,7 @@ async function refreshRunningServerConfig(
     return true;
   }
 
-  let message = `bb server rejected config reload with HTTP ${response.status}`;
+  let message = `mqh server rejected config reload with HTTP ${response.status}`;
   try {
     const parsed = apiErrorResponseSchema.safeParse(await response.json());
     if (parsed.success) {
@@ -1868,14 +1868,14 @@ function isStartupOnlyManagedKey(
   if (source === "config") {
     return STARTUP_ONLY_MANAGED_CONFIG_KEYS.has(key);
   }
-  return STARTUP_ONLY_MANAGED_ENV_KEYS.has(key) || key.startsWith("BB_FF_");
+  return STARTUP_ONLY_MANAGED_ENV_KEYS.has(key) || key.startsWith("MQH_FF_");
 }
 
 function printStartupOnlyChangeNotice(key: string): void {
   process.stdout.write(
     `${key} is startup-only. The running process keeps its current value; a full bb-app restart is required to apply this change. Run \`bb-app stop && bb-app start\`, or restart the desktop app.\n`,
   );
-  if (key === "BB_SERVER_BIND_HOST") {
+  if (key === "MQH_SERVER_BIND_HOST") {
     process.stdout.write(
       "Until then, the server keeps its previous bind address. If it was bound to 0.0.0.0, that network exposure remains open.\n",
     );
@@ -1916,12 +1916,12 @@ async function refreshRunningServerConfigAfterWrite(
     if (isStartupOnlyManagedKey(source, key)) {
       printStartupOnlyChangeNotice(key);
     } else {
-      process.stdout.write("Reloaded running bb server config.\n");
+      process.stdout.write("Reloaded running mqh server config.\n");
     }
     return;
   }
   process.stdout.write(
-    `No running bb server found at ${serverUrl}; config will apply on next start.\n`,
+    `No running mqh server found at ${serverUrl}; config will apply on next start.\n`,
   );
 }
 
@@ -1945,7 +1945,7 @@ async function runConfigCommand(args: RunConfigCommandArgs): Promise<void> {
       required: true,
       serverUrl: args.serverUrl,
     });
-    process.stdout.write("Reloaded running bb server config.\n");
+    process.stdout.write("Reloaded running mqh server config.\n");
     const startupOnlyKeys = await readConfiguredStartupOnlyManagedKeys(
       args.dataDir,
     );
@@ -2027,7 +2027,7 @@ async function runEnvCommand(args: RunEnvCommandArgs): Promise<void> {
   if (value.length === 0) {
     throw new Error("Env value must not be empty. Use unset to remove it.");
   }
-  if (key === "BB_SERVER_BIND_HOST") {
+  if (key === "MQH_SERVER_BIND_HOST") {
     parseServerBindHost(value);
   }
   const patch = createManagedEnvPatch(key, value);
@@ -2269,7 +2269,7 @@ async function requireExpectedHostDaemonId(args: {
   env: NodeJS.ProcessEnv;
 }): Promise<string> {
   const hostId =
-    toOptionalString(args.env.BB_HOST_ID) ??
+    toOptionalString(args.env.MQH_HOST_ID) ??
     (await readPersistedHostId(args.dataDir)) ??
     (await readPersistedHostAuthId(args.dataDir));
   if (hostId === null) {
@@ -2317,7 +2317,7 @@ async function requestMatchingHostEnrollKey(
 async function maybeAddAutoJoinEnv(
   args: MaybeAddAutoJoinEnvArgs,
 ): Promise<NodeJS.ProcessEnv> {
-  if (toOptionalString(args.env.BB_HOST_ENROLL_KEY) !== undefined) {
+  if (toOptionalString(args.env.MQH_HOST_ENROLL_KEY) !== undefined) {
     return args.env;
   }
   if (await pathExists(join(args.dataDir, HOST_AUTH_FILE_NAME))) {
@@ -2325,7 +2325,7 @@ async function maybeAddAutoJoinEnv(
   }
 
   const requestedHostId =
-    toOptionalString(args.env.BB_HOST_ID) ??
+    toOptionalString(args.env.MQH_HOST_ID) ??
     (await readPersistedHostId(args.dataDir));
   const enrollKeyResponse = await requestMatchingHostEnrollKey({
     requestedHostId,
@@ -2334,8 +2334,8 @@ async function maybeAddAutoJoinEnv(
 
   return {
     ...args.env,
-    BB_HOST_ENROLL_KEY: enrollKeyResponse.enrollKey,
-    BB_HOST_ID: enrollKeyResponse.hostId,
+    MQH_HOST_ENROLL_KEY: enrollKeyResponse.enrollKey,
+    MQH_HOST_ID: enrollKeyResponse.hostId,
   };
 }
 
@@ -2402,7 +2402,7 @@ export async function waitForServerHealth(
 
 function normalizeServerUrlForComparison(serverUrl: string): string {
   const url = new URL(serverUrl);
-  if (url.hostname === "localhost") url.hostname = BB_LOOPBACK_HOST;
+  if (url.hostname === "localhost") url.hostname = MQH_LOOPBACK_HOST;
   return url.href.replace(/\/$/u, "");
 }
 
@@ -2414,7 +2414,7 @@ export async function waitForHostDaemonStatus(
   const expectedServerUrl = normalizeServerUrlForComparison(
     args.expectedServerUrl,
   );
-  const statusUrl = `http://${BB_LOOPBACK_HOST}:${args.port}/status`;
+  const statusUrl = `http://${MQH_LOOPBACK_HOST}:${args.port}/status`;
 
   while (Date.now() <= deadline) {
     args.signal?.throwIfAborted();
@@ -2541,10 +2541,10 @@ async function terminateProcessIfRunning(
 function createSharedEnv(args: CreateSharedEnvArgs): NodeJS.ProcessEnv {
   return {
     ...args.env,
-    BB_APP_VERSION: args.context.appVersion,
-    BB_DATA_DIR: args.context.dataDir,
-    BB_HOST_DAEMON_PORT: String(args.context.daemonPort),
-    BB_SERVER_PORT: String(args.context.serverPort),
+    MQH_APP_VERSION: args.context.appVersion,
+    MQH_DATA_DIR: args.context.dataDir,
+    MQH_HOST_DAEMON_PORT: String(args.context.daemonPort),
+    MQH_SERVER_PORT: String(args.context.serverPort),
     NODE_ENV: "production",
   };
 }
@@ -2578,13 +2578,13 @@ export function createServerEnv(args: CreateServerEnvArgs): NodeJS.ProcessEnv {
     ...(args.cliLauncherPath === null
       ? {}
       : { [CLI_LAUNCHER_ENV_NAME]: args.cliLauncherPath }),
-    BB_APP_VERSION: args.context.appVersion,
+    MQH_APP_VERSION: args.context.appVersion,
     [APP_SURFACE_ENV_NAME]: resolveServerAppSurface(args.env),
-    BB_CLI: join(args.context.daemonBundleDir, "bb"),
-    BB_CLI_DIR: args.context.daemonBundleDir,
-    BB_DATA_DIR: args.context.dataDir,
-    BB_HOST_DAEMON_PORT: String(args.context.daemonPort),
-    BB_SERVER_PORT: String(args.context.serverPort),
+    MQH_CLI: join(args.context.daemonBundleDir, "bb"),
+    MQH_CLI_DIR: args.context.daemonBundleDir,
+    MQH_DATA_DIR: args.context.dataDir,
+    MQH_HOST_DAEMON_PORT: String(args.context.daemonPort),
+    MQH_SERVER_PORT: String(args.context.serverPort),
     NODE_ENV: "production",
   };
 }
@@ -2592,12 +2592,12 @@ export function createServerEnv(args: CreateServerEnvArgs): NodeJS.ProcessEnv {
 export function createDaemonEnv(args: CreateDaemonEnvArgs): NodeJS.ProcessEnv {
   return {
     ...hostToolchain.environment(stripThreadContextEnv(args.env)),
-    BB_APP_VERSION: args.context.appVersion,
-    BB_BRIDGE_DIR: args.context.daemonBundleDir,
-    BB_CLI_DIR: args.context.daemonBundleDir,
-    BB_DATA_DIR: args.context.dataDir,
-    BB_HOST_DAEMON_PORT: String(args.context.daemonPort),
-    BB_SERVER_URL: args.serverUrl,
+    MQH_APP_VERSION: args.context.appVersion,
+    MQH_BRIDGE_DIR: args.context.daemonBundleDir,
+    MQH_CLI_DIR: args.context.daemonBundleDir,
+    MQH_DATA_DIR: args.context.dataDir,
+    MQH_HOST_DAEMON_PORT: String(args.context.daemonPort),
+    MQH_SERVER_URL: args.serverUrl,
     NODE_ENV: "production",
   };
 }
@@ -2605,8 +2605,8 @@ export function createDaemonEnv(args: CreateDaemonEnvArgs): NodeJS.ProcessEnv {
 function createCliEnv(args: CreateCliEnvArgs): NodeJS.ProcessEnv {
   const cliEnv: NodeJS.ProcessEnv = {
     ...args.env,
-    BB_APP_VERSION: args.context.appVersion,
-    BB_HOST_DAEMON_PORT: String(args.context.daemonPort),
+    MQH_APP_VERSION: args.context.appVersion,
+    MQH_HOST_DAEMON_PORT: String(args.context.daemonPort),
     [MACHINE_INSTALLER_ENV_NAME]: join(
       dirname(args.context.serverEntry),
       "assets",
@@ -2615,8 +2615,8 @@ function createCliEnv(args: CreateCliEnvArgs): NodeJS.ProcessEnv {
     NODE_ENV: "production",
   };
 
-  if (toOptionalString(cliEnv.BB_SERVER_URL) === undefined) {
-    cliEnv.BB_SERVER_URL = args.context.serverUrl;
+  if (toOptionalString(cliEnv.MQH_SERVER_URL) === undefined) {
+    cliEnv.MQH_SERVER_URL = args.context.serverUrl;
   }
 
   return cliEnv;
@@ -2625,7 +2625,7 @@ function createCliEnv(args: CreateCliEnvArgs): NodeJS.ProcessEnv {
 function resolveHostDaemonServerUrl(
   args: ResolveHostDaemonServerUrlArgs,
 ): string {
-  return toOptionalString(args.env.BB_SERVER_URL) ?? args.context.serverUrl;
+  return toOptionalString(args.env.MQH_SERVER_URL) ?? args.context.serverUrl;
 }
 
 export async function resolveMovedDaemonLaunch(
@@ -2661,7 +2661,7 @@ export async function resolveMovedDaemonLaunch(
 function resolveEnrollmentRequirements(
   args: ResolveEnrollmentRequirementsArgs,
 ): EnrollmentRequirements {
-  const enrollKey = toOptionalString(args.env.BB_HOST_ENROLL_KEY);
+  const enrollKey = toOptionalString(args.env.MQH_HOST_ENROLL_KEY);
   return {
     enrolled: existsSync(join(args.context.dataDir, HOST_AUTH_FILE_NAME)),
     ...(enrollKey !== undefined ? { enrollKey } : {}),
@@ -2686,13 +2686,13 @@ export async function createHostDaemonJoinEnv(
   args: CreateHostDaemonJoinEnvArgs,
 ): Promise<NodeJS.ProcessEnv> {
   const requestedHostId =
-    toOptionalString(args.env.BB_HOST_ID) ??
+    toOptionalString(args.env.MQH_HOST_ID) ??
     (await readPersistedHostId(args.context.dataDir));
-  const suppliedJoinCode = toOptionalString(args.env.BB_HOST_ENROLL_KEY);
+  const suppliedJoinCode = toOptionalString(args.env.MQH_HOST_ENROLL_KEY);
   const machineCredential = toOptionalString(
-    args.env.BB_CONNECT_MACHINE_CREDENTIAL,
+    args.env.MQH_CONNECT_MACHINE_CREDENTIAL,
   );
-  const connectMachineId = toOptionalString(args.env.BB_CONNECT_MACHINE_ID);
+  const connectMachineId = toOptionalString(args.env.MQH_CONNECT_MACHINE_ID);
   const writeJoinConfig = (): Promise<void> =>
     writeManagedConfig({
       config: {
@@ -2709,8 +2709,8 @@ export async function createHostDaemonJoinEnv(
     await writeJoinConfig();
     return {
       ...args.env,
-      BB_HOST_ENROLL_KEY: suppliedJoinCode,
-      BB_HOST_ID: requestedHostId,
+      MQH_HOST_ENROLL_KEY: suppliedJoinCode,
+      MQH_HOST_ID: requestedHostId,
     };
   }
   const enrollKeyResponse = await requestMatchingHostEnrollKey({
@@ -2722,8 +2722,8 @@ export async function createHostDaemonJoinEnv(
 
   return {
     ...args.env,
-    BB_HOST_ENROLL_KEY: enrollKeyResponse.enrollKey,
-    BB_HOST_ID: enrollKeyResponse.hostId,
+    MQH_HOST_ENROLL_KEY: enrollKeyResponse.enrollKey,
+    MQH_HOST_ID: enrollKeyResponse.hostId,
   };
 }
 
@@ -2756,7 +2756,7 @@ export async function runBundledCliCommand(
   const cliOverride =
     args.env[CLI_REEXEC_ENV_NAME] === "1"
       ? null
-      : (toOptionalString(args.env.BB_CLI) ?? null);
+      : (toOptionalString(args.env.MQH_CLI) ?? null);
   const launch = resolveBundledCliLaunch({
     args: args.args,
     bundledCliPath: join(args.context.daemonBundleDir, "bb"),
@@ -2798,7 +2798,7 @@ export async function runBbCli(
 async function assertConfiguredServerBindHost(
   args: AssertConfiguredServerBindHostArgs,
 ): Promise<void> {
-  const configuredServerBindHost = args.runtime.serverEnv.BB_SERVER_BIND_HOST;
+  const configuredServerBindHost = args.runtime.serverEnv.MQH_SERVER_BIND_HOST;
   if (configuredServerBindHost === undefined) {
     return;
   }
@@ -2810,7 +2810,7 @@ async function assertConfiguredServerBindHost(
     });
     if (
       args.optionServerBindHost === undefined &&
-      envFile.env?.BB_SERVER_BIND_HOST === configuredServerBindHost &&
+      envFile.env?.MQH_SERVER_BIND_HOST === configuredServerBindHost &&
       error instanceof Error
     ) {
       throw new Error(
@@ -2852,7 +2852,7 @@ Exits with code 3 without starting when the server on this data directory moved 
   });
   if (movedFile !== null) {
     process.stderr.write(`${formatServerMovedNotice(movedFile)}\n`);
-    process.exitCode = BB_SERVER_MOVED_EXIT_CODE;
+    process.exitCode = MQH_SERVER_MOVED_EXIT_CODE;
     return;
   }
   await assertConfiguredServerBindHost({
@@ -2905,7 +2905,7 @@ async function runHostDaemonOnly(args: RunHostDaemonOnlyArgs): Promise<void> {
     env: daemonEnv,
   });
 
-  process.stdout.write(`\n  ${bold("bb host-daemon")}\n\n`);
+  process.stdout.write(`\n  ${bold("mqh host-daemon")}\n\n`);
 
   if (existsSync(args.context.daemonLockDir)) {
     warnExistingDaemonLock(args.context.daemonLockDir);
@@ -2914,7 +2914,7 @@ async function runHostDaemonOnly(args: RunHostDaemonOnlyArgs): Promise<void> {
   if (!enrollment.enrolled && enrollment.enrollKey === undefined) {
     endStep(
       red("✗"),
-      `Not enrolled - set BB_HOST_ENROLL_KEY to join ${serverUrl}`,
+      `Not enrolled - set MQH_HOST_ENROLL_KEY to join ${serverUrl}`,
     );
     process.stdout.write("\n");
     log(" ", dim("Run this command to request enrollment and start daemon:"));
@@ -3006,7 +3006,7 @@ async function runHostDaemonOnly(args: RunHostDaemonOnlyArgs): Promise<void> {
     endStep(green("✓"), "Host daemon running");
 
     process.stdout.write("\n");
-    log(green("●"), bold("bb host-daemon is ready"));
+    log(green("●"), bold("mqh host-daemon is ready"));
     process.stdout.write("\n");
     log(" ", formatReadyOutputRow("server", cyan(serverUrl)));
     log(" ", formatReadyOutputRow("daemon", String(args.context.daemonPort)));
@@ -3135,7 +3135,7 @@ Usage:
 
 CLI:
   npx --package bb-app bb <command>
-  Settings → General → bb CLI, or bb settings cli-command install,
+  Settings → General → bb CLI, or mqh settings cli-command install,
   installs the bb CLI for use outside bb.
 `);
 }
@@ -3161,7 +3161,7 @@ export async function startFullStackServerProcess(
   const serverRun = spawnNamedManagedProcess({
     args: [...nodeNetworkArgs(args.env), args.context.serverEntry],
     command: process.execPath,
-    env: { ...args.env, BB_SERVER_LAUNCH_ID: launchId },
+    env: { ...args.env, MQH_SERVER_LAUNCH_ID: launchId },
     ipc: args.onSpawned !== undefined,
     logDir: args.context.logDir,
     processName: "server",
@@ -3496,7 +3496,7 @@ function printMovedModeReadyOutput(args: PrintMovedModeReadyOutputArgs): void {
   log(
     " ",
     dim(
-      "This computer stays connected only while bb-app runs. Run `bb server install-machine-service` to keep it connected with a background service.",
+      "This computer stays connected only while bb-app runs. Run `mqh server install-machine-service` to keep it connected with a background service.",
     ),
   );
   log(" ", dim("Press Ctrl+C to stop"));
@@ -3680,7 +3680,7 @@ export async function runMovedMode(
   }
   log(
     yellow("!"),
-    "The server lock was removed - starting the bb server on this computer",
+    "The server lock was removed - starting the mqh server on this computer",
   );
   return "unlocked";
 }
@@ -4064,7 +4064,7 @@ export async function runBbApp(
           dryRun: true,
           ...runtime.context,
           serverBindHost:
-            runtime.serverEnv.BB_SERVER_BIND_HOST ?? BB_LOOPBACK_HOST,
+            runtime.serverEnv.MQH_SERVER_BIND_HOST ?? MQH_LOOPBACK_HOST,
         },
         null,
         2,
@@ -4147,7 +4147,7 @@ export async function runBbApp(
 
   const context = runtime.context;
   const serverBindHost = parseServerBindHost(
-    runtime.serverEnv.BB_SERVER_BIND_HOST ?? BB_LOOPBACK_HOST,
+    runtime.serverEnv.MQH_SERVER_BIND_HOST ?? MQH_LOOPBACK_HOST,
   );
   const serverListenerUrl = resolveServerListenerUrl({
     bindHost: serverBindHost,
@@ -4170,14 +4170,14 @@ export async function runBbApp(
         : { worktreePolicy: options.worktreePolicy }),
     });
     const serverEnv: NodeJS.ProcessEnv = { ...current.serverEnv };
-    delete serverEnv.BB_SERVER_BIND_HOST;
-    const startupBindHost = runtime.serverEnv.BB_SERVER_BIND_HOST;
+    delete serverEnv.MQH_SERVER_BIND_HOST;
+    const startupBindHost = runtime.serverEnv.MQH_SERVER_BIND_HOST;
     return {
       ...current,
       serverEnv:
         startupBindHost === undefined
           ? serverEnv
-          : { ...serverEnv, BB_SERVER_BIND_HOST: startupBindHost },
+          : { ...serverEnv, MQH_SERVER_BIND_HOST: startupBindHost },
     };
   };
 

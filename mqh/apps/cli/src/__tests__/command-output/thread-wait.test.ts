@@ -56,13 +56,13 @@ function threadWithStatus(id: string, status: domain.ThreadStatus) {
   });
 }
 
-describe("bb thread wait command output", () => {
+describe("mqh thread wait command output", () => {
   setupCommandOutputTestEnvironment();
 
   const register: CommandRegistrar = (program) =>
     registerThreadCommands(program, () => "http://server");
 
-  it("bb thread wait defaults to waiting for idle", async () => {
+  it("mqh thread wait defaults to waiting for idle", async () => {
     const get = vi.fn(async () =>
       fixtures.makeThread({
         id: "thread-wait-default",
@@ -82,7 +82,7 @@ describe("bb thread wait command output", () => {
     );
   });
 
-  it("bb thread wait --status succeeds when the thread is already at the requested status", async () => {
+  it("mqh thread wait --status succeeds when the thread is already at the requested status", async () => {
     const get = vi.fn(async () =>
       fixtures.makeThread({
         id: "thread-wait",
@@ -105,7 +105,7 @@ describe("bb thread wait command output", () => {
     );
   });
 
-  it("bb thread wait --status exits with timeout code when the status is not reached", async () => {
+  it("mqh thread wait --status exits with timeout code when the status is not reached", async () => {
     const get = vi.fn(async () =>
       fixtures.makeThread({
         id: "thread-wait-timeout",
@@ -134,7 +134,7 @@ describe("bb thread wait command output", () => {
     ).rejects.toThrow("process.exit:2");
   });
 
-  it("bb thread wait --status idle fails fast when the thread is stuck in error", async () => {
+  it("mqh thread wait --status idle fails fast when the thread is stuck in error", async () => {
     const get = vi.fn(async () =>
       fixtures.makeThread({
         id: "thread-wait-error",
@@ -158,12 +158,12 @@ describe("bb thread wait command output", () => {
     ).rejects.toThrow("process.exit:4");
 
     expect(collectLogLines(vi.mocked(console.error))).toContain(
-      "Error: Thread thread-wait-error is in status error and will not reach idle by waiting alone. Inspect it with 'bb thread show thread-wait-error' and recover by sending a follow-up.",
+      "Error: Thread thread-wait-error is in status error and will not reach idle by waiting alone. Inspect it with 'mqh thread show thread-wait-error' and recover by sending a follow-up.",
     );
     expect(get).toHaveBeenCalledTimes(1);
   });
 
-  it("bb thread wait --status idle keeps waiting on a failed thread whose retry will send", async () => {
+  it("mqh thread wait --status idle keeps waiting on a failed thread whose retry will send", async () => {
     const get = vi
       .fn()
       .mockResolvedValueOnce(threadWithStatus("thread-wait-retry", "error"))
@@ -185,7 +185,7 @@ describe("bb thread wait command output", () => {
     );
   });
 
-  it("bb thread wait --status idle fails fast when the failed thread's retry is not sent", async () => {
+  it("mqh thread wait --status idle fails fast when the failed thread's retry is not sent", async () => {
     stubServerApi({
       "v1.threads.:id.$get": vi.fn(async () =>
         threadWithStatus("thread-wait-retry", "error"),
@@ -201,7 +201,7 @@ describe("bb thread wait command output", () => {
     ).rejects.toThrow("process.exit:4");
   });
 
-  it("bb thread wait --status idle names the pending retry when it times out", async () => {
+  it("mqh thread wait --status idle names the pending retry when it times out", async () => {
     const sendAt = Date.UTC(2026, 9, 30, 18, 0, 0);
     stubServerApi({
       "v1.threads.:id.$get": vi.fn(async () =>
@@ -224,7 +224,7 @@ describe("bb thread wait command output", () => {
     );
   });
 
-  it("bb thread wait --event reports server errors instead of schema errors", async () => {
+  it("mqh thread wait --event reports server errors instead of schema errors", async () => {
     const waitGet = vi.fn(
       async () =>
         new Response(
@@ -259,7 +259,7 @@ describe("bb thread wait command output", () => {
     expect(hasServerError).toBe(true);
   });
 
-  it("bb thread wait --event --timeout 0 returns immediately when event exists", async () => {
+  it("mqh thread wait --event --timeout 0 returns immediately when event exists", async () => {
     const waitGet = vi.fn(
       async () =>
         new Response(

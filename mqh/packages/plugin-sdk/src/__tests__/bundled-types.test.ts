@@ -43,15 +43,6 @@ describe("bundled plugin SDK declarations", () => {
       "Provider-native roots as a plugin's frozen declaration holds them",
     );
 
-    const appDeclarations = await readFile(
-      new URL("../../bundled-types/bb-plugin-sdk-app.d.ts", import.meta.url),
-      "utf8",
-    );
-    expect(appDeclarations).not.toMatch(/from ['"]@bb\//u);
-    expect(appDeclarations).toContain("useSdk(): PluginBrowserBbSdk;");
-    expect(appDeclarations).toContain("interface ThreadSectionsArea");
-    expect(appDeclarations).toContain("threadSections: ThreadSectionsArea;");
-    expect(appDeclarations).toContain("interface PluginCatalogArea");
     expect(declarations).toContain(
       "list(args?: ProviderListArgs): Promise<ProviderListResult>;",
     );
@@ -73,10 +64,8 @@ describe("bundled plugin SDK declarations", () => {
   it("ships portable declarations for every exported subpath", async () => {
     const fileNames = [
       "bb-plugin-sdk.d.ts",
-      "bb-plugin-sdk-app.d.ts",
       "bb-plugin-sdk-host.d.ts",
       "bb-plugin-sdk-testing.d.ts",
-      "bb-plugin-sdk-testing-app.d.ts",
       "bb-plugin-sdk-testing-host.d.ts",
       "bb-plugin-sdk-environment-provider.d.ts",
     ];
@@ -88,11 +77,11 @@ describe("bundled plugin SDK declarations", () => {
         ),
       ),
     );
-    for (const content of declarations.slice(0, 3)) {
+    for (const content of declarations.slice(0, 2)) {
       expect(content).not.toMatch(/from ['"]@bb\//u);
       expect(content).not.toMatch(/import\(['"]@bb\//u);
     }
-    for (const content of declarations.slice(3)) {
+    for (const content of declarations.slice(2)) {
       const bbImports = [
         ...content.matchAll(/from ['"](@(?:get-)?bb\/[^'"]+)['"]/gu),
       ].map((match) => match[1]);
@@ -100,13 +89,10 @@ describe("bundled plugin SDK declarations", () => {
       expect(content).not.toContain("@bb/sdk");
       expect(content).not.toContain("@bb/server-contract");
     }
-    expect(declarations[2]).toContain("interface ExperimentalHostEntry");
-    expect(declarations[3]).toContain("interface FakePluginBehaviorDrivers");
+    expect(declarations[1]).toContain("interface ExperimentalHostEntry");
+    expect(declarations[2]).toContain("interface FakePluginBehaviorDrivers");
+    expect(declarations[3]).toContain("interface ExperimentalHostEntryHarness");
     expect(declarations[4]).toContain(
-      "interface RenderedSlotLifecycleControls",
-    );
-    expect(declarations[5]).toContain("interface ExperimentalHostEntryHarness");
-    expect(declarations[6]).toContain(
       "interface PluginEnvironmentProviderDefinition",
     );
   });

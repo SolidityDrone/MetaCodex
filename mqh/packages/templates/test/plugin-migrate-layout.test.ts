@@ -15,7 +15,6 @@ import {
   resolvePluginSdkLayout,
   setPluginSdkPin,
 } from "../src/plugin-scaffold.js";
-import { PLUGIN_SHIMMED_TYPE_DEPENDENCIES } from "../src/generated/plugin-starter-files.generated.js";
 
 const SDK_VERSION = "0.4.3";
 
@@ -720,76 +719,6 @@ describe("setPluginSdkPin", () => {
     ).toBeNull();
   });
 
-  it("brings an app plugin's shimmed packages to the host's versions in devDependencies", async () => {
-    const hostSonner = PLUGIN_SHIMMED_TYPE_DEPENDENCIES.sonner!;
-    const hostVaul = PLUGIN_SHIMMED_TYPE_DEPENDENCIES.vaul!;
-    await writeFile(
-      join(rootDir, "package.json"),
-      `${JSON.stringify(
-        {
-          name: "bb-plugin-toasty",
-          bb: { server: "./server.ts", app: "./app.tsx" },
-          dependencies: { vaul: "^0.9.0", zod: "^4.3.6" },
-          devDependencies: {
-            "@get-bb/plugin-sdk": SDK_VERSION,
-            sonner: "^0.3.0",
-            typescript: "^5.7.0",
-          },
-        },
-        null,
-        2,
-      )}\n`,
-    );
-
-    const original = await readFile(join(rootDir, "package.json"), "utf8");
-    const pending = await setPluginSdkPin({
-      rootDir,
-      sdkVersion: SDK_VERSION,
-      sdkInDependencies: false,
-      dryRun: true,
-    });
-    expect(await readFile(join(rootDir, "package.json"), "utf8")).toBe(
-      original,
-    );
-
-    const result = await setPluginSdkPin({
-      rootDir,
-      sdkVersion: SDK_VERSION,
-      sdkInDependencies: false,
-    });
-
-    expect(result).toEqual(pending);
-    expect(result?.pin).toBeNull();
-    expect(result?.shimmedTypePins).toContainEqual({
-      name: "sonner",
-      from: "^0.3.0",
-      to: hostSonner,
-      movedFromDependencies: false,
-    });
-    expect(result?.shimmedTypePins).toContainEqual({
-      name: "vaul",
-      from: "^0.9.0",
-      to: hostVaul,
-      movedFromDependencies: true,
-    });
-    expect(result?.shimmedTypePins).toHaveLength(2);
-    const manifest = await readJson(join(rootDir, "package.json"));
-    expect(manifest.dependencies).toEqual({ zod: "^4.3.6" });
-    expect(manifest.devDependencies).toEqual({
-      "@get-bb/plugin-sdk": SDK_VERSION,
-      sonner: hostSonner,
-      vaul: hostVaul,
-      typescript: "^5.7.0",
-    });
-    expect(
-      await setPluginSdkPin({
-        rootDir,
-        sdkVersion: SDK_VERSION,
-        sdkInDependencies: false,
-      }),
-    ).toBeNull();
-  });
-
   it.each([true, false])(
     "allows an app plugin with no shim packages (dryRun: %s)",
     async (dryRun) => {
@@ -814,41 +743,4 @@ describe("setPluginSdkPin", () => {
     },
   );
 
-  it("only repins the shimmed packages a headless plugin already declares", async () => {
-    await writeFile(
-      join(rootDir, "package.json"),
-      `${JSON.stringify(
-        {
-          name: "bb-plugin-headless",
-          bb: { server: "./server.ts" },
-          devDependencies: {
-            "@get-bb/plugin-sdk": SDK_VERSION,
-            clsx: "^1.0.0",
-          },
-        },
-        null,
-        2,
-      )}\n`,
-    );
-
-    const result = await setPluginSdkPin({
-      rootDir,
-      sdkVersion: SDK_VERSION,
-      sdkInDependencies: false,
-    });
-
-    expect(result?.shimmedTypePins).toEqual([
-      {
-        name: "clsx",
-        from: "^1.0.0",
-        to: PLUGIN_SHIMMED_TYPE_DEPENDENCIES.clsx,
-        movedFromDependencies: false,
-      },
-    ]);
-    const manifest = await readJson(join(rootDir, "package.json"));
-    expect(manifest.devDependencies).toEqual({
-      "@get-bb/plugin-sdk": SDK_VERSION,
-      clsx: PLUGIN_SHIMMED_TYPE_DEPENDENCIES.clsx,
-    });
-  });
 });

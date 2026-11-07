@@ -232,7 +232,7 @@ describe("imported server boot", () => {
     }
   });
 
-  it("leaves machineServerUrl alone for bb connect moves when bb account holds the pairing", async () => {
+  it("leaves machineServerUrl alone for bb connect moves when mqh account holds the pairing", async () => {
     const { dataDir, db } = await openImportedDataDir();
     try {
       setPluginKvValue(
@@ -452,8 +452,8 @@ describe("imported server boot", () => {
         join(dataDir, "config.json"),
         JSON.stringify({
           config: {
-            BB_APP_URL: "http://laptop.example.test:38887/app",
-            BB_LOG_LEVEL: "debug",
+            MQH_APP_URL: "http://laptop.example.test:38887/app",
+            MQH_LOG_LEVEL: "debug",
           },
           serverUrl: "http://127.0.0.1:38887",
         }),
@@ -462,7 +462,7 @@ describe("imported server boot", () => {
         join(dataDir, "env.json"),
         JSON.stringify({
           env: {
-            BB_EXTERNAL_URL: "http://laptop.example.test:5173",
+            MQH_EXTERNAL_URL: "http://laptop.example.test:5173",
             OTHER: "kept",
           },
         }),
@@ -479,14 +479,14 @@ describe("imported server boot", () => {
       expect(
         JSON.parse(await readFile(join(dataDir, "config.json"), "utf8")),
       ).toEqual({
-        config: { BB_APP_URL: DIRECT_URL, BB_LOG_LEVEL: "debug" },
+        config: { MQH_APP_URL: DIRECT_URL, MQH_LOG_LEVEL: "debug" },
         serverUrl: "http://127.0.0.1:38887",
       });
       expect(
         JSON.parse(await readFile(join(dataDir, "env.json"), "utf8")),
       ).toEqual({
         env: {
-          BB_EXTERNAL_URL: "http://laptop.example.test:5173",
+          MQH_EXTERNAL_URL: "http://laptop.example.test:5173",
           OTHER: "kept",
         },
       });
@@ -496,13 +496,13 @@ describe("imported server boot", () => {
     }
   });
 
-  it("rewrites env.json BB_EXTERNAL_URL when it was the old server's address", async () => {
+  it("rewrites env.json MQH_EXTERNAL_URL when it was the old server's address", async () => {
     const { dataDir, db } = await openImportedDataDir();
     try {
       await writeFile(
         join(dataDir, "env.json"),
         JSON.stringify({
-          env: { BB_EXTERNAL_URL: "https://laptop.example.test" },
+          env: { MQH_EXTERNAL_URL: "https://laptop.example.test" },
         }),
       );
       await writeServerImportFile(dataDir, moveMarker());
@@ -517,7 +517,7 @@ describe("imported server boot", () => {
       expect(boot.pendingMove?.moveId).toBe("move-1");
       expect(
         JSON.parse(await readFile(join(dataDir, "env.json"), "utf8")),
-      ).toEqual({ env: { BB_EXTERNAL_URL: DIRECT_URL } });
+      ).toEqual({ env: { MQH_EXTERNAL_URL: DIRECT_URL } });
     } finally {
       db.$client.close();
     }
@@ -594,7 +594,7 @@ describe("interrupted server import at boot", () => {
     await writeFile(join(dataDir, "bb.db"), "partial database");
     await writeJournal(dataDir, ["plugins/npm", "bb.db"]);
     const logger = { error: vi.fn() };
-    const message = `bb server import into ${dataDir} was interrupted, so this server won't start on partial data. Run bb server import <file> --data-dir ${dataDir} again; it rolls back the interrupted import first.`;
+    const message = `mqh server import into ${dataDir} was interrupted, so this server won't start on partial data. Run mqh server import <file> --data-dir ${dataDir} again; it rolls back the interrupted import first.`;
 
     await expect(
       refuseInterruptedServerImport({ dataDir, logger }),

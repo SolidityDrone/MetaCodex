@@ -46,7 +46,7 @@ const pluginList = (id: string, source: string) => ({
   ],
 });
 
-describe("bb plugin update commands", () => {
+describe("mqh plugin update commands", () => {
   setupCommandOutputTestEnvironment();
 
   const register: CommandRegistrar = (program) =>
@@ -216,7 +216,7 @@ describe("bb plugin update commands", () => {
 
     const output = collectLogPayloads(vi.mocked(console.log)).join("\n");
     expect(output).toContain(
-      'command: bb plugin run shadower — Shadow threads (core command "bb thread" takes precedence)',
+      'command: mqh plugin run shadower — Shadow threads (core command "mqh thread" takes precedence)',
     );
     expect(output).toContain("command: bb notes — Take notes");
     expect(output).not.toContain('core command "bb notes"');
@@ -273,7 +273,7 @@ describe("bb plugin update commands", () => {
     );
     expect(fetch).toHaveBeenCalledTimes(3);
     expect(collectLogPayloads(vi.mocked(console.log)).join("\n")).toContain(
-      "bb plugin update-jobs update-1",
+      "mqh plugin update-jobs update-1",
     );
     vi.mocked(console.log).mockClear();
     vi.mocked(fetch).mockResolvedValueOnce(Response.json({ job }));

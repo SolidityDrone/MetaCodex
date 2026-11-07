@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { defaultFeatureFlags, turnScope } from "@bb/domain";
-import { prependOlderTimelineRows } from "@bb/client-core";
+import { prependOlderTimelineRows } from "../helpers/client-timeline/timeline-merge.js";
 import {
   threadTimelineResponseSchema,
   type TimelinePaginationCursor,

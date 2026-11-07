@@ -634,7 +634,7 @@ export function buildCodexConfig(
 ): { [key in string]?: JsonValue } | undefined {
   const config: { [key in string]?: JsonValue } = {};
   if (args.threadId) {
-    config["shell_environment_policy.set.BB_THREAD_ID"] = args.threadId;
+    config["shell_environment_policy.set.MQH_THREAD_ID"] = args.threadId;
   }
   const shellEnvironmentConfig = buildShellEnvironmentPolicyConfig(
     args.options?.envVars,

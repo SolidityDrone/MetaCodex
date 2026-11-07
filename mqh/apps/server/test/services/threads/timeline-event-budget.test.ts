@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { getTimelineGroupingContext } from "../../../src/services/threads/timeline-context-order.js";
-import { prependOlderTimelineRows } from "@bb/client-core";
+import { prependOlderTimelineRows } from "../../helpers/client-timeline/timeline-merge.js";
 import {
   applyThreadTimelineDelta,
   isThreadTimelineDelta,
@@ -13,7 +13,7 @@ import { createTestAppHarness } from "../../helpers/test-app.js";
 import {
   mergeLoadedTimelineWithLatest,
   buildLoadedTimelineState,
-} from "@bb/client-core";
+} from "../../helpers/client-timeline/timeline-merge.js";
 import {
   encodeClientTurnRequestIdNumber,
   threadScope,

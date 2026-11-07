@@ -27,7 +27,7 @@ describe("experimental_scanPublicSdkOnly", () => {
     plant({
       "server.ts": `import { z } from "zod";\nimport type { BbPluginApi } from "@get-bb/plugin-sdk";\nimport { join } from "node:path";\nimport { helper } from "./src/helper.js";\n`,
       "src/helper.ts": `import "@get-bb/plugin-sdk/provider-bridge";\nimport "@get-bb/plugin-sdk/provider-bridge/acp";\nimport "@get-bb/plugin-sdk/host";\nexport const helper = 1;\n`,
-      "app.tsx": `import "@get-bb/plugin-sdk/app";\n`,
+      "app.tsx": `import "@get-bb/plugin-sdk/host";\n`,
       "server.test.ts": `import { it } from "vitest";\nimport "@get-bb/plugin-sdk/testing";\nimport "@get-bb/plugin-sdk/provider-bridge/testing";\n`,
       "node_modules/dep/index.js": `require("@bb/domain");\n`,
       "dist/server.js": `import "@bb/domain";\n`,
@@ -145,7 +145,7 @@ describe("experimental_scanPublicSdkOnly", () => {
         "",
       ].join("\n"),
       "app.tsx": [
-        'import "@get-bb/plugin-sdk/app";',
+        'import "@get-bb/plugin-sdk/host";',
         "export function Panel<T,>(props: { items: T[] }) {",
         "  return (",
         '    <section title="don\'t import">',

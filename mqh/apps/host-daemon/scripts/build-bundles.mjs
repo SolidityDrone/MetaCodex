@@ -66,8 +66,8 @@ async function main() {
   await copyFile(titleCommandPath, outputTitleCommandPath);
   await chmod(outputTitleCommandPath, 0o755);
   await writeFile(
-    resolve(packageRoot, "dist", "bb.cmd"),
-    '@echo off\r\nnode "%~dp0bb" %*\r\n',
+    resolve(packageRoot, "dist", "mqh.cmd"),
+    '@echo off\r\nnode "%~dp0mqh" %*\r\n',
   );
 }
 

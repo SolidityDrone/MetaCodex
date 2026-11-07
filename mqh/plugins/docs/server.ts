@@ -75,21 +75,21 @@ const DOCS_STATUS_DESCRIPTION = [
   "Exit 3: local and remote changes conflict.",
   "Exit 4: changes present.",
   "",
-  "Exit 4 is a successful status result. Review the output, then run bb docs push separately.",
+  "Exit 4 is a successful status result. Review the output, then run mqh docs push separately.",
 ].join("\n");
 
 const DEPRECATED_MUTATION_WARNING =
-  "Deprecated: direct Docs mutations will be removed; use bb docs pull, edit local files, then bb docs push.";
+  "Deprecated: direct Docs mutations will be removed; use mqh docs pull, edit local files, then mqh docs push.";
 
 const DEPRECATED_DELETION_WARNING =
-  "Deprecated: direct Docs mutations will be removed; use bb docs pull, edit local files, then bb docs push --delete.";
+  "Deprecated: direct Docs mutations will be removed; use mqh docs pull, edit local files, then mqh docs push --delete.";
 
 const VAULT_OPTION = {
   type: "string",
   placeholder: "id",
   aliases: ["vault-id", "vaultId"],
   description:
-    "Vault ID from `bb docs vaults`; defaults to the first configured vault",
+    "Vault ID from `mqh docs vaults`; defaults to the first configured vault",
 } as const;
 
 const WORKSPACE_HOST_OPTION = {
@@ -2246,7 +2246,7 @@ export default async function plugin(
     const existing = await readSyncState(rootPath, hostId);
     if (!existing) {
       throw new Error(
-        `${SYNC_STATE_FILE} was not found; run bb docs pull first`,
+        `${SYNC_STATE_FILE} was not found; run mqh docs pull first`,
       );
     }
     if (args.vaultId && args.vaultId !== existing.state.vault.id) {
@@ -2886,7 +2886,7 @@ export default async function plugin(
           positionals: [
             {
               name: "id",
-              description: "Vault ID from `bb docs vaults`",
+              description: "Vault ID from `mqh docs vaults`",
               required: true,
             },
           ],
@@ -2946,7 +2946,7 @@ export default async function plugin(
         pull: cliCommand({
           summary: "Pull one file, a folder subtree, or a whole vault",
           description:
-            "Writes the scope into a workspace directory with a .bb-docs-state.json manifest. Edit the files with ordinary tools, then run bb docs status and bb docs push.",
+            "Writes the scope into a workspace directory with a .bb-docs-state.json manifest. Edit the files with ordinary tools, then run mqh docs status and mqh docs push.",
           suggestFor: ["fetch", "clone", "checkout"],
           positionals: [
             {
@@ -3095,7 +3095,7 @@ export default async function plugin(
         write: cliCommand({
           summary: "Deprecated: write a UTF-8 file directly",
           description:
-            "Use bb docs pull, edit the files, then bb docs push instead.",
+            "Use mqh docs pull, edit the files, then mqh docs push instead.",
           positionals: [
             {
               name: "path",
@@ -3132,7 +3132,7 @@ export default async function plugin(
         mkdir: cliCommand({
           summary: "Deprecated: create a folder directly",
           description:
-            "Use bb docs pull, create the directory locally, then bb docs push instead.",
+            "Use mqh docs pull, create the directory locally, then mqh docs push instead.",
           positionals: [
             {
               name: "path",
@@ -3158,7 +3158,7 @@ export default async function plugin(
         move: cliCommand({
           summary: "Deprecated: move a path directly",
           description:
-            "Use bb docs pull, move the file locally, then bb docs push --delete instead.",
+            "Use mqh docs pull, move the file locally, then mqh docs push --delete instead.",
           positionals: [
             {
               name: "from",
@@ -3190,7 +3190,7 @@ export default async function plugin(
         remove: cliCommand({
           summary: "Deprecated: remove a file or directory directly",
           description:
-            "Use bb docs pull, delete the file locally, then bb docs push --delete instead.",
+            "Use mqh docs pull, delete the file locally, then mqh docs push --delete instead.",
           aliases: ["rm"],
           positionals: [
             {
@@ -3263,8 +3263,8 @@ export default async function plugin(
         context:
           `Docs document (${vaultId}/${relativePath}):\nSHA-256: ${file.sha256}\n\n${file.content}` +
           (proposal
-            ? `\n\nDocs proposal metadata:\n${JSON.stringify(proposal)}\nUse bb docs propose with this version and current document hash to propose a revision; do not push over the user's document.`
-            : "\n\nProposal version: none. Use bb docs propose to suggest changes for approval."),
+            ? `\n\nDocs proposal metadata:\n${JSON.stringify(proposal)}\nUse mqh docs propose with this version and current document hash to propose a revision; do not push over the user's document.`
+            : "\n\nProposal version: none. Use mqh docs propose to suggest changes for approval."),
       };
     },
   });

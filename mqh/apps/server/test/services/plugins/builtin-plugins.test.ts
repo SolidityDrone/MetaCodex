@@ -6,7 +6,6 @@ import {
   readFile,
   rm,
   stat,
-  utimes,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -262,14 +261,14 @@ describe("builtin plugin reconciliation", () => {
     workDir = await mkdtemp(join(tmpdir(), "bb-builtin-plugins-"));
   });
 
-  it("enables the account pooler only when a parent bb server pool is present", () => {
+  it("enables the account pooler only when a parent mqh server pool is present", () => {
     expect(accountPoolDefaultEnabled({})).toBe(false);
-    expect(accountPoolDefaultEnabled({ BB_ACCOUNT_POOL_PARENT_URL: "" })).toBe(
+    expect(accountPoolDefaultEnabled({ MQH_ACCOUNT_POOL_PARENT_URL: "" })).toBe(
       false,
     );
     expect(
       accountPoolDefaultEnabled({
-        BB_ACCOUNT_POOL_PARENT_URL:
+        MQH_ACCOUNT_POOL_PARENT_URL:
           "http://127.0.0.1:38886/api/v1/plugins/account-pool/http",
       }),
     ).toBe(true);
@@ -784,146 +783,6 @@ describe("builtin plugin reconciliation", () => {
     expect(globals.__hotBuiltinServerVersion).toBe("after");
   }, 50_000);
 
-  it("rebuilds a source-layout builtin app changed while the server was stopped", async () => {
-    const mutableRoot = join(workDir, "bb-plugin-stale-app-builtin");
-    await mkdir(mutableRoot, { recursive: true });
-    await writeFile(
-      join(mutableRoot, "package.json"),
-      JSON.stringify({
-        name: "bb-plugin-stale-app-builtin",
-        version: "0.1.0",
-        type: "module",
-        bb: {
-          name: "Stale app builtin",
-          description: "Stale app builtin plugin fixture.",
-          branding: { icon: "Zap" },
-          server: "./server.ts",
-          app: "./app.tsx",
-        },
-      }),
-    );
-    await writeFile(
-      join(mutableRoot, "server.ts"),
-      "export default function plugin() {}\n",
-    );
-    await writeFile(
-      join(mutableRoot, "app.tsx"),
-      'import { label } from "./label.js";\nexport default function App() { return <div>{label}</div>; }\n',
-    );
-    const labelPath = join(mutableRoot, "label.ts");
-    await writeFile(labelPath, 'export const label = "before";\n');
-    service = createService({
-      db,
-      dataDir: join(workDir, "data"),
-      builtinName: "stale-app",
-      rootDir: mutableRoot,
-      watchBuiltinPluginSources: true,
-    });
-    await service.start();
-    const beforeHash = service.list()[0]?.app.bundle?.hash;
-    expect(beforeHash).toBeTruthy();
-    await expect(
-      readFile(join(mutableRoot, "dist", "app.js"), "utf8"),
-    ).resolves.toContain("before");
-    await service.stop();
-
-    await writeFile(labelPath, 'export const label = "after";\n');
-    const oldArtifactTime = new Date(1_000);
-    await utimes(
-      join(mutableRoot, "dist", "app.js"),
-      oldArtifactTime,
-      oldArtifactTime,
-    );
-    service = createService({
-      db,
-      dataDir: join(workDir, "data"),
-      builtinName: "stale-app",
-      rootDir: mutableRoot,
-      watchBuiltinPluginSources: true,
-    });
-    await service.start();
-
-    expect(service.list()[0]?.app.bundle?.hash).not.toBe(beforeHash);
-    await expect(
-      readFile(join(mutableRoot, "dist", "app.js"), "utf8"),
-    ).resolves.toContain("after");
-  }, 30_000);
-
-  it("surfaces builtin app build failures in status until the next successful build", async () => {
-    const mutableRoot = join(workDir, "bb-plugin-hot-app-builtin");
-    await mkdir(mutableRoot, { recursive: true });
-    await writeFile(
-      join(mutableRoot, "package.json"),
-      JSON.stringify({
-        name: "bb-plugin-hot-app-builtin",
-        version: "0.1.0",
-        type: "module",
-        bb: {
-          name: "Hot app builtin",
-          description: "Hot app builtin plugin fixture.",
-          branding: { icon: "Zap" },
-          server: "./server.ts",
-          app: "./app.tsx",
-        },
-      }),
-    );
-    await writeFile(
-      join(mutableRoot, "server.ts"),
-      "export default function plugin() {}\n",
-    );
-    await writeFile(
-      join(mutableRoot, "app.tsx"),
-      "export default function App() { return <div>before</div>; }\n",
-    );
-    service = createService({
-      db,
-      dataDir: join(workDir, "data"),
-      builtinName: "hot-app",
-      rootDir: mutableRoot,
-      watchBuiltinPluginSources: true,
-    });
-    await service.start();
-    const before = service.list()[0]?.app.bundle;
-    expect(before).not.toBeNull();
-
-    await writeFile(
-      join(mutableRoot, "app.tsx"),
-      "export default function App( {\n",
-    );
-    let deadline = Date.now() + 20_000;
-    let failed = service.list()[0];
-    while (
-      !failed?.statusDetail?.includes("frontend bundle build failed") &&
-      Date.now() < deadline
-    ) {
-      await new Promise((resolvePromise) => setTimeout(resolvePromise, 50));
-      failed = service.list()[0];
-    }
-    expect(failed?.status).toBe("running");
-    expect(failed?.statusDetail).toContain("frontend bundle build failed");
-    expect(failed?.app.bundle?.hash).toBe(before?.hash);
-
-    await writeFile(
-      join(mutableRoot, "app.tsx"),
-      "export default function App() { return <div>after</div>; }\n",
-    );
-    deadline = Date.now() + 20_000;
-    let after = service.list()[0];
-    while (
-      (after?.statusDetail !== null ||
-        after.app.bundle?.hash === before?.hash) &&
-      Date.now() < deadline
-    ) {
-      await new Promise((resolvePromise) => setTimeout(resolvePromise, 50));
-      after = service.list()[0];
-    }
-    expect(after?.statusDetail).toBeNull();
-    expect(after?.app.bundle?.hash).not.toBe(before?.hash);
-    await expect(
-      readFile(join(mutableRoot, "dist", "app.js"), "utf8"),
-    ).resolves.toContain("after");
-  }, 90_000);
-
   it("rejects unknown builtin install sources clearly", async () => {
     service = createService({ db, dataDir: join(workDir, "data") });
 
@@ -994,7 +853,7 @@ describe("builtin plugin reconciliation", () => {
         version: "0.1.0",
         enabled: true,
         status: "incompatible",
-        statusDetail: `server artifact for plugin "automations" was built for SDK major ${incompatibleMajor}, running SDK major is ${PLUGIN_SDK_MAJOR}; rebuild the server artifact with this bb version`,
+        statusDetail: `server artifact for plugin "automations" was built for SDK major ${incompatibleMajor}, running SDK major is ${PLUGIN_SDK_MAJOR}; rebuild the server artifact with this mqh version`,
       },
     ]);
     expect(packagedLoadCount()).toBe(before);

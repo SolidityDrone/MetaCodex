@@ -82,13 +82,13 @@ function stdout(result: {
   return result.stdout;
 }
 
-describe("bb tasks CLI", () => {
+describe("mqh tasks CLI", () => {
   it("lists seed-demo in help while retaining the explicit confirmation guard", async () => {
     const { bb, harness } = createFakePluginHost({ pluginId: "tasks" });
     await plugin(bb);
 
     expect(stdout(await harness.runCli(["--help"]))).toContain(
-      "bb tasks seed-demo          Create sample folders, projects, labels, tasks, and comments",
+      "mqh tasks seed-demo          Create sample folders, projects, labels, tasks, and comments",
     );
     await expect(harness.runCli(["seed-demo"])).resolves.toMatchObject({
       exitCode: 1,
@@ -462,7 +462,7 @@ describe("bb tasks CLI", () => {
       "--parent and --no-parent cannot be combined",
     );
     expect(conflicting.stderr).toContain(
-      "Usage:\n  bb tasks update <key-or-id>",
+      "Usage:\n  mqh tasks update <key-or-id>",
     );
     await expect(harness.runCli(["update", "REL-3"])).resolves.toEqual({
       exitCode: 1,
@@ -743,7 +743,7 @@ describe("bb tasks CLI", () => {
       exitCode: 1,
       stdout: "",
       stderr:
-        "no tracker project is linked to BB project proj_missing; pass --project or link one with bb tasks project update\n",
+        "no tracker project is linked to BB project proj_missing; pass --project or link one with mqh tasks project update\n",
     });
 
     await harness.dispose();
@@ -1169,7 +1169,7 @@ describe("bb tasks CLI", () => {
     await harness.dispose();
   });
 
-  it("self-attaches through BB_THREAD_ID and lists the live thread status", async () => {
+  it("self-attaches through MQH_THREAD_ID and lists the live thread status", async () => {
     const { bb, harness } = createFakePluginHost({
       pluginId: "tasks",
       sdk: {
@@ -1205,15 +1205,15 @@ describe("bb tasks CLI", () => {
       ]),
     );
 
-    const previousThreadId = process.env.BB_THREAD_ID;
-    process.env.BB_THREAD_ID = "thr_cli_self";
+    const previousThreadId = process.env.MQH_THREAD_ID;
+    process.env.MQH_THREAD_ID = "thr_cli_self";
     try {
       expect(
         JSON.parse(stdout(await harness.runCli(["attach", "ATT-1", "--json"]))),
       ).toMatchObject({ task: { key: "ATT-1" }, threadId: "thr_cli_self" });
     } finally {
-      if (previousThreadId === undefined) delete process.env.BB_THREAD_ID;
-      else process.env.BB_THREAD_ID = previousThreadId;
+      if (previousThreadId === undefined) delete process.env.MQH_THREAD_ID;
+      else process.env.MQH_THREAD_ID = previousThreadId;
     }
 
     const threads = JSON.parse(
@@ -1278,7 +1278,7 @@ describe("bb tasks CLI", () => {
     await harness.dispose();
   });
 
-  it("detaches a thread with `bb tasks detach` and lists live threads first", async () => {
+  it("detaches a thread with `mqh tasks detach` and lists live threads first", async () => {
     const { bb, harness } = createFakePluginHost({
       pluginId: "tasks",
       sdk: {
@@ -1309,7 +1309,7 @@ describe("bb tasks CLI", () => {
     );
 
     expect(stdout(await harness.runCli(["--help"]))).toContain(
-      "bb tasks detach             Detach an agent thread from a task",
+      "mqh tasks detach             Detach an agent thread from a task",
     );
 
     stdout(
@@ -1342,20 +1342,20 @@ describe("bb tasks CLI", () => {
       stderr: "Thread thr_dead_worker is not attached to DET-1\n",
     });
 
-    const previousThreadId = process.env.BB_THREAD_ID;
-    process.env.BB_THREAD_ID = "thr_live_worker";
+    const previousThreadId = process.env.MQH_THREAD_ID;
+    process.env.MQH_THREAD_ID = "thr_live_worker";
     try {
       expect(
         JSON.parse(stdout(await harness.runCli(["detach", "DET-1", "--json"]))),
       ).toMatchObject({ task: { key: "DET-1" }, threadId: "thr_live_worker" });
-      delete process.env.BB_THREAD_ID;
+      delete process.env.MQH_THREAD_ID;
       await expect(harness.runCli(["detach", "DET-1"])).resolves.toMatchObject({
         exitCode: 1,
-        stderr: "missing --thread and BB_THREAD_ID is not set\n",
+        stderr: "missing --thread and MQH_THREAD_ID is not set\n",
       });
     } finally {
-      if (previousThreadId === undefined) delete process.env.BB_THREAD_ID;
-      else process.env.BB_THREAD_ID = previousThreadId;
+      if (previousThreadId === undefined) delete process.env.MQH_THREAD_ID;
+      else process.env.MQH_THREAD_ID = previousThreadId;
     }
     expect(
       JSON.parse(stdout(await harness.runCli(["threads", "DET-1", "--json"])))
@@ -1551,7 +1551,7 @@ describe("bb tasks CLI", () => {
         `Failed to attach ${boomPath}: simulated blob write failure`,
       );
       expect(human.stdout).toContain(
-        `Retry with: bb tasks attachment add MIX-2 --file ${boomPath}`,
+        `Retry with: mqh tasks attachment add MIX-2 --file ${boomPath}`,
       );
     } finally {
       await rm(directory, { recursive: true, force: true });
@@ -2135,7 +2135,7 @@ describe("bb tasks CLI", () => {
     expect(result).toEqual({
       exitCode: 1,
       stdout: "",
-      stderr: 'Task project "Unlinked CLI" is not linked to a bb project\n',
+      stderr: 'Task project "Unlinked CLI" is not linked to a mqh project\n',
     });
     const aliased = await harness.runCli([
       "delegate",
@@ -2144,7 +2144,7 @@ describe("bb tasks CLI", () => {
       "CLI worker",
     ]);
     expect(aliased.stderr).toBe(
-      'Task project "Unlinked CLI" is not linked to a bb project\n',
+      'Task project "Unlinked CLI" is not linked to a mqh project\n',
     );
     expect(harness.sdk.callsTo("threads.spawn")).toEqual([]);
 
@@ -2157,11 +2157,11 @@ describe("bb tasks CLI", () => {
 
     const top = await harness.runCli(["--help"]);
     expect(top).toMatchObject({ exitCode: 0, stderr: "" });
-    expect(top.stdout).toContain("bb tasks list               List and filter");
+    expect(top.stdout).toContain("mqh tasks list               List and filter");
 
     const statusHelp = stdout(await harness.runCli(["status", "--help"]));
     expect(statusHelp).toContain("Plugin health only");
-    expect(statusHelp).toContain("bb tasks list --status <status>");
+    expect(statusHelp).toContain("mqh tasks list --status <status>");
 
     const listHelp = stdout(await harness.runCli(["list", "-h"]));
     expect(listHelp).toContain("--limit <1-500>");
@@ -2177,8 +2177,8 @@ describe("bb tasks CLI", () => {
     expect(createHelp).toContain("At most one of:");
 
     const groupHelp = stdout(await harness.runCli(["preset", "--help"]));
-    expect(groupHelp).toContain("bb tasks preset list");
-    expect(groupHelp).toContain("bb tasks preset delete");
+    expect(groupHelp).toContain("mqh tasks preset list");
+    expect(groupHelp).toContain("mqh tasks preset delete");
 
     for (const group of [
       "project",
@@ -2189,12 +2189,12 @@ describe("bb tasks CLI", () => {
     ]) {
       const help = await harness.runCli([group, "--help"]);
       expect(help.exitCode, group).toBe(0);
-      expect(help.stdout, group).toContain(`bb tasks ${group} `);
+      expect(help.stdout, group).toContain(`mqh tasks ${group} `);
     }
 
     const bareGroup = await harness.runCli(["preset"]);
     expect(bareGroup.exitCode).toBe(1);
-    expect(bareGroup.stdout).toContain("bb tasks preset show");
+    expect(bareGroup.stdout).toContain("mqh tasks preset show");
 
     const unknownSubcommand = await harness.runCli(["preset", "bogus"]);
     expect(unknownSubcommand.exitCode).toBe(1);
@@ -2226,7 +2226,7 @@ describe("bb tasks CLI", () => {
     expect(unknownOption).toMatchObject({ exitCode: 1, stdout: "" });
     expect(unknownOption.stderr).toContain("unknown option '--lim'");
     expect(unknownOption.stderr).toContain("(Did you mean --limit?)");
-    expect(unknownOption.stderr).toContain("Usage:\n  bb tasks list");
+    expect(unknownOption.stderr).toContain("Usage:\n  mqh tasks list");
 
     const strayTitle = await harness.runCli([
       "create",
@@ -2280,14 +2280,14 @@ describe("bb tasks CLI", () => {
       "missing required arguments: <key-or-id>",
     );
     expect(missingKey.stderr).toContain(
-      "Usage:\n  bb tasks attach <key-or-id>",
+      "Usage:\n  mqh tasks attach <key-or-id>",
     );
-    expect(missingKey.stderr).not.toContain("bb tasks project create");
+    expect(missingKey.stderr).not.toContain("mqh tasks project create");
 
     await harness.dispose();
   });
 
-  it("answers `bb tasks get` and points --project at tracker projects", async () => {
+  it("answers `mqh tasks get` and points --project at tracker projects", async () => {
     const { bb, harness } = createFakePluginHost({ pluginId: "tasks" });
     await plugin(bb);
     stdout(
@@ -2329,8 +2329,8 @@ describe("bb tasks CLI", () => {
     expect(unknownBbProject.stderr).toContain(
       "project not found: proj_unknown",
     );
-    expect(unknownBbProject.stderr).toContain("is a bb project id");
-    expect(unknownBbProject.stderr).toContain("bb tasks project list");
+    expect(unknownBbProject.stderr).toContain("is a mqh project id");
+    expect(unknownBbProject.stderr).toContain("mqh tasks project list");
 
     const linkedBbProject = await harness.runCli([
       "list",
@@ -2343,7 +2343,7 @@ describe("bb tasks CLI", () => {
       ok: false,
       error: {
         code: "project_not_found",
-        hint: "proj_linked is a bb project id; its tracker project is LINK — re-run with --project LINK",
+        hint: "proj_linked is a mqh project id; its tracker project is LINK — re-run with --project LINK",
       },
     });
 

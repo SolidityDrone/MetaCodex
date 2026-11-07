@@ -268,9 +268,9 @@ function providerProcessEnvFromShellEnv(
   if (shellEnv.PATH) {
     env.PATH = shellEnv.PATH;
   }
-  const recordDir = process.env.BB_PROVIDER_BRIDGE_RECORD_DIR;
+  const recordDir = process.env.MQH_PROVIDER_BRIDGE_RECORD_DIR;
   if (recordDir) {
-    env.BB_PROVIDER_BRIDGE_RECORD_DIR = recordDir;
+    env.MQH_PROVIDER_BRIDGE_RECORD_DIR = recordDir;
   }
   return Object.keys(env).length > 0 ? env : null;
 }

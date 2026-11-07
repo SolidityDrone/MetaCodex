@@ -287,11 +287,11 @@ describe.each([
       commands: { usage: string; readOnly: boolean }[];
     };
     expect(parsed.commands[0]).toMatchObject({
-      usage: "bb thread tell <id> [message]",
+      usage: "mqh thread tell <id> [message]",
       readOnly: false,
     });
     expect(
-      parsed.commands.find((command) => command.usage === "bb thread list"),
+      parsed.commands.find((command) => command.usage === "mqh thread list"),
     ).toMatchObject({ readOnly: true });
     await client.close();
   });

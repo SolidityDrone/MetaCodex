@@ -22,13 +22,13 @@ export async function assertServerArchiveFormat(
   if (prefix.equals(OLD_ENCRYPTED_ARCHIVE_MAGIC)) {
     throw new ServerArchiveError(
       "unsupported_version",
-      "This export was encrypted by an older bb; re-export it with bb server export",
+      "This export was encrypted by an older bb; re-export it with mqh server export",
     );
   }
   if (
     prefix.length < GZIP_MAGIC.length ||
     !prefix.subarray(0, GZIP_MAGIC.length).equals(GZIP_MAGIC)
   ) {
-    throw new ServerArchiveError("corrupt", "File is not a bb server archive");
+    throw new ServerArchiveError("corrupt", "File is not a mqh server archive");
   }
 }

@@ -1,4 +1,4 @@
-// Generates the self-contained `.d.ts` bundles that `bb plugin new` ships into
+// Generates the self-contained `.d.ts` bundles that `mqh plugin new` ships into
 // a scaffolded plugin's `types/` directory, so authors get real BbPluginApi /
 // @get-bb/plugin-sdk/app types WITHOUT the (unpublished) @bb/* workspace packages
 // on disk.
@@ -64,14 +64,10 @@ const outputs = Object.fromEntries(
 // Real npm packages the bundle imports from — kept external so they resolve
 // from the scaffold's devDependencies rather than being inlined.
 const EXTERNAL = [
-  /^@tanstack\/react-query($|\/)/,
   /^@get-bb\/plugin-sdk$/,
   /^node:/,
-  /^@testing-library\/react($|\/)/,
   /^better-sqlite3/,
   /^hono($|\/)/,
-  /^react($|\/|-)/,
-  /^react-dom($|\/)/,
   /^zod($|\/)/,
 ];
 

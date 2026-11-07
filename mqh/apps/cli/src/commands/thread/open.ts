@@ -199,7 +199,7 @@ async function resolveThreadOpenFileRequest(args: {
   }
 
   const acceptedRoots = threadStorageRoot
-    ? "the target thread workspace or BB_THREAD_STORAGE"
+    ? "the target thread workspace or MQH_THREAD_STORAGE"
     : "the target thread workspace";
   throw new Error(`Absolute path must be inside ${acceptedRoots}.`);
 }
@@ -223,7 +223,7 @@ async function resolveThreadWorkspaceRoot(
 
 function resolveThreadStorageRoot(threadId: string): string | undefined {
   if (resolveContextThreadId() !== threadId) return undefined;
-  const rawRoot = process.env.BB_THREAD_STORAGE?.trim();
+  const rawRoot = process.env.MQH_THREAD_STORAGE?.trim();
   if (!rawRoot) return undefined;
   return path.resolve(rawRoot);
 }

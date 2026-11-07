@@ -60,4 +60,4 @@ the kept subset is complete. Keep it pruned to avoid re-vendoring dead types.
 - Upstream reference: [openai/codex app-server README](https://github.com/openai/codex/blob/main/codex-rs/app-server/README.md).
 - `schema/*.ts`: generated from Codex app-server, pruned to the reachable subset (see above).
 - `index.ts` / barrels: intentionally **not** committed; the adapter imports concrete `schema/**` files directly.
-- `plugins/provider-codex/src/delta-translation.ts`: translates Codex app-server events into bb thread deltas.
+- `plugins/provider-codex/src/delta-translation.ts`: translates Codex app-server events into mqh thread deltas.

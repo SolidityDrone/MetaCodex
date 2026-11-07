@@ -90,3 +90,4 @@ export {
   type ExternalUserBoundaryMessage,
   type ExternalUserBoundaryTurnSpan,
 } from "./external-user-boundaries.js";
+export { prependOlderTimelineRows } from "./timeline-prepend.js";

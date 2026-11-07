@@ -6,15 +6,15 @@ prompt. Include near-miss prompts when you tune the description.
 Spawn a fresh thread for every test:
 
 ```sh
-bb thread spawn --project "$BB_PROJECT_ID" --prompt "<test prompt>" --json
-bb thread wait <thread-id>
-bb thread output <thread-id>
-bb thread log <thread-id>
-bb thread show <thread-id> --json
+mqh thread spawn --project "$MQH_PROJECT_ID" --prompt "<test prompt>" --json
+mqh thread wait <thread-id>
+mqh thread output <thread-id>
+mqh thread log <thread-id>
+mqh thread show <thread-id> --json
 bb git diff <environment-id> --target all --merge-base-branch <branch>
 ```
 
-Take `<environment-id>` from `environment.id` in the `bb thread show` JSON and
+Take `<environment-id>` from `environment.id` in the `mqh thread show` JSON and
 `<branch>` from the first non-null of `environment.mergeBaseBranch`,
 `baseBranch` and `defaultBranch`.
 

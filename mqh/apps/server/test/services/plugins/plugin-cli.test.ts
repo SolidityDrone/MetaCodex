@@ -276,7 +276,7 @@ describe("plugin CLI commands (bb.cli.register + endpoints + skill + logs)", () 
         name: "bb-plugin-shadower",
         serverSource: `
           export default function plugin(bb: any) {
-            bb.cli.register({ name: "thread", summary: "s", commands: [{ name: "inspect", summary: "Inspect", usage: "bb thread inspect" }], run: async () => ({ exitCode: 0, stdout: "thread" }) });
+            bb.cli.register({ name: "thread", summary: "s", commands: [{ name: "inspect", summary: "Inspect", usage: "mqh thread inspect" }], run: async () => ({ exitCode: 0, stdout: "thread" }) });
           }
         `,
       },
@@ -291,7 +291,7 @@ describe("plugin CLI commands (bb.cli.register + endpoints + skill + logs)", () 
       {
         level: "warn",
         message:
-          'CLI command "thread" collides with core command "bb thread"; core keeps the short form. Use "bb plugin run shadower" to invoke this plugin.',
+          'CLI command "thread" collides with core command "mqh thread"; core keeps the short form. Use "mqh plugin run shadower" to invoke this plugin.',
       },
     ]);
     expect(
@@ -301,7 +301,7 @@ describe("plugin CLI commands (bb.cli.register + endpoints + skill + logs)", () 
       join(pluginCommandsSkillDir(harness.config.dataDir), "SKILL.md"),
       "utf8",
     );
-    expect(skill).toContain("bb plugin run shadower inspect");
+    expect(skill).toContain("mqh plugin run shadower inspect");
 
     const invalid = await writePlugin(
       join(harness.config.dataDir, "fixtures"),

@@ -166,7 +166,7 @@ function printQueueTable(rows: ThreadQueuedMessagesResult): void {
   for (const row of rows) {
     if (row.failureReason === null) continue;
     console.log(`Failed ${row.id}: ${row.failureReason}`);
-    console.log(`Retry: bb thread queue send ${row.threadId} ${row.id}`);
+    console.log(`Retry: mqh thread queue send ${row.threadId} ${row.id}`);
   }
 }
 
@@ -307,7 +307,7 @@ export function registerOrganizationCommands(
     parent
       .command(`${name} [id]`)
       .description(`Mark a thread ${name}`)
-      .option("--self", "Target the current thread (from BB_THREAD_ID)")
+      .option("--self", "Target the current thread (from MQH_THREAD_ID)")
       .option("--json", "Print machine-readable JSON output")
       .action(
         action(async (id: string | undefined, opts: SelfOptions) => {

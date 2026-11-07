@@ -18,7 +18,7 @@ export function createAppUpdateSendHold(
     },
     release() {
       if (!setAppUpdateSendHold(deps.db, false)) return;
-      deps.logger.info("Releasing the sends held for a bb update");
+      deps.logger.info("Releasing the sends held for a mqh update");
       requestQueuedMessageDispatch(deps, { kind: "app-update-released" });
     },
   };

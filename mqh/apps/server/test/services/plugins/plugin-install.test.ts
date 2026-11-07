@@ -33,7 +33,7 @@ import { ROOT_PLUGIN_SOURCE_SELECTION } from "@bb/server-contract";
 import type { Logger } from "@bb/logger";
 import { scaffoldPlugin } from "@bb/templates/plugin-scaffold";
 import { PLUGIN_SDK_MAJOR, PLUGIN_SDK_VERSION } from "@bb/domain";
-import { validatePluginArtifactMeta } from "../../../src/services/plugins/app-bundle.js";
+import { validatePluginArtifactMeta } from "../../../src/services/plugins/plugin-assets.js";
 import {
   gitArtifactCacheDir,
   gitRangeSourceSpec,
@@ -568,7 +568,7 @@ describe("plugin install flows", () => {
         }),
       ).rejects.toThrow(
         new RegExp(
-          `install refused.*requires bb plugin SDK >=99\\.0\\.0, running SDK is ${PLUGIN_SDK_VERSION.replaceAll(".", "\\.")}`,
+          `install refused.*requires mqh plugin SDK >=99\\.0\\.0, running SDK is ${PLUGIN_SDK_VERSION.replaceAll(".", "\\.")}`,
           "u",
         ),
       );
@@ -847,7 +847,7 @@ describe("plugin install flows", () => {
           expect.objectContaining({
             status: "rejected",
             reason: expect.objectContaining({
-              message: expect.stringContaining("bb plugin update concurrent"),
+              message: expect.stringContaining("mqh plugin update concurrent"),
             }),
           }),
         ]),
@@ -871,7 +871,7 @@ describe("plugin install flows", () => {
       });
       await commitAll(repoDir, "v0.2.0");
       await expect(service.install(source, { kind: "root" })).rejects.toThrow(
-        "bb plugin update fresh",
+        "mqh plugin update fresh",
       );
       expect(
         service.list().find((plugin) => plugin.id === "fresh"),
@@ -909,7 +909,7 @@ describe("plugin install flows", () => {
       await commitAll(repoDir, "broken frontend");
 
       await expect(service.install(source, { kind: "root" })).rejects.toThrow(
-        "bb plugin update managed-frontend",
+        "mqh plugin update managed-frontend",
       );
       expect(getInstalledPluginRegistration(db, "managed-frontend")).toEqual(
         registrationBefore,
@@ -1594,7 +1594,7 @@ describe("plugin install flows", () => {
     const entry = await service.installPath(rootDir);
     expect(entry.status).toBe("incompatible");
     expect(entry.statusDetail).toContain(
-      `requires bb plugin SDK >=99.0.0, running SDK is ${PLUGIN_SDK_VERSION}`,
+      `requires mqh plugin SDK >=99.0.0, running SDK is ${PLUGIN_SDK_VERSION}`,
     );
   });
 
@@ -1798,7 +1798,7 @@ describe("plugin install flows", () => {
     ).rejects.toThrowError(/ids starting with "bb--" are reserved/);
   });
 
-  it("the bb plugin new scaffold installs and loads through the plugin service", async () => {
+  it("the mqh plugin new scaffold installs and loads through the plugin service", async () => {
     const targetDir = join(workDir, "bb-plugin-scaffolded");
     await scaffoldPlugin({
       targetDir,

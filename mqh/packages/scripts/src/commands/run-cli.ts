@@ -17,9 +17,9 @@ export function resolveCliExecution(
   let args = ["apps/cli/dist/index.js", ...forwardedArgs];
   if (process.env.NODE_ENV !== "production") {
     const devEnv = resolveCurrentDevProcessEnv(repoRoot, process.env);
-    env.BB_SERVER_URL = process.env.BB_SERVER_URL ?? devEnv.BB_SERVER_URL;
-    env.BB_HOST_DAEMON_PORT =
-      process.env.BB_HOST_DAEMON_PORT ?? devEnv.BB_HOST_DAEMON_PORT;
+    env.MQH_SERVER_URL = process.env.MQH_SERVER_URL ?? devEnv.MQH_SERVER_URL;
+    env.MQH_HOST_DAEMON_PORT =
+      process.env.MQH_HOST_DAEMON_PORT ?? devEnv.MQH_HOST_DAEMON_PORT;
     args = [
       "--conditions=source",
       "--import",

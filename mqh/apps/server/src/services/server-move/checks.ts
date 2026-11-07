@@ -349,7 +349,7 @@ function appendTargetInspectItems(args: {
     items.push({
       id: "unsupported-platform",
       severity: "blocker",
-      title: `${targetName} can't run the bb server`,
+      title: `${targetName} can't run the mqh server`,
       detail: "The server runs on macOS and Linux.",
     });
   }
@@ -360,12 +360,12 @@ function appendTargetInspectItems(args: {
             id: "target-has-server-data",
             severity: "blocker",
             title: `The old server copy is still on ${targetName}`,
-            detail: `Delete it on ${targetName}'s page in Settings → Machines, or run bb server delete-old-copy on that machine, then check again.`,
+            detail: `Delete it on ${targetName}'s page in Settings → Machines, or run mqh server delete-old-copy on that machine, then check again.`,
           }
         : {
             id: "target-has-server-data",
             severity: "blocker",
-            title: `${targetName} already has bb server data`,
+            title: `${targetName} already has mqh server data`,
             detail: `${inspect.dataDir} already contains a bb database.`,
           },
     );
@@ -459,7 +459,7 @@ function appendTargetInspectItems(args: {
   items.push({
     id: "managed-config-replaced",
     severity: "info",
-    title: `This server's bb skill settings and other configuration will replace matching settings on ${targetName}`,
+    title: `This server's mqh skill settings and other configuration will replace matching settings on ${targetName}`,
     detail: null,
   });
 }
@@ -480,7 +480,7 @@ function appendVersionItems(args: {
       id: "target-newer-version",
       severity: "blocker",
       title: `${args.targetName} runs a newer bb than this server`,
-      detail: `${args.targetName} runs bb ${args.inspect.bbAppVersion} and this server runs bb ${appVersion}. Update the server to bb ${args.inspect.bbAppVersion} first, then check again.`,
+      detail: `${args.targetName} runs mqh ${args.inspect.bbAppVersion} and this server runs mqh ${appVersion}. Update the server to mqh ${args.inspect.bbAppVersion} first, then check again.`,
     });
     return;
   }
@@ -489,7 +489,7 @@ function appendVersionItems(args: {
     args.items.push({
       id: "target-update",
       severity: "info",
-      title: `bb ${availability.version} will be installed on ${args.targetName}`,
+      title: `mqh ${availability.version} will be installed on ${args.targetName}`,
       detail: `The update stays on ${args.targetName} even if the move is cancelled.`,
     });
     return;
@@ -499,13 +499,13 @@ function appendVersionItems(args: {
       ? {
           id: "target-version",
           severity: "blocker",
-          title: `${args.targetName} runs bb ${args.inspect.bbAppVersion}, but this server runs bb ${appVersion}`,
-          detail: `Update ${args.targetName} to bb ${appVersion}. ${availability.reason}`,
+          title: `${args.targetName} runs mqh ${args.inspect.bbAppVersion}, but this server runs mqh ${appVersion}`,
+          detail: `Update ${args.targetName} to mqh ${appVersion}. ${availability.reason}`,
         }
       : {
           id: "server-entry-unavailable",
           severity: "blocker",
-          title: `${args.targetName} doesn't have the bb server installed`,
+          title: `${args.targetName} doesn't have the mqh server installed`,
           detail: availability.reason,
         },
   );
@@ -636,7 +636,7 @@ function appendManagedAddressItems(args: {
     if (url === null) {
       continue;
     }
-    const idPrefix = address.key === "BB_APP_URL" ? "app-url" : "external-url";
+    const idPrefix = address.key === "MQH_APP_URL" ? "app-url" : "external-url";
     if (oldAddress !== null && url.origin === oldAddress.origin) {
       args.items.push({
         id: `${idPrefix}-rewrite`,

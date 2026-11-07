@@ -269,7 +269,7 @@ export function formatDeclaredSessionOptions(
   }
   return [
     "",
-    "Options (set with bb thread spawn --option <id>=<value>):",
+    "Options (set with mqh thread spawn --option <id>=<value>):",
     ...options.map((option) =>
       option.type === "boolean"
         ? `  ${option.id} (${option.label}): true | false, default ${String(option.value)}`

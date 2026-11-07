@@ -1794,7 +1794,7 @@ function textWithBbSkillCommandsSpelledOut(
     const leadsText =
       mention.start === firstCharacter &&
       text.slice(mention.end).trim().length > 0;
-    text = `${text.slice(0, mention.start)}Use the bb skill "${mention.name}"${leadsText ? ":" : ""}${text.slice(mention.end)}`;
+    text = `${text.slice(0, mention.start)}Use the mqh skill "${mention.name}"${leadsText ? ":" : ""}${text.slice(mention.end)}`;
     nextStart = mention.start;
   }
   return text;

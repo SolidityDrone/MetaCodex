@@ -11,12 +11,12 @@ import {
 
 const SERVER_INSTRUCTIONS = [
   "bb is an agentic IDE: it runs coding agents (threads) inside projects, on environments and machines the user controls.",
-  "This server exposes the whole `bb` command line through three tools.",
+  "This server exposes the whole `mqh` command line through three tools.",
   "1. `search` finds bb commands for a task.",
   "2. `read` runs a JavaScript snippet that may only call commands that inspect bb. It never changes anything.",
   "3. `run` runs a JavaScript snippet that may call any bb command, including ones that start agents, send them messages, or change settings. Use it only for what the user asked for.",
   "Snippets call `await bb.cli([...argv])` or `await bb.json([...argv])` and `return` a JSON-serialisable value. Do several steps in one snippet and return only what you need.",
-  "A snippet is stopped after 25 seconds. For long waits, return and call again later: `bb thread wait <id> --timeout 15s` reports whether the thread finished.",
+  "A snippet is stopped after 25 seconds. For long waits, return and call again later: `mqh thread wait <id> --timeout 15s` reports whether the thread finished.",
 ].join("\n");
 
 const SCRIPT_API = [
@@ -85,7 +85,7 @@ export function createBbMcpServer(
     {
       title: "Inspect bb",
       description: [
-        "Run a JavaScript snippet on the bb server that can only inspect bb: list and read threads, projects, environments, diffs, files, terminal output, machines, providers, settings, plugins, skills, and the bb guide. Commands that change anything are refused; use `run` for those.",
+        "Run a JavaScript snippet on the mqh server that can only inspect bb: list and read threads, projects, environments, diffs, files, terminal output, machines, providers, settings, plugins, skills, and the mqh guide. Commands that change anything are refused; use `run` for those.",
         SCRIPT_API,
         "Example: `const threads = await bb.json(['thread', 'list']); return threads.slice(0, 20).map((t) => ({ id: t.id, title: t.title, status: t.status }));`",
       ].join("\n\n"),
@@ -106,10 +106,10 @@ export function createBbMcpServer(
     {
       title: "Control bb",
       description: [
-        "Run a JavaScript snippet on the bb server that can call any bb command: start and message agent threads, answer their questions, manage projects, environments, terminals, files, plugins and settings. Agents and terminals run commands and change files on the user's machines, so do only what the user asked for.",
+        "Run a JavaScript snippet on the mqh server that can call any bb command: start and message agent threads, answer their questions, manage projects, environments, terminals, files, plugins and settings. Agents and terminals run commands and change files on the user's machines, so do only what the user asked for.",
         SCRIPT_API,
         "Example: `const thread = await bb.json(['thread', 'spawn', '--project', projectId, '--prompt-file', '-'], { stdin: 'Fix the failing test in src/app.test.ts' }); return thread;`",
-        "Pass long text through `stdin` with the command's `--prompt-file -` or `--message-file -` option. Commands that need an interactive terminal or never exit (`bb terminal attach`, `bb plugin dev`, `bb browser watch`) cannot run here.",
+        "Pass long text through `stdin` with the command's `--prompt-file -` or `--message-file -` option. Commands that need an interactive terminal or never exit (`mqh terminal attach`, `mqh plugin dev`, `mqh browser watch`) cannot run here.",
       ].join("\n\n"),
       inputSchema: codeSchema,
       annotations: {

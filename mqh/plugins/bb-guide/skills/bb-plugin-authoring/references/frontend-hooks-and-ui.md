@@ -3,7 +3,7 @@
 Hooks:
 
 - `useSdk()` → bb's public API client bound to your plugin: the same areas
-  the `bb` CLI and the backend `bb.sdk` expose (`threads`, `threadSections`,
+  the `mqh` CLI and the backend `bb.sdk` expose (`threads`, `threadSections`,
   `projects`, `environments`, `hosts`, `files`, …), running with the
   signed-in user's session on the app origin. The first choice for reading
   and mutating bb state from a frontend: `sdk.threadSections.create({ name })`,
@@ -176,7 +176,7 @@ reasoningLevel?, serviceTier?, permissionMode? })` sets the pickers as if
   `Promise<"started" | "failed">` — saves a file
   through bb's own download path. Browsers and bb Desktop start an ordinary
   download; the bb iOS app, where a download link would replace the app,
-  opens the share sheet instead. Pass a URL on the bb server (your plugin's
+  opens the share sheet instead. Pass a URL on the mqh server (your plugin's
   HTTP route works) or bytes you already hold. Keep `href` and `download` on
   your link and call it from `onClick` after `event.preventDefault()`. It
   never rejects; bb shows the error toast on `failed`. `started` means the
@@ -246,12 +246,12 @@ composer.
   the same components through the `@/` alias, which their tsconfig maps onto
   that source; a fork vendors them from the registry. External and example
   plugins vendor source through the registry.
-- `bb plugin new` pre-vendors button, card, input, checkbox, dialog (plus
+- `mqh plugin new` pre-vendors button, card, input, checkbox, dialog (plus
   their support files: `lib/utils`, `lib/portal-scope`, icon,
   responsive-overlay, drawer, hooks) into `components/ui/` etc., and writes a `components.json`
   whose `@bb` registry is pinned to the release tag matching the running
   BB. Import via the `@/*` alias: `import { Button } from
-"@/components/ui/button"` (tsconfig maps it; `bb plugin build` reads it).
+"@/components/ui/button"` (tsconfig maps it; `mqh plugin build` reads it).
 - Add more with stock shadcn tooling: `npx shadcn add @bb/select
 @bb/table` — the BB registry carries the full stock set (~46 items:
   accordion, alert-dialog, calendar, chart, command, form, sheet, table,
@@ -289,7 +289,7 @@ composer.
   When bb itself builds your frontend (git and local installs), it instead
   uses one copy the host loads on demand and shares across plugins, provided
   your installed `zod` has the host's major and is not newer than the host's
-  copy (bb ships zod 4). `bb plugin build` artifacts, `server.ts` and
+  copy (bb ships zod 4). `mqh plugin build` artifacts, `server.ts` and
   `zod/mini` always bundle their own, so a prebuilt bundle runs on older bb.
 - Source and diffs: use the host components
   `experimental_SourceCode` / `experimental_Diff` (frontend-components.md),
@@ -299,7 +299,7 @@ composer.
   and it opts you out of any installed renderer replacement.
 - Everything else bundles from YOUR `node_modules` (lucide,
   non-portal radix, form/calendar/chart libs): run `npm install`
-  after adding components (`bb plugin new` runs the first one; `shadcn add`
+  after adding components (`mqh plugin new` runs the first one; `shadcn add`
   installs each item's declared deps). Users of your prebuilt artifact need no
   npm. Managed source installs run bb's bundled npm.
 - `EmptyState` ships as `npx shadcn add @bb/empty-state`. There is no
@@ -379,7 +379,7 @@ the selected tab and the side panel is open, false otherwise. bb keeps a
 closed panel's tab mounted, so pause reads that only feed the tab while it is
 false; the Git plugin's Diff tab does.
 
-Retired members keep working for existing plugins, and `bb plugin build` warns
+Retired members keep working for existing plugins, and `mqh plugin build` warns
 with the replacement:
 
 | Retired                                                                               | Replacement                                                                                                                         |
@@ -479,4 +479,4 @@ that event instead, as the Git plugin does for git status on
 
 Contract `invalidates(input, output)` is retired. It fired only when the write
 came through that RPC method. Existing plugins keep working, and
-`bb plugin build` warns with this replacement.
+`mqh plugin build` warns with this replacement.

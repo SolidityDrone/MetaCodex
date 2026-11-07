@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import {
-  BB_PROD_HOST_DAEMON_PORT,
+  MQH_PROD_HOST_DAEMON_PORT,
   resolvePortFromEnv,
   resolveRuntimeDataDir,
   resolveRuntimeMode,
@@ -41,10 +41,10 @@ interface ResolveHostDaemonPortArgs {
 function resolveHostDaemonPort(args: ResolveHostDaemonPortArgs): number {
   if (
     args.requiresExplicitPort &&
-    process.env.BB_HOST_DAEMON_PORT === undefined
+    process.env.MQH_HOST_DAEMON_PORT === undefined
   ) {
     throw new Error(
-      "BB_HOST_DAEMON_PORT is required when running a dev extra-host daemon without BB_DATA_DIR. Set it to a port distinct from pnpm dev's host daemon port.",
+      "MQH_HOST_DAEMON_PORT is required when running a dev extra-host daemon without MQH_DATA_DIR. Set it to a port distinct from pnpm dev's host daemon port.",
     );
   }
 
@@ -52,9 +52,9 @@ function resolveHostDaemonPort(args: ResolveHostDaemonPortArgs): number {
     defaultPort:
       args.mode === "dev"
         ? resolveDevHostDaemonPort()
-        : BB_PROD_HOST_DAEMON_PORT,
+        : MQH_PROD_HOST_DAEMON_PORT,
     env: process.env,
-    name: "BB_HOST_DAEMON_PORT",
+    name: "MQH_HOST_DAEMON_PORT",
   });
 }
 
@@ -63,11 +63,11 @@ function ensureDevOverridePair(mode: BbRuntimeMode): void {
     return;
   }
 
-  const hasDataDirOverride = process.env.BB_DATA_DIR !== undefined;
-  const hasServerUrlOverride = process.env.BB_SERVER_URL !== undefined;
+  const hasDataDirOverride = process.env.MQH_DATA_DIR !== undefined;
+  const hasServerUrlOverride = process.env.MQH_SERVER_URL !== undefined;
   if (hasDataDirOverride !== hasServerUrlOverride) {
     throw new Error(
-      "Dev host-daemon overrides must set both BB_DATA_DIR and BB_SERVER_URL, or neither.",
+      "Dev host-daemon overrides must set both MQH_DATA_DIR and MQH_SERVER_URL, or neither.",
     );
   }
 }
@@ -77,7 +77,7 @@ export function resolveHostDaemonRuntimeEnvironment(
 ): HostDaemonRuntimeEnvironment {
   ensureDevOverridePair(mode);
   const usesDefaultDevExtraHost =
-    mode === "dev" && process.env.BB_DATA_DIR === undefined;
+    mode === "dev" && process.env.MQH_DATA_DIR === undefined;
   const devDataDirSuffix = usesDefaultDevExtraHost ? "extra-host" : undefined;
   const dataDir = resolveRuntimeDataDir({
     env: process.env,
@@ -88,17 +88,17 @@ export function resolveHostDaemonRuntimeEnvironment(
   const hostDaemonEntrypointConfig = loadHostDaemonEntrypointConfig();
   return {
     ...hostDaemonEntrypointConfig,
-    BB_DATA_DIR:
+    MQH_DATA_DIR:
       devDataDirSuffix === undefined
         ? dataDir
         : join(dataDir, devDataDirSuffix),
-    BB_HOST_DAEMON_PORT: String(
+    MQH_HOST_DAEMON_PORT: String(
       resolveHostDaemonPort({
         mode,
         requiresExplicitPort: usesDefaultDevExtraHost,
       }),
     ),
-    BB_SERVER_URL: loadServerUrlValue({
+    MQH_SERVER_URL: loadServerUrlValue({
       env: process.env,
       homeDir: homedir(),
       mode,
@@ -157,20 +157,20 @@ export async function maybeAddAutoJoinEnv(
   env: HostDaemonRuntimeEnvironment,
   autoJoin: boolean,
 ): Promise<HostDaemonRuntimeEnvironment> {
-  if (!autoJoin || env.BB_HOST_ENROLL_KEY) {
+  if (!autoJoin || env.MQH_HOST_ENROLL_KEY) {
     return env;
   }
 
-  if (await pathExists(join(env.BB_DATA_DIR, HOST_AUTH_FILE_NAME))) {
+  if (await pathExists(join(env.MQH_DATA_DIR, HOST_AUTH_FILE_NAME))) {
     return env;
   }
 
-  await waitForServerHealth(env.BB_SERVER_URL);
+  await waitForServerHealth(env.MQH_SERVER_URL);
   const requestedHostId =
-    env.BB_HOST_ID?.trim() || (await readPersistedHostId(env.BB_DATA_DIR));
+    env.MQH_HOST_ID?.trim() || (await readPersistedHostId(env.MQH_DATA_DIR));
 
   const response = await fetch(
-    `${env.BB_SERVER_URL}/internal/hosts/enroll-key`,
+    `${env.MQH_SERVER_URL}/internal/hosts/enroll-key`,
     {
       body: JSON.stringify(createAutoJoinRequest({ requestedHostId })),
       headers: {
@@ -198,8 +198,8 @@ export async function maybeAddAutoJoinEnv(
 
   return {
     ...env,
-    BB_HOST_ENROLL_KEY: enrollKeyResponse.enrollKey,
-    BB_HOST_ID: enrollKeyResponse.hostId,
+    MQH_HOST_ENROLL_KEY: enrollKeyResponse.enrollKey,
+    MQH_HOST_ID: enrollKeyResponse.hostId,
   };
 }
 

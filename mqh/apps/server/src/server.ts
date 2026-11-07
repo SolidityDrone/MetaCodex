@@ -22,15 +22,9 @@ import {
   declineWebSocketCompression,
   WEB_SOCKET_COMPRESSION,
 } from "./ws/compression.js";
-import { createGateKeyStore } from "./services/connect-next/gate-keys.js";
-import {
-  createTunnelIngressManager,
-  type TunnelIngressManager,
-} from "./services/connect-next/tunnel-ingress.js";
-import { createHash, randomUUID } from "node:crypto";
-import { readFile, stat } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { performance } from "node:perf_hooks";
-import { extname, join, resolve } from "node:path";
 import { Hono } from "hono";
 import { terminalWebSocketQuerySchema } from "@bb/server-contract";
 import { compress } from "hono/compress";
@@ -119,8 +113,6 @@ import {
   createPluginCatalogService,
   type PluginCatalogService,
 } from "./services/plugin-catalog/plugin-catalog-service.js";
-import { callHostRetryableOnlineRpcForWork } from "./services/hosts/online-rpc.js";
-import { requestMatchesEntityTag } from "./services/files/entity-tag.js";
 import {
   allowedAppOrigins,
   browserRequestProblem,
@@ -132,7 +124,6 @@ import {
 } from "./services/plugins/plugin-host-rpc.js";
 
 const PLUGIN_WIRE_HTTP_PATH = /^\/api\/v1\/plugins\/[^/]+\/http(?:\/|$)/u;
-import { rankAcceptedAssetEncodings } from "./asset-content-encoding.js";
 import { apiJsonCompression } from "./api-response-compression.js";
 import { APP_SURFACE_WEB, type AppSurface } from "@bb/config/app-surface";
 import type { ServerBindHost } from "@bb/config/server";
@@ -169,7 +160,6 @@ interface ServerApp {
   pluginService: PluginService;
   pluginCatalogService: PluginCatalogService;
   serverMove: ServerMoveCoordinator;
-  tunnelIngress: TunnelIngressManager;
 }
 
 interface CloseWebSocketServerArgs {
@@ -209,34 +199,14 @@ interface CreateAppOptions {
   serverMove?: ServerMoveAppOptions;
   slowApiRequestLogThresholdMs?: number;
   performanceDiagnosticsEnabled?: () => boolean;
-  staticDir?: string;
-  tunnelIngressNow?: () => number;
 }
 
-interface StaticResponseHeadersArgs {
-  contentEncoding?: string;
-  contentLength?: number;
-  contentType: string;
-  etag?: string;
-  urlPath: string;
-}
-
-const STATIC_INDEX_CACHE_CONTROL = "no-cache";
-const STATIC_ASSET_CACHE_CONTROL = "public, max-age=31536000, immutable";
-const STATIC_PUBLIC_FILE_CACHE_CONTROL = "public, max-age=86400";
 const WEB_SOCKET_SHUTDOWN_CODE = 1001;
 const WEB_SOCKET_SHUTDOWN_FORCE_CLOSE_MS = 1_000;
 const WEB_SOCKET_SHUTDOWN_REASON = "server-shutdown";
 const SLOW_API_REQUEST_LOG_THRESHOLD_MS = 1_000;
 const THREAD_EVENT_WAIT_PATH_PATTERN =
   /^\/api\/v1\/threads\/[^/]+\/events\/wait$/u;
-const PLUGIN_APP_ASSET_PATH_PATTERN =
-  /^\/api\/v1\/(?:plugins\/[^/]+\/assets|plugin-app-assets\/[a-f0-9]{16})\/app\.(?:js|css)$/u;
-const PRECOMPRESSED_STATIC_FILES = [
-  { encoding: "br", extension: ".br" },
-  { encoding: "gzip", extension: ".gz" },
-] as const;
-
 interface ShouldLogSlowApiRequestArgs {
   durationMs: number;
   path: string;
@@ -250,205 +220,6 @@ function shouldLogSlowApiRequest(args: ShouldLogSlowApiRequestArgs): boolean {
   return !THREAD_EVENT_WAIT_PATH_PATTERN.test(args.path);
 }
 
-function staticCacheControlForPath(urlPath: string): string {
-  if (urlPath.startsWith("/assets/")) {
-    return STATIC_ASSET_CACHE_CONTROL;
-  }
-  if (urlPath.endsWith(".html")) {
-    return STATIC_INDEX_CACHE_CONTROL;
-  }
-  return STATIC_PUBLIC_FILE_CACHE_CONTROL;
-}
-
-function createStaticResponseHeaders(args: StaticResponseHeadersArgs): Headers {
-  const headers = new Headers();
-  headers.set("content-type", args.contentType);
-  headers.set("cache-control", staticCacheControlForPath(args.urlPath));
-  if (args.etag !== undefined) {
-    headers.set("etag", args.etag);
-  }
-  if (args.contentEncoding !== undefined) {
-    headers.set("content-encoding", args.contentEncoding);
-    headers.set("vary", "Accept-Encoding");
-  }
-  if (args.contentLength !== undefined) {
-    headers.set("content-length", String(args.contentLength));
-  }
-  return headers;
-}
-
-const shellEtagCache = new Map<
-  string,
-  { etag: string; mtimeMs: number; size: number }
->();
-
-async function shellEtag(filePath: string): Promise<string | undefined> {
-  try {
-    const fileStat = await stat(filePath);
-    const cached = shellEtagCache.get(filePath);
-    if (
-      cached !== undefined &&
-      cached.size === fileStat.size &&
-      cached.mtimeMs === fileStat.mtimeMs
-    ) {
-      return cached.etag;
-    }
-    const digest = createHash("sha256")
-      .update(await readFile(filePath))
-      .digest("hex");
-    const etag = `W/"${digest.slice(0, 32)}"`;
-    shellEtagCache.set(filePath, {
-      etag,
-      mtimeMs: fileStat.mtimeMs,
-      size: fileStat.size,
-    });
-    return etag;
-  } catch {
-    return undefined;
-  }
-}
-
-const STATIC_MIME_TYPES: Record<string, string> = {
-  ".html": "text/html",
-  ".js": "application/javascript",
-  ".css": "text/css",
-  ".json": "application/json",
-  ".webmanifest": "application/manifest+json",
-  ".png": "image/png",
-  ".svg": "image/svg+xml",
-  ".ico": "image/x-icon",
-  ".woff": "font/woff",
-  ".woff2": "font/woff2",
-  ".webp": "image/webp",
-  ".map": "application/json",
-};
-
-export function registerStaticAppRoutes(app: Hono, staticDir: string): void {
-  const root = resolve(staticDir);
-
-  const serveStaticAppFile = async (args: {
-    acceptEncodingHeader: string | undefined;
-    contentType: string;
-    filePath: string;
-    ifNoneMatchHeader: string | undefined;
-    urlPath: string;
-  }): Promise<Response> => {
-    const etag =
-      args.contentType === "text/html"
-        ? await shellEtag(args.filePath)
-        : undefined;
-    if (
-      etag !== undefined &&
-      requestMatchesEntityTag(args.ifNoneMatchHeader, etag)
-    ) {
-      const headers = new Headers();
-      headers.set("cache-control", staticCacheControlForPath(args.urlPath));
-      headers.set("etag", etag);
-      return new Response(null, { status: 304, headers });
-    }
-    const precompressedFile = await findPrecompressedStaticFile({
-      acceptEncodingHeader: args.acceptEncodingHeader,
-      contentType: args.contentType,
-      filePath: args.filePath,
-    });
-    if (precompressedFile !== null) {
-      const content = await readFile(precompressedFile.filePath);
-      return new Response(content, {
-        headers: createStaticResponseHeaders({
-          contentEncoding: precompressedFile.encoding,
-          contentLength: precompressedFile.contentLength,
-          contentType: args.contentType,
-          etag,
-          urlPath: args.urlPath,
-        }),
-      });
-    }
-    const content = await readFile(args.filePath);
-    return new Response(content, {
-      headers: createStaticResponseHeaders({
-        contentType: args.contentType,
-        etag,
-        urlPath: args.urlPath,
-      }),
-    });
-  };
-
-  app.get("*", async (context) => {
-    const urlPath = context.req.path === "/" ? "/index.html" : context.req.path;
-    const filePath = join(root, urlPath);
-    if (!filePath.startsWith(root)) {
-      return context.notFound();
-    }
-    try {
-      const fileStat = await stat(filePath);
-      if (fileStat.isFile()) {
-        return await serveStaticAppFile({
-          acceptEncodingHeader: context.req.header("accept-encoding"),
-          contentType:
-            STATIC_MIME_TYPES[extname(filePath)] ?? "application/octet-stream",
-          filePath,
-          ifNoneMatchHeader: context.req.header("if-none-match"),
-          urlPath,
-        });
-      }
-    } catch {}
-    if (urlPath.startsWith("/assets/")) {
-      return context.notFound();
-    }
-    return serveStaticAppFile({
-      acceptEncodingHeader: context.req.header("accept-encoding"),
-      contentType: "text/html",
-      filePath: join(root, "index.html"),
-      ifNoneMatchHeader: context.req.header("if-none-match"),
-      urlPath: "/index.html",
-    });
-  });
-}
-
-function canServePrecompressedStaticFile(contentType: string): boolean {
-  return (
-    contentType.startsWith("text/") ||
-    contentType === "application/javascript" ||
-    contentType === "application/json" ||
-    contentType === "application/manifest+json" ||
-    contentType === "application/wasm" ||
-    contentType === "application/xml" ||
-    contentType === "image/svg+xml"
-  );
-}
-
-async function findPrecompressedStaticFile(args: {
-  acceptEncodingHeader: string | undefined;
-  contentType: string;
-  filePath: string;
-}): Promise<{
-  contentLength: number;
-  encoding: string;
-  filePath: string;
-} | null> {
-  if (!canServePrecompressedStaticFile(args.contentType)) {
-    return null;
-  }
-
-  for (const candidate of rankAcceptedAssetEncodings(
-    args.acceptEncodingHeader,
-    PRECOMPRESSED_STATIC_FILES,
-  )) {
-    const encodedFilePath = `${args.filePath}${candidate.extension}`;
-    try {
-      const encodedStat = await stat(encodedFilePath);
-      if (encodedStat.isFile()) {
-        return {
-          contentLength: encodedStat.size,
-          encoding: candidate.encoding,
-          filePath: encodedFilePath,
-        };
-      }
-    } catch {}
-  }
-
-  return null;
-}
 
 function closeWebSocketServer(args: CloseWebSocketServerArgs): Promise<void> {
   for (const client of args.server.clients) {
@@ -483,18 +254,6 @@ export function createApp(
     app,
   });
   wss.options.perMessageDeflate = WEB_SOCKET_COMPRESSION;
-  const tunnelIngressNow = options?.tunnelIngressNow ?? Date.now;
-  const tunnelIngress = createTunnelIngressManager({
-    app,
-    injectWebSocket,
-    keys: createGateKeyStore({
-      url: () => deps.config.connectGateKeysUrl,
-      logger: deps.logger,
-      now: tunnelIngressNow,
-    }),
-    loopbackOrigin: () => `http://127.0.0.1:${deps.config.serverPort}`,
-    logger: deps.logger,
-  });
   const slowApiRequestLogThresholdMs =
     options?.slowApiRequestLogThresholdMs ?? SLOW_API_REQUEST_LOG_THRESHOLD_MS;
   const bbAppArtifactService =
@@ -566,9 +325,6 @@ export function createApp(
   const compressResponse = compress();
   const compressApiJson = apiJsonCompression();
   app.use("*", (context, next) => {
-    if (PLUGIN_APP_ASSET_PATH_PATTERN.test(context.req.path)) {
-      return next();
-    }
     return compressResponse(context, async () => {
       await compressApiJson(context, next);
     });
@@ -804,16 +560,7 @@ export function createApp(
     providerRegistry: deps.providerRegistry,
     pluginHostArtifacts: deps.pluginHostArtifacts,
     aiServices: deps.aiServices,
-    ensureSharedPortTunnel: (hostId) =>
-      deps.sharedPorts.ensureTunnelIdentity(hostId, () =>
-        callHostRetryableOnlineRpcForWork(deps, {
-          command: { type: "connect-tunnel.ensure-identity" },
-          hostId,
-          timeoutMs: 30_000,
-        }),
-      ),
     callPluginHost: (args) => callPluginHostRpc(deps, args),
-    openTunnelIngress: (audience) => tunnelIngress.open(audience),
     disposePluginHost: (args) => disposePluginHostWorkers(deps, args),
     onSettingsChanged: (pluginId) => {
       deps.providerNativeRoots.invalidate(pluginId);
@@ -833,7 +580,7 @@ export function createApp(
       requestQueuedMessageDispatch(deps, { kind: "plugin-recheck" });
     },
     watchBuiltinPluginSources:
-      process.env.BB_MANAGED_DEV_BUILTIN_PLUGIN_HOT_RELOAD === "1",
+      process.env.MQH_MANAGED_DEV_BUILTIN_PLUGIN_HOT_RELOAD === "1",
   });
   // Messages queued while a thread awaited user interaction stop waiting once
   // that interaction settles (#1650); the idle drain then delivers them.
@@ -1088,11 +835,8 @@ export function createApp(
     }),
   );
 
-  if (options?.staticDir) {
-    registerStaticAppRoutes(app, options.staticDir);
-  } else {
-    app.get("/", (context) => context.text("bb server"));
-  }
+  // MQH: no web UI to serve; the Unity client talks to /api/v1 only.
+  app.get("/", (context) => context.text("mqh server"));
 
   return {
     app,
@@ -1106,6 +850,5 @@ export function createApp(
     pluginService,
     pluginCatalogService,
     serverMove,
-    tunnelIngress,
   };
 }

@@ -53,13 +53,13 @@ function describeCliCommandStatus(status: SystemCliCommandStatus): string {
       : `The bb CLI is installed at ${status.installedPath}, but its folder is not on your PATH. Add the folder to your PATH to use bb outside bb.`;
   }
   if (status.shadowedBy === null) {
-    return "The bb CLI is not installed for use outside bb. Run bb settings cli-command install to add it.";
+    return "The bb CLI is not installed for use outside bb. Run mqh settings cli-command install to add it.";
   }
   if (status.shadowedBy.source === "npm") {
     return `bb is already on your PATH at ${status.shadowedBy.path}, installed by npm.`;
   }
   if (status.shadowedBy.source === "machine") {
-    return `bb is already on your PATH at ${status.shadowedBy.path}, installed with the bb machine on this computer.`;
+    return `bb is already on your PATH at ${status.shadowedBy.path}, installed with the mqh machine on this computer.`;
   }
   return `The bb CLI is not installed for use outside bb. Another bb at ${status.shadowedBy.path} comes first on your PATH.`;
 }
@@ -850,7 +850,7 @@ export function registerSettingsCommands(
   const cliCommand = settings
     .command("cli-command")
     .description(
-      "Install the bb CLI for use outside bb, on the computer that runs the bb server",
+      "Install the bb CLI for use outside bb, on the computer that runs the mqh server",
     );
   cliCommand
     .command("show", { isDefault: true })

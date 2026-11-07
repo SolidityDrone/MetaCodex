@@ -62,7 +62,7 @@ const DEFAULT_POWERSHELL_EXECUTION_POLICY = "RemoteSigned";
 const USER_SHELL_ENV_FORCE_KILL_AFTER_MS = 1_000;
 
 function getDefaultCliExecutablePath(): string {
-  return fileURLToPath(new URL("../../cli/bin/bb", import.meta.url));
+  return fileURLToPath(new URL("../../cli/bin/mqh", import.meta.url));
 }
 
 function getDefaultCliRuntimePath(): string {
@@ -383,7 +383,7 @@ export async function resolveLocalBbExecutablePath(
 export function resolveBbExecutablePathInDirectory(
   bbExecutableDirectory: string,
 ): string {
-  return resolve(bbExecutableDirectory, "bb");
+  return resolve(bbExecutableDirectory, "mqh");
 }
 
 export function prepareRuntimeShellEnv(
@@ -397,11 +397,11 @@ export function prepareRuntimeShellEnv(
       options.bbExecutableDirectory,
       options.inheritedPath ?? process.env.PATH,
     ),
-    BB_CLI: bbExecutablePath,
-    BB_SERVER_URL: options.serverUrl,
+    MQH_CLI: bbExecutablePath,
+    MQH_SERVER_URL: options.serverUrl,
   };
   assignIfDefined({
-    key: "BB_HOST_DAEMON_PORT",
+    key: "MQH_HOST_DAEMON_PORT",
     target: shellEnv,
     value:
       options.hostDaemonPort === undefined

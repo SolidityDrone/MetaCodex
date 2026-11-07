@@ -9,16 +9,16 @@ Project commands
 
 A project maps to a code repository. All threads belong to a project.
 
-  bb project list                         List ordinary projects
+  mqh project list                         List ordinary projects
     --include-personal                    Also include the personal project
-  bb project discover                     Find recently used git repos
+  mqh project discover                     Find recently used git repos
     --machine <id-or-name>                Machine to scan (default: local)
     --host <id-or-name>                   Alias for --machine
-  bb project history <id>                 List prompt history
-  bb project reorder <id>                 Reorder in the sidebar
+  mqh project history <id>                 List prompt history
+  mqh project reorder <id>                 Reorder in the sidebar
     --after <id>                          Previous project, or omit for start
     --before <id>                         Next project, or omit for end
-  bb project create --name "..." [options]
+  mqh project create --name "..." [options]
     --root <path>                         Project source path
     --machine <id-or-name>                Bind the path to a connected machine
     --host <id-or-name>                   Alias for --machine
@@ -27,12 +27,12 @@ A project maps to a code repository. All threads belong to a project.
   binds --root to that machine. Omitting the selector preserves the existing
   local CLI machine fallback (normally the server machine).
 
-  bb project show <id>                    Show project details
+  mqh project show <id>                    Show project details
     Accepts proj_personal to inspect Personal.
-  bb project update <id>                  Update a project
+  mqh project update <id>                  Update a project
     --name <name>                         New name
 
-  bb project delete <id>                  Delete project and all threads
+  mqh project delete <id>                  Delete project and all threads
     --yes                                 Skip confirmation
 
 Global prompt history:
@@ -46,12 +46,12 @@ Global prompt history:
 
 Discovery:
 
-  bb project branches <id> --host <id>   List branches for a machine source
-  bb project paths <id>                   Search workspace paths
-  bb project files <id>                   List workspace files
-  bb project content <id> <path>          Read file content (binary is base64;
+  mqh project branches <id> --host <id>   List branches for a machine source
+  mqh project paths <id>                   Search workspace paths
+  mqh project files <id>                   List workspace files
+  mqh project content <id> <path>          Read file content (binary is base64;
                                           --json reports contentEncoding)
-  bb project commands <id> --provider <id>
+  mqh project commands <id> --provider <id>
                                           List commands and skills
     --machine <id-or-name>                Target project source machine
     --host <id-or-name>                   Alias for --machine
@@ -69,15 +69,15 @@ Discovery:
   Path and file searches honor Git ignore rules, including local and global
   exclusions; tracked and non-ignored untracked files, including hidden files,
   remain searchable. Non-Git workspaces use filesystem listings. Use
-  `bb file list|paths` for listings that include ignored files.
+  `mqh file list|paths` for listings that include ignored files.
 
 Attachments:
 
-  bb project attachment upload <id>       Upload bytes from the CLI machine
+  mqh project attachment upload <id>       Upload bytes from the CLI machine
     --client-file <path>                  Path read on this CLI machine
     --filename <name>                     Attachment filename override
     --mime-type <type>                    MIME override (otherwise inferred)
-  bb project attachment download <id> <attachment-path>
+  mqh project attachment download <id> <attachment-path>
     --client-file <path>                  Destination on this CLI machine
 
   Uploads use multipart bytes and return a server-managed attachment DTO. Pass
@@ -93,7 +93,7 @@ Sources:
 
   Projects can have multiple machine-local path sources.
 
-  bb project source add <projectId>       Add a source
+  mqh project source add <projectId>       Add a source
     --path <path>                         Local path
     --clone                               Clone the project's Git remote
     --remote-url <url>                    Git remote override for --clone
@@ -104,11 +104,11 @@ Sources:
   Explicit project source selectors must name a connected machine. Omitting
   the selector preserves the same local CLI machine fallback as project create.
 
-  bb project source update <projectId> <sourceId>
+  mqh project source update <projectId> <sourceId>
     --path <path>
     --default
 
-  bb project source delete <projectId> <sourceId>
+  mqh project source delete <projectId> <sourceId>
 
   A live project must retain at least one source; a project pending deletion
   may remove its last source.

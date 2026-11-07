@@ -62,7 +62,7 @@ async function stageImport(): Promise<{
   await writeDataFile(
     sourceDataDir,
     "config.json",
-    JSON.stringify({ config: { BB_LOG_LEVEL: "info" } }),
+    JSON.stringify({ config: { MQH_LOG_LEVEL: "info" } }),
   );
   await writeDataFile(
     sourceDataDir,

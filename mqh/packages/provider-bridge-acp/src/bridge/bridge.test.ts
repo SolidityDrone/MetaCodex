@@ -164,7 +164,7 @@ function bbThreadIdFor(providerThreadId: string): string {
       return params.threadId;
     }
   }
-  throw new Error(`No bb thread id recorded for ${providerThreadId}`);
+  throw new Error(`No mqh thread id recorded for ${providerThreadId}`);
 }
 
 const CLIENT_REQUEST_ID = "creq_abcdefghjk";
@@ -2835,10 +2835,10 @@ describe("acp bridge", () => {
     const env = new Map(
       mcpServerConfig.env.map(({ name, value }) => [name, value]),
     );
-    const host = env.get("BB_ACP_DYNAMIC_TOOL_HOST");
-    const port = Number(env.get("BB_ACP_DYNAMIC_TOOL_PORT"));
-    const threadId = env.get("BB_ACP_DYNAMIC_TOOL_THREAD_ID");
-    const token = env.get("BB_ACP_DYNAMIC_TOOL_TOKEN");
+    const host = env.get("MQH_ACP_DYNAMIC_TOOL_HOST");
+    const port = Number(env.get("MQH_ACP_DYNAMIC_TOOL_PORT"));
+    const threadId = env.get("MQH_ACP_DYNAMIC_TOOL_THREAD_ID");
+    const token = env.get("MQH_ACP_DYNAMIC_TOOL_TOKEN");
     if (!host || !Number.isInteger(port) || !threadId || !token) {
       throw new Error("MCP server config is missing dynamic tool bridge env");
     }
@@ -2930,10 +2930,10 @@ describe("acp bridge", () => {
       const env = new Map(
         mcpServerConfig.env.map(({ name, value }) => [name, value]),
       );
-      const host = env.get("BB_ACP_DYNAMIC_TOOL_HOST");
-      const port = Number(env.get("BB_ACP_DYNAMIC_TOOL_PORT"));
-      const threadId = env.get("BB_ACP_DYNAMIC_TOOL_THREAD_ID");
-      const token = env.get("BB_ACP_DYNAMIC_TOOL_TOKEN");
+      const host = env.get("MQH_ACP_DYNAMIC_TOOL_HOST");
+      const port = Number(env.get("MQH_ACP_DYNAMIC_TOOL_PORT"));
+      const threadId = env.get("MQH_ACP_DYNAMIC_TOOL_THREAD_ID");
+      const token = env.get("MQH_ACP_DYNAMIC_TOOL_TOKEN");
       if (!host || !Number.isInteger(port) || !threadId || !token) {
         throw new Error("MCP server config is missing dynamic tool bridge env");
       }
@@ -3035,10 +3035,10 @@ describe("acp bridge", () => {
     const env = new Map(
       mcpServerConfig.env.map(({ name, value }) => [name, value]),
     );
-    const host = env.get("BB_ACP_DYNAMIC_TOOL_HOST");
-    const port = Number(env.get("BB_ACP_DYNAMIC_TOOL_PORT"));
-    const threadId = env.get("BB_ACP_DYNAMIC_TOOL_THREAD_ID");
-    const token = env.get("BB_ACP_DYNAMIC_TOOL_TOKEN");
+    const host = env.get("MQH_ACP_DYNAMIC_TOOL_HOST");
+    const port = Number(env.get("MQH_ACP_DYNAMIC_TOOL_PORT"));
+    const threadId = env.get("MQH_ACP_DYNAMIC_TOOL_THREAD_ID");
+    const token = env.get("MQH_ACP_DYNAMIC_TOOL_TOKEN");
     if (!host || !Number.isInteger(port) || !threadId || !token) {
       throw new Error("MCP server config is missing dynamic tool bridge env");
     }
@@ -3189,7 +3189,7 @@ describe("acp bridge", () => {
     const prompt: unknown = JSON.parse(
       readFileSync(promptLog, "utf8").trim().split("\n")[0] ?? "null",
     );
-    expect(prompt).toContain("Available bb skills:");
+    expect(prompt).toContain("Available mqh skills:");
     expect(prompt).toContain(
       `- deploy: Ship the app. (SKILL.md: ${join("/staged/acp-skills", "deploy", "SKILL.md")})`,
     );
@@ -5862,7 +5862,7 @@ describe("acp bridge: live session state", () => {
     });
   });
 
-  it("spells out bb skill commands the agent did not advertise, wherever they appear, so the agent does not swallow them as unknown commands", async () => {
+  it("spells out mqh skill commands the agent did not advertise, wherever they appear, so the agent does not swallow them as unknown commands", async () => {
     expect(
       (
         await waitForResponse(
@@ -5951,12 +5951,12 @@ describe("acp bridge: live session state", () => {
           ),
         ),
       ).toEqual([
-        'Use the bb skill "example-skill": summarize the repo',
-        'first Use the bb skill "deploy", then Use the bb skill "example-skill"',
-        '/native-only go\nand Use the bb skill "deploy"',
+        'Use the mqh skill "example-skill": summarize the repo',
+        'first Use the mqh skill "deploy", then Use the mqh skill "example-skill"',
+        '/native-only go\nand Use the mqh skill "deploy"',
         "/deploy",
         "advertise-commands",
-        '/review this and Use the bb skill "deploy"',
+        '/review this and Use the mqh skill "deploy"',
       ]);
     } finally {
       await waitForResponse(sendRequest("skills/configure", { roots: [] }));

@@ -70,7 +70,7 @@ const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const packageRoot = resolve(scriptsDir, "..");
 const tempRoot = await mkdtemp(join(tmpdir(), "bb-app-tarball-"));
 const smokeProcessEnv = {
-  BB_TELEMETRY: "false",
+  MQH_TELEMETRY: "false",
 };
 const stopManagedProcess = createManagedProcessStop(PROCESS_STOP_TIMEOUT_MS);
 
@@ -713,7 +713,7 @@ async function smokeBridgeModelList({
 async function smokeProviderBridgeBundles(packageDir) {
   await smokeBridgeModelList({
     // Claude Code ships its bridge as a plugin artifact (graduation wave 5),
-    // so the packed bundle to smoke is the one `bb plugin build` produced for
+    // so the packed bundle to smoke is the one `mqh plugin build` produced for
     // the builtin plugin, not a daemon-side file. The bridge intentionally
     // relies on the host's Claude CLI for account-scoped discovery; CI does
     // not install that binary, so its explicit unavailable-provider response
@@ -770,7 +770,7 @@ async function smokeProviderBridgeBundles(packageDir) {
   });
   await smokeBridgeModelList({
     // Codex ships its bridge as a plugin artifact (graduation wave 5), so the
-    // packed bundle to smoke is the one `bb plugin build` produced for the
+    // packed bundle to smoke is the one `mqh plugin build` produced for the
     // builtin plugin, not a daemon-side file. The bridge spawns the host's
     // `codex app-server` for model discovery; CI does not install the Codex
     // CLI, so its explicit missing-CLI response is a valid smoke outcome.
@@ -879,7 +879,7 @@ async function smokeHelpCommands(binDir) {
   });
   await runCommand({
     ...createInstalledBinInvocation(binDir, "bb", ["--help"]),
-    label: "bb cli help",
+    label: "mqh cli help",
   });
   await runCommand({
     ...createInstalledBinInvocation(binDir, "bb-server", ["--help"]),
@@ -910,10 +910,10 @@ async function smokeConfigCommand(binDir) {
       dataDir,
       "config",
       "set",
-      "BB_APP_URL",
+      "MQH_APP_URL",
       "https://bb.example.test",
     ]),
-    label: "bb-app config BB_APP_URL",
+    label: "bb-app config MQH_APP_URL",
   });
 
   const configJson = JSON.parse(
@@ -923,8 +923,8 @@ async function smokeConfigCommand(binDir) {
   if (envJson.env?.OPENAI_API_KEY !== "test-openai-key") {
     throw new Error("Expected bb-app env to persist OPENAI_API_KEY");
   }
-  if (configJson.config?.BB_APP_URL !== "https://bb.example.test") {
-    throw new Error("Expected bb-app config to persist BB_APP_URL");
+  if (configJson.config?.MQH_APP_URL !== "https://bb.example.test") {
+    throw new Error("Expected bb-app config to persist MQH_APP_URL");
   }
 }
 
@@ -1057,7 +1057,7 @@ async function smokeBuiltinPluginsRunning({ binDir, cliEnv }) {
         "--json",
       ]),
       env: cliEnv,
-      label: "bb plugin list",
+      label: "mqh plugin list",
     });
     const plugins = JSON.parse(stdout).plugins ?? [];
     const byId = new Map(plugins.map((plugin) => [plugin.id, plugin]));
@@ -1115,7 +1115,7 @@ async function smokeFullStackAttempt(binDir, sdkDir, attempt) {
         String(daemonPort),
       ]),
       env: {
-        BB_LOG_LEVEL: "info",
+        MQH_LOG_LEVEL: "info",
       },
       label: "bb-app full stack",
     });
@@ -1150,14 +1150,14 @@ async function smokeFullStackAttempt(binDir, sdkDir, attempt) {
       url: `http://${DEFAULT_HOST_DAEMON_LOCAL_BIND_HOST}:${daemonPort}/status`,
     });
     const cliEnv = {
-      BB_DATA_DIR: dataDir,
-      BB_HOST_DAEMON_PORT: String(daemonPort),
-      BB_SERVER_URL: serverUrl,
+      MQH_DATA_DIR: dataDir,
+      MQH_HOST_DAEMON_PORT: String(daemonPort),
+      MQH_SERVER_URL: serverUrl,
     };
     await runCommand({
       ...createInstalledBinInvocation(binDir, "bb", ["status"]),
       env: cliEnv,
-      label: "bb cli status",
+      label: "mqh cli status",
     });
     await smokeBuiltinPluginsRunning({ binDir, cliEnv });
     // Keep Awake reconciles even its default disabled state, so reaching this
@@ -1174,14 +1174,14 @@ async function smokeFullStackAttempt(binDir, sdkDir, attempt) {
         "-e",
         [
           'import { BBSdk } from "bb-app";',
-          "const bb = new BBSdk({ baseUrl: process.env.BB_SERVER_URL });",
+          "const bb = new BBSdk({ baseUrl: process.env.MQH_SERVER_URL });",
           "await bb.status.get();",
         ].join("\n"),
       ],
       command: "node",
       cwd: sdkDir,
       env: {
-        BB_SERVER_URL: serverUrl,
+        MQH_SERVER_URL: serverUrl,
       },
       label: "bb-app SDK status",
     });
@@ -1239,8 +1239,8 @@ async function smokeDaemonJoinAttempt(binDir, attempt) {
         String(firstDaemonReservation.port),
       ]),
       env: {
-        BB_LOG_LEVEL: "warn",
-        BB_SERVER_LAUNCH_ID: serverLaunchId,
+        MQH_LOG_LEVEL: "warn",
+        MQH_SERVER_LAUNCH_ID: serverLaunchId,
       },
       label: "bb-server",
     });
@@ -1266,8 +1266,8 @@ async function smokeDaemonJoinAttempt(binDir, attempt) {
           String(spec.reservation.port),
         ]),
         env: {
-          BB_LOG_LEVEL: "info",
-          BB_SERVER_URL: staleEnvServerUrl,
+          MQH_LOG_LEVEL: "info",
+          MQH_SERVER_URL: staleEnvServerUrl,
         },
         label: spec.label,
       });
@@ -1300,9 +1300,9 @@ async function smokeDaemonJoinAttempt(binDir, attempt) {
       }
     }
     const cliEnv = {
-      BB_DATA_DIR: serverDataDir,
-      BB_HOST_DAEMON_PORT: String(firstDaemonReservation.port),
-      BB_SERVER_URL: serverUrl,
+      MQH_DATA_DIR: serverDataDir,
+      MQH_HOST_DAEMON_PORT: String(firstDaemonReservation.port),
+      MQH_SERVER_URL: serverUrl,
     };
     await smokeBuiltinPluginsRunning({ binDir, cliEnv });
     // Both daemons joined a server in a different process and data directory.

@@ -45,7 +45,7 @@ them to your row link if the row is not itself the link.
 ## Read the data yourself
 
 For your own display, read the plugin's keyed method directly. Copy the part
-of its contract you read; `bb plugin rpc inspect bb--github-pr-status
+of its contract you read; `mqh plugin rpc inspect bb--github-pr-status
 pullRequests` prints the full schema. Each key is an environment id and each
 row is `available` with the current branch's `pullRequest`, `absent`, or
 `unavailable` (the machine is offline or `gh` failed).

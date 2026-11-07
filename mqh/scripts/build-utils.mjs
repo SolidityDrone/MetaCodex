@@ -65,7 +65,7 @@ export async function copyDirectory({ from, to }) {
  *
  * esbuild's split mode writes `<entryNames>.js` into `outdir`. The entry
  * keeps `outfile`'s directory and name; an extensionless `outfile` (the
- * packaged `bb` executable) is renamed into place by
+ * packaged `mqh` executable) is renamed into place by
  * {@link finalizeSplitOutput}, which is safe because chunks are imported by
  * a relative path from the same directory. Chunks go under a sibling
  * directory so packaging can list it next to the entry.

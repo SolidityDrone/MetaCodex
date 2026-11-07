@@ -122,7 +122,7 @@ describe("bb-plugin-memory", () => {
     });
     expect(instructions?.length).toBeLessThanOrEqual(3_900);
     expect(instructions).toContain("Showing");
-    expect(instructions).toContain("bb memory catalog --scope all --json");
+    expect(instructions).toContain("mqh memory catalog --scope all --json");
     expect(instructions).not.toContain("Private details");
   }, 20_000);
 

@@ -13,7 +13,7 @@
 bb is an agentic IDE that builds itself. It can control, customize, and automate
 itself, laying the groundwork for your own software factory.
 
-This package provides the `npx bb-app` launcher, bundled `bb` CLI entry, and
+This package provides the `npx bb-app` launcher, bundled `mqh` CLI entry, and
 Node SDK export. Every surface — the web app, CLI, and HTTP API — is a
 first-class way to drive bb. Work runs in threads you can follow live, steer at
 any point, or hand off to another agent.
@@ -41,7 +41,7 @@ credentials. If you use multiple providers, you can mix and match per task.
 <details>
 <summary>Windows via Ubuntu on WSL2</summary>
 
-Run all `bb` commands inside WSL2, install Node.js, Git, and your provider CLIs
+Run all `mqh` commands inside WSL2, install Node.js, Git, and your provider CLIs
 inside that WSL2 distro, and use Linux-style paths such as `/home/me/repo` or
 `/mnt/c/Users/me/repo`.
 
@@ -126,21 +126,21 @@ npx bb-app stop
 recorded process really is that launcher, then stops it. Pass `--data-dir` when
 the bb you want to stop does not use the default `~/.bb/`.
 
-### The `bb` command
+### The `mqh` command
 
 To control bb from outside bb, open **Settings → General → Command line** and
-choose **Install** next to **bb CLI**. Threads in bb already have `bb`; this
+choose **Install** next to **bb CLI**. Threads in bb already have `mqh`; this
 is for your own terminals, scripts, and agents running outside bb, such as
 Claude Code or Codex. bb links a launcher from `~/.bb/bin/bb` into a folder on
 your PATH (`~/.local/bin` on Linux; `/opt/homebrew/bin`, `/usr/local/bin`, or
 `~/.local/bin` on macOS). On Windows it adds `~/.bb/bin` to your user PATH;
 open a new terminal afterwards. **Remove** takes it off again. bb leaves any
-other `bb` you already have in place.
+other `mqh` you already have in place.
 
-From a terminal, before `bb` is on your PATH:
+From a terminal, before `mqh` is on your PATH:
 
 ```bash
-npx --package bb-app bb settings cli-command install
+npx --package bb-app mqh settings cli-command install
 ```
 
 ### Updating from the app
@@ -160,7 +160,7 @@ it exits, and answers the old server port. API requests get `410 server_moved`
 with the new address; browser pages redirect to it for a direct address or link
 to it for bb connect. While a move back to this computer is in progress
 (`server-import.json`), it frees that port for the incoming server. When
-`server-moved.json` goes away, after that move completes or `bb server unlock`,
+`server-moved.json` goes away, after that move completes or `mqh server unlock`,
 it starts the server and co-located daemon again. `bb-server` exits with status
 `3` instead of starting, except for the incoming server of a move back.
 
@@ -169,20 +169,20 @@ you want that thread to use.
 
 ## CLI
 
-The package also exposes the `bb` CLI for an already-running bb server:
+The package also exposes the `mqh` CLI for an already-running mqh server:
 
 ```bash
 npx --package bb-app bb --help
 ```
 
-The CLI uses the same `BB_SERVER_URL` and bb config resolution as the SDK. When
+The CLI uses the same `MQH_SERVER_URL` and mqh config resolution as the SDK. When
 unset, it targets the default local packaged server at
 `http://127.0.0.1:38886`.
 
 ## Scripting with the SDK
 
 The package also exposes a Node SDK for scripts that drive an already-running
-bb server:
+mqh server:
 
 ```ts
 import { BBSdk } from "bb-app";
@@ -197,10 +197,10 @@ await bb.threads.wait({ threadId: String(thread.id), status: "idle" });
 console.log(await bb.threads.output({ threadId: String(thread.id) }));
 ```
 
-`new BBSdk()` uses the same `BB_SERVER_URL` and bb config resolution as the
+`new BBSdk()` uses the same `MQH_SERVER_URL` and mqh config resolution as the
 CLI. Pass `new BBSdk({ baseUrl: "http://host:38886" })` for remote or test
-targets (see the remote-access note below). Scripts launched by bb already receive `BB_SERVER_URL` and
-`BB_THREAD_ID` in their environment.
+targets (see the remote-access note below). Scripts launched by bb already receive `MQH_SERVER_URL` and
+`MQH_THREAD_ID` in their environment.
 
 ## Provider Credentials
 
@@ -220,7 +220,7 @@ BB indexes the documented native skill roots for Codex, Claude Code, Pi,
 Cursor, OpenCode, omp, Grok Build, and Hermes Agent. It includes user roots,
 project roots, and compatibility roots such as `.agents/skills`. These skills
 appear in the selected provider's `/` command menu. The Skills page and
-`bb skill list` show native skills for Claude Code, Codex, and Cursor. BB also
+`mqh skill list` show native skills for Claude Code, Codex, and Cursor. BB also
 reads configured Pi, omp, Grok, and Hermes skill directories, plus enabled
 provider plugin skills.
 
@@ -233,7 +233,7 @@ trust prompt.
 You can still use the Pi CLI and `/login` to create this configuration.
 
 Custom ACP agents are configured through the ACP providers plugin's
-`customAgents` setting: `bb plugin config provider-acp set customAgents
+`customAgents` setting: `mqh plugin config provider-acp set customAgents
 '[...]'`. See the configuration docs for the optional `modelCli` and
 `reasoningCli` or `nativeReasoning` reasoning settings. The optional
 `nativeSkillRoots` field adds provider-native skills to the composer. Its
@@ -250,7 +250,7 @@ Use `bb-app config` for persistent non-secret package settings under
 `~/.bb/config.json`:
 
 ```bash
-npx bb-app config set BB_APP_URL https://<machine>.<tailnet>.ts.net
+npx bb-app config set MQH_APP_URL https://<machine>.<tailnet>.ts.net
 npx bb-app config list
 npx bb-app config refresh
 ```

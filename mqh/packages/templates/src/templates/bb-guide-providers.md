@@ -9,9 +9,9 @@ Provider commands
 
 Providers are agent backends (e.g., codex, claude-code). Each supports different models.
 
-  bb provider list [--machine <id-or-name> | --environment <id>]
+  mqh provider list [--machine <id-or-name> | --environment <id>]
                                           List available providers
-  bb provider models [providerId] [--machine <id-or-name> | --environment <id>]
+  mqh provider models [providerId] [--machine <id-or-name> | --environment <id>]
                      [--project <id>]
     [--selected-model <model-id>]
                                           List models for a provider
@@ -20,7 +20,7 @@ Use these before spawning threads if you are unsure which provider or model to u
 `--host` is an alias for `--machine`. Machine and environment selectors are
 mutually exclusive because an environment already selects its machine. When no
 selector is supplied, both commands intentionally inspect the server machine.
-`bb guide threads` describes how `bb thread spawn` picks a default provider and
+`mqh guide threads` describes how `mqh thread spawn` picks a default provider and
 model.
 
 Some providers read their models and options from the directory they run in
@@ -30,18 +30,18 @@ what it reports in the project's checkout on the chosen machine, which is what
 a new thread in that project is offered; it cannot be combined with
 `--environment`. Other providers answer the same for every directory.
 
-When a provider's models declare options (a mode, an on/off switch), `bb provider
+When a provider's models declare options (a mode, an on/off switch), `mqh provider
 models` lists them under the table with their ids, values and defaults; `--json`
 carries them per model as `sessionOptions`. Choose values at creation with
-`bb thread spawn --option <id>=<value>` and on an existing thread with
-`bb thread options --set <id>=<value>`. A model may accept only some values
+`mqh thread spawn --option <id>=<value>` and on an existing thread with
+`mqh thread options --set <id>=<value>`. A model may accept only some values
 (`fixed: true` on an on/off option, or a shorter `values` list): a spawn
 without `--model` starts on a model that fits the chosen options, and a spawn
 whose `--model` cannot run with them is refused with the name of one that can.
 
-Service tiers are provider-defined ids. `bb provider list --json` reports each
+Service tiers are provider-defined ids. `mqh provider list --json` reports each
 provider's `serviceTiers` ({id, label, description?}); `default` always means
-the provider's standard tier. A model may narrow that list: `bb provider
+the provider's standard tier. A model may narrow that list: `mqh provider
 models` shows a Service tiers column, and `--json` reports
 `supportedServiceTiers` per model (absent when the provider does not report
 tiers per model, in which case the model accepts every tier the provider
@@ -54,7 +54,7 @@ update when it changes the list. The first request after a quiet period can
 therefore return a list that is hours old. A provider whose refresh keeps
 failing or timing out keeps answering from its last stored list.
 
-When no list can be served, bb provider models prints the failing provider,
+When no list can be served, mqh provider models prints the failing provider,
 the failure code, and the underlying host message on stderr, then reports the
 empty catalog on stdout. The model pickers show the same underlying message
 beneath their summary line.
@@ -64,9 +64,9 @@ Enabling and disabling providers
 Manage agents in Settings → Providers. Install provider plugins in Settings →
 Plugins.
 
-  bb provider disable <id>
-  bb provider enable <id>
-  bb provider list --all
+  mqh provider disable <id>
+  mqh provider enable <id>
+  mqh provider list --all
 
 Disable hides one provider from pickers and the ordinary list and rejects new
 sessions and turns. It preserves its CLI, plugin, siblings and thread history;
@@ -82,8 +82,8 @@ silently switch.
 
 Provider-native memory can be controlled on the Settings → Plugins → Codex
 provider and Settings → Plugins → Claude Code provider pages, or with
-`bb plugin config provider-codex set memoryEnabled false` and
-`bb plugin config provider-claude-code set memoryEnabled false`. Codex memory
+`mqh plugin config provider-codex set memoryEnabled false` and
+`mqh plugin config provider-claude-code set memoryEnabled false`. Codex memory
 controls both recall (`memories.use_memories`) and future generation
 (`memories.generate_memories`). Claude Code memory controls native auto-memory
 reads and writes (`autoMemoryEnabled`). Both preferences default on and apply
@@ -101,13 +101,13 @@ page. This preference also defaults off and applies to newly started, resumed,
 or forked provider sessions. Claude Code plugin settings (`disable1MContext`,
 `chromeEnabled`, `artifactsEnabled`, `sandboxEnabled`,
 `fullAccessApprovalsEnabled`, `commandDescriptionsEnabled`) are set with
-`bb plugin config provider-claude-code set <key> <value>` and documented in the
+`mqh plugin config provider-claude-code set <key> <value>` and documented in the
 claude-code-provider skill.
 
 Automatic retries after provider overloads, server or connection errors, and
 subscription-window limits come from the bundled Provider retry plugin
-(`bb provider-retry status`); see `bb guide plugins`. For a manual retry of a
-failed turn, use `bb thread retry`.
+(`mqh provider-retry status`); see `mqh guide plugins`. For a manual retry of a
+failed turn, use `mqh thread retry`.
 
 Known ACP agents can appear automatically when their CLI is installed on the
 host. For example, opencode, omp, Grok Build's grok CLI, or Hermes' hermes CLI
@@ -121,7 +121,7 @@ roots such as .agents/skills and .claude/skills when the provider supports them.
 It also includes project ancestor roots for providers that search to the Git
 repository root. Configured Pi, omp, Grok, and Hermes directories are included.
 Enabled provider plugins also contribute skills to the selected provider's `/`
-command menu. `bb skill list` shows native skills for Claude Code, Codex, and
+command menu. `mqh skill list` shows native skills for Claude Code, Codex, and
 Cursor.
 
 ACP agents (acp-*), including custom agents set in the ACP providers plugin's
@@ -130,7 +130,7 @@ customAgents setting, are documented in the acp-provider skill.
 Top-level customModels in the app data-dir config.json adds extra picker
 entries. Each entry has a providerId (a built-in provider id or any acp-*
 provider id), a model id, and an optional displayName. bb skips an invalid
-entry with a warning. The entry then appears in bb provider models output and
+entry with a warning. The entry then appears in mqh provider models output and
 in the model picker, but the provider must still accept the id: claude-code
 and codex accept unlisted ids, while an ACP agent can reject an id it does
 not know at session start. OpenCode rejects unlisted ids, so add an OpenCode

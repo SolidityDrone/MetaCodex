@@ -14,7 +14,7 @@ describe("thread storage root", () => {
     const parentStorageRoot = await makeTempDir(
       "bb-thread-storage-root-parent-",
     );
-    vi.stubEnv("BB_THREAD_STORAGE", path.join(parentStorageRoot, "thr_parent"));
+    vi.stubEnv("MQH_THREAD_STORAGE", path.join(parentStorageRoot, "thr_parent"));
 
     const rootPath = await ensureThreadStorageRoot(dataDir);
 

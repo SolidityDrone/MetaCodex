@@ -112,7 +112,7 @@ describe("assembleSkillList", () => {
     };
   }
 
-  it("de-dupes a bb skill discovered under both providers", () => {
+  it("de-dupes a mqh skill discovered under both providers", () => {
     const bb = discovered(
       "shared",
       "bb-data-dir",

@@ -274,10 +274,10 @@ it("recovers with a fresh app-server after a model catalog failure", async () =>
 
 it("rejects a model catalog request with the missing-executable code when codex cannot be spawned", async () => {
   vi.stubEnv(
-    "BB_CODEX_BRIDGE_APP_SERVER_COMMAND",
+    "MQH_CODEX_BRIDGE_APP_SERVER_COMMAND",
     join(tmpdir(), "bb-codex-does-not-exist"),
   );
-  vi.stubEnv("BB_CODEX_BRIDGE_APP_SERVER_ARGS", "[]");
+  vi.stubEnv("MQH_CODEX_BRIDGE_APP_SERVER_ARGS", "[]");
 
   harness.sendRequest(1, "model/list", {});
   const response = await harness.waitForResponse(1);

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rm, stat } from "node:fs/promises";
+import { mkdir, readFile, rm } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
 import { derivePluginId } from "@bb/domain";
 import {
@@ -17,11 +17,7 @@ import {
   type PluginProvenance,
   type PluginSourceIntent,
 } from "@bb/db";
-import {
-  buildPluginApp,
-  buildPluginHost,
-  buildPluginServer,
-} from "@bb/plugin-build";
+import { buildPluginHost, buildPluginServer } from "@bb/plugin-build";
 import {
   assertPublicMarketplaceUrl,
   boundedResponseJson,
@@ -30,7 +26,7 @@ import {
 } from "../plugin-catalog/marketplace-http.js";
 import { installGitDependencies } from "./git-plugin-dependencies.js";
 import { getPluginBuildToolchain } from "./build-toolchain.js";
-import { validatePluginArtifactMeta } from "./app-bundle.js";
+import { validatePluginArtifactMeta } from "./plugin-assets.js";
 import type {
   InstalledPlugin,
   PluginSourceSelection,
@@ -112,7 +108,7 @@ interface ManagedPluginArtifactsContext {
     kind: "path" | "git" | "npm" | "builtin";
     manifest: PluginManifest;
     rootDir: string;
-    artifact: "app" | "server" | "host";
+    artifact: "server" | "host";
   }) => boolean;
   registerInstalled: (args: RegisterInstalledArgs) => Promise<InstalledPlugin>;
   assertInstallRegistrationAvailable: (
@@ -209,7 +205,6 @@ export function createManagedPluginArtifacts(
     sourceKind,
     checkEngineRange,
     checkPluginSdkRange,
-    isPackagedBuiltinEntry,
     registerInstalled,
     assertInstallRegistrationAvailable,
     refuseBuiltinShadow,
@@ -269,45 +264,6 @@ export function createManagedPluginArtifacts(
     if (kind === "git") {
       await installGitDependencies(args.rootDir);
     }
-    if (manifest.appEntry !== undefined) {
-      if (kind === "npm") {
-        const jsPresent = await stat(join(args.rootDir, "dist", "app.js"))
-          .then(() => true)
-          .catch(() => false);
-        if (!jsPresent) {
-          throw new Error(
-            `install refused: npm plugins with a frontend (bb.app) must publish a prebuilt bundle — "${manifest.id}" is missing dist/app.js + dist/app.meta.json`,
-          );
-        }
-      } else if (
-        !isPackagedBuiltinEntry({
-          kind,
-          manifest,
-          rootDir: args.rootDir,
-          artifact: "app",
-        })
-      ) {
-        let app: Awaited<ReturnType<typeof buildPluginApp>>;
-        try {
-          app = await buildPluginApp(
-            args.rootDir,
-            deps.appVersion,
-            await getPluginBuildToolchain(deps),
-            { minify: true, hostProvidedZod: true },
-          );
-        } catch (error) {
-          throw new Error(
-            `install failed: frontend bundle build for "${manifest.id}" failed: ${error instanceof Error ? error.message : String(error)}`,
-          );
-        }
-        logPluginBuildWarnings({
-          dataDir: deps.dataDir,
-          logger: deps.logger,
-          pluginId: manifest.id,
-          warnings: app.migrationWarnings,
-        });
-      }
-    }
     if (kind === "git") {
       let server: Awaited<ReturnType<typeof buildPluginServer>>;
       try {
@@ -342,7 +298,7 @@ export function createManagedPluginArtifacts(
       }
     }
     async function validateArtifact(
-      artifact: "server" | "app" | "host",
+      artifact: "server" | "host",
       required: boolean,
     ): Promise<void> {
       const metaPath = join(args.rootDir, "dist", `${artifact}.meta.json`);
@@ -370,9 +326,6 @@ export function createManagedPluginArtifacts(
 
     if (managed) {
       await validateArtifact("server", kind === "git");
-      if (manifest.appEntry !== undefined) {
-        await validateArtifact("app", kind === "npm");
-      }
       if (manifest.hostEntry !== undefined) {
         await validateArtifact("host", true);
       }

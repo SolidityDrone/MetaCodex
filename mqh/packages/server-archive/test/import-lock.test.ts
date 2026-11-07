@@ -66,7 +66,7 @@ async function stageImport(): Promise<{
   await writeDataFile(
     sourceDataDir,
     "config.json",
-    JSON.stringify({ config: { BB_LOG_LEVEL: "info" } }),
+    JSON.stringify({ config: { MQH_LOG_LEVEL: "info" } }),
   );
   await writeDataFile(
     sourceDataDir,
@@ -133,7 +133,7 @@ describe("installImportedServerFiles managed file locks", () => {
     await writeDataFile(
       dataDir,
       "config.json",
-      JSON.stringify({ config: { BB_APP_URL: "https://target.example" } }),
+      JSON.stringify({ config: { MQH_APP_URL: "https://target.example" } }),
     );
     const lockPath = path.join(dataDir, ".config.json.lock");
     const lock = await holdLock(lockPath);
@@ -154,7 +154,7 @@ describe("installImportedServerFiles managed file locks", () => {
     await writeDataFile(
       dataDir,
       "config.json",
-      JSON.stringify({ config: { BB_APP_URL: "https://changed.example" } }),
+      JSON.stringify({ config: { MQH_APP_URL: "https://changed.example" } }),
     );
     lock.release();
     await lock.released;
@@ -162,11 +162,11 @@ describe("installImportedServerFiles managed file locks", () => {
 
     expect(firstOutcome).toBe("waiting on the lock");
     expect(configWhileLocked).toEqual({
-      config: { BB_APP_URL: "https://target.example" },
+      config: { MQH_APP_URL: "https://target.example" },
     });
     expect(entriesWhileLocked).not.toContain("bb.db");
     expect(await readDataJson(dataDir, "config.json")).toEqual({
-      config: { BB_APP_URL: "https://changed.example", BB_LOG_LEVEL: "info" },
+      config: { MQH_APP_URL: "https://changed.example", MQH_LOG_LEVEL: "info" },
     });
     expect(await readdir(dataDir)).toContain("bb.db");
   });
@@ -207,7 +207,7 @@ describe("installImportedServerFiles managed file locks", () => {
 
     expect(firstOutcome).toBe("waiting on the lock");
     expect(envWhileLocked).toEqual({ env: { TARGET_ONLY: "1" } });
-    expect(configWhileLocked).toEqual({ config: { BB_LOG_LEVEL: "info" } });
+    expect(configWhileLocked).toEqual({ config: { MQH_LOG_LEVEL: "info" } });
     expect(entriesWhileLocked).not.toContain("bb.db");
     expect(await readDataJson(dataDir, "env.json")).toEqual({
       env: { SOURCE_ONLY: "1", TARGET_ONLY: "2" },

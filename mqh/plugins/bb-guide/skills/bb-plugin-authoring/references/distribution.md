@@ -5,7 +5,7 @@
 This skill is a guide, not the contract. For an exact signature or a symbol it
 does not cover:
 
-1. **`bb plugin types`**, run in the plugin directory (or given its path),
+1. **`mqh plugin types`**, run in the plugin directory (or given its path),
    syncs that plugin's SDK surface to the running bb — no server needed. It
    repins the exact `@get-bb/plugin-sdk` to this bb's SDK version and brings
    the declared runtime-shimmed packages' type-only devDependencies to the
@@ -31,9 +31,9 @@ does not cover:
      `types/bb-plugin-sdk-app.d.ts` for an app), which its `tsconfig.json`
      maps `@get-bb/plugin-sdk` onto. That layout lacks the `/host` and
      `/testing/host` subpaths, so migrate before adding `bb.host`.
-     `bb plugin migrate` converts such a plugin to the npm package: it prints
+     `mqh plugin migrate` converts such a plugin to the npm package: it prints
      the plan and asks first (`--yes` when stdin is not a terminal), pins the
-     SDK in the field `bb plugin types` picks (raising an older
+     SDK in the field `mqh plugin types` picks (raising an older
      `engines.bbPluginSdk` floor), drops the tsconfig path map, deletes the
      vendored declarations (keeping `types/` if it holds your own files), and
      rewrites `@bb/plugin-sdk` imports; rerunning is a no-op, and you run
@@ -54,11 +54,11 @@ Users can install third-party plugins directly from a local path, npm package,
 or Git repository:
 
 ```sh
-bb plugin install ./bb-plugin-notes
-bb plugin install npm:bb-plugin-notes@^1.0.0
-bb plugin install https://github.com/acme/bb-plugin-notes
-bb plugin install git:https://github.com/acme/bb-plugin-notes.git@main
-bb plugin install git:https://github.com/acme/bb-plugin-notes.git@^1.2.0
+mqh plugin install ./bb-plugin-notes
+mqh plugin install npm:bb-plugin-notes@^1.0.0
+mqh plugin install https://github.com/acme/bb-plugin-notes
+mqh plugin install git:https://github.com/acme/bb-plugin-notes.git@main
+mqh plugin install git:https://github.com/acme/bb-plugin-notes.git@^1.2.0
 ```
 
 A bare HTTP(S) repository URL tracks its default branch. Use the `git:` form
@@ -70,7 +70,7 @@ install builds and which files an npm package must publish.
 
 ### Updates
 
-`bb plugin outdated` checks tracking sources and `bb plugin update` applies
+`mqh plugin outdated` checks tracking sources and `mqh plugin update` applies
 compatible candidates; installing an already-installed managed plugin again is
 refused. Updates select only candidates whose `engines.bb` and
 `engines.bbPluginSdk` ranges the host satisfies, and report newer
@@ -85,7 +85,7 @@ strands users.
 
 Tag each release `vX.Y.Z` and users can install a range instead of a ref:
 bb reads the repository's tags, installs the highest release the range allows,
-and `bb plugin update` moves them to later releases in the same range.
+and `mqh plugin update` moves them to later releases in the same range.
 Prereleases stay out unless the range names one. Give each plugin of a
 multi-plugin repository its own tag prefix — `notes/v1.2.3` — and users add
 `--tag-prefix notes/`.
@@ -117,9 +117,9 @@ file is an index only — it never overrides a plugin's identity, branding,
 entry points, or engine ranges. Users install one plugin at a time:
 
 ```sh
-bb plugin install git:https://github.com/acme/bb-plugins.git@main --plugin notes
-bb plugin install git:https://github.com/acme/bb-plugins.git@main --subdirectory plugins/notes
-bb plugin install path:. --plugin notes
+mqh plugin install git:https://github.com/acme/bb-plugins.git@main --plugin notes
+mqh plugin install git:https://github.com/acme/bb-plugins.git@main --subdirectory plugins/notes
+mqh plugin install path:. --plugin notes
 ```
 
 `--subdirectory` works without a collection manifest; `--plugin` resolves an
@@ -174,13 +174,13 @@ own origin.
 Host it three ways, and users add whichever fits:
 
 ```sh
-bb marketplace add https://plugins.acme.dev/marketplace.json
-bb marketplace add git:github.com/acme/bb-marketplace@main
-bb marketplace add git:github.com/acme/agent-plugins@main --subdirectory bb
-bb marketplace add path:/work/acme-marketplace
-bb marketplace list
-bb marketplace refresh acme-plugins
-bb marketplace remove acme-plugins
+mqh marketplace add https://plugins.acme.dev/marketplace.json
+mqh marketplace add git:github.com/acme/bb-marketplace@main
+mqh marketplace add git:github.com/acme/agent-plugins@main --subdirectory bb
+mqh marketplace add path:/work/acme-marketplace
+mqh marketplace list
+mqh marketplace refresh acme-plugins
+mqh marketplace remove acme-plugins
 ```
 
 `list` shows configured catalogs. `refresh` updates discovery metadata and
@@ -211,7 +211,7 @@ State the outcome the user gets.
 
 `PLUGIN_OVERVIEW.md` beside package.json holds the long-form description. The
 detail page shows it in an Overview section under the lead paragraph, in the
-app and on the public getbb.app marketplace. `bb plugin new` scaffolds one, the
+app and on the public getbb.app marketplace. `mqh plugin new` scaffolds one, the
 BB Community marketplace requires one, and a plugin that is only installed from
 a local path or a private source still reads better with one.
 
@@ -241,4 +241,4 @@ Follow these rules. Marketplace CI rejects a file that breaks one.
 Lead with the outcome, then sections such as What you get, How it works, and
 Requirements. Name every cost: an external service, an account, a separate
 install, or a limited operating system. Name agent surfaces with their exact
-tool or `bb` command names in inline code.
+tool or `mqh` command names in inline code.

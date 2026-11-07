@@ -79,7 +79,7 @@ function formatAttachments(
     .map(
       (attachment) =>
         `- ${attachment.fileName} · ${attachment.id}\n` +
-        `  Fetch with: bb tasks attachment get ${attachment.id} --out <path>`,
+        `  Fetch with: mqh tasks attachment get ${attachment.id} --out <path>`,
     )
     .join("\n");
 }
@@ -103,14 +103,14 @@ export function buildSeedPrompt(input: SeedPromptInput): string {
     ),
     markdownSection(
       "Project context",
-      `- Name: ${input.project.name}\n- Linked bb project: ${input.project.linkedBbProjectId ?? "Not linked"}`,
+      `- Name: ${input.project.name}\n- Linked mqh project: ${input.project.linkedBbProjectId ?? "Not linked"}`,
     ),
     markdownSection("Sub-tasks", formatSubtasks(input.subtasks)),
     markdownSection("Attachments", formatAttachments(input.attachments)),
     markdownSection("Recent comments", formatComments(input.recentComments)),
     markdownSection(
       "Report-back contract",
-      `You are working on task ${input.task.key}. Use the bb tasks CLI: comment substantive updates (bb tasks comment ${input.task.key} --body ...), attach result artifacts, set status when done (bb tasks update ${input.task.key} --status in_review) or explain blockage in a comment. Your thread is already attached to the task.`,
+      `You are working on task ${input.task.key}. Use the mqh tasks CLI: comment substantive updates (mqh tasks comment ${input.task.key} --body ...), attach result artifacts, set status when done (mqh tasks update ${input.task.key} --status in_review) or explain blockage in a comment. Your thread is already attached to the task.`,
     ),
   ];
 
@@ -160,7 +160,7 @@ function requireLinkedBbProject(project: Project): string {
   if (project.linkedBbProjectId) return project.linkedBbProjectId;
   throw new DelegationError(
     "project_not_linked",
-    `Task project "${project.name}" is not linked to a bb project`,
+    `Task project "${project.name}" is not linked to a mqh project`,
   );
 }
 

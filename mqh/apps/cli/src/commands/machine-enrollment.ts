@@ -131,7 +131,7 @@ export async function enrollMachine(
   const home = runtime.homeDir ?? homedir();
   const serverUrl = normalizeUrl(bootstrap.serverUrl);
   const dataDir = resolve(
-    env.BB_DATA_DIR ??
+    env.MQH_DATA_DIR ??
       bootstrap.dataDir ??
       join(
         home,

@@ -89,7 +89,7 @@ await copyBuildOutput({
 });
 // The bb CLI is code-split into host-daemon/dist/bb-chunks. A turbo cache hit
 // restores apps/host-daemon/dist without clearing it first, so the copy can
-// carry an earlier build's hashed chunks; ship only the ones `bb` reaches.
+// carry an earlier build's hashed chunks; ship only the ones `mqh` reaches.
 await assertPathExists(
   resolve(packageRoot, "host-daemon", "dist", "bb-chunks"),
   "bundled bb CLI chunks",

@@ -67,7 +67,7 @@ export function createPendingServerEnv(
     PATH: hostToolchain.environment(sanitized).PATH,
     ...(hostDaemonPort === null
       ? {}
-      : { BB_HOST_DAEMON_PORT: String(hostDaemonPort) }),
+      : { MQH_HOST_DAEMON_PORT: String(hostDaemonPort) }),
   };
 }
 

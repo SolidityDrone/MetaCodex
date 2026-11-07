@@ -13,7 +13,7 @@ export function piProviderDeclaration(): PluginProviderDeclaration {
       iconTint: { light: "#6D5DFB", dark: "#6D5DFB" },
     },
     maintenance: { health: true, usage: false, installation: true },
-    env: { passthrough: ["BB_PI_BRIDGE_COMMAND", "BB_PI_BRIDGE_ARGS"] },
+    env: { passthrough: ["MQH_PI_BRIDGE_COMMAND", "MQH_PI_BRIDGE_ARGS"] },
     capabilities: {
       supportsServiceTier: false,
       supportsNativeUserQuestion: false,

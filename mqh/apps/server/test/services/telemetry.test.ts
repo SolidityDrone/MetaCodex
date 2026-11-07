@@ -168,16 +168,16 @@ describe("telemetry service", () => {
     const commit = "a".repeat(40);
     const installs = [
       appInstallFromServerConfig({}),
-      appInstallFromServerConfig({ BB_APP_INSTALL_KIND: "npm" }),
+      appInstallFromServerConfig({ MQH_APP_INSTALL_KIND: "npm" }),
       appInstallFromServerConfig({
-        BB_APP_INSTALL_KIND: "source",
-        BB_APP_SOURCE_COMMIT: commit,
-        BB_APP_SOURCE_ORIGIN: "official",
+        MQH_APP_INSTALL_KIND: "source",
+        MQH_APP_SOURCE_COMMIT: commit,
+        MQH_APP_SOURCE_ORIGIN: "official",
       }),
       appInstallFromServerConfig({
-        BB_APP_INSTALL_KIND: "source",
-        BB_APP_SOURCE_COMMIT: commit,
-        BB_APP_SOURCE_ORIGIN: "fork",
+        MQH_APP_INSTALL_KIND: "source",
+        MQH_APP_SOURCE_COMMIT: commit,
+        MQH_APP_SOURCE_ORIGIN: "fork",
       }),
     ];
     for (const appInstall of installs) {
