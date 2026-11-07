@@ -49,7 +49,10 @@ namespace MetaCodex.UI
         protected virtual void OnInteractionChanged() { }
 
         public virtual void OnPress(UiPointerEvent e) { }
+        /// Only while pressed (pinch held or fingertip pushed in): sliders and drag-scrolling follow it.
         public virtual void OnDrag(UiPointerEvent e) { }
+        /// The pointer moves over the element without pressing (hover highlights only; never change a value here).
+        public virtual void OnHover(UiPointerEvent e) { }
         public virtual void OnRelease(UiPointerEvent e, bool inside) { if (inside) OnClick(e); }
         public virtual void OnClick(UiPointerEvent e) { }
 
@@ -124,15 +127,16 @@ namespace MetaCodex.UI
 
         protected override void Build()
         {
-            _shape = Panel.Shapes.Add(Panel.Shape(UiShapeKind.Button, Rect, Tint, Theme.CutBig * 0.5f, 0.002f, 0.006f));
+            // fill style for the shader: 1 = filled with its colour (primary, danger), 2 = ghost (only when hovered), 0 = normal
+            float fillStyle = Style == UiButtonStyle.Primary || Style == UiButtonStyle.Danger ? 1f : Style == UiButtonStyle.Ghost ? 2f : 0f;
+            _shape = Panel.Shapes.Add(Panel.Shape(UiShapeKind.Button, Rect, Tint, Mathf.Min(Theme.CutBig * 0.55f, Rect.height * 0.5f), fillStyle, 0.006f));
             float size = TextSize > 0 ? TextSize : Mathf.Min(Theme.BodySize, Rect.height * 0.62f);
-            _label = UiText.Create(Panel, Rect, Text, Style == UiButtonStyle.Tab || Style == UiButtonStyle.Primary ? Theme.Display : Theme.Body,
+            _label = UiText.Create(Panel, Rect, UiTheme.Pretty(Text), Style == UiButtonStyle.Tab || Style == UiButtonStyle.Primary ? Theme.Display : Theme.Body,
                 size, Theme.Text, TextAlignmentOptions.Center);
-            if (Style == UiButtonStyle.Tab || Style == UiButtonStyle.Primary) _label.Tmp.characterSpacing = 4f;
             Refresh();
         }
 
-        public void SetText(string t) { Text = t; if (_label != null) _label.Text = t; }
+        public void SetText(string t) { Text = t; if (_label != null) _label.Text = UiTheme.Pretty(t); }
 
         public void SetSelected(bool s) { if (Selected == s) return; Selected = s; Refresh(); }
 
@@ -201,7 +205,7 @@ namespace MetaCodex.UI
             _label = UiText.Create(Panel, new Rect(Rect.x, Rect.y, Rect.width - 0.11f, Rect.height), Text, Theme.Body, Theme.BodySize, Theme.Text);
             _state = UiText.Create(Panel, new Rect(Rect.xMax - 0.112f, Rect.y, 0.04f, Rect.height), "", Theme.Display, Theme.SmallSize, Theme.TextDim, TextAlignmentOptions.MidlineRight);
             _track = Panel.Shapes.Add(Panel.Shape(UiShapeKind.Bar, TrackRect, Theme.Ok, 0.004f, 0.004f, 0.004f));
-            _knob = Panel.Shapes.Add(Panel.Shape(UiShapeKind.Button, KnobRect(), Theme.Accent, 0.003f, 0.002f, 0.004f));
+            _knob = Panel.Shapes.Add(Panel.Shape(UiShapeKind.Button, KnobRect(), Theme.Text, 0.05f, 1f, 0.004f)); // a round, filled knob
             Refresh();
         }
 
@@ -225,13 +229,13 @@ namespace MetaCodex.UI
             if (Panel == null) return;
             var s = Panel.Shapes.Get(_track);
             s.State = Value ? 1f : 0f;
-            s.Tint = Value ? Theme.Ok : Theme.Frame;
+            s.Tint = Value ? Theme.Accent : Theme.Frame;
             Panel.Shapes.Set(_track, s);
             var k = KnobRect();
             Panel.Shapes.SetRect(_knob, Panel.PanelToLocal(k.center), k.size);
             Panel.Shapes.SetState(_knob, Hover ? 0.6f : 0.25f);
             _state.Text = Value ? "ON" : "OFF";
-            _state.Color = Value ? Theme.Ok : Theme.TextDim;
+            _state.Color = Value ? Theme.TextAccent : Theme.TextDim;
         }
 
         protected override void OnInteractionChanged() => Refresh();
@@ -287,12 +291,12 @@ namespace MetaCodex.UI
         protected override void Build()
         {
             if (!string.IsNullOrEmpty(Text))
-                _label = UiText.Create(Panel, new Rect(Rect.x, Rect.y, LabelWidth - 0.006f, Rect.height), Text, Theme.Body, Theme.BodySize, Theme.Text);
+                _label = UiText.Create(Panel, new Rect(Rect.x, Rect.y, LabelWidth - 0.006f, Rect.height), UiTheme.Pretty(Text), Theme.Body, Theme.BodySize, Theme.Text);
             for (int i = 0; i < Options.Length; i++)
             {
                 var r = SegRect(i);
                 _shapes.Add(Panel.Shapes.Add(Panel.Shape(UiShapeKind.Button, r, Theme.AccentSoft, 0.006f, 0.002f, 0.005f)));
-                _texts.Add(UiText.Create(Panel, r, Options[i], Theme.Display, Mathf.Min(Theme.SmallSize, r.height * 0.6f), Theme.Text, TextAlignmentOptions.Center));
+                _texts.Add(UiText.Create(Panel, r, UiTheme.Pretty(Options[i]), Theme.Display, Mathf.Min(Theme.SmallSize, r.height * 0.6f), Theme.Text, TextAlignmentOptions.Center));
             }
             Refresh();
         }
@@ -330,7 +334,8 @@ namespace MetaCodex.UI
             if (!Hover && _hoverIndex != -1) { _hoverIndex = -1; Refresh(); }
         }
 
-        public override void OnDrag(UiPointerEvent e) { int i = IndexAt(e.Point); if (i != _hoverIndex) { _hoverIndex = i; Refresh(); } }
+        public override void OnDrag(UiPointerEvent e) => OnHover(e);
+        public override void OnHover(UiPointerEvent e) { int i = IndexAt(e.Point); if (i != _hoverIndex) { _hoverIndex = i; Refresh(); } }
 
         public override void OnClick(UiPointerEvent e)
         {
@@ -375,10 +380,10 @@ namespace MetaCodex.UI
 
         protected override void Build()
         {
-            _label = UiText.Create(Panel, new Rect(Rect.x, Rect.y, LabelWidth - 0.006f, Rect.height), Text, Theme.Body, Theme.BodySize, Theme.Text);
+            _label = UiText.Create(Panel, new Rect(Rect.x, Rect.y, LabelWidth - 0.006f, Rect.height), UiTheme.Pretty(Text), Theme.Body, Theme.BodySize, Theme.Text);
             _value = UiText.Create(Panel, new Rect(Rect.xMax - 0.055f, Rect.y, 0.055f, Rect.height), "", Theme.Mono, Theme.SmallSize, Theme.TextAccent, TextAlignmentOptions.MidlineRight);
             _track = Panel.Shapes.Add(Panel.Shape(UiShapeKind.Bar, TrackRect, Theme.Accent, 0.003f, 0.003f, 0.004f));
-            _thumb = Panel.Shapes.Add(Panel.Shape(UiShapeKind.Button, ThumbRect(), Theme.Accent, 0.003f, 0.002f, 0.005f));
+            _thumb = Panel.Shapes.Add(Panel.Shape(UiShapeKind.Button, ThumbRect(), Theme.Text, 0.05f, 1f, 0.005f));
             Refresh();
         }
 
@@ -465,7 +470,7 @@ namespace MetaCodex.UI
         protected override void Build()
         {
             if (!string.IsNullOrEmpty(Caption))
-                _caption = UiText.Create(Panel, new Rect(Rect.x, Rect.y, CaptionWidth - 0.006f, Rect.height), Caption, Theme.Body, Theme.BodySize, Theme.Text);
+                _caption = UiText.Create(Panel, new Rect(Rect.x, Rect.y, CaptionWidth - 0.006f, Rect.height), UiTheme.Pretty(Caption), Theme.Body, Theme.BodySize, Theme.Text);
             _box = Panel.Shapes.Add(Panel.Shape(UiShapeKind.Button, BoxRect, Theme.Frame, 0.006f, 0.002f, 0.005f));
             var tr = BoxRect;
             _text = UiText.Create(Panel, new Rect(tr.x + 0.008f, tr.y, tr.width - 0.016f, tr.height), "", Theme.Mono, Theme.SmallSize * 1.1f, Theme.Text);
@@ -645,6 +650,11 @@ namespace MetaCodex.UI
                 _scroll = Mathf.Clamp(_dragStartScroll - dy / RowHeight, 0f, MaxScroll);
                 Render();
             }
+            OnHover(e);
+        }
+
+        public override void OnHover(UiPointerEvent e)
+        {
             int hr = RowAt(e.Point);
             if (hr != _hoverRow) { _hoverRow = hr; Render(); }
         }

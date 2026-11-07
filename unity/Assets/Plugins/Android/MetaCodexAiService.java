@@ -2,6 +2,7 @@ package com.pnncl.metacodex.ai;
 
 import android.app.Service;
 import android.content.Intent;
+import android.os.Binder;
 import android.os.IBinder;
 import android.util.Log;
 
@@ -27,9 +28,11 @@ public class MetaCodexAiService extends Service {
     private static final String TAG = "MetaCodexAI";
     private static Process child;
 
+    /** The app binds too: a bound service is not stopped when Android stops an idle app's started services
+     *  (that ended the AI service while the headset slept). */
     @Override
     public IBinder onBind(Intent intent) {
-        return null;
+        return new Binder();
     }
 
     @Override

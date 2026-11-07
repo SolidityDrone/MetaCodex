@@ -5,10 +5,12 @@ using UnityEngine;
 
 namespace MetaCodex.Shell
 {
-    /// The two layouts. FIXED: panels are world-locked where you leave them. FLOAT: every panel sits on an
-    /// invisible cylinder around you (a circular screen); the cylinder follows you horizontally as you walk,
-    /// never your head's pitch or roll, and spins freely with inertia (close the hand in empty space and swipe
-    /// sideways; no snapping). Panels bend to the cylinder: the nearer they are, the stronger the curve.
+    /// The two layouts. FIXED: panels are world-locked where you leave them (bent towards you when "Bend panels"
+    /// is on). FLOAT: every panel sits on an invisible cylinder around you (a circular screen) with a gap
+    /// between neighbours; the cylinder follows you horizontally as you walk, never your head's pitch or roll,
+    /// and spins freely with inertia (close the hand in empty space and swipe sideways; no snapping). When the
+    /// open panels do not fit around the circle it grows, so panels never overlap; a panel you drop moves to
+    /// the nearest free place at its height.
     public sealed partial class MetaCodexShell
     {
         private Transform _carousel;
@@ -53,53 +55,104 @@ namespace MetaCodex.Shell
             ArrangeRing();
         }
 
+        private const float RingGap = 4f;     // degrees between neighbours
+        private const float RowHeight = -0.04f; // panel centres just below the eyes
+
+        /// The cylinder's radius: the chosen one, grown when the open panels (plus gaps) would not fit around it.
+        private float FloatRadius()
+        {
+            float r = Mathf.Clamp(Settings.carouselRadius, 0.5f, 2f);
+            var open = LayoutPanels().Where(p => p != null && p.IsOpen).ToList();
+            if (open.Count == 0) return r;
+            float width = open.Sum(p => p.Width * p.transform.lossyScale.x);
+            float room = 2f * Mathf.PI * 0.94f - open.Count * RingGap * Mathf.Deg2Rad; // radians left for the panels themselves
+            return room <= 0.2f ? 2.5f : Mathf.Clamp(Mathf.Max(r, width / room), r, 2.5f);
+        }
+
+        /// Half the angle a panel takes on the cylinder: a bent panel's width is an arc (conservative for flat ones).
+        private static float HalfArc(UiPanel p, float r) => p.Width * 0.5f * p.transform.lossyScale.x / Mathf.Max(r, 0.1f) * Mathf.Rad2Deg;
+
+        private static bool SameRow(UiPanel a, float ha, UiPanel b, float hb) =>
+            Mathf.Abs(ha - hb) < (a.Height * a.transform.lossyScale.y + b.Height * b.transform.lossyScale.y) * 0.5f;
+
+        /// Angles taken by the open panels whose height range meets `p`'s, except `p`.
+        private List<(float, float)> Occupied(UiPanel p, float height, float r)
+        {
+            var occ = new List<(float, float)>();
+            foreach (var kv in _slots)
+            {
+                var q = kv.Key != null ? kv.Key.GetComponent<UiPanel>() : null;
+                if (q == null || q == p || !q.IsOpen) continue;
+                if (!SameRow(p, height, q, kv.Value.height)) continue;
+                occ.Add((kv.Value.angle, HalfArc(q, r)));
+            }
+            return occ;
+        }
+
         /// Side by side around the circle: terminals in the middle (in front), the other panels alternating
         /// right and left, ordered by where they were. Spin to reach the ones behind you.
         private void ArrangeRing()
         {
-            float r = Mathf.Clamp(Settings.carouselRadius, 0.5f, 2f);
+            float r = FloatRadius();
             var c = _carousel.position;
             float Yaw(UiPanel p) { var d = p.transform.position - c; return Mathf.DeltaAngle(_baseYaw, Mathf.Atan2(d.x, d.z) * Mathf.Rad2Deg); }
             var open = LayoutPanels().Where(p => p != null && p.IsOpen).ToList();
             var ordered = open.Where(p => p.Id.StartsWith("term-")).OrderBy(Yaw).Concat(open.Where(p => !p.Id.StartsWith("term-")).OrderBy(p => Mathf.Abs(Yaw(p)))).ToList();
+            _slots.Clear();
             float right = 0f, left = 0f;
             bool first = true, toRight = true;
             foreach (var p in ordered)
             {
-                float half = HalfAngle(p, r);
+                float half = HalfArc(p, r);
                 float angle;
-                if (first) { angle = 0f; right = half; left = -half; first = false; }
-                else if (toRight) { angle = right + 3f + half; right = angle + half; }
-                else { angle = left - 3f - half; left = angle - half; }
+                if (first) { angle = 0f; right = half; left = -half; }
+                else if (toRight) { angle = right + RingGap + half; right = angle + half; }
+                else { angle = left - RingGap - half; left = angle - half; }
                 if (!first) toRight = !toRight;
-                _slots[p.transform] = (angle, p.Id.StartsWith("term-") ? 0f - 0.05f : -0.04f);
+                first = false;
+                _slots[p.transform] = (angle, RowHeight);
             }
+            _ringRadius = r;
         }
 
-        /// A panel opened while floating takes the free gap of the ring nearest to where the user looks.
+        private float _ringRadius;
+
+        /// A panel opened while floating takes the free gap of the ring nearest to where the user looks; when
+        /// there is none the ring grows and is laid out again.
         private void OnOpenedFloating(UiPanel p)
         {
             if (!Floating || p == null || _carousel == null || p.Id == "dock") return;
-            float r = Mathf.Clamp(Settings.carouselRadius, 0.5f, 2f);
-            var occupied = new List<(float, float)>();
-            foreach (var kv in _slots)
-            {
-                var q = kv.Key.GetComponent<UiPanel>();
-                if (q == null || q == p || !q.IsOpen) continue;
-                occupied.Add((kv.Value.angle, HalfAngle(q, r)));
-            }
+            float r = FloatRadius();
+            if (r > _ringRadius + 0.02f) { ArrangeRing(); return; }
             var head = Head;
             float gazeWorld = head != null ? Mathf.Atan2(head.forward.x, head.forward.z) * Mathf.Rad2Deg : _baseYaw;
             float gaze = Mathf.DeltaAngle(_baseYaw + _spin, gazeWorld);
-            float a = FindFreeYaw(gaze, HalfAngle(p, r), occupied, 180f, 3f);
-            if (float.IsNaN(a)) a = gaze;
-            _slots[p.transform] = (a, -0.04f);
+            float a = FindFreeYaw(gaze, HalfArc(p, r), Occupied(p, RowHeight, r), 180f, RingGap);
+            if (float.IsNaN(a)) { ArrangeRing(); return; }
+            _slots[p.transform] = (a, RowHeight);
         }
 
         private void ExitFloat()
         {
             _slots.Clear();
             foreach (var p in LayoutPanels()) p.SetBend(0f);
+            UpdateFixedBend();
+        }
+
+        /// Fixed layout with "Bend panels": each panel curves towards you around its own distance (5 cm steps, so
+        /// text is not rebuilt every frame). Terminals stay flat (their text grid cannot bend yet).
+        public void UpdateFixedBend()
+        {
+            if (Floating || Settings == null) return;
+            var head = Head;
+            foreach (var p in LayoutPanels())
+            {
+                if (p == null) continue;
+                if (!Settings.bendPanels || p.Id.StartsWith("term-") || head == null) { p.SetBend(0f); continue; }
+                var d = p.transform.position - head.position;
+                float dist = Mathf.Max(0.45f, new Vector2(d.x, d.z).magnitude);
+                p.SetBend(Mathf.Round(dist / 0.05f) * 0.05f);
+            }
         }
 
         private void ResetCarousel()
@@ -107,13 +160,23 @@ namespace MetaCodex.Shell
             if (Floating) EnterFloat();
         }
 
-        /// Records a panel's place on the cylinder from where it is now (angle around you, height).
+        /// Records a panel's place on the cylinder from where it is now (angle around you, height), moved to the
+        /// nearest free angle when it would overlap a panel at the same height.
         private void Slot(Transform t)
         {
             var c = _carousel.position;
             var d = t.position - c;
             float world = Mathf.Atan2(d.x, d.z) * Mathf.Rad2Deg;
-            _slots[t] = (Mathf.DeltaAngle(_baseYaw + _spin, world), t.position.y - _carouselY);
+            float angle = Mathf.DeltaAngle(_baseYaw + _spin, world);
+            float height = t.position.y - _carouselY;
+            var p = t.GetComponent<UiPanel>();
+            if (p != null)
+            {
+                float r = Mathf.Max(_ringRadius, FloatRadius());
+                float free = FindFreeYaw(angle, HalfArc(p, r), Occupied(p, height, r), 180f, RingGap);
+                if (!float.IsNaN(free)) angle = free;
+            }
+            _slots[t] = (angle, height);
         }
 
         private void UpdateLayout() => UpdateLayout(Mathf.Min(Time.unscaledDeltaTime, 0.05f));
@@ -123,9 +186,17 @@ namespace MetaCodex.Shell
 
         public Vector3 CarouselCenter => _carousel != null ? new Vector3(_carousel.position.x, _carouselY, _carousel.position.z) : Vector3.zero;
 
+        private float _nextFixedBend;
+
         private void UpdateLayout(float dt)
         {
-            if (!Floating || Settings == null) return;
+            if (Settings == null) return;
+            if (!Floating)
+            {
+                // fixed: re-bend now and then (panels are dragged, the user walks); cheap when nothing changed
+                if (Settings.bendPanels && Time.unscaledTime >= _nextFixedBend) { _nextFixedBend = Time.unscaledTime + 0.5f; UpdateFixedBend(); }
+                return;
+            }
             if (_carousel == null) EnterFloat();
             var head = Head;
             if (head != null)
@@ -142,7 +213,8 @@ namespace MetaCodex.Shell
                 if (Mathf.Abs(_spinVel) < 0.5f) _spinVel = 0f;
             }
 
-            float r = Mathf.Clamp(Settings.carouselRadius, 0.5f, 2f);
+            float r = Mathf.Max(_ringRadius, Mathf.Clamp(Settings.carouselRadius, 0.5f, 2f));
+            if (_ringRadius <= 0f) _ringRadius = r;
             var c = _carousel.position;
             foreach (var p in LayoutPanels())
             {

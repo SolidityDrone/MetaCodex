@@ -53,9 +53,8 @@ namespace MetaCodex.UI
             {
                 var hr = new Rect(0.004f, 0.004f, width - 0.008f, Theme.HeaderHeight - 0.004f);
                 _header = Shapes.Add(Shape(UiShapeKind.Header, hr, Theme.Accent, Theme.CutBig * 0.8f, 0.002f, margin: 0.002f));
-                _title = UiText.Create(this, new Rect(Theme.Padding + 0.006f, 0.006f, width - 0.1f, Theme.HeaderHeight - 0.008f),
-                    title.ToUpperInvariant(), Theme.Display, Theme.TitleSize, Theme.Text, TextAlignmentOptions.MidlineLeft);
-                _title.Tmp.characterSpacing = 6f;
+                _title = UiText.Create(this, new Rect(Theme.Padding + 0.002f, 0.006f, width - 0.1f, Theme.HeaderHeight - 0.008f),
+                    UiTheme.Pretty(title), Theme.Display, Theme.TitleSize, Theme.Text, TextAlignmentOptions.MidlineLeft);
                 _close = Add(new UiButton("✕", () => Close(), UiButtonStyle.Ghost)
                 {
                     Rect = new Rect(width - 0.044f, 0.006f, 0.036f, Theme.HeaderHeight - 0.010f),
@@ -102,7 +101,20 @@ namespace MetaCodex.UI
         public Rect Content => new Rect(Theme.Padding, (HasHeader ? Theme.HeaderHeight : 0f) + Theme.Padding,
             Width - 2 * Theme.Padding, Height - (HasHeader ? Theme.HeaderHeight : 0f) - 2 * Theme.Padding);
 
-        public bool InHeader(Vector2 p) => HasHeader && p.y >= 0f && p.y <= Theme.HeaderHeight && p.x >= 0f && p.x <= Width;
+        public bool InHeader(Vector2 p) => (HasHeader ? p.y >= 0f && p.y <= Theme.HeaderHeight : HandleHeight > 0f && p.y >= 0f && p.y <= HandleHeight) && p.x >= 0f && p.x <= Width;
+
+        /// Panels without a title bar (the dock) can still be moved: pinch the strip at the top (a small bar shows it).
+        public float HandleHeight { get; private set; }
+
+        public void AddGrabHandle(float height)
+        {
+            HandleHeight = height;
+            float w = Mathf.Min(0.07f, Width * 0.3f);
+            Shapes.Add(Shape(UiShapeKind.Bar, new Rect((Width - w) * 0.5f, height * 0.5f - 0.0022f, w, 0.0044f), Theme.Frame, 0.003f, 0f, 0.003f, 0f));
+        }
+
+        /// Hides the title bar's own close button (terminal frames have their own buttons there).
+        public void HideCloseButton() => _close?.SetVisible(false);
 
         /// Ray against the panel plane; panel point when it hits inside the frame.
         public bool Raycast(Ray ray, out Vector2 panelPoint, out float distance)

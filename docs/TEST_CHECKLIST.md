@@ -1,4 +1,4 @@
-# Headset test checklist (MetaCodex 0.3, 2026-11-07)
+# Headset test checklist (MetaCodex 0.5, 2026-11-07)
 
 Tick each line on the Quest. "→" is what should happen. Items marked **(MQH)** need MQH reachable at
 127.0.0.1:38990 from the headset: until MQH runs on the headset (roadmap step 1-2), run it in WSL
@@ -10,7 +10,7 @@ Helpers on the PC: `tools/qterm` (control port), `adb logcat -s Unity`, `files/s
 ## 0. Install and first start
 
 - [ ] `adb install -r unity/Builds/MetaCodex.apk` → installs (version 0.3.x)
-- [ ] Start from the Library → passthrough, no boundary prompt (boundaryless), terminal + dock in front
+- [ ] Start from the Library → passthrough, no boundary prompt (boundaryless), the dock in front; the terminal runs hidden (TERM on the dock shows it)
 - [ ] First start installs the Linux userland (progress in the status line) → a shell prompt in the terminal
 - [ ] Frame rate: status line shows about 72 fps with the shell idle
 - [ ] `mcx-ui status` inside the terminal → host=Ready, fps, terminals=1
@@ -29,7 +29,11 @@ Helpers on the PC: `tools/qterm` (control port), `adb logcat -s Unity`, `files/s
 
 ## 2. Dock, panels, hands
 
-- [ ] Dock: two rows (NEW TERMS FILES GIT AGENTS THREADS WEB / SCRIPTS GESTURE VAULT SETUP KEYS SELECT CENTER)
+- [ ] Dock: two rows of 8 (Term Terms Files Git Agents Threads Web Scripts / Gesture Vault Talk Setup Keys Select Center Voice), a grab bar on top: pinch it and move → the dock moves
+- [ ] New look: rounded dark-glass panels, blue primary buttons, clean type, no scanlines / grid / glowing frames
+- [ ] Terminal `–` hides it (TERMS lists it as hidden; TERM shows it again); `✕` on the last terminal hides it instead of ending it
+- [ ] Hover over a slider without pinching → it does not move; pinch and drag → it moves
+- [ ] SELECT on → pinch-drag a rectangle → "Selected …" and the tool turns itself off; SELECT on, then SELECT again (dock or Settings) → off
 - [ ] Each dock button opens/closes its panel; new panels open where you look, beside the others, not overlapping
 - [ ] Open many panels (10+) → when no gap is left within a head turn, extra panels cascade in front (closer, higher, a bit to the side), never exactly on another
 - [ ] Ray + pinch clicks buttons; poke with the index fingertip clicks too
@@ -53,10 +57,10 @@ Helpers on the PC: `tools/qterm` (control port), `adb logcat -s Unity`, `files/s
 - [ ] GESTURES: move panels by PINCH HEADER / CLOSED HAND / BOTH
 - [ ] GESTURES: POINT RAY ALWAYS / POINTING POSE (ray only when you point)
 - [ ] GESTURES: PINCH AT slider, clap on/off, clap distance, "Custom gestures from plugins" on/off
-- [ ] DISPLAY: distance, carousel radius, UI scale, bend toggle
-- [ ] LOOK: THEME presets COMMAND / STEALTH / ALERT / SOLAR / CLEAN change colours, glow, opacity, motion
-- [ ] LOOK: ACCENT cycles through 9 colours; GLOW, PANEL OPACITY, MOTION sliders; Scanlines, Grid, Sounds, Volume
-- [ ] After a THEME or ACCENT change (panels rebuild), the ray and pinch keep working right away (no stuck input)
+- [ ] DISPLAY: distance, carousel radius, UI scale; "Bend panels around you" bends panels in FIXED too (terminals stay flat)
+- [ ] FLOAT with 10+ panels open → evenly spaced around you, none overlapping (the circle grows); drop a panel on another → it slides to a free place
+- [ ] LOOK: Sharpness, Panel Opacity, Shadows, Foveated rendering, Sounds, Volume (no themes, accents, scanlines or grid)
+- [ ] Foveated rendering ON → the edges of the view get softer (VrApi `Fov=`); OFF (default) → sharp everywhere
 - [ ] Settings survive an app restart
 
 ## 5. Files, Git, Browser
@@ -158,6 +162,8 @@ Reference: `docs/voice.md`. The models are not in the APK: install them once (53
 - [ ] VOICE > TYPE… "close all windows" → same as saying it; SAY… → speaks the text
 - [ ] LANGUAGE IT, say "apri git" → transcribed in Italian (commands match English phrases; the LLM path may still map it)
 - [ ] Frame rate while talking: the status line stays at about 72 fps; VOICE shows the service's RAM
+- [ ] VOICE: pick a voice (F1-F5, M1-M5) → a sample sentence in that voice; spoken replies use it
+- [ ] Speed: "open git" → done right after you stop talking (~0.7 s pause + ~0.6 s); an unusual phrasing → ◆ THINKING under a second
 - [ ] In a terminal: `mcx-ai status`, `mcx-ai say "hello" /tmp/h.wav && mcx-ai transcribe /tmp/h.wav` → "Hello."
 - [ ] `mcx-ui voice run "open the vault"` → JSON result, VAULT opens; `mcx-ui voice list` → commands
 - [ ] A plugin with `voice.command{...}` (skill quest-scripting) → its phrase works by voice; `mcx-ui voice match "<phrase>"`

@@ -46,10 +46,15 @@ namespace MetaCodex.AI
         private float _nextHealth;
         private int _healthFails;
         private bool _healthPending;
+        private bool _routine;      // a start routine is running
+        private int _gen;           // bumped by every start and stop: an older routine gives up
+        private bool _resumeCheck;  // just back from a pause: one failed health check restarts at once
+        private AndroidJavaProxy _conn;
         public const string ServiceClass = "com.pnncl.metacodex.ai.MetaCodexAiService";
 
         public bool IsRunning => State == HostState.Running;
-        public bool IsBusyStarting => State == HostState.Preparing || State == HostState.Starting;
+        /// Coming up (or about to restart): the voice pipeline waits instead of failing.
+        public bool IsBusyStarting => _routine || State == HostState.Preparing || State == HostState.Starting;
 
         public void Init(ConcurrentQueue<Action> main, string sharedDir, int threads)
         {
@@ -88,16 +93,30 @@ namespace MetaCodex.AI
         public void StartService()
         {
             _wantRunning = true;
-            if (State == HostState.Running || IsBusyStarting) return;
+            if (State == HostState.Running || _routine) return;
             if (IsDev) { if (Application.isPlaying) StartCoroutine(ConnectDev()); else ConnectDevNow(); return; }
             if (State == HostState.Failed && _nativeLibDir == null) return;
-            StartCoroutine(StartRoutine());
+            _restartAt = -1f;
+            StartCoroutine(StartRoutine(++_gen));
+        }
+
+        /// The service stopped answering: start it again now (no waiting for the next health checks).
+        public void RestartNow(string why)
+        {
+            if (!_wantRunning) _wantRunning = true;
+            if (_routine) return;
+            if (IsDev) { StartService(); return; }
+            Say("restarting the AI service: " + why);
+            State = HostState.Stopped; // so StartService does not think it is up
+            StartService();
         }
 
         public void StopService()
         {
             _wantRunning = false;
             _restartAt = -1f;
+            _gen++;
+            _routine = false;
             if (IsDev) { Set(HostState.Stopped, "dev service left running (tools/qvac-dev.sh … stop)"); return; }
             Client.Shutdown();
             ServiceIntent("stop", null, null, null, null);
@@ -106,29 +125,69 @@ namespace MetaCodex.AI
 
         private void OnApplicationQuit() => StopService();
 
+        private void OnApplicationPause(bool paused)
+        {
+            if (paused || IsDev || !_wantRunning) return;
+            // the headset slept: the service may be gone; check now and restart on the first miss
+            _resumeCheck = true;
+            _nextHealth = 0f;
+            if (State != HostState.Running && !_routine) StartService();
+        }
+
         private void Update()
         {
-            if (_restartAt > 0f && Time.unscaledTime >= _restartAt && _wantRunning && !IsBusyStarting)
+            if (_restartAt > 0f && Time.unscaledTime >= _restartAt && _wantRunning && !_routine)
             {
                 _restartAt = -1f;
-                StartCoroutine(StartRoutine());
+                State = HostState.Stopped;
+                StartService();
                 return;
             }
             // the service lives in another process: it is alive when it answers
             if (State != HostState.Running || IsDev || _healthPending || Time.unscaledTime < _nextHealth) return;
+            if (Client.InFlight > 0 && !_resumeCheck) { _nextHealth = Time.unscaledTime + 5f; return; } // busy is not dead
             _nextHealth = Time.unscaledTime + 5f;
             _healthPending = true;
             Client.Health((r, e) =>
             {
                 _healthPending = false;
+                bool resumed = _resumeCheck;
+                _resumeCheck = false;
                 if (r != null && e == null) { _healthFails = 0; return; }
-                if (++_healthFails < 3 || State != HostState.Running || !_wantRunning) return;
+                if (State != HostState.Running || !_wantRunning) return;
+                if (resumed) { _healthFails = 0; RestartNow("not answering after the headset woke up"); return; }
+                if (++_healthFails < 3) return;
                 _healthFails = 0;
                 if (Time.unscaledTime - _restartWindowStart > 300f) { _restartWindowStart = Time.unscaledTime; _restarts = 0; }
                 if (++_restarts > 3) { Fail("the AI service stopped answering 4 times in 5 min; see files/qvac/data/service.log and stdout.log"); return; }
                 Set(HostState.Starting, $"the AI service stopped answering; restarting ({_restarts}/3)");
                 _restartAt = Time.unscaledTime + 1f + 2f * _restarts;
             });
+        }
+
+        private sealed class Connection : AndroidJavaProxy
+        {
+            public Connection() : base("android.content.ServiceConnection") { }
+            public void onServiceConnected(AndroidJavaObject name, AndroidJavaObject binder) { }
+            public void onServiceDisconnected(AndroidJavaObject name) { }
+            public void onBindingDied(AndroidJavaObject name) { }
+            public void onNullBinding(AndroidJavaObject name) { }
+        }
+
+        /// Binds once per app session: a bound service is not stopped with an idle app's started services.
+        private void Bind()
+        {
+            if (_conn != null || Application.platform != RuntimePlatform.Android) return;
+            using (var player = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+            using (var activity = player.GetStatic<AndroidJavaObject>("currentActivity"))
+            using (var intent = new AndroidJavaObject("android.content.Intent"))
+            {
+                intent.Call<AndroidJavaObject>("setClassName", activity, ServiceClass).Dispose();
+                var conn = new Connection();
+                bool ok = activity.Call<bool>("bindService", intent, conn, 1 /* BIND_AUTO_CREATE */);
+                if (ok) _conn = conn;
+                Say(ok ? "bound to the AI service process" : "bindService failed (the service may be stopped while the app is idle)");
+            }
         }
 
         /// startService on MetaCodexAiService (process ":ai"): action null = (re)start the child with argv/env.
@@ -152,7 +211,18 @@ namespace MetaCodex.AI
 
         // ------------------------------------------------------------------ headset
 
-        private IEnumerator StartRoutine()
+        private IEnumerator StartRoutine(int gen)
+        {
+            _routine = true;
+            try
+            {
+                var inner = StartSteps(gen);
+                while (gen == _gen && inner.MoveNext()) yield return inner.Current;
+            }
+            finally { if (gen == _gen) _routine = false; }
+        }
+
+        private IEnumerator StartSteps(int gen)
         {
             Set(HostState.Preparing, "preparing the AI runtime");
             string info = null;
@@ -222,7 +292,7 @@ namespace MetaCodex.AI
                 "TMPDIR=" + tmp,
                 "PATH=/system/bin",
             };
-            try { ServiceIntent(null, argv, env, RuntimeDir, Path.Combine(DataDir, "stdout.log")); }
+            try { ServiceIntent(null, argv, env, RuntimeDir, Path.Combine(DataDir, "stdout.log")); Bind(); }
             catch (Exception ex) { Fail("start: " + ex.Message); yield break; }
             Set(HostState.Starting, "starting the AI service");
             yield return WaitHealthy(30f);

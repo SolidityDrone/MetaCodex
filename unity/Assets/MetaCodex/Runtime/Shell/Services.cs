@@ -103,8 +103,8 @@ namespace MetaCodex.Shell
         public bool foveation = false;
         /// One-time upgrades of saved settings (2: readability defaults, 2026-11-07). 0 in files written before.
         public int settingsVersion = 0;
-        public string accent = "cyan";
-        public bool scanlines = true;
+        public string accent = "blue";
+        public bool scanlines = false;
         public string mqhUrl = "http://127.0.0.1:38990";
         public string mqhToken = "";
         public bool mqhSync = true;
@@ -114,9 +114,9 @@ namespace MetaCodex.Shell
         public List<GestureBinding> bindings = new List<GestureBinding>();
         // look and feel
         public float glow = 1f;
-        public float panelOpacity = 0.9f;
-        public float motion = 1f;
-        public bool grid = true;
+        public float panelOpacity = 0.92f;
+        public float motion = 0f;
+        public bool grid = false;
         public bool sounds = true;
         public float soundVolume = 0.35f;
         // agents: defaults for new threads
@@ -129,6 +129,8 @@ namespace MetaCodex.Shell
         public List<SavedLayout> layouts = new List<SavedLayout>();
         /// Voice control and the local AI service (VOICE panel).
         public VoiceSettings voice = new VoiceSettings();
+        /// Show the first terminal when the app starts (off: it runs hidden until TERM on the dock shows it).
+        public bool terminalAtStart = false;
 
         public static string PathOnDisk => Path.Combine(Application.persistentDataPath, "metacodex-settings.json");
 

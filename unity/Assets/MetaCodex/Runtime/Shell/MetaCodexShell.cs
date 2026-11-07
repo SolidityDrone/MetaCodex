@@ -81,6 +81,7 @@ namespace MetaCodex.Shell
             if (_built) return;
             _built = true;
             Settings = ShellSettings.Load(_settingsPath);
+            _hideFirstTerminal = !Settings.terminalAtStart;
             if (Settings.settingsVersion < 2)
             {
                 // readability (first headset test: text too small and soft): bigger panels, supersampling
@@ -90,6 +91,23 @@ namespace MetaCodex.Shell
                 Settings.settingsVersion = 2;
                 Settings.Save(_settingsPath);
                 _localSettingsWin = true; // MQH's copy is older: push ours instead of taking it at the first sync
+            }
+            if (Settings.settingsVersion < 3)
+            {
+                // one standard appearance (owner, 0.5): no themes, accents, scanlines or grid; the terminal starts
+                // hidden; voice on 2 threads (3 and 4 measured slower on the 3 cores the AI service has)
+                Settings.accent = "blue";
+                Settings.scanlines = false;
+                Settings.grid = false;
+                Settings.motion = 0f;
+                Settings.glow = 1f;
+                Settings.panelOpacity = Mathf.Max(Settings.panelOpacity, 0.92f);
+                Settings.foveation = false;
+                Settings.terminalAtStart = false;
+                Settings.voice.threads = 2;
+                Settings.settingsVersion = 3;
+                Settings.Save(_settingsPath);
+                _localSettingsWin = true;
             }
             var theme = new UiTheme();
             theme.SetAccent(Settings.accent);
@@ -182,6 +200,9 @@ namespace MetaCodex.Shell
                 var displays = new List<UnityEngine.XR.XRDisplaySubsystem>();
                 SubsystemManager.GetSubsystems(displays);
                 foreach (var d in displays) d.foveatedRenderingLevel = Settings.foveation ? 0.5f : 0f;
+                // the rig's OVRManager turns fixed foveation on (High) by itself; it is the switch that works
+                OVRManager.useDynamicFoveatedRendering = false;
+                OVRManager.foveatedRenderingLevel = Settings.foveation ? OVRManager.FoveatedRenderingLevel.High : OVRManager.FoveatedRenderingLevel.Off;
             }
             catch (Exception ex) { Log("display settings: " + ex.Message); }
         }
@@ -330,6 +351,7 @@ namespace MetaCodex.Shell
             float w = v.Width + 2 * bezel, h = v.Height + t.HeaderHeight + bezel * 2;
             var frame = UiPanel.Create<UiPanel>("term-" + inst.Number, "TERMINAL " + inst.Number, w, h, _root);
             frame.Closable = false;
+            frame.HideCloseButton(); // ✕ below ends the terminal (or hides the last one); – hides it
             // reparent: keep the view's world pose -> derive the frame pose from it
             var viewTr = v.transform;
             Vector3 topLeftWorld = viewTr.position;
@@ -342,23 +364,59 @@ namespace MetaCodex.Shell
             viewTr.localRotation = Quaternion.identity;
             inst.Frame = frame.transform;
             float bx = w - 0.044f;
-            frame.Add(new UiButton("✕", () => app?.CloseTerminal(inst), UiButtonStyle.Ghost) { Rect = new Rect(bx, 0.006f, 0.036f, t.HeaderHeight - 0.010f) });
-            frame.Add(new UiButton("+", () => app?.NewTerminal(), UiButtonStyle.Ghost) { Rect = new Rect(bx - 0.042f, 0.006f, 0.036f, t.HeaderHeight - 0.010f) });
-            frame.Add(new UiButton("⌨", () => app.Input?.ToggleSystemKeyboard(), UiButtonStyle.Ghost) { Rect = new Rect(bx - 0.084f, 0.006f, 0.036f, t.HeaderHeight - 0.010f) });
-            frame.Add(new UiButton("⎘", () => { app?.Focus(inst); app?.Input?.Paste(GUIUtility.systemCopyBuffer); }, UiButtonStyle.Ghost) { Rect = new Rect(bx - 0.126f, 0.006f, 0.036f, t.HeaderHeight - 0.010f) });
-            var link = frame.Add(new UiButton("⇗", () => OpenTerminalLink(inst), UiButtonStyle.Ghost) { Rect = new Rect(bx - 0.168f, 0.006f, 0.036f, t.HeaderHeight - 0.010f) });
+            frame.Add(new UiButton("✕", () => CloseOrHideTerminal(inst), UiButtonStyle.Ghost) { Rect = new Rect(bx, 0.006f, 0.036f, t.HeaderHeight - 0.010f) });
+            frame.Add(new UiButton("–", () => HideTerminal(inst), UiButtonStyle.Ghost) { Rect = new Rect(bx - 0.042f, 0.006f, 0.036f, t.HeaderHeight - 0.010f) });
+            frame.Add(new UiButton("+", () => app?.NewTerminal(), UiButtonStyle.Ghost) { Rect = new Rect(bx - 0.084f, 0.006f, 0.036f, t.HeaderHeight - 0.010f) });
+            frame.Add(new UiButton("⌨", () => app.Input?.ToggleSystemKeyboard(), UiButtonStyle.Ghost) { Rect = new Rect(bx - 0.126f, 0.006f, 0.036f, t.HeaderHeight - 0.010f) });
+            frame.Add(new UiButton("⎘", () => { app?.Focus(inst); app?.Input?.Paste(GUIUtility.systemCopyBuffer); }, UiButtonStyle.Ghost) { Rect = new Rect(bx - 0.168f, 0.006f, 0.036f, t.HeaderHeight - 0.010f) });
+            var link = frame.Add(new UiButton("⇗", () => OpenTerminalLink(inst), UiButtonStyle.Ghost) { Rect = new Rect(bx - 0.210f, 0.006f, 0.036f, t.HeaderHeight - 0.010f) });
             _linkButtons[inst] = link;
             // a tap on the terminal area focuses it
             frame.Add(new UiHitArea(() => app?.Focus(inst)) { Rect = new Rect(bezel, t.HeaderHeight + bezel, v.Width, v.Height) });
             _frames[inst] = frame;
             Router.Register(frame);
-            frame.Open();
+            if (_hideFirstTerminal) { _hideFirstTerminal = false; frame.gameObject.SetActive(false); } // runs hidden: TERM shows it
+            else frame.Open();
             OnFocusChanged(app != null ? app.Active : inst);
             RefreshTerminalsPanel();
         }
 
+        private bool _hideFirstTerminal;
+
+        /// Shows a hidden terminal where the user looks (and focuses it).
+        public void ShowTerminal(TerminalInstance inst)
+        {
+            if (inst == null || !_frames.TryGetValue(inst, out var f)) return;
+            if (!f.IsOpen) { PlaceDefault(f.Id, f); f.Open(); OnOpenedFloating(f); }
+            app?.Focus(inst);
+        }
+
+        public void HideTerminal(TerminalInstance inst)
+        {
+            if (inst != null && _frames.TryGetValue(inst, out var f)) f.Close();
+            RefreshTerminalsPanel();
+        }
+
+        /// ✕ on a terminal: ends it, except the last one, which keeps running hidden.
+        private void CloseOrHideTerminal(TerminalInstance inst)
+        {
+            if (app == null || app.Terminals.Count <= 1) { HideTerminal(inst); Toast("The last terminal keeps running hidden · TERM on the dock shows it", "info"); return; }
+            app.CloseTerminal(inst);
+        }
+
+        /// TERM on the dock: a hidden terminal comes back; when all are shown, a new one opens.
+        public void ShowOrNewTerminal()
+        {
+            if (app == null) return;
+            var hidden = app.Terminals.FirstOrDefault(x => _frames.TryGetValue(x, out var f) && !f.IsOpen);
+            if (hidden != null) ShowTerminal(hidden);
+            else TerminalNew();
+        }
+
         /// Self-tests: frame a terminal that no MetaCodexApp owns.
-        public UiPanel WrapForTest(TerminalInstance inst) { WrapTerminal(inst); return _frames.TryGetValue(inst, out var f) ? f : null; }
+        public TerminalInstance FrameOwnerForTest(UiPanel frame) => _frames.FirstOrDefault(kv => kv.Value == frame).Key;
+
+        public UiPanel WrapForTest(TerminalInstance inst) { _hideFirstTerminal = false; WrapTerminal(inst); return _frames.TryGetValue(inst, out var f) ? f : null; }
 
         private void OnTerminalClosed(TerminalInstance inst)
         {
@@ -384,8 +442,11 @@ namespace MetaCodex.Shell
 
         private void OnSelected(UiPanel panel, Rect r)
         {
-            Toast($"Selected {r.width * 100f:F0}×{r.height * 100f:F0} cm on {panel.Title}", "ok");
             LastSelection = (panel.Id, r);
+            // one selection per SELECT: the tool never stays on by surprise
+            Router.SelectionMode = false;
+            if (_selectButton != null) _selectButton.SetSelected(false);
+            Toast($"Selected {r.width * 100f:F0}×{r.height * 100f:F0} cm on {panel.Title} · select tool off", "ok");
         }
 
         public (string panel, Rect rect) LastSelection { get; private set; }

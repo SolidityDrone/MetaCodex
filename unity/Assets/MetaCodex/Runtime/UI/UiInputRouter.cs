@@ -296,7 +296,7 @@ namespace MetaCodex.UI
                 p.HoverElement = element;
                 element?.SetHover(true);
             }
-            if (element != null) element.OnDrag(new UiPointerEvent { Point = point, PressPoint = point, Pointer = p });
+            if (element != null) element.OnHover(new UiPointerEvent { Point = point, PressPoint = point, Pointer = p });
 
             bool pressEdge = p.Down && !p.WasDown;
             bool grabEdge = p.GrabHeld && !p.WasGrab;
@@ -308,7 +308,8 @@ namespace MetaCodex.UI
             }
             else if (pressEdge && panel != null)
             {
-                if (SelectionMode && p.Kind != PointerKind.Poke)
+                // the selection tool draws on content panels; the dock always clicks (SELECT turns it off again)
+                if (SelectionMode && p.Kind != PointerKind.Poke && panel.Id != "dock")
                 {
                     p.Selecting = true;
                     p.SelectPanel = panel;
@@ -379,6 +380,20 @@ namespace MetaCodex.UI
             if (!commit) return;
             var r = Rect.MinMaxRect(Mathf.Min(p.SelectStart.x, p.SelectEnd.x), Mathf.Min(p.SelectStart.y, p.SelectEnd.y),
                 Mathf.Max(p.SelectStart.x, p.SelectEnd.x), Mathf.Max(p.SelectStart.y, p.SelectEnd.y));
+            if (r.width < 0.008f && r.height < 0.008f)
+            {
+                // a tap, not a rectangle: click what is under it (toggles, buttons, SELECT itself in Settings)
+                if (_selectShape.TryGetValue(panel, out int sid)) panel.Shapes.SetVisible(sid, false);
+                var el = panel.HitTest(p.SelectStart);
+                if (el != null)
+                {
+                    var ev = new UiPointerEvent { Point = p.SelectStart, PressPoint = p.SelectStart, Pointer = p };
+                    el.OnPress(ev);
+                    el.OnRelease(ev, true);
+                    Clicked?.Invoke(panel, el);
+                }
+                return;
+            }
             Selected?.Invoke(panel, r);
             Gestures?.RaiseExternal("select", p.Hand, "tap", Time.unscaledTime, panel.transform.TransformPoint(panel.PanelToLocal(r.center)),
                 $"{panel.Id} {r.x:F3} {r.y:F3} {r.width:F3} {r.height:F3}");

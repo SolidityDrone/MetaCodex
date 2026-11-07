@@ -32,8 +32,25 @@ namespace MetaCodex.EditorTools
         private static void Check(bool cond, string what) { if (cond) Line("ok   " + what); else Fail(what); }
         /// Only some sections (fast loop): MCX_UITEST_ONLY=voice,vault, or the same in unity/Bench/uitest-only (env
         /// vars do not cross from WSL into the Windows Editor); neither set = all sections.
+        private static string _progress;
+
+        /// One line per section with memory, written at once (a run stopped by the RAM guard still shows where).
+        private static void Progress(string section)
+        {
+            try
+            {
+                if (_progress == null) { _progress = Path.Combine(MetaCodexSetup.ReportDir, "ui-progress.txt"); File.WriteAllText(_progress, ""); }
+                long native = UnityEngine.Profiling.Profiler.GetTotalAllocatedMemoryLong() / 1048576;
+                long gc = GC.GetTotalMemory(false) / 1048576;
+                long ws = System.Diagnostics.Process.GetCurrentProcess().WorkingSet64 / 1048576;
+                File.AppendAllText(_progress, $"{DateTime.Now:HH:mm:ss.fff} {section}: native {native} MB, managed {gc} MB, process {ws} MB\n");
+            }
+            catch (Exception) { }
+        }
+
         private static bool Want(string section)
         {
+            Progress("before " + section);
             string only = Environment.GetEnvironmentVariable("MCX_UITEST_ONLY");
             if (string.IsNullOrWhiteSpace(only) && File.Exists(Path.Combine("Bench", "uitest-only"))) only = File.ReadAllText(Path.Combine("Bench", "uitest-only")).Trim();
             return string.IsNullOrWhiteSpace(only) || only.Split(',').Any(x => x.Trim().Length > 0 && section.StartsWith(x.Trim(), StringComparison.OrdinalIgnoreCase));
@@ -117,6 +134,7 @@ namespace MetaCodex.EditorTools
                 if (Want("daemon")) Daemon(shell);
                 if (Want("agentsandthreads")) AgentsAndThreads(shell);
                 if (Want("voicecontrol")) VoiceControl(shell);
+                if (Want("fixes")) Fixes(shell, head, frame, term, view);
             }
             catch (Exception ex) { Fail("exception: " + ex); }
             finally
@@ -181,6 +199,98 @@ namespace MetaCodex.EditorTools
             router.Inject(p);
         }
 
+        /// A pointer that moves over a panel point without pressing (hover only).
+        private static void Hover(UiInputRouter router, UiPanel panel, Vector2 panelPoint)
+        {
+            var world = panel.transform.TransformPoint(panel.PanelToLocal(panelPoint));
+            var dir = panel.transform.forward;
+            var p = new UiPointer { Id = 51, Kind = PointerKind.Test, Hand = "test", Active = true, Ray = new Ray(world - dir * 0.4f, dir) };
+            for (int i = 0; i < 3; i++) router.Inject(p);
+            p.Active = false;
+            router.Inject(p);
+        }
+
+        /// The owner's bug list of 0.4 (headset test): each fix checked.
+        private static void Fixes(MetaCodexShell shell, Transform head, UiPanel frame, VtTerminal term, TerminalView view)
+        {
+            foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
+            // sliders move only when pinched, never by hovering
+            shell.OpenPanel("settings");
+            var st = shell.PanelsById["settings"];
+            st.Elements.OfType<UiTabs>().First().Select(0);
+            var slider = st.Elements.OfType<UiSlider>().First(sl => sl.Text == "PINCH AT");
+            float before = slider.Value;
+            Hover(shell.Router, st, new Vector2(slider.Rect.xMax - 0.01f, slider.Rect.center.y));
+            Check(Mathf.Abs(slider.Value - before) < 1e-4f, $"hovering a slider leaves it alone ({before:F2} -> {slider.Value:F2})");
+            Click(shell.Router, st, new Vector2(slider.Rect.xMax - 0.06f, slider.Rect.center.y), new Vector2(slider.Rect.xMax - 0.01f, slider.Rect.center.y));
+            Check(slider.Value > before + 0.01f, $"pinch-dragging a slider moves it ({slider.Value:F2})");
+
+            // the select tool can always be turned off: the dock clicks, a tap clicks through, one selection ends it
+            shell.SetSelectionMode(true);
+            var selBtn = st.Elements.OfType<UiButton>().First(b => b.Text.StartsWith("SELECT AREA"));
+            Click(shell.Router, st, selBtn.Rect.center);
+            Check(!shell.Router.SelectionMode, "select tool on: a tap on SELECT AREA (Settings) turns it off");
+            shell.OpenPanel("dock");
+            var dock = shell.PanelsById["dock"];
+            shell.SetSelectionMode(true);
+            var dockSel = dock.Elements.OfType<UiButton>().First(b => b.Text.EndsWith("SELECT"));
+            Click(shell.Router, dock, dockSel.Rect.center);
+            Check(!shell.Router.SelectionMode, "select tool on: SELECT on the dock turns it off");
+            shell.OpenPanel("files");
+            var files = shell.PanelsById["files"];
+            shell.SetSelectionMode(true);
+            Click(shell.Router, files, new Vector2(0.1f, 0.15f), new Vector2(0.25f, 0.25f));
+            Check(!shell.Router.SelectionMode && shell.LastSelection.panel == "files", "one selection, then the select tool is off");
+
+            // the dock moves by its grab bar
+            var d0 = dock.transform.position;
+            Click(shell.Router, dock, new Vector2(dock.Width * 0.5f, dock.HandleHeight * 0.5f), new Vector2(dock.Width * 0.5f + 0.12f, dock.HandleHeight * 0.5f));
+            Check((dock.transform.position - d0).magnitude > 0.03f, $"the dock moves by its grab bar ({(dock.transform.position - d0).magnitude * 100f:F0} cm)");
+
+            // terminals: hide keeps the shell, show brings it back where you look; the last one is hidden, not ended
+            var inst = new TerminalInstance { Number = 9, Terminal = new VtTerminal(10, 40, 100), View = view };
+            Check(frame != null && frame.IsOpen, "test terminal frame open");
+            shell.HideTerminal(shell.FrameOwnerForTest(frame));
+            Check(!frame.IsOpen, "– hides a terminal (its shell keeps running)");
+            shell.ShowTerminal(shell.FrameOwnerForTest(frame));
+            Check(frame.IsOpen, "TERM / SHOW brings it back");
+
+            // panels bend towards you in the fixed layout too
+            shell.SetLayout("fixed");
+            shell.Settings.bendPanels = true;
+            shell.UpdateFixedBend();
+            Check(files.BendRadius > 0.3f && frame.BendRadius == 0f, $"fixed layout bends panels ({files.BendRadius:F2} m), terminals stay flat");
+            shell.Settings.bendPanels = false;
+            shell.UpdateFixedBend();
+            Check(files.BendRadius == 0f, "bend off: flat again");
+            shell.Settings.bendPanels = true;
+
+            // float: many panels never overlap (the circle grows instead)
+            foreach (var id in new[] { "settings", "files", "git", "browser", "scripts", "terminals", "gestures", "agents", "threads", "vault", "voice" }) shell.OpenPanel(id);
+            shell.SetLayout("float");
+            shell.TickLayoutForTest(0.05f, 120);
+            var c = shell.CarouselCenter;
+            var open = shell.PanelsById.Values.Where(p => p.IsOpen && p.Id != "dock").Concat(new[] { frame }).ToList();
+            int overlaps = 0;
+            string worst = "";
+            for (int a = 0; a < open.Count; a++)
+                for (int b = a + 1; b < open.Count; b++)
+                {
+                    var pa = open[a]; var pb = open[b];
+                    if (Mathf.Abs(pa.transform.position.y - pb.transform.position.y) > (pa.Height * pa.transform.lossyScale.y + pb.Height * pb.transform.lossyScale.y) * 0.5f) continue;
+                    var da = pa.transform.position - c; var db = pb.transform.position - c;
+                    float r = new Vector2(da.x, da.z).magnitude;
+                    float angle = Mathf.Abs(Mathf.DeltaAngle(Mathf.Atan2(da.x, da.z) * Mathf.Rad2Deg, Mathf.Atan2(db.x, db.z) * Mathf.Rad2Deg));
+                    float need = (pa.Width * pa.transform.lossyScale.x + pb.Width * pb.transform.lossyScale.x) * 0.5f / r * Mathf.Rad2Deg;
+                    if (angle < need - 0.5f) { overlaps++; worst = $"{pa.Id}/{pb.Id} {angle:F0}° < {need:F0}°"; }
+                }
+            Check(overlaps == 0, $"float layout with {open.Count} panels: no overlaps {worst}");
+            shell.Spin(0f, 0f);
+            Render(shell, "ui-float-many.png", head.position, Quaternion.identity, 100f, 1600, 900);
+            shell.SetLayout("fixed");
+            foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
+        }
+
         private static void Interactions(MetaCodexShell shell, Transform head)
         {
             var r = shell.Router;
@@ -196,13 +306,13 @@ namespace MetaCodex.EditorTools
             var lookTab = settings.Elements.OfType<UiButton>().First(b => b.Text == "LOOK");
             Click(r, settings, lookTab.Rect.center);
             Check(tabs.Selected == 2, "tab click switches to LOOK");
-            var scan = settings.Elements.OfType<UiToggle>().First(t => t.Text == "Scanlines");
-            bool before = scan.Value;
-            Click(r, settings, scan.Rect.center);
-            Check(scan.Value != before && shell.Settings.scanlines == scan.Value, "toggle flips Scanlines and the setting");
+            var fov = settings.Elements.OfType<UiToggle>().First(t => t.Text.StartsWith("Foveated"));
+            bool before = fov.Value;
+            Click(r, settings, fov.Rect.center);
+            Check(fov.Value != before && shell.Settings.foveation == fov.Value, "toggle flips Foveated rendering and the setting");
             settings.ForceRefresh();
             RenderPanel(settings, "ui-settings-look.png");
-            Click(r, settings, scan.Rect.center); // back on
+            Click(r, settings, fov.Rect.center); // back off
 
             var gestTab = settings.Elements.OfType<UiButton>().First(b => b.Text == "GESTURES");
             Click(r, settings, gestTab.Rect.center);
@@ -442,8 +552,10 @@ end)
             shell.TickLayoutForTest(0.05f, 120);
             var c2 = shell.CarouselCenter;
             Check(Mathf.Abs(c2.x - head.position.x) < 0.02f && Mathf.Abs(c2.z - head.position.z) < 0.02f && Mathf.Abs(c2.y - c.y) < 1e-4f, "carousel follows walking (x/z), not head height");
+            shell.Settings.bendPanels = false;
             shell.SetLayout("fixed");
-            Check(shell.PanelsById["files"].BendRadius == 0f, "fixed layout flattens the panels");
+            Check(shell.PanelsById["files"].BendRadius == 0f, "fixed layout with bend off flattens the panels");
+            shell.Settings.bendPanels = true;
         }
 
         private static void Daemon(MetaCodexShell shell)
@@ -736,6 +848,10 @@ end)
             }
             catch (Exception) { Line("skip voice MQH commands (MQH not running)"); }
 
+            // the exact LLM request (prompt prefix + grammar), for replays against the service outside the Editor
+            File.WriteAllText(Path.Combine(MetaCodexSetup.ReportDir, "voice-llm-request.json"), shell.VoiceLlmRequest("REQUEST").ToString());
+            Check(shell.VoiceLlmRequest("x")["grammar"]?.ToString().Contains("open_panel") == true && !shell.VoiceLlmRequest("x")["grammar"].ToString().Contains("type_text"),
+                "LLM grammar: shell commands, no free-text typing");
             // the real thing: the local AI service (QVAC) behind it
             DevForward();
             if (!shell.Qvac.ConnectDevNow()) { Line("skip voice AI: " + shell.Qvac.Status + " (tools/qvac-dev.sh device start)"); RenderVoice(shell); return; }
@@ -875,37 +991,22 @@ end)
 
         private static void LookAndLayouts(MetaCodexShell shell, Transform head)
         {
-            shell.ApplyThemePreset(1);
-            var mat = UiTheme.Current.ShapeMaterial;
-            Check(mat != null && Mathf.Abs(mat.GetFloat("_Opacity") - 0.75f) < 0.01f && Mathf.Abs(mat.GetFloat("_GlowBoost") - 0.45f) < 0.01f && shell.Settings.accent == "white", "theme preset STEALTH applied (accent, glow, opacity)");
-            shell.FlushPendingRebuild();
-            Check(UiTheme.Current.Accent == UiTheme.Hex(UiTheme.Accents["white"]), "panels rebuilt with the new accent (next frame, not inside the click)");
-            foreach (var id in new[] { "files", "git", "dock" }) shell.OpenPanel(id);
-            foreach (var p in shell.PanelsById.Values) p.ForceRefresh();
-            Render(shell, "ui-theme-stealth.png", head.position, Quaternion.identity, 100f, 1600, 900);
-            shell.ApplyThemePreset(0);
-            shell.FlushPendingRebuild();
-            Check(shell.Settings.accent == "cyan" && Mathf.Abs(mat.GetFloat("_Motion") - 1f) < 0.01f, "theme preset COMMAND restored");
-            // a theme change clicked on the settings panel itself: the router must not touch the destroyed panel
+            // one standard appearance: LOOK has comfort settings only (no themes, accents, scanlines, grid)
             foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
             shell.OpenPanel("settings");
             var st = shell.PanelsById["settings"];
             st.Elements.OfType<UiTabs>().First().Select(2);
-            var theme = st.Elements.OfType<UiSegmented>().First(sg => sg.Text == "THEME");
-            var tr = theme.Rect;
-            float segW = (tr.xMax - (tr.x + theme.LabelWidth)) / MetaCodexShell.ThemePresets.Length;
-            bool threw = false;
-            try
-            {
-                Click(shell.Router, st, new Vector2(tr.x + theme.LabelWidth + segW * 3.5f, tr.center.y)); // SOLAR
-                shell.FlushPendingRebuild();
-                var again = shell.PanelsById["settings"];
-                Click(shell.Router, again, new Vector2(0.3f, 0.2f));
-            }
-            catch (Exception ex) { threw = true; Line("     " + ex.GetType().Name + ": " + ex.Message); }
-            Check(!threw && shell.Settings.accent == "gold", "THEME clicked in VR: panels rebuilt, input keeps working");
-            shell.ApplyThemePreset(0);
-            shell.FlushPendingRebuild();
+            bool gone = !st.Elements.OfType<UiSegmented>().Any(sg => sg.Text == "THEME") && !st.Elements.OfType<UiToggle>().Any(tg => tg.Text == "Scanlines" || tg.Text == "Grid")
+                && !st.Elements.OfType<UiButton>().Any(b => b.Text.StartsWith("ACCENT"));
+            Check(gone, "LOOK: no theme presets, accent, scanlines or grid");
+            var opacity = st.Elements.OfType<UiSlider>().First(sl => sl.Text == "PANEL OPACITY");
+            var orr = opacity.Rect;
+            Click(shell.Router, st, new Vector2(orr.xMax - 0.02f, orr.center.y));
+            var mat = UiTheme.Current.ShapeMaterial;
+            Check(mat != null && mat.GetFloat("_Opacity") > 0.9f && mat.GetFloat("_Scanlines") < 0.01f && mat.GetFloat("_Grid") < 0.01f, $"panel opacity follows its slider ({mat?.GetFloat("_Opacity"):F2}); scanlines and grid off");
+            foreach (var id in new[] { "files", "git", "dock" }) shell.OpenPanel(id);
+            foreach (var p in shell.PanelsById.Values) p.ForceRefresh();
+            Render(shell, "ui-look.png", head.position, Quaternion.identity, 100f, 1600, 900);
 
             foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
             shell.OpenPanel("files");

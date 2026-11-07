@@ -81,7 +81,7 @@ namespace MetaCodex.Shell
             var t = UiTheme.Current;
             var items = new (string label, Action act)[]
             {
-                ("▶\nNEW", () => TerminalNew()),
+                ("▶\nTERM", () => ShowOrNewTerminal()),
                 ("▤\nTERMS", () => TogglePanel("terminals")),
                 ("◫\nFILES", () => TogglePanel("files")),
                 ("⎇\nGIT", () => TogglePanel("git")),
@@ -99,10 +99,11 @@ namespace MetaCodex.Shell
                 ("♫\nVOICE", () => TogglePanel("voice")),
             };
             const int perRow = 8;
-            float bw = 0.070f, gap = 0.006f, pad = 0.012f, bh = 0.058f;
-            float w = perRow * bw + (perRow - 1) * gap + 2 * pad, h = 2 * bh + gap + 2 * pad;
+            float bw = 0.070f, gap = 0.006f, pad = 0.012f, bh = 0.058f, handle = 0.016f;
+            float w = perRow * bw + (perRow - 1) * gap + 2 * pad, h = 2 * bh + gap + 2 * pad + handle;
             var dock = UiPanel.Create<UiPanel>("dock", "", w, h, _root, header: false);
             dock.Closable = false;
+            dock.AddGrabHandle(handle); // pinch the bar at the top to move the dock
             _panels["dock"] = dock;
             Router.Register(dock);
             for (int i = 0; i < items.Length; i++)
@@ -110,7 +111,7 @@ namespace MetaCodex.Shell
                 int row = i / perRow, col = i % perRow;
                 var b = dock.Add(new UiButton(items[i].label, items[i].act, i == 0 || items[i].label.EndsWith("TALK") ? UiButtonStyle.Primary : UiButtonStyle.Normal)
                 {
-                    Rect = new Rect(pad + col * (bw + gap), pad + row * (bh + gap), bw, bh),
+                    Rect = new Rect(pad + col * (bw + gap), handle + pad * 0.6f + row * (bh + gap), bw, bh),
                     TextSize = 0.0135f,
                 });
                 if (items[i].label.EndsWith("SELECT")) _selectButton = b;
@@ -128,18 +129,19 @@ namespace MetaCodex.Shell
             var p = Panel<UiPanel>("terminals", "TERMINALS", 0.52f, 0.40f);
             var st = new UiStack(p.Content, t.Gap);
             var bar = st.Next(t.ButtonHeight);
-            string[] names = { "+ NEW", "FOCUS", "CLOSE", "⌨ KEYS" };
+            string[] names = { "+ NEW", "SHOW", "HIDE", "CLOSE", "⌨ KEYS" };
             Action[] acts =
             {
                 () => TerminalNew(),
-                () => { var s = SelectedTerminal(); if (s != null) app.Focus(s); },
-                () => { var s = SelectedTerminal(); if (s != null) app.CloseTerminal(s); },
+                () => { var s = SelectedTerminal(); if (s != null) ShowTerminal(s); },
+                () => { var s = SelectedTerminal(); if (s != null) HideTerminal(s); },
+                () => { var s = SelectedTerminal(); if (s != null) CloseOrHideTerminal(s); },
                 () => OpenKeyboard(),
             };
-            float bw = (bar.width - t.Gap * 3) / 4f;
-            for (int i = 0; i < 4; i++)
+            float bw = (bar.width - t.Gap * 4) / 5f;
+            for (int i = 0; i < 5; i++)
                 p.Add(new UiButton(names[i], acts[i], i == 0 ? UiButtonStyle.Primary : UiButtonStyle.Normal) { Rect = new Rect(bar.x + i * (bw + t.Gap), bar.y, bw, bar.height) });
-            _termList = p.Add(new UiList(0.034f, (item, idx) => { if (item.Tag is TerminalInstance ti) app.Focus(ti); }) { Rect = st.Rest() });
+            _termList = p.Add(new UiList(0.034f, (item, idx) => { if (item.Tag is TerminalInstance ti) ShowTerminal(ti); }) { Rect = st.Rest() });
             RefreshTerminalsPanel();
         }
 
@@ -155,7 +157,7 @@ namespace MetaCodex.Shell
                 Icon = ti == app.Active ? "▶" : "▢",
                 Title = ti.Name,
                 Sub = ti.Session != null ? ti.Session.Description : "no session",
-                Badge = ti == app.Active ? "ACTIVE" : ti.Session != null && ti.Session.IsRunning ? "RUN" : "IDLE",
+                Badge = (_frames.TryGetValue(ti, out var fr) && !fr.IsOpen ? "HIDDEN · " : "") + (ti == app.Active ? "ACTIVE" : ti.Session != null && ti.Session.IsRunning ? "RUN" : "IDLE"),
                 BadgeColor = ti == app.Active ? t.Accent : ti.Session != null && ti.Session.IsRunning ? t.Ok : t.TextDim,
                 Tag = ti,
             }).ToList();
@@ -580,7 +582,7 @@ end)
             tabs.AddTo(TabDisplay, new UiSlider("DISTANCE", 0.5f, 1.4f, s.panelDistance, v => { s.panelDistance = v; OnSettingsChanged(); }) { Rect = d.Next(rowH), Format = "0.00 m" });
             tabs.AddTo(TabDisplay, new UiSlider("CAROUSEL RADIUS", 0.6f, 1.6f, s.carouselRadius, v => { s.carouselRadius = v; OnSettingsChanged(); }) { Rect = d.Next(rowH), Format = "0.00 m" });
             tabs.AddTo(TabDisplay, new UiSlider("UI SCALE", 0.8f, 1.8f, s.uiScale, v => { s.uiScale = v; OnSettingsChanged(); }) { Rect = d.Next(rowH), Format = "0.00" });
-            tabs.AddTo(TabDisplay, new UiToggle("Bend panels in float layout", s.bendPanels, v => { s.bendPanels = v; OnSettingsChanged(); }) { Rect = d.Next(rowH) });
+            tabs.AddTo(TabDisplay, new UiToggle("Bend panels around you", s.bendPanels, v => { s.bendPanels = v; OnSettingsChanged(); UpdateFixedBend(); }) { Rect = d.Next(rowH) });
             var lr = d.NextSplit(t.ButtonHeight, 0.5f, out var lr2);
             tabs.AddTo(TabDisplay, new UiButton("SAVE LAYOUT…", () => UiKeyboard.Edit("desk", false, null, n => { if (!string.IsNullOrWhiteSpace(n)) { SaveNamedLayout(n.Trim()); Toast($"Layout '{n.Trim()}' saved", "ok"); } })) { Rect = lr });
             tabs.AddTo(TabDisplay, new UiButton("LOAD NEXT LAYOUT", LoadNextLayout) { Rect = lr2 });
@@ -588,24 +590,12 @@ end)
             tabs.AddTo(TabDisplay, new UiButton("⟲ RECENTER EVERYTHING", () => app?.Recenter(), UiButtonStyle.Primary) { Rect = d.Next(t.ButtonHeight) });
             RefreshLayoutsLabel();
 
-            // LOOK: the console's style
+            // LOOK: one standard appearance; what is left are comfort settings
             var k = new UiStack(area, t.Gap);
-            tabs.AddTo(TabLook, new UiSegmented("THEME", ThemePresets.Select(x => x.name).ToArray(), -1, i => ApplyThemePreset(i)) { Rect = k.Next(rowH) });
             tabs.AddTo(TabLook, new UiSlider("SHARPNESS", 1f, 1.6f, s.renderScale, v => { s.renderScale = v; OnSettingsChanged(); }) { Rect = k.Next(rowH), Format = "0.00 x" });
-            var accents = UiTheme.Accents.Keys.ToArray();
-            _accentButton = tabs.AddTo(TabLook, new UiButton("ACCENT: " + s.accent.ToUpperInvariant() + "  ▸", () =>
-            {
-                int i = (Array.IndexOf(accents, s.accent) + 1) % accents.Length;
-                s.accent = accents[i];
-                OnSettingsChanged(rebuild: true);
-            }) { Rect = k.Next(rowH) });
-            tabs.AddTo(TabLook, new UiSlider("GLOW", 0f, 2f, s.glow, v => { s.glow = v; OnSettingsChanged(); }) { Rect = k.Next(rowH), Format = "0.00" });
-            tabs.AddTo(TabLook, new UiSlider("PANEL OPACITY", 0.3f, 1f, s.panelOpacity, v => { s.panelOpacity = v; OnSettingsChanged(); }) { Rect = k.Next(rowH), Format = "0.00" });
-            tabs.AddTo(TabLook, new UiSlider("MOTION", 0f, 2f, s.motion, v => { s.motion = v; OnSettingsChanged(); }) { Rect = k.Next(rowH), Format = "0.00" });
-            var tg = k.NextSplit(rowH, 0.5f, out var tg2);
-            tabs.AddTo(TabLook, new UiToggle("Scanlines", s.scanlines, v => { s.scanlines = v; OnSettingsChanged(); }) { Rect = tg });
-            tabs.AddTo(TabLook, new UiToggle("Grid", s.grid, v => { s.grid = v; OnSettingsChanged(); }) { Rect = tg2 });
-            tabs.AddTo(TabLook, new UiToggle("Foveated rendering (saves GPU, softer edges)", s.foveation, v => { s.foveation = v; OnSettingsChanged(); }) { Rect = k.Next(rowH) });
+            tabs.AddTo(TabLook, new UiSlider("PANEL OPACITY", 0.5f, 1f, s.panelOpacity, v => { s.panelOpacity = v; OnSettingsChanged(); }) { Rect = k.Next(rowH), Format = "0.00" });
+            tabs.AddTo(TabLook, new UiSlider("SHADOWS", 0f, 2f, s.glow, v => { s.glow = v; OnSettingsChanged(); }) { Rect = k.Next(rowH), Format = "0.00" });
+            tabs.AddTo(TabLook, new UiToggle("Foveated rendering (saves GPU, blurs the edges of the view)", s.foveation, v => { s.foveation = v; OnSettingsChanged(); }) { Rect = k.Next(rowH) });
             var sg = k.NextSplit(rowH, 0.4f, out var sg2);
             tabs.AddTo(TabLook, new UiToggle("Sounds", s.sounds, v => { s.sounds = v; OnSettingsChanged(); if (v) Sounds?.Play("toast"); }) { Rect = sg });
             tabs.AddTo(TabLook, new UiSlider("VOLUME", 0f, 1f, s.soundVolume, v => { s.soundVolume = v; OnSettingsChanged(); }) { Rect = sg2, LabelWidth = 0.08f, Format = "0.00" });
@@ -625,32 +615,12 @@ end)
             var a2 = new UiStack(area, t.Gap);
             tabs.AddTo(TabAbout, new UiLabel($"<b>MetaCodex</b> {Application.version} · {SystemInfo.deviceModel}", t.BodySize) { Rect = a2.Next(0.026f) });
             tabs.AddTo(TabAbout, new UiLabel("Agents and a real Linux userland in VR. Panels, gestures and behaviours are data, Lua and plugins: agents change them live.", t.SmallSize) { Rect = a2.Next(0.04f), Wrap = true, Color = t.TextDim });
-            tabs.AddTo(TabAbout, new UiLabel("Third-party: MoonSharp (BSD-3-Clause, Marco Mastropaolo) · Orbitron, Rajdhani, Noto (SIL OFL 1.1) · DejaVu fonts · bb (MIT, Michael Yong) for MQH.", t.SmallSize) { Rect = a2.Next(0.05f), Wrap = true, Color = t.TextDim });
+            tabs.AddTo(TabAbout, new UiLabel("Third-party: MoonSharp (BSD-3-Clause, Marco Mastropaolo) · Inter, Noto (SIL OFL 1.1) · DejaVu fonts · QVAC (Apache-2.0, Tether) · Whisper, Qwen3, Supertonic models · bb (MIT, Michael Yong) for MQH.", t.SmallSize) { Rect = a2.Next(0.05f), Wrap = true, Color = t.TextDim });
             tabs.AddTo(TabAbout, new UiLabel("", t.SmallSize) { Rect = a2.Rest(), UseMono = true, Wrap = true, Color = t.TextDim, Align = TextAlignmentOptions.TopLeft }).Set(string.Join("\n", LogLines.Skip(Math.Max(0, LogLines.Count - 8))));
         }
 
-        private UiButton _accentButton;
         private UiLabel _layoutsLabel;
         private int _layoutCursor = -1;
-
-        public static readonly (string name, string accent, float glow, float opacity, float motion, bool scan, bool grid)[] ThemePresets =
-        {
-            ("COMMAND", "cyan", 1f, 0.9f, 1f, true, true),
-            ("STEALTH", "white", 0.45f, 0.75f, 0.4f, false, false),
-            ("ALERT", "red", 1.5f, 0.92f, 1.6f, true, true),
-            ("SOLAR", "gold", 1.15f, 0.88f, 0.8f, false, true),
-            ("CLEAN", "ice", 0.7f, 0.96f, 0.25f, false, false),
-        };
-
-        public void ApplyThemePreset(int i)
-        {
-            if (i < 0 || i >= ThemePresets.Length) return;
-            var p = ThemePresets[i];
-            Settings.accent = p.accent; Settings.glow = p.glow; Settings.panelOpacity = p.opacity; Settings.motion = p.motion;
-            Settings.scanlines = p.scan; Settings.grid = p.grid;
-            OnSettingsChanged(rebuild: true);
-            Toast("Theme " + p.name, "ok");
-        }
 
         /// Remembers where the open panels are, relative to the head (yaw frame), under a name.
         public void SaveNamedLayout(string name)

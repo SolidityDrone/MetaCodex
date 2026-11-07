@@ -1,23 +1,23 @@
 # MetaCodex spatial UI: style, panels, gestures, plugins, agents, layouts
 
-Status: v0.4, 2026-11-07. v0.3 tested on the headset; v0.4 adds voice control (`docs/voice.md`), tested in the Editor against the AI service running on the headset.
+Status: v0.5, 2026-11-07. v0.4 tested on the headset; v0.5 is the owner's bug list from that test (input,
+look, layouts, terminals, dock) and faster voice, tested in the Editor (151 checks).
 Test list for the headset: `docs/TEST_CHECKLIST.md`.
 
 ## Style
 
-An original sci-fi "command console" look: dark navy glass panels with cut corners (big cuts top-left and
-bottom-right), bevelled glowing frames with brighter corner brackets, a light comet running round the frame,
-a faint 2.5 cm grid and scanlines, cyan accents (amber warnings, green ok, red danger), condensed technical
-type (Orbitron for titles and buttons, Rajdhani for text, DejaVu Sans Mono for paths and code; all OFL /
-free licences). No game assets, names or logos. Short console sounds (click, open, close, toast, alert,
-error) are synthesised in code; no audio files.
+A calm, standard look (owner, 0.5: no themes or accents for now): dark frosted-glass panels with rounded
+corners, a fine border lit from above, soft shadows instead of glows, one blue accent for primary actions,
+selections and toggles, Inter (SemiBold for titles and buttons, Medium for text) with DejaVu Sans Mono for
+paths and code; labels written in capitals in code show in Title Case (acronyms kept). All OFL / free
+licences, no game or brand assets. Short UI sounds are synthesised in code.
 
-Everything is drawn by one shader, `MetaCodex/SciFiUI`: each panel, button, header, bar, line, dot and
-selection frame is a quad whose shape is computed per pixel from vertex data (size, cut corners, border,
-state), so a whole panel is one mesh and one draw call, crisp at any distance. Text is TextMeshPro with
-runtime SDF fonts. Look settings (Settings > LOOK) are material values, so they cost nothing: theme
-presets (COMMAND, STEALTH, ALERT, SOLAR, CLEAN), accent (9 colours), glow, panel opacity, motion speed,
-scanlines, grid, sounds and volume.
+Everything is drawn by one shader, `MetaCodex/SciFiUI` (the name stays for references): each panel, button,
+header, bar, line, dot and selection frame is a quad whose rounded shape is computed per pixel from vertex
+data (size, radius, fill style, border, state), so a whole panel is one mesh and one draw call, crisp at any
+distance. Text is TextMeshPro with runtime SDF fonts (OpenType features off: Inter's kerning tables cost
+over 1 GB as glyphs were added). LOOK settings: sharpness (render scale), panel opacity, shadows,
+foveated rendering (off by default; it blurs the edges of the view), sounds and volume.
 
 ## Code map (`unity/Assets/MetaCodex/Runtime`)
 
@@ -35,9 +35,9 @@ scanlines, grid, sounds and volume.
 
 | Panel | Does |
 |---|---|
-| Dock (two rows of 8) | new terminal, terminals, files, git, agents, threads, web, scripts / gestures, vault, TALK (push-to-talk), setup, keyboard, select tool, recenter, voice |
-| Terminal frames | every terminal in a frame: drag by the header, `⇗` open the link the terminal printed (sign-in flows), `⎘` paste the clipboard, `⌨` keyboard, `+` new, `✕` close, tap to focus |
-| Terminals | list of terminal instances: new, focus, close |
+| Dock (two rows of 8, a grab bar on top to move it) | TERM (shows the hidden terminal, else a new one), terminals, files, git, agents, threads, web, scripts / gestures, vault, TALK (push-to-talk), setup, keyboard, select tool (one selection, then off), recenter, voice |
+| Terminal frames | every terminal in a frame: drag by the header, `⇗` open the link the terminal printed (sign-in flows), `⎘` paste the clipboard, `⌨` keyboard, `+` new, `–` hide (the shell keeps running), `✕` end it (the last one is hidden instead), tap to focus. The first terminal starts hidden: TERM on the dock shows it |
+| Terminals | list of terminal instances (hidden ones marked): new, show, hide, close |
 | Files | the Linux userland's folders (`/root`, `/mnt/quest`, `/`): open folders, cd / view / edit / paste path |
 | Git | repositories under `/root`: branch, ahead/behind, upstream, changes, branches, history as metro lines; fetch, pull (ff-only), commit, checkout |
 | Browser | URL field (system keyboard) opens the Horizon OS browser (`systemux://browser`), bookmarks, local servers on 127.0.0.1, shortcuts to Horizon settings and Files |
@@ -95,13 +95,16 @@ the terminal frame offers `⇗`, the Horizon browser opens it, and the CLI keeps
 
 ## Layouts
 
-- **Fixed**: panels are world-locked where you leave them; new panels open where you look, in the
+- **Fixed**: panels are world-locked where you leave them, bent towards you when "Bend panels around you" is
+  on (terminals stay flat); new panels open where you look, in the
   nearest free gap (within a head turn, ±110°); when none is left they cascade in front, each a little
   closer, higher and to the side. Named layouts (Settings > DISPLAY) store the open panels relative to the head and put
   them back around wherever the user is.
 - **Float**: panels sit on an invisible cylinder around you that follows you horizontally (x/z), never
-  your head's pitch or roll. Close your hand in empty space and swipe to spin it (inertia, no snapping).
-  Panels bend to the cylinder; terminals stay flat. The dock stays low in front.
+  your head's pitch or roll, 4° apart; when the open panels do not fit around it the cylinder grows, so
+  they never overlap, and a panel you drop slides to the nearest free place at its height. Close your hand
+  in empty space and swipe to spin it (inertia, no snapping). Panels bend to the cylinder; terminals stay
+  flat. The dock stays low in front.
 - Boundaryless: the app declares `com.oculus.feature.BOUNDARYLESS_APP` (passthrough only).
 
 ## Testing without a headset

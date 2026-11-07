@@ -36,8 +36,8 @@ namespace MetaCodex.EditorTools
         public const string PanelMaterialPath = "Assets/MetaCodex/Materials/Panel.mat";
         public const string ShapeMaterialPath = "Assets/MetaCodex/Materials/SciFiUI.mat";
         public const string BeamMaterialPath = "Assets/MetaCodex/Materials/Beam.mat";
-        public const string DisplayFontPath = "Assets/MetaCodex/Fonts/Orbitron.ttf";
-        public const string BodyFontPath = "Assets/MetaCodex/Fonts/Rajdhani-SemiBold.ttf";
+        public const string DisplayFontPath = "Assets/MetaCodex/Fonts/Inter-SemiBold.ttf";
+        public const string BodyFontPath = "Assets/MetaCodex/Fonts/Inter-Medium.ttf";
         public const string ManifestPath = "Assets/Plugins/Android/AndroidManifest.xml";
         public const string MonoFontPath = "Assets/MetaCodex/Fonts/DejaVuSansMono.ttf";
         /// Glyphs DejaVu Sans Mono lacks, in order: general symbols, ⏺ (Symbols 2), ⎿ (Symbols), emoji.
