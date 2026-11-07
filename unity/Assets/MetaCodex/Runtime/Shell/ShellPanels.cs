@@ -500,6 +500,7 @@ end)
             _scriptList.SetItems(Scripts.Entries.Select(e => new UiListItem
             {
                 Icon = "●",
+                IconColor = e.Error != null ? t.Danger : e.Enabled ? t.Ok : t.TextDim,
                 Title = e.Name,
                 TitleColor = e.Error != null ? t.Danger : e.Enabled ? (Color?)null : t.TextDim,
                 Sub = e.Description,

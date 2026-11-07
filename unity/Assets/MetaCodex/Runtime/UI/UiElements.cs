@@ -525,6 +525,7 @@ namespace MetaCodex.UI
         public string Badge = "";
         public Color? BadgeColor;
         public Color? TitleColor;
+        public Color? IconColor;
         public int Indent;
         public object Tag;
     }
@@ -600,8 +601,13 @@ namespace MetaCodex.UI
                 float indent = it.Indent * 0.016f;
                 var r = RowRect(i);
                 row.icon.SetRect(new Rect(r.x + 0.006f + indent, r.y, 0.024f, r.height));
-                row.title.SetRect(new Rect(r.x + 0.032f + indent, r.y, r.width * 0.62f - indent, r.height));
+                float badgeW = string.IsNullOrEmpty(it.Badge) ? 0f : Mathf.Min(0.075f, r.width * 0.3f);
+                float subW = string.IsNullOrEmpty(it.Sub) ? 0f : Mathf.Min(r.width * 0.32f, r.width - badgeW - 0.05f - indent);
+                row.title.SetRect(new Rect(r.x + 0.032f + indent, r.y, r.width - 0.036f - indent - subW - badgeW, r.height));
+                row.sub.SetRect(new Rect(r.xMax - badgeW - subW - 0.004f, r.y, subW, r.height));
+                row.badge.SetRect(new Rect(r.xMax - badgeW - 0.004f, r.y, badgeW, r.height));
                 row.icon.Text = it.Icon;
+                row.icon.Color = it.IconColor ?? Theme.TextAccent;
                 row.title.Text = "<noparse>" + it.Title + "</noparse>";
                 row.title.Color = it.TitleColor ?? Theme.Text;
                 row.sub.Text = "<noparse>" + it.Sub + "</noparse>";

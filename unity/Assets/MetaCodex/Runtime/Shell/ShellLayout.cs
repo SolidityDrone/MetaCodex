@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using MetaCodex.UI;
 using UnityEngine;
 
@@ -49,11 +50,51 @@ namespace MetaCodex.Shell
             _spin = 0f; _spinVel = 0f;
             _dockYaw = _baseYaw;
             _slots.Clear();
-            foreach (var p in LayoutPanels()) if (p.IsOpen) Slot(p.transform);
+            ArrangeRing();
         }
 
-        /// A panel opened while floating joins the carousel where it appeared (in front of the user).
-        private void OnOpenedFloating(UiPanel p) { if (Floating && p != null) _slots.Remove(p.transform); }
+        /// Side by side around the circle: terminals in the middle (in front), the other panels alternating
+        /// right and left, ordered by where they were. Spin to reach the ones behind you.
+        private void ArrangeRing()
+        {
+            float r = Mathf.Clamp(Settings.carouselRadius, 0.5f, 2f);
+            var c = _carousel.position;
+            float Yaw(UiPanel p) { var d = p.transform.position - c; return Mathf.DeltaAngle(_baseYaw, Mathf.Atan2(d.x, d.z) * Mathf.Rad2Deg); }
+            var open = LayoutPanels().Where(p => p != null && p.IsOpen).ToList();
+            var ordered = open.Where(p => p.Id.StartsWith("term-")).OrderBy(Yaw).Concat(open.Where(p => !p.Id.StartsWith("term-")).OrderBy(p => Mathf.Abs(Yaw(p)))).ToList();
+            float right = 0f, left = 0f;
+            bool first = true, toRight = true;
+            foreach (var p in ordered)
+            {
+                float half = HalfAngle(p, r);
+                float angle;
+                if (first) { angle = 0f; right = half; left = -half; first = false; }
+                else if (toRight) { angle = right + 3f + half; right = angle + half; }
+                else { angle = left - 3f - half; left = angle - half; }
+                if (!first) toRight = !toRight;
+                _slots[p.transform] = (angle, p.Id.StartsWith("term-") ? 0f - 0.05f : -0.04f);
+            }
+        }
+
+        /// A panel opened while floating takes the free gap of the ring nearest to where the user looks.
+        private void OnOpenedFloating(UiPanel p)
+        {
+            if (!Floating || p == null || _carousel == null || p.Id == "dock") return;
+            float r = Mathf.Clamp(Settings.carouselRadius, 0.5f, 2f);
+            var occupied = new List<(float, float)>();
+            foreach (var kv in _slots)
+            {
+                var q = kv.Key.GetComponent<UiPanel>();
+                if (q == null || q == p || !q.IsOpen) continue;
+                occupied.Add((kv.Value.angle, HalfAngle(q, r)));
+            }
+            var head = Head;
+            float gazeWorld = head != null ? Mathf.Atan2(head.forward.x, head.forward.z) * Mathf.Rad2Deg : _baseYaw;
+            float gaze = Mathf.DeltaAngle(_baseYaw + _spin, gazeWorld);
+            float a = FindFreeYaw(gaze, HalfAngle(p, r), occupied, 180f, 3f);
+            if (float.IsNaN(a)) a = gaze;
+            _slots[p.transform] = (a, -0.04f);
+        }
 
         private void ExitFloat()
         {

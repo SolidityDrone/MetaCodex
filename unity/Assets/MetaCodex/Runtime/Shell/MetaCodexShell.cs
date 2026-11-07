@@ -192,37 +192,49 @@ namespace MetaCodex.Shell
 
         private readonly HashSet<string> _placed = new HashSet<string>();
 
-        /// Opens where the user looks: level, at the panel distance; if that direction is taken by another open
-        /// panel (or a terminal), steps sideways (right, left, right, ...) to the nearest free angle.
+        /// Opens where the user looks: level, at the panel distance, in the nearest gap (within 75 degrees) that
+        /// no other open panel or terminal covers. When the front is full it floats a little closer, in front.
         private void PlaceDefault(string id, UiPanel p)
         {
             var head = Head;
             if (id == "dock") { p.PlaceInFront(head, 0.55f, 0.42f); TiltTowards(p, head); return; }
             Vector3 eye = head != null ? head.position : new Vector3(0f, 1.4f, 0f);
             var f = head != null ? head.forward : Vector3.forward;
-            float yaw0 = Mathf.Atan2(f.x, f.z) * Mathf.Rad2Deg;
+            float gaze = Mathf.Atan2(f.x, f.z) * Mathf.Rad2Deg;
             float dist = Settings.panelDistance * 0.95f;
-            float Half(UiPanel q, float d) => Mathf.Atan2(q.Width * 0.5f * q.transform.lossyScale.x, d) * Mathf.Rad2Deg;
-            var others = _panels.Values.Where(q => q != p && q.IsOpen && q.Id != "dock").Concat(_frames.Values.Where(q => q.IsOpen)).ToList();
-            float mine = Half(p, dist);
-            float chosen = yaw0;
-            for (int k = 0; k < 12; k++)
+            var occupied = new List<(float, float)>();
+            foreach (var q in _panels.Values.Where(q => q != p && q.IsOpen && q.Id != "dock").Concat(_frames.Values.Where(q => q.IsOpen)))
             {
-                float step = (k + 1) / 2 * (mine * 2f + 4f) * (k % 2 == 1 ? 1f : -1f);
-                float yaw = yaw0 + (k == 0 ? 0f : step);
-                bool free = true;
-                foreach (var q in others)
-                {
-                    var d = q.transform.position - eye;
-                    float qyaw = Mathf.Atan2(d.x, d.z) * Mathf.Rad2Deg;
-                    float qd = new Vector2(d.x, d.z).magnitude;
-                    if (Mathf.Abs(Mathf.DeltaAngle(qyaw, yaw)) < mine + Half(q, Mathf.Max(qd, 0.1f)) + 2f) { free = false; break; }
-                }
-                if (free) { chosen = yaw; break; }
+                var d = q.transform.position - eye;
+                float qd = Mathf.Max(new Vector2(d.x, d.z).magnitude, 0.1f);
+                occupied.Add((Mathf.Atan2(d.x, d.z) * Mathf.Rad2Deg, HalfAngle(q, qd)));
             }
-            float a = chosen * Mathf.Deg2Rad;
+            float yaw = FindFreeYaw(gaze, HalfAngle(p, dist), occupied, 75f);
+            if (float.IsNaN(yaw)) { yaw = gaze; dist = Mathf.Max(0.45f, dist - 0.14f); }
+            float a = yaw * Mathf.Deg2Rad;
             var dir = new Vector3(Mathf.Sin(a), 0f, Mathf.Cos(a));
             p.transform.SetPositionAndRotation(eye + dir * dist + Vector3.down * 0.06f, Quaternion.LookRotation(dir, Vector3.up));
+        }
+
+        /// Half the angle a panel covers seen from `distance` away (degrees).
+        public static float HalfAngle(UiPanel q, float distance) => Mathf.Atan2(q.Width * 0.5f * q.transform.lossyScale.x, distance) * Mathf.Rad2Deg;
+
+        /// The angle nearest `preferred` (searching outwards both ways up to `limit` degrees) where an interval of
+        /// +-half fits between the occupied intervals with a small margin; NaN when there is no room.
+        public static float FindFreeYaw(float preferred, float half, List<(float center, float half)> occupied, float limit, float margin = 2f)
+        {
+            for (float off = 0f; off <= limit; off += 1f)
+            {
+                foreach (float sign in off == 0f ? new[] { 1f } : new[] { 1f, -1f })
+                {
+                    float yaw = preferred + off * sign;
+                    bool free = true;
+                    foreach (var o in occupied)
+                        if (Mathf.Abs(Mathf.DeltaAngle(o.center, yaw)) < half + o.half + margin) { free = false; break; }
+                    if (free) return yaw;
+                }
+            }
+            return float.NaN;
         }
 
         private static void TiltTowards(UiPanel p, Transform head)

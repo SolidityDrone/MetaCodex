@@ -535,6 +535,9 @@ namespace MetaCodex.EditorTools
             ConfigureMetaProjectConfig();
             OVRManifestPreprocessor.GenerateOrUpdateAndroidManifest(silentMode: true);
             PatchManifest();
+            // fewer parallel C++ compiles: an IL2CPP build with 8 jobs needs ~6 GB on top of the Editor, which this
+            // laptop rarely has free (browser + WSL); 3 jobs build slower but fit. MCX_IL2CPP_ARGS overrides.
+            PlayerSettings.SetAdditionalIl2CppArgs(Environment.GetEnvironmentVariable("MCX_IL2CPP_ARGS") ?? "--jobs=3 --bee-jobs=3");
             Directory.CreateDirectory("Builds");
             var report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
             {
