@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Text;
+using MetaCodex.AI;
 using MetaCodex.App;
 using MetaCodex.Hands;
 using MetaCodex.Scripting;
@@ -29,6 +30,14 @@ namespace MetaCodex.EditorTools
         private static void Line(string s) => _report.AppendLine(s);
         private static void Fail(string s) { _ok = false; _report.AppendLine("FAIL " + s); }
         private static void Check(bool cond, string what) { if (cond) Line("ok   " + what); else Fail(what); }
+        /// Only some sections (fast loop): MCX_UITEST_ONLY=voice,vault, or the same in unity/Bench/uitest-only (env
+        /// vars do not cross from WSL into the Windows Editor); neither set = all sections.
+        private static bool Want(string section)
+        {
+            string only = Environment.GetEnvironmentVariable("MCX_UITEST_ONLY");
+            if (string.IsNullOrWhiteSpace(only) && File.Exists(Path.Combine("Bench", "uitest-only"))) only = File.ReadAllText(Path.Combine("Bench", "uitest-only")).Trim();
+            return string.IsNullOrWhiteSpace(only) || only.Split(',').Any(x => x.Trim().Length > 0 && section.StartsWith(x.Trim(), StringComparison.OrdinalIgnoreCase));
+        }
 
         [MenuItem("MetaCodex/4. UI self-test")]
         public static string Run()
@@ -92,21 +101,22 @@ namespace MetaCodex.EditorTools
                 view.Render();
                 Check(frame != null, "terminal wrapped in a frame panel");
 
-                Glyphs(shell);
-                Panels(shell, head, frame);
-                Interactions(shell, head);
-                Gestures(shell, hands);
-                Scripts(shell, hands, scripts, tmp);
-                AgentScript(shell, hands, tmp);
-                Services(shell);
-                Layout(shell, head, frame);
-                GesturePlugins(shell, hands, tmp);
-                AgentPlugin(shell, hands, tmp);
-                Vault(shell);
-                Links(shell, term);
-                LookAndLayouts(shell, head);
-                Daemon(shell);
-                AgentsAndThreads(shell);
+                if (Want("glyphs")) Glyphs(shell);
+                if (Want("panels")) Panels(shell, head, frame);
+                if (Want("interactions")) Interactions(shell, head);
+                if (Want("gestures")) Gestures(shell, hands);
+                if (Want("scripts")) Scripts(shell, hands, scripts, tmp);
+                if (Want("agentscript")) AgentScript(shell, hands, tmp);
+                if (Want("services")) Services(shell);
+                if (Want("layout")) Layout(shell, head, frame);
+                if (Want("gestureplugins")) GesturePlugins(shell, hands, tmp);
+                if (Want("agentplugin")) AgentPlugin(shell, hands, tmp);
+                if (Want("vault")) Vault(shell);
+                if (Want("links")) Links(shell, term);
+                if (Want("lookandlayouts")) LookAndLayouts(shell, head);
+                if (Want("daemon")) Daemon(shell);
+                if (Want("agentsandthreads")) AgentsAndThreads(shell);
+                if (Want("voicecontrol")) VoiceControl(shell);
             }
             catch (Exception ex) { Fail("exception: " + ex); }
             finally
@@ -631,6 +641,171 @@ end)
             Check(!shell.PanelsById["git"].IsOpen, "agent plugin: a LEFT thumbs-up does nothing");
             hands.Hide(Handedness.Left);
             shell.TickGesturesForTest(0.2f);
+        }
+
+        // ------------------------------------------------------------------ voice
+
+        /// Voice control: the fast path (phrase templates, synonyms, fillers), the actions, a Lua plugin command,
+        /// then, with a dev AI service (tools/qvac-dev.sh device start), speech -> text -> command for real and the
+        /// LLM path for phrasings no template covers.
+        private static void VoiceControl(MetaCodexShell shell)
+        {
+            var v = shell.Voice;
+            (string said, string cmd, string args)[] cases =
+            {
+                ("Open the providers page.", "open_panel", "{\"panel\":\"agents\"}"),
+                ("Hey, could you open the git panel please", "open_panel", "{\"panel\":\"git\"}"),
+                ("Open the provider's page.", "open_panel", "{\"panel\":\"agents\"}"),
+                ("Close all windows.", "close_all_panels", "{}"),
+                ("Open a new terminal.", "new_terminal", "{}"),
+                ("Find the thread where we fixed the keyboard.", "find_thread", "{\"query\":\"we fixed the keyboard\"}"),
+                ("Switch to the workspace called MetaCodex.", "switch_workspace", "{\"name\":\"metacodex\"}"),
+                ("change workspace", "switch_workspace", "{}"),
+                ("use the floating layout", "set_layout", "{\"mode\":\"float\"}"),
+                ("show me the source control", "open_panel", "{\"panel\":\"git\"}"),
+                ("recenter", "recenter", "{}"),
+                ("close the vault", "close_panel", "{\"panel\":\"vault\"}"),
+                ("Where are my API keys?", "open_panel", "{\"panel\":\"vault\"}"),
+                ("Which conversation was about the keyboard bug?", "find_thread", "{\"query\":\"the keyboard bug\"}"),
+                ("Put everything back in front of me.", "recenter", "{}"),
+            };
+            foreach (var c in cases)
+            {
+                var m = v.FastMatch(c.said);
+                string got = m == null ? "no match" : m.Command.Name + " " + m.Args.ToString(Newtonsoft.Json.Formatting.None);
+                Check(m != null && m.Command.Name == c.cmd && JToken.DeepEquals(m.Args, JObject.Parse(c.args)), $"voice fast path “{c.said}” -> {got}");
+            }
+            Check(v.FastMatch("what is the weather like in Rome") == null, "voice: other sentences are left to the LLM");
+            Check(v.FastMatch("open the banana page") == null, "voice: an unknown panel name is not forced onto a panel");
+            Check(v.ToolSpecs().Count == v.All.Count && v.ToolSpecs().All(t => t["function"]?["parameters"]?["type"]?.ToString() == "object"), $"voice: {v.All.Count} commands offered to the LLM as tools");
+
+            foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
+            shell.OpenPanel("files");
+            shell.OpenPanel("git");
+            VoiceResult r = null;
+            shell.VoiceProcessText("close all windows", x => r = x);
+            Check(r != null && r.Ok && r.Via == "fast" && !shell.PanelsById["files"].IsOpen && !shell.PanelsById["git"].IsOpen, "“close all windows” closes the panels: " + r);
+            shell.VoiceProcessText("open the providers page", x => r = x);
+            Check(r != null && r.Ok && shell.PanelsById["agents"].IsOpen, "“open the providers page” opens AGENTS: " + r);
+            shell.ClosePanel("agents");
+
+            // a Lua plugin adds a command: phrases, an enum parameter with spoken synonyms, a run function
+            string pdir = Path.Combine(shell.Scripts.PluginsDir, "voice-test");
+            Directory.CreateDirectory(pdir);
+            File.WriteAllText(Path.Combine(pdir, "plugin.json"), "{\"name\":\"Voice test\",\"version\":\"1.0\",\"description\":\"self-test\"}");
+            File.WriteAllText(Path.Combine(pdir, "main.lua"),
+                "voice.command{\n" +
+                "  name = 'set_accent',\n" +
+                "  description = 'Change the accent colour of the interface',\n" +
+                "  params = { color = { type = 'string', enum = { 'cyan', 'amber', 'green', 'magenta' }, required = true } },\n" +
+                "  phrases = { '(make|turn) [the] (ui|interface|panels) {color}', '(set|change) [the] (accent|colour|color) [to] {color}' },\n" +
+                "  synonyms = { color = { orange = 'amber', yellow = 'amber', pink = 'magenta' } },\n" +
+                "  run = function(args) store.set('accent', args.color) return 'Accent ' .. args.color end\n" +
+                "}\n");
+            shell.Scripts.Scan();
+            var pe = shell.Scripts.Find("plugin/voice-test");
+            Check(pe != null && pe.Error == null, "voice plugin loads: " + (pe?.Error ?? "ok"));
+            var pm = v.FastMatch("make the interface orange");
+            Check(pm != null && pm.Command.Owner == "plugin/voice-test" && (string)pm.Args["color"] == "amber", "plugin phrase + synonym: “make the interface orange” -> " + (pm == null ? "no match" : pm.Command.Name + " " + pm.Args));
+            shell.VoiceProcessText("set the colour to pink", x => r = x);
+            Check(r != null && r.Ok && r.Reply == "Accent magenta", "plugin command runs in Lua and replies: " + r);
+            Check(v.ToolSpecs().Any(t => (string)t["function"]?["name"] == "set_accent"), "plugin command is offered to the LLM as a tool");
+            shell.Scripts.SetEnabled("plugin/voice-test", false);
+            Check(v.Find("set_accent") == null, "disabling the plugin removes its command");
+            shell.Scripts.Delete("plugin/voice-test");
+
+            // the control port speaks the same language
+            string ctl = shell.ControlCommand("voice", "match open the vault");
+            Check(ctl.StartsWith("open_panel") && ctl.Contains("vault"), "control port `voice match`: " + ctl);
+            string asyncReply = null;
+            Check(shell.VoiceAsyncCommand("voice run open the files", a => asyncReply = a) && asyncReply != null && asyncReply.Contains("\"command\":\"open_panel\""), "control port `voice run` answers with the result: " + asyncReply);
+            shell.ClosePanel("files");
+
+            // MQH-backed commands (when MQH runs): they answer, matched or not
+            try
+            {
+                shell.Mqh.Send(HttpMethod.Get, "/api/v1/system/version").GetAwaiter().GetResult();
+                r = null;
+                shell.VoiceProcessText("find the thread where we tested the self test", x => r = x);
+                shell.PumpForTest(8f);
+                Check(r != null && (r.Ok || r.Error.StartsWith("no thread")), "find_thread asks MQH and answers: " + r);
+                r = null;
+                shell.VoiceProcessText("switch to the workspace called metacodex", x => r = x);
+                shell.PumpForTest(8f);
+                Check(r != null && (r.Ok || r.Error.StartsWith("no workspace")), "switch_workspace asks MQH and answers: " + r);
+            }
+            catch (Exception) { Line("skip voice MQH commands (MQH not running)"); }
+
+            // the real thing: the local AI service (QVAC) behind it
+            DevForward();
+            if (!shell.Qvac.ConnectDevNow()) { Line("skip voice AI: " + shell.Qvac.Status + " (tools/qvac-dev.sh device start)"); RenderVoice(shell); return; }
+            shell.PumpForTest(4f);
+            Check(shell.QvacStatus != null && shell.QvacStatus["models"]?["asr"]?["installed"]?.Value<bool>() == true, "AI service status with models: " + shell.QvacStatus?["models"]?.ToString(Newtonsoft.Json.Formatting.None));
+            byte[] wav = null;
+            string err = null;
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            shell.Qvac.Client.Speak("Open the git panel.", null, (w, e) => { wav = w; err = e; });
+            shell.PumpForTest(90f);
+            Check(wav != null && wav.Length > 20000, $"text-to-speech: {(wav?.Length ?? 0) / 1024} KB of speech in {sw.ElapsedMilliseconds} ms {err}");
+            if (wav != null)
+            {
+                foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
+                r = null;
+                shell.VoiceProcessWav(wav, x => r = x);
+                shell.PumpForTest(60f);
+                Check(r != null && r.Ok && r.Command == "open_panel" && r.Transcript.ToLowerInvariant().Contains("git") && shell.PanelsById["git"].IsOpen,
+                    "spoken “Open the git panel.” -> " + r);
+            }
+            sw.Restart();
+            string werr = "pending";
+            shell.WarmVoiceLlm(e => werr = e);
+            shell.PumpForTest(120f);
+            Check(werr == null, $"LLM warm-up (system prompt + {v.All.Count} tools cached) in {sw.ElapsedMilliseconds} ms {werr}");
+            (string said, string cmd, string arg)[] llm =
+            {
+                ("I need to see which AI providers are signed in", "open_panel", "agents"),
+                ("get rid of every window you have open", "close_all_panels", null),
+                ("I want a fresh shell to type commands in", "new_terminal", null),
+            };
+            foreach (var c in llm)
+            {
+                r = null;
+                shell.VoiceProcessText(c.said, x => r = x);
+                shell.PumpForTest(60f);
+                Check(r != null && r.Via == "llm" && r.Ok && r.Command == c.cmd && (c.arg == null || (r.Args ?? "").Contains(c.arg)), $"LLM path “{c.said}” -> {r}");
+            }
+            RenderVoice(shell);
+        }
+
+        /// The Editor's Android module starts its own adb (another version), which restarts the adb server and
+        /// drops `adb forward`s: when the dev AI service runs on the headset, forward its port with that adb.
+        private static void DevForward()
+        {
+            try
+            {
+                var dev = File.Exists(MetaCodex.AI.QvacHost.DevConfigPath) ? JObject.Parse(File.ReadAllText(MetaCodex.AI.QvacHost.DevConfigPath)) : null;
+                if ((string)dev?["where"] != "device") return;
+                string adb = Path.Combine(EditorApplication.applicationContentsPath, "PlaybackEngines", "AndroidPlayer", "SDK", "platform-tools", "adb.exe");
+                if (!File.Exists(adb)) { Line("     no Editor adb at " + adb); return; }
+                var port = new Uri((string)dev["url"]).Port;
+                var psi = new System.Diagnostics.ProcessStartInfo(adb, $"forward tcp:{port} tcp:{port}") { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+                using (var p = System.Diagnostics.Process.Start(psi))
+                {
+                    if (!p.WaitForExit(15000)) { p.Kill(); Line("     adb forward timed out"); return; }
+                    Line($"     adb forward tcp:{port} (Editor adb): exit {p.ExitCode} {p.StandardError.ReadToEnd().Trim()}");
+                }
+            }
+            catch (Exception ex) { Line("     adb forward: " + ex.Message); }
+        }
+
+        private static void RenderVoice(MetaCodexShell shell)
+        {
+            shell.OpenPanel("voice");
+            shell.PollVoiceStatus();
+            shell.PumpForTest(3f);
+            var vp = shell.PanelsById["voice"];
+            vp.ForceRefresh();
+            RenderPanel(vp, "ui-voice.png");
         }
 
         // ------------------------------------------------------------------ vault

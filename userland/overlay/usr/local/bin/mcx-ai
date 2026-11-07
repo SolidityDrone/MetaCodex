@@ -1,0 +1,37 @@
+#!/bin/bash
+# mcx-ai: the headset's local AI service (QVAC, native on Horizon OS) from the Linux userland.
+# Speech-to-text, a small LLM with tool calling and text-to-speech, all on the headset; nothing leaves it.
+#   mcx-ai status                       service, models, engines, memory
+#   mcx-ai install [asr|llm|tts ...]    download the models (about 530 MB, once)
+#   mcx-ai transcribe file.wav          speech-to-text (any WAV; 16 kHz mono is best)
+#   mcx-ai say "text" [out.wav]         text-to-speech (WAV, 44.1 kHz)
+#   mcx-ai chat "prompt"                one-shot chat with the local LLM (small: commands, short answers)
+#   mcx-ai env                          OPENAI_BASE_URL / OPENAI_API_KEY lines for OpenAI-compatible tools
+#   mcx-ai log                          the service log
+# API (OpenAI-style): POST /v1/audio/transcriptions, /v1/audio/speech, /v1/chat/completions (tools),
+# GET /status. Token: /mnt/quest/qvac.token (new at every app start).
+set -euo pipefail
+TOKEN_FILE=${MCX_AI_TOKEN_FILE:-/mnt/quest/qvac.token}
+URL=${MCX_AI_URL:-http://127.0.0.1:47810}
+[[ $# -gt 0 ]] || { sed -n 2,13p "$0"; exit 2; }
+command -v curl >/dev/null || { echo "mcx-ai: needs curl (apt install curl)" >&2; exit 1; }
+[[ -r "$TOKEN_FILE" ]] || { echo "mcx-ai: no $TOKEN_FILE: start the AI service (VOICE panel, or mcx-ui voice start)" >&2; exit 1; }
+AUTH="Authorization: Bearer $(cat "$TOKEN_FILE")"
+json() { python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$1" 2>/dev/null || printf '"%s"' "${1//\"/\\\"}"; }
+cmd=$1; shift
+case "$cmd" in
+  status) curl -sS -H "$AUTH" "$URL/status"; echo ;;
+  install)
+    kinds=$(printf '"%s",' "${@:-asr llm tts}"); [[ $# -eq 0 ]] && kinds='"asr","llm","tts",'
+    curl -sS -H "$AUTH" -H 'Content-Type: application/json' -d "{\"kinds\":[${kinds%,}]}" "$URL/v1/models/install"; echo ;;
+  transcribe) [[ -f "${1:-}" ]] || { echo "mcx-ai transcribe file.wav" >&2; exit 2; }
+    curl -sS -H "$AUTH" -H 'Content-Type: audio/wav' --data-binary @"$1" "$URL/v1/audio/transcriptions"; echo ;;
+  say) out=${2:-say.wav}
+    curl -sS --fail-with-body -H "$AUTH" -H 'Content-Type: application/json' -d "{\"input\":$(json "${1:-}")}" -o "$out" "$URL/v1/audio/speech" && echo "$out" ;;
+  chat)
+    curl -sS -H "$AUTH" -H 'Content-Type: application/json' -d "{\"messages\":[{\"role\":\"user\",\"content\":$(json "${1:-}")}],\"max_tokens\":256}" "$URL/v1/chat/completions" \
+      | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["choices"][0]["message"].get("content") or d) ' 2>/dev/null || true ;;
+  env) echo "export OPENAI_BASE_URL=$URL/v1"; echo "export OPENAI_API_KEY=$(cat "$TOKEN_FILE")" ;;
+  log) curl -sS -H "$AUTH" "$URL/log?lines=${1:-60}" ;;
+  *) sed -n 2,13p "$0"; exit 2 ;;
+esac

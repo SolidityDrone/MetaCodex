@@ -31,6 +31,14 @@ namespace MetaCodex.Scripting
         GestureEngine Gestures { get; }
         /// A binding-style action ("open:git", "toggle:files", "run:ls", "url:https://…", …); null = ok, else the error.
         string RunAction(string action);
+        /// The voice command registry (plugins add commands with voice.command).
+        MetaCodex.AI.VoiceCommands Voice { get; }
+        /// Speaks text with the local text-to-speech model.
+        void VoiceSay(string text);
+        /// Runs text through the voice pipeline as if spoken (fast path, else the local LLM).
+        void VoiceRun(string text);
+        /// Starts listening (push-to-talk).
+        void VoiceListen();
         void Log(string line);
     }
 
@@ -282,6 +290,7 @@ namespace MetaCodex.Scripting
             _timers.RemoveAll(t => t.Owner == e);
             _detectors.RemoveAll(d => d.Owner == e);
             _svc.Gestures?.RemoveOwnedBy(e.Key);
+            _svc.Voice?.RemoveOwnedBy(e.Key);
             e.Script = null;
             e.HandTables = null;
         }
@@ -602,6 +611,69 @@ namespace MetaCodex.Scripting
         private static string TStr(Table t, string k, string def = null) { var v = t.Get(k); return v.Type == DataType.String ? v.String : def; }
         private static float? TNum(Table t, string k) { var v = t.Get(k); return v.Type == DataType.Number ? (float)v.Number : (float?)null; }
 
+        /// voice.command{...} -> a registry entry owned by the script; `run` executes under the instruction budget.
+        private MetaCodex.AI.VoiceCommand VoiceCommandFromTable(Entry e, Table t)
+        {
+            var fn = t.Get("run");
+            if (fn.Type != DataType.Function) throw new ScriptRuntimeException("voice.command needs run=function(args) ... end");
+            var cmd = new MetaCodex.AI.VoiceCommand
+            {
+                Name = TStr(t, "name", ""),
+                Description = TStr(t, "description", ""),
+                Owner = e.Key,
+                Confirm = t.Get("confirm").CastToBool(),
+            };
+            // params: {name={type=, description=, enum={...}, required=true}} or an ordered list {{name=..., ...}, ...}
+            var ps = new List<(string, string, string[], string, bool)>();
+            var pt = t.Get("params");
+            if (pt.Type == DataType.Table)
+            {
+                foreach (var pair in pt.Table.Pairs)
+                {
+                    if (pair.Value.Type != DataType.Table) continue;
+                    var spec = pair.Value.Table;
+                    string pname = pair.Key.Type == DataType.String ? pair.Key.String : TStr(spec, "name", "");
+                    if (string.IsNullOrEmpty(pname)) throw new ScriptRuntimeException("voice.command params: every parameter needs a name");
+                    string[] en = null;
+                    if (spec.Get("enum").Type == DataType.Table) en = spec.Get("enum").Table.Values.Where(v => v.Type == DataType.String || v.Type == DataType.Number).Select(v => v.ToPrintString()).ToArray();
+                    ps.Add((pname, TStr(spec, "type", "string"), en, TStr(spec, "description", ""), spec.Get("required").CastToBool()));
+                }
+            }
+            cmd.Parameters = MetaCodex.AI.VoiceCommands.Schema(ps.ToArray());
+            var ph = t.Get("phrases");
+            if (ph.Type == DataType.Table) cmd.Phrases = ph.Table.Values.Where(v => v.Type == DataType.String).Select(v => v.String).ToArray();
+            else if (ph.Type == DataType.String) cmd.Phrases = new[] { ph.String };
+            var sy = t.Get("synonyms");
+            if (sy.Type == DataType.Table)
+                foreach (var pair in sy.Table.Pairs)
+                {
+                    if (pair.Key.Type != DataType.String || pair.Value.Type != DataType.Table) continue;
+                    var map = new Dictionary<string, string>();
+                    foreach (var w in pair.Value.Table.Pairs)
+                        if (w.Key.Type == DataType.String && w.Value.Type == DataType.String) map[MetaCodex.AI.VoiceCommands.Simplify(w.Key.String)] = w.Value.String;
+                    cmd.Synonyms[pair.Key.String] = map;
+                }
+            cmd.Run = args =>
+            {
+                var at = new Table(e.Script);
+                foreach (var p in args.Properties())
+                {
+                    switch (p.Value.Type)
+                    {
+                        case Newtonsoft.Json.Linq.JTokenType.Integer:
+                        case Newtonsoft.Json.Linq.JTokenType.Float: at.Set(p.Name, DynValue.NewNumber((double)p.Value)); break;
+                        case Newtonsoft.Json.Linq.JTokenType.Boolean: at.Set(p.Name, DynValue.NewBoolean((bool)p.Value)); break;
+                        default: at.Set(p.Name, DynValue.NewString(p.Value.Type == Newtonsoft.Json.Linq.JTokenType.String ? (string)p.Value : p.Value.ToString())); break;
+                    }
+                }
+                if (!e.Enabled || e.Error != null) return "error: " + e.Name + " is " + (e.Error != null ? "stopped: " + e.Error : "disabled");
+                var r = Run(e, fn, DynValue.NewTable(at));
+                if (e.Error != null) return "error: " + e.Error;
+                return r.Type == DataType.String ? r.String : r.IsNil() ? null : r.ToPrintString();
+            };
+            return cmd;
+        }
+
         private void Install(Entry e, Script s)
         {
             var g = s.Globals;
@@ -786,6 +858,29 @@ namespace MetaCodex.Scripting
             Set(app, "cancel", a => { int id = (int)Num(a, 0, -1); _timers.RemoveAll(t => t.Id == id && t.Owner == e); return DynValue.Nil; });
             Set(app, "action", a => { var err = _svc.RunAction(Str(a, 0)); return err == null ? DynValue.True : DynValue.NewString(err); });
             g.Set("app", DynValue.NewTable(app));
+
+            var voice = new Table(s);
+            Set(voice, "command", a =>
+            {
+                if (a.Count < 1 || a[0].Type != DataType.Table) throw new ScriptRuntimeException("voice.command{name=\"git_status\", description=\"...\", params={...}, phrases={\"show git status\"}, run=function(args) return \"reply\" end}");
+                var cmd = VoiceCommandFromTable(e, a[0].Table);
+                if (_svc.Voice == null) return DynValue.Nil;
+                try { _svc.Voice.Register(cmd); }
+                catch (ArgumentException ex) { throw new ScriptRuntimeException(ex.Message); }
+                e.Handlers++;
+                return DynValue.Nil;
+            });
+            Set(voice, "remove", a => DynValue.NewBoolean(_svc.Voice != null && _svc.Voice.Remove(Str(a, 0), e.Key)));
+            Set(voice, "say", a => { _svc.VoiceSay(Str(a, 0)); return DynValue.Nil; });
+            Set(voice, "run", a => { _svc.VoiceRun(Str(a, 0)); return DynValue.Nil; });
+            Set(voice, "listen", a => { _svc.VoiceListen(); return DynValue.Nil; });
+            Set(voice, "list", a =>
+            {
+                var t = new Table(s);
+                if (_svc.Voice != null) foreach (var c in _svc.Voice.All) t.Append(DynValue.NewString(c.Name));
+                return DynValue.NewTable(t);
+            });
+            g.Set("voice", DynValue.NewTable(voice));
 
             if (e.Kind == "plugin")
             {

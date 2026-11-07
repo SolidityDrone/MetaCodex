@@ -43,7 +43,7 @@ done
 secs=$(( $(date +%s) - t0 ))
 echo "--- $METHOD finished in ${secs}s, lowest available ${low} MB"
 grep -E "\[MetaCodex\]|error CS|Shader error in|Exception|Exiting batchmode|Aborting batchmode|Scripts have compiler errors" "$LOG" 2>/dev/null | tr -d '\r' | grep -v "^UnityEngine\." | tail -40
-if grep -q "Exiting batchmode successfully" "$LOG" 2>/dev/null || grep -q "\[MetaCodex\] SELFTEST OK\|\[MetaCodex\] Succeeded" "$LOG" 2>/dev/null; then
+if grep -q "Exiting batchmode successfully" "$LOG" 2>/dev/null || grep -Eq "\[MetaCodex\] (UI )?SELFTEST OK|\[MetaCodex\] Succeeded" "$LOG" 2>/dev/null; then
   [[ -z "$killed" ]] && ! grep -q "\[MetaCodex\] FAILED" "$LOG" && { echo "RESULT: OK"; exit 0; }
 fi
 echo "RESULT: FAILED (see $LOG)"; exit 1

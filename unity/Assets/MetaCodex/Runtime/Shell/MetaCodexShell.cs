@@ -68,7 +68,7 @@ namespace MetaCodex.Shell
                 app.TerminalClosed += OnTerminalClosed;
                 app.FocusChanged += OnFocusChanged;
                 app.ExtraCommand = ControlCommand;
-                app.AsyncCommand = SecretCommand;
+                app.AsyncCommand = (line, reply) => VoiceAsyncCommand(line, reply) || SecretCommand(line, reply);
                 app.Recentered += OnRecentered;
             }
         }
@@ -129,6 +129,7 @@ namespace MetaCodex.Shell
             Git = new GitService(host);
             Files = new FileService(host, Application.isEditor ? Path.GetFullPath(Path.Combine(Application.dataPath, "../..")) : null);
 
+            InitVoice(); // before the scripts: plugins register voice commands while they load
             string dir = scriptsDir ?? DefaultScriptsDir(host);
             Scripts = new ScriptHost(this, dir);
             Scripts.Changed += () => { RefreshScriptsPanel(); RefreshGesturesPanel(); };
@@ -189,6 +190,7 @@ namespace MetaCodex.Shell
         {
             while (_main.TryDequeue(out var a)) { try { a(); } catch (Exception ex) { Log("main-thread callback failed: " + ex.Message); } }
             Scripts?.Tick(Time.unscaledTime);
+            TickVoice();
             FlushPendingRebuild();
             RunLater();
             ScanTerminalLinks();
@@ -405,6 +407,9 @@ namespace MetaCodex.Shell
 
         public void Modal(string title, string text, string[] buttons, Action<int> onResult) =>
             UiModal.Show(Router, Head, title, text, buttons, onResult, _root);
+
+        void IScriptServices.VoiceSay(string text) => VoiceSay(text);
+        void IScriptServices.VoiceRun(string text) => VoiceProcessText(text, null);
 
         public void TerminalSend(string text) => app?.SendText(text);
         public void TerminalNew() => app?.NewTerminal();
@@ -629,6 +634,7 @@ namespace MetaCodex.Shell
                     return "ok";
                 }
                 case "action": { var err = RunAction(arg); return err == null ? "ok" : "error: " + err; }
+                case "voice": return VoiceControl(arg);
                 case "plugin":
                 {
                     var parts = arg.Split(new[] { ' ' }, 2, StringSplitOptions.RemoveEmptyEntries);
@@ -687,7 +693,7 @@ namespace MetaCodex.Shell
                 FlushPendingRebuild();
                 RunLater();
                 PushSettingsWhenQuiet();
-                idle = any || Mqh.InFlight > 0 ? 0 : idle + 1;
+                idle = any || Mqh.InFlight > 0 || (Qvac != null && Qvac.Client != null && Qvac.Client.InFlight > 0) ? 0 : idle + 1;
                 if (idle >= 10) break; // 200 ms with nothing in flight and nothing queued
                 System.Threading.Thread.Sleep(20);
             }

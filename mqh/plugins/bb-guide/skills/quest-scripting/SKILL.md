@@ -1,6 +1,6 @@
 ---
 name: quest-scripting
-description: Change how the MetaCodex headset app behaves while it runs - gestures (double clap, pinch, fist, palm up...), panels, toasts, terminal actions, layout and settings - by writing a Lua script, with no rebuild. Use when the user asks things like "make it so if I double clap X happens", "when I show my palm open the files", "move panels with a fist instead of a pinch", or wants a new hands-free shortcut.
+description: Change how the MetaCodex headset app behaves while it runs - gestures (double clap, pinch, fist, palm up...), voice commands, panels, toasts, terminal actions, layout and settings - by writing a Lua script, with no rebuild. Use when the user asks things like "make it so if I double clap X happens", "when I show my palm open the files", "move panels with a fist instead of a pinch", "add a voice command that ...", or wants a new hands-free shortcut.
 ---
 
 # Quest scripting: live behaviours in the MetaCodex app
@@ -53,7 +53,7 @@ New gestures (hand poses, swipes, two-hand shapes) belong in a **plugin** folder
 | Call | Does |
 |---|---|
 | `ui.toast(text[, "info"\|"ok"\|"warn"\|"error"])` | a short message in front of the user |
-| `ui.open(id)` `ui.close(id)` `ui.toggle(id)` | panels: `dock`, `terminals`, `files`, `git`, `browser`, `scripts`, `gestures`, `agents`, `threads`, `thread`, `thread-new`, `vault`, `settings`, `term-1`... |
+| `ui.open(id)` `ui.close(id)` `ui.toggle(id)` | panels: `dock`, `terminals`, `files`, `git`, `browser`, `scripts`, `gestures`, `agents`, `threads`, `thread`, `thread-new`, `vault`, `settings`, `voice`, `term-1`... |
 | `ui.panels()` | ids of all panels |
 | `ui.modal(title, text, {"YES","NO"}, fn)` | a dialog; `fn(index, label)` with the answer |
 | `ui.select(true\|false)` | the select tool (pinch-drag a rectangle on a panel) |
@@ -63,8 +63,10 @@ New gestures (hand poses, swipes, two-hand shapes) belong in a **plugin** folder
 | `settings.get(key)` / `settings.set(key, value)` | app settings (strings in and out), saved and synced to MQH |
 | `store.get(key)` / `store.set(key, value)` | this script's own persistent strings |
 | `app.after(sec, fn)` / `app.every(sec, fn)` / `app.cancel(id)` / `app.time()` | timers |
-| `app.action("verb:arg")` | one action string: `open:` `close:` `toggle:<panel>`, `toast:`, `run:<cmd>`, `type:<text>`, `url:<url>`, `layout:fixed\|float`, `spin:<deg>`, `select`, `keyboard`, `terminal:new`, `recenter`, `gesture:<name>` |
+| `app.action("verb:arg")` | one action string: `open:` `close:` `toggle:<panel>`, `toast:`, `run:<cmd>`, `type:<text>`, `url:<url>`, `layout:fixed\|float`, `spin:<deg>`, `select`, `keyboard`, `terminal:new`, `recenter`, `gesture:<name>`, `voice:listen\|stop\|toggle\|say:<text>\|run:<text>` |
 | `head.pose()` | `{x, y, z, fx, fy, fz}`: eyes and look direction |
+| `voice.command{...}` | a voice command (below); removed when the script is disabled or deleted |
+| `voice.say(text)` / `voice.run(text)` / `voice.listen()` / `voice.list()` | speak with the local voice / run text as if spoken / start listening / command names |
 | `log(...)` / `print(...)` | lines in the script log (`mcx-ui script log <name>`) |
 
 Settings keys: `gestures.clickMode` (0 pinch, 1 poke, 2 both), `gestures.grabMode` (0 pinch the header,
@@ -77,6 +79,35 @@ No-code links from a gesture to an action live in Settings too (Gestures panel >
 `mcx-ui gesture bind <gesture> <action>`).
 Example: "move panels by closing my hand instead of pinching" = `settings.set("gestures.grabMode", "1")`
 (a one-line script, or the Settings panel).
+
+## Voice commands
+
+The user talks to the app with push-to-talk (TALK on the dock, or a gesture bound to `voice:toggle`).
+Speech becomes text on the headset (local speech-to-text, nothing leaves it); a phrase template that
+matches runs its command at once, anything else goes to a small local LLM that sees every command as a
+tool. A script adds its own command:
+
+```lua
+-- description: "git status" by voice
+voice.command{
+  name = "git_status",                       -- snake_case, unique
+  description = "Show git status of the project in the terminal",   -- one line: the LLM reads it
+  params = { path = { type = "string", description = "folder", required = false } },
+  phrases = { "(show|what is) [the] git status", "git status [of|in] {path}" },
+  run = function(args)                       -- args.path is nil when not said
+    terminal.run("git -C " .. (args.path or ".") .. " status")
+    return "Git status"                      -- shown (and spoken if the user enabled spoken replies)
+  end
+}
+```
+
+Phrase templates: plain words, `(a|b)` one of, `[a|b]` optional, `{param}` captures words for a parameter.
+Text is matched lower-case without punctuation, after polite fillers ("hey", "could you", "please") are
+dropped. Enum parameters (`enum = {"cyan","amber"}`) accept spoken synonyms:
+`synonyms = { color = { orange = "amber" } }`. `confirm = true` makes the user approve in VR before
+`run` (use it for anything that types or deletes). Return `"error: why"` when it fails.
+Test without speaking: `mcx-ui voice match "git status"` (which command and arguments), then
+`mcx-ui voice run "git status"` (runs it, prints the result as JSON); `mcx-ui voice list` lists commands.
 
 ## Rules
 

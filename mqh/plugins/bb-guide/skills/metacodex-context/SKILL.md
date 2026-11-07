@@ -1,6 +1,6 @@
 ---
 name: metacodex-context
-description: Where you are when you run inside MetaCodex - a Meta Quest headset app with a Debian Linux userland (proot), the MQH harness (mqh CLI, threads, providers), the shared folder /mnt/quest, the app's control port (mcx-ui), the secret vault (mcx-secret) and the frame-rate rules. Read it before changing anything on the headset, before writing gesture plugins or Lua behaviours, or when a command, path or login behaves unexpectedly.
+description: Where you are when you run inside MetaCodex - a Meta Quest headset app with a Debian Linux userland (proot), the MQH harness (mqh CLI, threads, providers), the shared folder /mnt/quest, the app's control port (mcx-ui), the secret vault (mcx-secret), the local AI service and voice commands (mcx-ai, mcx-ui voice) and the frame-rate rules. Read it before changing anything on the headset, before writing gesture plugins or Lua behaviours, or when a command, path or login behaves unexpectedly.
 ---
 
 # MetaCodex context
@@ -24,6 +24,7 @@ description: Where you are when you run inside MetaCodex - a Meta Quest headset 
 | `/mnt/quest/plugins/<id>/` | gesture / behaviour plugins (skill `quest-gesture-plugins`) |
 | `/mnt/quest/scripts/*.lua` | single-file Lua behaviours (skill `quest-scripting`) |
 | `/mnt/quest/control.token` | token for the app's control port (new at every app start) |
+| `/mnt/quest/qvac.token` | token for the local AI service (new at every start of the service) |
 | `~/.mqh` | MQH data (database, logs, plugin data) |
 | `~/.claude/skills` | skills for agents (this one, quest-*, Unity and Meta skills) |
 
@@ -35,6 +36,14 @@ description: Where you are when you run inside MetaCodex - a Meta Quest headset 
 - `mcx-secret get NAME` asks the app's vault for a secret (API keys, tokens). Values are typed by the
   user in VR and sealed by the Android Keystore; the app may ask the user to approve your request.
   Never write secrets into files, logs, commits or messages; prefer `mcx-secret env NAME -- cmd`.
+- `mcx-ai ...` reaches the **local AI service** (QVAC, native on Horizon OS, 127.0.0.1:47810, OpenAI-style):
+  `mcx-ai status`, `transcribe file.wav`, `say "text" out.wav`, `chat "prompt"`, `env` (prints
+  `OPENAI_BASE_URL` / `OPENAI_API_KEY` for OpenAI-compatible tools). Speech-to-text (Whisper base), a 0.6B
+  LLM for commands and short answers (not for coding), text-to-speech (Supertonic 3). Private: nothing
+  leaves the headset. It shares 3 CPU cores with you at low priority: one request at a time per model.
+- Voice: the user speaks commands (TALK on the dock). `mcx-ui voice run "close all windows"` runs text as if
+  spoken; `mcx-ui voice list` lists commands; scripts and plugins add their own (`voice.command`, skill
+  `quest-scripting`).
 - Agents' API keys usually come from MQH's machine environment (the user pushes them from the vault);
   provider logins (`claude auth login`, `opencode auth login`, `codex login`) are done by the user in a
   terminal: the CLIs keep their own credentials. Never read, copy or print those credential files.

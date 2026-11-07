@@ -1,5 +1,14 @@
 # QVAC in MetaCodex: where it runs and how it keeps the frame rate stable
 
+> **Status 2026-11-07 (evening): phases 0-3 built.** Phase 0 ran the three models natively on the Quest 3S
+> over adb (numbers in `docs/voice.md`: speech-to-text 0.7 s, an LLM tool call 1.2-2 s, 72 fps held with 2
+> threads at nice 10). The service (`qvac/server`), its packing into the APK (`tools/qvac-bundle.sh`), the
+> app side (QvacHost, microphone, voice pipeline, VOICE panel) and the command registry (shell commands,
+> Lua `voice.command`, control port `voice`) are in; `docs/voice.md` is the reference. One change from the
+> plan below: the app starts the Bare executable as its own child process (like proot), pinned to cores
+> 0-2 at nice 10, instead of a Java service hosting BareKit (no BareKit Android release exists to link; the
+> isolation is the same). Next: the first APK with it, then MQH tools in the registry.
+
 Status: decision 2026-11-07, replaces PLAN v2 D12 ("R1 first: the SDK in the Linux userland").
 Nothing below is measured on the headset yet; the validation order is at the end.
 

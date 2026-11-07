@@ -136,3 +136,30 @@ Helpers on the PC: `tools/qterm` (control port), `adb logcat -s Unity`, `files/s
 - [ ] All panels open + float layout + 2 terminals → still about 72 fps (status line); no stutter when gestures run
 - [ ] A long `apt install` / `npm install` in a terminal → app stays smooth (run it with `nice -n 10`)
 - [ ] Take the headset off and on, reopen the app → terminals and panels come back
+
+## 13. Voice and the local AI service (0.4)
+
+Reference: `docs/voice.md`. The models are not in the APK: install them once (530 MB, Wi-Fi).
+
+- [ ] Dock: two rows of 8, with ◉ TALK (highlighted) and ♫ VOICE
+- [ ] VOICE panel → "AI service: ● running" within a few seconds (the first start unpacks the runtime: a few seconds more)
+- [ ] INSTALL MODELS → three rows go from – to a percentage to ✓ (speech→text 78 MB, commands LLM 364 MB, text→speech 81 MB)
+- [ ] First TALK → Horizon OS asks for the microphone → ALLOW
+- [ ] TALK, say "open git" → HUD above the dock: ● LISTENING with a level bar, then ✓ Opened GIT; GIT opens
+- [ ] "close all windows" → every panel closes (dock and terminals stay)
+- [ ] "open the providers page" → AGENTS opens; "show me the source control" → GIT
+- [ ] "find the thread where we …" (words from a thread title) → THREAD opens on it (MQH)
+- [ ] "switch to the workspace called <project>" → THREADS shows that project (MQH)
+- [ ] "use the floating layout" / "fixed mode" → layout changes; "recenter" → panels come back
+- [ ] A phrasing no template knows ("I need to see which AI providers are signed in") → ◆ THINKING, then the right panel (LLM path, about 2 s; the first one after start a few seconds more)
+- [ ] "run ls" → a confirmation dialog in VR; RUN types it into the terminal
+- [ ] Silence after TALK → "no speech heard" after ~6 s; TALK twice → stops and processes what was said
+- [ ] VOICE > Spoken replies ON → the reply is also spoken (needs the voice model)
+- [ ] VOICE > TYPE… "close all windows" → same as saying it; SAY… → speaks the text
+- [ ] LANGUAGE IT, say "apri git" → transcribed in Italian (commands match English phrases; the LLM path may still map it)
+- [ ] Frame rate while talking: the status line stays at about 72 fps; VOICE shows the service's RAM
+- [ ] In a terminal: `mcx-ai status`, `mcx-ai say "hello" /tmp/h.wav && mcx-ai transcribe /tmp/h.wav` → "Hello."
+- [ ] `mcx-ui voice run "open the vault"` → JSON result, VAULT opens; `mcx-ui voice list` → commands
+- [ ] A plugin with `voice.command{...}` (skill quest-scripting) → its phrase works by voice; `mcx-ui voice match "<phrase>"`
+- [ ] Gestures > BIND: `palm-up` (left) → `voice:toggle` → hands-free TALK
+- [ ] Kill the service (`mcx-ai log` shows its pid; or restart the app) → it restarts by itself

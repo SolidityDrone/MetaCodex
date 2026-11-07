@@ -34,6 +34,7 @@ namespace MetaCodex.Shell
             BuildThread();
             BuildNewThread();
             BuildVault();
+            BuildVoice();
             foreach (var p in _panels.Values) p.transform.localScale = Vector3.one * Mathf.Clamp(Settings.uiScale, 0.6f, 1.8f);
         }
 
@@ -69,6 +70,7 @@ namespace MetaCodex.Shell
                 case "agents": RefreshAgents(); break;
                 case "threads": RefreshThreads(); break;
                 case "vault": RefreshVaultPanel(); break;
+                case "voice": EnsureVoiceService(); PollVoiceStatus(); break;
             }
         }
 
@@ -89,12 +91,14 @@ namespace MetaCodex.Shell
                 ("ƒ\nSCRIPTS", () => TogglePanel("scripts")),
                 ("✋\nGESTURE", () => TogglePanel("gestures")),
                 ("⚿\nVAULT", () => TogglePanel("vault")),
+                ("◉\nTALK", () => VoiceToggle()),
                 ("⚙\nSETUP", () => TogglePanel("settings")),
                 ("⌨\nKEYS", () => OpenKeyboard()),
                 ("⌖\nSELECT", () => SetSelectionMode(!Router.SelectionMode)),
                 ("⟲\nCENTER", () => app?.Recenter()),
+                ("♫\nVOICE", () => TogglePanel("voice")),
             };
-            const int perRow = 7;
+            const int perRow = 8;
             float bw = 0.070f, gap = 0.006f, pad = 0.012f, bh = 0.058f;
             float w = perRow * bw + (perRow - 1) * gap + 2 * pad, h = 2 * bh + gap + 2 * pad;
             var dock = UiPanel.Create<UiPanel>("dock", "", w, h, _root, header: false);
@@ -104,7 +108,7 @@ namespace MetaCodex.Shell
             for (int i = 0; i < items.Length; i++)
             {
                 int row = i / perRow, col = i % perRow;
-                var b = dock.Add(new UiButton(items[i].label, items[i].act, i == 0 ? UiButtonStyle.Primary : UiButtonStyle.Normal)
+                var b = dock.Add(new UiButton(items[i].label, items[i].act, i == 0 || items[i].label.EndsWith("TALK") ? UiButtonStyle.Primary : UiButtonStyle.Normal)
                 {
                     Rect = new Rect(pad + col * (bw + gap), pad + row * (bh + gap), bw, bh),
                     TextSize = 0.0135f,

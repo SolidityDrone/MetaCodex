@@ -127,6 +127,8 @@ namespace MetaCodex.Shell
         public string lastProject = "";
         /// Named panel layouts (DISPLAY > SAVE / LOAD).
         public List<SavedLayout> layouts = new List<SavedLayout>();
+        /// Voice control and the local AI service (VOICE panel).
+        public VoiceSettings voice = new VoiceSettings();
 
         public static string PathOnDisk => Path.Combine(Application.persistentDataPath, "metacodex-settings.json");
 

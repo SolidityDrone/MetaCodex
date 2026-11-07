@@ -137,13 +137,14 @@ Rules that keep it working:
 `ui.toast(text, kind)` · `ui.open/close/toggle(panel)` · `ui.modal(...)` · `ui.select(on)` ·
 `terminal.run(cmd)` · `terminal.send(text)` · `terminal.new()` · `browser.open(url)` ·
 `keyboard.open()` · `settings.get/set(key, value)` · `app.action("verb:arg")` · `app.after(s, fn)` ·
-`app.every(s, fn)` · `store.get/set` · `gesture.emit(name, hand, phase)` · `log(...)`
+`app.every(s, fn)` · `store.get/set` · `gesture.emit(name, hand, phase)` · `voice.listen()` ·
+`voice.say(text)` · `voice.command{...}` (the same plugin can add voice commands) · `log(...)`
 
 Panels: `dock` `terminals` `files` `git` `browser` `scripts` `gestures` `agents` `threads` `thread`
-`thread-new` `vault` `settings`. Actions (`app.action`, bindings): `open:` `close:` `toggle:<panel>`,
+`thread-new` `vault` `settings` `voice`. Actions (`app.action`, bindings): `open:` `close:` `toggle:<panel>`,
 `toast:<text>`, `run:<command>`, `type:<text>` (`\n` Enter, `\e` Esc, `\x03` Ctrl-C), `url:<url>`,
 `layout:fixed|float`, `spin:<degrees>`, `select[:on|off]`, `keyboard`, `terminal:new`, `recenter`,
-`gesture:<name>`, `lua:<code>`.
+`gesture:<name>`, `lua:<code>`, `voice:listen|stop|toggle|say:<text>|run:<text>`.
 
 ## 5. Procedure (do all of it)
 

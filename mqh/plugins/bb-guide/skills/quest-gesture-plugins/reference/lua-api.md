@@ -54,3 +54,21 @@ Every call is limited to 200 000 instructions; going over stops the plugin (erro
 | `app.action("verb:arg")` | same actions as bindings: `open:` `close:` `toggle:<panel>`, `toast:`, `run:`, `type:`, `url:`, `layout:`, `spin:`, `select[:on|off]`, `keyboard`, `terminal:new`, `recenter`, `gesture:<name>`, `lua:<code>`; returns true or an error string |
 | `log(...)` / `print(...)` | a line in the plugin's log (`mcx-ui plugin log <id>`, Gestures > PLUGINS) |
 | `plugin.id` `plugin.name` `plugin.version` `plugin.dir` | (plugins only) |
+
+## voice
+
+A plugin can be driven by voice as well as by hands: `voice.command{...}` registers a command (owned by the
+plugin; removed when it is disabled, reloaded or deleted). Full format and phrase templates: skill
+`quest-scripting`, "Voice commands".
+
+| Call | Does |
+|---|---|
+| `voice.command{name=, description=, params=, phrases=, synonyms=, confirm=, run=function(args) ... end}` | a command: spoken phrases run it at once, other phrasings reach it through the local LLM (it reads `description` and `params`) |
+| `voice.remove(name)` | removes one of this plugin's commands |
+| `voice.say(text)` | speaks text with the local voice (text-to-speech on the headset) |
+| `voice.run(text)` | runs text as if the user said it |
+| `voice.listen()` | starts listening (like TALK on the dock); bind it to a gesture for hands-free voice |
+| `voice.list()` | names of all voice commands |
+
+A gesture that starts listening: `gesture.on("palm-up", function(e) if e.hand == "left" and e.phase == "start" then voice.listen() end end)`
+(or no code: Gestures > BIND `palm-up` -> `voice:toggle`).

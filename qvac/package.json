@@ -1,0 +1,24 @@
+{
+  "name": "metacodex-ai",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MetaCodex local AI service: QVAC speech-to-text, a small LLM with tool calling and text-to-speech on the Bare runtime (Horizon OS). Built into the APK by tools/qvac-bundle.sh.",
+  "main": "server/main.js",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@qvac/asr-ggml": "0.12.0",
+    "@qvac/asr-ggml-android-arm64": "0.12.0",
+    "@qvac/fabric": "0.26.0",
+    "@qvac/fabric-android-arm64": "0.26.0",
+    "@qvac/llm-llamacpp": "0.68.0",
+    "@qvac/registry-client": "0.8.0",
+    "@qvac/tts-ggml": "0.15.0",
+    "@qvac/tts-ggml-android-arm64": "0.15.0",
+    "bare-fs": "4.8.4",
+    "bare-http1": "4.6.3",
+    "bare-https": "3.1.0",
+    "bare-os": "3.9.4",
+    "bare-path": "3.1.2",
+    "sodium-native": "5.2.0"
+  }
+}

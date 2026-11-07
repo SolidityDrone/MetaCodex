@@ -95,7 +95,7 @@ namespace MetaCodex.App
                         var done = new ManualResetEventSlim(false);
                         string result = null;
                         _queue.Enqueue((line, r => { if (!done.IsSet) { result = r; done.Set(); } }));
-                        int wait = line.StartsWith("secret ") ? LongWaitSeconds : 10;
+                        int wait = line.StartsWith("secret ") || line.StartsWith("voice ") ? LongWaitSeconds : 10;
                         if (!done.Wait(TimeSpan.FromSeconds(wait))) result = "error: timeout (app paused, or nobody answered in VR)";
                         writer.WriteLine(result ?? "");
                         writer.WriteLine(".");

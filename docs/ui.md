@@ -1,6 +1,6 @@
 # MetaCodex spatial UI: style, panels, gestures, plugins, agents, layouts
 
-Status: v0.3, 2026-11-07. Built and tested headless in the Editor (`MetaCodexUiTest`); not yet on the headset.
+Status: v0.4, 2026-11-07. v0.3 tested on the headset; v0.4 adds voice control (`docs/voice.md`), tested in the Editor against the AI service running on the headset.
 Test list for the headset: `docs/TEST_CHECKLIST.md`.
 
 ## Style
@@ -27,14 +27,15 @@ scanlines, grid, sounds and volume.
 | `Hands/` | `GestureEngine` (built-ins, pose templates, custom gestures with hold/cooldown, head-relative directions), `PoseSpec`, `OvrHandSource` (OVRHand/OVRSkeleton), `SimulatedHands` (any pose, for tests) |
 | `Scripting/` | `ScriptHost`: Lua (MoonSharp) scripts and plugin folders, hot reload, sandbox, instruction budget, detectors as persistent coroutines, persisted state; `PoseJson` |
 | `Security/` | `SecretVault` (Android Keystore sealer, Editor dev sealer, policies, access log) |
-| `Shell/` | `MetaCodexShell` (wiring, panels by id, control-port commands), `ShellPanels` (dock, terminals, files, git, browser, scripts, settings, themes, saved layouts), `ShellGestures` (Gestures studio, bindings, actions, recording, starter plugins), `ShellAgents` (agents, threads, thread, new thread, terminal links), `ShellVault` (vault panel, secret broker), `ShellLayout` (fixed / float carousel), `Services` (system deep links, settings, MQH client, git, files) |
+| `AI/` | `QvacHost` (starts the local AI service process, token, restarts), `QvacClient` (HTTP), `VoiceRecorder` (microphone, end of speech), `VoiceCommands` (registry, phrase templates, tool specs) |
+| `Shell/` | `MetaCodexShell` (wiring, panels by id, control-port commands), `ShellPanels` (dock, terminals, files, git, browser, scripts, settings, themes, saved layouts), `ShellGestures` (Gestures studio, bindings, actions, recording, starter plugins), `ShellAgents` (agents, threads, thread, new thread, terminal links), `ShellVault` (vault panel, secret broker), `ShellVoice` (voice pipeline, shell commands, VOICE panel, HUD), `ShellLayout` (fixed / float carousel), `Services` (system deep links, settings, MQH client, git, files) |
 | `../Plugins/Android/MetaCodexVault.java` | the Keystore bridge (AES-256-GCM, StrongBox or TEE) |
 
 ## Panels
 
 | Panel | Does |
 |---|---|
-| Dock (two rows) | new terminal, terminals, files, git, agents, threads, web, scripts, gestures, vault, setup, keyboard, select tool, recenter |
+| Dock (two rows of 8) | new terminal, terminals, files, git, agents, threads, web, scripts / gestures, vault, TALK (push-to-talk), setup, keyboard, select tool, recenter, voice |
 | Terminal frames | every terminal in a frame: drag by the header, `⇗` open the link the terminal printed (sign-in flows), `⎘` paste the clipboard, `⌨` keyboard, `+` new, `✕` close, tap to focus |
 | Terminals | list of terminal instances: new, focus, close |
 | Files | the Linux userland's folders (`/root`, `/mnt/quest`, `/`): open folders, cd / view / edit / paste path |
@@ -47,6 +48,8 @@ scanlines, grid, sounds and volume.
 | Thread | the timeline (you, agent, commands, tools, file edits, errors; newest at the bottom, ▲▼ to scroll), composer (system keyboard) + SEND, approvals (ALLOW ONCE / SESSION / DENY), STOP, jumps to the workspace's FILES, GIT and a TERMINAL there |
 | New thread | provider, model (from MQH's catalogue for that provider), permissions (EDITS / AUTO / FULL), workspace (project checkout or a new git worktree), first message, START |
 | Vault | secrets (names only), where the key lives (StrongBox / TEE), policy (ASK / ONCE / ALLOW / DENY), new value (secure keyboard), → MQH ENV, re-arm, delete, access log; approval dialogs for requests from Linux (`docs/secrets.md`) |
+| Voice | the local AI service (state, RAM), models (install with progress, loaded or not), TALK, TYPE… (a command as text), SAY… (text to speech), spoken replies, LLM fallback, auto stop, language, threads, the command list (shell + plugins), the last requests with timings (`docs/voice.md`) |
+| Voice HUD | above the dock while a voice request runs: listening level, transcript, result; STOP |
 | Settings | GESTURES (click by pinch/poke/both, move panels by header pinch or closed hand, ray mode, pinch threshold, clap, plugin gestures on/off, select tool), DISPLAY (layout fixed/float, distance, carousel radius, scale, bending, save / load named layouts, recenter), LOOK (theme presets, accent, glow, opacity, motion, scanlines, grid, sounds), DAEMON (MQH URL and token, sync, status, plugins), ABOUT |
 
 ## Hands

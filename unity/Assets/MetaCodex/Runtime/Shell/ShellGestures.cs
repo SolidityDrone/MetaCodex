@@ -93,7 +93,8 @@ namespace MetaCodex.Shell
                 case "recenter": app?.Recenter(); OnRecentered(Vector3.zero, Quaternion.identity); return null;
                 case "lua": { var r = Scripts.Eval(arg); return r.StartsWith("error:") ? r : null; }
                 case "gesture": Gestures.RaiseExternal(arg.Trim(), "both", "tap", Time.unscaledTime, Vector3.zero, "action"); return null;
-                default: return "unknown action '" + verb + "' (open/close/toggle/toast/run/type/url/layout/spin/select/keyboard/terminal/recenter/lua/gesture)";
+                case "voice": return VoiceAction(arg);
+                default: return "unknown action '" + verb + "' (open/close/toggle/toast/run/type/url/layout/spin/select/keyboard/terminal/recenter/lua/gesture/voice)";
             }
         }
 
