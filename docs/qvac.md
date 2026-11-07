@@ -3,6 +3,48 @@
 Status: decision 2026-11-07, replaces PLAN v2 D12 ("R1 first: the SDK in the Linux userland").
 Nothing below is measured on the headset yet; the validation order is at the end.
 
+## Scope and plan (owner, 2026-11-07 afternoon): voice control of the environment
+
+QVAC is **not** a coding agent or a provider. It is the private, local interface to the environment:
+speech-to-text, a small LLM and text-to-speech turn "close all windows", "change workspace", "find the
+thread where we do X", "open providers page" into actions, and private data never leaves the headset.
+OCR, translation, video and embeddings are out of scope for now.
+
+**Placement: native on Horizon OS** (confirmed). An Android service process of our APK hosts a BareKit
+worklet with the QVAC SDK worker (`qvac bundle sdk`, plugins: transcription, TTS, llamacpp completion) and
+QVAC's android-arm64 addons (`@qvac/asr-ggml-android-arm64`, `@qvac/tts-ggml-android-arm64`,
+`@qvac/fabric-android-arm64` exist; the CLI's `qvac serve` is desktop-only, so the worklet serves its own
+small HTTP API). Why native for frame stability: Android keeps a service process on cores 0-2 at background
+priority and kills it first under memory pressure, with no proot overhead; and the microphone and speaker
+are only reachable from Android (the Linux side has no audio devices).
+
+```
+ Horizon OS: AI service (:ai, BareKit + QVAC: STT, TTS, LLM)  127.0.0.1:47810, vault key
+        ^                         ^
+        | HTTP                    | HTTP (loopback)
+   Unity app (mic, speaker,     MQH daemon / terminal (mcx-ai) in the Linux userland
+   voice commands -> actions)
+```
+
+| Capability | First model (small, CPU, cores 0-2, 2 threads) | API |
+|---|---|---|
+| Speech-to-text | `WHISPER_TINY` or `PARAKEET_TRANSCRIBEPSY_250M_Q8_0` (8 European languages) | `POST /v1/audio/transcriptions` |
+| Text-to-speech | Supertonic (tts-ggml) | `POST /v1/audio/speech` |
+| Commands | `QWEN3_600M_INST_Q4`, then `QWEN3_1_7B_INST_Q4` if needed (tool calling; deferred tool loading) | `POST /v1/chat/completions` with tools |
+| Control | | `GET /status`, `POST /pause`, `POST /resume` (Unity pauses inference in frame-critical moments) |
+
+**Commands are a registry (MCP-like):** each command has a name, a description and a JSON schema
+(`close_all_panels`, `open_panel(id)`, `switch_workspace(name)`, `find_thread(query)`, `new_terminal`,
+`set_layout(mode)`, `run_in_terminal(cmd)` with confirmation, ...). The shell registers its own, Lua
+plugins add theirs (`voice.command{...}`), MQH plugins can expose MCP tools; with deferred loading the LLM
+sees only the few that match, so it needs no context about the app. Obvious phrasings take a fast path
+(rule match) and skip the LLM.
+
+**Phases:** 0. native spike over adb, no APK (bare + addons + the three models: works on Horizon OS? load
+time, latency, RAM, fps with the app running) - 1. the service in the APK (BareKit, worker bundle, addons,
+model download on first use) - 2. voice control in Unity (push-to-talk, mic permission, STT -> fast path /
+LLM -> action -> spoken or visual confirmation) - 3. the command registry for plugins and MQH.
+
 ## Decision
 
 QVAC runs **natively on Horizon OS, in its own Android process**: a service in the MetaCodex APK
