@@ -1,0 +1,36 @@
+{
+  "name": "@bb/bundled-plugins",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "build": "cd ../.. && node --conditions=source --import tsx packages/bundled-plugins/build.ts"
+  },
+  "dependencies": {
+    "bb-plugin-ask-user-question": "workspace:*",
+    "bb-plugin-automations": "workspace:*",
+    "bb-plugin-bb-guide": "workspace:*",
+    "bb-plugin-concurrency-limit": "workspace:*",
+    "bb-plugin-custom-instructions": "workspace:*",
+    "bb-plugin-environment-git-worktree": "workspace:*",
+    "bb-plugin-environment-personal-workspace": "workspace:*",
+    "bb-plugin-environment-project-checkout": "workspace:*",
+    "bb-plugin-github": "workspace:*",
+    "bb-plugin-bb--git": "workspace:*",
+    "bb-plugin-bb--github-pr-status": "workspace:*",
+    "bb-plugin-memory": "workspace:*",
+    "bb-plugin-provider-acp": "workspace:*",
+    "bb-plugin-provider-claude-code": "workspace:*",
+    "bb-plugin-provider-codex": "workspace:*",
+    "bb-plugin-provider-pi": "workspace:*",
+    "bb-plugin-provider-retry": "workspace:*",
+    "bb-plugin-bb--provider-usage": "workspace:*",
+    "bb-plugin-bb--mcp": "workspace:*",
+    "bb-plugin-bb--prompt-library": "workspace:*",
+    "bb-plugin-secrets": "workspace:*",
+    "bb-plugin-simple-notes": "workspace:*",
+    "bb-plugin-tasks": "workspace:*",
+    "bb-plugin-workflows": "workspace:*",
+    "bb-plugin-bb--storage-retention": "workspace:*"
+  }
+}

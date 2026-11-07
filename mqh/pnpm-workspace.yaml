@@ -1,0 +1,6 @@
+packages:
+  - "packages/*"
+  - "apps/*"
+  - "tests/*"
+  - "plugins/*"
+  - "!**/.bundled-stage-*"
