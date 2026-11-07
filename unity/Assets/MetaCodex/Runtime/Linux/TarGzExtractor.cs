@@ -24,7 +24,8 @@ namespace MetaCodex.Linux
         public override string ToString() => $"{Files} files, {Dirs} dirs, {Symlinks} symlinks, {HardLinks} hard links (copied), {Skipped} skipped, {Bytes / (1024 * 1024)} MB";
     }
 
-    /// Streams a .tar.gz (ustar, GNU long names, PAX headers) into a folder. Hard links become copies and
+    /// Streams a .tar.gz or a plain .tar (ustar, GNU long names, PAX headers; gzip is detected by its magic bytes:
+    /// Android's asset packaging stores "x.tar.gz" decompressed as "x.tar") into a folder. Hard links become copies and
     /// device nodes are skipped (neither is allowed in an app's data folder); owner bits rw(x) are always set
     /// so the fake-root userland can write everywhere; paths that would escape the folder are refused.
     public static class TarGzExtractor
@@ -40,7 +41,8 @@ namespace MetaCodex.Linux
             int zeroBlocks = 0;
             int sinceProgress = 0;
 
-            using (var tar = new GZipStream(compressed, CompressionMode.Decompress, leaveOpen: true))
+            bool gzip = IsGzip(compressed);
+            using (var tar = gzip ? (Stream)new GZipStream(compressed, CompressionMode.Decompress, leaveOpen: true) : new NonClosingStream(compressed))
             {
                 while (true)
                 {
@@ -262,6 +264,34 @@ namespace MetaCodex.Linux
         {
             int pad = (int)((512 - size % 512) % 512);
             if (pad > 0) Skip(s, pad, buffer);
+        }
+
+        /// Peeks the gzip magic (1f 8b) and rewinds; streams that cannot seek are taken as gzip (the old format).
+        public static bool IsGzip(Stream s)
+        {
+            if (!s.CanSeek) return true;
+            long at = s.Position;
+            int a = s.ReadByte(), b = s.ReadByte();
+            s.Position = at;
+            return a == 0x1f && b == 0x8b;
+        }
+
+        /// A plain tar is read straight from the caller's stream, which the caller closes.
+        private sealed class NonClosingStream : Stream
+        {
+            private readonly Stream _s;
+            public NonClosingStream(Stream s) { _s = s; }
+            public override bool CanRead => _s.CanRead;
+            public override bool CanSeek => false;
+            public override bool CanWrite => false;
+            public override long Length => _s.Length;
+            public override long Position { get => _s.Position; set => throw new NotSupportedException(); }
+            public override int Read(byte[] buffer, int offset, int count) => _s.Read(buffer, offset, count);
+            public override void Flush() { }
+            public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+            public override void SetLength(long value) => throw new NotSupportedException();
+            public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+            protected override void Dispose(bool disposing) { }
         }
 
         private static bool ReadFull(Stream s, byte[] b, int len)

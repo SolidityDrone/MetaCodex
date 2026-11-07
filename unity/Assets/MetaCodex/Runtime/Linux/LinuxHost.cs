@@ -252,15 +252,29 @@ namespace MetaCodex.Linux
             }
         }
 
+        /// Copies a StreamingAssets file out of the APK. Android's asset packaging stores "x.tar.gz" decompressed
+        /// as "x.tar" (verified in the 0.3 APK: assets/linux/rootfs.tar, overlay.tar), so ".gz" names fall back
+        /// to the name without it; the extractor reads both formats.
         private IEnumerator CopyStreamingAsset(string rel, string dest, Action<float> progress)
         {
-            using (var req = new UnityWebRequest(StreamingUrl(rel), UnityWebRequest.kHttpVerbGET))
+            var names = rel.EndsWith(".gz") ? new[] { rel, rel.Substring(0, rel.Length - 3) } : new[] { rel };
+            string error = null;
+            foreach (var name in names)
             {
-                req.downloadHandler = new DownloadHandlerFile(dest) { removeFileOnAbort = true };
-                var op = req.SendWebRequest();
-                while (!op.isDone) { progress(req.downloadProgress); yield return null; }
-                if (req.result != UnityWebRequest.Result.Success) Fail($"read {rel}: {req.error}");
+                using (var req = new UnityWebRequest(StreamingUrl(name), UnityWebRequest.kHttpVerbGET))
+                {
+                    req.downloadHandler = new DownloadHandlerFile(dest) { removeFileOnAbort = true };
+                    var op = req.SendWebRequest();
+                    while (!op.isDone) { progress(req.downloadProgress); yield return null; }
+                    if (req.result == UnityWebRequest.Result.Success)
+                    {
+                        if (name != rel) Say($"{rel} is packed as {name}");
+                        yield break;
+                    }
+                    error = req.error;
+                }
             }
+            Fail($"read {rel}: {error}");
         }
 
         private static string StreamingUrl(string rel)

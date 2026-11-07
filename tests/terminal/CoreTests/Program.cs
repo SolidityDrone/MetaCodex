@@ -19,9 +19,9 @@ internal static class Program
         Unit();
         Corpus(corpus);
         if (synthTar != null && File.Exists(synthTar)) SyntheticTar(synthTar);
-        if (rootfs != null && File.Exists(rootfs)) RealRootfs(rootfs);
+        if (rootfs != null && File.Exists(rootfs)) { RealRootfs(rootfs); RealRootfs(Gunzipped(rootfs), " (plain tar, as packed in the APK)"); }
         string overlay = args.Length > 3 ? args[3] : null;
-        if (overlay != null && File.Exists(overlay)) Overlay(overlay);
+        if (overlay != null && File.Exists(overlay)) { Overlay(overlay); Overlay(Gunzipped(overlay), " (plain tar, as packed in the APK)"); }
         Console.WriteLine(_fails == 0 ? $"ALL OK ({_passes} checks)" : $"{_fails} FAILED, {_passes} passed");
         return _fails == 0 ? 0 : 1;
     }
@@ -190,17 +190,29 @@ internal static class Program
         Check(ops.Modes.TryGetValue("setuid-bin", out int sm) && (sm & 0xE00) == 0 && (sm & 0x40) != 0, "tar: setuid stripped, exec kept", Convert.ToString(sm, 8));
     }
 
-    private static void Overlay(string path)
+    /// The APK holds "x.tar.gz" decompressed as "x.tar": test the extractor on that form too.
+    private static string Gunzipped(string gz)
+    {
+        string tar = Path.Combine(Path.GetTempPath(), "mcx-" + Path.GetFileNameWithoutExtension(gz));
+        using (var input = File.OpenRead(gz))
+        using (var unzip = new System.IO.Compression.GZipStream(input, System.IO.Compression.CompressionMode.Decompress))
+        using (var output = File.Create(tar)) unzip.CopyTo(output);
+        Check(!TarGzExtractor.IsGzip(File.OpenRead(tar)) && TarGzExtractor.IsGzip(File.OpenRead(gz)), "gzip magic detected: " + Path.GetFileName(gz) + " vs plain tar");
+        return tar;
+    }
+
+    private static void Overlay(string path, string note = "")
     {
         string root = Path.Combine(Path.GetTempPath(), "mcx-overlay-null");
         var ops = new RecordingOps(root);
         using (var f = File.OpenRead(path)) TarGzExtractor.Extract(f, root, ops);
         Check(ops.Files.Contains("usr/local/bin/mcx-setup") && ops.Modes.TryGetValue("usr/local/bin/mcx-setup", out int m) && (m & 0x1FF) == 0x1ED,
-            "overlay: mcx-setup, mode 0755");
-        Check(ops.Modes.TryGetValue("usr", out int um) && um == 0x1ED, "overlay: dirs keep 0755 (never 0777 from NTFS)");
+            "overlay: mcx-setup, mode 0755" + note);
+        Check(ops.Modes.TryGetValue("usr", out int um) && um == 0x1ED, "overlay: dirs keep 0755 (never 0777 from NTFS)" + note);
+        Check(ops.Files.Contains("usr/local/bin/mcx-secret") && ops.Files.Contains("root/.claude/skills/quest-gesture-plugins/SKILL.md"), "overlay: mcx-secret and the agent skills" + note);
     }
 
-    private static void RealRootfs(string path)
+    private static void RealRootfs(string path, string note = "")
     {
         string root = Path.Combine(Path.GetTempPath(), "mcx-rootfs-null");
         var ops = new RecordingOps(root);
@@ -209,7 +221,7 @@ internal static class Program
         float last = 0;
         using (var f = File.OpenRead(path)) st = TarGzExtractor.Extract(f, root, ops, p => last = p);
         Console.WriteLine($"rootfs parse: {st} in {(DateTime.UtcNow - t0).TotalSeconds:F1} s");
-        Check(st.Files == 2677 && st.Dirs == 414 && st.Symlinks == 173 && st.HardLinks == 1 && last == 1f, "rootfs: entry counts (tar tv: 2677 files, 415 dirs incl. ./, 173 links, 1 hard link)", st.ToString());
+        Check(st.Files == 2677 && st.Dirs == 414 && st.Symlinks == 173 && st.HardLinks == 1 && last == 1f, "rootfs: entry counts (tar tv: 2677 files, 415 dirs incl. ./, 173 links, 1 hard link)" + note, st.ToString());
         Check(ops.Links.TryGetValue("bin", out var b) && b == "usr/bin", "rootfs: /bin -> usr/bin");
         Check(ops.Files.Contains("usr/bin/bash") && ops.Files.Contains("usr/lib/aarch64-linux-gnu/libc.so.6"), "rootfs: bash and glibc present");
         RootfsSetup.Apply(root, new[] { 3003, 9997, 20123 }, 6, ops);
