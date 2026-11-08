@@ -352,24 +352,43 @@ namespace MetaCodex.Hands
             Edge(ref s.PalmUp, false, "palm-up", hn, time, p);
         }
 
-        /// Clap: both palms come together fast and touch. Re-armed once they move apart again.
+        private float _lastBothTime = -10f, _lastBothDist = 1f;
+        private Vector3 _lastClapMid;
+
+        /// Clap: both palms come together fast and touch. Re-armed once they move apart again. Hand tracking often
+        /// drops one or both hands at the moment they touch (occlusion), so a fast approach that was already close
+        /// and then lost tracking within 0.2 s counts too (without it, real claps were rarely seen on the headset).
         private void UpdateClap(float time, float dt)
         {
-            if (!Settings.clapEnabled || !Left.Tracked || !Right.Tracked) { _prevPalmDist = -1f; return; }
-            float d = Vector3.Distance(Left.Frame.Palm, Right.Frame.Palm);
-            if (_prevPalmDist >= 0f && dt > 1e-5f)
+            if (!Settings.clapEnabled) { _prevPalmDist = -1f; return; }
+            if (Left.Tracked && Right.Tracked)
             {
-                float speed = (_prevPalmDist - d) / dt; // closing speed, m/s
-                _approachSpeed = Mathf.Max(speed, _approachSpeed * Mathf.Exp(-dt / 0.15f));
+                float d = Vector3.Distance(Left.Frame.Palm, Right.Frame.Palm);
+                if (_prevPalmDist >= 0f && dt > 1e-5f)
+                {
+                    float speed = (_prevPalmDist - d) / dt; // closing speed, m/s
+                    _approachSpeed = Mathf.Max(speed, _approachSpeed * Mathf.Exp(-dt / 0.15f));
+                }
+                _prevPalmDist = d;
+                _lastBothTime = time;
+                _lastBothDist = d;
+                _lastClapMid = (Left.Frame.Palm + Right.Frame.Palm) * 0.5f;
+                if (_clapArmed && d < Settings.clapDistance && _approachSpeed > 0.3f) FireClap(time);
+                else if (!_clapArmed && d > Settings.clapDistance * 1.9f) _clapArmed = true;
+                return;
             }
-            _prevPalmDist = d;
-            if (_clapArmed && d < Settings.clapDistance && _approachSpeed > 0.35f)
-            {
-                _clapArmed = false;
-                LastClapTime = time;
-                Raise("clap", "both", "tap", time, (Left.Frame.Palm + Right.Frame.Palm) * 0.5f);
-            }
-            else if (!_clapArmed && d > Settings.clapDistance * 1.9f) _clapArmed = true;
+            // tracking lost: was it the moment of contact?
+            if (_clapArmed && _prevPalmDist >= 0f && time - _lastBothTime < 0.2f && _lastBothDist < Settings.clapDistance * 2.2f && _approachSpeed > 0.6f)
+                FireClap(time);
+            _prevPalmDist = -1f;
+            if (time - _lastBothTime > 0.6f) _clapArmed = true;
+        }
+
+        private void FireClap(float time)
+        {
+            _clapArmed = false;
+            LastClapTime = time;
+            Raise("clap", "both", "tap", time, _lastClapMid);
         }
 
         // ------------------------------------------------------------------ custom gestures (plugins)

@@ -24,6 +24,9 @@ namespace MetaCodex.AI
         /// Ask in VR before running (commands with side effects you cannot undo, e.g. shell commands).
         public bool Confirm;
         public bool Enabled = true;
+        /// The reply is an answer worth hearing ("It's 3 pm"), not a confirmation of an action ("Opened GIT"):
+        /// only these are spoken (confirmations come late and annoy; the HUD and a click show them at once).
+        public bool SpeakReply;
         /// Offered to the local LLM (off for commands that take free text verbatim: typing, shell commands;
         /// their spoken phrases still work).
         public bool Llm = true;

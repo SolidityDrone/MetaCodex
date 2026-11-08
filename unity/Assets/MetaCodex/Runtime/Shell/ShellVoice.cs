@@ -34,6 +34,8 @@ namespace MetaCodex.Shell
     public sealed class VoiceResult
     {
         public string Transcript = "", Via, Command, Args, Reply, Error;
+        /// The reply answers something (spoken when spoken replies are on); action confirmations are not.
+        public bool Answer;
         public int AsrMs, LlmMs, TotalMs;
         public float Started = -1f;
         public DateTime At;
@@ -348,6 +350,7 @@ namespace MetaCodex.Shell
             res.Via = m.Via;
             res.Command = m.Command.Name;
             res.Args = m.Args.ToString(Newtonsoft.Json.Formatting.None);
+            res.Answer = m.Command.SpeakReply;
             bool finished = false;
             void Apply(string reply)
             {
@@ -394,7 +397,7 @@ namespace MetaCodex.Shell
             Sounds?.Play(res.Ok ? "toast" : "error");
             EndBoostSoon();
             _vHudCloseAt = Time.unscaledTime + (res.Ok ? 2.5f : 4.5f);
-            if (res.Ok && Settings.voice.speak && !string.IsNullOrEmpty(res.Reply)) VoiceSay(res.Reply);
+            if (res.Ok && res.Answer && Settings.voice.speak && !string.IsNullOrEmpty(res.Reply)) VoiceSay(res.Reply);
             RefreshVoicePanel();
             done?.Invoke(res);
             VoiceState = "idle";
@@ -760,7 +763,7 @@ namespace MetaCodex.Shell
                 ("TYPE…", () => UiKeyboard.Edit("", false, null, txt => { if (!string.IsNullOrWhiteSpace(txt)) VoiceProcessText(txt, null); })),
                 ("SAY…", () => UiKeyboard.Edit("Hello from MetaCodex", false, null, txt => VoiceSay(txt))),
             }, primary: 0);
-            p.Add(new UiToggle("Spoken replies", Settings.voice.speak, v => { Settings.voice.speak = v; OnSettingsChanged(); }) { Rect = ls.Next(0.03f) });
+            p.Add(new UiToggle("Speak answers (actions are confirmed silently)", Settings.voice.speak, v => { Settings.voice.speak = v; OnSettingsChanged(); }) { Rect = ls.Next(0.03f) });
             p.Add(new UiToggle("Ask the LLM when no phrase matches", Settings.voice.useLlm, v => { Settings.voice.useLlm = v; OnSettingsChanged(); }) { Rect = ls.Next(0.03f) });
             p.Add(new UiToggle("Stop listening after a pause", Settings.voice.autoStop, v => { Settings.voice.autoStop = v; OnSettingsChanged(); }) { Rect = ls.Next(0.03f) });
             p.Add(new UiToggle("Start the AI service with the app", Settings.voice.enabled, v => { Settings.voice.enabled = v; OnSettingsChanged(); }) { Rect = ls.Next(0.03f) });

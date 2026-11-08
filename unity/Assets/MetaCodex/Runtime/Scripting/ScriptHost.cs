@@ -623,6 +623,7 @@ namespace MetaCodex.Scripting
                 Owner = e.Key,
                 Confirm = t.Get("confirm").CastToBool(),
                 Llm = t.Get("llm").IsNil() || t.Get("llm").CastToBool(),
+                SpeakReply = t.Get("speak").CastToBool(),
             };
             // examples = {{"make it orange", "set_accent amber"}, ...}: teach the local LLM this command
             var ex = t.Get("examples");
