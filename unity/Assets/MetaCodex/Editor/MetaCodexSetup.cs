@@ -149,6 +149,11 @@ namespace MetaCodex.EditorTools
                     "com.unity.openxr.feature.input.metaquestplus",
                     "com.unity.openxr.feature.input.handinteraction");
             }
+            // Ambient Focus reads the room's live depth (Meta's EnvironmentDepthManager): with the OpenXR loader the
+            // depth comes through these two (com.unity.xr.meta-openxr; same setup as SandyBridge)
+            SetFeatures(BuildTargetGroup.Android, true,
+                "com.unity.openxr.feature.arfoundation-meta-session",
+                "com.unity.openxr.feature.arfoundation-meta-occlusion");
             EditorUtility.SetDirty(perTarget);
         }
 
@@ -170,9 +175,11 @@ namespace MetaCodex.EditorTools
             config.handTrackingSupport = OVRProjectConfig.HandTrackingSupport.ControllersAndHands;
             config.handTrackingFrequency = OVRProjectConfig.HandTrackingFrequency.HIGH;
             config.insightPassthroughSupport = OVRProjectConfig.FeatureSupport.Required;
-            // Ambient Focus reads the room's scanned geometry (scene anchors: global mesh, walls, floor)
-            config.anchorSupport = OVRProjectConfig.AnchorSupport.Enabled;
+            // Ambient Focus: the Depth API needs the "spatial data" permission (USE_SCENE), no Space Setup scan; its
+            // blur reads the passthrough camera (horizonos.permission.HEADSET_CAMERA, MR Utility Kit)
+            config.anchorSupport = OVRProjectConfig.AnchorSupport.Disabled;
             config.sceneSupport = OVRProjectConfig.FeatureSupport.Supported;
+            config.isPassthroughCameraAccessEnabled = true;
             // TouchScreenKeyboard -> the headset's system keyboard over the immersive app
             config.requiresSystemKeyboard = true;
             // the Linux userland (compilers, node, agents) is CPU work; the scene is a few flat panels

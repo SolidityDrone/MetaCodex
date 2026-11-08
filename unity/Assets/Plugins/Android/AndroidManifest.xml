@@ -28,9 +28,11 @@
   <uses-permission android:name="com.oculus.permission.HAND_TRACKING" />
   <!-- voice control: push-to-talk speech-to-text (local AI service, docs/voice.md) -->
   <uses-permission android:name="android.permission.RECORD_AUDIO" />
-  <!-- Ambient Focus: the room's scanned geometry (Space Setup) for the dome -->
+  <!-- Ambient Focus: the live depth of the room ("spatial data", no Space Setup scan) and, for its blur, the passthrough camera -->
   <uses-permission android:name="com.oculus.permission.USE_SCENE" />
+  <uses-permission android:name="horizonos.permission.HEADSET_CAMERA" />
   <uses-feature android:name="oculus.software.overlay_keyboard" android:required="false" />
   <uses-feature android:name="com.oculus.feature.PASSTHROUGH" android:required="true" />
   <horizonos:uses-horizonos-sdk horizonos:minSdkVersion="60" horizonos:targetSdkVersion="205" />
+  <uses-permission android:name="com.oculus.permission.USE_ANCHOR_API" />
 </manifest>
