@@ -86,17 +86,19 @@ namespace MetaCodex.UI
     {
         private readonly List<int> _shapes = new List<int>();
         private readonly List<UiText> _texts = new List<UiText>();
-        private int _ns, _nt;
+        private readonly List<int> _icons = new List<int>();
+        private int _ns, _nt, _ni;
 
         protected override void Build() => Redraw();
 
         public void Redraw()
         {
             if (Panel == null) return;
-            _ns = 0; _nt = 0;
+            _ns = 0; _nt = 0; _ni = 0;
             if (Visible) Draw();
             for (int i = _ns; i < _shapes.Count; i++) Panel.Shapes.SetVisible(_shapes[i], false);
             for (int i = _nt; i < _texts.Count; i++) _texts[i].SetVisible(false);
+            for (int i = _ni; i < _icons.Count; i++) Panel.Icons.SetVisible(_icons[i], false);
         }
 
         protected abstract void Draw();
@@ -109,6 +111,15 @@ namespace MetaCodex.UI
             _shapes.Add(nid);
             _ns++;
             return nid;
+        }
+
+        /// An icon from the atlas (UiIcons), in front of the shapes.
+        protected void Icon(Rect r, Rect uv, Color tint)
+        {
+            var c = Panel.PanelToLocal(r.center, -0.0006f);
+            if (_ni < _icons.Count) Panel.Icons.Set(_icons[_ni], c, r.size, uv, tint);
+            else _icons.Add(Panel.Icons.Add(c, r.size, uv, tint));
+            _ni++;
         }
 
         /// A box: fill 0 = quiet surface (state lights it), 1 = filled with the tint, 2 = ghost.
@@ -190,8 +201,10 @@ namespace MetaCodex.UI
         {
             foreach (var id in _shapes) Panel.Shapes.SetVisible(id, false);
             foreach (var t in _texts) DestroyGo(t.Tmp.gameObject);
+            foreach (var id in _icons) Panel.Icons.SetVisible(id, false);
             _shapes.Clear();
             _texts.Clear();
+            _icons.Clear();
         }
     }
 
@@ -1237,11 +1250,14 @@ namespace MetaCodex.UI
                 var r = new Rect(Rect.x + (k % cols) * (tw + 0.004f), Rect.y + (k / cols) * (TileH + 0.004f), tw, TileH);
                 bool hov = tile == _hover;
                 Box(r, tile.Found ? tile.Tint : t.Frame, 0.006f, 0, hov ? 0.55f : tile.Found ? 0.14f : 0.04f, 0.002f);
-                float d = TileH * 0.62f;
+                float d = TileH * 0.66f;
                 var c = new Vector2(r.x + 0.006f + d * 0.5f, r.center.y);
-                var col = tile.Found ? tile.Tint : t.Frame;
-                Pill(new Rect(c.x - d * 0.5f, c.y - d * 0.5f, d, d), new Color(col.r, col.g, col.b, tile.Found ? 0.9f : 0.35f));
-                Txt(new Rect(c.x - d * 0.5f, c.y - d * 0.5f, d, d), tile.Glyph ?? "·", d * 0.62f, tile.Found ? Color.white : t.TextDim, TextAlignmentOptions.Center);
+                bool logo = UiIcons.TryGet(tile.Name, out var uv, out var brand);
+                // the tool's own logo on its brand colour (dark brand colours get the steel plate instead)
+                var col = logo ? (brand.r * 0.3f + brand.g * 0.59f + brand.b * 0.11f < 0.12f ? UiTheme.Hex(0x2E3F55) : brand) : tile.Found ? tile.Tint : t.Frame;
+                Pill(new Rect(c.x - d * 0.5f, c.y - d * 0.5f, d, d), new Color(col.r, col.g, col.b, tile.Found ? 0.95f : 0.30f));
+                if (logo) Icon(new Rect(c.x - d * 0.36f, c.y - d * 0.36f, d * 0.72f, d * 0.72f), uv, tile.Found ? Color.white : new Color(1f, 1f, 1f, 0.45f));
+                else Txt(new Rect(c.x - d * 0.5f, c.y - d * 0.5f, d, d), tile.Glyph ?? "·", d * 0.62f, tile.Found ? Color.white : t.TextDim, TextAlignmentOptions.Center);
                 float tx = r.x + 0.012f + d;
                 Txt(new Rect(tx, r.y + 0.003f, r.xMax - tx - 0.004f, TileH * 0.5f), "<b>" + UiViz.NoParse(tile.Name) + "</b>", 0.0112f, tile.Found ? t.Text : t.TextDim);
                 Txt(new Rect(tx, r.y + TileH * 0.5f, r.xMax - tx - 0.004f, TileH * 0.45f), tile.Found ? UiViz.NoParse(UiViz.Cut(tile.Version ?? "", 18)) : UiViz.NoParse(tile.Hint), 0.0094f, tile.Found ? t.TextDim : t.TextAccent, TextAlignmentOptions.MidlineLeft, tile.Found ? t.Mono : null);

@@ -132,6 +132,7 @@ namespace MetaCodex.Shell
             _sysTabs.OnChanged = i => { if (i == 0) RefreshTools(false); else RefreshStorage(false); };
             LoadToolsCache();
             ShowTools();
+            ScheduleToolScan();
         }
 
         // ------------------------------------------------------------------ tools
@@ -187,6 +188,7 @@ namespace MetaCodex.Shell
                     ParseTools(r.output ?? "");
                     _toolsAt = DateTime.Now;
                     SaveToolsCache();
+                    WriteToolsInventory();
                     ShowTools();
                 });
             });
@@ -240,6 +242,74 @@ namespace MetaCodex.Shell
             _sysToolsInfo.Set(_toolsBusy ? "checking the Linux userland … (versions of " + ToolCatalog.Length + " tools)" :
                 _tools.Count == 0 ? "Not checked yet: ⟳ CHECK." :
                 $"<b>{n}</b> of {_tools.Count} known tools installed · {counts}\nchecked {(_toolsAt == DateTime.MinValue ? "?" : _toolsAt.ToString("HH:mm"))} · tap a tile to install, update or remove it", t.TextDim);
+        }
+
+        /// What agents read instead of probing with commands: /mnt/quest/system/tools.json (the app's shared
+        /// folder), rewritten after every scan; also `mcx-ui system tools`.
+        public string ToolsInventoryPath
+        {
+            get
+            {
+                var host = app != null ? app.Host : null;
+                string shared = host != null && !string.IsNullOrEmpty(host.SharedDir) ? host.SharedDir : Application.persistentDataPath;
+                return Path.Combine(shared, "system", "tools.json");
+            }
+        }
+
+        public JObject ToolsInventory() => new JObject
+        {
+            ["updated"] = _toolsAt == DateTime.MinValue ? null : _toolsAt.ToUniversalTime().ToString("o"),
+            ["os"] = _sysCounts.TryGetValue("os", out var os) ? os : null,
+            ["debianPackages"] = _sysCounts.TryGetValue("apt", out var apt) ? apt : null,
+            ["debianChosen"] = _sysCounts.TryGetValue("manual", out var man) ? man : null,
+            ["npmGlobals"] = _sysCounts.TryGetValue("npm", out var npm) ? npm : null,
+            ["note"] = "Kept current by MetaCodex (SYSTEM > TOOLS). Install missing tools there or with the command in `install`.",
+            ["tools"] = new JArray(_tools.Select(x => new JObject
+            {
+                ["name"] = x.Name, ["installed"] = x.Found, ["version"] = x.Version, ["path"] = x.Path, ["category"] = x.Category,
+                ["install"] = x.Found ? null : Cmd(x.Install, "install"),
+            })),
+        };
+
+        private void WriteToolsInventory()
+        {
+            try
+            {
+                string p = ToolsInventoryPath;
+                Directory.CreateDirectory(Path.GetDirectoryName(p));
+                File.WriteAllText(p, ToolsInventory().ToString());
+            }
+            catch (Exception ex) { Log("tools inventory: " + ex.Message); }
+        }
+
+        /// `system …` from Linux (mcx-ui system …).
+        public string SystemCommand(string arg)
+        {
+            var parts = (arg ?? "").Trim().Split(new[] { ' ' }, 2);
+            switch (parts[0])
+            {
+                case "tools":
+                    if (parts.Length > 1 && parts[1].Trim() == "json") return ToolsInventory().ToString(Newtonsoft.Json.Formatting.None);
+                    if (_tools.Count == 0) return "not scanned yet: mcx-ui system refresh";
+                    return string.Join("\n", _tools.Select(x => $"{x.Name}\t{(x.Found ? x.Version ?? "?" : "-")}\t{(x.Found ? x.Path : "missing: " + (Cmd(x.Install, "install") ?? "comes with the system"))}"));
+                case "refresh": RefreshTools(true); return "ok, scanning (results in a few seconds: mcx-ui system tools)";
+                case "storage":
+                    return _linuxBytes < 0 ? "not measured yet: open SYSTEM > STORAGE" :
+                        $"linux {UiStorageBar.Size(_linuxBytes)}, free {UiStorageBar.Size(_devFree)} of {UiStorageBar.Size(_devTotal)}" + (Settings.linuxLimitGB > 0 ? $", limit {Settings.linuxLimitGB:0} GB" : "");
+                case "inventory": return ToolsInventoryPath;
+                default: return "error: system tools [json] | refresh | storage | inventory";
+            }
+        }
+
+        /// A while after start, the inventory is refreshed in the background (agents read it), at low priority.
+        private void ScheduleToolScan()
+        {
+            After(45f, () =>
+            {
+                if (!Git.InUserland && !Application.isEditor) { ScheduleToolScan(); return; } // the userland is not up yet
+                if (_tools.Count == 0 || (DateTime.Now - _toolsAt).TotalMinutes > 30) RefreshTools(true);
+                else WriteToolsInventory();
+            });
         }
 
         private static string Cmd(string spec, string verb)

@@ -41,6 +41,10 @@ description: Where you are when you run inside MetaCodex - a Meta Quest headset 
   `OPENAI_BASE_URL` / `OPENAI_API_KEY` for OpenAI-compatible tools). Speech-to-text (Whisper base), a 0.6B
   LLM for commands and short answers (not for coding), text-to-speech (Supertonic 3). Private: nothing
   leaves the headset. It shares 3 CPU cores with you at low priority: one request at a time per model.
+- Installed tools and their versions (git, node, bun, python3, rustc, compilers, agent CLIs, ...): read
+  `/mnt/quest/system/tools.json` (or `mcx-ui system tools`) instead of probing with `--version` commands; the
+  app keeps it current (SYSTEM > TOOLS; `mcx-ui system refresh` rescans). Each missing tool lists its install
+  command. Disk use: `mcx-ui system storage`.
 - Views: show charts, diagrams (Mermaid), tables, checklists, choices or a physics scene in the headset
   with a ```mcx-view``` / ```mermaid``` block in your reply, or `mcx-ui view show spec.json` from a shell
   (skill `quest-views`). A tapped choice comes back as the user's next message.

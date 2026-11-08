@@ -606,7 +606,7 @@ end)
             var a2 = new UiStack(area, t.Gap);
             tabs.AddTo(TabAbout, new UiLabel($"<b>MetaCodex</b> {Application.version} · {SystemInfo.deviceModel}", t.BodySize) { Rect = a2.Next(0.026f) });
             tabs.AddTo(TabAbout, new UiLabel("Agents and a real Linux userland in VR. Panels, gestures and behaviours are data, Lua and plugins: agents change them live.", t.SmallSize) { Rect = a2.Next(0.04f), Wrap = true, Color = t.TextDim });
-            tabs.AddTo(TabAbout, new UiLabel("Third-party: MoonSharp (BSD-3-Clause, Marco Mastropaolo) · Inter, Noto (SIL OFL 1.1) · DejaVu fonts · QVAC (Apache-2.0, Tether) · Whisper, Qwen3, Supertonic models · bb (MIT, Michael Yong) for MQH.", t.SmallSize) { Rect = a2.Next(0.05f), Wrap = true, Color = t.TextDim });
+            tabs.AddTo(TabAbout, new UiLabel("Third-party: MoonSharp (BSD-3-Clause, Marco Mastropaolo) · Inter, Noto (SIL OFL 1.1) · DejaVu fonts · QVAC (Apache-2.0, Tether) · Whisper, Qwen3, Supertonic models · bb (MIT, Michael Yong) for MQH · tool logos: Simple Icons (CC0; trademarks of their owners).", t.SmallSize) { Rect = a2.Next(0.05f), Wrap = true, Color = t.TextDim });
             tabs.AddTo(TabAbout, new UiLabel("", t.SmallSize) { Rect = a2.Rest(), UseMono = true, Wrap = true, Color = t.TextDim, Align = TextAlignmentOptions.TopLeft }).Set(string.Join("\n", LogLines.Skip(Math.Max(0, LogLines.Count - 8))));
         }
 

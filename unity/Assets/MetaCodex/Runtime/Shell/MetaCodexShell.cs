@@ -739,6 +739,7 @@ namespace MetaCodex.Shell
                 case "action": { var err = RunAction(arg); return err == null ? "ok" : "error: " + err; }
                 case "voice": return VoiceControl(arg);
                 case "view": return ViewCommand(arg);
+                case "system": return SystemCommand(arg);
                 case "plugin":
                 {
                     var parts = arg.Split(new[] { ' ' }, 2, StringSplitOptions.RemoveEmptyEntries);

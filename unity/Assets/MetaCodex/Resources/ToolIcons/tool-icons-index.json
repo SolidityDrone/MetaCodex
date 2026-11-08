@@ -1,0 +1,156 @@
+{
+ "cell": 128,
+ "columns": 8,
+ "icons": {
+  "git": {
+   "cell": 0,
+   "hex": "F03C2E",
+   "title": "Git"
+  },
+  "github": {
+   "cell": 1,
+   "hex": "181717",
+   "title": "GitHub"
+  },
+  "nodedotjs": {
+   "cell": 2,
+   "hex": "5FA04E",
+   "title": "Node.js"
+  },
+  "npm": {
+   "cell": 3,
+   "hex": "CB3837",
+   "title": "npm"
+  },
+  "pnpm": {
+   "cell": 4,
+   "hex": "F69220",
+   "title": "pnpm"
+  },
+  "bun": {
+   "cell": 5,
+   "hex": "000000",
+   "title": "Bun"
+  },
+  "deno": {
+   "cell": 6,
+   "hex": "000000",
+   "title": "Deno"
+  },
+  "python": {
+   "cell": 7,
+   "hex": "3776AB",
+   "title": "Python"
+  },
+  "pypi": {
+   "cell": 8,
+   "hex": "3775A9",
+   "title": "PyPI"
+  },
+  "uv": {
+   "cell": 9,
+   "hex": "DE5FE9",
+   "title": "uv"
+  },
+  "rust": {
+   "cell": 10,
+   "hex": "000000",
+   "title": "Rust"
+  },
+  "go": {
+   "cell": 11,
+   "hex": "00ADD8",
+   "title": "Go"
+  },
+  "gnu": {
+   "cell": 12,
+   "hex": "A42E2B",
+   "title": "GNU"
+  },
+  "llvm": {
+   "cell": 13,
+   "hex": "262D3A",
+   "title": "LLVM"
+  },
+  "cmake": {
+   "cell": 14,
+   "hex": "064F8C",
+   "title": "CMake"
+  },
+  "openjdk": {
+   "cell": 15,
+   "hex": "000000",
+   "title": "OpenJDK"
+  },
+  "ruby": {
+   "cell": 16,
+   "hex": "CC342D",
+   "title": "Ruby"
+  },
+  "php": {
+   "cell": 17,
+   "hex": "777BB4",
+   "title": "PHP"
+  },
+  "lua": {
+   "cell": 18,
+   "hex": "000080",
+   "title": "Lua"
+  },
+  "sqlite": {
+   "cell": 19,
+   "hex": "003B57",
+   "title": "SQLite"
+  },
+  "tmux": {
+   "cell": 20,
+   "hex": "1BB91F",
+   "title": "tmux"
+  },
+  "vim": {
+   "cell": 21,
+   "hex": "019733",
+   "title": "Vim"
+  },
+  "curl": {
+   "cell": 22,
+   "hex": "073551",
+   "title": "curl"
+  },
+  "claude": {
+   "cell": 23,
+   "hex": "D97757",
+   "title": "Claude"
+  }
+ },
+ "tools": {
+  "git": "git",
+  "gh": "github",
+  "node": "nodedotjs",
+  "npm": "npm",
+  "pnpm": "pnpm",
+  "bun": "bun",
+  "deno": "deno",
+  "python3": "python",
+  "pip": "pypi",
+  "uv": "uv",
+  "rustc": "rust",
+  "cargo": "rust",
+  "go": "go",
+  "gcc": "gnu",
+  "clang": "llvm",
+  "make": "gnu",
+  "cmake": "cmake",
+  "java": "openjdk",
+  "ruby": "ruby",
+  "php": "php",
+  "lua": "lua",
+  "sqlite3": "sqlite",
+  "tmux": "tmux",
+  "vim": "vim",
+  "nano": "gnu",
+  "curl": "curl",
+  "wget": "gnu",
+  "claude": "claude"
+ }
+}
