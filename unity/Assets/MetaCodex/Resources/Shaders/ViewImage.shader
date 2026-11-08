@@ -14,7 +14,7 @@ Shader "MetaCodex/ViewImage"
             Tags { "LightMode" = "UniversalForward" }
             Cull Off
             ZWrite Off
-            Blend SrcAlpha OneMinusSrcAlpha
+            Blend SrcAlpha OneMinusSrcAlpha, One OneMinusSrcAlpha
             HLSLPROGRAM
             #pragma vertex vert
             #pragma fragment frag

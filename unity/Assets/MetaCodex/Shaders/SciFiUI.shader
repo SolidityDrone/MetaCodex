@@ -5,7 +5,10 @@
 //   TEXCOORD1  x,y = shape size in metres, z = glow margin in metres, w = kind
 //   TEXCOORD2  x = corner radius, y = fill style, z = border width, w = state 0..1
 // Kinds: 0 panel body, 1 button, 2 header separator, 3 selection frame, 4 bar (state = fill), 5 line, 6 dot.
-// A calm, standard look: rounded corners, dark frosted glass, a fine border lit from above, soft shadows.
+// Two passes: PanelDepth writes depth where a panel body is opaque (so text and images of windows behind it are
+// hidden, as they render later), then the colour pass. Alpha is blended with One OneMinusSrcAlpha: it only ever
+// grows, so a translucent button, row or shadow drawn over an opaque panel never opens a hole to the passthrough
+// (the eye buffer's alpha decides how much of the real world shows).
 //   TEXCOORD2 is read as x = corner radius, y = fill style (buttons: 0 normal, 1 filled, 2 ghost), z = border, w = state.
 Shader "MetaCodex/SciFiUI"
 {
@@ -20,6 +23,94 @@ Shader "MetaCodex/SciFiUI"
     SubShader
     {
         Tags { "RenderType" = "Transparent" "Queue" = "Transparent-10" "RenderPipeline" = "UniversalPipeline" "IgnoreProjector" = "True" }
+
+        HLSLINCLUDE
+        #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+
+        CBUFFER_START(UnityPerMaterial)
+            float _Scanlines;
+            float _GlowBoost;
+            float _Opacity;
+            float _Motion;
+            float _Grid;
+        CBUFFER_END
+
+        struct Attributes
+        {
+            float4 positionOS : POSITION;
+            half4 color : COLOR;
+            float2 uv : TEXCOORD0;
+            float4 shape : TEXCOORD1;
+            float4 style : TEXCOORD2;
+            UNITY_VERTEX_INPUT_INSTANCE_ID
+        };
+
+        struct Varyings
+        {
+            float4 positionCS : SV_POSITION;
+            half4 color : COLOR;
+            float2 uv : TEXCOORD0;
+            float4 shape : TEXCOORD1;
+            float4 style : TEXCOORD2;
+            UNITY_VERTEX_OUTPUT_STEREO
+        };
+
+        Varyings vert(Attributes v)
+        {
+            Varyings o;
+            UNITY_SETUP_INSTANCE_ID(v);
+            UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(o);
+            o.positionCS = TransformObjectToHClip(v.positionOS.xyz);
+            o.color = v.color;
+            o.uv = v.uv;
+            o.shape = v.shape;
+            o.style = v.style;
+            return o;
+        }
+
+        // Signed distance to a rounded rectangle of half size h and corner radius r. Negative inside.
+        float sdRound(float2 p, float2 h, float r)
+        {
+            r = min(r, min(h.x, h.y));
+            float2 q = abs(p) - h + r;
+            return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
+        }
+
+        ENDHLSL
+
+        Pass
+        {
+            Name "PanelDepth"
+            Tags { "LightMode" = "SRPDefaultUnlit" }
+            Cull Off
+            ZWrite On
+            ZTest LEqual
+            ColorMask 0
+            HLSLPROGRAM
+            #pragma vertex vertDepth
+            #pragma fragment fragDepth
+
+            // the body's depth sits 1.5 mm behind it, so the colour pass's own shapes never fail against it
+            Varyings vertDepth(Attributes v)
+            {
+                v.positionOS.z += 0.0015;
+                return vert(v);
+            }
+            #pragma multi_compile_instancing
+
+            // depth only where a panel body is opaque enough to hide what is behind it
+            half4 fragDepth(Varyings i) : SV_Target
+            {
+                int kind = (int)round(i.shape.w);
+                if (kind != 0 || _Opacity < 0.75) discard;
+                float2 h = i.shape.xy * 0.5;
+                float2 p = (i.uv - 0.5) * (i.shape.xy + 2.0 * i.shape.z);
+                if (sdRound(p, h, i.style.x) > 0.0) discard;
+                return 0;
+            }
+            ENDHLSL
+        }
+
         Pass
         {
             Name "SciFiUI"
@@ -27,61 +118,11 @@ Shader "MetaCodex/SciFiUI"
             Cull Off
             ZWrite Off
             ZTest LEqual
-            Blend SrcAlpha OneMinusSrcAlpha
+            Blend SrcAlpha OneMinusSrcAlpha, One OneMinusSrcAlpha
             HLSLPROGRAM
             #pragma vertex vert
             #pragma fragment frag
             #pragma multi_compile_instancing
-            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
-
-            CBUFFER_START(UnityPerMaterial)
-                float _Scanlines;
-                float _GlowBoost;
-                float _Opacity;
-                float _Motion;
-                float _Grid;
-            CBUFFER_END
-
-            struct Attributes
-            {
-                float4 positionOS : POSITION;
-                half4 color : COLOR;
-                float2 uv : TEXCOORD0;
-                float4 shape : TEXCOORD1;
-                float4 style : TEXCOORD2;
-                UNITY_VERTEX_INPUT_INSTANCE_ID
-            };
-
-            struct Varyings
-            {
-                float4 positionCS : SV_POSITION;
-                half4 color : COLOR;
-                float2 uv : TEXCOORD0;
-                float4 shape : TEXCOORD1;
-                float4 style : TEXCOORD2;
-                UNITY_VERTEX_OUTPUT_STEREO
-            };
-
-            Varyings vert(Attributes v)
-            {
-                Varyings o;
-                UNITY_SETUP_INSTANCE_ID(v);
-                UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(o);
-                o.positionCS = TransformObjectToHClip(v.positionOS.xyz);
-                o.color = v.color;
-                o.uv = v.uv;
-                o.shape = v.shape;
-                o.style = v.style;
-                return o;
-            }
-
-            // Signed distance to a rounded rectangle of half size h and corner radius r. Negative inside.
-            float sdRound(float2 p, float2 h, float r)
-            {
-                r = min(r, min(h.x, h.y));
-                float2 q = abs(p) - h + r;
-                return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
-            }
 
             half4 frag(Varyings i) : SV_Target
             {
