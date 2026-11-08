@@ -79,6 +79,16 @@ namespace MetaCodex.UI
             };
         }
 
+        /// A straight stroke from a to b (panel coordinates): a rotated pill (Bar kind, full) or line.
+        public UiShape Segment(Vector2 a, Vector2 b, float thickness, Color tint, UiShapeKind kind = UiShapeKind.Bar)
+        {
+            var d = b - a;
+            float len = Mathf.Max(d.magnitude, 1e-4f);
+            var s = Shape(kind, new Rect((a + b) * 0.5f - new Vector2(len, thickness) * 0.5f, new Vector2(len, thickness)), tint, thickness * 0.5f, 0f, 0.0015f, 1f);
+            s.Rotation = Mathf.Atan2(-d.y, d.x); // panel y points down, local y up
+            return s;
+        }
+
         /// Panel coordinates (top-left origin, y down, metres) -> local position (centre origin, y up).
         public Vector3 PanelToLocal(Vector2 p, float z = 0f) => new Vector3(p.x - Width * 0.5f, Height * 0.5f - p.y, z);
 
@@ -111,6 +121,12 @@ namespace MetaCodex.UI
             HandleHeight = height;
             float w = Mathf.Min(0.07f, Width * 0.3f);
             Shapes.Add(Shape(UiShapeKind.Bar, new Rect((Width - w) * 0.5f, height * 0.5f - 0.0022f, w, 0.0044f), Theme.Frame, 0.003f, 0f, 0.003f, 0f));
+        }
+
+        public void SetTitle(string title)
+        {
+            Title = title;
+            if (_title != null) _title.Text = UiTheme.Pretty(title);
         }
 
         /// Hides the title bar's own close button (terminal frames have their own buttons there).

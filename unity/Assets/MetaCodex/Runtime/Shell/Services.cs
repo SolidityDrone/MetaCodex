@@ -131,6 +131,17 @@ namespace MetaCodex.Shell
         public VoiceSettings voice = new VoiceSettings();
         /// Show the first terminal when the app starts (off: it runs hidden until TERM on the dock shows it).
         public bool terminalAtStart = false;
+        /// Agent views (charts, diagrams) open by themselves when a thread message brings one.
+        public bool viewsAutoOpen = true;
+        /// THREAD: the workspace module (changes, git, files, views) beside the conversation.
+        public bool threadWorkspace = true;
+        /// Ambient Focus: darken the room beyond a radius (Settings > FOCUS, FOCUS on the dock).
+        public bool focusEnabled = false;
+        public float focusRadius = 1.2f;
+        public float focusIntensity = 0.75f;
+        public float focusSoftness = 0.6f;
+        /// SYSTEM > STORAGE: warn when the Linux userland grows past this many GB (0: no limit).
+        public float linuxLimitGB = 0f;
 
         public static string PathOnDisk => Path.Combine(Application.persistentDataPath, "metacodex-settings.json");
 
@@ -224,7 +235,7 @@ namespace MetaCodex.Shell
 
         /// Seconds a call may take: quick reads 15 s; starting threads, installs and provider checks longer.
         private static int TimeoutFor(HttpMethod m, string path) =>
-            path.StartsWith("/api/v1/threads") && m == HttpMethod.Post && path.Length <= "/api/v1/threads".Length + 1 ? 60 :
+            path.StartsWith("/api/v1/threads") && m == HttpMethod.Post && (path.Length <= "/api/v1/threads".Length + 1 || path.StartsWith("/api/v1/threads/fork")) ? 60 :
             path.Contains("/providers/state") || path.Contains("/execution-options") ? 45 : 15;
 
         private HttpRequestMessage Req(HttpMethod m, string path, JToken body = null)
@@ -306,8 +317,19 @@ namespace MetaCodex.Shell
         public void Thread(string id, Action<JToken> cb) => Call(HttpMethod.Get, $"/api/v1/threads/{E(id)}", null, cb);
         public void CreateThread(JObject body, Action<JToken> cb) => Call(HttpMethod.Post, "/api/v1/threads", body, cb);
         public void Timeline(string id, Action<JToken> cb) => Call(HttpMethod.Get, $"/api/v1/threads/{E(id)}/timeline", null, cb);
-        public void SendMessage(string id, string text, Action<JToken> cb) =>
-            Call(HttpMethod.Post, $"/api/v1/threads/{E(id)}/send", new JObject { ["input"] = new JArray { TextInput(text) }, ["mode"] = "auto" }, cb);
+        public void SendMessage(string id, string text, Action<JToken> cb) => SendMessage(id, text, null, cb);
+        /// extra: the composer's choices for this and the next turns (model, reasoningLevel, permissionMode).
+        public void SendMessage(string id, string text, JObject extra, Action<JToken> cb)
+        {
+            var body = new JObject { ["input"] = new JArray { TextInput(text) }, ["mode"] = "auto" };
+            if (extra != null) foreach (var p in extra.Properties()) body[p.Name] = p.Value;
+            Call(HttpMethod.Post, $"/api/v1/threads/{E(id)}/send", body, cb);
+        }
+        /// The model, effort and access the thread's next turn uses (its last ones, or the defaults).
+        public void ExecOptions(string id, Action<JToken> cb) => Call(HttpMethod.Get, $"/api/v1/threads/{E(id)}/default-execution-options", null, cb);
+        public void ForkThread(JObject body, Action<JToken> cb) => Call(HttpMethod.Post, "/api/v1/threads/fork", body, cb);
+        public void UpdateThread(string id, JObject patch, Action<JToken> cb) => Call(new HttpMethod("PATCH"), $"/api/v1/threads/{E(id)}", patch, cb);
+        public void CompactThread(string id, Action<JToken> cb) => Call(HttpMethod.Post, $"/api/v1/threads/{E(id)}/compact", null, cb);
         public void StopThread(string id, Action<JToken> cb) => Call(HttpMethod.Post, $"/api/v1/threads/{E(id)}/stop", new JObject(), cb);
         public void Interactions(string id, Action<JToken> cb) => Call(HttpMethod.Get, $"/api/v1/threads/{E(id)}/interactions", null, cb);
         /// decision: allow_once | allow_for_session | deny
@@ -553,6 +575,8 @@ namespace MetaCodex.Shell
                 if (linuxPath == "/mnt/quest" || linuxPath.StartsWith("/mnt/quest/")) return _host.SharedDir + linuxPath.Substring(10);
                 return _host.RootfsDir + linuxPath;
             }
+            var drive = System.Text.RegularExpressions.Regex.Match(linuxPath, "^/mnt/([a-z])(/.*)?$");
+            if (drive.Success && Application.platform == RuntimePlatform.WindowsEditor) return drive.Groups[1].Value.ToUpperInvariant() + ":" + (drive.Groups[2].Success ? drive.Groups[2].Value : "/");
             return Path.Combine(EditorRoot ?? Application.dataPath, linuxPath.TrimStart('/'));
         }
 

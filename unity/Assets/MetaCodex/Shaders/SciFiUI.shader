@@ -113,7 +113,7 @@ Shader "MetaCodex/SciFiUI"
                     return half4(lerp(tint, white, 0.35) * (1.0 + 0.5 * state), saturate(max(ring * 0.85, core)) * i.color.a);
                 }
 
-                float d = sdRound(p, h, kind == 4 ? h.y : radius);
+                float d = sdRound(p, h, kind == 4 ? (radius < 0.00005 ? 0.0 : h.y) : radius); // bars: pills, square when radius is 0 (arc pieces)
                 float aa = max(fwidth(d), 1e-5);
                 float inside = saturate(0.5 - d / aa);
                 float ring = saturate(0.5 - (abs(d + border * 0.5) - border * 0.5) / aa);

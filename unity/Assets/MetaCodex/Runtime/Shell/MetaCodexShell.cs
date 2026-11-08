@@ -68,7 +68,7 @@ namespace MetaCodex.Shell
                 app.TerminalClosed += OnTerminalClosed;
                 app.FocusChanged += OnFocusChanged;
                 app.ExtraCommand = ControlCommand;
-                app.AsyncCommand = (line, reply) => VoiceAsyncCommand(line, reply) || SecretCommand(line, reply);
+                app.AsyncCommand = (line, reply) => VoiceAsyncCommand(line, reply) || SecretCommand(line, reply) || ViewAsyncCommand(line, reply);
                 app.Recentered += OnRecentered;
             }
         }
@@ -696,6 +696,7 @@ namespace MetaCodex.Shell
                 }
                 case "action": { var err = RunAction(arg); return err == null ? "ok" : "error: " + err; }
                 case "voice": return VoiceControl(arg);
+                case "view": return ViewCommand(arg);
                 case "plugin":
                 {
                     var parts = arg.Split(new[] { ' ' }, 2, StringSplitOptions.RemoveEmptyEntries);

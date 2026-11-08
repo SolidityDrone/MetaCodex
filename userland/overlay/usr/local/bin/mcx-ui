@@ -8,18 +8,25 @@
 #   mcx-ui action open:git     (any action: open/close/toggle:<panel>, toast:, run:, url:, layout:, spin:, voice:, ...)
 #   mcx-ui voice run "close all windows" | voice say "hello" | voice list | voice status | voice match "open git"
 #   mcx-ui voice listen | voice wav /mnt/quest/cmd.wav | voice install | voice threads 2 | voice lang en
+#   mcx-ui view show spec.json | view show - (stdin) | view mermaid f.mmd | view list | view wait <id> | view schema
 #   mcx-ui status | screen
 # The token is new at every app start: /mnt/quest/control.token (the app's shared folder).
 set -euo pipefail
 TOKEN_FILE=${MCX_TOKEN_FILE:-/mnt/quest/control.token}
 PORT=${MCX_CONTROL_PORT:-47800}
-[[ $# -gt 0 ]] || { sed -n 2,12p "$0"; exit 2; }
+[[ $# -gt 0 ]] || { sed -n 2,13p "$0"; exit 2; }
+# views: the app reads the spec file itself (any size), so pass an absolute path; '-' takes stdin
+if [[ "$1" == view && ( "${2:-}" == show || "${2:-}" == mermaid ) && -n "${3:-}" ]]; then
+  f=$3
+  if [[ "$f" == - ]]; then mkdir -p /tmp/mcx-views; f=/tmp/mcx-views/stdin-$$.json; cat > "$f"; fi
+  if [[ -r "$f" ]]; then set -- view "$2" "$(readlink -f "$f")"; elif [[ "$2" == show ]]; then echo "mcx-ui: no file $f" >&2; exit 1; fi
+fi
 [[ -r "$TOKEN_FILE" ]] || { echo "mcx-ui: no $TOKEN_FILE (is the MetaCodex app running?)" >&2; exit 1; }
 exec 3<>"/dev/tcp/127.0.0.1/$PORT" || { echo "mcx-ui: control port $PORT closed" >&2; exit 1; }
 printf 'auth %s\n%s\n' "$(cat "$TOKEN_FILE")" "$*" >&3
 n=0
 WAIT=10
-[[ "$1" == voice || "$1" == secret ]] && WAIT=130 # answered after speech-to-text / the LLM / your approval in VR
+[[ "$1" == voice || "$1" == secret || ( "$1" == view && "${2:-}" == wait ) ]] && WAIT=130 # answered after speech-to-text / the LLM / your approval / your choice in VR
 while IFS= read -r -t "$WAIT" line <&3; do
   [[ "$line" == "." ]] && { n=$((n+1)); [[ $n -ge 2 ]] && break; continue; }
   [[ $n -ge 1 ]] && printf '%s\n' "$line"

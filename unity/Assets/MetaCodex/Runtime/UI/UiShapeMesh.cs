@@ -117,12 +117,14 @@ namespace MetaCodex.UI
                 // flat: one quad; bent: columns of about 1.5 cm so the curve stays smooth
                 int cols = _bend > 0f ? Mathf.Clamp(Mathf.CeilToInt(hw * 2f / 0.015f), 1, 64) : 1;
                 int i0 = _v.Count;
+                float cs = 1f, sn = 0f; // rotated shapes (diagram edges, chart lines): around the centre, in the panel plane
+                if (s.Rotation != 0f) { cs = Mathf.Cos(s.Rotation); sn = Mathf.Sin(s.Rotation); }
                 for (int k = 0; k <= cols; k++)
                 {
                     float u = (float)k / cols;
                     float x = -hw + u * hw * 2f;
-                    _v.Add(Bend(s.Center + new Vector3(x, -hh, 0f), _bend));
-                    _v.Add(Bend(s.Center + new Vector3(x, hh, 0f), _bend));
+                    _v.Add(Bend(s.Center + new Vector3(x * cs + hh * sn, x * sn - hh * cs, 0f), _bend));
+                    _v.Add(Bend(s.Center + new Vector3(x * cs - hh * sn, x * sn + hh * cs, 0f), _bend));
                     _uv.Add(new Vector2(u, 0f)); _uv.Add(new Vector2(u, 1f));
                     _c.Add(lin); _c.Add(lin); _shape.Add(shape); _shape.Add(shape); _style.Add(style); _style.Add(style);
                 }

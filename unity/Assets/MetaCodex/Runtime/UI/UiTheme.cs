@@ -129,6 +129,8 @@ namespace MetaCodex.UI
         public UiShapeKind Kind;
         public Color Tint;
         public float CutBig, CutSmall, Border, Margin, State;
+        /// Radians, counter-clockwise in the panel plane (0: axis-aligned).
+        public float Rotation;
         public bool Visible;
     }
 

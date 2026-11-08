@@ -36,7 +36,7 @@ with tarfile.open(fileobj=raw, mode="w", format=tarfile.PAX_FORMAT) as tf:
     skills_dst = "root/.claude/skills"
     trees = {}
     mqh_skills = os.path.join(root, "mqh", "plugins", "bb-guide", "skills")
-    for name in ("quest-scripting", "quest-gesture-plugins", "metacodex-context"):
+    for name in ("quest-scripting", "quest-gesture-plugins", "metacodex-context", "quest-views"):
         trees[f"{skills_dst}/{name}"] = os.path.join(mqh_skills, name)
     bundled = os.path.join(root, "userland", "agent-skills")
     for group in ("unity", "meta"):

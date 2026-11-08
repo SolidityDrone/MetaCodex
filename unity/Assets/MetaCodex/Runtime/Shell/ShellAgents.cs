@@ -188,48 +188,54 @@ namespace MetaCodex.Shell
 
         // ------------------------------------------------------------------ THREADS
 
+        private readonly HashSet<string> _collapsedProjects = new HashSet<string>();
+        private string _threadOpenProject;
+
+        /// Threads grouped by project folder, like bb's sidebar: a project row (tap: fold / unfold) and its threads
+        /// under it, newest first; a tap on a thread opens it.
         private void BuildThreads()
         {
             var t = UiTheme.Current;
-            var p = Panel<UiPanel>("threads", "THREADS · MQH", 0.74f, 0.56f);
+            var p = Panel<UiPanel>("threads", "Threads", 0.60f, 0.60f);
             var c = p.Content;
-            float leftW = 0.24f;
-            var ls = new UiStack(new Rect(c.x, c.y, leftW, c.height), t.Gap);
-            p.Add(new UiLabel("PROJECTS", t.SmallSize) { Rect = ls.Next(0.018f), UseDisplay = true, Color = t.TextDim });
-            _projectList = p.Add(new UiList(0.032f, (item, idx) => { _projectSel = item.Tag as string; Settings.lastProject = _projectSel; RefreshThreadList(); }) { Rect = ls.Next(c.height - 0.018f - t.ButtonHeight - t.Gap * 2) });
-            p.Add(new UiButton("+ PROJECT…", NewProjectPrompt) { Rect = ls.Next(t.ButtonHeight) });
-            var rs = new UiStack(new Rect(c.x + leftW + t.Gap * 2, c.y, c.width - leftW - t.Gap * 2, c.height), t.Gap);
-            _threadsStatus = p.Add(new UiLabel("", t.SmallSize) { Rect = rs.Next(0.02f), Color = t.TextDim });
-            _threadList = p.Add(new UiList(0.036f, (item, idx) => { var id = item.Tag as string; if (id == _threadSel) OpenThread(id); _threadSel = id; }) { Rect = rs.Next(c.height - 0.02f - t.ButtonHeight - t.Gap * 2) });
-            AddButtons(p, rs.Next(t.ButtonHeight), new (string, Action)[]
+            var st = new UiStack(c, t.Gap);
+            _threadsStatus = p.Add(new UiLabel("", t.SmallSize) { Rect = st.Next(0.02f), Color = t.TextDim });
+            _threadList = p.Add(new UiList(0.034f, (item, idx) => ThreadRowPicked(item)) { Rect = st.Next(c.height - 0.02f - t.ButtonHeight - t.Gap * 2) });
+            _projectList = _threadList; // one list now (projects are its group rows)
+            AddButtons(p, st.Next(t.ButtonHeight), new (string, Action)[]
             {
                 ("+ NEW THREAD…", () => OpenNewThread(null)),
-                ("OPEN", () => OpenThread(_threadSel)),
-                ("STOP", () => { if (_threadSel != null) Mqh.StopThread(_threadSel, r => { Toast(r != null ? "Stopping" : "MQH: " + Mqh.LastError); RefreshThreadList(); }); }),
+                ("+ PROJECT…", NewProjectPrompt),
+                ("FOLD ALL", () => { foreach (var x in _projects) _collapsedProjects.Add((string)x["id"]); RenderThreadGroups(); }),
                 ("⟳", RefreshThreads),
-            }, primary: 0, danger: 2);
+            }, primary: 0);
+        }
+
+        private void ThreadRowPicked(UiListItem item)
+        {
+            if (!(item.Tag is string tag)) return;
+            if (tag.StartsWith("p:"))
+            {
+                string pid = tag.Substring(2);
+                _projectSel = pid;
+                Settings.lastProject = pid;
+                if (!_collapsedProjects.Remove(pid)) _collapsedProjects.Add(pid);
+                RenderThreadGroups();
+                return;
+            }
+            if (tag.StartsWith("t:")) { _threadSel = tag.Substring(2); OpenThread(_threadSel); }
         }
 
         public void RefreshThreads()
         {
-            if (_projectList == null) return;
+            if (_threadList == null) return;
             _threadsStatus.Set("asking MQH …", UiTheme.Current.TextDim);
             Mqh.Projects(pr =>
             {
                 if (pr == null) { _threadsStatus.Set("⚠ " + (Mqh.LastError ?? "MQH not reachable"), UiTheme.Current.Danger); return; }
                 _projects = pr as JArray ?? new JArray();
-                var t = UiTheme.Current;
-                _projectList.SetItems(_projects.Select(x => new UiListItem
-                {
-                    Icon = "▣",
-                    Title = (string)x["name"],
-                    Sub = (string)x["sources"]?.FirstOrDefault()?["path"] ?? "",
-                    Tag = (string)x["id"],
-                }), keepScroll: true);
                 if (_projectSel == null || !_projects.Any(x => (string)x["id"] == _projectSel))
                     _projectSel = _projects.Any(x => (string)x["id"] == Settings.lastProject) ? Settings.lastProject : (string)_projects.FirstOrDefault()?["id"];
-                int idx = _projects.ToList().FindIndex(x => (string)x["id"] == _projectSel);
-                if (idx >= 0) _projectList.SelectIndex(idx, notify: false);
                 RefreshThreadList();
             });
         }
@@ -237,28 +243,69 @@ namespace MetaCodex.Shell
         private void RefreshThreadList()
         {
             if (_threadList == null) return;
-            if (_projectSel == null) { _threadsStatus.Set("No project yet: + PROJECT… adds a folder of the Linux userland (e.g. /root/myapp).", UiTheme.Current.TextDim); _threadList.SetItems(new UiListItem[0]); return; }
-            Mqh.Threads(_projectSel, th =>
+            Mqh.Threads(null, th =>
             {
-                var t = UiTheme.Current;
+                if (th == null) { _threadsStatus.Set("⚠ " + (Mqh.LastError ?? "MQH not reachable"), UiTheme.Current.Danger); return; }
                 _threads = th as JArray ?? new JArray();
-                _threadsStatus.Set($"{_threads.Count} threads · tap twice (or OPEN) to open", t.TextDim);
-                _threadList.SetItems(_threads.Select(x =>
+                RenderThreadGroups();
+            });
+        }
+
+        private static string ThreadStatus(JToken x) => (string)x["runtime"]?["displayStatus"] ?? (string)x["status"] ?? "";
+
+        private void RenderThreadGroups()
+        {
+            if (_threadList == null) return;
+            var t = UiTheme.Current;
+            if (_projects.Count == 0) { _threadsStatus.Set("No project yet: + PROJECT… adds a folder of the Linux userland (e.g. /root/myapp).", t.TextDim); _threadList.SetItems(new UiListItem[0]); return; }
+            var byProject = _threads.GroupBy(x => (string)x["projectId"] ?? "").ToDictionary(g => g.Key, g => g.OrderByDescending(x => x["updatedAt"]?.Value<long>() ?? 0).ToList());
+            long Latest(JToken pr) => byProject.TryGetValue((string)pr["id"], out var l) && l.Count > 0 ? l[0]["updatedAt"]?.Value<long>() ?? 0 : 0;
+            var items = new List<UiListItem>();
+            foreach (var pr in _projects.OrderByDescending(Latest))
+            {
+                string pid = (string)pr["id"];
+                byProject.TryGetValue(pid, out var list);
+                list = list ?? new List<JToken>();
+                int running = list.Count(x => ThreadStatus(x) == "running" || ThreadStatus(x) == "starting");
+                int asks = list.Count(x => x["hasPendingInteraction"]?.Value<bool>() == true);
+                bool folded = _collapsedProjects.Contains(pid);
+                items.Add(new UiListItem
                 {
-                    string st = (string)x["runtime"]?["displayStatus"] ?? (string)x["status"] ?? "";
+                    Icon = folded ? "▸" : "▾",
+                    IconColor = t.TextDim,
+                    Title = ((string)pr["name"] ?? "project").ToUpperInvariant(),
+                    TitleColor = pid == _projectSel ? t.TextAccent : t.TextDim,
+                    Sub = Cut((string)pr["sources"]?.FirstOrDefault()?["path"] ?? "", 34),
+                    Badge = asks > 0 ? asks + " NEED YOU" : running > 0 ? running + " RUNNING" : list.Count.ToString(),
+                    BadgeColor = asks > 0 ? t.Warn : running > 0 ? t.Ok : t.TextDim,
+                    Tag = "p:" + pid,
+                });
+                if (folded) continue;
+                foreach (var x in list)
+                {
+                    string st = ThreadStatus(x);
                     bool pending = x["hasPendingInteraction"]?.Value<bool>() == true;
-                    return new UiListItem
+                    string id = (string)x["id"];
+                    items.Add(new UiListItem
                     {
+                        Indent = 1,
                         Icon = pending ? "?" : st == "running" || st == "starting" ? "▶" : st == "error" ? "⚠" : "◆",
                         IconColor = pending ? t.Warn : st == "running" || st == "starting" ? t.Ok : st == "error" ? t.Danger : t.Accent,
-                        Title = (string)x["title"] ?? (string)x["titleFallback"] ?? (string)x["id"],
-                        Sub = $"{x["providerId"]} · {x["environmentBranchName"] ?? ""} · {Ago(x["updatedAt"]?.Value<long>() ?? 0)}",
-                        Badge = pending ? "NEEDS YOU" : st.ToUpperInvariant(),
-                        BadgeColor = pending ? t.Warn : st == "error" ? t.Danger : st == "running" ? t.Ok : t.TextDim,
-                        Tag = (string)x["id"],
-                    };
-                }), keepScroll: true);
-            });
+                        Title = (string)x["title"] ?? (string)x["titleFallback"] ?? id,
+                        TitleColor = id == _threadOpen ? t.TextAccent : (Color?)null,
+                        Sub = $"{x["providerId"]} · {(x["environmentIsWorktree"]?.Value<bool>() == true ? "⎇ " + x["environmentBranchName"] : "checkout")} · {Ago(x["updatedAt"]?.Value<long>() ?? 0)}",
+                        Badge = pending ? "NEEDS YOU" : st == "running" ? "RUNNING" : st == "error" ? "ERROR" : "",
+                        BadgeColor = pending ? t.Warn : st == "error" ? t.Danger : t.Ok,
+                        Tag = "t:" + id,
+                    });
+                }
+                if (list.Count == 0) items.Add(new UiListItem { Indent = 1, Icon = "·", IconColor = t.TextDim, Title = "no threads yet: + NEW THREAD…", TitleColor = t.TextDim, Tag = "p:" + pid });
+            }
+            int total = _threads.Count, run = _threads.Count(x => ThreadStatus(x) == "running"), need = _threads.Count(x => x["hasPendingInteraction"]?.Value<bool>() == true);
+            _threadsStatus.Set($"{_projects.Count} projects · {total} threads" + (run > 0 ? $" · <color=#{UiViz.Hex(t.Ok)}>{run} running</color>" : "") + (need > 0 ? $" · <color=#{UiViz.Hex(t.Warn)}>{need} need you</color>" : "") + " · tap a project to fold it", t.TextDim);
+            _threadList.SetItems(items, keepScroll: true);
+            int sel = items.FindIndex(i => i.Tag as string == "t:" + _threadOpen);
+            if (sel >= 0) _threadList.SelectIndex(sel, notify: false);
         }
 
         private static string Ago(long ms)
@@ -280,6 +327,7 @@ namespace MetaCodex.Shell
                     if (r == null) { Toast("Project not added: " + Mqh.LastError, "error"); return; }
                     _projectSel = (string)r["id"];
                     Settings.lastProject = _projectSel;
+                    _collapsedProjects.Remove(_projectSel);
                     Toast("Project " + r["name"] + " added", "ok");
                     RefreshThreads();
                 }));
@@ -288,21 +336,41 @@ namespace MetaCodex.Shell
 
         // ------------------------------------------------------------------ THREAD
 
+        private UiButton _thModelChip, _thPermChip, _thWsChip, _thWsButton;
+        private UiRing _thContext;
+        private UiButton _tlUp, _tlDown;
+        private Rect _tlArea;
+        private JObject _thExec;
+        private JToken _thUsage;
+        private JArray _tlRaw = new JArray();
+        private long _tlOpenSeq = -1;
+        private readonly Dictionary<string, (string model, string effort, string perm)> _thOverrides = new Dictionary<string, (string, string, string)>();
+        private readonly Dictionary<string, JArray> _modelsByProvider = new Dictionary<string, JArray>();
+
         private void BuildThread()
         {
-            _thAskButtons.Clear(); // RebuildPanels (accent, themes) builds the panel again
+            _thAskButtons.Clear(); // RebuildPanels builds the panel again
             var t = UiTheme.Current;
-            var p = Panel<UiPanel>("thread", "THREAD", 0.74f, 0.66f);
+            var p = Panel<UiPanel>("thread", "Thread", 0.70f, 0.66f);
             var c = p.Content;
             var st = new UiStack(c, t.Gap);
-            _thTitle = p.Add(new UiLabel("", t.BodySize * 1.1f) { Rect = st.Next(0.026f) });
+            var top = st.Next(0.03f);
+            float bw = 0.082f;
+            _thTitle = p.Add(new UiLabel("", t.BodySize * 1.1f) { Rect = new Rect(top.x, top.y, top.width - bw * 3 - t.Gap * 3, top.height) });
+            p.Add(new UiButton("⑂ FORK…", ForkPrompt) { Rect = new Rect(top.xMax - bw * 3 - t.Gap * 2, top.y, bw, top.height), TextSize = t.SmallSize * 1.05f });
+            _thWsButton = p.Add(new UiButton("◧ WORKSPACE", ToggleWorkspace) { Rect = new Rect(top.xMax - bw * 2 - t.Gap, top.y, bw, top.height), TextSize = t.SmallSize * 1.05f });
+            p.Add(new UiButton("⟳", () => { _tlMaxSeq = -1; PollThread(); }) { Rect = new Rect(top.xMax - bw, top.y, bw, top.height), TextSize = t.SmallSize * 1.05f });
             _thMeta = p.Add(new UiLabel("", t.SmallSize) { Rect = st.Next(0.02f), Color = t.TextDim, UseMono = true });
-            var tlRect = st.Next(c.height - 0.026f - 0.02f - 0.05f - t.ButtonHeight * 3 - t.Gap * 7);
-            _thTimeline = p.Add(new UiLabel("", t.SmallSize * 1.05f) { Rect = new Rect(tlRect.x, tlRect.y, tlRect.width - 0.05f, tlRect.height), Wrap = true, Align = TextAlignmentOptions.BottomLeft });
-            p.Add(new UiButton("▲", () => { _tlScroll = Mathf.Min(_tlScroll + 4, Math.Max(0, _tlLines.Count - 1)); RenderTimeline(); }, UiButtonStyle.Ghost) { Rect = new Rect(tlRect.xMax - 0.042f, tlRect.y, 0.042f, tlRect.height * 0.5f - t.Gap) });
-            p.Add(new UiButton("▼", () => { _tlScroll = Mathf.Max(0, _tlScroll - 4); RenderTimeline(); }, UiButtonStyle.Ghost) { Rect = new Rect(tlRect.xMax - 0.042f, tlRect.y + tlRect.height * 0.5f, 0.042f, tlRect.height * 0.5f) });
-            _thAsk = p.Add(new UiLabel("", t.SmallSize) { Rect = st.Next(0.05f), Wrap = true, Color = t.Warn, Align = TextAlignmentOptions.TopLeft });
-            var askRow = st.Next(t.ButtonHeight);
+            float chipH = 0.032f;
+            float bottom = chipH + t.ButtonHeight + t.Gap * 2;
+            _tlArea = new Rect(c.x, st.Y, c.width, c.yMax - st.Y - bottom - t.Gap);
+            _thTimeline = p.Add(new UiLabel("", t.SmallSize * 1.05f) { Rect = TimelineRect(false), Wrap = true, Align = TextAlignmentOptions.BottomLeft });
+            _tlUp = p.Add(new UiButton("▲", () => { _tlScroll = Mathf.Min(_tlScroll + 4, Math.Max(0, _tlLines.Count - 1)); RenderTimeline(); }, UiButtonStyle.Ghost));
+            _tlDown = p.Add(new UiButton("▼", () => { _tlScroll = Mathf.Max(0, _tlScroll - 4); RenderTimeline(); }, UiButtonStyle.Ghost));
+            LayoutTimelineButtons(false);
+            // approvals: at the bottom of the timeline area, only while one is pending
+            var askRow = new Rect(c.x, _tlArea.yMax - t.ButtonHeight, c.width, t.ButtonHeight);
+            _thAsk = p.Add(new UiLabel("", t.SmallSize) { Rect = new Rect(c.x, askRow.y - t.Gap - 0.046f, c.width, 0.046f), Wrap = true, Color = t.Warn, Align = TextAlignmentOptions.TopLeft });
             var asks = new (string label, string decision)[] { ("ALLOW ONCE", "allow_once"), ("ALLOW SESSION", "allow_for_session"), ("DENY", "deny") };
             float aw = (askRow.width - t.Gap * 2) / 3f;
             for (int i = 0; i < 3; i++)
@@ -310,19 +378,38 @@ namespace MetaCodex.Shell
                 var d = asks[i].decision;
                 _thAskButtons.Add(p.Add(new UiButton(asks[i].label, () => Resolve(d), i == 0 ? UiButtonStyle.Primary : i == 2 ? UiButtonStyle.Danger : UiButtonStyle.Normal) { Rect = new Rect(askRow.x + i * (aw + t.Gap), askRow.y, aw, askRow.height) }));
             }
-            var comp = st.NextSplit(t.ButtonHeight, 0.80f, out var send);
-            _thComposer = p.Add(new UiTextField("", "", s => SendToThread(s), "message the agent…") { Rect = comp, CaptionWidth = 0f });
-            p.Add(new UiButton("SEND ▶", () => SendToThread(_thComposer.Text), UiButtonStyle.Primary) { Rect = send });
-            AddButtons(p, st.Next(t.ButtonHeight), new (string, Action)[]
-            {
-                ("■ STOP", () => { if (_threadOpen != null) Mqh.StopThread(_threadOpen, r => Toast(r != null ? "Stopping the turn" : "MQH: " + Mqh.LastError)); }),
-                ("FILES", () => { var path = ThreadPath(); if (path != null) { OpenPanel("files"); FilesNavigate(path); } }),
-                ("GIT", () => { var path = ThreadPath(); if (path != null) { OpenPanel("git"); GitOpen(path); } }),
-                ("TERMINAL", () => { var path = ThreadPath(); if (path != null) RunInNewTerminal("cd " + GitService.Quote(path) + " && git status -sb"); }),
-                ("⟳", () => { _tlMaxSeq = -1; PollThread(); }),
-            }, danger: 0);
+            // composer, then the bb-like chips: model, access, workspace, context, stop
+            float cy = c.yMax - chipH - t.Gap - t.ButtonHeight;
+            float sendW = 0.11f;
+            _thComposer = p.Add(new UiTextField("", "", s => SendToThread(s), "message the agent…") { Rect = new Rect(c.x, cy, c.width - sendW - t.Gap, t.ButtonHeight), CaptionWidth = 0f });
+            p.Add(new UiButton("SEND ▶", () => SendToThread(_thComposer.Text), UiButtonStyle.Primary) { Rect = new Rect(c.xMax - sendW, cy, sendW, t.ButtonHeight) });
+            float y = c.yMax - chipH;
+            float[] w = { 0.17f, 0.13f, 0.165f, 0.135f };
+            float x = c.x;
+            float ts = t.SmallSize * 1.02f;
+            _thModelChip = p.Add(new UiButton("◇ model ▾", ModelPrompt) { Rect = new Rect(x, y, w[0], chipH), TextSize = ts }); x += w[0] + t.Gap;
+            _thPermChip = p.Add(new UiButton("✎ Edits ▾", PermissionPrompt) { Rect = new Rect(x, y, w[1], chipH), TextSize = ts }); x += w[1] + t.Gap;
+            _thWsChip = p.Add(new UiButton("▣ checkout", () => { OpenWorkspace(); _wsTabs?.Select(2); }) { Rect = new Rect(x, y, w[2], chipH), TextSize = ts }); x += w[2] + t.Gap;
+            _thContext = p.Add(new UiRing { Rect = new Rect(x, y, w[3], chipH), OnClickAction = ContextPrompt }); x += w[3] + t.Gap;
+            p.Add(new UiButton("■ STOP", () => { if (_threadOpen != null) Mqh.StopThread(_threadOpen, r => Toast(r != null ? "Stopping the turn" : "MQH: " + Mqh.LastError)); }, UiButtonStyle.Danger) { Rect = new Rect(x, y, c.xMax - x, chipH), TextSize = ts });
             p.Tick += _ => { if (_threadOpen != null && Time.unscaledTime >= _nextThreadPoll) PollThread(); };
+            p.Closed += _ => { if (_ws != null && _ws.IsOpen) _ws.Close(); };
             SetAskVisible(false);
+        }
+
+        private Rect TimelineRect(bool ask)
+        {
+            var t = UiTheme.Current;
+            float cut = ask ? t.ButtonHeight + 0.046f + t.Gap * 2 : 0f;
+            return new Rect(_tlArea.x, _tlArea.y, _tlArea.width - 0.05f, _tlArea.height - cut);
+        }
+
+        private void LayoutTimelineButtons(bool ask)
+        {
+            var r = TimelineRect(ask);
+            var t = UiTheme.Current;
+            _tlUp?.SetRect(new Rect(_tlArea.xMax - 0.042f, r.y, 0.042f, r.height * 0.5f - t.Gap));
+            _tlDown?.SetRect(new Rect(_tlArea.xMax - 0.042f, r.y + r.height * 0.5f, 0.042f, r.height * 0.5f));
         }
 
         private string ThreadPath()
@@ -335,14 +422,25 @@ namespace MetaCodex.Shell
         public void OpenThread(string id)
         {
             if (string.IsNullOrEmpty(id)) return;
+            if (id != _threadOpen) { _thExec = null; _thUsage = null; _tlRaw = new JArray(); }
             _threadOpen = id;
+            var row = _threads.FirstOrDefault(x => (string)x["id"] == id) as JObject;
+            if (row != null) { _threadInfo = row; _threadOpenProject = (string)row["projectId"]; }
+            else _threadOpenProject = null;
             _tlLines.Clear();
             _tlScroll = 0;
             _tlMaxSeq = -1;
+            _tlOpenSeq = -1;
             _thTitle?.Set("loading …");
             _thTimeline?.Set("");
+            _thContext?.Set(-1f, "context —");
             OpenPanel("thread");
+            WsSetThread(id, (string)row?["environmentPath"]);
+            if (Settings.threadWorkspace) OpenWorkspace();
+            UpdateChips();
+            Mqh.ExecOptions(id, r => { if (id != _threadOpen || !(r is JObject jo)) return; _thExec = jo; UpdateChips(); });
             PollThread();
+            RenderThreadGroups();
         }
 
         /// Refreshes the open thread: its row, the timeline (when it grew) and pending approvals.
@@ -351,21 +449,30 @@ namespace MetaCodex.Shell
             if (_threadOpen == null || _thTitle == null) return;
             string id = _threadOpen;
             _nextThreadPoll = Time.unscaledTime + 1.5f;
-            Mqh.Threads(_projectSel, th =>
+            Mqh.Threads(_threadOpenProject, th =>
             {
                 var row = (th as JArray)?.FirstOrDefault(x => (string)x["id"] == id) as JObject;
-                if (row != null) _threadInfo = row;
+                if (row == null || id != _threadOpen) return;
+                _threadInfo = row;
+                _threadOpenProject = (string)row["projectId"];
                 ShowThreadHeader();
             });
             Mqh.Timeline(id, tl =>
             {
                 if (tl == null || id != _threadOpen) return;
                 long max = tl["maxSeq"]?.Value<long>() ?? 0;
+                _thUsage = tl["contextWindowUsage"];
+                ShowContextUsage();
                 if (max == _tlMaxSeq) return;
+                bool first = _tlMaxSeq < 0;
                 _tlMaxSeq = max;
+                if (_tlOpenSeq < 0) _tlOpenSeq = max;
+                _tlRaw = tl["rows"] as JArray ?? new JArray();
                 _tlLines.Clear();
-                foreach (var r in tl["rows"] as JArray ?? new JArray()) AddTimelineRow(r, 0);
+                foreach (var r in _tlRaw) AddTimelineRow(r, 0);
                 RenderTimeline();
+                WsTrackRows(_tlRaw);
+                ScanViews(_tlRaw, id, first);
             });
             Mqh.Interactions(id, ia =>
             {
@@ -375,14 +482,337 @@ namespace MetaCodex.Shell
             });
         }
 
+        /// Agent views in the thread's messages: registered; the ones that arrive while it is open also open.
+        private void ScanViews(JArray rows, string threadId, bool first)
+        {
+            void Walk(JToken r)
+            {
+                if ((string)r["kind"] == "turn") { foreach (var ch in r["children"] as JArray ?? new JArray()) Walk(ch); return; }
+                if ((string)r["kind"] != "conversation" || (string)r["role"] == "user") return;
+                string text = (string)r["text"];
+                if (string.IsNullOrEmpty(text) || text.IndexOf("```", StringComparison.Ordinal) < 0) return;
+                long seq = r["sourceSeqEnd"]?.Type == JTokenType.Integer ? (long)r["sourceSeqEnd"] : 0;
+                bool fresh = !first && seq > _tlOpenSeq;
+                ViewsFromMessage(threadId, seq, text, fresh);
+            }
+            foreach (var r in rows) Walk(r);
+            if (first) _tlOpenSeq = _tlMaxSeq;
+        }
+
         private void ShowThreadHeader()
         {
             var x = _threadInfo;
+            var t = UiTheme.Current;
             if (x == null) { _thTitle.Set(_threadOpen ?? ""); return; }
             string st = (string)x["runtime"]?["displayStatus"] ?? (string)x["status"] ?? "";
-            _thTitle.Set($"<b>{Esc((string)x["title"] ?? (string)x["titleFallback"] ?? "thread")}</b>  <color=#{ColorUtility.ToHtmlStringRGB(st == "error" ? UiTheme.Current.Danger : st == "running" ? UiTheme.Current.Ok : UiTheme.Current.TextDim)}>{st.ToUpperInvariant()}</color>");
-            _thMeta.Set($"{x["providerId"]} · {x["environmentPath"] ?? "no workspace yet"} · ⎇ {x["environmentBranchName"] ?? "-"}{(x["environmentIsWorktree"]?.Value<bool>() == true ? " (worktree)" : "")}");
+            _thTitle.Set($"<b>{Esc((string)x["title"] ?? (string)x["titleFallback"] ?? "thread")}</b>  <color=#{ColorUtility.ToHtmlStringRGB(st == "error" ? t.Danger : st == "running" ? t.Ok : t.TextDim)}>{st.ToUpperInvariant()}</color>");
+            string proj = (string)_projects.FirstOrDefault(p => (string)p["id"] == (string)x["projectId"])?["name"];
+            _thMeta.Set($"{x["providerId"]} · {(proj != null ? proj + " · " : "")}{x["environmentPath"] ?? "no workspace yet"} · ⎇ {x["environmentBranchName"] ?? "-"}");
+            bool wt = x["environmentIsWorktree"]?.Value<bool>() == true;
+            _thWsChip?.SetText("▣ " + Cut(proj ?? ((string)x["environmentPath"] ?? "workspace").Split('/').Last(), 12) + " · " + (wt ? "worktree" : "checkout"));
+            WsSetThread(_threadOpen, (string)x["environmentPath"]);
+            _thWsButton?.SetSelected(_ws != null && _ws.IsOpen);
+            UpdateChips();
         }
+
+        private void ShowContextUsage()
+        {
+            if (_thContext == null) return;
+            var u = _thUsage;
+            long used = u?["usedTokens"]?.Type == JTokenType.Integer ? (long)u["usedTokens"] : -1;
+            long win = u?["modelContextWindow"]?.Type == JTokenType.Integer ? (long)u["modelContextWindow"] : -1;
+            if (used < 0 || win <= 0) { _thContext.Set(-1f, "context —"); return; }
+            bool est = u["estimated"]?.Type == JTokenType.Boolean && (bool)u["estimated"];
+            float frac = Mathf.Clamp01(used / (float)win);
+            _thContext.Set(frac, $"{(est ? "~" : "")}{frac * 100f:0}% · {K(used)}/{K(win)}");
+        }
+
+        private static string K(long n) => n >= 1000000 ? (n / 1e6).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) + "M" : n >= 1000 ? (n / 1000) + "k" : n.ToString();
+
+        // ---- chips: model, access, context
+
+        private (string model, string effort, string perm) Override(string id) => id != null && _thOverrides.TryGetValue(id, out var o) ? o : (null, null, null);
+
+        private string CurrentModel() => Override(_threadOpen).model ?? (string)_thExec?["model"];
+        private string CurrentEffort() => Override(_threadOpen).effort ?? (string)_thExec?["reasoningLevel"];
+        private string CurrentPerm() => Override(_threadOpen).perm ?? (string)_thExec?["permissionMode"] ?? Settings.permissionMode;
+
+        private string ModelName(string provider, string modelId)
+        {
+            if (modelId == null) return null;
+            if (provider != null && _modelsByProvider.TryGetValue(provider, out var models))
+            {
+                var m = models.FirstOrDefault(x => (string)x["id"] == modelId || (string)x["model"] == modelId);
+                if (m != null) return (string)m["displayName"] ?? modelId;
+            }
+            return modelId;
+        }
+
+        private static string PermLabel(string perm) => perm == "full" ? "⚠ Full access" : perm == "auto" ? "◐ Auto" : "✎ Edits";
+
+        private static string Cap(string s) => string.IsNullOrEmpty(s) ? s : char.ToUpperInvariant(s[0]) + s.Substring(1);
+
+        private void UpdateChips()
+        {
+            if (_thModelChip == null) return;
+            string provider = (string)_threadInfo?["providerId"];
+            string model = CurrentModel(), effort = CurrentEffort();
+            string name = ModelName(provider, model) ?? "default model";
+            bool showEffort = !string.IsNullOrEmpty(effort) && effort != "none" && effort != "medium";
+            _thModelChip.SetText("◇ " + Cut(name, showEffort ? 11 : 16) + (showEffort ? " " + Cap(effort) : "") + " ▾");
+            string perm = CurrentPerm();
+            _thPermChip.SetText(PermLabel(perm) + " ▾");
+            _thPermChip.SetSelected(perm == "full");
+            if (provider != null && !_modelsByProvider.ContainsKey(provider))
+            {
+                _modelsByProvider[provider] = new JArray(); // asked once
+                EnsureHost(() => Mqh.Models(provider, _hostId, m => { _modelsByProvider[provider] = m?["models"] as JArray ?? new JArray(); UpdateChips(); }));
+            }
+        }
+
+        private void ModelPrompt()
+        {
+            if (_threadOpen == null) return;
+            string provider = (string)_threadInfo?["providerId"];
+            if (provider == null || !_modelsByProvider.TryGetValue(provider, out var models) || models.Count == 0) { Toast("Models are still loading (or the provider lists none)", "warn"); UpdateChips(); return; }
+            string cur = CurrentModel();
+            var t = UiTheme.Current;
+            ShowPicker("Model", $"For the next messages of this thread ({provider}).", models.Select(m => new UiListItem
+            {
+                Icon = (string)m["id"] == cur || (string)m["model"] == cur ? "◆" : "◇",
+                Title = (string)m["displayName"] ?? (string)m["id"],
+                Sub = Cut((string)m["description"], 40),
+                Badge = m["isDefault"]?.Value<bool>() == true ? "DEFAULT" : "",
+                BadgeColor = t.TextDim,
+                Tag = m,
+            }), item =>
+            {
+                var m = item.Tag as JToken;
+                string id = (string)m?["id"];
+                var efforts = (m?["supportedReasoningEfforts"] as JArray ?? new JArray()).Select(e => e.Type == JTokenType.Object ? (string)e["reasoningEffort"] : (string)e).Where(e => !string.IsNullOrEmpty(e)).ToList();
+                var o = Override(_threadOpen);
+                _thOverrides[_threadOpen] = (id, efforts.Contains(o.effort ?? "") ? o.effort : null, o.perm);
+                UpdateChips();
+                if (efforts.Count > 1)
+                {
+                    string curE = CurrentEffort();
+                    ShowPicker("Effort", (string)m["displayName"] + ": how hard it thinks.", efforts.Select(e => new UiListItem { Icon = e == curE ? "◆" : "◇", Title = Cap(e), Tag = e }), it2 =>
+                    {
+                        var o2 = Override(_threadOpen);
+                        _thOverrides[_threadOpen] = (o2.model, it2.Tag as string, o2.perm);
+                        UpdateChips();
+                    }, PanelsById["thread"]);
+                }
+            }, PanelsById["thread"]);
+        }
+
+        private void PermissionPrompt()
+        {
+            if (_threadOpen == null) return;
+            var modes = (AgentCatalog((string)_threadInfo?["providerId"])?["capabilities"]?["permissionModes"] as JArray)?.Select(m => (string)m).ToList()
+                        ?? new List<string> { "accept-edits", "auto", "full" };
+            string cur = CurrentPerm();
+            var help = new Dictionary<string, string> { { "accept-edits", "edits files; asks before commands" }, { "auto", "asks only for risky actions" }, { "full", "never asks: runs anything" } };
+            ShowPicker("Access", "What the agent may do without asking, from the next message on.", modes.Select(m => new UiListItem
+            {
+                Icon = m == cur ? "◆" : "◇",
+                Title = PermLabel(m),
+                Sub = help.TryGetValue(m, out var h) ? h : m,
+                TitleColor = m == "full" ? UiTheme.Current.Warn : (Color?)null,
+                Tag = m,
+            }), item =>
+            {
+                var o = Override(_threadOpen);
+                _thOverrides[_threadOpen] = (o.model, o.effort, item.Tag as string);
+                Settings.permissionMode = item.Tag as string;
+                UpdateChips();
+            }, PanelsById["thread"]);
+        }
+
+        private void ContextPrompt()
+        {
+            if (_threadOpen == null) return;
+            var u = _thUsage;
+            string what = u == null ? "MQH has not reported the context use of this thread yet." :
+                $"{u["usedTokens"]} of {u["modelContextWindow"]} tokens{(u["estimated"]?.Type == JTokenType.Boolean && (bool)u["estimated"] ? " (estimated)" : "")}.";
+            ShowPicker("Context", what, new[]
+            {
+                new UiListItem { Icon = "⇣", Title = "Compact now", Sub = "summarise older turns to free context", Tag = "compact" },
+                new UiListItem { Icon = "⑂", Title = "Fork instead…", Sub = "continue in a new thread", Tag = "fork" },
+            }, item =>
+            {
+                if ((string)item.Tag == "fork") { ForkPrompt(); return; }
+                Mqh.CompactThread(_threadOpen, r => { Toast(r != null ? "Compacting the context" : "Not compacted: " + Mqh.LastError, r != null ? "ok" : "error"); PollThread(); });
+            }, PanelsById["thread"]);
+        }
+
+        // ---- fork
+
+        private void ForkPrompt()
+        {
+            if (_threadOpen == null || _threadInfo == null) { Toast("Open a thread first", "warn"); return; }
+            string provider = (string)_threadInfo["providerId"];
+            string cur = CurrentModel();
+            var items = new List<UiListItem>
+            {
+                new UiListItem { Icon = "⑂", Title = $"Same agent · {ModelName(provider, cur) ?? "same model"}", Sub = "the conversation continues in a copy", Tag = new[] { "same", provider, null } },
+            };
+            if (_modelsByProvider.TryGetValue(provider ?? "", out var models))
+                foreach (var m in models.Where(m => (string)m["id"] != cur).Take(6))
+                    items.Add(new UiListItem { Icon = "◇", Title = $"{provider} · {(string)m["displayName"] ?? (string)m["id"]}", Sub = "same conversation, other model", Tag = new[] { "same", provider, (string)m["id"] } });
+            void Done(JToken st)
+            {
+                var t = UiTheme.Current;
+                foreach (var x in (st?["providers"] as JArray ?? _providerStates).Where(x => (string)x["providerId"] != provider && ((string)x["status"] == "ready" || (string)x["status"] == "authenticated")))
+                    items.Add(new UiListItem { Icon = "◆", IconColor = t.Violet, Title = $"{(string)x["displayName"] ?? (string)x["providerId"]} · default model", Sub = "new thread, same workspace, conversation handed over", Tag = new[] { "other", (string)x["providerId"], null } });
+                string text = _thComposer?.Text?.Trim();
+                ShowPicker("Fork thread", string.IsNullOrEmpty(text) ? "Branch this thread: same or another agent. Type a first message in the composer to send it with the fork." : "The fork starts with your message: “" + Cut(text, 60) + "”", items, item =>
+                {
+                    var tag = item.Tag as string[];
+                    if (tag != null) ForkTo(tag[0], tag[1], tag[2]);
+                }, PanelsById["thread"]);
+            }
+            if (_providerStates.Count > 0) Done(null);
+            else Mqh.ProvidersState(st => { if (st != null) _providerStates = st["providers"] as JArray ?? new JArray(); Done(st); });
+        }
+
+        /// Fork the open thread: "same" = MQH's fork (same provider, the conversation copied; another model is set
+        /// after), "other" = a new thread of another provider in the same workspace, the conversation handed over
+        /// as hidden context.
+        public void ForkTo(string kind, string provider, string model)
+        {
+            if (_threadOpen == null || _threadInfo == null) return;
+            string src = _threadOpen;
+            string title = Cut((string)_threadInfo["title"] ?? (string)_threadInfo["titleFallback"] ?? "thread", 50);
+            string text = _thComposer?.Text?.Trim();
+            string perm = CurrentPerm();
+            if (kind == "same")
+            {
+                var body = new JObject { ["sourceThreadId"] = src, ["origin"] = "app", ["title"] = title + " · fork", ["permissionMode"] = perm };
+                if (!string.IsNullOrEmpty(text)) body["input"] = new JArray { MqhClient.TextInput(text) };
+                Toast("Forking …", "info");
+                Mqh.ForkThread(body, r =>
+                {
+                    if (r == null)
+                    {
+                        string err = Mqh.LastError ?? "";
+                        if (err.Contains("does not support thread forks")) { Toast(provider + " cannot fork: handing the conversation over instead", "info"); ForkTo("other", provider, model); return; }
+                        Toast("Not forked: " + err, "error");
+                        return;
+                    }
+                    string nid = (string)r["id"];
+                    if (!string.IsNullOrEmpty(model)) Mqh.UpdateThread(nid, new JObject { ["model"] = model }, _ => { });
+                    _thComposer?.Set("");
+                    Toast("Forked: " + title, "ok");
+                    RefreshThreadList();
+                    OpenThreadAfterRefresh(nid);
+                });
+                return;
+            }
+            var envId = (string)_threadInfo["environmentId"];
+            var input = new JArray
+            {
+                new JObject { ["type"] = "text", ["text"] = HandoverContext(), ["mentions"] = new JArray(), ["visibility"] = "agent-only" },
+                MqhClient.TextInput(string.IsNullOrEmpty(text) ? "Continue this work where the previous agent stopped. First say in 2-3 lines where things stand, then wait for my next message." : text),
+            };
+            var create = new JObject
+            {
+                ["projectId"] = (string)_threadInfo["projectId"],
+                ["providerId"] = provider,
+                ["origin"] = "app",
+                ["title"] = title + " · " + provider,
+                ["input"] = input,
+                ["permissionMode"] = perm,
+                ["sourceThreadId"] = src,
+                ["environment"] = envId != null ? new JObject { ["type"] = "reuse", ["environmentId"] = envId } : NewThreadBody((string)_threadInfo["projectId"], provider, model, "x")["environment"],
+            };
+            if (!string.IsNullOrEmpty(model)) create["model"] = model;
+            Toast("Handing over to " + provider + " …", "info");
+            EnsureHost(() => Mqh.CreateThread(create, r =>
+            {
+                if (r == null) { Toast("Not forked: " + Mqh.LastError, "error"); return; }
+                _thComposer?.Set("");
+                Toast("Forked to " + provider, "ok");
+                RefreshThreadList();
+                OpenThreadAfterRefresh((string)r["id"]);
+            }));
+        }
+
+        private void OpenThreadAfterRefresh(string id)
+        {
+            Mqh.Threads(null, th => { if (th is JArray a) _threads = a; RenderThreadGroups(); OpenThread(id); });
+        }
+
+        /// The conversation so far as hidden context for another provider (the newest ~8000 characters).
+        public string HandoverContext()
+        {
+            var x = _threadInfo;
+            var sb = new StringBuilder();
+            sb.Append($"[Context handed over from the thread \"{(string)x?["title"] ?? (string)x?["titleFallback"]}\" of another agent ({x?["providerId"]}). ");
+            sb.Append($"You continue the same work in the same workspace ({x?["environmentPath"] ?? "?"}, branch {x?["environmentBranchName"] ?? "?"}). The conversation so far, oldest first:]\n");
+            var lines = new List<string>();
+            void Walk(JToken r)
+            {
+                string kind = (string)r["kind"];
+                if (kind == "turn") { foreach (var ch in r["children"] as JArray ?? new JArray()) Walk(ch); return; }
+                if (kind == "conversation") lines.Add(((string)r["role"] == "user" ? "USER: " : "AGENT: ") + Cut(StripViewBlocks((string)r["text"]), 700));
+                else if (kind == "work" && (string)r["workKind"] == "file-change") lines.Add("(edited " + (string)r["change"]?["path"] + ")");
+                else if (kind == "work" && (string)r["workKind"] == "command") lines.Add("(ran: " + Cut((string)r["command"], 120) + ")");
+            }
+            foreach (var r in _tlRaw) Walk(r);
+            int budget = 8000, start = lines.Count;
+            int used = 0;
+            while (start > 0 && used + lines[start - 1].Length < budget) { used += lines[start - 1].Length + 1; start--; }
+            if (start > 0) sb.Append($"(… {start} earlier entries left out)\n");
+            for (int i = start; i < lines.Count; i++) sb.Append(lines[i]).Append('\n');
+            var files = _touched.Values.Where(f => f.ByThread).Take(30).ToList();
+            if (files.Count > 0) sb.Append("Files touched: " + string.Join(", ", files.Select(f => $"{f.Path} (+{f.Added} -{f.Removed})")) + "\n");
+            return sb.ToString();
+        }
+
+        // ---- self-tests: a thread from canned MQH data (no daemon needed)
+
+        public void LoadThreadForTest(JObject row, JArray rows, JToken usage, JObject exec, JArray projects, bool openViews)
+        {
+            if (projects != null) _projects = projects;
+            _threads = new JArray(row);
+            OpenThread((string)row["id"]);
+            _threadInfo = row;
+            _thExec = exec;
+            ShowThreadHeader();
+            _thUsage = usage;
+            ShowContextUsage();
+            _tlRaw = rows;
+            _tlLines.Clear();
+            foreach (var r in rows) AddTimelineRow(r, 0);
+            RenderTimeline();
+            _tlMaxSeq = rows.Max(r => r["sourceSeqEnd"]?.Value<long>() ?? 0);
+            _tlOpenSeq = openViews ? 0 : _tlMaxSeq;
+            WsTrackRows(rows);
+            ScanViews(rows, (string)row["id"], false);
+        }
+
+        /// Self-tests: more rows arrive in the open thread (as the next poll would bring them).
+        public void AppendTimelineForTest(JArray more)
+        {
+            foreach (var r in more) _tlRaw.Add(r);
+            _tlLines.Clear();
+            foreach (var r in _tlRaw) AddTimelineRow(r, 0);
+            RenderTimeline();
+            _tlMaxSeq = _tlRaw.Max(r => r["sourceSeqEnd"]?.Value<long>() ?? 0);
+            WsTrackRows(_tlRaw);
+            ScanViews(_tlRaw, _threadOpen, false);
+        }
+
+        public void SetThreadsForTest(JArray projects, JArray threads) { _projects = projects; _threads = threads; RenderThreadGroups(); }
+        public UiList ThreadListForTest => _threadList;
+        public void PickThreadRowForTest(int index) => ThreadRowPicked(_threadList.Items[index]);
+        public string TimelineTextForTest => _thTimeline?.Text ?? "";
+        public string ChipsForTest => $"{_thModelChip?.Text} | {_thPermChip?.Text} | {_thWsChip?.Text} | {_thContext?.Caption}";
+        public void PickChangedFileForTest(string path) => WsPick(path);
+        public string DiffHeadForTest => _wsDiffHead?.Text ?? "";
+        public UiCodeView DiffViewForTest => _wsDiff;
+        public void ShowPermissionPickerForTest() => PermissionPrompt();
 
         private static string Esc(string s) => s == null ? "" : "<noparse>" + s.Replace("</noparse>", "") + "</noparse>";
         private static string Cut(string s, int n) { s = (s ?? "").Trim(); return s.Length > n ? s.Substring(0, n) + "…" : s; }
@@ -396,7 +826,8 @@ namespace MetaCodex.Shell
                 case "conversation":
                 {
                     bool user = (string)r["role"] == "user";
-                    _tlLines.Add(pad + (user ? "<color=#8FEBFF><b>▶ YOU</b></color>  " : "<color=#4DFFA6><b>◆ AGENT</b></color>  ") + Esc(Cut((string)r["text"], 900)));
+                    string text = user ? (string)r["text"] : StripViewBlocks((string)r["text"]);
+                    _tlLines.Add(pad + (user ? "<color=#8FEBFF><b>▶ YOU</b></color>  " : "<color=#4DFFA6><b>◆ AGENT</b></color>  ") + Esc(Cut(text, 900)));
                     break;
                 }
                 case "system":
@@ -412,7 +843,12 @@ namespace MetaCodex.Shell
                     string tail = status == "running" || status == "pending" ? " <color=#FFB547>…</color>" : status == "error" || status == "failed" ? " <color=#FF5468>✕</color>" : "";
                     if (wk == "command") _tlLines.Add(pad + "<color=#FFB547>$</color> " + Esc(Cut((string)r["command"], 160)) + (r["exitCode"]?.Type == JTokenType.Integer ? $" <color=#7FA9BF>→ {r["exitCode"]}</color>" : "") + tail);
                     else if (wk == "tool") _tlLines.Add(pad + "<color=#B28CFF>⚙ " + Esc(Cut((string)r["toolName"], 60)) + "</color>" + tail);
-                    else if (wk == "file-change") _tlLines.Add(pad + "<color=#FFB547>✎ " + Esc(Cut((string)r["change"]?["path"] ?? "file", 120)) + "</color>" + tail);
+                    else if (wk == "file-change")
+                    {
+                        var ds = r["change"]?["diffStats"];
+                        string stats = ds != null ? $" <color=#4DFFA6>+{ds["added"]}</color> <color=#FF5468>−{ds["removed"]}</color>" : "";
+                        _tlLines.Add(pad + "<color=#FFB547>✎ " + Esc(Cut(WsRel((string)r["change"]?["path"] ?? "file"), 120)) + "</color>" + stats + tail);
+                    }
                     else _tlLines.Add(pad + "<color=#7FA9BF>· " + Esc(wk ?? "work") + "</color>" + tail);
                     break;
                 }
@@ -460,7 +896,7 @@ namespace MetaCodex.Shell
             else
             {
                 _thAsk.Set($"The agent asks something ({kind}): answer it in a terminal with `mqh thread` or in the thread later.");
-                _thAsk.SetVisible(true);
+                SetAskVisible(true);
                 foreach (var b in _thAskButtons) b.SetVisible(false);
             }
         }
@@ -469,6 +905,7 @@ namespace MetaCodex.Shell
         {
             _thAsk?.SetVisible(v);
             foreach (var b in _thAskButtons) b.SetVisible(v);
+            if (_thTimeline != null && _thTimeline.Rect != TimelineRect(v)) { _thTimeline.SetRect(TimelineRect(v)); LayoutTimelineButtons(v); RenderTimeline(); }
         }
 
         private void Resolve(string decision)
@@ -486,7 +923,12 @@ namespace MetaCodex.Shell
         private void SendToThread(string text)
         {
             if (string.IsNullOrWhiteSpace(text) || _threadOpen == null) return;
-            Mqh.SendMessage(_threadOpen, text.Trim(), r =>
+            var o = Override(_threadOpen);
+            var extra = new JObject();
+            if (o.model != null) extra["model"] = o.model;
+            if (o.effort != null) extra["reasoningLevel"] = o.effort;
+            if (o.perm != null) extra["permissionMode"] = o.perm;
+            Mqh.SendMessage(_threadOpen, text.Trim(), extra, r =>
             {
                 if (r == null) { Toast("Not sent: " + Mqh.LastError, "error"); return; }
                 _thComposer.Set("");

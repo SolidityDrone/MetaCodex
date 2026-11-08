@@ -32,9 +32,12 @@ namespace MetaCodex.Shell
             BuildAgents();
             BuildThreads();
             BuildThread();
+            BuildWorkspace();
             BuildNewThread();
+            BuildPicker();
             BuildVault();
             BuildVoice();
+            BuildSystem();
             foreach (var p in _panels.Values) p.transform.localScale = Vector3.one * Mathf.Clamp(Settings.uiScale, 0.6f, 1.8f);
         }
 
