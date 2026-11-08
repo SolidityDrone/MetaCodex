@@ -28,6 +28,8 @@
   <uses-permission android:name="com.oculus.permission.HAND_TRACKING" />
   <!-- voice control: push-to-talk speech-to-text (local AI service, docs/voice.md) -->
   <uses-permission android:name="android.permission.RECORD_AUDIO" />
+  <!-- Ambient Focus: the room's scanned geometry (Space Setup) for the dome -->
+  <uses-permission android:name="com.oculus.permission.USE_SCENE" />
   <uses-feature android:name="oculus.software.overlay_keyboard" android:required="false" />
   <uses-feature android:name="com.oculus.feature.PASSTHROUGH" android:required="true" />
   <horizonos:uses-horizonos-sdk horizonos:minSdkVersion="60" horizonos:targetSdkVersion="205" />

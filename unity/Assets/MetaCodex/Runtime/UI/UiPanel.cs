@@ -375,6 +375,9 @@ namespace MetaCodex.UI
                 panel.TagRenderer(sub.renderer, t.rectTransform.localPosition);
         }
 
+        /// Self-tests: one frame of easing towards the target bend.
+        public void EaseBendForTest(float dt) { EaseBend(dt); }
+
         /// Kept for callers of the old CPU bending: texts are bent on the GPU now.
         public void ApplyBendNow() { SnapBend(); PushBendGlobals(); }
 

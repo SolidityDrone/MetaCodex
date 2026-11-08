@@ -577,8 +577,8 @@ end)
                 string preset = presets[i];
                 tabs.AddTo(TabFocus, new UiButton(preset.ToUpperInvariant(), () => { ApplyFocusPreset(preset); }) { Rect = new Rect(fp.x + i * (fpw + t.Gap), fp.y, fpw, fp.height) });
             }
-            _focusInfo = tabs.AddTo(TabFocus, new UiLabel("", t.SmallSize) { Rect = fo.Next(0.03f), Wrap = true, Color = t.TextDim, Align = TextAlignmentOptions.TopLeft });
-            tabs.AddTo(TabFocus, new UiLabel("Distance is measured along the floor around you: the floor near you and your desk stay visible, walls and everything above the horizon fade first. BLACKOUT leaves only your windows. The passthrough can be darkened, not blurred (Horizon OS draws it). FOCUS on the dock turns it on and off.", t.SmallSize) { Rect = fo.Rest(), Wrap = true, Color = t.TextDim, Align = TextAlignmentOptions.TopLeft });
+            _focusInfo = tabs.AddTo(TabFocus, new UiLabel("", t.SmallSize) { Rect = fo.Next(0.046f), Wrap = true, Color = t.TextDim, Align = TextAlignmentOptions.TopLeft });
+            tabs.AddTo(TabFocus, new UiLabel("A dome on the floor around you: real walls, furniture and your hands inside it stay (from your Space Setup scan), the rest fades; your windows always stay. BLACKOUT leaves only the windows and your hands. The passthrough can be darkened, not blurred (Horizon OS draws it). FOCUS on the dock turns it on and off.", t.SmallSize) { Rect = fo.Rest(), Wrap = true, Color = t.TextDim, Align = TextAlignmentOptions.TopLeft });
             RefreshFocusPanel();
 
             // LOOK: one standard appearance; what is left are comfort settings

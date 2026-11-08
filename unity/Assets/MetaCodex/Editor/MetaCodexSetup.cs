@@ -170,6 +170,9 @@ namespace MetaCodex.EditorTools
             config.handTrackingSupport = OVRProjectConfig.HandTrackingSupport.ControllersAndHands;
             config.handTrackingFrequency = OVRProjectConfig.HandTrackingFrequency.HIGH;
             config.insightPassthroughSupport = OVRProjectConfig.FeatureSupport.Required;
+            // Ambient Focus reads the room's scanned geometry (scene anchors: global mesh, walls, floor)
+            config.anchorSupport = OVRProjectConfig.AnchorSupport.Enabled;
+            config.sceneSupport = OVRProjectConfig.FeatureSupport.Supported;
             // TouchScreenKeyboard -> the headset's system keyboard over the immersive app
             config.requiresSystemKeyboard = true;
             // the Linux userland (compilers, node, agents) is CPU work; the scene is a few flat panels
