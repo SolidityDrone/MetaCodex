@@ -31,8 +31,8 @@ namespace MetaCodex.EditorTools
         public const string ScenePath = "Assets/Scenes/MetaCodex.unity";
         public const string PackageId = "com.pnncl.metacodex";
         public const string ApkPath = "Builds/MetaCodex.apk";
-        public const string Version = "0.7.0";
-        public const int VersionCode = 7;
+        public const string Version = "0.7.1";
+        public const int VersionCode = 8;
         public const string PanelMaterialPath = "Assets/MetaCodex/Materials/Panel.mat";
         public const string ShapeMaterialPath = "Assets/MetaCodex/Materials/SciFiUI.mat";
         public const string BeamMaterialPath = "Assets/MetaCodex/Materials/Beam.mat";
