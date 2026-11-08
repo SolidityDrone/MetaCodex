@@ -135,6 +135,8 @@ namespace MetaCodex.EditorTools
                 if (Want("agentsandthreads")) AgentsAndThreads(shell);
                 if (Want("voicecontrol")) VoiceControl(shell);
                 if (Want("fixes")) Fixes(shell, head, frame, term, view);
+                if (Want("opacitybend")) OpacityAndBend(shell, head);
+                if (Want("voicewords")) VoiceWords(shell);
                 if (Want("views")) Views(shell, head, tmp);
                 if (Want("workspace")) Workspace(shell, head);
                 if (Want("threadgroups")) ThreadGroups(shell);
@@ -1200,6 +1202,198 @@ end)
             Check(shell.Views.Count == 0 && !shell.PanelsById.Keys.Any(k => k.StartsWith("view-")), "view clear removes the views and their panels");
         }
 
+        private static void VoiceWords(MetaCodexShell shell)
+        {
+            foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
+            var v = shell.Voice;
+            // misheard words are fixed against the commands' own vocabulary
+            var m = v.FastMatch("Open ambient fogus.");
+            Check(m != null && m.Command.Name == "open_panel" && (string)m.Args["panel"] == "focus", "“open ambient fogus” -> open_panel focus");
+            var mc = v.FastMatch("turn on ambient fogus");
+            bool focusOn = mc != null && (mc.Command.Name == "set_focus" && (string)mc.Args["state"] == "on" || mc.Command.Name == "set_setting" && (string)mc.Args["setting"] == "focus" && (string)mc.Args["value"] == "on");
+            Check(focusOn, $"“turn on ambient fogus” -> focus on ({mc?.Command.Name} {mc?.Args.ToString(Newtonsoft.Json.Formatting.None)})");
+            // the words split into the right slots: "dome radius" is the setting, not "dome" + "radius to ..."
+            var sp = v.FastMatch("set the dome radius to two meters");
+            Check(sp != null && sp.Command.Name == "set_setting" && (string)sp.Args["setting"] == "focus_radius" && (string)sp.Args["value"] == "two meters",
+                $"“set the dome radius to two meters” -> set_setting focus_radius “two meters” ({sp?.Command.Name} {sp?.Args.ToString(Newtonsoft.Json.Formatting.None)})");
+            VoiceResult r = null;
+            shell.VoiceProcessText("Open ambient fogus.", x => r = x);
+            Check(r != null && r.Ok && shell.IsPanelOpen("focus") && shell.PanelsById["settings"].IsOpen, "… and it opens Settings on the FOCUS tab: " + r);
+            // several commands in one sentence
+            float i0 = shell.Settings.focusIntensity, r0 = shell.Settings.focusRadius, ui0 = shell.Settings.uiScale, op0 = shell.Settings.panelOpacity, sv0 = shell.Settings.soundVolume;
+            bool s0 = shell.Settings.sounds, f0 = shell.Settings.focusEnabled;
+            var all = v.FastMatchAll("Turn on ambient focus and set intensity to 0.");
+            Check(all != null && all.Count == 2 && all[0].Command.Name == "set_focus" && all[1].Command.Name == "set_setting" && (string)all[1].Args["setting"] == "focus_intensity",
+                "“turn on ambient focus and set intensity to 0” -> two commands: " + (all == null ? "no match" : string.Join(" + ", all.Select(x => x.Command.Name + " " + x.Args.ToString(Newtonsoft.Json.Formatting.None)))));
+            r = null;
+            shell.VoiceProcessText("Turn on ambient focus and set intensity to 0.", x => r = x);
+            Check(r != null && r.Ok && shell.Settings.focusEnabled && shell.Settings.focusIntensity < 0.001f, "… both run: focus on, intensity 0 (" + r?.Reply + ")");
+            var slider = shell.PanelsById["settings"].Elements.OfType<UiSlider>().FirstOrDefault(x => x.Text == "INTENSITY");
+            Check(slider != null && slider.Value < 0.001f, "… and the INTENSITY slider moved with it");
+            // numbers, units, percent, more / less
+            foreach (var (said, key, want) in new[]
+            {
+                ("set the dome radius to two meters", "focusRadius", 2f), ("radius 50 centimeters", "focusRadius", 0.5f), ("set the intensity to fifty percent", "focusIntensity", 0.5f),
+                ("set intensity to 30", "focusIntensity", 0.3f), ("set the opacity to max", "panelOpacity", 1f), ("set the volume to a quarter", "soundVolume", 0.25f),
+                ("set the focus intensity to twenty percent", "focusIntensity", 0.2f), ("turn the volume up to eighty percent", "soundVolume", 0.8f),
+            })
+            {
+                r = null;
+                shell.VoiceProcessText(said, x => r = x);
+                float got = float.Parse(shell.Settings.Get(key), System.Globalization.CultureInfo.InvariantCulture);
+                Check(r != null && r.Ok && Mathf.Abs(got - want) < 0.011f, $"“{said}” -> {key} {got:0.##} ({r?.Reply ?? r?.Error})");
+            }
+            r = null;
+            shell.VoiceProcessText("turn off the sounds", x => r = x);
+            Check(r != null && r.Ok && !shell.Settings.sounds, "“turn off the sounds” -> sounds off");
+            r = null;
+            shell.VoiceProcessText("make the windows bigger", x => r = x);
+            Check(r != null && r.Ok && shell.Settings.uiScale > ui0 + 0.05f, $"“make the windows bigger” -> UI scale {ui0:0.00} -> {shell.Settings.uiScale:0.00} ({r?.Reply ?? r?.Error})");
+            float vol0 = shell.Settings.soundVolume;
+            r = null;
+            shell.VoiceProcessText("volume a bit less", x => r = x);
+            Check(r != null && r.Ok && shell.Settings.soundVolume < vol0 - 0.05f, $"“volume a bit less” -> volume {vol0:0.00} -> {shell.Settings.soundVolume:0.00} ({r?.Reply ?? r?.Error})");
+            double n;
+            Check(VoiceCommands.TryNumber("two point five", null, null, null, out n) && Mathf.Approximately((float)n, 2.5f)
+                && VoiceCommands.TryNumber("twenty five", null, null, null, out n) && Mathf.Approximately((float)n, 25f)
+                && VoiceCommands.TryNumber("0,75", null, null, null, out n) && Mathf.Approximately((float)n, 0.75f), "spoken numbers: “two point five”, “twenty five”, “0,75”");
+            // the LLM may answer with several commands, held to valid ones by the grammar
+            string g = v.LlmGrammar();
+            var lines = v.ParseLines("set_focus on ; set_setting focus_intensity 0", out string perr);
+            Check(g.Contains("cmd ::=") && g.Contains("\" ; \"") && g.Contains("\"set_setting\"") && lines != null && lines.Count == 2, "LLM: up to three commands per answer (“set_focus on ; set_setting focus_intensity 0”)" + (perr != null ? " " + perr : ""));
+            // a plugin's own vocabulary is heard and fixed too
+            var cmd = new VoiceCommand { Name = "zz_test_warp", Description = "test", Owner = "plugin/test", Phrases = new[] { "engage [the] warpdrive" }, Vocabulary = new[] { "warpdrive" }, Run = a => "Engaged" };
+            v.Register(cmd);
+            var wm = v.FastMatch("engage the warpdrove");
+            Check(wm != null && wm.Command.Name == "zz_test_warp" && wm.Corrected == "engage the warpdrive", $"a plugin command's vocabulary fixes misheard words too (“warpdrove” -> “{wm?.Corrected}”)");
+            v.Remove("zz_test_warp", "plugin/test");
+            // restore
+            shell.Settings.focusIntensity = i0; shell.Settings.focusRadius = r0; shell.Settings.uiScale = ui0; shell.Settings.sounds = s0;
+            shell.Settings.panelOpacity = op0; shell.Settings.soundVolume = sv0;
+            shell.SetFocus(f0, false);
+            shell.OnSettingsChanged();
+            shell.SyncSettingsControls();
+            shell.TickFocusForTest(1f);
+        }
+
+        /// Renders with a transparent clear colour (like the passthrough underlay) and returns the pixels (RGBA).
+        private static Texture2D RenderRgba(string file, Vector3 pos, Quaternion rot, float fov, int w, int h)
+        {
+            foreach (var up in UnityEngine.Object.FindObjectsByType<UiPanel>(FindObjectsSortMode.None)) up.ApplyBendNow();
+            var camGo = new GameObject("uitest-cam-rgba") { hideFlags = HideFlags.DontSave };
+            try
+            {
+                var cam = camGo.AddComponent<Camera>();
+                cam.clearFlags = CameraClearFlags.SolidColor;
+                cam.backgroundColor = new Color(0f, 0f, 0f, 0f);
+                cam.fieldOfView = fov;
+                cam.nearClipPlane = 0.02f;
+                cam.transform.SetPositionAndRotation(pos, rot);
+                var rt = new RenderTexture(w, h, 24, RenderTextureFormat.ARGB32) { antiAliasing = 1 };
+                cam.targetTexture = rt;
+                cam.aspect = (float)w / h;
+                cam.Render();
+                RenderTexture.active = rt;
+                var tex = new Texture2D(w, h, TextureFormat.RGBA32, false);
+                tex.ReadPixels(new Rect(0, 0, w, h), 0, 0);
+                tex.Apply();
+                RenderTexture.active = null;
+                if (file != null) File.WriteAllBytes(Path.Combine(MetaCodexSetup.ReportDir, file), tex.EncodeToPNG());
+                cam.targetTexture = null;
+                rt.Release();
+                UnityEngine.Object.DestroyImmediate(rt);
+                return tex;
+            }
+            finally { UnityEngine.Object.DestroyImmediate(camGo); }
+        }
+
+        /// The screen pixel of a world point for a camera at pos/rot (fov vertical, w x h).
+        private static Vector2Int ScreenOf(Vector3 world, Vector3 pos, Quaternion rot, float fov, int w, int h)
+        {
+            var local = Quaternion.Inverse(rot) * (world - pos);
+            float f = 1f / Mathf.Tan(fov * 0.5f * Mathf.Deg2Rad);
+            float x = local.x / local.z * f / ((float)w / h), y = local.y / local.z * f;
+            return new Vector2Int(Mathf.RoundToInt((x * 0.5f + 0.5f) * w), Mathf.RoundToInt((y * 0.5f + 0.5f) * h));
+        }
+
+        private static void OpacityAndBend(MetaCodexShell shell, Transform head)
+        {
+            foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
+            shell.SetLayout("fixed");
+            float opacity0 = shell.Settings.panelOpacity;
+            shell.Settings.panelOpacity = 1f;
+            shell.OnSettingsChanged();
+            var files = shell.PanelsById["files"];
+            var settings = shell.PanelsById["settings"];
+            foreach (var p in new[] { files, settings }) { p.gameObject.SetActive(true); p.SetBend(0f); }
+            var fwd = Vector3.forward;
+            files.transform.SetPositionAndRotation(head.position + fwd * 1.25f, Quaternion.identity);      // behind
+            settings.transform.SetPositionAndRotation(head.position + fwd * 0.80f + Vector3.right * 0.05f, Quaternion.identity); // in front, overlapping
+            foreach (var p in new[] { files, settings }) p.ForceRefresh();
+            // 1) at 100 % opacity nothing of the passthrough shows through a panel: not its body, not its buttons
+            var tex = RenderRgba("ui-opacity-alpha.png", head.position, Quaternion.identity, 70f, 640, 480);
+            var btn = settings.Elements.OfType<UiButton>().First(b => b.Visible && b.Rect.width > 0.05f && !b.Text.Contains("✕"));
+            var bp = ScreenOf(settings.SurfacePoint(btn.Rect.center, -0.001f), head.position, Quaternion.identity, 70f, 640, 480);
+            var body = ScreenOf(settings.SurfacePoint(new Vector2(settings.Width * 0.5f, settings.Height * 0.6f)), head.position, Quaternion.identity, 70f, 640, 480);
+            float aBtn = tex.GetPixel(bp.x, bp.y).a, aBody = tex.GetPixel(body.x, body.y).a;
+            Check(aBtn > 0.985f && aBody > 0.985f, $"opacity 100 %: the eye buffer is opaque over a button ({aBtn:F3}) and the body ({aBody:F3}): no passthrough through them");
+            UnityEngine.Object.DestroyImmediate(tex);
+            // 2) the text of a window behind does not show through an opaque window in front
+            var withBack = RenderRgba("ui-opacity-front.png", head.position, Quaternion.identity, 70f, 640, 480);
+            files.gameObject.SetActive(false);
+            var noBack = RenderRgba(null, head.position, Quaternion.identity, 70f, 640, 480);
+            files.gameObject.SetActive(true);
+            // compare inside the front panel's body, away from its own texts: sample a grid of pixels on it
+            int diff = 0, n = 0;
+            for (float u = 0.15f; u < 0.86f; u += 0.05f)
+                for (float v = 0.25f; v < 0.95f; v += 0.05f)
+                {
+                    var sp = ScreenOf(settings.SurfacePoint(new Vector2(settings.Width * u, settings.Height * v)), head.position, Quaternion.identity, 70f, 640, 480);
+                    if (sp.x < 0 || sp.y < 0 || sp.x >= 640 || sp.y >= 480) continue;
+                    var c1 = withBack.GetPixel(sp.x, sp.y); var c2 = noBack.GetPixel(sp.x, sp.y);
+                    n++;
+                    if (Mathf.Abs(c1.r - c2.r) + Mathf.Abs(c1.g - c2.g) + Mathf.Abs(c1.b - c2.b) > 0.02f) diff++;
+                }
+            Check(n > 50 && diff == 0, $"opacity 100 %: nothing of the window behind shows through the window in front ({diff} of {n} sampled pixels differ)");
+            UnityEngine.Object.DestroyImmediate(withBack);
+            UnityEngine.Object.DestroyImmediate(noBack);
+            files.gameObject.SetActive(false);
+            // 3) bent: the ray lands where the panel is drawn (the cylinder), not on its flat projection
+            settings.transform.SetPositionAndRotation(head.position + fwd * 0.8f, Quaternion.identity);
+            settings.SetBend(0.8f);
+            settings.ForceRefresh();
+            int good = 0, total = 0;
+            foreach (var target in new[] { new Vector2(0.04f, 0.2f), new Vector2(settings.Width * 0.5f, 0.3f), new Vector2(settings.Width - 0.04f, 0.45f), new Vector2(settings.Width - 0.02f, settings.Height - 0.03f) })
+            {
+                var world = settings.SurfacePoint(target);
+                var ray = new Ray(head.position, (world - head.position).normalized);
+                total++;
+                if (settings.Raycast(ray, out var hit, out _) && Vector2.Distance(hit, target) < 0.002f) good++;
+                else Line($"     bent hit for {target}: {(settings.Raycast(ray, out var h2, out _) ? h2.ToString("F3") : "miss")}");
+            }
+            Check(good == total, $"bent panel: rays hit the drawn (curved) surface: {good}/{total} spots within 2 mm");
+            settings.SurfaceOf(settings.SurfacePoint(new Vector2(settings.Width - 0.03f, 0.2f), -0.01f), out var pp, out float depth);
+            Check(Vector2.Distance(pp, new Vector2(settings.Width - 0.03f, 0.2f)) < 0.002f && Mathf.Abs(depth + 0.01f) < 0.002f, $"bent panel: a fingertip 1 cm in front of an edge maps to that spot ({pp.x:F3}, {pp.y:F3}, depth {depth * 100f:F1} cm)");
+            Render(shell, "ui-bent.png", head.position, Quaternion.identity, 80f, 1280, 900);
+            // 4) the bend eases: no steps
+            settings.SetBend(0f);
+            settings.SnapBend();
+            var steps = new System.Collections.Generic.List<float>();
+            settings.SetBend(0.8f);
+            if (!Application.isPlaying) { settings.SnapBend(); settings.SetBend(0f); settings.SnapBend(); }
+            // SetBend snaps in the Editor; drive the easing by hand from flat to 0.8 m
+            typeof(UiPanel).GetField("_bendTarget", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).SetValue(settings, 0.8f);
+            for (int i = 0; i < 40; i++) { settings.EaseBendForTest(1f / 72f); steps.Add(settings.BendNow > 0 ? 1f / settings.BendNow : 0f); }
+            float maxJump = 0f;
+            for (int i = 1; i < steps.Count; i++) maxJump = Mathf.Max(maxJump, Mathf.Abs(steps[i] - steps[i - 1]));
+            Check(Mathf.Abs(settings.BendNow - 0.8f) < 0.02f && maxJump < 0.2f, $"bend eases smoothly to its target (curvature step at most {maxJump:F3} /m per frame, now {settings.BendNow:F2} m)");
+            settings.SetBend(0f);
+            settings.SnapBend();
+            shell.Settings.panelOpacity = opacity0;
+            shell.OnSettingsChanged();
+            settings.gameObject.SetActive(false);
+        }
+
         private static JObject Row(string kind, int seq, JObject fields) { var o = new JObject { ["kind"] = kind, ["sourceSeqEnd"] = seq, ["id"] = "r" + seq }; foreach (var p in fields.Properties()) o[p.Name] = p.Value; return o; }
 
         private static void Workspace(MetaCodexShell shell, Transform head)
@@ -1382,6 +1576,45 @@ end)
             float black = Luma("ui-focus-blackout.png", new Rect(0f, 0.85f, 1f, 0.15f));
             float panel = Luma("ui-focus-blackout.png", new Rect(0.42f, 0.4f, 0.16f, 0.2f));
             Check(black < 0.01f && panel > black + 0.02f, $"BLACKOUT: black around you ({black:F3}), the windows stay ({panel:F3})");
+            // the dome with the room's real geometry (as Space Setup gives it): judged on the eye buffer's alpha,
+            // which is what lets the passthrough through (0 = the real world shows, 1 = black)
+            shell.FloorYOverride = 0f; // the head stands 1.4 m above it
+            shell.Settings.focusRadius = 2.5f;
+            shell.Settings.focusSoftness = 0.2f;
+            shell.Settings.focusIntensity = 1f;
+            shell.SetFocus(true, false);
+            shell.ClosePanel("files");
+            var wallMesh = new Mesh();
+            wallMesh.vertices = new[] { new Vector3(-2f, -2f, 0f), new Vector3(2f, -2f, 0f), new Vector3(2f, 2f, 0f), new Vector3(-2f, 2f, 0f) };
+            wallMesh.triangles = new[] { 0, 2, 1, 0, 3, 2 };
+            wallMesh.RecalculateNormals();
+            var wall = shell.AddRoomMeshForTest(wallMesh, head.position + Vector3.forward * 1.0f, Quaternion.identity);
+            shell.TickFocusForTest(0.2f);
+            var near = RenderRgba("ui-focus-wall-near.png", head.position, Quaternion.identity, 60f, 320, 240);
+            // in the band above the test terminal (it sits in front, opaque by design, and its shadow darkens
+            // around it); there the wall is 0.5 m above the eyes at 1 m, 1.8 m at 4 m (still on the 4 m wall)
+            int[] xs = { 80, 160, 240 };
+            float aNear = xs.Max(x => near.GetPixel(x, 215).a);
+            wall.transform.position = head.position + Vector3.forward * 4.0f;
+            var far = RenderRgba("ui-focus-wall-far.png", head.position, Quaternion.identity, 60f, 320, 240);
+            float aFar = xs.Min(x => far.GetPixel(x, 215).a);
+            Check(aNear < 0.05f && aFar > 0.95f, $"the dome: a real wall 1 m away stays visible ({aNear:F2}), one 4 m away is outside a 2.5 m dome and fades ({aFar:F2})");
+            UnityEngine.Object.DestroyImmediate(near);
+            UnityEngine.Object.DestroyImmediate(far);
+            shell.ClearRoomForTest();
+            // hands: always clear, even at BLACKOUT
+            shell.ApplyFocusPreset("blackout");
+            shell.PoseHand(Handedness.Right, 0.1f, 0.1f, 0.1f, 0.1f, 0.1f);
+            shell.TickGesturesForTest(0.1f);
+            shell.TickFocusForTest(0.2f);
+            var palmW = shell.Gestures.Right.Frame.Palm;
+            var hands = RenderRgba("ui-focus-hands.png", head.position, Quaternion.LookRotation((palmW - head.position).normalized), 60f, 320, 240);
+            float aPalm = hands.GetPixel(160, 120).a, aAround = hands.GetPixel(10, 230).a;
+            Check(aPalm < 0.1f && aAround > 0.95f, $"hands stay visible in the dark (palm {aPalm:F2}, around {aAround:F2})");
+            UnityEngine.Object.DestroyImmediate(hands);
+            shell.SimHands.Hide(Handedness.Right);
+            shell.TickGesturesForTest(0.1f);
+            shell.FloorYOverride = null;
             shell.SetFocus(false, false);
             shell.TickFocusForTest(1f);
             Check(!shell.FocusSphereForTest.activeSelf, "ambient focus off: the sphere is gone");
@@ -1415,6 +1648,13 @@ end)
             while (shell.SystemBusyForTest && sw.Elapsed.TotalSeconds < 120) shell.PumpForTest(1f);
             int found = shell.ToolsForTest.Count(x => x.Found);
             Check(shell.ToolsForTest.Any(x => x.Name == "git" && x.Found && !string.IsNullOrEmpty(x.Version)), $"TOOLS: checked in Linux (WSL here): {found} found in {sw.Elapsed.TotalSeconds:F0} s: " + string.Join(", ", shell.ToolsForTest.Where(x => x.Found).Select(x => x.Name + " " + x.Version)));
+            string inv = shell.ToolsInventoryPath;
+            var invJ = File.Exists(inv) ? JObject.Parse(File.ReadAllText(inv)) : null;
+            Check(invJ != null && (invJ["tools"] as JArray).Any(x => (string)x["name"] == "git" && (bool)x["installed"] && !string.IsNullOrEmpty((string)x["version"])),
+                "the installed-tools inventory for agents is written (" + inv + ")");
+            Check(shell.SystemCommand("tools").Contains("git\t") && shell.SystemCommand("tools json").Contains("\"installed\""), "control port: system tools / tools json");
+            Check(UiIcons.TryGet("git", out _, out _) && UiIcons.TryGet("python3", out _, out _) && UiIcons.TryGet("claude", out _, out _) && !UiIcons.TryGet("fzf", out _, out _),
+                "the tools' own logos (git, python3, claude), a category glyph for tools without one (fzf)");
             var sp = shell.PanelsById["system"];
             sp.ForceRefresh();
             RenderPanel(sp, "ui-system-tools.png");

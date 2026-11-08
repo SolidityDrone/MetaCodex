@@ -1,4 +1,4 @@
-# Headset test checklist (MetaCodex 0.6, 2026-11-08)
+# Headset test checklist (MetaCodex 0.7, 2026-11-08)
 
 Tick each line on the Quest. "→" is what should happen. Items marked **(MQH)** need MQH reachable at
 127.0.0.1:38990 from the headset: until MQH runs on the headset (roadmap step 1-2), run it in WSL
@@ -210,3 +210,36 @@ SYSTEM:
 - [ ] PACKAGES… → Debian packages you chose and npm globals
 - [ ] STORAGE: the headset bar (Linux, AI models, shared, apps + system, free) and Linux by folder; tap a cache → CLEAN; LINUX LIMIT below the current size → warning
 
+## 15. 0.7: the owner's 0.6 bug list
+
+Look:
+- [ ] Every panel has the console look: chamfered corners (big cut top-left and bottom-right), dark glass with a faint hex pattern, a steel frame, a cyan energy bar under the title, titles and buttons in capitals (Rajdhani)
+- [ ] Buttons read as command cards (lit rim); sliders and progress as segmented energy bars; nothing looks washed out or neutral
+
+Opacity:
+- [ ] Settings > LOOK: PANEL OPACITY at 100 % → no part of a window is see-through: buttons, rows, tiles, the header
+- [ ] Put one window in front of another at 100 % → no text, icon or button of the window behind shows through
+- [ ] Around a window's edge and where its shadow falls on another window → no see-through line ("fissure")
+- [ ] PANEL OPACITY below 75 % → windows behind show through faintly again (as intended)
+
+Bending (Settings > LOOK > Bend panels, fixed layout):
+- [ ] Walk closer / farther, drag a panel → it curves smoothly (no steps or jumps)
+- [ ] Point at a bent window's edges → the reticle sits on the curved surface, buttons near the edges react where the beam meets them; pokes with the fingertip work on bent panels
+- [ ] A text that changes fast (Debug / Perf, a running terminal-linked thread) → it stays on the curve, never flashes flat
+
+Ambient Focus:
+- [ ] First use → Horizon OS asks for "spatial data" (allow it); FOCUS tab says the room was loaded
+- [ ] FOCUS on → a dome standing on the floor around you: walls and furniture near you stay visible, far ones fade (no dome "starting above")
+- [ ] RADIUS changes the dome's size live; SOFTNESS its edge; INTENSITY the darkness
+- [ ] Hands always visible, also at BLACKOUT
+- [ ] Without Space Setup (or permission denied) → the old floor-plane sphere still works
+
+SYSTEM > TOOLS:
+- [ ] Known tools show their own logo on their brand colour (git, node, python, rust, go, claude, …) with the version; tools without a logo show a glyph
+- [ ] In a terminal: `cat /mnt/quest/system/tools.json` and `mcx-ui system tools` → the same list with versions and paths
+
+Voice:
+- [ ] "Open ambient focus" → Settings opens on the FOCUS tab (also when heard as "fogus")
+- [ ] "Turn on ambient focus and set intensity to 0" → focus on, intensity 0, the slider moves
+- [ ] "Set the dome radius to two meters", "radius 50 centimeters", "make the windows bigger", "volume a bit less", "turn off the sounds" → each changes that setting
+- [ ] "Show the installed tools" → SYSTEM on TOOLS; "how much disk space is left" → SYSTEM on STORAGE

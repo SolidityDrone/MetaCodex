@@ -4,35 +4,51 @@ Status: v0.6, 2026-11-08. v0.5: the owner's bug list from the 0.4 test and faste
 grouped by project with a linked workspace module (changes map, git, files, views), bb-like composer chips
 (model, access, context) and FORK, agent views (charts, diagrams, tables, choices, physics), GIT moved into
 the vault with the GitHub account, Ambient Focus, the SYSTEM panel (installed tools, storage). Tested in
-the Editor; not yet on the headset.
+the Editor; not yet on the headset. v0.7 (owner's 0.6 bug list): the sci-fi console look is back and
+richer, opaque windows are truly opaque, bending is smooth and done on the GPU, Ambient Focus is a dome from
+the floor that follows the real room, tools show their own logos, voice hears and chains commands better.
 Test list for the headset: `docs/TEST_CHECKLIST.md`.
 
 ## Style
 
-A calm, standard look (owner, 0.5: no themes or accents for now): dark frosted-glass panels with rounded
-corners, a fine border lit from above, soft shadows instead of glows, one blue accent for primary actions,
-selections and toggles, Inter (SemiBold for titles and buttons, Medium for text) with DejaVu Sans Mono for
-paths and code; labels written in capitals in code show in Title Case (acronyms kept). All OFL / free
-licences, no game or brand assets. Short UI sounds are synthesised in code.
+A real-time-strategy command console (owner: "keep the StarCraft 2 style, make it much better"; the design is
+our own, no game assets): dark navy glass with a faint hex lattice and fine scanlines, chamfered corners (a
+big cut top-left and bottom-right, small ones elsewhere), a steel frame lit from above with corner brackets,
+a header energy bar with a hatched edge, command-card buttons with a lit rim and a sweep on focus, segmented
+energy bars for progress and sliders, cyan accent (#35D0FF) with amber / red / green for warning, danger and
+ok. Titles and buttons use Rajdhani SemiBold in capitals with letter spacing (the console voice), body text
+Inter, code DejaVu Sans Mono. All OFL / free licences. Short UI sounds are synthesised in code.
 
-Everything is drawn by one shader, `MetaCodex/SciFiUI` (the name stays for references): each panel, button,
-header, bar, line, dot and selection frame is a quad whose rounded shape is computed per pixel from vertex
-data (size, radius, fill style, border, state), so a whole panel is one mesh and one draw call, crisp at any
-distance. Text is TextMeshPro with runtime SDF fonts (OpenType features off: Inter's kerning tables cost
-over 1 GB as glyphs were added). LOOK settings: sharpness (render scale), panel opacity, shadows,
+Everything is drawn by one shader, `MetaCodex/SciFiUI`: each panel, button, header, bar, line, dot and
+selection frame is a quad whose shape is computed per pixel from vertex data (size, chamfer, fill style,
+border, state), so a whole panel is one mesh and one draw call, crisp at any distance. Text is TextMeshPro
+with runtime SDF fonts drawn by `MetaCodex/TextBend` (TMP mobile SDF plus the panel bend); tool logos are
+one atlas drawn by `MetaCodex/UiIcon`. LOOK settings: sharpness (render scale), panel opacity, shadows,
 foveated rendering (off by default; it blurs the edges of the view), sounds and volume.
+
+**Opacity.** Passthrough is an underlay: the eye buffer's alpha decides how much of the room shows. Every UI
+shader blends its alpha as `One OneMinusSrcAlpha` (coverage only adds), so a shadow or a glow over a window
+can never cut a see-through fissure. At PANEL OPACITY 75 % and above, a depth-only pass writes the panel's
+body (1.5 mm behind its face), so text, icons and buttons of windows behind it are hidden, not shown through.
+
+**Bending.** BEND PANELS curves each window around a vertical axis on the GPU: the panel's radius goes into
+a global table (`_PanelBend`, 128 slots) and every renderer of the panel (shapes, text, sub-meshes, icons)
+carries its slot, so text that changes every frame bends with the panel and never flashes flat. The
+curvature eases in and out (about 0.3 s) instead of jumping. Rays and pokes hit the curved surface (ray-
+cylinder intersection), so the reticle sits where the beam meets the window.
 
 ## Code map (`unity/Assets/MetaCodex/Runtime`)
 
 | Folder | What |
 |---|---|
-| `UI/` | `UiTheme` (colours, sizes, fonts), `UiShapeMesh` (batched shapes, bending, rotated strokes), `UiPanel` (frame, header, open animation, drag, bend), widgets (`UiButton`, `UiToggle`, `UiSegmented`, `UiSlider`, `UiTextField`, `UiList`, `UiTabs`, `UiProgress`, `UiDivider`), `UiViz` (canvases drawn from pooled shapes: `UiChart`, `UiFlow`, `UiSequence`, `UiTable`, `UiCodeView`, `UiRing`, `UiChangeMap`, `UiToolGrid`, `UiStorageBar`; the series palette), `UiMermaid` (flowchart / sequence / pie subset), `UiKeyboard` (Horizon OS system keyboard), `UiInputRouter` (pointers, beams, reticles, selection), `UiToasts`, `UiModal`, `UiSounds` |
+| `UI/` | `UiTheme` (colours, sizes, fonts), `UiShapeMesh` (batched shapes, rotated strokes), `UiPanel` (frame, header, open animation, drag, GPU bend slots, curved ray hits), `UiIconMesh` (tool logos atlas, batched icons), widgets (`UiButton`, `UiToggle`, `UiSegmented`, `UiSlider`, `UiTextField`, `UiList`, `UiTabs`, `UiProgress`, `UiDivider`), `UiViz` (canvases drawn from pooled shapes: `UiChart`, `UiFlow`, `UiSequence`, `UiTable`, `UiCodeView`, `UiRing`, `UiChangeMap`, `UiToolGrid`, `UiStorageBar`; the series palette), `UiMermaid` (flowchart / sequence / pie subset), `UiKeyboard` (Horizon OS system keyboard), `UiInputRouter` (pointers, beams, reticles, selection), `UiToasts`, `UiModal`, `UiSounds` |
 | `Hands/` | `GestureEngine` (built-ins, pose templates, custom gestures with hold/cooldown, head-relative directions), `PoseSpec`, `OvrHandSource` (OVRHand/OVRSkeleton), `SimulatedHands` (any pose, for tests) |
 | `Scripting/` | `ScriptHost`: Lua (MoonSharp) scripts and plugin folders, hot reload, sandbox, instruction budget, detectors as persistent coroutines, persisted state; `PoseJson` |
 | `Security/` | `SecretVault` (Android Keystore sealer, Editor dev sealer, policies, access log) |
 | `AI/` | `QvacHost` (starts the local AI service process, token, restarts), `QvacClient` (HTTP), `VoiceRecorder` (microphone, end of speech), `VoiceCommands` (registry, phrase templates, tool specs) |
 | `Shell/` | `MetaCodexShell` (wiring, panels by id and aliases, control-port commands), `ShellPanels` (dock, terminals, files, git logic, browser, scripts, settings, saved layouts), `ShellGestures` (Gestures studio, bindings, actions, recording, starter plugins), `ShellAgents` (agents, threads grouped by project, thread with composer chips and fork, new thread, terminal links), `ShellWorkspace` (the thread's linked workspace module, the picker), `ShellViews` + `ViewStage` (agent views, the physics stage), `ShellVault` (vault: secrets and GIT with the GitHub account; secret broker), `ShellVoice` (voice pipeline, shell commands, VOICE panel, HUD), `ShellAmbient` (Ambient Focus), `ShellSystem` (installed tools, storage), `ShellLayout` (fixed / float carousel, the thread + workspace pair), `Services` (system deep links, settings, MQH client, git, files) |
-| `../Resources/Shaders/` | `AmbientFocus`, `StageLit` (physics bodies), `ViewImage` (images in views): in Resources so they ship without material assets |
+| `../Resources/Shaders/` | `AmbientFocus` (sphere fallback), `FocusMesh` (dome on the room's surfaces), `TextBend` (TMP SDF + bend), `UiIcon` (logos + bend), `StageLit` (physics bodies), `ViewImage` (images in views): in Resources so they ship without material assets |
+| `../Resources/ToolIcons/` | tool logos (Simple Icons, CC0 SVG data; each logo is its owner's trademark, shown only to name the tool), built by `tools/make-tool-icons.js` |
 | `../Plugins/Android/MetaCodexVault.java` | the Keystore bridge (AES-256-GCM, StrongBox or TEE) |
 
 ## Panels
@@ -54,7 +70,7 @@ foveated rendering (off by default; it blurs the edges of the view), sounds and 
 | Picker | a short list in front of the panel that asked: model, effort, access, fork target, context, packages |
 | New thread | provider, model (from MQH's catalogue for that provider), permissions (EDITS / AUTO / FULL), workspace (project checkout or a new git worktree), first message, START |
 | Vault | SECRETS: secrets (names only), where the key lives (StrongBox / TEE), policy (ASK / ONCE / ALLOW / DENY), new value (secure keyboard), → MQH ENV, re-arm, delete, access log; approval dialogs for requests from Linux (`docs/secrets.md`). GIT (was the GIT panel; `git` still opens it): the GitHub account (TOKEN… sealed as `GITHUB_TOKEN`, TEST asks api.github.com who it is, IDENTITY… sets user.name / email, GIT USES IT installs the credential helper `!mcx-secret git-credential GITHUB_TOKEN` for github.com, → AGENTS gives GH_TOKEN / GITHUB_TOKEN to MQH threads) and the repositories (status, branches, history, fetch / pull / commit / push) |
-| System | TOOLS: a tile per known tool (runtimes, package managers, compilers, git, editors, network, agent CLIs) with its version, plain category glyphs; a tap installs (in a terminal, low priority), updates or removes it; PACKAGES… (Debian packages you chose, npm globals). STORAGE: the headset (Linux, AI models, shared folder, apps + system, free), Linux by folder with one-tap cleanups (apt, npm, bun, pip/uv, cargo, temp), a soft LINUX LIMIT (Android cannot reserve or cap an app's space: the app warns past it) |
+| System | TOOLS: a tile per known tool (runtimes, package managers, compilers, git, editors, network, agent CLIs) with its own logo on its brand colour (a category glyph when it has none) and its version; the list is also written for agents as `/mnt/quest/system/tools.json` (`mcx-ui system tools [json]`), so they know what is installed without probing the terminal; a tap installs (in a terminal, low priority), updates or removes it; PACKAGES… (Debian packages you chose, npm globals). STORAGE: the headset (Linux, AI models, shared folder, apps + system, free), Linux by folder with one-tap cleanups (apt, npm, bun, pip/uv, cargo, temp), a soft LINUX LIMIT (Android cannot reserve or cap an app's space: the app warns past it) |
 | Voice | the local AI service (state, RAM), models (install with progress, loaded or not), TALK, TYPE… (a command as text), SAY… (text to speech), spoken replies, LLM fallback, auto stop, language, threads, the command list (shell + plugins), the last requests with timings (`docs/voice.md`) |
 | Voice HUD | above the dock while a voice request runs: listening level, transcript, result; STOP |
 | Settings | GESTURES (click by pinch/poke/both, move panels by header pinch or closed hand, ray mode, pinch threshold, clap, plugin gestures on/off, select tool), DISPLAY (layout fixed/float, distance, carousel radius, scale, bending, save / load named layouts, recenter), FOCUS (Ambient Focus: on/off, radius, intensity, softness, presets SUBTLE / FOCUS / BLACKOUT), LOOK (sharpness, opacity, shadows, foveation, sounds), DAEMON (MQH URL and token, sync, status, plugins), ABOUT |
@@ -118,14 +134,23 @@ panels are kept; older ones rebuild from their spec when opened again (workspace
 
 ## Ambient Focus
 
-Settings > FOCUS, FOCUS on the dock, `focus:on|off|toggle` (actions), "focus mode on" (voice). A sphere
-around the head (`Resources/Shaders/AmbientFocus`) is drawn before everything else and darkens the
-passthrough: per pixel, by how far the view ray meets the floor plane (tracking is floor-level), with
-RADIUS where the fade starts, SOFTNESS its width and INTENSITY the darkness; above the horizon there is no
-distance, so it fades fully. Panels, terminals and views draw on top: BLACKOUT (radius 0, 100 %) leaves only
-the windows. Why not real distances: Meta's Depth API needs the Unity OpenXR Meta package (and AR
-Foundation) with this project's OpenXR loader; the floor plane needs nothing. Passthrough can be darkened,
-not blurred (Horizon OS composites it).
+Settings > FOCUS, FOCUS on the dock, `focus:on|off|toggle` (actions), voice ("open ambient focus", "turn on
+ambient focus and set intensity to 0"). A dome stands on the floor around you: inside it the room stays
+visible, outside it the passthrough darkens. RADIUS is the dome's size (measured from the floor under your
+head), SOFTNESS the width of its edge, INTENSITY the darkness; BLACKOUT (radius 0, 100 %) leaves only the
+windows and your hands.
+
+- **The real room.** With Space Setup data (Meta scene anchors: room mesh, walls, floor, furniture; the
+  permission "spatial data", `com.oculus.permission.USE_SCENE`), the room's surfaces are drawn with the dome
+  (`Resources/Shaders/FocusMesh`): a wall 1 m away stays visible, one 4 m away fades. FOCUS shows whether
+  the room was loaded.
+- **Without Space Setup** the sphere fallback (`Resources/Shaders/AmbientFocus`) estimates distances from
+  the floor plane; above the horizon it fades fully.
+- **Hands** are cut out of the darkness (soft capsules along the tracked bones), so they always show.
+- **Blur** is not possible on the passthrough itself: Horizon OS composites it under the app and apps can
+  only darken it. A blurred room would need the camera image (Passthrough Camera Access) blurred and drawn
+  by the app (a follow-up). Meta's Depth API would give per-pixel distances but needs the Unity OpenXR Meta
+  package with this project's OpenXR loader.
 
 ## Layouts
 
