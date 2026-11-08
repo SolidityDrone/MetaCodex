@@ -4,15 +4,21 @@
 # One-shot batch Editor on this project (no GUI, exits when done): -executeMethod
 # MetaCodex.EditorTools.MetaCodexSetup.<method>. Run it in the background; it prints a summary at the end.
 # Guards for this machine (16 GB laptop, other Editors and bb running): refuses to start below
-# MIN_MB available RAM (default 4500), stops ITS OWN Unity process (by PID, never by name) if
-# Windows drops below KILL_MB (default 700) or the time limit passes, and refuses if another Editor
-# already has this project open.
+# MIN_MB available RAM (default 4500, never below 3000), stops ITS OWN Unity process (by PID, never by
+# name) if Windows drops below KILL_MB (default 700, never below), or the time limit passes, and refuses
+# if another Editor already has this project open.
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/../unity" && pwd)" # the Unity project
 METHOD="${1:?method: BatchSetup | BatchSelfTest | BatchBuild}"
 MAXMIN="${2:-60}"
 MIN_MB="${MIN_MB:-4500}"
 KILL_MB="${KILL_MB:-700}"
+# floors (2026-11-08): with KILL_MB=250 Unity pushed Windows down until the bb IDE's UI (Chrome) starved and bb
+# went down; the Editor must stop itself first. Override only for a run nobody watches: UNSAFE_GUARDS=1.
+if [[ "${UNSAFE_GUARDS:-0}" != 1 ]]; then
+  if [[ "$KILL_MB" -lt 700 ]]; then echo "KILL_MB=$KILL_MB raised to 700 (below that the bb IDE starves)"; KILL_MB=700; fi
+  if [[ "$MIN_MB" -lt 3000 ]]; then echo "MIN_MB=$MIN_MB raised to 3000 (a UI test needs ~2.3 GB + bb's headroom)"; MIN_MB=3000; fi
+fi
 VER=$(sed -n 's/^m_EditorVersion: //p' "$ROOT/ProjectSettings/ProjectVersion.txt")
 EXE_W="C:\\Program Files\\Unity $VER\\Editor\\Unity.exe"
 P_W=$(wslpath -w "$ROOT")
