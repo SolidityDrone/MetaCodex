@@ -172,8 +172,8 @@ namespace MetaCodex.Shell
             UpdateFixedBend();
         }
 
-        /// Fixed layout with "Bend panels": each panel curves towards you around its own distance (5 cm steps, so
-        /// text is not rebuilt every frame). Terminals stay flat (their text grid cannot bend yet).
+        /// Fixed layout with "Bend panels": each panel curves towards you around its own distance (bent on the GPU,
+        /// eased by the panel, so it follows you smoothly). Terminals stay flat (their text grid cannot bend yet).
         public void UpdateFixedBend()
         {
             if (Floating || Settings == null) return;
@@ -184,7 +184,7 @@ namespace MetaCodex.Shell
                 if (!Settings.bendPanels || p.Id.StartsWith("term-") || head == null) { p.SetBend(0f); continue; }
                 var d = p.transform.position - head.position;
                 float dist = Mathf.Max(0.45f, new Vector2(d.x, d.z).magnitude);
-                p.SetBend(Mathf.Round(dist / 0.05f) * 0.05f);
+                p.SetBend(dist); // the GPU bends; the panel eases towards it (no steps)
             }
         }
 
@@ -231,8 +231,8 @@ namespace MetaCodex.Shell
             UpdateWorkspaceLink();
             if (!Floating)
             {
-                // fixed: re-bend now and then (panels are dragged, the user walks); cheap when nothing changed
-                if (Settings.bendPanels && Time.unscaledTime >= _nextFixedBend) { _nextFixedBend = Time.unscaledTime + 0.5f; UpdateFixedBend(); }
+                // fixed: follow the distance every frame (panels are dragged, the user walks): only a uniform changes
+                if (Settings.bendPanels) UpdateFixedBend();
                 return;
             }
             if (_carousel == null) EnterFloat();

@@ -19,6 +19,7 @@ Shader "MetaCodex/SciFiUI"
         _Opacity ("Panel opacity", Range(0.3, 1)) = 0.9
         _Motion ("Motion speed", Range(0, 2)) = 1
         _Grid ("Grid", Range(0, 1)) = 1
+        _PanelIndex ("Panel slot (set per renderer)", Float) = -1
     }
     SubShader
     {
@@ -27,7 +28,18 @@ Shader "MetaCodex/SciFiUI"
         HLSLINCLUDE
         #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
+        // the bend of every panel: x = radius (0 flat), indexed by the renderer's _PanelIndex (UiPanel)
+        float4 _PanelBend[128];
+
+        float3 BendPanel(float3 p, float r)
+        {
+            if (r <= 0.01) return p;
+            float a = p.x / r;
+            return float3(r * sin(a), p.y, p.z - r * (1.0 - cos(a)));
+        }
+
         CBUFFER_START(UnityPerMaterial)
+            float _PanelIndex;
             float _Scanlines;
             float _GlowBoost;
             float _Opacity;
@@ -60,7 +72,8 @@ Shader "MetaCodex/SciFiUI"
             Varyings o;
             UNITY_SETUP_INSTANCE_ID(v);
             UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(o);
-            o.positionCS = TransformObjectToHClip(v.positionOS.xyz);
+            float r = _PanelIndex >= 0.0 ? _PanelBend[(int)_PanelIndex].x : 0.0;
+            o.positionCS = TransformObjectToHClip(BendPanel(v.positionOS.xyz, r));
             o.color = v.color;
             o.uv = v.uv;
             o.shape = v.shape;
@@ -90,7 +103,8 @@ Shader "MetaCodex/SciFiUI"
             #pragma vertex vertDepth
             #pragma fragment fragDepth
 
-            // the body's depth sits 1.5 mm behind it, so the colour pass's own shapes never fail against it
+            // the body's depth sits 1.5 mm behind it: buttons and rows on a bent panel are split into other columns
+            // than the body, so their chords can dip a hair behind the body's and would fail the depth test
             Varyings vertDepth(Attributes v)
             {
                 v.positionOS.z += 0.0015;

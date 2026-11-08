@@ -48,6 +48,9 @@ namespace MetaCodex.UI
             shapesGo.transform.SetParent(transform, false);
             Shapes = shapesGo.AddComponent<UiShapeMesh>();
             Shapes.Init(Theme.ShapeMaterial);
+            Hook();
+            ClaimSlot();
+            TagRenderer(shapesGo.GetComponent<MeshRenderer>(), Vector3.zero);
             _body = Shapes.Add(Shape(UiShapeKind.Panel, new Rect(0, 0, width, height), Theme.Frame, Theme.CutBig, Theme.CutSmall));
             if (header)
             {
@@ -132,34 +135,93 @@ namespace MetaCodex.UI
         /// Hides the title bar's own close button (terminal frames have their own buttons there).
         public void HideCloseButton() => _close?.SetVisible(false);
 
-        /// Ray against the panel plane; panel point when it hits inside the frame.
+        /// Ray against the panel's drawn surface (its plane, or its cylinder when bent); the panel point when the
+        /// ray hits inside the frame. Pointers land where the panel is drawn, not on its flat projection.
         public bool Raycast(Ray ray, out Vector2 panelPoint, out float distance)
         {
             panelPoint = default;
             distance = 0f;
-            if (!IsOpen) return false;
-            var n = transform.forward;
-            float denom = Vector3.Dot(n, ray.direction);
-            if (Mathf.Abs(denom) < 1e-5f) return false;
-            float t = Vector3.Dot(transform.position - ray.origin, n) / denom;
-            if (t < 0f) return false;
-            var hit = ray.origin + ray.direction * t;
-            panelPoint = LocalToPanel(transform.InverseTransformPoint(hit));
-            distance = t;
+            if (!IsOpen || !Intersect(ray, out var local, out distance)) return false;
+            panelPoint = SurfaceToPanel(local);
             return panelPoint.x >= -0.004f && panelPoint.y >= -0.004f && panelPoint.x <= Width + 0.004f && panelPoint.y <= Height + 0.004f;
         }
 
-        /// Plane intersection without the bounds check (dragging continues outside the panel).
+        /// The same without the bounds check (dragging continues outside the panel).
         public bool ProjectRay(Ray ray, out Vector2 panelPoint)
         {
             panelPoint = default;
-            var n = transform.forward;
-            float denom = Vector3.Dot(n, ray.direction);
-            if (Mathf.Abs(denom) < 1e-5f) return false;
-            float t = Vector3.Dot(transform.position - ray.origin, n) / denom;
-            if (t < 0f) return false;
-            panelPoint = LocalToPanel(transform.InverseTransformPoint(ray.origin + ray.direction * t));
+            if (!Intersect(ray, out var local, out _)) return false;
+            panelPoint = SurfaceToPanel(local);
             return true;
+        }
+
+        /// Where a ray meets the drawn surface, in panel-local space. Bent: the cylinder x² + (z + r)² = r², on the
+        /// side away from its axis (z + r > 0), which is where the panel is.
+        private bool Intersect(Ray ray, out Vector3 local, out float distance)
+        {
+            local = default;
+            distance = 0f;
+            float r = _bendCurrent;
+            if (r <= 0f)
+            {
+                var n = transform.forward;
+                float denom = Vector3.Dot(n, ray.direction);
+                if (Mathf.Abs(denom) < 1e-5f) return false;
+                float t = Vector3.Dot(transform.position - ray.origin, n) / denom;
+                if (t < 0f) return false;
+                var hit = ray.origin + ray.direction * t;
+                local = transform.InverseTransformPoint(hit);
+                distance = t;
+                return true;
+            }
+            var o = transform.InverseTransformPoint(ray.origin);
+            var d = transform.InverseTransformVector(ray.direction);
+            float ox = o.x, oz = o.z + r, dx = d.x, dz = d.z;
+            float A = dx * dx + dz * dz;
+            if (A < 1e-9f) return false;
+            float B = 2f * (ox * dx + oz * dz), C = ox * ox + oz * oz - r * r;
+            float disc = B * B - 4f * A * C;
+            if (disc < 0f) return false;
+            float sq = Mathf.Sqrt(disc);
+            float t0 = (-B - sq) / (2f * A), t1 = (-B + sq) / (2f * A), th = -1f;
+            if (t0 >= 0f && oz + t0 * dz > 0f) th = t0;
+            if (t1 >= 0f && oz + t1 * dz > 0f && (th < 0f || t1 < th)) th = t1;
+            if (th < 0f) return false;
+            local = o + d * th;
+            distance = Vector3.Distance(ray.origin, transform.TransformPoint(local));
+            return true;
+        }
+
+        /// A point on the drawn surface (panel-local) -> panel coordinates (the arc length along a bent panel).
+        private Vector2 SurfaceToPanel(Vector3 local)
+        {
+            float r = _bendCurrent;
+            if (r <= 0f) return LocalToPanel(local);
+            float a = Mathf.Atan2(local.x, local.z + r);
+            return new Vector2(a * r + Width * 0.5f, Height * 0.5f - local.y);
+        }
+
+        /// A world point (a fingertip) -> panel coordinates and its depth off the drawn surface (< 0: in front,
+        /// towards the user), on a bent panel too.
+        public void SurfaceOf(Vector3 world, out Vector2 panelPoint, out float depth)
+        {
+            var local = transform.InverseTransformPoint(world);
+            float r = _bendCurrent;
+            if (r <= 0f) { panelPoint = LocalToPanel(local); depth = local.z; return; }
+            float zr = local.z + r;
+            panelPoint = new Vector2(Mathf.Atan2(local.x, zr) * r + Width * 0.5f, Height * 0.5f - local.y);
+            depth = Mathf.Sqrt(local.x * local.x + zr * zr) - r;
+        }
+
+        /// Panel coordinates -> the world point where that spot is drawn (bent or flat), `depth` off the surface
+        /// along its normal (< 0: towards the user).
+        public Vector3 SurfacePoint(Vector2 panelPoint, float depth = 0f)
+        {
+            float r = _bendCurrent;
+            var flat = PanelToLocal(panelPoint, depth);
+            if (r <= 0f) return transform.TransformPoint(flat);
+            float a = flat.x / r, rr = r + depth;
+            return transform.TransformPoint(new Vector3(rr * Mathf.Sin(a), flat.y, -r + rr * Mathf.Cos(a)));
         }
 
         public UiElement HitTest(Vector2 p)
@@ -213,21 +275,83 @@ namespace MetaCodex.UI
 
         public void SetHighlight(float state) => Shapes.SetState(_body, state);
 
-        // ------------------------------------------------------------------ bending (float layout)
+        // ------------------------------------------------------------------ bending (GPU)
 
-        /// 0 = flat. Otherwise shapes and texts curve around a vertical axis `radius` in front of the panel.
-        public float BendRadius => Shapes != null ? Shapes.BendRadius : 0f;
-        private readonly HashSet<TMP_Text> _bendDirty = new HashSet<TMP_Text>();
+        // A bent panel curves around a vertical axis `radius` in front of it (towards the user). The vertex
+        // shaders of its shapes (MetaCodex/SciFiUI) and texts (MetaCodex/TextBend) bend every vertex from one global
+        // array, _PanelBend[slot].x = the radius drawn now; each renderer carries its panel's slot (and a text its
+        // offset in the panel) in a property block. Changing the bend costs nothing on the CPU, eases smoothly (no
+        // 5 cm ticks), and a text that changes every frame is never drawn flat for a frame.
+        public const int MaxSlots = 128;
+        private static readonly UiPanel[] Slots = new UiPanel[MaxSlots];
+        private static readonly Vector4[] BendData = new Vector4[MaxSlots];
+        private static int _pushedFrame = -1;
+        private static readonly int BendArrayId = Shader.PropertyToID("_PanelBend");
+        private static readonly int IndexId = Shader.PropertyToID("_PanelIndex");
+        private static readonly int OffsetId = Shader.PropertyToID("_TextOffset");
+        private static MaterialPropertyBlock _mpb;
         private static bool _hooked;
+        public int Slot { get; private set; } = -1;
+        private float _bendTarget, _bendCurrent;
+
+        /// 0 = flat. The radius the layout asked for; BendNow is what is drawn (it eases towards this).
+        public float BendRadius => _bendTarget;
+        public float BendNow => _bendCurrent;
+
+        private void ClaimSlot()
+        {
+            for (int i = 0; i < MaxSlots; i++)
+                if (Slots[i] == null) { Slots[i] = this; Slot = i; BendData[i] = Vector4.zero; return; }
+            Slot = -1; // out of slots: this panel stays flat
+        }
+
+        protected virtual void OnDestroy()
+        {
+            if (Slot >= 0 && Slots[Slot] == this) { Slots[Slot] = null; BendData[Slot] = Vector4.zero; }
+        }
 
         public void SetBend(float radius)
         {
-            radius = radius < 0.05f ? 0f : radius;
-            if (Mathf.Abs(BendRadius - radius) < 1e-3f) return;
-            Hook();
-            Shapes.BendRadius = radius;
-            // regenerate flat geometry; the change event marks each text for bending
-            foreach (var t in GetComponentsInChildren<TextMeshPro>(true)) { t.ForceMeshUpdate(); _bendDirty.Add(t); }
+            _bendTarget = radius < 0.05f ? 0f : radius;
+            if (!Application.isPlaying) SnapBend(); // Editor self-tests: no frame loop to ease it
+        }
+
+        /// Jump to the target bend now (tests, rebuilt panels).
+        public void SnapBend()
+        {
+            _bendCurrent = _bendTarget;
+            if (Slot >= 0) BendData[Slot] = new Vector4(_bendCurrent, 0f, 0f, 0f);
+        }
+
+        private void EaseBend(float dt)
+        {
+            if (Mathf.Approximately(_bendCurrent, _bendTarget)) return;
+            // ease the curvature (1/r): flat <-> bent is then as smooth as one radius to another
+            float k0 = _bendCurrent > 0f ? 1f / _bendCurrent : 0f, k1 = _bendTarget > 0f ? 1f / _bendTarget : 0f;
+            float k = Mathf.Lerp(k0, k1, 1f - Mathf.Exp(-dt * 9f));
+            if (Mathf.Abs(k - k1) < 0.002f) k = k1;
+            _bendCurrent = k > 1e-3f ? 1f / k : 0f;
+            if (k == k1) _bendCurrent = _bendTarget;
+            if (Slot >= 0) BendData[Slot] = new Vector4(_bendCurrent, 0f, 0f, 0f);
+        }
+
+        /// The bend of every panel to the shaders (once a frame; self-tests call it before rendering).
+        public static void PushBendGlobals()
+        {
+            Shader.SetGlobalVectorArray(BendArrayId, BendData);
+            _pushedFrame = Time.frameCount;
+        }
+
+        /// Tags a renderer of this panel (shapes, a text, a text's fallback sub-mesh) with the panel's slot and, for
+        /// a text, where its origin sits in the panel.
+        public void TagRenderer(Renderer r, Vector3 offset)
+        {
+            if (r == null) return;
+            _mpb ??= new MaterialPropertyBlock();
+            r.GetPropertyBlock(_mpb);
+            _mpb.SetFloat(IndexId, Slot);
+            _mpb.SetVector(OffsetId, offset);
+            r.SetPropertyBlock(_mpb);
         }
 
         private static void Hook()
@@ -237,45 +361,27 @@ namespace MetaCodex.UI
             TMPro_EventManager.TEXT_CHANGED_EVENT.Add(OnAnyTextChanged);
         }
 
+        /// Glyphs from fallback fonts live in TMP sub-meshes created on the fly: tag them like their text.
         private static void OnAnyTextChanged(UnityEngine.Object obj)
         {
-            if (!(obj is TextMeshPro t) || t == null) return;
+            if (!(obj is TextMeshPro t) || t == null || t.transform.childCount == 0) return;
             var panel = t.GetComponentInParent<UiPanel>();
-            if (panel != null && panel.BendRadius > 0f) panel._bendDirty.Add(t);
+            if (panel == null) return;
+            foreach (var sub in t.GetComponentsInChildren<TMP_SubMesh>(true))
+                panel.TagRenderer(sub.renderer, t.rectTransform.localPosition);
         }
 
-        private void LateUpdate() => ApplyBendNow();
+        /// Kept for callers of the old CPU bending: texts are bent on the GPU now.
+        public void ApplyBendNow() { SnapBend(); PushBendGlobals(); }
 
-        /// Bends the texts that changed since the last call (LateUpdate; self-tests call it directly).
-        public void ApplyBendNow()
+        private void LateUpdate()
         {
-            if (_bendDirty.Count == 0) return;
-            float r = BendRadius;
-            var list = new List<TMP_Text>(_bendDirty);
-            _bendDirty.Clear();
-            foreach (var t in list)
-            {
-                if (t == null || r <= 0f) continue;
-                var ti = t.textInfo;
-                if (ti == null || ti.meshInfo == null) continue;
-                var tt = t.transform;
-                for (int m = 0; m < ti.meshInfo.Length; m++)
-                {
-                    var verts = ti.meshInfo[m].vertices;
-                    if (verts == null) continue;
-                    int n = Mathf.Min(ti.meshInfo[m].vertexCount, verts.Length);
-                    for (int k = 0; k < n; k++)
-                    {
-                        var pl = transform.InverseTransformPoint(tt.TransformPoint(verts[k]));
-                        verts[k] = tt.InverseTransformPoint(transform.TransformPoint(UiShapeMesh.Bend(pl, r)));
-                    }
-                }
-                t.UpdateVertexData(TMP_VertexDataUpdateFlags.Vertices);
-            }
+            if (_pushedFrame != Time.frameCount) PushBendGlobals();
         }
 
         protected virtual void Update()
         {
+            EaseBend(Time.unscaledDeltaTime);
             if (_openT < 1f)
             {
                 _openT = Mathf.Min(1f, _openT + Time.unscaledDeltaTime / 0.18f);
@@ -291,6 +397,8 @@ namespace MetaCodex.UI
         public void ForceRefresh()
         {
             _openT = 1f;
+            SnapBend();
+            PushBendGlobals();
             transform.localScale = _baseScale;
             Tick?.Invoke(this);
             foreach (var e in Elements) if (e.Visible) e.Update();
@@ -312,7 +420,7 @@ namespace MetaCodex.UI
             var go = new GameObject("text");
             go.transform.SetParent(panel.transform, false);
             var t = go.AddComponent<TextMeshPro>();
-            if (font != null) t.font = font;
+            ApplyFont(t, font);
             t.fontSize = panel.Theme.FontSizeFor(lineHeight);
             t.color = color;
             t.alignment = align;
@@ -325,14 +433,27 @@ namespace MetaCodex.UI
             ut.SetRect(r);
             var mr = go.GetComponent<MeshRenderer>();
             if (mr != null) mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            panel.TagRenderer(mr, t.rectTransform.localPosition);
             return ut;
         }
 
         public void SetRect(Rect r)
         {
+            bool moved = Rect.position != r.position;
             Rect = r;
             Tmp.rectTransform.sizeDelta = r.size;
             Tmp.rectTransform.localPosition = _panel.PanelToLocal(r.position, -0.0012f);
+            if (moved) _panel.TagRenderer(Tmp.GetComponent<MeshRenderer>(), Tmp.rectTransform.localPosition);
+        }
+
+        /// Sets the font and makes sure its material bends with the panel (the terminal's font asset keeps TMP's
+        /// own shader for the terminal itself; panel texts get a bending copy of its material).
+        public static void ApplyFont(TextMeshPro t, TMP_FontAsset font)
+        {
+            if (font == null) return;
+            if (t.font != font) t.font = font;
+            var m = font.material;
+            if (m != null && m.shader != null && m.shader.name != "MetaCodex/TextBend") t.fontSharedMaterial = UiTheme.BendMaterialFor(font);
         }
 
         public string Text { get => Tmp.text; set { if (Tmp.text != value) Tmp.text = value ?? ""; } }

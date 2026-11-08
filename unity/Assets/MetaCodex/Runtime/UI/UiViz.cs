@@ -170,7 +170,7 @@ namespace MetaCodex.UI
             else { t = UiText.Create(Panel, r, "", font, lineHeight, color, align, wrap); _texts.Add(t); }
             _nt++;
             var tmp = t.Tmp;
-            if (font != null && tmp.font != font) tmp.font = font;
+            if (font != null && tmp.font != font) UiText.ApplyFont(tmp, font);
             float fs = Theme.FontSizeFor(lineHeight);
             if (!Mathf.Approximately(tmp.fontSize, fs)) tmp.fontSize = fs;
             tmp.color = color;

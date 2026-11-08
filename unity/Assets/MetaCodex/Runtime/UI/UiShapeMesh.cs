@@ -22,16 +22,8 @@ namespace MetaCodex.UI
 
         public int Count => _shapes.Count;
 
-        /// 0 = flat. Otherwise the shapes curve around a vertical axis this far in front of the panel (towards
-        /// the user), like a curved monitor: quads are split into narrow columns and bent.
-        public float BendRadius
-        {
-            get => _bend;
-            set { if (Mathf.Abs(_bend - value) < 1e-4f) return; _bend = value; _dirty = true; }
-        }
-        private float _bend;
-
-        /// Panel-local point -> its place on the bend cylinder (identity when flat).
+        /// Panel-local point -> its place on the bend cylinder (identity when flat). The shaders bend the same way
+        /// (UiPanel: the bend is drawn on the GPU); this is for pointers and placement.
         public static Vector3 Bend(Vector3 v, float radius)
         {
             if (radius <= 0f) return v;
@@ -114,8 +106,8 @@ namespace MetaCodex.UI
                 var lin = UiTheme.Lin(s.Tint);
                 var shape = new Vector4(s.Size.x, s.Size.y, s.Margin, (float)s.Kind);
                 var style = new Vector4(s.CutBig, s.CutSmall, s.Border, s.State);
-                // flat: one quad; bent: columns of about 1.5 cm so the curve stays smooth
-                int cols = _bend > 0f ? Mathf.Clamp(Mathf.CeilToInt(hw * 2f / 0.015f), 1, 64) : 1;
+                // columns of about 1.5 cm, so the shader can bend wide shapes smoothly
+                int cols = Mathf.Clamp(Mathf.CeilToInt(hw * 2f / 0.015f), 1, 64);
                 int i0 = _v.Count;
                 float cs = 1f, sn = 0f; // rotated shapes (diagram edges, chart lines): around the centre, in the panel plane
                 if (s.Rotation != 0f) { cs = Mathf.Cos(s.Rotation); sn = Mathf.Sin(s.Rotation); }
@@ -123,8 +115,8 @@ namespace MetaCodex.UI
                 {
                     float u = (float)k / cols;
                     float x = -hw + u * hw * 2f;
-                    _v.Add(Bend(s.Center + new Vector3(x * cs + hh * sn, x * sn - hh * cs, 0f), _bend));
-                    _v.Add(Bend(s.Center + new Vector3(x * cs - hh * sn, x * sn + hh * cs, 0f), _bend));
+                    _v.Add(s.Center + new Vector3(x * cs + hh * sn, x * sn - hh * cs, 0f));
+                    _v.Add(s.Center + new Vector3(x * cs - hh * sn, x * sn + hh * cs, 0f));
                     _uv.Add(new Vector2(u, 0f)); _uv.Add(new Vector2(u, 1f));
                     _c.Add(lin); _c.Add(lin); _shape.Add(shape); _shape.Add(shape); _style.Add(style); _style.Add(style);
                 }
@@ -143,6 +135,10 @@ namespace MetaCodex.UI
             _mesh.SetUVs(2, _style);
             _mesh.SetTriangles(_tris, 0);
             _mesh.RecalculateBounds();
+            // bent in the vertex shader: grow the bounds so the panel is not culled while it curves towards you
+            var bb = _mesh.bounds;
+            bb.Expand(new Vector3(0f, 0f, Mathf.Max(0.3f, bb.size.x)));
+            _mesh.bounds = bb;
         }
 
         private void OnDestroy()

@@ -91,6 +91,19 @@ namespace MetaCodex.UI
             return sb.ToString();
         }
 
+        private static readonly Dictionary<TMP_FontAsset, Material> BendMaterials = new Dictionary<TMP_FontAsset, Material>();
+
+        /// A copy of a font's material with the bending text shader (for font assets made elsewhere: the terminal's).
+        public static Material BendMaterialFor(TMP_FontAsset font)
+        {
+            if (BendMaterials.TryGetValue(font, out var m) && m != null) return m;
+            var sh = Resources.Load<Shader>("Shaders/TextBend") ?? Shader.Find("MetaCodex/TextBend");
+            m = new Material(font.material) { name = font.name + " (bend)" };
+            if (sh != null) m.shader = sh;
+            BendMaterials[font] = m;
+            return m;
+        }
+
         /// Runtime SDF font asset from a TTF (dynamic atlas: glyphs are added as text needs them), with an
         /// optional fallback chain for symbols.
         public static TMP_FontAsset MakeFont(Font font, IList<Font> fallbacks = null, int size = 72)
@@ -101,7 +114,8 @@ namespace MetaCodex.UI
             // no OpenType features at runtime: with Inter's large GPOS table they cost >1 GB as glyphs were added
             // (measured in the Editor); UI labels do not need kerning pairs
             fa.getFontFeatures = false;
-            var mobile = Shader.Find("TextMeshPro/Mobile/Distance Field");
+            // TMP's mobile SDF shader with the panel bend (UiPanel bends texts on the GPU)
+            var mobile = Resources.Load<Shader>("Shaders/TextBend") ?? Shader.Find("MetaCodex/TextBend") ?? Shader.Find("TextMeshPro/Mobile/Distance Field");
             if (mobile != null) fa.material.shader = mobile;
             if (fallbacks != null)
             {

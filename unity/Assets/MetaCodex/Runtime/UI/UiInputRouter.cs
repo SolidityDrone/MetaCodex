@@ -189,13 +189,12 @@ namespace MetaCodex.UI
             foreach (var p in Panels)
             {
                 if (p == null || !p.IsOpen) continue;
-                var local = p.transform.InverseTransformPoint(tip);
-                var pt = p.LocalToPanel(local);
+                p.SurfaceOf(tip, out var pt, out float depth); // the drawn surface, bent or flat
                 if (pt.x < 0 || pt.y < 0 || pt.x > p.Width || pt.y > p.Height) continue;
-                // local z < 0 is in front of the panel (towards the user)
-                if (local.z < -0.04f || local.z > 0.03f) continue;
-                float d = Mathf.Abs(local.z);
-                if (d < best) { best = d; panel = p; point = pt; z = local.z; }
+                // depth < 0 is in front of the panel (towards the user)
+                if (depth < -0.04f || depth > 0.03f) continue;
+                float d = Mathf.Abs(depth);
+                if (d < best) { best = d; panel = p; point = pt; z = depth; }
             }
             return panel != null;
         }
@@ -208,7 +207,7 @@ namespace MetaCodex.UI
                 if (!NearestPokePanel(p.Tip, out panel, out point, out float z)) { p.PokeTouching = false; p.Down = false; return false; }
                 p.PokeTouching = p.PokeTouching ? z > -0.014f : z > -0.006f;
                 p.Down = p.PokeTouching;
-                p.HitPoint = panel.transform.TransformPoint(panel.PanelToLocal(point));
+                p.HitPoint = panel.SurfacePoint(point);
                 return true;
             }
             float best = float.MaxValue;
@@ -225,9 +224,8 @@ namespace MetaCodex.UI
         {
             if (p.Kind == PointerKind.Poke)
             {
-                pt = panel.LocalToPanel(panel.transform.InverseTransformPoint(p.Tip));
-                var local = panel.transform.InverseTransformPoint(p.Tip);
-                p.PokeTouching = local.z > -0.014f;
+                panel.SurfaceOf(p.Tip, out pt, out float depth);
+                p.PokeTouching = depth > -0.014f;
                 p.Down = p.PokeTouching;
                 return true;
             }
