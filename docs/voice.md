@@ -1,8 +1,8 @@
 # Voice control and the local AI service
 
-Status: v0.2, 2026-11-07. Runs in the APK on the Quest 3S (0.4: service process on cores 0-2, models
+Status: v0.3, 2026-11-08. Runs in the APK on the Quest 3S (0.4: service process on cores 0-2, models
 installed on the headset); 0.5 makes the cycle faster (measured below) and fixes the service after the
-headset sleeps.
+headset sleeps; 0.6 confirms actions silently (the HUD shows them) and adds `set_focus` and the SYSTEM panel.
 
 ## What it does
 
@@ -15,7 +15,9 @@ Push-to-talk, then the headset does the rest, privately, with no cloud:
    -> fast path: a phrase template of a command matches        -> run it   (~0 ms)
       else the local LLM writes one command line ("open_panel git"), held to the valid ones by a
       grammar                                                   -> run it   (~0.5 s)
-   -> HUD above the dock ("✓ Opened GIT"), optional spoken reply (Supertonic 3)
+   -> HUD above the dock ("✓ Opened GIT"); actions are confirmed there only (0.6: a spoken "Opened GIT"
+      arrived seconds after the action and was annoying); spoken replies are for answers (commands marked
+      `speak`, e.g. a plugin's `voice.command{speak=true}`)
 ```
 
 Examples that work out of the box: "open the providers page", "close all windows", "find the thread where
@@ -42,6 +44,10 @@ tool), phrase templates for the fast path, and a run function. The shell registe
 | `type_text` | `text` | "type {text}" |
 | `run_in_terminal` | `command` (confirmed in VR) | "run {command}" |
 | `show_keyboard` | | "show the keyboard" |
+| `set_focus` | `state`: on off | "focus mode on", "turn off the focus", "darken the room" (Ambient Focus) |
+
+`open_panel` also knows `system` ("open storage", "show the installed tools") and `git` opens the vault's GIT
+tab.
 
 Phrase templates: words, `(a|b)` one of, `[a|b]` optional, `{param}` captures words. Text is matched lower
 case without punctuation or apostrophes, after fillers ("hey", "could you", "please", "now") are dropped.
@@ -127,6 +133,24 @@ wav /mnt/quest/f.wav | listen | install | threads N | lang en|it|auto`.
 | Health checks skip a busy service; 6 s timeout; restarts that actually restart; the app binds to the service | the service is no longer restarted under load, and survives the headset sleeping |
 
 Voices: Supertonic 3 has ten, F1-F5 and M1-M5 (VOICE panel; `mcx-ui voice voice M2`).
+
+## GPU? (measured 2026-11-08, Quest 3S, the app not running)
+
+QVAC's Android prebuilds carry an OpenCL backend for Adreno (and Vulkan). On the headset it works once
+`libqvac-ggml-vulkan.so` is next to the OpenCL one (fabric detects the Adreno version through Vulkan; without
+it: "no adreno GPU version found (-2) removing OpenCL backend") and `LD_LIBRARY_PATH` includes
+`/vendor/lib64`. Forcing the Vulkan backend aborts (SIGABRT).
+
+| | CPU | GPU (OpenCL) |
+|---|---|---|
+| LLM (Qwen3 0.6B q4_0) | 37 tok/s with 2 threads, 57 with 6 | 13.8 tok/s (29/29 layers on the GPU; first load 29.6 s compiling kernels) |
+| Speech-to-text (Whisper base) | 430-450 ms | 328-346 ms (-22 %) |
+| Text-to-speech (Supertonic 3) | 1.7-3.7 s | 1.5-3.2 s (-12 %) |
+
+So the LLM stays on the CPU (2.7x slower on the GPU), and the small speech gains do not pay for sharing
+the GPU with the app's rendering (frame rate first) and the extra 70 MB of libraries. What does cost time
+on the headset is the app itself: with MetaCodex running the service gets 14-17 tok/s instead of 37 (CPU
+level, the shared cores, memory). Kept as measured for a later decision; not in the APK.
 
 ## Measured (Quest 3S, MetaCodex running at 72 fps, nice 10)
 

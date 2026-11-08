@@ -1,7 +1,10 @@
 # MetaCodex spatial UI: style, panels, gestures, plugins, agents, layouts
 
-Status: v0.5, 2026-11-07. v0.4 tested on the headset; v0.5 is the owner's bug list from that test (input,
-look, layouts, terminals, dock) and faster voice, tested in the Editor (151 checks).
+Status: v0.6, 2026-11-08. v0.5: the owner's bug list from the 0.4 test and faster voice. v0.6: threads
+grouped by project with a linked workspace module (changes map, git, files, views), bb-like composer chips
+(model, access, context) and FORK, agent views (charts, diagrams, tables, choices, physics), GIT moved into
+the vault with the GitHub account, Ambient Focus, the SYSTEM panel (installed tools, storage). Tested in
+the Editor; not yet on the headset.
 Test list for the headset: `docs/TEST_CHECKLIST.md`.
 
 ## Style
@@ -23,34 +26,38 @@ foveated rendering (off by default; it blurs the edges of the view), sounds and 
 
 | Folder | What |
 |---|---|
-| `UI/` | `UiTheme` (colours, sizes, fonts), `UiShapeMesh` (batched shapes, bending), `UiPanel` (frame, header, open animation, drag, bend), widgets (`UiButton`, `UiToggle`, `UiSegmented`, `UiSlider`, `UiTextField`, `UiList`, `UiTabs`, `UiProgress`, `UiDivider`), `UiKeyboard` (Horizon OS system keyboard), `UiInputRouter` (pointers, beams, reticles, selection), `UiToasts`, `UiModal`, `UiSounds` |
+| `UI/` | `UiTheme` (colours, sizes, fonts), `UiShapeMesh` (batched shapes, bending, rotated strokes), `UiPanel` (frame, header, open animation, drag, bend), widgets (`UiButton`, `UiToggle`, `UiSegmented`, `UiSlider`, `UiTextField`, `UiList`, `UiTabs`, `UiProgress`, `UiDivider`), `UiViz` (canvases drawn from pooled shapes: `UiChart`, `UiFlow`, `UiSequence`, `UiTable`, `UiCodeView`, `UiRing`, `UiChangeMap`, `UiToolGrid`, `UiStorageBar`; the series palette), `UiMermaid` (flowchart / sequence / pie subset), `UiKeyboard` (Horizon OS system keyboard), `UiInputRouter` (pointers, beams, reticles, selection), `UiToasts`, `UiModal`, `UiSounds` |
 | `Hands/` | `GestureEngine` (built-ins, pose templates, custom gestures with hold/cooldown, head-relative directions), `PoseSpec`, `OvrHandSource` (OVRHand/OVRSkeleton), `SimulatedHands` (any pose, for tests) |
 | `Scripting/` | `ScriptHost`: Lua (MoonSharp) scripts and plugin folders, hot reload, sandbox, instruction budget, detectors as persistent coroutines, persisted state; `PoseJson` |
 | `Security/` | `SecretVault` (Android Keystore sealer, Editor dev sealer, policies, access log) |
 | `AI/` | `QvacHost` (starts the local AI service process, token, restarts), `QvacClient` (HTTP), `VoiceRecorder` (microphone, end of speech), `VoiceCommands` (registry, phrase templates, tool specs) |
-| `Shell/` | `MetaCodexShell` (wiring, panels by id, control-port commands), `ShellPanels` (dock, terminals, files, git, browser, scripts, settings, themes, saved layouts), `ShellGestures` (Gestures studio, bindings, actions, recording, starter plugins), `ShellAgents` (agents, threads, thread, new thread, terminal links), `ShellVault` (vault panel, secret broker), `ShellVoice` (voice pipeline, shell commands, VOICE panel, HUD), `ShellLayout` (fixed / float carousel), `Services` (system deep links, settings, MQH client, git, files) |
+| `Shell/` | `MetaCodexShell` (wiring, panels by id and aliases, control-port commands), `ShellPanels` (dock, terminals, files, git logic, browser, scripts, settings, saved layouts), `ShellGestures` (Gestures studio, bindings, actions, recording, starter plugins), `ShellAgents` (agents, threads grouped by project, thread with composer chips and fork, new thread, terminal links), `ShellWorkspace` (the thread's linked workspace module, the picker), `ShellViews` + `ViewStage` (agent views, the physics stage), `ShellVault` (vault: secrets and GIT with the GitHub account; secret broker), `ShellVoice` (voice pipeline, shell commands, VOICE panel, HUD), `ShellAmbient` (Ambient Focus), `ShellSystem` (installed tools, storage), `ShellLayout` (fixed / float carousel, the thread + workspace pair), `Services` (system deep links, settings, MQH client, git, files) |
+| `../Resources/Shaders/` | `AmbientFocus`, `StageLit` (physics bodies), `ViewImage` (images in views): in Resources so they ship without material assets |
 | `../Plugins/Android/MetaCodexVault.java` | the Keystore bridge (AES-256-GCM, StrongBox or TEE) |
 
 ## Panels
 
 | Panel | Does |
 |---|---|
-| Dock (two rows of 8, a grab bar on top to move it) | TERM (shows the hidden terminal, else a new one), terminals, files, git, agents, threads, web, scripts / gestures, vault, TALK (push-to-talk), setup, keyboard, select tool (one selection, then off), recenter, voice |
+| Dock (two rows of 9, a grab bar on top to move it) | TERM (shows the hidden terminal, else a new one), terminals, files, threads, agents, web, scripts, gestures, SYSTEM / TALK (push-to-talk), voice, vault, git (the vault's GIT tab), FOCUS (Ambient Focus on/off), select tool (one selection, then off), keyboard, recenter, setup |
 | Terminal frames | every terminal in a frame: drag by the header, `⇗` open the link the terminal printed (sign-in flows), `⎘` paste the clipboard, `⌨` keyboard, `+` new, `–` hide (the shell keeps running), `✕` end it (the last one is hidden instead), tap to focus. The first terminal starts hidden: TERM on the dock shows it |
 | Terminals | list of terminal instances (hidden ones marked): new, show, hide, close |
 | Files | the Linux userland's folders (`/root`, `/mnt/quest`, `/`): open folders, cd / view / edit / paste path |
-| Git | repositories under `/root`: branch, ahead/behind, upstream, changes, branches, history as metro lines; fetch, pull (ff-only), commit, checkout |
 | Browser | URL field (system keyboard) opens the Horizon OS browser (`systemux://browser`), bookmarks, local servers on 127.0.0.1, shortcuts to Horizon settings and Files |
 | Scripts | Lua scripts and plugins: status, enable/disable, reload, example, delete, log; gesture monitor |
 | Gestures | studio: GESTURES (all gestures with source, live state, bindings, TEST, source, delete pose), LIVE (finger curls of both hands, palm/thumb direction, velocity, active gestures, recent events, Lua detector cost), BIND (gesture → action, no code), RECORD (3-2-1, the hand's pose becomes a named gesture in plugin `my-poses`; new plugin from a template), PLUGINS (enable/disable/reload/delete/folder) |
 | Agents | MQH's providers with sign-in state, version, account; SIGN IN runs the provider's own login in a new terminal; INSTALL / UPDATE through MQH; enable/disable; NEW THREAD; OPEN LINK |
-| Threads | MQH projects (+ PROJECT from a Linux folder) and their threads with status (running, error, needs you); new, open, stop |
-| Thread | the timeline (you, agent, commands, tools, file edits, errors; newest at the bottom, ▲▼ to scroll), composer (system keyboard) + SEND, approvals (ALLOW ONCE / SESSION / DENY), STOP, jumps to the workspace's FILES, GIT and a TERMINAL there |
+| Threads | like bb's sidebar: each project folder (+ PROJECT from a Linux folder) with its threads under it, newest first; the project row shows how many run or need you, a tap folds it; a tap on a thread opens it |
+| Thread | the timeline (you, agent, commands, tools, file edits with line counts, views as `[▣ title]`; newest at the bottom, ▲▼), approvals (ALLOW ONCE / SESSION / DENY, only while one is pending), composer + SEND, and the chips under it: MODEL (+ effort), ACCESS (Edits / Auto / Full access), the workspace (project · checkout or worktree), the CONTEXT ring (use of the model's window; tap: compact or fork), STOP; on top FORK…, WORKSPACE (the module on/off), ⟳ |
+| Workspace (linked to the thread) | right of the thread, following it (drag it: it keeps that place relative to the thread; in FLOAT it rides beside it on the ring; it closes with the thread). CHANGES: a live map of the files the thread touched (tile size = lines changed, colour = added / changed / deleted / moved, lit when just edited; grey = uncommitted but not from this thread), the list, the diff of the picked file (@ ASK puts its path in the composer). GIT: branch, ahead/behind, status, branches, history; fetch, pull, commit, push. FILES: the folder tree, preview, EDIT in a terminal, @ ASK. VIEWS: the thread's agent views, DEMO |
+| Views | agent views (below): one panel per view, named "View · title"; the same id updates in place |
+| Picker | a short list in front of the panel that asked: model, effort, access, fork target, context, packages |
 | New thread | provider, model (from MQH's catalogue for that provider), permissions (EDITS / AUTO / FULL), workspace (project checkout or a new git worktree), first message, START |
-| Vault | secrets (names only), where the key lives (StrongBox / TEE), policy (ASK / ONCE / ALLOW / DENY), new value (secure keyboard), → MQH ENV, re-arm, delete, access log; approval dialogs for requests from Linux (`docs/secrets.md`) |
+| Vault | SECRETS: secrets (names only), where the key lives (StrongBox / TEE), policy (ASK / ONCE / ALLOW / DENY), new value (secure keyboard), → MQH ENV, re-arm, delete, access log; approval dialogs for requests from Linux (`docs/secrets.md`). GIT (was the GIT panel; `git` still opens it): the GitHub account (TOKEN… sealed as `GITHUB_TOKEN`, TEST asks api.github.com who it is, IDENTITY… sets user.name / email, GIT USES IT installs the credential helper `!mcx-secret git-credential GITHUB_TOKEN` for github.com, → AGENTS gives GH_TOKEN / GITHUB_TOKEN to MQH threads) and the repositories (status, branches, history, fetch / pull / commit / push) |
+| System | TOOLS: a tile per known tool (runtimes, package managers, compilers, git, editors, network, agent CLIs) with its version, plain category glyphs; a tap installs (in a terminal, low priority), updates or removes it; PACKAGES… (Debian packages you chose, npm globals). STORAGE: the headset (Linux, AI models, shared folder, apps + system, free), Linux by folder with one-tap cleanups (apt, npm, bun, pip/uv, cargo, temp), a soft LINUX LIMIT (Android cannot reserve or cap an app's space: the app warns past it) |
 | Voice | the local AI service (state, RAM), models (install with progress, loaded or not), TALK, TYPE… (a command as text), SAY… (text to speech), spoken replies, LLM fallback, auto stop, language, threads, the command list (shell + plugins), the last requests with timings (`docs/voice.md`) |
 | Voice HUD | above the dock while a voice request runs: listening level, transcript, result; STOP |
-| Settings | GESTURES (click by pinch/poke/both, move panels by header pinch or closed hand, ray mode, pinch threshold, clap, plugin gestures on/off, select tool), DISPLAY (layout fixed/float, distance, carousel radius, scale, bending, save / load named layouts, recenter), LOOK (theme presets, accent, glow, opacity, motion, scanlines, grid, sounds), DAEMON (MQH URL and token, sync, status, plugins), ABOUT |
+| Settings | GESTURES (click by pinch/poke/both, move panels by header pinch or closed hand, ray mode, pinch threshold, clap, plugin gestures on/off, select tool), DISPLAY (layout fixed/float, distance, carousel radius, scale, bending, save / load named layouts, recenter), FOCUS (Ambient Focus: on/off, radius, intensity, softness, presets SUBTLE / FOCUS / BLACKOUT), LOOK (sharpness, opacity, shadows, foveation, sounds), DAEMON (MQH URL and token, sync, status, plugins), ABOUT |
 
 ## Hands
 
@@ -93,6 +100,33 @@ command per provider), `/system/execution-options?providerId=&hostId=` (models),
 `/settings/machine-environment`. Sign-in never goes through MetaCodex: the provider CLI prints a link,
 the terminal frame offers `⇗`, the Horizon browser opens it, and the CLI keeps its own credentials.
 
+## Agent views
+
+Agents show things as panels instead of text (skill `quest-views`, the MCP-like context they read): a
+fenced ```` ```mcx-view {json} ```` or ```` ```mermaid ```` block in a thread message (registered when the
+message arrives, opened when it arrives while the thread is open; the timeline shows `[▣ title]`), or from
+Linux `mcx-ui view show spec.json | view mermaid f.mmd | view list | view wait <id> | view schema`
+(control port `view …`). One spec: `{id, title, size, columns, components:[…]}` with `text`, `stats`,
+`chart` (bar, hbar, line, area, scatter, donut, pie, sparkline; one axis, the validated colour-blind-safe
+palette in order, legend from 2 series, hover readout), `graph` / `mermaid` (flowchart with layered layout,
+sequence, pie), `table` (drag to scroll), `code` / `diff` / `log`, `progress`, `checklist`, `timeline`,
+`kanban`, `kv`, `choices` and `input` (the answer goes back as the user's next message, or to
+`view wait`), `image` (PNG/JPG from Linux) and `scene3d` (a Unity physics stage on a shelf in front of the
+view: rigid bodies with per-stage gravity, carried along when the panel moves, pushed by the index
+fingertips; RUN / PAUSE / RESET). The same id replaces a view in place (live charts). The newest 12 view
+panels are kept; older ones rebuild from their spec when opened again (workspace VIEWS).
+
+## Ambient Focus
+
+Settings > FOCUS, FOCUS on the dock, `focus:on|off|toggle` (actions), "focus mode on" (voice). A sphere
+around the head (`Resources/Shaders/AmbientFocus`) is drawn before everything else and darkens the
+passthrough: per pixel, by how far the view ray meets the floor plane (tracking is floor-level), with
+RADIUS where the fade starts, SOFTNESS its width and INTENSITY the darkness; above the horizon there is no
+distance, so it fades fully. Panels, terminals and views draw on top: BLACKOUT (radius 0, 100 %) leaves only
+the windows. Why not real distances: Meta's Depth API needs the Unity OpenXR Meta package (and AR
+Foundation) with this project's OpenXR loader; the floor plane needs nothing. Passthrough can be darkened,
+not blurred (Horizon OS composites it).
+
 ## Layouts
 
 - **Fixed**: panels are world-locked where you leave them, bent towards you when "Bend panels around you" is
@@ -104,7 +138,8 @@ the terminal frame offers `⇗`, the Horizon browser opens it, and the CLI keeps
   your head's pitch or roll, 4° apart; when the open panels do not fit around it the cylinder grows, so
   they never overlap, and a panel you drop slides to the nearest free place at its height. Close your hand
   in empty space and swipe to spin it (inertia, no snapping). Panels bend to the cylinder; terminals stay
-  flat. The dock stays low in front.
+  flat. The dock stays low in front. The thread and its workspace take one slot together: the workspace
+  sits right beside the thread and comes back there after a drag.
 - Boundaryless: the app declares `com.oculus.feature.BOUNDARYLESS_APP` (passthrough only).
 
 ## Testing without a headset

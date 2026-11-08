@@ -1,4 +1,4 @@
-# Headset test checklist (MetaCodex 0.5, 2026-11-07)
+# Headset test checklist (MetaCodex 0.6, 2026-11-08)
 
 Tick each line on the Quest. "→" is what should happen. Items marked **(MQH)** need MQH reachable at
 127.0.0.1:38990 from the headset: until MQH runs on the headset (roadmap step 1-2), run it in WSL
@@ -169,3 +169,44 @@ Reference: `docs/voice.md`. The models are not in the APK: install them once (53
 - [ ] A plugin with `voice.command{...}` (skill quest-scripting) → its phrase works by voice; `mcx-ui voice match "<phrase>"`
 - [ ] Gestures > BIND: `palm-up` (left) → `voice:toggle` → hands-free TALK
 - [ ] Kill the service (`mcx-ai log` shows its pid; or restart the app) → it restarts by itself
+
+## 14. 0.6: threads, workspace, views, vault git, focus, system
+
+Threads and the workspace (MQH):
+- [ ] Dock: two rows of 9 (… SYSTEM / TALK, VOICE, VAULT, GIT, FOCUS, SELECT, KEYS, CENTER, SETUP)
+- [ ] THREADS: one list, each project folder in capitals with its threads under it (newest first); the project row says how many run / need you; a tap folds it; a tap on a thread opens it
+- [ ] THREAD opens with the WORKSPACE module on its right; drag the thread → the module follows; drag the module somewhere else → it stays there relative to the thread; close the thread → the module closes
+- [ ] FLOAT layout: the module rides right beside the thread on the ring; nothing overlaps; drag it away → it snaps back beside the thread
+- [ ] Ask the agent to edit two files → CHANGES: a tile per file appears and lights up while it is edited (green added, amber changed, red deleted); grey tiles = uncommitted files the thread did not touch
+- [ ] Tap a tile → the diff below (green / red lines); ▲ ▼ scroll; @ ASK puts the path into the composer
+- [ ] GIT tab: branch, ↑↓, status, branches, history; COMMIT… / PUSH work in the thread's folder
+- [ ] FILES tab: the folder tree (tap folders to open), preview of a file, EDIT opens nano in a terminal
+- [ ] Chips under the composer: MODEL ▾ (models of the provider, then effort) → the next message uses it; ACCESS ▾ (Edits / Auto / Full access); the workspace chip; the CONTEXT ring with % (tap: compact or fork); ■ STOP
+- [ ] ⑂ FORK… → "Same agent" → a new thread with the same conversation opens; FORK to another provider → a new thread in the same folder that knows what was said (it summarises where things stand)
+
+Agent views:
+- [ ] WORKSPACE > VIEWS > DEMO → a "What agents can show" panel: stats, a line chart, a diagram, a donut, a checklist, choices and a physics shelf in front with balls and boxes
+- [ ] Push a ball with your index fingertip → it rolls; ❚❚ PAUSE / ▶ RUN / ⟲ RESET work; move the panel → the scene moves with it
+- [ ] Hover a chart → the value shows in its top-right corner; hover a diagram node → its edges light up
+- [ ] Ask a thread agent "show the architecture of this repo as a diagram" → a view opens by itself; the timeline shows `[▣ …]` instead of the code block
+- [ ] An agent view with choices → tap one → it arrives in the thread as your message
+- [ ] In a terminal: `mcx-ui view schema`, then `mcx-ui view show spec.json` (the skill's example) → the view opens; `mcx-ui view wait <id>` returns your tap
+
+Vault > GIT:
+- [ ] GIT on the dock (or voice "open git") → VAULT opens on its GIT tab
+- [ ] TOKEN… (a GitHub token) → TEST → "● <your login>"; IDENTITY… sets name / email
+- [ ] GIT USES IT → `git push` to a github.com https remote works without asking for a password (the vault logs the request)
+- [ ] → AGENTS → threads get GH_TOKEN (`gh auth status` in a thread)
+
+Ambient Focus:
+- [ ] FOCUS on the dock → the room fades except the floor near you; the panels stay bright; FOCUS again → back
+- [ ] Settings > FOCUS: RADIUS, INTENSITY, SOFTNESS change it live; BLACKOUT → black around you, only the windows
+- [ ] "focus mode on" / "focus mode off" by voice
+- [ ] Frame rate with focus on stays about 72 fps
+
+SYSTEM:
+- [ ] SYSTEM > TOOLS: tiles for what is installed (git, node, npm, python3, curl, …) with versions; missing ones dimmed ("+ install")
+- [ ] Tap a missing tool (e.g. jq) → Install → a terminal runs the install; ⟳ CHECK → it shows as installed
+- [ ] PACKAGES… → Debian packages you chose and npm globals
+- [ ] STORAGE: the headset bar (Linux, AI models, shared, apps + system, free) and Linux by folder; tap a cache → CLEAN; LINUX LIMIT below the current size → warning
+

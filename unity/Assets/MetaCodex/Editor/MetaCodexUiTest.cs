@@ -135,6 +135,12 @@ namespace MetaCodex.EditorTools
                 if (Want("agentsandthreads")) AgentsAndThreads(shell);
                 if (Want("voicecontrol")) VoiceControl(shell);
                 if (Want("fixes")) Fixes(shell, head, frame, term, view);
+                if (Want("views")) Views(shell, head, tmp);
+                if (Want("workspace")) Workspace(shell, head);
+                if (Want("threadgroups")) ThreadGroups(shell);
+                if (Want("vaultgit")) VaultGit(shell);
+                if (Want("focus")) Focus(shell, head);
+                if (Want("system")) SystemPanel(shell, tmp);
             }
             catch (Exception ex) { Fail("exception: " + ex); }
             finally
@@ -154,7 +160,7 @@ namespace MetaCodex.EditorTools
 
         private static void Glyphs(MetaCodexShell shell)
         {
-            string needed = "▶▤◫⎇◎ƒ⚙⌨⌖⟲✕↑⌂▸·↪●◆◇◎▣⚠✓▌•↓−⟳✋⚿☰⇗⎘◈✎⇢⇣○■▲▼→";
+            string needed = "▶▤◫⎇◎ƒ⚙⌨⌖⟲✕↑⌂▸·↪●◆◇◎▣⚠✓▌•↓−⟳✋⚿☰⇗⎘◈✎⇢⇣○■▲▼→⑂◧◐☑☐▾❚λ⚒⛁⇅⬢✦‹›";
             foreach (var (name, font) in new[] { ("display", UiTheme.Current.Display), ("body", UiTheme.Current.Body) })
             {
                 font.HasCharacters(needed, out uint[] missing, true, true);
@@ -305,7 +311,7 @@ namespace MetaCodex.EditorTools
             RenderPanel(settings, "ui-settings-display.png");
             var lookTab = settings.Elements.OfType<UiButton>().First(b => b.Text == "LOOK");
             Click(r, settings, lookTab.Rect.center);
-            Check(tabs.Selected == 2, "tab click switches to LOOK");
+            Check(tabs.Names[tabs.Selected] == "LOOK", "tab click switches to LOOK");
             var fov = settings.Elements.OfType<UiToggle>().First(t => t.Text.StartsWith("Foveated"));
             bool before = fov.Value;
             Click(r, settings, fov.Rect.center);
@@ -390,6 +396,28 @@ namespace MetaCodex.EditorTools
             hands.Hide(Handedness.Right);
             Tick();
             Check(!g.Right.Tracked, "hand lost ends its gestures");
+
+            // a real clap often loses tracking right at contact (the hands occlude each other): still a clap
+            int claps = 0;
+            System.Action<GestureEvent> onClap = e => { if (e.Name == "clap") claps++; };
+            g.OnGesture += onClap;
+            try
+            {
+                var c = new Vector3(0f, 1.25f, 0.35f);
+                for (float half = 0.16f; half > 0.045f; half -= 0.012f) // fast approach (~0.7 m/s per palm)
+                {
+                    hands.SetOpen(Handedness.Left, c + Vector3.left * half, Vector3.forward, Vector3.right);
+                    hands.SetOpen(Handedness.Right, c + Vector3.right * half, Vector3.forward, Vector3.left);
+                    Tick();
+                }
+                hands.Hide(Handedness.Left);
+                hands.Hide(Handedness.Right);
+                Tick(); Tick();
+                Check(claps == 1, $"clap when both hands vanish at contact ({claps} claps)");
+                for (int i = 0; i < 60; i++) Tick(); // hands gone for a second: one clap only, re-armed after
+                Check(claps == 1, "no second clap while the hands stay lost");
+            }
+            finally { g.OnGesture -= onClap; }
         }
 
         /// Two claps: palms approach fast and touch, separate, touch again.
@@ -452,7 +480,7 @@ end)
             host.Scan();
             t += 1.5f;
             Claps(shell, hands, ref t, 2);
-            Check(shell.PanelsById["git"].IsOpen && !shell.PanelsById["files"].IsOpen, "edited script reloaded live: double clap now opens git");
+            Check(shell.IsPanelOpen("git") && !shell.PanelsById["files"].IsOpen, "edited script reloaded live: double clap now opens git");
 
             // 3. a runaway script is stopped, the others keep working
             File.WriteAllText(Path.Combine(dir, "bad.lua"), "gesture.on('clap', function() while true do end end)\n");
@@ -463,7 +491,7 @@ end)
             Claps(shell, hands, ref t, 2);
             var bad = host.Entries.First(e => e.Name == "bad");
             Check(bad.Error != null && bad.Error.Contains("instructions"), $"endless loop stopped by the instruction budget in {sw.ElapsedMilliseconds} ms");
-            Check(shell.PanelsById["git"].IsOpen, "other scripts unaffected");
+            Check(shell.IsPanelOpen("git"), "other scripts unaffected");
 
             // 4. state that survives a restart: per-script store + enabled flags
             File.WriteAllText(Path.Combine(dir, "counter.lua"), "gesture.on('clap', function() store.set('n', tostring((tonumber(store.get('n')) or 0) + 1)) end)\n");
@@ -517,7 +545,7 @@ end)
             var repos = shell.Git.FindRepos(GitService.ToLinuxPath(Path.GetFullPath("..")), 1).GetAwaiter().GetResult();
             Check(repos.Count >= 1, "git repos found: " + string.Join(", ", repos));
             shell.OpenPanel("git");
-            var gp = shell.PanelsById["git"];
+            var gp = shell.PanelsById["vault"]; // GIT lives in the vault now
             typeof(MetaCodexShell).GetMethod("GitShow", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).Invoke(shell, new object[] { st });
             gp.ForceRefresh();
             RenderPanel(gp, "ui-git.png");
@@ -531,7 +559,7 @@ end)
             var c = shell.CarouselCenter;
             float r = shell.Settings.carouselRadius;
             bool onCircle = true;
-            foreach (var id in new[] { "settings", "files", "git" })
+            foreach (var id in new[] { "settings", "files", "vault" })
             {
                 var p = shell.PanelsById[id].transform.position;
                 float d = new Vector2(p.x - c.x, p.z - c.z).magnitude;
@@ -650,7 +678,7 @@ end)
             hands.Hide(Handedness.Right);
             shell.TickGesturesForTest(0.2f);
             Move(shell, hands, palm, new Vector3(0f, 0f, 1.5f), Vector3.forward, 0.25f);
-            Check(!shell.PanelsById["git"].IsOpen && shell.Toasts.Last == "pushed right", "push detector closed git (reaction ran)");
+            Check(!shell.IsPanelOpen("git") && shell.Toasts.Last == "pushed right", "push detector closed git (reaction ran)");
 
             // no-code binding
             shell.AddBinding("victory", "open:vault");
@@ -686,7 +714,7 @@ end)
             // control port vocabulary
             Check(shell.ControlCommand("plugin", "list").Contains("core-poses"), "control port: plugin list");
             Check(shell.ControlCommand("gesture", "list").Contains("swipe-left lua"), "control port: gesture list shows Lua gestures");
-            Check(shell.ControlCommand("action", "open:git") == "ok" && shell.PanelsById["git"].IsOpen, "control port: action open:git");
+            Check(shell.ControlCommand("action", "open:git") == "ok" && shell.IsPanelOpen("git"), "control port: action open:git");
             Check(shell.ControlCommand("gesture", "bind clap toggle:files") == "ok" && shell.ControlCommand("gesture", "bindings").Contains("clap"), "control port: gesture bind");
             shell.ControlCommand("gesture", "unbind clap");
 
@@ -738,19 +766,19 @@ end)
             shell.TickGesturesForTest(0.3f);
             shell.PoseHand(Handedness.Right, 0, 1, 1, 1, 1, Vector3.up);
             shell.TickGesturesForTest(0.6f);
-            Check(shell.PanelsById["git"].IsOpen, "agent plugin: right thumbs-up opened git");
+            Check(shell.IsPanelOpen("git"), "agent plugin: right thumbs-up opened git");
             hands.Hide(Handedness.Right);
             shell.TickGesturesForTest(0.5f);
             var palm = shell.Gestures.Head.position + new Vector3(0.2f, -0.2f, 0.3f);
             Move(shell, hands, palm, new Vector3(0f, 0f, 1.6f), Vector3.forward, 0.3f);
             shell.TickGesturesForTest(0.2f);
-            Check(!shell.PanelsById["git"].IsOpen, "agent plugin: pushing an open palm away closed git");
+            Check(!shell.IsPanelOpen("git"), "agent plugin: pushing an open palm away closed git");
             // a left thumbs-up must not open it (the user asked for the right hand)
             hands.Hide(Handedness.Right);
             shell.TickGesturesForTest(1.2f);
             shell.PoseHand(Handedness.Left, 0, 1, 1, 1, 1, Vector3.up);
             shell.TickGesturesForTest(0.6f);
-            Check(!shell.PanelsById["git"].IsOpen, "agent plugin: a LEFT thumbs-up does nothing");
+            Check(!shell.IsPanelOpen("git"), "agent plugin: a LEFT thumbs-up does nothing");
             hands.Hide(Handedness.Left);
             shell.TickGesturesForTest(0.2f);
         }
@@ -796,7 +824,7 @@ end)
             shell.OpenPanel("git");
             VoiceResult r = null;
             shell.VoiceProcessText("close all windows", x => r = x);
-            Check(r != null && r.Ok && r.Via == "fast" && !shell.PanelsById["files"].IsOpen && !shell.PanelsById["git"].IsOpen, "“close all windows” closes the panels: " + r);
+            Check(r != null && r.Ok && r.Via == "fast" && !shell.PanelsById["files"].IsOpen && !shell.IsPanelOpen("git"), "“close all windows” closes the panels: " + r);
             shell.VoiceProcessText("open the providers page", x => r = x);
             Check(r != null && r.Ok && shell.PanelsById["agents"].IsOpen, "“open the providers page” opens AGENTS: " + r);
             shell.ClosePanel("agents");
@@ -869,7 +897,7 @@ end)
                 r = null;
                 shell.VoiceProcessWav(wav, x => r = x);
                 shell.PumpForTest(60f);
-                Check(r != null && r.Ok && r.Command == "open_panel" && r.Transcript.ToLowerInvariant().Contains("git") && shell.PanelsById["git"].IsOpen,
+                Check(r != null && r.Ok && r.Command == "open_panel" && r.Transcript.ToLowerInvariant().Contains("git") && shell.IsPanelOpen("git"),
                     "spoken “Open the git panel.” -> " + r);
             }
             sw.Restart();
@@ -1018,7 +1046,7 @@ end)
             shell.ClosePanel("git");
             Check(shell.LoadNamedLayout("desk"), "layout 'desk' loads");
             var files1 = Quaternion.Euler(0f, -90f, 0f) * (shell.PanelsById["files"].transform.position - head.position);
-            Check(shell.PanelsById["git"].IsOpen && (files1 - files0).magnitude < 0.02f, $"saved layout restored around the user ({(files1 - files0).magnitude * 100f:F1} cm)");
+            Check(shell.IsPanelOpen("git") && (files1 - files0).magnitude < 0.02f, $"saved layout restored around the user ({(files1 - files0).magnitude * 100f:F1} cm)");
             head.position -= new Vector3(1f, 0f, 1f);
             head.rotation = Quaternion.identity;
         }
@@ -1086,6 +1114,319 @@ end)
             shell.PumpForTest(2f);
         }
 
+        // ------------------------------------------------------------------ 0.6: views, workspace, threads, vault git, focus, system
+
+        private static void Views(MetaCodexShell shell, Transform head, string tmp)
+        {
+            foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
+            shell.SetLayout("fixed");
+            string msg = "Here:\n```mermaid\ngraph LR\n  A[Parse] -->|ok| B{Valid?}\n  B -- yes --> C([Run])\n  B -.-> D((Report))\n  A & C --> E[Done]\n```\nand\n```mcx-view\n{\"id\":\"t1\",\"title\":\"Times\",\"components\":[{\"type\":\"chart\",\"kind\":\"bar\",\"labels\":[\"a\",\"b\"],\"data\":[3,5]}]}\n```\n```mcx-view\n{bad json\n```";
+            var blocks = MetaCodexShell.ExtractViewBlocks(msg);
+            Check(blocks.Count == 3 && blocks[0].spec != null && blocks[1].spec != null && blocks[2].spec == null && blocks[2].error != null, $"view blocks in a message: mermaid + mcx-view + a bad one reported ({blocks.Count}: {blocks.Last().error})");
+            Check(MetaCodexShell.StripViewBlocks(msg).Contains("[▣ Times]") && !MetaCodexShell.StripViewBlocks(msg).Contains("```"), "the timeline shows a marker instead of the block: " + MetaCodexShell.StripViewBlocks(msg).Replace("\n", " ⏎ "));
+            Progress("views: blocks parsed");
+            var flow = new UiFlow();
+            UiMermaid.ParseFlow((string)blocks[0].spec["components"][0]["text"], flow, out string ferr);
+            Check(ferr == null && flow.Nodes.Count == 5 && flow.Edges.Count == 5 && flow.Direction == "LR" && flow.Get("B").Shape == "diamond" && flow.Get("C").Shape == "stadium" && flow.Get("D").Shape == "circle"
+                && flow.Edges.Any(e => e.From == "A" && e.To == "B" && e.Label == "ok") && flow.Edges.Any(e => e.From == "B" && e.To == "C" && e.Label == "yes") && flow.Edges.Any(e => e.To == "D" && e.Style == "dotted"),
+                $"mermaid flowchart: {flow.Nodes.Count} nodes, {flow.Edges.Count} edges, shapes and labels ({string.Join(", ", flow.Edges.Select(e => e.From + ">" + e.To + (e.Label != null ? ":" + e.Label : "")))})");
+            var seq = new UiSequence();
+            UiMermaid.ParseSequence("sequenceDiagram\nparticipant U as You\nU->>App: talk\nApp-->>U: done\nNote over U,App: fast\nloop retry\nApp->>App: again\nend", seq, out string serr);
+            Check(serr == null && seq.Participants.Count == 2 && seq.Messages.Count == 4 && seq.Messages[1].dashed && seq.Messages[2].note, $"mermaid sequence: {seq.Participants.Count} participants, {seq.Messages.Count} rows");
+            var pie = new UiChart();
+            UiMermaid.ParsePie("pie title Time\n\"Render\" : 46\n\"Idle\" : 24", pie, out string perr);
+            Check(perr == null && pie.Labels.Count == 2 && pie.Series[0].data.Sum() == 70 && pie.Title == "Time", "mermaid pie");
+
+            Progress("views: mermaid parsed");
+            shell.ShowDemoView();
+            Progress("views: demo built");
+            var vp = shell.PanelsById["view-demo"];
+            vp.ForceRefresh();
+            Check(vp.IsOpen && vp.Elements.OfType<UiChart>().Count() == 2 && vp.Elements.OfType<UiFlow>().Count() == 1 && vp.Elements.OfType<UiViewBlock>().Count() == 2,
+                $"demo view: {vp.Elements.OfType<UiChart>().Count()} charts, {vp.Elements.OfType<UiFlow>().Count()} diagram, {vp.Elements.OfType<UiViewBlock>().Count()} blocks, {vp.Width:F2} x {vp.Height:F2} m");
+            Progress("views: demo refreshed");
+            var stage = vp.GetComponentInChildren<ViewStage>();
+            Check(stage != null && stage.Count == 9, "scene3d: a physics stage with 9 bodies under the view: " + (stage != null ? stage.Count.ToString() : "none"));
+            if (stage != null)
+            {
+                var mode = Physics.simulationMode;
+                Physics.simulationMode = SimulationMode.Script;
+                try
+                {
+                    for (int i = 0; i < 240; i++) { stage.Step(1f / 72f); Physics.Simulate(1f / 72f); }
+                    var bodies = stage.GetComponentsInChildren<Rigidbody>().Where(b => !b.isKinematic).ToList();
+                    var local = bodies.Select(b => stage.transform.InverseTransformPoint(b.position)).ToList();
+                    bool onPlate = local.All(p => p.y > -0.02f && p.y < 0.3f && Mathf.Abs(p.x) < stage.Width / 2 + 0.04f && Mathf.Abs(p.z) < stage.Depth / 2 + 0.04f);
+                    float maxSpeed = bodies.Count > 0 ? bodies.Max(b => b.linearVelocity.magnitude) : 0f;
+                    Check(bodies.Count == 9 && onPlate, $"scene3d: after 3.3 s of physics the bodies are on the plate (lowest y {local.Min(p => p.y) * 100f:F1} cm, max speed {maxSpeed:F2} m/s)");
+                    stage.SetRunning(false);
+                    var frozen = bodies.Select(b => b.position).ToList();
+                    for (int i = 0; i < 30; i++) { stage.Step(1f / 72f); Physics.Simulate(1f / 72f); }
+                    Check(bodies.Select((b, i) => Vector3.Distance(b.position, frozen[i])).Max() < 1e-4f, "scene3d: PAUSE freezes the bodies");
+                    stage.SetRunning(true);
+                    vp.transform.position += new Vector3(0.3f, 0f, 0f);
+                    stage.Step(1f / 72f);
+                    var after = stage.GetComponentsInChildren<Rigidbody>().Where(b => !b.isKinematic).Select(b => stage.transform.InverseTransformPoint(b.position)).ToList();
+                    Check(after.Zip(local, (a, b) => Vector3.Distance(a, b)).Max() < 0.05f, "scene3d: moving the panel carries the bodies along");
+                    vp.transform.position -= new Vector3(0.3f, 0f, 0f);
+                    stage.Step(1f / 72f);
+                }
+                finally { Physics.simulationMode = mode; }
+            }
+            Progress("views: physics done");
+            var v = shell.FindView("demo");
+            string answer = null;
+            Check(shell.ViewAsyncCommand("view wait demo", r => answer = r), "view wait registers");
+            var choice = vp.Elements.OfType<UiButton>().FirstOrDefault(b => b.Text == "Physics");
+            choice?.Click();
+            Check(choice != null && v.Answer == "Physics" && answer == "answer Physics", "a tapped choice answers the waiting `view wait`: " + answer);
+            vp.ForceRefresh();
+            var pos = vp.transform.position - vp.transform.forward * 0.75f + Vector3.up * 0.18f;
+            RenderAt("ui-view-demo.png", pos, Quaternion.LookRotation((vp.transform.position + Vector3.down * 0.16f - pos).normalized), 62f, 1600, 1200);
+
+            Progress("views: rendered");
+            // control port: a spec file, live update by id, list, schema
+            string rel = "unity/Temp/mcx-uitest/view-spec.json";
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine("..", rel)));
+            File.WriteAllText(Path.Combine("..", rel), "{\"id\":\"live\",\"title\":\"Live\",\"components\":[{\"type\":\"progress\",\"items\":[{\"label\":\"build\",\"value\":0.3}]},{\"type\":\"table\",\"columns\":[\"file\",\"lines\"],\"rows\":[[\"a.cs\",12],[\"b.cs\",340]]},{\"type\":\"kanban\",\"columns\":[{\"title\":\"todo\",\"cards\":[\"x\",\"y\"]},{\"title\":\"done\",\"cards\":[{\"text\":\"z\",\"tone\":\"ok\"}]}]}]}");
+            string r1 = shell.ControlCommand("view", "show /" + rel);
+            File.WriteAllText(Path.Combine("..", rel), "{\"id\":\"live\",\"title\":\"Live 2\",\"components\":[{\"type\":\"progress\",\"items\":[{\"label\":\"build\",\"value\":0.9}]}]}");
+            string r2 = shell.ControlCommand("view", "show /" + rel);
+            Check(r1 == "ok live" && r2 == "ok live" && shell.Views.Count(x => x.Id == "live") == 1 && shell.FindView("live").Title == "Live 2" && shell.PanelsById["view-live"].IsOpen,
+                $"control port: view show reads a spec file; the same id updates in place ({r1}, {r2})");
+            Check(shell.ControlCommand("view", "list").Contains("live") && shell.ControlCommand("view", "schema").Contains("scene3d") && shell.ControlCommand("view", "show /nope.json").StartsWith("error"), "view list / schema / errors");
+            Check(shell.ControlCommand("view", "mermaid graph TD\\nX-->Y").StartsWith("ok"), "view mermaid from one line");
+            shell.ControlCommand("view", "clear");
+            Check(shell.Views.Count == 0 && !shell.PanelsById.Keys.Any(k => k.StartsWith("view-")), "view clear removes the views and their panels");
+        }
+
+        private static JObject Row(string kind, int seq, JObject fields) { var o = new JObject { ["kind"] = kind, ["sourceSeqEnd"] = seq, ["id"] = "r" + seq }; foreach (var p in fields.Properties()) o[p.Name] = p.Value; return o; }
+
+        private static void Workspace(MetaCodexShell shell, Transform head)
+        {
+            foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
+            shell.SetLayout("fixed");
+            shell.Settings.threadWorkspace = true;
+            string root = GitService.ToLinuxPath(Path.GetFullPath(".."));
+            long now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            var projects = new JArray { new JObject { ["id"] = "prj_t", ["name"] = "metacodex", ["sources"] = new JArray { new JObject { ["path"] = root } } } };
+            var row = new JObject
+            {
+                ["id"] = "thr_selftest", ["projectId"] = "prj_t", ["providerId"] = "claude-code", ["title"] = "Rework the thread panel", ["status"] = "running",
+                ["runtime"] = new JObject { ["displayStatus"] = "running" }, ["environmentPath"] = root, ["environmentBranchName"] = "main", ["environmentIsWorktree"] = false,
+                ["environmentId"] = "env_t", ["updatedAt"] = now,
+            };
+            string diff = "diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1,3 +1,4 @@\n using System;\n-old line\n+new line\n+another\n context\n";
+            var rows = new JArray
+            {
+                Row("conversation", 1, new JObject { ["role"] = "user", ["text"] = "Show me the workspace as a diagram" }),
+                Row("work", 3, new JObject { ["workKind"] = "file-change", ["status"] = "completed", ["change"] = new JObject { ["path"] = root + "/unity/Assets/MetaCodex/Runtime/Shell/ShellWorkspace.cs", ["kind"] = "add", ["movePath"] = null, ["diff"] = diff, ["diffStats"] = new JObject { ["added"] = 120, ["removed"] = 0 } } }),
+                Row("work", 4, new JObject { ["workKind"] = "command", ["status"] = "completed", ["command"] = "dotnet build", ["exitCode"] = 0 }),
+                Row("work", 5, new JObject { ["workKind"] = "file-change", ["status"] = "completed", ["change"] = new JObject { ["path"] = "unity/Assets/MetaCodex/Runtime/UI/UiViz.cs", ["kind"] = "update", ["movePath"] = null, ["diff"] = null, ["diffStats"] = new JObject { ["added"] = 40, ["removed"] = 12 } } }),
+                Row("conversation", 6, new JObject { ["role"] = "assistant", ["text"] = "Done. The module:\n```mermaid\ngraph LR\nT[Thread] --> W[Workspace]\nW --> C[Changes]\nW --> G[Git]\nW --> F[Files]\n```" }),
+            };
+            var usage = new JObject { ["usedTokens"] = 84000, ["modelContextWindow"] = 200000, ["estimated"] = false };
+            var exec = new JObject { ["model"] = "claude-opus", ["reasoningLevel"] = "high", ["permissionMode"] = "full" };
+            shell.LoadThreadForTest(row, rows, usage, exec, projects, true);
+            shell.PumpForTest(1f);
+            var th = shell.PanelsById["thread"];
+            var ws = shell.PanelsById["thread-ws"];
+            shell.TickLayoutForTest(0.05f, 3);
+            var rel = th.transform.InverseTransformPoint(ws.transform.position);
+            Check(th.IsOpen && ws.IsOpen && rel.x > th.Width * 0.5f && Mathf.Abs(rel.y) < 0.01f, $"the workspace opens beside the thread, to its right ({rel.x * 100f:F0} cm from its centre)");
+            var touched = shell.Touched.Values.Where(f => f.ByThread).ToList();
+            Check(touched.Count == 2 && touched.Any(f => f.Path == "unity/Assets/MetaCodex/Runtime/Shell/ShellWorkspace.cs" && f.Kind == "add" && f.Added == 120) && touched.Any(f => f.Path.EndsWith("UiViz.cs") && f.Kind == "modify" && f.Removed == 12),
+                "CHANGES: the thread's file changes, paths relative to the workspace: " + string.Join(", ", touched.Select(f => $"{f.Path} {f.Kind} +{f.Added}/-{f.Removed}")));
+            Check(shell.ChangeMapForTest.Items.Count >= 2, "the change map has a tile per file: " + shell.ChangeMapForTest.Items.Count);
+            string tl = shell.TimelineTextForTest;
+            Check(tl.Contains("[▣ Diagram]") && !tl.Contains("```") && tl.Contains("+120"), "THREAD timeline: view block as a marker, file changes with their line counts");
+            Check(shell.Views.Count(x => x.ThreadId == "thr_selftest") == 1 && shell.PanelsById.Keys.Any(k => k.StartsWith("view-") && shell.PanelsById[k].IsOpen), "the agent's diagram became a view and opened");
+            string chips = shell.ChipsForTest;
+            Check(chips.Contains("claude-opus") && chips.Contains("High") && chips.Contains("Full access") && chips.Contains("checkout") && chips.Contains("42%"), "composer chips: model + effort, access, workspace, context: " + chips);
+            shell.PickChangedFileForTest("unity/Assets/MetaCodex/Runtime/Shell/ShellWorkspace.cs");
+            Check(shell.DiffViewForTest.LineCount >= 8 && shell.DiffHeadForTest.Contains("+120"), $"picking a file shows its diff ({shell.DiffViewForTest.LineCount} lines)");
+            // the thread moves: the workspace follows; dragged elsewhere it keeps its new place relative to the thread
+            th.transform.position += new Vector3(0.2f, 0.1f, 0f);
+            shell.TickLayoutForTest(0.05f, 2);
+            var rel2 = th.transform.InverseTransformPoint(ws.transform.position);
+            Check((rel2 - rel).magnitude < 0.001f, "the workspace follows the thread panel");
+            // more work arrives: a new file lights up
+            shell.AppendTimelineForTest(new JArray { Row("work", 9, new JObject { ["workKind"] = "file-change", ["status"] = "completed", ["change"] = new JObject { ["path"] = root + "/docs/ui.md", ["kind"] = "update", ["movePath"] = null, ["diff"] = null, ["diffStats"] = new JObject { ["added"] = 8, ["removed"] = 2 } } }) });
+            var fresh = shell.Touched.TryGetValue("docs/ui.md", out var fr) ? fr : null;
+            Check(fresh != null && Time.unscaledTime - fresh.Time < 1f && shell.ChangeMapForTest.Items.First(i => i.Path == "docs/ui.md").Heat > 0.9f, "a file the agent just edited lights up on the map");
+            string handover = shell.HandoverContext();
+            Check(handover.Contains("USER: Show me the workspace") && handover.Contains("Files touched") && handover.Contains("ShellWorkspace.cs") && !handover.Contains("```"), "fork to another agent: the conversation and touched files are handed over (" + handover.Length + " chars)");
+            shell.ShowPermissionPickerForTest();
+            Check(shell.PanelsById["picker"].IsOpen && shell.PickerListForTest.Items.Count == 3, "ACCESS chip: a picker with Edits / Auto / Full access");
+            shell.ClosePanel("picker");
+            shell.PumpForTest(2f); // git status of the repo (WSL) feeds CHANGES and GIT
+            foreach (var p in new[] { th, ws }) p.ForceRefresh();
+            var mid = (th.transform.position + ws.transform.position) * 0.5f;
+            Render(shell, "ui-thread-workspace.png", mid - th.transform.forward * 0.95f, th.transform.rotation * Quaternion.Euler(0f, 6f, 0f), 76f, 1920, 1080);
+            shell.WorkspaceTabsForTest.Select(1);
+            ws.ForceRefresh();
+            RenderPanel(ws, "ui-workspace-git.png");
+            shell.WorkspaceTabsForTest.Select(2);
+            ws.ForceRefresh();
+            RenderPanel(ws, "ui-workspace-files.png");
+            shell.WorkspaceTabsForTest.Select(0);
+            // float: the workspace rides beside its thread on the ring, nothing overlaps
+            shell.OpenPanel("files");
+            shell.SetLayout("float");
+            shell.TickLayoutForTest(0.05f, 100);
+            var c = shell.CarouselCenter;
+            float Ang(UiPanel p) { var d = p.transform.position - c; return Mathf.Atan2(d.x, d.z) * Mathf.Rad2Deg; }
+            float gap = Mathf.DeltaAngle(Ang(th), Ang(ws));
+            float r = new Vector2(th.transform.position.x - c.x, th.transform.position.z - c.z).magnitude;
+            float expect = (th.Width * th.transform.lossyScale.x + ws.Width * ws.transform.lossyScale.x) * 0.5f / r * Mathf.Rad2Deg;
+            Check(gap > 0f && Mathf.Abs(gap - expect) < 4f, $"float: the workspace sits right of its thread on the ring ({gap:F1}° apart, {expect:F1}° + gap expected)");
+            var files = shell.PanelsById["files"];
+            float df = Mathf.Abs(Mathf.DeltaAngle(Ang(files), Ang(ws))), dt = Mathf.Abs(Mathf.DeltaAngle(Ang(files), Ang(th)));
+            float halfF = files.Width * files.transform.lossyScale.x * 0.5f / r * Mathf.Rad2Deg;
+            Check(df > halfF + ws.Width * ws.transform.lossyScale.x * 0.5f / r * Mathf.Rad2Deg && dt > halfF + th.Width * th.transform.lossyScale.x * 0.5f / r * Mathf.Rad2Deg, "float: no other panel overlaps the thread + workspace pair");
+            shell.SetLayout("fixed");
+            shell.ClosePanel("thread");
+            Check(!ws.IsOpen, "closing the thread closes its workspace");
+        }
+
+        private static void ThreadGroups(MetaCodexShell shell)
+        {
+            foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
+            long now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            var projects = new JArray
+            {
+                new JObject { ["id"] = "p1", ["name"] = "metacodex", ["sources"] = new JArray { new JObject { ["path"] = "/root/metacodex" } } },
+                new JObject { ["id"] = "p2", ["name"] = "sandbox", ["sources"] = new JArray { new JObject { ["path"] = "/root/sandbox" } } },
+                new JObject { ["id"] = "p3", ["name"] = "empty", ["sources"] = new JArray() },
+            };
+            JObject T(string id, string pid, string title, string st, long ago, bool ask = false) => new JObject { ["id"] = id, ["projectId"] = pid, ["title"] = title, ["providerId"] = "claude-code", ["status"] = st, ["runtime"] = new JObject { ["displayStatus"] = st }, ["updatedAt"] = now - ago, ["hasPendingInteraction"] = ask, ["environmentIsWorktree"] = id == "t2", ["environmentBranchName"] = "feat/x" };
+            var threads = new JArray { T("t1", "p1", "Voice tuning", "idle", 3600000), T("t2", "p1", "Thread workspace", "running", 60000), T("t3", "p2", "Try physics", "idle", 7200000, true) };
+            shell.OpenPanel("threads");
+            shell.SetThreadsForTest(projects, threads);
+            var list = shell.ThreadListForTest;
+            var tags = list.Items.Select(i => i.Tag as string).ToList();
+            Check(tags.SequenceEqual(new[] { "p:p1", "t:t2", "t:t1", "p:p2", "t:t3", "p:p3", "p:p3" }) && list.Items[1].Indent == 1 && list.Items[0].Badge == "1 RUNNING" && list.Items[3].Badge == "1 NEED YOU",
+                "THREADS grouped by project, newest first, with running / needs-you badges: " + string.Join(" ", tags));
+            shell.PickThreadRowForTest(0);
+            Check(shell.ThreadListForTest.Items.Count == 5 && shell.ThreadListForTest.Items[0].Icon == "▸", "tapping a project folds it");
+            shell.PickThreadRowForTest(0);
+            shell.PanelsById["threads"].ForceRefresh();
+            RenderPanel(shell.PanelsById["threads"], "ui-threads-grouped.png");
+        }
+
+        private static void VaultGit(MetaCodexShell shell)
+        {
+            foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
+            Check(shell.OpenPanel("git") && shell.IsPanelOpen("git") && shell.PanelsById["vault"].IsOpen && shell.VaultTabsForTest.Selected == 1, "“git” opens the vault on its GIT tab");
+            shell.VaultTabsForTest.Select(0);
+            Check(!shell.IsPanelOpen("git") && shell.IsPanelOpen("vault"), "on the SECRETS tab, git does not count as open");
+            shell.TogglePanel("git");
+            Check(shell.IsPanelOpen("git"), "toggle git: shows the GIT tab of the open vault");
+            shell.TogglePanel("git");
+            Check(!shell.PanelsById["vault"].IsOpen, "toggle git again: closes it");
+            shell.OpenPanel("git");
+            bool had = shell.Vault.Has(MetaCodexShell.GitHubTokenName);
+            if (!had) shell.Vault.Set(MetaCodexShell.GitHubTokenName, "ghp_selftest_not_a_token", "token", "allow", "self-test");
+            shell.RefreshGitHubStatus();
+            shell.PumpForTest(3f);
+            System.Threading.Thread.Sleep(1500);
+            shell.PumpForTest(2f);
+            Check(shell.GitHubStatusForTest.Contains("token in the vault"), "GIT tab: the GitHub account shows the vault's token: " + shell.GitHubStatusForTest.Replace("\n", " ⏎ "));
+            var vp = shell.PanelsById["vault"];
+            vp.ForceRefresh();
+            RenderPanel(vp, "ui-vault-git.png");
+            if (!had) shell.Vault.Delete(MetaCodexShell.GitHubTokenName);
+            shell.VaultTabsForTest.Select(0);
+        }
+
+        private static float Luma(string file, Rect area)
+        {
+            var tex = new Texture2D(2, 2);
+            tex.LoadImage(File.ReadAllBytes(Path.Combine(MetaCodexSetup.ReportDir, file)));
+            float sum = 0; int n = 0;
+            for (int y = (int)(area.yMin * tex.height); y < (int)(area.yMax * tex.height); y += 4)
+                for (int x = (int)(area.xMin * tex.width); x < (int)(area.xMax * tex.width); x += 4) { var c = tex.GetPixel(x, y); sum += c.r * 0.3f + c.g * 0.59f + c.b * 0.11f; n++; }
+            UnityEngine.Object.DestroyImmediate(tex);
+            return n > 0 ? sum / n : 0f;
+        }
+
+        private static void Focus(MetaCodexShell shell, Transform head)
+        {
+            foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
+            var sh = Resources.Load<Shader>("Shaders/AmbientFocus");
+            int errors = sh == null ? -1 : ShaderUtil.GetShaderMessages(sh).Count(m => m.severity == UnityEditor.Rendering.ShaderCompilerMessageSeverity.Error);
+            Check(errors == 0, $"shader MetaCodex/AmbientFocus compiles ({errors} errors)");
+            foreach (var name in new[] { "Shaders/StageLit", "Shaders/ViewImage" })
+            {
+                var s2 = Resources.Load<Shader>(name);
+                int e2 = s2 == null ? -1 : ShaderUtil.GetShaderMessages(s2).Count(m => m.severity == UnityEditor.Rendering.ShaderCompilerMessageSeverity.Error);
+                Check(e2 == 0, $"shader {name} compiles ({e2} errors)");
+            }
+            shell.OpenPanel("files");
+            var down = Quaternion.Euler(70f, 0f, 0f);
+            var up = Quaternion.Euler(-25f, 0f, 0f);
+            shell.SetFocus(false, false);
+            shell.TickFocusForTest(1f);
+            Render(shell, "ui-focus-off-up.png", head.position, up, 70f, 480, 270);
+            float offUp = Luma("ui-focus-off-up.png", new Rect(0f, 0.6f, 1f, 0.4f));
+            shell.ApplyFocusPreset("focus");
+            shell.TickFocusForTest(1f);
+            Check(shell.FocusSphereForTest != null && shell.FocusSphereForTest.activeSelf && shell.FocusShownForTest >= 1f, "ambient focus: the sphere fades in around the head");
+            Render(shell, "ui-focus-up.png", head.position, up, 70f, 480, 270);
+            Render(shell, "ui-focus-down.png", head.position, down, 70f, 480, 270);
+            float onUp = Luma("ui-focus-up.png", new Rect(0f, 0.6f, 1f, 0.4f)), onDown = Luma("ui-focus-down.png", new Rect(0.3f, 0.3f, 0.4f, 0.4f));
+            Check(onUp < offUp * 0.5f && onDown > onUp * 1.5f, $"ambient focus: the room above the horizon darkens ({offUp:F3} -> {onUp:F3}); the floor near you stays ({onDown:F3})");
+            shell.ApplyFocusPreset("blackout");
+            shell.TickFocusForTest(1f);
+            Render(shell, "ui-focus-blackout.png", head.position, Quaternion.identity, 100f, 1280, 720);
+            float black = Luma("ui-focus-blackout.png", new Rect(0f, 0.85f, 1f, 0.15f));
+            float panel = Luma("ui-focus-blackout.png", new Rect(0.42f, 0.4f, 0.16f, 0.2f));
+            Check(black < 0.01f && panel > black + 0.02f, $"BLACKOUT: black around you ({black:F3}), the windows stay ({panel:F3})");
+            shell.SetFocus(false, false);
+            shell.TickFocusForTest(1f);
+            Check(!shell.FocusSphereForTest.activeSelf, "ambient focus off: the sphere is gone");
+            Check(shell.RunAction("focus:toggle") == null && shell.Settings.focusEnabled, "action focus:toggle");
+            shell.SetFocus(false, false);
+            shell.TickFocusForTest(1f);
+            var st = shell.PanelsById["settings"];
+            shell.OpenPanel("settings");
+            st.Elements.OfType<UiTabs>().First().Select(2);
+            st.ForceRefresh();
+            RenderPanel(st, "ui-settings-focus.png");
+            st.Elements.OfType<UiTabs>().First().Select(0);
+        }
+
+        private static void SystemPanel(MetaCodexShell shell, string tmp)
+        {
+            foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
+            shell.ParseTools("T|git|/usr/bin/git|git version 2.47.3\nT|node|/usr/local/bin/node|v24.11.0\nT|rustc|/root/.cargo/bin/rustc|rustc 1.91.0 (f8297e351 2025-10-28)\nC|apt|512\nO|Debian GNU/Linux 13 (trixie) aarch64\n");
+            var tools = shell.ToolsForTest;
+            Check(tools.First(x => x.Name == "git").Version == "2.47.3" && tools.First(x => x.Name == "node").Version == "24.11.0" && tools.First(x => x.Name == "rustc").Version == "1.91.0" && !tools.First(x => x.Name == "bun").Found,
+                "tool versions parsed (git 2.47.3, node 24.11.0, rustc 1.91.0; bun missing)");
+            string d = Path.Combine(tmp, "sizes");
+            Directory.CreateDirectory(Path.Combine(d, "sub"));
+            File.WriteAllBytes(Path.Combine(d, "a.bin"), new byte[1000]);
+            File.WriteAllBytes(Path.Combine(d, "sub", "b.bin"), new byte[2500]);
+            Check(MetaCodexShell.DirSize(d) == 3500, "folder sizes add up (3500 bytes)");
+            shell.OpenPanel("system");
+            shell.SystemTabsForTest.Select(0);
+            shell.RefreshTools(true);
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            while (shell.SystemBusyForTest && sw.Elapsed.TotalSeconds < 120) shell.PumpForTest(1f);
+            int found = shell.ToolsForTest.Count(x => x.Found);
+            Check(shell.ToolsForTest.Any(x => x.Name == "git" && x.Found && !string.IsNullOrEmpty(x.Version)), $"TOOLS: checked in Linux (WSL here): {found} found in {sw.Elapsed.TotalSeconds:F0} s: " + string.Join(", ", shell.ToolsForTest.Where(x => x.Found).Select(x => x.Name + " " + x.Version)));
+            var sp = shell.PanelsById["system"];
+            sp.ForceRefresh();
+            RenderPanel(sp, "ui-system-tools.png");
+            shell.SystemTabsForTest.Select(1);
+            sw.Restart();
+            while (shell.SystemBusyForTest && sw.Elapsed.TotalSeconds < 120) shell.PumpForTest(1f);
+            Check(shell.LinuxBytesForTest >= 0, $"STORAGE measured in {sw.Elapsed.TotalSeconds:F0} s");
+            sp.ForceRefresh();
+            RenderPanel(sp, "ui-system-storage.png");
+            shell.SystemTabsForTest.Select(0);
+        }
+
         // ------------------------------------------------------------------ pictures
 
         private static void RenderPanel(UiPanel p, string file)
@@ -1102,6 +1443,8 @@ end)
 
         private static void RenderAt(string file, Vector3 pos, Quaternion rot, float fov, int w, int h)
         {
+            // bent panels: the app bends text in LateUpdate; do it here too, or texts sit flat on curved shapes
+            foreach (var up in UnityEngine.Object.FindObjectsByType<UiPanel>(FindObjectsSortMode.None)) up.ApplyBendNow();
             var camGo = new GameObject("uitest-cam") { hideFlags = HideFlags.DontSave };
             try
             {
