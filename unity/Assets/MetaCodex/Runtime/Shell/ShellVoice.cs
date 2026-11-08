@@ -34,6 +34,8 @@ namespace MetaCodex.Shell
     public sealed class VoiceResult
     {
         public string Transcript = "", Via, Command, Args, Reply, Error;
+        /// The words as the matcher understood them, when it had to fix misheard ones ("fogus" -> "focus").
+        public string Corrected;
         /// The reply answers something (spoken when spoken replies are on); action confirmations are not.
         public bool Answer;
         public int AsrMs, LlmMs, TotalMs;
@@ -44,7 +46,7 @@ namespace MetaCodex.Shell
         public JObject ToJson() => new JObject
         {
             ["transcript"] = Transcript, ["via"] = Via, ["command"] = Command, ["args"] = Args,
-            ["reply"] = Reply, ["error"] = Error, ["asrMs"] = AsrMs, ["llmMs"] = LlmMs, ["totalMs"] = TotalMs,
+            ["reply"] = Reply, ["error"] = Error, ["corrected"] = Corrected, ["asrMs"] = AsrMs, ["llmMs"] = LlmMs, ["totalMs"] = TotalMs,
         };
 
         public override string ToString() =>
@@ -97,7 +99,7 @@ namespace MetaCodex.Shell
         private JArray _voicePrefix;
         private int _voicePrefixRev = -1;
         private string _voiceGrammar;
-        public static readonly string[] VoicePanels = { "terminals", "files", "git", "agents", "threads", "browser", "scripts", "gestures", "vault", "settings", "voice", "system" };
+        public static readonly string[] VoicePanels = { "terminals", "files", "git", "agents", "threads", "browser", "scripts", "gestures", "vault", "settings", "voice", "system", "focus", "storage", "tools" };
 
         private AudioSource _voiceAudio;
         private UiPanel _vHud;
@@ -147,8 +149,9 @@ namespace MetaCodex.Shell
         private void PushVoiceConfig()
         {
             if (Qvac == null || !Qvac.IsRunning) return;
-            var words = new List<string> { "MetaCodex", "terminal", "workspace", "thread", "panel", "layout", "float", "fixed", "recenter" };
+            var words = new List<string> { "MetaCodex", "ambient focus", "terminal", "workspace", "thread", "panel", "layout", "float", "fixed", "recenter", "intensity", "radius", "softness" };
             words.AddRange(VoicePanels);
+            foreach (var c in Voice.All) if (c.Enabled && c.Vocabulary != null) words.AddRange(c.Vocabulary);
             words.AddRange(_projects.Select(p => (string)p["name"]).Where(n => !string.IsNullOrEmpty(n)).Take(12));
             var cfg = new JObject
             {
@@ -321,66 +324,93 @@ namespace MetaCodex.Shell
         {
             var res = new VoiceResult { Transcript = (text ?? "").Trim(), AsrMs = asrMs, Started = t0 >= 0f ? t0 : Time.realtimeSinceStartup };
             if (res.Transcript.Length == 0) { res.Error = "heard nothing"; VoiceDone(res, done); return; }
-            var m = Voice.FastMatch(res.Transcript);
-            if (m != null) { VoiceExecute(m, res, done); return; }
+            var fast = Voice.FastMatchAll(res.Transcript);
+            if (fast != null) { VoiceExecuteAll(fast, res, done); return; }
             if (!Settings.voice.useLlm) { res.Error = "no command matches (the LLM is off)"; VoiceDone(res, done); return; }
             if (Qvac == null || !Qvac.IsRunning) { res.Error = "no command matches, and the AI service is not running"; VoiceDone(res, done); return; }
             SetVoiceState("thinking", "◆ THINKING", "“" + Short(res.Transcript, 70) + "”");
             float l0 = Time.realtimeSinceStartup;
             var msgs = (JArray)VoicePrefix().DeepClone();
             msgs.Add(new JObject { ["role"] = "user", ["content"] = res.Transcript });
-            var body = new JObject { ["messages"] = msgs, ["grammar"] = _voiceGrammar, ["max_tokens"] = 24, ["temperature"] = 0 };
+            var body = new JObject { ["messages"] = msgs, ["grammar"] = _voiceGrammar, ["max_tokens"] = 48, ["temperature"] = 0 };
             Qvac.Client.Chat(body, (r, e) =>
             {
                 res.LlmMs = (int)((Time.realtimeSinceStartup - l0) * 1000f);
                 res.Via = "llm";
                 if (e != null) { res.Error = "LLM: " + e; VoiceDone(res, done); return; }
                 string line = ((string)r["choices"]?[0]?["message"]?["content"] ?? "").Trim();
-                var m2 = Voice.ParseLine(line, out string perr);
-                if (m2 == null) { res.Error = perr; VoiceDone(res, done); return; }
-                res.Command = m2.Command.Name;
-                var verr = Voice.Validate(m2.Command, m2.Args);
-                if (verr != null) { res.Args = m2.Args.ToString(Newtonsoft.Json.Formatting.None); res.Error = verr; VoiceDone(res, done); return; }
-                VoiceExecute(m2, res, done);
+                var ms = Voice.ParseLines(line, out string perr);
+                if (ms == null) { res.Error = perr; VoiceDone(res, done); return; }
+                res.Command = string.Join(" + ", ms.Select(x => x.Command.Name));
+                foreach (var m2 in ms)
+                {
+                    var verr = Voice.Validate(m2.Command, m2.Args);
+                    if (verr != null) { res.Args = m2.Args.ToString(Newtonsoft.Json.Formatting.None); res.Error = verr; VoiceDone(res, done); return; }
+                }
+                VoiceExecuteAll(ms, res, done);
             });
         }
 
-        private void VoiceExecute(VoiceMatch m, VoiceResult res, Action<VoiceResult> done)
+        private void VoiceExecute(VoiceMatch m, VoiceResult res, Action<VoiceResult> done) => VoiceExecuteAll(new List<VoiceMatch> { m }, res, done);
+
+        /// Runs one command or several said together, in order; their replies are joined. A command that needs
+        /// confirming asks first (the next ones wait); the first error stops the rest.
+        private void VoiceExecuteAll(List<VoiceMatch> ms, VoiceResult res, Action<VoiceResult> done)
         {
-            res.Via = m.Via;
-            res.Command = m.Command.Name;
-            res.Args = m.Args.ToString(Newtonsoft.Json.Formatting.None);
-            res.Answer = m.Command.SpeakReply;
+            res.Via = ms[0].Via;
+            res.Command = string.Join(" + ", ms.Select(x => x.Command.Name));
+            res.Args = ms.Count == 1 ? ms[0].Args.ToString(Newtonsoft.Json.Formatting.None) : new JArray(ms.Select(x => (JToken)x.Args)).ToString(Newtonsoft.Json.Formatting.None);
+            res.Answer = ms.Any(x => x.Command.SpeakReply);
+            if (ms.Any(x => x.Corrected != null)) res.Corrected = string.Join(" · ", ms.Where(x => x.Corrected != null).Select(x => x.Corrected));
+            var replies = new List<string>();
+            int next = 0;
             bool finished = false;
-            void Apply(string reply)
+            void Finish(string error)
             {
                 if (finished) return;
                 finished = true;
-                if (reply != null && reply.StartsWith("error:")) res.Error = reply.Substring(6).Trim();
-                else res.Reply = reply;
+                if (error != null) res.Error = error;
+                res.Reply = replies.Count > 0 ? string.Join(" · ", replies) : res.Reply;
                 VoiceDone(res, done);
             }
-            void Go()
+            void RunNext()
             {
-                try
+                if (finished) return;
+                if (next >= ms.Count) { Finish(null); return; }
+                var m = ms[next++];
+                bool answered = false;
+                void Apply(string reply)
                 {
-                    if (m.Command.RunAsync != null)
-                    {
-                        After(20f, () => Apply("error: " + m.Command.Name + " gave no answer in 20 s"));
-                        m.Command.RunAsync(m.Args, reply => _main.Enqueue(() => Apply(reply)));
-                    }
-                    else Apply(m.Command.Run(m.Args));
+                    if (answered || finished) return;
+                    answered = true;
+                    if (reply != null && reply.StartsWith("error:")) { Finish(reply.Substring(6).Trim()); return; }
+                    if (!string.IsNullOrEmpty(reply)) replies.Add(reply);
+                    RunNext();
                 }
-                catch (Exception ex) { Apply("error: " + ex.Message); }
+                void Go()
+                {
+                    try
+                    {
+                        if (m.Command.RunAsync != null)
+                        {
+                            After(20f, () => Apply("error: " + m.Command.Name + " gave no answer in 20 s"));
+                            m.Command.RunAsync(m.Args, reply => _main.Enqueue(() => Apply(reply)));
+                        }
+                        else Apply(m.Command.Run(m.Args));
+                    }
+                    catch (Exception ex) { Apply("error: " + ex.Message); }
+                }
+                if (m.Command.Confirm)
+                {
+                    string args = m.Args.ToString(Newtonsoft.Json.Formatting.None);
+                    SetVoiceState("thinking", "? CONFIRM", m.Command.Name + " " + args);
+                    Modal("VOICE COMMAND", $"Run <b>{m.Command.Name}</b> {args}?\n\nyou said: “{res.Transcript}”", new[] { "RUN", "CANCEL" },
+                        i => { if (i == 0) Go(); else Apply("Cancelled"); });
+                    return;
+                }
+                Go();
             }
-            if (m.Command.Confirm)
-            {
-                SetVoiceState("thinking", "? CONFIRM", m.Command.Name + " " + res.Args);
-                Modal("VOICE COMMAND", $"Run <b>{m.Command.Name}</b> {res.Args}?\n\nyou said: “{res.Transcript}”", new[] { "RUN", "CANCEL" },
-                    i => { if (i == 0) Go(); else Apply("Cancelled"); });
-                return;
-            }
-            Go();
+            RunNext();
         }
 
         private void VoiceDone(VoiceResult res, Action<VoiceResult> done)
@@ -471,7 +501,8 @@ namespace MetaCodex.Shell
                 ["repository"] = "git", ["repo"] = "git", ["source control"] = "git", ["branches"] = "git", ["commits"] = "git", ["get"] = "git", ["gift"] = "git",
                 ["terminal list"] = "terminals", ["consoles"] = "terminals", ["shells"] = "terminals",
                 ["microphone"] = "voice", ["voice control"] = "voice", ["assistant"] = "voice", ["speech"] = "voice",
-                ["storage"] = "system", ["disk"] = "system", ["disk space"] = "system", ["installed tools"] = "system", ["tools"] = "system", ["packages"] = "system", ["linux"] = "system",
+                ["disk"] = "storage", ["disk space"] = "storage", ["space"] = "storage", ["installed tools"] = "tools", ["packages"] = "tools", ["linux"] = "system",
+                ["ambient focus"] = "focus", ["focus mode"] = "focus", ["focus settings"] = "focus", ["ambient"] = "focus", ["the dome"] = "focus",
             };
             string Label(string id) => id.ToUpperInvariant();
 
@@ -611,6 +642,31 @@ namespace MetaCodex.Shell
             });
             Voice.Register(new VoiceCommand
             {
+                Name = "set_setting",
+                Description = "Change a setting: on / off, a number (percent, metres) or more / less",
+                Parameters = VoiceCommands.Schema(("setting", "string", VoiceSettingsCatalog.Select(x => x.Id).ToArray(), "which setting", true), ("value", "string", null, "on, off, a number, + or -", true)),
+                Synonyms = new Dictionary<string, Dictionary<string, string>> { ["setting"] = VoiceSettingsCatalog.SelectMany(x => x.Names.Select(n => (n, x.Id))).GroupBy(x => x.n).ToDictionary(g => g.Key, g => g.First().Id) },
+                Phrases = new[]
+                {
+                    "(set|change|put|make|turn|bring) [the] {setting} [to|at|up to|down to] {value}",
+                    "(turn|switch) on [the] {setting} {value:on}", "(turn|switch) off [the] {setting} {value:off}",
+                    "(turn|switch) [the] {setting} on {value:on}", "(turn|switch) [the] {setting} off {value:off}",
+                    "(enable|activate|start) [the] {setting} {value:on}", "(disable|deactivate|stop) [the] {setting} {value:off}",
+                    "(increase|raise|more|turn up) [the] {setting} {value:+}", "(decrease|lower|reduce|less|turn down) [the] {setting} {value:-}",
+                    "make [the] {setting} (bigger|larger|higher|stronger|darker|wider) {value:+}", "make [the] {setting} (smaller|lower|weaker|lighter|narrower) {value:-}",
+                    "{setting} [to|at] {value}",
+                },
+                Vocabulary = VoiceSettingsCatalog.SelectMany(x => x.Names).ToArray(),
+                Examples = new List<(string, string)>
+                {
+                    ("make the room completely dark", "set_setting focus_intensity 100"), ("set the dome to two meters", "set_setting focus_radius 2"),
+                    ("make the windows bigger", "set_setting ui_scale +"), ("mute the clicks", "set_setting sounds off"),
+                },
+                Check = a => VoiceSettingFits((string)a["setting"], (string)a["value"]) ? null : "that value does not fit " + (string)a["setting"],
+                Run = a => SetSettingByVoice((string)a["setting"], (string)a["value"]),
+            });
+            Voice.Register(new VoiceCommand
+            {
                 Name = "show_keyboard",
                 Description = "Show the keyboard to type into the terminal",
                 Phrases = new[] { "(open|show|bring up) [the] keyboard", "keyboard" },
@@ -624,8 +680,133 @@ namespace MetaCodex.Shell
                 ("let the windows float around me", "set_layout float"), ("what's the weather like", "none"), ("good morning", "none"),
                 ("which models can I use", "open_panel agents"), ("show the branches", "open_panel git"), ("hide the files", "close_panel files"),
                 ("bring my stuff back here", "recenter"), ("change the look of the panels", "open_panel settings"),
+                ("turn on ambient focus and set the intensity to zero", "set_focus on ; set_setting focus_intensity 0"),
+                ("dim the room a bit more", "set_setting focus_intensity +"), ("open the ambient focus settings", "open_panel focus"),
+                ("how much disk space is left", "open_panel storage"),
             });
             Voice.Changed += () => _main.Enqueue(RefreshVoicePanel);
+        }
+
+        // ------------------------------------------------------------------ settings by voice
+
+        private sealed class VoiceSetting
+        {
+            public string Id, Key, Kind, Unit, Label;
+            public float Min, Max;
+            public string[] Names;
+        }
+
+        /// Settings that voice (and the local LLM) can change: id, the settings key, kind, range, unit, spoken names.
+        private static readonly VoiceSetting[] VoiceSettingsCatalog =
+        {
+            new VoiceSetting { Id = "focus", Key = "focusEnabled", Kind = "bool", Label = "Ambient focus", Names = new[] { "ambient focus", "focus", "focus mode", "the dome", "dome" } },
+            new VoiceSetting { Id = "focus_intensity", Key = "focusIntensity", Kind = "number", Min = 0f, Max = 1f, Unit = "%", Label = "Focus intensity", Names = new[] { "intensity", "focus intensity", "ambient intensity", "ambient focus intensity", "darkness", "dimming", "dim" } },
+            new VoiceSetting { Id = "focus_radius", Key = "focusRadius", Kind = "number", Min = 0f, Max = 5f, Unit = "m", Label = "Focus radius", Names = new[] { "radius", "focus radius", "dome radius", "dome size", "focus range", "range" } },
+            new VoiceSetting { Id = "focus_softness", Key = "focusSoftness", Kind = "number", Min = 0.05f, Max = 2f, Unit = "m", Label = "Focus softness", Names = new[] { "softness", "focus softness", "fade", "edge softness" } },
+            new VoiceSetting { Id = "opacity", Key = "panelOpacity", Kind = "number", Min = 0.5f, Max = 1f, Unit = "%", Label = "Panel opacity", Names = new[] { "opacity", "panel opacity", "window opacity" } },
+            new VoiceSetting { Id = "panel_distance", Key = "panelDistance", Kind = "number", Min = 0.5f, Max = 1.4f, Unit = "m", Label = "Panel distance", Names = new[] { "distance", "panel distance", "window distance" } },
+            new VoiceSetting { Id = "ui_scale", Key = "uiScale", Kind = "number", Min = 0.8f, Max = 1.8f, Unit = "x", Label = "UI scale", Names = new[] { "ui scale", "scale", "panel size", "window size", "windows", "panels", "text size", "size" } },
+            new VoiceSetting { Id = "sharpness", Key = "renderScale", Kind = "number", Min = 1f, Max = 1.6f, Unit = "x", Label = "Sharpness", Names = new[] { "sharpness", "resolution", "render scale" } },
+            new VoiceSetting { Id = "carousel_radius", Key = "carouselRadius", Kind = "number", Min = 0.6f, Max = 1.6f, Unit = "m", Label = "Carousel radius", Names = new[] { "carousel radius", "ring radius", "carousel size", "carousel" } },
+            new VoiceSetting { Id = "bend", Key = "bendPanels", Kind = "bool", Label = "Bend panels", Names = new[] { "bend", "bending", "bend panels", "curved panels", "curve" } },
+            new VoiceSetting { Id = "sounds", Key = "sounds", Kind = "bool", Label = "Sounds", Names = new[] { "sounds", "sound", "ui sounds", "clicks" } },
+            new VoiceSetting { Id = "volume", Key = "soundVolume", Kind = "number", Min = 0f, Max = 1f, Unit = "%", Label = "Volume", Names = new[] { "volume", "sound volume" } },
+            new VoiceSetting { Id = "speak", Key = "voice.speak", Kind = "bool", Label = "Spoken answers", Names = new[] { "spoken answers", "speak answers", "spoken replies", "voice replies", "talking back" } },
+            new VoiceSetting { Id = "clap", Key = "gestures.clapEnabled", Kind = "bool", Label = "Clap gesture", Names = new[] { "clap", "clap gesture", "clapping" } },
+            new VoiceSetting { Id = "hand_rays", Key = "gestures.rayVisible", Kind = "bool", Label = "Hand rays", Names = new[] { "hand rays", "rays", "pointer rays", "lasers" } },
+            new VoiceSetting { Id = "foveation", Key = "foveation", Kind = "bool", Label = "Foveated rendering", Names = new[] { "foveation", "foveated rendering" } },
+            new VoiceSetting { Id = "views_auto_open", Key = "viewsAutoOpen", Kind = "bool", Label = "Agent views open by themselves", Names = new[] { "auto open views", "agent views auto open", "views auto open" } },
+            new VoiceSetting { Id = "workspace_module", Key = "threadWorkspace", Kind = "bool", Label = "Thread workspace", Names = new[] { "workspace module", "thread workspace", "workspace panel" } },
+        };
+
+        private static readonly HashSet<string> OnWords = new HashSet<string> { "on", "yes", "true", "enable", "enabled", "active" };
+        private static readonly HashSet<string> OffWords = new HashSet<string> { "off", "no", "false", "disable", "disabled", "0" };
+        private static readonly HashSet<string> MoreWords = new HashSet<string>
+        {
+            "more", "up", "higher", "bigger", "larger", "stronger", "darker", "wider", "louder", "brighter", "further", "farther", "increase",
+            "a bit more", "a little more", "a little bit more", "even more", "much more",
+        };
+        private static readonly HashSet<string> LessWords = new HashSet<string>
+        {
+            "less", "down", "lower", "smaller", "weaker", "lighter", "narrower", "quieter", "softer", "dimmer", "closer", "decrease",
+            "a bit less", "a little less", "a little bit less", "even less", "much less",
+        };
+
+        /// "+" / "-" for more / less words ("bigger", "a bit more"), else the value as said.
+        private static string MoreOrLess(string value)
+        {
+            string raw = (value ?? "").Trim();
+            if (raw == "+" || raw == "-") return raw;
+            string n = VoiceCommands.Normalize(raw);
+            return MoreWords.Contains(n) ? "+" : LessWords.Contains(n) ? "-" : raw;
+        }
+
+        /// Whether a spoken value can set this setting at all: on / off for a switch, a number or more / less for a
+        /// slider. Lets the fast path skip a wrong split of the words ("set the dome | radius to two meters").
+        private static bool VoiceSettingFits(string id, string value)
+        {
+            var vs = VoiceSettingsCatalog.FirstOrDefault(x => x.Id == id);
+            if (vs == null) return false;
+            string raw = MoreOrLess(value);
+            if (raw == "+" || raw == "-") return true;
+            string v = VoiceCommands.Normalize(raw);
+            if (vs.Kind == "bool") return OnWords.Contains(v) || OffWords.Contains(v) || v == "toggle" || v == "switch";
+            return VoiceCommands.TryNumber(raw, vs.Min, vs.Max, vs.Unit, out _);
+        }
+
+        /// set_setting: on / off / toggle, a number ("0", "50 percent", "two meters", "max"), or more / less ("+",
+        /// "-", "bigger", "a bit less": a tenth of the range). Applies it, moves the matching slider or toggle, and says
+        /// what it is now.
+        public string SetSettingByVoice(string id, string value)
+        {
+            var vs = VoiceSettingsCatalog.FirstOrDefault(x => x.Id == id);
+            if (vs == null) return "error: no setting " + id;
+            value = MoreOrLess(value);
+            string v = VoiceCommands.Normalize(value ?? "");
+            if (vs.Kind == "bool")
+            {
+                bool cur = Settings.Get(vs.Key) == "true";
+                bool on = OnWords.Contains(v) || value == "+" || (v == "toggle" || v == "switch" ? !cur : false);
+                bool off = OffWords.Contains(v) || value == "-";
+                if (!on && !off && v != "toggle" && v != "switch") return "error: " + vs.Label + " is on or off";
+                if (vs.Id == "focus") SetFocus(on, false);
+                else { Settings.Set(vs.Key, on ? "true" : "false"); OnSettingsChanged(); }
+                SyncSettingsControls();
+                return vs.Label + (on ? " on" : " off");
+            }
+            float curN = float.TryParse(Settings.Get(vs.Key), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var cn) ? cn : vs.Min;
+            double n;
+            string raw = (value ?? "").Trim();
+            if (raw == "+" || raw == "-") n = curN + (raw == "+" ? 1 : -1) * (vs.Max - vs.Min) * 0.1f;
+            else if (!VoiceCommands.TryNumber(raw, vs.Min, vs.Max, vs.Unit, out n))
+            {
+                // "set the intensity to 30" on a 0..1 setting: whole numbers above 1 are percent
+                return "error: " + vs.Label + " needs a number (" + vs.Min + "-" + vs.Max + (vs.Unit == "%" ? ", or a percent" : " " + vs.Unit) + ")";
+            }
+            if (vs.Unit == "%" && !raw.Contains("%") && !raw.Contains("percent") && n >= vs.Max && double.TryParse(raw, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double whole) && whole > 1) n = Mathf.Clamp((float)whole / 100f, vs.Min, vs.Max);
+            n = Mathf.Clamp((float)n, vs.Min, vs.Max);
+            Settings.Set(vs.Key, ((float)n).ToString(System.Globalization.CultureInfo.InvariantCulture));
+            if (vs.Id.StartsWith("focus") && !Settings.focusEnabled) SetFocus(true, false); // changing the dome means using it
+            OnSettingsChanged();
+            SyncSettingsControls();
+            RefreshFocusPanel();
+            return vs.Label + " " + (vs.Unit == "%" ? Mathf.RoundToInt((float)n * 100f) + "%" : ((float)n).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) + (vs.Unit == "m" ? " m" : vs.Unit == "x" ? "x" : ""));
+        }
+
+        /// Sliders and toggles of open panels follow settings changed elsewhere (voice, scripts, MQH).
+        public void SyncSettingsControls()
+        {
+            var sliders = new Dictionary<string, string> { { "DISTANCE", "panelDistance" }, { "CAROUSEL RADIUS", "carouselRadius" }, { "UI SCALE", "uiScale" }, { "SHARPNESS", "renderScale" },
+                { "PANEL OPACITY", "panelOpacity" }, { "VOLUME", "soundVolume" }, { "RADIUS", "focusRadius" }, { "INTENSITY", "focusIntensity" }, { "SOFTNESS", "focusSoftness" } };
+            var toggles = new Dictionary<string, string> { { "Bend panels", "bendPanels" }, { "Sounds", "sounds" }, { "Clap gesture", "gestures.clapEnabled" }, { "Show hand rays", "gestures.rayVisible" },
+                { "Foveated", "foveation" }, { "Ambient focus", "focusEnabled" }, { "Speak answers", "voice.speak" } };
+            foreach (var p in _panels.Values)
+                foreach (var e in p.Elements)
+                {
+                    if (e is UiSlider sl && sliders.TryGetValue(sl.Text ?? "", out var key) && float.TryParse(Settings.Get(key), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var f)) sl.Set(f);
+                    else if (e is UiToggle tg) { var k = toggles.FirstOrDefault(kv => (tg.Text ?? "").StartsWith(kv.Key)); if (k.Value != null) tg.Set(Settings.Get(k.Value) == "true"); }
+                }
+            _focusButton?.SetSelected(Settings.focusEnabled);
         }
 
         /// Closes every panel except the dock; returns how many were open.

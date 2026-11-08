@@ -236,7 +236,10 @@ namespace MetaCodex.Shell
         public IEnumerable<string> PanelIds => _panels.Keys;
 
         /// Panels that moved inside another one: GIT is the vault's GIT tab now (ui.open("git") still works).
-        public static readonly Dictionary<string, (string panel, int tab)> PanelAliases = new Dictionary<string, (string, int)> { { "git", ("vault", 1) } };
+        public static readonly Dictionary<string, (string panel, int tab)> PanelAliases = new Dictionary<string, (string, int)>
+        {
+            { "git", ("vault", 1) }, { "focus", ("settings", 2) }, { "storage", ("system", 1) }, { "tools", ("system", 0) },
+        };
 
         private static bool Alias(ref string id, out int tab)
         {
@@ -247,7 +250,7 @@ namespace MetaCodex.Shell
             return true;
         }
 
-        private UiTabs PanelTabs(string id) => id == "vault" ? _vTabs : id == "thread-ws" ? _wsTabs : null;
+        private UiTabs PanelTabs(string id) => id == "vault" ? _vTabs : id == "thread-ws" ? _wsTabs : id == "system" ? _sysTabs : id == "settings" ? _settingsTabs : null;
 
         /// Open (an alias counts when its tab is the one shown).
         public bool IsPanelOpen(string id)

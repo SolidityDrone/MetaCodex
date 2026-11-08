@@ -520,6 +520,7 @@ end)
         // ------------------------------------------------------------------ settings
 
         private UiLabel _daemonStatus, _gestureLive;
+        private UiTabs _settingsTabs;
         private UiList _pluginList;
 
         private void BuildSettings()
@@ -529,6 +530,7 @@ end)
             var p = Panel<UiPanel>("settings", "SETTINGS", 0.62f, 0.58f);
             var c = p.Content;
             var tabs = p.Add(new UiTabs("GESTURES", "DISPLAY", "FOCUS", "LOOK", "DAEMON", "ABOUT") { Rect = new Rect(c.x, c.y, c.width, t.ButtonHeight) });
+            _settingsTabs = tabs;
             const int TabDisplay = 1, TabFocus = 2, TabLook = 3, TabDaemon = 4, TabAbout = 5;
             var area = new Rect(c.x, c.y + t.ButtonHeight + t.Gap * 2, c.width, c.height - t.ButtonHeight - t.Gap * 2);
             float rowH = 0.034f;

@@ -33,11 +33,16 @@ namespace MetaCodex.AI
         /// Example requests and the command line they mean ("make it orange" -> "set_accent amber"): they teach
         /// the small LLM better than descriptions do.
         public List<(string said, string line)> Examples = new List<(string, string)>();
+        /// Words this command needs heard right (speech-to-text prompt) and fixed when misheard ("fogus" -> "focus").
+        public string[] Vocabulary = new string[0];
         /// Runs on the main thread with validated arguments; returns a short reply (shown, optionally spoken),
         /// null for none, or "error: ..." when it failed.
         public Func<JObject, string> Run;
         /// For commands that wait on something (MQH): call `done(reply)` once, within ~15 s. Used instead of Run.
         public Action<JObject, Action<string>> RunAsync;
+        /// Optional: whether matched arguments make sense together (null = yes, else why not). A phrase whose words
+        /// fell into the wrong slots ("set the dome | radius to two meters") is skipped for the next phrase.
+        public Func<JObject, string> Check;
         internal List<(Regex rx, Dictionary<string, string> constants)> Compiled = new List<(Regex, Dictionary<string, string>)>();
 
         public IEnumerable<string> Required => (Parameters["required"] as JArray)?.Select(x => (string)x) ?? Enumerable.Empty<string>();
@@ -46,6 +51,8 @@ namespace MetaCodex.AI
 
     public sealed class VoiceMatch
     {
+        /// The words after correction, when the match needed it ("open ambient fogus" -> "... focus").
+        public string Corrected;
         public VoiceCommand Command;
         public JObject Args = new JObject();
         /// "fast" (a phrase template matched) or "llm" (the model picked the tool).
@@ -75,7 +82,7 @@ namespace MetaCodex.AI
             c.Compiled = new List<(Regex, Dictionary<string, string>)>();
             foreach (var p in c.Phrases ?? new string[0])
             {
-                try { var consts = new Dictionary<string, string>(); c.Compiled.Add((CompilePhrase(p, consts), consts)); }
+                try { var consts = new Dictionary<string, string>(); c.Compiled.Add((CompilePhrase(p, consts, SlotChoices(c)), consts)); }
                 catch (Exception ex) { throw new ArgumentException($"phrase '{p}' of {c.Name}: {ex.Message}"); }
             }
             _all.RemoveAll(x => x.Name == c.Name);
@@ -152,11 +159,88 @@ namespace MetaCodex.AI
             return s;
         }
 
-        /// The first enabled command whose phrase matches and whose captured values fit the schema.
+        /// The first enabled command whose phrase matches and whose captured values fit the schema; when nothing
+        /// matches as heard, the words are corrected against the commands' vocabulary and tried again.
         public VoiceMatch FastMatch(string text)
         {
             string n = Normalize(text);
             if (n.Length == 0) return null;
+            var m = MatchNormalized(n);
+            if (m != null) return m;
+            string fixedText = Correct(n);
+            if (fixedText != n && (m = MatchNormalized(fixedText)) != null) m.Corrected = fixedText;
+            return m;
+        }
+
+        private static readonly Regex Joiners = new Regex(@"\s*(?:,\s*)?\b(?:and then|and also|and|then|also)\b\s*|\s*[,;]\s*", RegexOptions.Compiled);
+
+        /// One command, or several said in one go ("turn on ambient focus and set the intensity to zero"): each part
+        /// must match on its own. null when any part does not (the LLM then reads the whole sentence).
+        public List<VoiceMatch> FastMatchAll(string text)
+        {
+            var one = FastMatch(text);
+            if (one != null) return new List<VoiceMatch> { one };
+            string n = Normalize(text);
+            var parts = Joiners.Split(n).Select(p => p.Trim()).Where(p => p.Length > 0).ToList();
+            if (parts.Count < 2 || parts.Count > 4) return null;
+            var list = new List<VoiceMatch>();
+            foreach (var p in parts)
+            {
+                var m = FastMatch(p);
+                if (m == null) return null;
+                list.Add(m);
+            }
+            return list;
+        }
+
+        private int _vocabRevision = -1;
+        private HashSet<string> _vocab = new HashSet<string>();
+
+        /// Every word the commands use: their phrases, synonyms, enum values and declared vocabulary.
+        public HashSet<string> VocabularyWords()
+        {
+            if (_vocabRevision == Revision) return _vocab;
+            var v = new HashSet<string>();
+            void AddText(string s) { foreach (var w in Simplify(s).Split(' ')) if (w.Length > 0) v.Add(w); }
+            foreach (var c in _all)
+            {
+                foreach (var ph in c.Phrases) AddText(Regex.Replace(ph, @"\{[^}]*\}", " ").Replace('(', ' ').Replace(')', ' ').Replace('[', ' ').Replace(']', ' ').Replace('|', ' '));
+                foreach (var syn in c.Synonyms.Values) foreach (var kv in syn) { AddText(kv.Key); AddText(kv.Value); }
+                foreach (var p in c.Properties.Properties()) if (p.Value["enum"] is JArray en) foreach (var e in en) AddText((string)e);
+                foreach (var w in c.Vocabulary ?? new string[0]) AddText(w);
+            }
+            _vocab = v;
+            _vocabRevision = Revision;
+            return v;
+        }
+
+        /// Misheard words replaced by the nearest command word (edit distance 1 for 4-6 letters, 2 from 7).
+        public string Correct(string normalized)
+        {
+            var vocab = VocabularyWords();
+            var words = normalized.Split(' ');
+            bool changed = false;
+            for (int i = 0; i < words.Length; i++)
+            {
+                string w = words[i];
+                if (w.Length < 4 || vocab.Contains(w) || char.IsDigit(w[0])) continue;
+                int limit = w.Length >= 7 ? 2 : 1;
+                string best = null;
+                int bestD = limit + 1;
+                foreach (var cand in vocab)
+                {
+                    if (Math.Abs(cand.Length - w.Length) > limit || cand.Length < 4) continue;
+                    int d = Levenshtein(w, cand);
+                    if (d < bestD) { bestD = d; best = cand; }
+                    else if (d == bestD && best != null && string.CompareOrdinal(cand, best) < 0) best = cand;
+                }
+                if (best != null && bestD <= limit) { words[i] = best; changed = true; }
+            }
+            return changed ? string.Join(" ", words) : normalized;
+        }
+
+        private VoiceMatch MatchNormalized(string n)
+        {
             string subject = n + " ";
             foreach (var c in _all)
             {
@@ -176,15 +260,30 @@ namespace MetaCodex.AI
                         if (v == null) { ok = false; break; }
                         args[g] = v;
                     }
-                    if (ok && c.Required.All(r => args[r] != null)) return new VoiceMatch { Command = c, Args = args, Via = "fast" };
+                    if (ok && c.Required.All(r => args[r] != null) && (c.Check == null || c.Check(args) == null)) return new VoiceMatch { Command = c, Args = args, Via = "fast" };
                 }
             }
             return null;
         }
 
+        /// The words each enum parameter is known by (its values and synonyms), longest first.
+        private static Dictionary<string, string[]> SlotChoices(VoiceCommand c)
+        {
+            var d = new Dictionary<string, string[]>();
+            foreach (var p in c.Properties.Properties())
+            {
+                if (!(p.Value["enum"] is JArray en) || en.Count == 0) continue;
+                var words = new HashSet<string>(en.Select(x => Simplify((string)x)));
+                if (c.Synonyms != null && c.Synonyms.TryGetValue(p.Name, out var syn)) foreach (var k in syn.Keys) words.Add(Simplify(k));
+                d[p.Name] = words.Where(w => w.Length > 0).OrderByDescending(w => w.Length).ThenBy(w => w, StringComparer.Ordinal).ToArray();
+            }
+            return d;
+        }
+
         /// Template -> anchored regex over normalized text with one trailing space. `{param:value}` sets a fixed
-        /// value instead of capturing ("(make|let) the panels follow me {mode:float}").
-        public static Regex CompilePhrase(string template, Dictionary<string, string> constants = null)
+        /// value instead of capturing ("(make|let) the panels follow me {mode:float}"). An enum parameter's slot tries
+        /// its known words first, longest first ("dome radius" before "dome"), then any words (for fuzzy matching).
+        public static Regex CompilePhrase(string template, Dictionary<string, string> constants = null, Dictionary<string, string[]> choices = null)
         {
             var sb = new StringBuilder("^");
             foreach (var tok in Tokens(template))
@@ -199,7 +298,10 @@ namespace MetaCodex.AI
                 {
                     string name = tok.Trim('{', '}').Trim();
                     if (!Regex.IsMatch(name, "^[A-Za-z_][A-Za-z0-9_]*$")) throw new ArgumentException("bad parameter name " + name);
-                    sb.Append("(?<").Append(name).Append(">.+?) ");
+                    sb.Append("(?<").Append(name).Append('>');
+                    if (choices != null && choices.TryGetValue(name, out var known) && known.Length > 0)
+                        sb.Append(string.Join("|", known.Select(k => Regex.Escape(k).Replace("\\ ", " ")))).Append('|');
+                    sb.Append(".+?) ");
                 }
                 else if (tok.StartsWith("[")) sb.Append("(?:(?:").Append(Alternatives(tok.Substring(1, tok.Length - 2))).Append(") )?");
                 else if (tok.StartsWith("(")) sb.Append("(?:").Append(Alternatives(tok.Substring(1, tok.Length - 2))).Append(") ");
@@ -262,9 +364,10 @@ namespace MetaCodex.AI
             }
             if (type == "number" || type == "integer")
             {
-                if (double.TryParse(raw, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double d)) return type == "integer" ? (JToken)(long)Math.Round(d) : d;
-                int w = Array.IndexOf(new[] { "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten" }, raw.Trim().ToLowerInvariant());
-                return w >= 0 ? (JToken)w : null;
+                double? min = prop["minimum"]?.Type == JTokenType.Float || prop["minimum"]?.Type == JTokenType.Integer ? (double?)prop["minimum"] : null;
+                double? max = prop["maximum"]?.Type == JTokenType.Float || prop["maximum"]?.Type == JTokenType.Integer ? (double?)prop["maximum"] : null;
+                if (!TryNumber(raw, min, max, (string)prop["x-unit"], out double d)) return null;
+                return type == "integer" ? (JToken)(long)Math.Round(d) : d;
             }
             if (type == "boolean")
             {
@@ -274,6 +377,81 @@ namespace MetaCodex.AI
                 return null;
             }
             return raw.Trim().Length == 0 ? null : raw.Trim();
+        }
+
+        private static readonly string[] Units = { "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+            "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen" };
+        private static readonly string[] Tens = { "", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety" };
+
+        /// A spoken amount -> a number in [min, max]: "0.5", "0,5", "50 %", "fifty percent", "twenty five", "two point
+        /// five", "half", "a quarter", "max", "minimum", "1.5 meters", "30 cm". Percent of a 0..1 range is /100; cm
+        /// for a metre setting is /100. false when it is not a number.
+        public static bool TryNumber(string raw, double? min, double? max, string unit, out double value)
+        {
+            value = 0;
+            string s = Simplify((raw ?? "").Replace("%", " percent ").Replace(",", "."));
+            if (s.Length == 0) return false;
+            bool percent = Regex.IsMatch(s, @"\b(percent|per cent|pc)\b");
+            bool cm = Regex.IsMatch(s, @"\b(cm|centimeters?|centimetres?)\b");
+            s = Regex.Replace(s, @"\b(percent|per cent|pc|meters?|metres?|m|cm|centimeters?|centimetres?|degrees?|seconds?|units?)\b", " ").Trim();
+            s = Regex.Replace(s, @"\b(to|at|of|the|a|an|by)\b", " ").Trim();
+            s = Regex.Replace(s, @"\s+", " ");
+            if (s == "max" || s == "maximum" || s == "full" || s == "all way" || s == "highest" || s == "top") { if (max == null) return false; value = max.Value; return true; }
+            if (s == "min" || s == "minimum" || s == "lowest" || s == "bottom" || s == "nothing" || s == "none") { if (min == null) return false; value = min.Value; return true; }
+            if (s == "half") { value = min != null && max != null ? (min.Value + max.Value) / 2 : 0.5; return true; }
+            if (s == "quarter") { value = min != null && max != null ? min.Value + (max.Value - min.Value) / 4 : 0.25; return true; }
+            // digits ("0.5" or "0 5" after Simplify split the point)
+            var dm = Regex.Match(s, @"^(\d+)(?: (?:point )?(\d+))?$");
+            double v;
+            if (dm.Success) v = double.Parse(dm.Groups[1].Value + (dm.Groups[2].Success ? "." + dm.Groups[2].Value : ""), System.Globalization.CultureInfo.InvariantCulture);
+            else if (!TryWords(s, out v)) return false;
+            if (percent && max != null && max.Value <= 1.0) v /= 100.0;
+            if (cm && unit == "m") v /= 100.0;
+            if (min != null) v = Math.Max(min.Value, v);
+            if (max != null) v = Math.Min(max.Value, v);
+            value = v;
+            return true;
+        }
+
+        /// "twenty five", "two point five", "one hundred" -> the number.
+        private static bool TryWords(string s, out double v)
+        {
+            v = 0;
+            var parts = s.Split(new[] { " point " }, StringSplitOptions.None);
+            if (!TryInt(parts[0], out long whole)) return false;
+            v = whole;
+            if (parts.Length == 2)
+            {
+                var frac = new StringBuilder();
+                foreach (var w in parts[1].Split(' '))
+                {
+                    int k = Array.IndexOf(Units, w);
+                    if (k < 0 || k > 9) return false;
+                    frac.Append(k);
+                }
+                v = double.Parse(whole + "." + frac, System.Globalization.CultureInfo.InvariantCulture);
+            }
+            return true;
+        }
+
+        private static bool TryInt(string s, out long n)
+        {
+            n = 0;
+            long cur = 0;
+            bool any = false;
+            foreach (var w in s.Split(' '))
+            {
+                if (w.Length == 0) continue;
+                int u = Array.IndexOf(Units, w), t = Array.IndexOf(Tens, w);
+                if (u >= 0) cur += u;
+                else if (t >= 2) cur += t * 10;
+                else if (w == "hundred") cur = (cur == 0 ? 1 : cur) * 100;
+                else if (char.IsDigit(w[0]) && long.TryParse(w, out long d)) cur += d;
+                else return false;
+                any = true;
+            }
+            n = cur;
+            return any;
         }
 
         public static string MapEnum(VoiceCommand c, string param, string raw, string[] values)
@@ -322,7 +500,7 @@ namespace MetaCodex.AI
                 if (v == null) return $"'{p.Value}' is not a valid {p.Name} for {c.Name}";
                 args[p.Name] = v;
             }
-            return null;
+            return c.Check?.Invoke(args);
         }
 
         // ------------------------------------------------------------------ for the LLM: one command line
@@ -385,18 +563,36 @@ namespace MetaCodex.AI
                 {
                     string rule = "v" + (n++);
                     var en = (p.Value["enum"] as JArray)?.Select(x => (string)x).ToArray();
-                    rules.Append(rule).Append(" ::= ").Append(en != null ? string.Join(" | ", en.Select(Lit)) : "[^\\n]+").Append('\n'); // GBNF: any text up to the end of the line
+                    rules.Append(rule).Append(" ::= ").Append(en != null ? string.Join(" | ", en.Select(Lit)) : "[^\\n;]+").Append('\n'); // GBNF: any text up to the end of the line or the next ";"
                     parts.Add("\" \" " + rule);
                 }
                 alts.Add(string.Join(" ", parts));
                 // optional trailing arguments may be left out
                 for (int k = props.Count - 1; k >= 0 && !req.Contains(props[k].Name); k--) alts.Add(string.Join(" ", parts.Take(k + 1)));
             }
-            alts.Add(Lit("none"));
-            return "root ::= " + string.Join(" | ", alts.Distinct()) + "\n" + rules;
+            // up to three commands in one answer ("set_focus on ; set_setting focus_intensity 0"), or none
+            return "root ::= cmd (\" ; \" cmd)? (\" ; \" cmd)? | \"none\"\ncmd ::= " + string.Join(" | ", alts.Distinct()) + "\n" + rules;
         }
 
         private static string Lit(string s) => "\"" + (s ?? "").Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
+
+        /// The model's answer -> its commands (one per " ; "); null with an error when any part is unusable.
+        public List<VoiceMatch> ParseLines(string text, out string error)
+        {
+            error = null;
+            string first = (text ?? "").Trim();
+            int nl = first.IndexOf('\n');
+            if (nl >= 0) first = first.Substring(0, nl);
+            var list = new List<VoiceMatch>();
+            foreach (var part in first.Split(';').Select(p => p.Trim()).Where(p => p.Length > 0).Take(3))
+            {
+                var m = ParseLine(part, out error);
+                if (m == null) return null;
+                list.Add(m);
+            }
+            if (list.Count == 0) { error = "no command for that"; return null; }
+            return list;
+        }
 
         /// The model's line -> a command and its arguments (null for "none" or nothing usable).
         public VoiceMatch ParseLine(string line, out string error)

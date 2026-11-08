@@ -2,7 +2,9 @@
 
 Status: v0.3, 2026-11-08. Runs in the APK on the Quest 3S (0.4: service process on cores 0-2, models
 installed on the headset); 0.5 makes the cycle faster (measured below) and fixes the service after the
-headset sleeps; 0.6 confirms actions silently (the HUD shows them) and adds `set_focus` and the SYSTEM panel.
+headset sleeps; 0.6 confirms actions silently (the HUD shows them) and adds `set_focus` and the SYSTEM panel;
+0.7 fixes misheard words against the commands' vocabulary, runs several commands said in one sentence and
+adds `set_setting` (every setting by voice: on / off, numbers, more / less).
 
 ## What it does
 
@@ -45,9 +47,37 @@ tool), phrase templates for the fast path, and a run function. The shell registe
 | `run_in_terminal` | `command` (confirmed in VR) | "run {command}" |
 | `show_keyboard` | | "show the keyboard" |
 | `set_focus` | `state`: on off | "focus mode on", "turn off the focus", "darken the room" (Ambient Focus) |
+| `set_setting` | `setting` (see below), `value`: on, off, toggle, a number, + or - | "set the dome radius to two meters", "intensity 30", "turn off the sounds", "make the windows bigger", "volume a bit less" |
 
-`open_panel` also knows `system` ("open storage", "show the installed tools") and `git` opens the vault's GIT
-tab.
+`open_panel` also knows panels by their tabs: `focus` (Settings, FOCUS tab: "open ambient focus"),
+`storage` and `tools` (SYSTEM: "show the installed tools", "how much disk space is left"), `git` (the
+vault's GIT tab).
+
+`set_setting` settings (spoken names in brackets): `focus` (ambient focus, the dome), `focus_intensity`
+(intensity, darkness), `focus_radius` (radius, dome radius, dome size), `focus_softness`, `opacity`,
+`panel_distance`, `ui_scale` (scale, windows, text size), `sharpness`, `carousel_radius`, `bend`, `sounds`,
+`volume`, `speak`, `clap`, `hand_rays`, `foveation`, `views_auto_open`, `workspace_module`. Numbers are
+spoken freely: "zero", "fifty percent", "two point five", "30 cm", "max", "half", "a quarter"; "30" on a
+0-1 setting means 30 %. More / less words ("bigger", "darker", "a bit less") move it by a tenth of its
+range. The slider or toggle in an open panel moves with it.
+
+### Misheard words and several commands at once (0.7)
+
+- **Vocabulary.** Every word a command uses (its phrases, synonyms, enum values and the `vocabulary` it
+  declares) goes into the speech-to-text prompt, so Whisper hears "ambient focus" and not "ambient fogus".
+  When it still mishears, a word that matches no phrase is replaced by the nearest command word (edit
+  distance 1 for 4-6 letters, 2 from 7 letters) and the request is matched again; the HUD shows the fixed
+  words.
+- **Slots split right.** An enum slot tries its known words first, longest first ("dome radius" before
+  "dome"), and a command can reject arguments that do not fit (`Check`: "radius to two meters" is not on /
+  off), so the next phrase is tried instead of running a wrong command.
+- **Compound sentences.** "Turn on ambient focus and set intensity to 0": when the whole sentence matches
+  nothing, it is split on "and", "then", "also" and commas; when every part matches, they run in order and
+  the HUD joins the replies. The LLM may also answer with up to three lines joined by " ; " (the grammar
+  allows it).
+- **Context for every command, like MCP.** Plugins describe their commands as fully as the shell does:
+  `description`, typed `params` with `enum`, `min` / `max` / `unit`, `synonyms`, `vocabulary` and
+  `examples` (skill `quest-scripting`, "Voice commands"). The LLM sees the same schema the fast path uses.
 
 Phrase templates: words, `(a|b)` one of, `[a|b]` optional, `{param}` captures words. Text is matched lower
 case without punctuation or apostrophes, after fillers ("hey", "could you", "please", "now") are dropped.

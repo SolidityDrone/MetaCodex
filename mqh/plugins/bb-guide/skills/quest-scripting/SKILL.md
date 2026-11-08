@@ -94,6 +94,8 @@ voice.command{
   description = "Show git status of the project in the terminal",   -- one line: the LLM reads it
   params = { path = { type = "string", description = "folder", required = false } },
   phrases = { "(show|what is) [the] git status", "git status [of|in] {path}" },
+  vocabulary = { "git" },                    -- words to hear right and fix when misheard
+  examples = { {"what changed in the repo", "git_status"} },
   run = function(args)                       -- args.path is nil when not said
     terminal.run("git -C " .. (args.path or ".") .. " status")
     return "Git status"                      -- shown (and spoken if the user enabled spoken replies)
@@ -109,8 +111,23 @@ order of `params`). `llm = false` keeps a command to its phrases only (use it fo
 deletes free text).
 Text is matched lower-case without punctuation, after polite fillers ("hey", "could you", "please") are
 dropped. Enum parameters (`enum = {"cyan","amber"}`) accept spoken synonyms:
-`synonyms = { color = { orange = "amber" } }`. `confirm = true` makes the user approve in VR before
+`synonyms = { color = { orange = "amber" } }`; a slot tries the known words first, longest first, so
+"dome radius" wins over "dome". `confirm = true` makes the user approve in VR before
 `run` (use it for anything that types or deletes). Return `"error: why"` when it fails.
+
+Give every command rich context, like an MCP tool: the local LLM and the speech recogniser only know what
+the command declares.
+
+- `description`: one line, what it does and what its parameters mean.
+- `params`: `type` (`string`, `number`, `integer`, `boolean`), `description`, `required`, `enum`; numbers take
+  `min`, `max` and `unit` (`"%"`, `"m"`, `"s"`...). Spoken numbers are parsed for you: "fifty percent", "two
+  point five", "30 cm" (to metres), "max", "half".
+- `vocabulary = {"warpdrive", "nebula"}`: unusual words the command needs heard right. They go into the
+  speech-to-text prompt, and a misheard word one or two letters off ("warpdrove") is corrected to them.
+- `examples`: two to four requests no phrase covers, each with its command line.
+
+One sentence can hold several commands ("turn on ambient focus and set the intensity to zero"): the fast
+path splits on "and", "then", "also" and commas; the LLM may answer with up to three lines.
 Test without speaking: `mcx-ui voice match "git status"` (which command and arguments), then
 `mcx-ui voice run "git status"` (runs it, prints the result as JSON); `mcx-ui voice list` lists commands.
 

@@ -633,6 +633,7 @@ namespace MetaCodex.Scripting
                         cmd.Examples.Add((v.Table.Get(1).String, v.Table.Get(2).String));
             // params: {name={type=, description=, enum={...}, required=true}} or an ordered list {{name=..., ...}, ...}
             var ps = new List<(string, string, string[], string, bool)>();
+            var ranges = new Dictionary<string, (double? min, double? max, string unit)>();
             var pt = t.Get("params");
             if (pt.Type == DataType.Table)
             {
@@ -645,9 +646,24 @@ namespace MetaCodex.Scripting
                     string[] en = null;
                     if (spec.Get("enum").Type == DataType.Table) en = spec.Get("enum").Table.Values.Where(v => v.Type == DataType.String || v.Type == DataType.Number).Select(v => v.ToPrintString()).ToArray();
                     ps.Add((pname, TStr(spec, "type", "string"), en, TStr(spec, "description", ""), spec.Get("required").CastToBool()));
+                    // numbers: min / max / unit, so "fifty percent", "max" or "30 cm" are understood
+                    if (spec.Get("min").Type == DataType.Number || spec.Get("max").Type == DataType.Number || spec.Get("unit").Type == DataType.String)
+                        ranges[pname] = (spec.Get("min").Type == DataType.Number ? spec.Get("min").Number : (double?)null,
+                            spec.Get("max").Type == DataType.Number ? spec.Get("max").Number : (double?)null, TStr(spec, "unit", null));
                 }
             }
             cmd.Parameters = MetaCodex.AI.VoiceCommands.Schema(ps.ToArray());
+            foreach (var kv in ranges)
+            {
+                var prop = cmd.Parameters["properties"]?[kv.Key] as Newtonsoft.Json.Linq.JObject;
+                if (prop == null) continue;
+                if (kv.Value.min.HasValue) prop["minimum"] = kv.Value.min.Value;
+                if (kv.Value.max.HasValue) prop["maximum"] = kv.Value.max.Value;
+                if (kv.Value.unit != null) prop["x-unit"] = kv.Value.unit;
+            }
+            // vocabulary = {"ambient", "focus"}: words to hear right (speech-to-text prompt) and fix when misheard
+            var vo = t.Get("vocabulary");
+            if (vo.Type == DataType.Table) cmd.Vocabulary = vo.Table.Values.Where(v => v.Type == DataType.String).Select(v => v.String).ToArray();
             var ph = t.Get("phrases");
             if (ph.Type == DataType.Table) cmd.Phrases = ph.Table.Values.Where(v => v.Type == DataType.String).Select(v => v.String).ToArray();
             else if (ph.Type == DataType.String) cmd.Phrases = new[] { ph.String };
