@@ -44,7 +44,8 @@ view in place (a chart you update as work progresses). At most 16 components per
 {"id": "perf", "title": "Frame time", "columns": 1, "size": [0.6, 0.45], "components": [ ... ]}
 ```
 
-`columns` 2 puts components side by side; `size` (metres) is optional: the app sizes the panel to its
+`columns` 2 puts components side by side (diagrams, tables, boards, code, timelines and scenes still take a
+full row; `"wide": false` keeps one in a column); `size` (metres) is optional: the app sizes the panel to its
 content. A single component object (with `"type"`) is accepted as a whole view.
 
 | type | fields | use |

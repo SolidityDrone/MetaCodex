@@ -243,6 +243,13 @@ namespace MetaCodex.Shell
             float explicitH = Fl1(c["height"], -1f);
             if (explicitH > 0) return Mathf.Clamp(explicitH, 0.03f, 0.8f);
             string type = ((string)c["type"] ?? "text").ToLowerInvariant();
+            // a title row above the content (charts draw their own; choices / input use it as the prompt)
+            bool titled = !string.IsNullOrEmpty((string)c["title"]) && !Is(c, "chart", "choices", "buttons", "input", "text", "markdown", "note", "scene3d", "physics");
+            return BaseHeight(c, type, width) + (titled ? 0.02f : 0f);
+        }
+
+        private float BaseHeight(JObject c, string type, float width)
+        {
             int Count(string key) => (c[key] as JArray)?.Count ?? 0;
             switch (type)
             {
@@ -345,7 +352,7 @@ namespace MetaCodex.Shell
                     break;
                 }
                 case "stats": case "kpi": case "progress": case "checklist": case "todo": case "timeline": case "kanban": case "kv": case "list":
-                    p.Add(new UiViewBlock(type, c) { Rect = r });
+                    p.Add(new UiViewBlock(type, c) { Rect = TitleRow(p, r, title) });
                     break;
                 case "choices": case "buttons":
                 {

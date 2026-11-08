@@ -1207,7 +1207,7 @@ namespace MetaCodex.UI
     /// Tiles for installed tools: a round category glyph, the name and the version; missing ones are dimmed.
     public sealed class UiToolGrid : UiCanvas
     {
-        public sealed class Tile { public string Name, Version, Category, Glyph; public Color Tint; public bool Found; public object Tag; }
+        public sealed class Tile { public string Name, Version, Category, Glyph, Hint = "+ install"; public Color Tint; public bool Found; public object Tag; }
         public readonly List<Tile> Tiles = new List<Tile>();
         public float TileW = 0.112f, TileH = 0.044f;
         public Action<Tile> OnPick;
@@ -1242,7 +1242,7 @@ namespace MetaCodex.UI
                 Txt(new Rect(c.x - d * 0.5f, c.y - d * 0.5f, d, d), tile.Glyph ?? "·", d * 0.62f, tile.Found ? Color.white : t.TextDim, TextAlignmentOptions.Center);
                 float tx = r.x + 0.012f + d;
                 Txt(new Rect(tx, r.y + 0.003f, r.xMax - tx - 0.004f, TileH * 0.5f), "<b>" + UiViz.NoParse(tile.Name) + "</b>", 0.0112f, tile.Found ? t.Text : t.TextDim);
-                Txt(new Rect(tx, r.y + TileH * 0.5f, r.xMax - tx - 0.004f, TileH * 0.45f), tile.Found ? UiViz.NoParse(UiViz.Cut(tile.Version ?? "", 18)) : "+ install", 0.0094f, tile.Found ? t.TextDim : t.TextAccent, TextAlignmentOptions.MidlineLeft, tile.Found ? t.Mono : null);
+                Txt(new Rect(tx, r.y + TileH * 0.5f, r.xMax - tx - 0.004f, TileH * 0.45f), tile.Found ? UiViz.NoParse(UiViz.Cut(tile.Version ?? "", 18)) : UiViz.NoParse(tile.Hint), 0.0094f, tile.Found ? t.TextDim : t.TextAccent, TextAlignmentOptions.MidlineLeft, tile.Found ? t.Mono : null);
                 _hits.Add((r, tile));
             }
             if (MaxScroll > 0)

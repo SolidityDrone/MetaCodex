@@ -575,6 +575,22 @@ namespace MetaCodex.Shell
 
         private void DefaultWsOffset(UiPanel thread)
         {
+            var head = Head;
+            if (head != null)
+            {
+                // the module continues the thread's arc around you: on the circle through the thread, right next
+                // to it, facing you; with "Bend panels" on both bend on that circle and read as one curved screen
+                var d = thread.transform.position - head.position;
+                float r = Mathf.Max(0.45f, new Vector2(d.x, d.z).magnitude);
+                float halfTh = thread.Width * 0.5f * thread.transform.lossyScale.x, halfWs = _ws.Width * 0.5f * _ws.transform.lossyScale.x;
+                float yaw = Mathf.Atan2(d.x, d.z) + (halfTh + 0.015f + halfWs) / r;
+                var dir = new Vector3(Mathf.Sin(yaw), 0f, Mathf.Cos(yaw));
+                var pos = new Vector3(head.position.x, thread.transform.position.y, head.position.z) + dir * r;
+                _wsOffPos = thread.transform.InverseTransformPoint(pos);
+                _wsOffRot = Quaternion.Inverse(thread.transform.rotation) * Quaternion.LookRotation(dir, Vector3.up);
+                _wsHasOffset = true;
+                return;
+            }
             float a = WsYaw * Mathf.Deg2Rad;
             float halfW = _ws.Width * 0.5f * (_ws.transform.lossyScale.x / Mathf.Max(1e-4f, thread.transform.lossyScale.x));
             _wsOffPos = new Vector3(thread.Width * 0.5f + 0.012f + halfW * Mathf.Cos(a), 0f, -halfW * Mathf.Sin(a));

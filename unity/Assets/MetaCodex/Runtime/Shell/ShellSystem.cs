@@ -166,6 +166,7 @@ namespace MetaCodex.Shell
             ShowTools();
             // no backslashes in the script: on the PC it goes through wsl.exe's command line, which mangles them
             var sb = new StringBuilder();
+            sb.Append("renice -n 10 $$ >/dev/null 2>&1; "); // low priority: the app renders on the same cores
             sb.Append("export PATH=\"").Append(string.Join(":", KnownPathAdds)).Append(":$PATH\"; ");
             foreach (var tool in ToolCatalog)
             {
@@ -209,6 +210,7 @@ namespace MetaCodex.Shell
             {
                 found.TryGetValue(tool.name, out var hit);
                 var m = hit.raw != null ? VersionRe.Match(hit.raw) : Match.Empty;
+                if (hit.raw != null && !m.Success) m = Regex.Match(hit.raw, @"\b\d+\b"); // java -version: openjdk version "21" 
                 _tools.Add(new ToolInfo
                 {
                     Name = tool.name, Category = tool.cat, Install = tool.install, Update = tool.update, Remove = tool.remove,
@@ -225,7 +227,7 @@ namespace MetaCodex.Shell
             foreach (var tool in _tools.OrderBy(x => x.Found ? 0 : 1).ThenBy(x => Array.FindIndex(ToolCatalog, c => c.name == x.Name)))
             {
                 var (glyph, series) = CategoryLook(tool.Category);
-                _toolGrid.Tiles.Add(new UiToolGrid.Tile { Name = tool.Name, Version = tool.Version, Category = tool.Category, Glyph = glyph, Tint = UiViz.Series(series), Found = tool.Found, Tag = tool });
+                _toolGrid.Tiles.Add(new UiToolGrid.Tile { Name = tool.Name, Version = tool.Version, Category = tool.Category, Glyph = glyph, Tint = UiViz.Series(series), Found = tool.Found, Tag = tool, Hint = tool.Install == null ? "not found" : tool.Install == "agents" ? "+ in AGENTS" : "+ install" });
             }
             _toolGrid.Redraw();
             int n = _tools.Count(x => x.Found);
@@ -315,7 +317,7 @@ namespace MetaCodex.Shell
             ("rust toolchains", "/root/.rustup", null),
             ("MQH data", "/root/.mqh", null),
             ("temp", "/tmp", "find /tmp -mindepth 1 -mtime +1 -delete 2>/dev/null; echo cleaned"),
-            ("other system files", "/var", null),
+            ("/var (logs, lists)", "/var", null),
             ("/opt", "/opt", null),
         };
 
@@ -331,15 +333,29 @@ namespace MetaCodex.Shell
             string ai = Qvac?.DataDir;
             var files = Files;
             var deviceProbe = DeviceSpace();
-            Task.Run(() =>
+            // a low-priority thread: walking the rootfs is long, and the frame loop shares the cores
+            var worker = new System.Threading.Thread(() =>
             {
                 var parts = new List<StorePart>();
                 long linux = 0;
                 try
                 {
                     string Base(string linuxPath) => rootfs != null ? rootfs + linuxPath : files.HostPath(linuxPath);
+                    // each top-level folder once (the total), the caches inside them on their own
+                    var top = new Dictionary<string, long>();
+                    if (rootfs != null && Directory.Exists(rootfs))
+                    {
+                        foreach (var d in new DirectoryInfo(rootfs).EnumerateDirectories())
+                        {
+                            if ((d.Attributes & FileAttributes.ReparsePoint) != 0 || d.Name == "proc" || d.Name == "sys" || d.Name == "dev" || d.Name == "mnt") continue;
+                            top["/" + d.Name] = DirSize(d.FullName);
+                        }
+                        foreach (var f in new DirectoryInfo(rootfs).EnumerateFiles()) linux += f.Length;
+                    }
+                    else foreach (var lp in LinuxParts.Where(x => x.path.Count(ch => ch == '/') == 1)) top[lp.path] = DirSize(Base(lp.path));
+                    linux += top.Values.Sum();
                     var sizes = new Dictionary<string, long>();
-                    foreach (var lp in LinuxParts) sizes[lp.path] = DirSize(Base(lp.path));
+                    foreach (var lp in LinuxParts) sizes[lp.path] = top.TryGetValue(lp.path, out long tb) ? tb : DirSize(Base(lp.path));
                     foreach (var lp in LinuxParts)
                     {
                         long b = sizes[lp.path];
@@ -348,7 +364,9 @@ namespace MetaCodex.Shell
                         if (lp.path == "/var") b -= sizes["/var/cache/apt"];
                         parts.Add(new StorePart { Name = lp.name, LinuxPath = lp.path, Clean = lp.clean, Bytes = Math.Max(0, b), Cache = lp.clean != null });
                     }
-                    linux = rootfs != null ? DirSize(rootfs) : parts.Sum(x => x.Bytes);
+                    long listed = LinuxParts.Where(x => x.path.Count(ch => ch == '/') == 1).Sum(x => top.TryGetValue(x.path, out long v) ? v : 0);
+                    long rest = linux - listed;
+                    if (rest > 0) parts.Add(new StorePart { Name = "other system files", LinuxPath = "/etc, /lib, …", Bytes = rest });
                 }
                 catch (Exception ex) { _main.Enqueue(() => Log("storage: " + ex.Message)); }
                 long aiBytes = ai != null ? DirSize(ai) : 0, sharedBytes = shared != null ? DirSize(shared) : 0;
@@ -365,7 +383,8 @@ namespace MetaCodex.Shell
                     ShowStorage();
                     CheckStorageLimits(false);
                 });
-            });
+            }) { IsBackground = true, Priority = System.Threading.ThreadPriority.Lowest, Name = "mcx-storage" };
+            worker.Start();
         }
 
         /// Bytes under a folder: files only, symlinks not followed (the rootfs links into /proc and the like).

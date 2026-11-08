@@ -707,6 +707,7 @@ namespace MetaCodex.Shell
                 }
                 _projectSel = (string)best.p["id"];
                 Settings.lastProject = _projectSel;
+                _collapsedProjects.Remove(_projectSel); // unfold it in THREADS
                 OnSettingsChanged();
                 OpenPanel("threads");
                 RefreshThreads();
