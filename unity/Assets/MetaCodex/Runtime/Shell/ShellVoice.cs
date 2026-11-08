@@ -702,6 +702,7 @@ namespace MetaCodex.Shell
             new VoiceSetting { Id = "focus", Key = "focusEnabled", Kind = "bool", Label = "Ambient focus", Names = new[] { "ambient focus", "focus", "focus mode", "the dome", "dome" } },
             new VoiceSetting { Id = "focus_intensity", Key = "focusIntensity", Kind = "number", Min = 0f, Max = 1f, Unit = "%", Label = "Focus intensity", Names = new[] { "intensity", "focus intensity", "ambient intensity", "ambient focus intensity", "darkness", "dimming", "dim" } },
             new VoiceSetting { Id = "focus_radius", Key = "focusRadius", Kind = "number", Min = 0f, Max = 5f, Unit = "m", Label = "Focus radius", Names = new[] { "radius", "focus radius", "dome radius", "dome size", "focus range", "range" } },
+            new VoiceSetting { Id = "focus_blur", Key = "focusBlur", Kind = "number", Min = 0f, Max = 1f, Unit = "%", Label = "Focus blur", Names = new[] { "blur", "focus blur", "blurring", "the blur", "background blur" } },
             new VoiceSetting { Id = "focus_softness", Key = "focusSoftness", Kind = "number", Min = 0.05f, Max = 2f, Unit = "m", Label = "Focus softness", Names = new[] { "softness", "focus softness", "fade", "edge softness" } },
             new VoiceSetting { Id = "opacity", Key = "panelOpacity", Kind = "number", Min = 0.5f, Max = 1f, Unit = "%", Label = "Panel opacity", Names = new[] { "opacity", "panel opacity", "window opacity" } },
             new VoiceSetting { Id = "panel_distance", Key = "panelDistance", Kind = "number", Min = 0.5f, Max = 1.4f, Unit = "m", Label = "Panel distance", Names = new[] { "distance", "panel distance", "window distance" } },
@@ -797,7 +798,7 @@ namespace MetaCodex.Shell
         public void SyncSettingsControls()
         {
             var sliders = new Dictionary<string, string> { { "DISTANCE", "panelDistance" }, { "CAROUSEL RADIUS", "carouselRadius" }, { "UI SCALE", "uiScale" }, { "SHARPNESS", "renderScale" },
-                { "PANEL OPACITY", "panelOpacity" }, { "VOLUME", "soundVolume" }, { "RADIUS", "focusRadius" }, { "INTENSITY", "focusIntensity" }, { "SOFTNESS", "focusSoftness" } };
+                { "PANEL OPACITY", "panelOpacity" }, { "VOLUME", "soundVolume" }, { "RADIUS", "focusRadius" }, { "INTENSITY", "focusIntensity" }, { "SOFTNESS", "focusSoftness" }, { "BLUR", "focusBlur" } };
             var toggles = new Dictionary<string, string> { { "Bend panels", "bendPanels" }, { "Sounds", "sounds" }, { "Clap gesture", "gestures.clapEnabled" }, { "Show hand rays", "gestures.rayVisible" },
                 { "Foveated", "foveation" }, { "Ambient focus", "focusEnabled" }, { "Speak answers", "voice.speak" } };
             foreach (var p in _panels.Values)

@@ -47,7 +47,7 @@ cylinder intersection), so the reticle sits where the beam meets the window.
 | `Security/` | `SecretVault` (Android Keystore sealer, Editor dev sealer, policies, access log) |
 | `AI/` | `QvacHost` (starts the local AI service process, token, restarts), `QvacClient` (HTTP), `VoiceRecorder` (microphone, end of speech), `VoiceCommands` (registry, phrase templates, tool specs) |
 | `Shell/` | `MetaCodexShell` (wiring, panels by id and aliases, control-port commands), `ShellPanels` (dock, terminals, files, git logic, browser, scripts, settings, saved layouts), `ShellGestures` (Gestures studio, bindings, actions, recording, starter plugins), `ShellAgents` (agents, threads grouped by project, thread with composer chips and fork, new thread, terminal links), `ShellWorkspace` (the thread's linked workspace module, the picker), `ShellViews` + `ViewStage` (agent views, the physics stage), `ShellVault` (vault: secrets and GIT with the GitHub account; secret broker), `ShellVoice` (voice pipeline, shell commands, VOICE panel, HUD), `ShellAmbient` (Ambient Focus), `ShellSystem` (installed tools, storage), `ShellLayout` (fixed / float carousel, the thread + workspace pair), `Services` (system deep links, settings, MQH client, git, files) |
-| `../Resources/Shaders/` | `AmbientFocus` (sphere fallback), `FocusMesh` (dome on the room's surfaces), `TextBend` (TMP SDF + bend), `UiIcon` (logos + bend), `StageLit` (physics bodies), `ViewImage` (images in views): in Resources so they ship without material assets |
+| `../Resources/Shaders/` | `AmbientFocus` (the dome: depth, floor plane, blur), `FocusMesh` (hand cut-outs), `FocusDepthCopy` (floor readback), `TextBend` (TMP SDF + bend), `UiIcon` (logos + bend), `StageLit` (physics bodies), `ViewImage` (images in views): in Resources so they ship without material assets |
 | `../Resources/ToolIcons/` | tool logos (Simple Icons, CC0 SVG data; each logo is its owner's trademark, shown only to name the tool), built by `tools/make-tool-icons.js` |
 | `../Plugins/Android/MetaCodexVault.java` | the Keystore bridge (AES-256-GCM, StrongBox or TEE) |
 
@@ -135,22 +135,31 @@ panels are kept; older ones rebuild from their spec when opened again (workspace
 ## Ambient Focus
 
 Settings > FOCUS, FOCUS on the dock, `focus:on|off|toggle` (actions), voice ("open ambient focus", "turn on
-ambient focus and set intensity to 0"). A dome stands on the floor around you: inside it the room stays
-visible, outside it the passthrough darkens. RADIUS is the dome's size (measured from the floor under your
-head), SOFTNESS the width of its edge, INTENSITY the darkness; BLACKOUT (radius 0, 100 %) leaves only the
-windows and your hands.
+ambient focus and set intensity to 0", "set the blur to fifty percent"). A dome stands on the floor around you:
+inside it the room stays visible, outside it the passthrough darkens or, with BLUR, turns into a soft image of
+itself. RADIUS is the dome's size (from the floor under your head), SOFTNESS the width of its edge, INTENSITY
+the darkness, BLUR how soft the room outside gets (0 = darkened only); BLACKOUT (radius 0, 100 %) leaves only the
+windows and your hands. No Space Setup scan is needed (branch `feat/spatial-dome`, `docs/SPATIAL_DOME_PLAN.md`).
 
-- **The real room.** With Space Setup data (Meta scene anchors: room mesh, walls, floor, furniture; the
-  permission "spatial data", `com.oculus.permission.USE_SCENE`), the room's surfaces are drawn with the dome
-  (`Resources/Shaders/FocusMesh`): a wall 1 m away stays visible, one 4 m away fades. FOCUS shows whether
-  the room was loaded.
-- **Without Space Setup** the sphere fallback (`Resources/Shaders/AmbientFocus`) estimates distances from
-  the floor plane; above the horizon it fades fully.
-- **Hands** are cut out of the darkness (soft capsules along the tracked bones), so they always show.
-- **Blur** is not possible on the passthrough itself: Horizon OS composites it under the app and apps can
-  only darken it. A blurred room would need the camera image (Passthrough Camera Access) blurred and drawn
-  by the app (a follow-up). Meta's Depth API would give per-pixel distances but needs the Unity OpenXR Meta
-  package with this project's OpenXR loader.
+- **Live depth.** Meta's Depth API (`EnvironmentDepthManager`, via `com.unity.xr.meta-openxr` and the OpenXR
+  features "Meta Quest: Session" + "Occlusion"; permission "spatial data", `USE_SCENE`) runs while focus is on. The
+  focus sphere (`Resources/Shaders/AmbientFocus`) reads the depth along each pixel's view ray and rebuilds the
+  real surface's world position (inverse of `_EnvironmentDepthReprojectionMatrices`), so walls, furniture and hands
+  near you stay and far ones fade. Meta's occlusion shaders stay off (no extra depth pass).
+- **The floor** is the tracking floor, corrected by the depth seen under your feet once three readings 0.3 s apart
+  agree within 5 cm (SandyBridge's rule: the Guardian floor can be 10-30 cm off): a 48 x 48 copy of the depth
+  (`FocusDepthCopy`) read back, the lowest level near you with enough points (not a table, not a patch read too
+  high). FOCUS shows depth, floor and camera status.
+- **Blur.** BLUR above 0 starts the left passthrough camera (MR Utility Kit's `PassthroughCameraAccess`, 640 x 480,
+  30 fps; permission `horizonos.permission.HEADSET_CAMERA`, asked once). Each frame is copied into a 256 x 192
+  mip-mapped texture; outside the dome the sphere draws it at a high mip (4 taps), projected per pixel through the
+  camera's pose and intrinsics (depth gives the right parallax) and darkened by INTENSITY. The camera sees less
+  than the passthrough: beyond its image the plain darkness stays. Horizon OS composites the passthrough itself,
+  so an app cannot blur the passthrough directly.
+- **Without depth** (permission not given yet, the Editor) the floor plane stands in: the floor near you stays,
+  everything above the horizon fades.
+- **Hands** are cut out of the darkness and the blur (soft capsules along the tracked bones, `FocusMesh`), so they
+  always show, also at BLACKOUT.
 
 ## Layouts
 

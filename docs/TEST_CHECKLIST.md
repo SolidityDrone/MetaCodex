@@ -227,12 +227,15 @@ Bending (Settings > LOOK > Bend panels, fixed layout):
 - [ ] Point at a bent window's edges → the reticle sits on the curved surface, buttons near the edges react where the beam meets them; pokes with the fingertip work on bent panels
 - [ ] A text that changes fast (Debug / Perf, a running terminal-linked thread) → it stays on the curve, never flashes flat
 
-Ambient Focus:
-- [ ] First use → Horizon OS asks for "spatial data" (allow it); FOCUS tab says the room was loaded
-- [ ] FOCUS on → a dome standing on the floor around you: walls and furniture near you stay visible, far ones fade (no dome "starting above")
+Ambient Focus (branch feat/spatial-dome, no Space Setup needed):
+- [ ] First FOCUS → Horizon OS asks for "spatial data" (allow it); FOCUS tab: "depth: live", then "floor: measured under your feet (… cm from the Guardian floor)"
+- [ ] FOCUS on → a dome standing on the floor around you: walls, furniture and your hands near you stay visible, far ones fade (no dome "starting above")
+- [ ] Walk around: the dome follows you; nothing flickers at its edge while you stand still
 - [ ] RADIUS changes the dome's size live; SOFTNESS its edge; INTENSITY the darkness
-- [ ] Hands always visible, also at BLACKOUT
-- [ ] Without Space Setup (or permission denied) → the old floor-plane sphere still works
+- [ ] BLUR above 0 → Horizon OS asks for the camera once; then the room outside the dome is a soft image (darker with INTENSITY); at the edges of your view (outside the camera's image) it is just dark
+- [ ] Hands always visible, also at BLACKOUT and with BLUR
+- [ ] Without the "spatial data" permission → the old floor-plane darkening still works
+- [ ] Frame rate with focus + blur on stays about 72 fps (Perf menu)
 
 SYSTEM > TOOLS:
 - [ ] Known tools show their own logo on their brand colour (git, node, python, rust, go, claude, …) with the version; tools without a logo show a glyph
@@ -241,5 +244,5 @@ SYSTEM > TOOLS:
 Voice:
 - [ ] "Open ambient focus" → Settings opens on the FOCUS tab (also when heard as "fogus")
 - [ ] "Turn on ambient focus and set intensity to 0" → focus on, intensity 0, the slider moves
-- [ ] "Set the dome radius to two meters", "radius 50 centimeters", "make the windows bigger", "volume a bit less", "turn off the sounds" → each changes that setting
+- [ ] "Set the dome radius to two meters", "radius 50 centimeters", "set the blur to fifty percent", "make the windows bigger", "volume a bit less", "turn off the sounds" → each changes that setting
 - [ ] "Show the installed tools" → SYSTEM on TOOLS; "how much disk space is left" → SYSTEM on STORAGE

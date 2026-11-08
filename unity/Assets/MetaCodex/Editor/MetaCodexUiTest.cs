@@ -1277,6 +1277,47 @@ end)
         }
 
         /// Renders with a transparent clear colour (like the passthrough underlay) and returns the pixels (RGBA).
+        /// Renders the eye buffer (320 x 240, 60 degrees, looking along +z) with a synthetic environment depth: a 4 x 4 m
+        /// wall `dist` metres ahead, nothing elsewhere (raw depth 1 = "far"), stored as Meta's texture does ((ndc + 1) / 2)
+        /// with the same world -> depth clip matrix for both eyes.
+        private static Texture2D RenderWithDepth(MetaCodexShell shell, string file, Vector3 head, float dist, int dw, int dh)
+        {
+            const float fov = 60f, aspect = 320f / 240f;
+            var view = Matrix4x4.Scale(new Vector3(1f, 1f, -1f)) * Matrix4x4.TRS(head, Quaternion.identity, Vector3.one).inverse;
+            var m = Matrix4x4.Perspective(fov, aspect, 0.1f, 20f) * view;
+            var inv = m.inverse;
+            var depth = new float[dw * dh];
+            for (int y = 0; y < dh; y++)
+                for (int x = 0; x < dw; x++)
+                {
+                    var farP = inv * new Vector4((x + 0.5f) / dw * 2f - 1f, (y + 0.5f) / dh * 2f - 1f, 1f, 1f);
+                    var dir = ((Vector3)farP / farP.w - head).normalized;
+                    float d = 1f;
+                    if (dir.z > 1e-4f)
+                    {
+                        var hit = head + dir * (dist / dir.z);
+                        if (Mathf.Abs(hit.x - head.x) <= 2f && Mathf.Abs(hit.y - head.y) <= 2f)
+                        {
+                            var c = m * new Vector4(hit.x, hit.y, hit.z, 1f);
+                            d = Mathf.Clamp01((c.z / c.w + 1f) * 0.5f);
+                        }
+                    }
+                    depth[y * dw + x] = d;
+                }
+            var tex = new Texture2DArray(dw, dh, 2, TextureFormat.RFloat, false, true) { filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp };
+            tex.SetPixelData(depth, 0, 0);
+            tex.SetPixelData(depth, 0, 1);
+            tex.Apply(false);
+            shell.SetDepthForTest(tex, new[] { m, m });
+            shell.TickFocusForTest(0.2f);
+            // a manual Editor render right after a material keyword changes still draws the old variant (measured:
+            // 1.00 then 0.00 for the same frame): one warm-up render first
+            UnityEngine.Object.DestroyImmediate(RenderRgba(null, head, Quaternion.identity, fov, 320, 240));
+            var img = RenderRgba(file, head, Quaternion.identity, fov, 320, 240);
+            UnityEngine.Object.DestroyImmediate(tex);
+            return img;
+        }
+
         private static Texture2D RenderRgba(string file, Vector3 pos, Quaternion rot, float fov, int w, int h)
         {
             foreach (var up in UnityEngine.Object.FindObjectsByType<UiPanel>(FindObjectsSortMode.None)) up.ApplyBendNow();
@@ -1550,7 +1591,7 @@ end)
             var sh = Resources.Load<Shader>("Shaders/AmbientFocus");
             int errors = sh == null ? -1 : ShaderUtil.GetShaderMessages(sh).Count(m => m.severity == UnityEditor.Rendering.ShaderCompilerMessageSeverity.Error);
             Check(errors == 0, $"shader MetaCodex/AmbientFocus compiles ({errors} errors)");
-            foreach (var name in new[] { "Shaders/StageLit", "Shaders/ViewImage" })
+            foreach (var name in new[] { "Shaders/StageLit", "Shaders/ViewImage", "Shaders/FocusMesh", "Shaders/FocusDepthCopy" })
             {
                 var s2 = Resources.Load<Shader>(name);
                 int e2 = s2 == null ? -1 : ShaderUtil.GetShaderMessages(s2).Count(m => m.severity == UnityEditor.Rendering.ShaderCompilerMessageSeverity.Error);
@@ -1576,32 +1617,107 @@ end)
             float black = Luma("ui-focus-blackout.png", new Rect(0f, 0.85f, 1f, 0.15f));
             float panel = Luma("ui-focus-blackout.png", new Rect(0.42f, 0.4f, 0.16f, 0.2f));
             Check(black < 0.01f && panel > black + 0.02f, $"BLACKOUT: black around you ({black:F3}), the windows stay ({panel:F3})");
-            // the dome with the room's real geometry (as Space Setup gives it): judged on the eye buffer's alpha,
-            // which is what lets the passthrough through (0 = the real world shows, 1 = black)
+            // the dome from live depth, as Meta's EnvironmentDepthManager gives it (no Space Setup): a synthetic depth
+            // map of a wall straight ahead, judged on the eye buffer's alpha (0 = the real world shows, 1 = black)
             shell.FloorYOverride = 0f; // the head stands 1.4 m above it
             shell.Settings.focusRadius = 2.5f;
             shell.Settings.focusSoftness = 0.2f;
             shell.Settings.focusIntensity = 1f;
+            shell.Settings.focusBlur = 0f;
             shell.SetFocus(true, false);
             shell.ClosePanel("files");
-            var wallMesh = new Mesh();
-            wallMesh.vertices = new[] { new Vector3(-2f, -2f, 0f), new Vector3(2f, -2f, 0f), new Vector3(2f, 2f, 0f), new Vector3(-2f, 2f, 0f) };
-            wallMesh.triangles = new[] { 0, 2, 1, 0, 3, 2 };
-            wallMesh.RecalculateNormals();
-            var wall = shell.AddRoomMeshForTest(wallMesh, head.position + Vector3.forward * 1.0f, Quaternion.identity);
-            shell.TickFocusForTest(0.2f);
-            var near = RenderRgba("ui-focus-wall-near.png", head.position, Quaternion.identity, 60f, 320, 240);
-            // in the band above the test terminal (it sits in front, opaque by design, and its shadow darkens
-            // around it); there the wall is 0.5 m above the eyes at 1 m, 1.8 m at 4 m (still on the 4 m wall)
+            const int dw = 160, dh = 120;
+            var near = RenderWithDepth(shell, "ui-focus-wall-near.png", head.position, 1.0f, dw, dh);
+            // in the band above the test terminal (it sits in front, opaque by design, and its shadow darkens around
+            // it); there the wall is 0.5 m above the eyes at 1 m, 1.8 m at 4 m (still on the 4 m wall)
             int[] xs = { 80, 160, 240 };
             float aNear = xs.Max(x => near.GetPixel(x, 215).a);
-            wall.transform.position = head.position + Vector3.forward * 4.0f;
-            var far = RenderRgba("ui-focus-wall-far.png", head.position, Quaternion.identity, 60f, 320, 240);
+            var far = RenderWithDepth(shell, "ui-focus-wall-far.png", head.position, 4.0f, dw, dh);
             float aFar = xs.Min(x => far.GetPixel(x, 215).a);
-            Check(aNear < 0.05f && aFar > 0.95f, $"the dome: a real wall 1 m away stays visible ({aNear:F2}), one 4 m away is outside a 2.5 m dome and fades ({aFar:F2})");
+            Check(aNear < 0.05f && aFar > 0.95f, $"the dome from live depth: a real wall 1 m away stays visible ({aNear:F2}), one 4 m away is outside a 2.5 m dome and fades ({aFar:F2})");
             UnityEngine.Object.DestroyImmediate(near);
             UnityEngine.Object.DestroyImmediate(far);
-            shell.ClearRoomForTest();
+            // BLUR: outside the dome the camera's image, soft and darkened by INTENSITY, covers the passthrough;
+            // inside it the passthrough stays sharp; beyond the camera's narrower view, the plain darkness
+            shell.Settings.focusBlur = 0.5f;
+            shell.Settings.focusIntensity = 0.5f;
+            var camImg = new Texture2D(64, 48, TextureFormat.RGBA32, true, false) { wrapMode = TextureWrapMode.Clamp };
+            var orange = new Color32[64 * 48];
+            for (int k = 0; k < orange.Length; k++) orange[k] = new Color32(255, 128, 0, 255);
+            camImg.SetPixels32(orange);
+            camImg.Apply(true);
+            var camPose = new Pose(head.position, Quaternion.identity);
+            shell.SetCameraForTest(camImg, camPose, new Vector2(457f, 457f), new Vector2(320f, 240f), new Vector2Int(640, 480), new Vector2Int(640, 480));
+            var blurFar = RenderWithDepth(shell, "ui-focus-blur-far.png", head.position, 4.0f, dw, dh);
+            var cb = blurFar.GetPixel(160, 215);
+            var blurNear = RenderWithDepth(shell, "ui-focus-blur-near.png", head.position, 1.0f, dw, dh);
+            float aBlurNear = xs.Max(x => blurNear.GetPixel(x, 215).a);
+            Check(cb.a > 0.95f && cb.r > 0.15f && cb.r > cb.g && cb.g > cb.b && aBlurNear < 0.05f,
+                $"BLUR: outside the dome the camera image covers the passthrough (alpha {cb.a:F2}, colour {cb.r:F2} {cb.g:F2} {cb.b:F2}); inside it stays clear ({aBlurNear:F2})");
+            // a narrow camera: the top of the view is beyond its image -> darkness only (alpha = intensity, no colour)
+            shell.SetCameraForTest(camImg, camPose, new Vector2(1800f, 1800f), new Vector2(320f, 240f), new Vector2Int(640, 480), new Vector2Int(640, 480));
+            var narrow = RenderWithDepth(shell, "ui-focus-blur-narrow.png", head.position, 4.0f, dw, dh);
+            var cn = narrow.GetPixel(160, 215);
+            Check(Mathf.Abs(cn.a - 0.5f) < 0.06f && cn.r < 0.05f, $"BLUR: beyond the camera's view the plain darkness (alpha {cn.a:F2}, red {cn.r:F2})");
+            foreach (var t in new[] { blurFar, blurNear, narrow }) UnityEngine.Object.DestroyImmediate(t);
+            shell.SetCameraForTest(null, default, default, default, default, default);
+            UnityEngine.Object.DestroyImmediate(camImg);
+            shell.SetDepthForTest(null, null);
+            shell.Settings.focusBlur = 0f;
+            shell.Settings.focusIntensity = 1f;
+            // the floor under the feet (SandyBridge's rule): the lowest level with enough depth points near you, not
+            // a table, not a patch of floor read too high; it counts once three readings agree
+            var rng = new System.Random(7);
+            float Noise() => (float)(rng.NextDouble() - 0.5) * 0.02f;
+            var pts = new System.Collections.Generic.List<Vector3>();
+            var hp = new Vector3(0f, 1.6f, 0f);
+            for (int k = 0; k < 220; k++) pts.Add(new Vector3((float)rng.NextDouble() * 2f - 1f, -0.12f + Noise(), (float)rng.NextDouble() * 2f - 1f));
+            for (int k = 0; k < 60; k++) pts.Add(new Vector3((float)rng.NextDouble() - 0.5f, -0.02f + Noise(), 0.5f + (float)rng.NextDouble() * 0.3f)); // misread patch
+            for (int k = 0; k < 150; k++) pts.Add(new Vector3((float)rng.NextDouble() - 0.5f, 0.75f + Noise(), 0.8f)); // a table top
+            float est = MetaCodexShell.EstimateFloor(pts, hp, 0f);
+            var tableOnly = pts.Where(p => p.y > 0.5f).ToList();
+            float none = MetaCodexShell.EstimateFloor(tableOnly, hp, 0f);
+            shell.ResetFloorForTest();
+            shell.FeedFloorForTest(pts, hp, 0f);
+            bool earlyStable = !float.IsNaN(shell.FeetFloorForTest);
+            shell.FeedFloorForTest(pts, hp, 0f);
+            shell.FeedFloorForTest(pts, hp, 0f);
+            Check(Mathf.Abs(est + 0.12f) < 0.02f && float.IsNaN(none) && !earlyStable && Mathf.Abs(shell.FeetFloorForTest + 0.12f) < 0.02f && shell.FocusStatus.Contains("measured under your feet"),
+                $"floor from depth: {est * 100f:0.0} cm (real -12, a patch read at -2 and a table ignored), none from a table alone, counts after 3 readings ({shell.FeetFloorForTest * 100f:0.0} cm): {shell.FocusStatus}");
+            shell.ResetFloorForTest();
+            // the floor readback's copy shader (never drawn otherwise in the Editor): every texel carries the depth
+            // at its own uv, so the reader does not depend on row order
+            {
+                var copyMat = new Material(Resources.Load<Shader>("Shaders/FocusDepthCopy"));
+                var arr = new Texture2DArray(4, 4, 2, TextureFormat.RFloat, false, true) { filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp };
+                var vals = Enumerable.Range(0, 16).Select(k => (k + 1) / 17f).ToArray();
+                arr.SetPixelData(vals, 0, 0);
+                arr.SetPixelData(vals, 0, 1);
+                arr.Apply(false);
+                Shader.SetGlobalTexture("_EnvironmentDepthTexture", arr);
+                var crt = new RenderTexture(4, 4, 0, RenderTextureFormat.ARGBFloat);
+                var ccb = new UnityEngine.Rendering.CommandBuffer();
+                ccb.SetRenderTarget(crt);
+                ccb.DrawProcedural(Matrix4x4.identity, copyMat, 0, MeshTopology.Triangles, 3);
+                Graphics.ExecuteCommandBuffer(ccb);
+                ccb.Release();
+                RenderTexture.active = crt;
+                var back = new Texture2D(4, 4, TextureFormat.RGBAFloat, false, true);
+                back.ReadPixels(new Rect(0, 0, 4, 4), 0, 0);
+                back.Apply();
+                RenderTexture.active = null;
+                int good = 0;
+                for (int y = 0; y < 4; y++)
+                    for (int x = 0; x < 4; x++)
+                    {
+                        var c = back.GetPixel(x, y);
+                        int sx = Mathf.Clamp(Mathf.FloorToInt(c.g * 4f), 0, 3), sy = Mathf.Clamp(Mathf.FloorToInt(c.b * 4f), 0, 3);
+                        if (c.a > 0.5f && Mathf.Abs(c.r - vals[sy * 4 + sx]) < 1e-4f) good++;
+                    }
+                Check(good == 16, $"floor readback copy: each texel carries its depth and its own uv ({good}/16)");
+                crt.Release();
+                foreach (var o in new UnityEngine.Object[] { copyMat, arr, crt, back }) UnityEngine.Object.DestroyImmediate(o);
+            }
             // hands: always clear, even at BLACKOUT
             shell.ApplyFocusPreset("blackout");
             shell.PoseHand(Handedness.Right, 0.1f, 0.1f, 0.1f, 0.1f, 0.1f);

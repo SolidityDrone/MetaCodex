@@ -140,6 +140,8 @@ namespace MetaCodex.Shell
         public float focusRadius = 1.2f;
         public float focusIntensity = 0.75f;
         public float focusSoftness = 0.6f;
+        /// Outside the dome: 0 = darkened only; above 0 the passthrough camera's image, soft (more = softer).
+        public float focusBlur = 0f;
         /// SYSTEM > STORAGE: warn when the Linux userland grows past this many GB (0: no limit).
         public float linuxLimitGB = 0f;
 
