@@ -18,6 +18,7 @@ Shader "MetaCodex/StageLit"
             #pragma fragment frag
             #pragma multi_compile_instancing
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+            #include "Assets/MetaCodex/Shaders/McxOcclusion.hlsl"
 
             CBUFFER_START(UnityPerMaterial)
                 half4 _Color;
@@ -45,7 +46,9 @@ Shader "MetaCodex/StageLit"
                 float diffuse = saturate(dot(n, l)) * 0.62 + 0.38;
                 float rim = pow(1.0 - saturate(dot(n, v)), 3.0) * 0.28;
                 float spec = pow(saturate(dot(n, normalize(l + v))), 40.0) * 0.35;
-                return half4(_Color.rgb * diffuse + rim + spec, 1.0);
+                UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
+                half vis = (half)McxVisibility(i.positionWS); // opaque: alpha 0 where something real is in front
+                return half4((_Color.rgb * diffuse + rim + spec) * vis, vis);
             }
             ENDHLSL
         }

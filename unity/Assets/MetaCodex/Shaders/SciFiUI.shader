@@ -31,6 +31,7 @@ Shader "MetaCodex/SciFiUI"
 
         HLSLINCLUDE
         #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+        #include "Assets/MetaCodex/Shaders/McxOcclusion.hlsl"
 
         // the bend of every panel: x = radius (0 flat), indexed by the renderer's _PanelIndex (UiPanel)
         float4 _PanelBend[128];
@@ -68,6 +69,7 @@ Shader "MetaCodex/SciFiUI"
             float2 uv : TEXCOORD0;
             float4 shape : TEXCOORD1;
             float4 style : TEXCOORD2;
+            float3 positionWS : TEXCOORD3; // after the bend: what real things in front are compared with
             UNITY_VERTEX_OUTPUT_STEREO
         };
 
@@ -77,7 +79,8 @@ Shader "MetaCodex/SciFiUI"
             UNITY_SETUP_INSTANCE_ID(v);
             UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(o);
             float r = _PanelIndex >= 0.0 ? _PanelBend[(int)_PanelIndex].x : 0.0;
-            o.positionCS = TransformObjectToHClip(BendPanel(v.positionOS.xyz, r));
+            o.positionWS = TransformObjectToWorld(BendPanel(v.positionOS.xyz, r));
+            o.positionCS = TransformWorldToHClip(o.positionWS);
             o.color = v.color;
             o.uv = v.uv;
             o.shape = v.shape;
@@ -119,8 +122,9 @@ Shader "MetaCodex/SciFiUI"
             // depth only where a panel body is opaque enough to hide what is behind it
             half4 fragDepth(Varyings i) : SV_Target
             {
+                UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
                 int kind = (int)round(i.shape.w);
-                if (kind != 0 || _Opacity < 0.75) discard;
+                if (kind != 0 || _Opacity < 0.75 || McxVisibility(i.positionWS) < 0.5) discard;
                 float2 h = i.shape.xy * 0.5;
                 float2 p = (i.uv - 0.5) * (i.shape.xy + 2.0 * i.shape.z);
                 // the chamfered panel body (the colour pass's shape, without the anti-aliased edge)
@@ -176,7 +180,18 @@ Shader "MetaCodex/SciFiUI"
                 return smoothstep(0.5 - width, 0.5, hexD);
             }
 
+            half4 fragBody(Varyings i);
+
+            // everything a panel draws fades where something real (a hand, a person) is in front of it
             half4 frag(Varyings i) : SV_Target
+            {
+                UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
+                half4 c = fragBody(i);
+                c.a *= (half)McxVisibility(i.positionWS);
+                return c;
+            }
+
+            half4 fragBody(Varyings i)
             {
                 float2 size = i.shape.xy;
                 float margin = i.shape.z;

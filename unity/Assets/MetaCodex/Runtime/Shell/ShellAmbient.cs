@@ -59,10 +59,29 @@ namespace MetaCodex.Shell
         private Material _floorCopyMat;
         private const int FloorGrid = 48;
 
-        // ---- the passthrough camera, for the blur
+        // ---- the sharp depth (Resources/Shaders/DepthSharp) and real things in front of the UI (McxOcclusion.hlsl)
+        private Material _sharpMat;
+        private RenderTexture _sharpA, _sharpB;
+        private bool _sharpFlip, _sharpHavePrev, _sharpLive;
+        private readonly Matrix4x4[] _sharpPrevW2D = { Matrix4x4.identity, Matrix4x4.identity };
+        private Texture2DArray _noDepth;
+        private float _uiHide;
+        private static readonly int SharpId = Shader.PropertyToID("_McxDepthSharp"), SharpPrevId = Shader.PropertyToID("_McxSharpPrev"),
+            SharpPrevW2DId = Shader.PropertyToID("_McxPrevWorldToDepth"), SharpSliceId = Shader.PropertyToID("_McxSlice"),
+            SharpSizeId = Shader.PropertyToID("_McxDepthSize"), SharpHistoryId = Shader.PropertyToID("_McxHistory"),
+            OcclusionId = Shader.PropertyToID("_McxOcclusion"), UiHideId = Shader.PropertyToID("_McxUiHide"),
+            ZParamsId = Shader.PropertyToID("_EnvironmentDepthZBufferParams");
+        /// The sharp depth's last output (self-tests read it back).
+        public RenderTexture SharpDepthForTest => _sharpLive ? (_sharpFlip ? _sharpB : _sharpA) : null; // (flipped after each frame)
+        /// Self-tests: the UI steps aside as for the Horizon OS menu (null = decided by the headset).
+        public bool? UiStepAsideOverride;
+
+        // ---- the passthrough camera: the blur, and the picture that sharpens the depth
         private Meta.XR.PassthroughCameraAccess _cam;
-        private bool _askedCamera, _camLive, _camTest;
+        private bool _askedCamera, _camLive, _camTest, _camRetried;
         private RenderTexture _camRt;
+        private System.DateTime _camStamp;
+        private float _camDisabledAt = -1f;
         private static readonly int CamTexId = Shader.PropertyToID("_McxCamTex"), CamW2CId = Shader.PropertyToID("_McxCamWorldToCam"),
             CamIntrId = Shader.PropertyToID("_McxCamIntr"), CamCropId = Shader.PropertyToID("_McxCamCrop");
 
@@ -94,19 +113,26 @@ namespace MetaCodex.Shell
             RefreshFocusPanel();
         }
 
-        /// Every frame: fades the sphere in / out, keeps it on the head with the current settings, and runs the depth
-        /// and the camera only while they are used.
+        /// Every frame: the UI steps aside for the Horizon OS menu; the depth runs while focus or "real things in front
+        /// of windows" needs it, the camera while the blur or the sharp depth does; the sphere fades in / out and stays
+        /// on the head; the hands are cut out of everything.
         private void UpdateFocus(float dt)
         {
             if (Settings == null) return;
-            _focusShown = Mathf.MoveTowards(_focusShown, Settings.focusEnabled ? 1f : 0f, dt / 0.4f);
+            EnsureFocusDefaults();
+            bool aside = UiShouldStepAside();
+            _uiHide = Mathf.MoveTowards(_uiHide, aside ? 1f : 0f, dt / 0.15f);
+            Shader.SetGlobalFloat(UiHideId, _uiHide);
+            _focusShown = Mathf.MoveTowards(_focusShown, Settings.focusEnabled && !aside ? 1f : 0f, dt / (aside ? 0.15f : 0.4f));
             bool shown = _focusShown > 0f;
-            EnsureDepth(shown);
-            EnsureCamera(shown && Settings.focusBlur > 0.001f);
+            bool wantDepth = shown || Settings.occludeUi;
+            EnsureDepth(wantDepth);
+            EnsureCamera((shown && Settings.focusBlur > 0.001f) || (wantDepth && Settings.depthCamera && _depthLive));
+            Shader.SetGlobalFloat(OcclusionId, Settings.occludeUi && _sharpLive ? 1f : 0f);
+            if (Settings.occludeUi || shown) UpdateHandCutouts(); else HideHandCutouts();
             if (!shown)
             {
                 if (_focusSphere != null && _focusSphere.activeSelf) _focusSphere.SetActive(false);
-                HideHandCutouts();
                 return;
             }
             if (!EnsureFocusSphere()) return;
@@ -121,14 +147,42 @@ namespace MetaCodex.Shell
             _focusMat.SetFloat(IntensityId, intensity);
             _focusMat.SetFloat(FloorYId, floor);
             _focusMat.SetVector(FeetId, feet);
-            SetKeyword(_focusMat, "MCX_DEPTH", _depthLive);
+            SetKeyword(_focusMat, "MCX_DEPTH", _depthLive && _sharpLive);
             bool blur = _camLive && Settings.focusBlur > 0.001f;
             SetKeyword(_focusMat, "MCX_BLUR", blur);
-            // BLUR 1 % .. 100 %: mip 1.5 (soft) .. 5 (only colours) of the 256 x 192 copy, 4 taps
-            if (blur) _focusMat.SetFloat(BlurMipId, Mathf.Lerp(1.5f, 5f, Mathf.Clamp01(Settings.focusBlur)));
-            if (_handMat != null) _handMat.SetFloat(IntensityId, intensity);
+            // BLUR 1 % .. 100 %: mip 2.5 (soft) .. 6 (only colours) of the 512 x 384 copy, 4 taps
+            if (blur) _focusMat.SetFloat(BlurMipId, Mathf.Lerp(2.5f, 6f, Mathf.Clamp01(Settings.focusBlur)));
             UpdateFloorFromDepth(head);
-            UpdateHandCutouts();
+        }
+
+        /// The Horizon OS menu: while a hand does the system gesture (palm up, pinch) or the app has lost input focus
+        /// (the universal menu is open), the windows and the focus darkness fade out so the system's menu shows.
+        private bool UiShouldStepAside()
+        {
+            if (UiStepAsideOverride.HasValue) return UiStepAsideOverride.Value;
+            if (Gestures != null)
+                for (int h = 0; h < 2; h++)
+                {
+                    var st = Gestures.Get((MetaCodex.Hands.Handedness)h);
+                    if (st != null && st.Frame.Tracked && st.Frame.SystemGesture) return true;
+                }
+#if !UNITY_EDITOR
+            if (OVRManager.instance != null && !OVRManager.hasInputFocus) return true;
+#endif
+            return false;
+        }
+
+        /// Globals every UI shader reads (McxOcclusion.hlsl) get a value before any depth exists: "no reading".
+        private void EnsureFocusDefaults()
+        {
+            if (_noDepth != null) return;
+            _noDepth = new Texture2DArray(1, 1, 2, TextureFormat.RHalf, false, true) { name = "no depth", filterMode = FilterMode.Point };
+            _noDepth.SetPixelData(new ushort[] { 0 }, 0, 0);
+            _noDepth.SetPixelData(new ushort[] { 0 }, 0, 1);
+            _noDepth.Apply(false, true);
+            Shader.SetGlobalTexture(SharpId, _noDepth);
+            Shader.SetGlobalFloat(OcclusionId, 0f);
+            Shader.SetGlobalFloat(UiHideId, 0f);
         }
 
         private static void SetKeyword(Material m, string keyword, bool on)
@@ -141,6 +195,7 @@ namespace MetaCodex.Shell
         {
             if (field == value) return;
             field = value;
+            if (value.Length > 0) Log("ambient focus: " + value); // the session log tells what the headset did
             RefreshFocusPanel();
         }
 
@@ -194,28 +249,79 @@ namespace MetaCodex.Shell
         {
             if (_depthTest) return;
             _depthLive = false;
-            if (_depth == null || !_depth.enabled || !_depth.IsDepthAvailable || _focusShown <= 0f) return;
+            if (_depth == null || !_depth.enabled || !_depth.IsDepthAvailable) return;
             _reproj.Clear();
             Shader.GetGlobalMatrixArray(ReprojId, _reproj);
             if (_reproj.Count < 2) return;
             for (int i = 0; i < 2; i++) _depthToWorld[i] = _reproj[i].inverse;
             Shader.SetGlobalMatrixArray(DepthToWorldId, _depthToWorld);
             _depthLive = true;
+            var cb = new CommandBuffer { name = "MetaCodex sharp depth" };
+            if (RecordSharpDepth(cb, Shader.GetGlobalTexture(DepthTexId), _reproj)) ctx.ExecuteCommandBuffer(cb);
+            cb.Release();
         }
 
         /// Self-tests: Meta's depth inputs as EnvironmentDepthManager sets them (a depth Texture2DArray holding
         /// (ndc + 1) / 2 per eye, and world -> depth clip matrices); null goes back to the live depth.
-        public void SetDepthForTest(Texture depthArray, Matrix4x4[] worldToDepth)
+        public void SetDepthForTest(Texture depthArray, Matrix4x4[] worldToDepth, Vector4 zBufferParams, bool keepHistory = false)
         {
             _depthTest = depthArray != null;
             _depthLive = _depthTest;
-            if (!_depthTest) return;
-            var m = new[] { worldToDepth[0], worldToDepth[Mathf.Min(1, worldToDepth.Length - 1)] };
+            if (!_depthTest) { _sharpLive = false; _sharpHavePrev = false; Shader.SetGlobalTexture(SharpId, _noDepth); return; }
+            EnsureFocusDefaults();
+            var m = new System.Collections.Generic.List<Matrix4x4> { worldToDepth[0], worldToDepth[Mathf.Min(1, worldToDepth.Length - 1)] };
             Shader.SetGlobalTexture(DepthTexId, depthArray);
             Shader.SetGlobalMatrixArray(ReprojId, m);
+            Shader.SetGlobalVector(ZParamsId, zBufferParams);
             for (int i = 0; i < 2; i++) _depthToWorld[i] = m[i].inverse;
             Shader.SetGlobalMatrixArray(DepthToWorldId, _depthToWorld);
+            if (!keepHistory) _sharpHavePrev = false;
+            var cb = new CommandBuffer { name = "MetaCodex sharp depth (test)" };
+            if (RecordSharpDepth(cb, depthArray, m)) Graphics.ExecuteCommandBuffer(cb);
+            cb.Release();
             SetFocusStatus(ref _depthStatus, "depth: test input");
+        }
+
+        /// The sharp depth of this frame into the other buffer of the pair (both eyes), with last frame's as history;
+        /// the camera's picture guides it when the camera runs. Publishes _McxDepthSharp.
+        private bool RecordSharpDepth(CommandBuffer cb, Texture depth, System.Collections.Generic.List<Matrix4x4> worldToDepth)
+        {
+            if (depth == null || worldToDepth == null || worldToDepth.Count < 2) return false;
+            if (_sharpMat == null)
+            {
+                var sh = Resources.Load<Shader>("Shaders/DepthSharp");
+                if (sh == null) { SetFocusStatus(ref _depthStatus, "depth: sharp-depth shader missing"); return false; }
+                _sharpMat = new Material(sh) { name = "sharp depth" };
+            }
+            int w = Mathf.Min(depth.width * 2, 640), h = Mathf.Min(depth.height * 2, 640);
+            if (_sharpA == null || _sharpA.width != w || _sharpA.height != h)
+            {
+                foreach (var old in new[] { _sharpA, _sharpB }) if (old != null) { old.Release(); if (Application.isPlaying) Destroy(old); else DestroyImmediate(old); }
+                RenderTexture Make(string n) { var rt = new RenderTexture(w, h, 0, RenderTextureFormat.RHalf) { name = n, dimension = TextureDimension.Tex2DArray, volumeDepth = 2, filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp }; rt.Create(); return rt; }
+                _sharpA = Make("sharp depth A");
+                _sharpB = Make("sharp depth B");
+                _sharpHavePrev = false;
+            }
+            var prev = _sharpFlip ? _sharpB : _sharpA;
+            var cur = _sharpFlip ? _sharpA : _sharpB;
+            _sharpMat.SetVector(SharpSizeId, new Vector4(depth.width, depth.height, 1f / depth.width, 1f / depth.height));
+            _sharpMat.SetTexture(SharpPrevId, prev);
+            _sharpMat.SetMatrixArray(SharpPrevW2DId, _sharpPrevW2D);
+            _sharpMat.SetFloat(SharpHistoryId, _sharpHavePrev ? 0.7f : 0f);
+            SetKeyword(_sharpMat, "MCX_GUIDE", _camLive);
+            for (int slice = 0; slice < 2; slice++)
+            {
+                cb.SetRenderTarget(new RenderTargetIdentifier(cur, 0, CubemapFace.Unknown, slice));
+                cb.SetGlobalFloat(SharpSliceId, slice);
+                cb.DrawProcedural(Matrix4x4.identity, _sharpMat, 0, MeshTopology.Triangles, 3);
+            }
+            cb.SetGlobalTexture(SharpId, cur);
+            _sharpPrevW2D[0] = worldToDepth[0];
+            _sharpPrevW2D[1] = worldToDepth[1];
+            _sharpHavePrev = true;
+            _sharpFlip = !_sharpFlip;
+            _sharpLive = true;
+            return true;
         }
 
         // ---- the floor under the feet (SandyBridge's rule, light)
@@ -345,9 +451,9 @@ namespace MetaCodex.Shell
                 return;
             }
 #if UNITY_EDITOR
-            SetFocusStatus(ref _camStatus, "blur: no passthrough camera in the Editor");
+            SetFocusStatus(ref _camStatus, "camera: none in the Editor");
 #else
-            if (!Meta.XR.PassthroughCameraAccess.IsSupported) { SetFocusStatus(ref _camStatus, "blur: needs a Quest 3 / 3S with Horizon OS 74+"); return; }
+            if (!Meta.XR.PassthroughCameraAccess.IsSupported) { SetFocusStatus(ref _camStatus, "camera: needs a Quest 3 / 3S with Horizon OS 74+"); return; }
 #if UNITY_ANDROID
             if (!_askedCamera && !UnityEngine.Android.Permission.HasUserAuthorizedPermission(OVRPermissionsRequester.PassthroughCameraAccessPermission))
             {
@@ -357,36 +463,68 @@ namespace MetaCodex.Shell
 #endif
             if (_cam == null)
             {
-                // left camera, small and slow: it only feeds a blur (PassthroughCameraAccess waits for the permission)
+                // left camera, 640 x 480, 30 fps: it feeds the blur and guides the sharp depth. Configured while the
+                // component is disabled (MaxFramerate refuses changes while it is enabled), then started.
                 var go = new GameObject("PassthroughCamera");
                 go.SetActive(false);
                 go.transform.SetParent(_root, false);
                 _cam = go.AddComponent<Meta.XR.PassthroughCameraAccess>();
+                _cam.enabled = false;
                 _cam.CameraPosition = Meta.XR.PassthroughCameraAccess.CameraPositionType.Left;
                 _cam.RequestedResolution = new Vector2Int(640, 480);
                 _cam.MaxFramerate = 30;
+                go.SetActive(true);
+                _cam.enabled = true;
             }
             if (!_cam.gameObject.activeSelf) _cam.gameObject.SetActive(true);
-            if (!_cam.IsPlaying) { _camLive = false; SetFocusStatus(ref _camStatus, _askedCamera ? "blur: waiting for the camera (permission)" : "blur: starting the camera…"); return; }
-            if (_cam.IsUpdatedThisFrame || !_camLive) PushCameraFrame();
+            if (!_cam.enabled)
+            {
+                // PassthroughCameraAccess disables itself when Play fails: one retry at its default 1280 x 960
+                if (_camDisabledAt < 0f) { _camDisabledAt = Time.unscaledTime; SetFocusStatus(ref _camStatus, "camera: failed to start"); }
+                if (!_camRetried && Time.unscaledTime - _camDisabledAt > 3f)
+                {
+                    _camRetried = true;
+                    _cam.RequestedResolution = new Vector2Int(1280, 960);
+                    _cam.enabled = true;
+                    SetFocusStatus(ref _camStatus, "camera: retrying at 1280 x 960");
+                }
+                _camLive = false;
+                return;
+            }
+            _camDisabledAt = -1f;
+            if (!_cam.IsPlaying) { _camLive = false; SetFocusStatus(ref _camStatus, "camera: starting…"); return; }
+            // a new picture (its time stamp moved): copy it after the camera's own Update issued the native update
+            if (_cam.Timestamp != _camStamp || !_camLive)
+            {
+                _camStamp = _cam.Timestamp;
+                if (!PushCameraFrame()) { _camLive = false; return; }
+            }
             _camLive = true;
-            SetFocusStatus(ref _camStatus, "blur: camera live");
+            SetFocusStatus(ref _camStatus, $"camera: live {_cam.CurrentResolution.x} x {_cam.CurrentResolution.y}");
 #endif
         }
 
-        private void PushCameraFrame()
+        private bool PushCameraFrame()
         {
             var tex = _cam.GetTexture();
-            if (tex == null) return;
+            if (tex == null) { SetFocusStatus(ref _camStatus, "camera: no picture yet"); return false; }
+            var ints = _cam.Intrinsics;
+            var pose = _cam.GetCameraPose();
+            float qn = pose.rotation.x * pose.rotation.x + pose.rotation.y * pose.rotation.y + pose.rotation.z * pose.rotation.z + pose.rotation.w * pose.rotation.w;
+            if (qn < 0.5f || float.IsNaN(qn) || ints.FocalLength.x < 1f || ints.SensorResolution.x < 1)
+            {
+                SetFocusStatus(ref _camStatus, $"camera: no pose or intrinsics yet (|q|² {qn:F2}, f {ints.FocalLength.x:F0})");
+                return false;
+            }
             if (_camRt == null)
             {
-                _camRt = new RenderTexture(256, 192, 0, RenderTextureFormat.ARGB32)
-                { name = "focus blur", useMipMap = true, autoGenerateMips = true, filterMode = FilterMode.Trilinear, wrapMode = TextureWrapMode.Clamp };
+                _camRt = new RenderTexture(512, 384, 0, RenderTextureFormat.ARGB32)
+                { name = "focus camera", useMipMap = true, autoGenerateMips = true, filterMode = FilterMode.Trilinear, wrapMode = TextureWrapMode.Clamp };
                 _camRt.Create();
             }
             Graphics.Blit(tex, _camRt);
-            var ints = _cam.Intrinsics;
-            SetCameraUniforms(_camRt, _cam.GetCameraPose(), ints.FocalLength, ints.PrincipalPoint, ints.SensorResolution, _cam.CurrentResolution, true);
+            SetCameraUniforms(_camRt, pose, ints.FocalLength, ints.PrincipalPoint, ints.SensorResolution, _cam.CurrentResolution, true);
+            return true;
         }
 
         /// The camera for the shader: world -> camera, intrinsics (sensor pixels) and the sensor region the image
@@ -421,6 +559,7 @@ namespace MetaCodex.Shell
             if (sh == null) return null;
             var m = new Material(sh) { name = "focus hand cut-out" };
             m.SetFloat(HandId, 1f);
+            m.SetFloat(IntensityId, 1f); // BlendOp Min: clear inside the hand, the outline keeps what is under it
             return m;
         }
 
@@ -441,7 +580,9 @@ namespace MetaCodex.Shell
             for (int h = 0; h < 2; h++)
             {
                 var st = Gestures.Get((MetaCodex.Hands.Handedness)h);
-                bool on = st != null && st.Tracked;
+                // the raw tracking: during the system gesture (the Horizon OS menu) the gesture engine marks the hand
+                // untracked, but it must stay visible then most of all
+                bool on = st != null && st.Frame.Tracked;
                 var f = on ? st.Frame : default;
                 // palm, then each finger from its knuckle to its tip (the thumb from its knuckle), and the wrist
                 Seg(h, 0, on, f.Wrist, f.Palm, 0.040f);

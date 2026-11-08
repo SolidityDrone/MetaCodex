@@ -1,7 +1,7 @@
-// MetaCodex Ambient Focus, the hands: capsules on the tracked hand joints, drawn right after the focus sphere and
-// before any content. Each fragment lowers the eye buffer (BlendOp Min, colour and alpha) so the real hand shows
-// through the darkness or the blur, with a soft silhouette: clear where the capsule faces you, darker towards its
-// outline. Needed at BLACKOUT (radius 0), where the depth alone would darken the hands too.
+// MetaCodex, the hands: capsules on the tracked hand joints, drawn after everything (windows, focus darkness, blur),
+// depth-tested against the opaque panels. Each fragment lowers the eye buffer (BlendOp Min, colour and alpha) so the
+// real hand shows through, with a soft silhouette: clear where the capsule faces you, the outline keeps what is under
+// it. A hand in front of a window is seen; one behind an opaque window stays hidden.
 Shader "MetaCodex/FocusMesh"
 {
     Properties
@@ -11,14 +11,14 @@ Shader "MetaCodex/FocusMesh"
     }
     SubShader
     {
-        Tags { "RenderType" = "Transparent" "Queue" = "Geometry-99" "RenderPipeline" = "UniversalPipeline" "IgnoreProjector" = "True" }
+        Tags { "RenderType" = "Transparent" "Queue" = "Overlay+10" "RenderPipeline" = "UniversalPipeline" "IgnoreProjector" = "True" }
         Pass
         {
             Name "FocusMesh"
             Tags { "LightMode" = "UniversalForward" }
             Cull Off
             ZWrite Off
-            ZTest Always
+            ZTest LEqual // in front of opaque panels (their depth), never through one the hand is behind
             BlendOp Min
             Blend One One
             HLSLPROGRAM

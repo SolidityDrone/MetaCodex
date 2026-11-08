@@ -142,6 +142,10 @@ namespace MetaCodex.Shell
         public float focusSoftness = 0.6f;
         /// Outside the dome: 0 = darkened only; above 0 the passthrough camera's image, soft (more = softer).
         public float focusBlur = 0f;
+        /// Real things (hands, people, objects) in front of a window are shown, from the room's live depth.
+        public bool occludeUi = true;
+        /// The depth is sharpened with the passthrough camera's picture (cleaner cut-outs; the camera runs).
+        public bool depthCamera = true;
         /// SYSTEM > STORAGE: warn when the Linux userland grows past this many GB (0: no limit).
         public float linuxLimitGB = 0f;
 

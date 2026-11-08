@@ -328,7 +328,8 @@ namespace MetaCodex.Terminal
             if (_font != null) return;
             _font = TMP_FontAsset.CreateFontAsset(monoFont, 64, 8, GlyphRenderMode.SDFAA, 1024, 1024, AtlasPopulationMode.Dynamic, true);
             _font.name = monoFont.name + " (runtime SDF)";
-            var mobile = Shader.Find("TextMeshPro/Mobile/Distance Field");
+            // TextBend = TMP's mobile SDF shader + the panel bend (off here) + real things in front of the text
+            var mobile = Resources.Load<Shader>("Shaders/TextBend") ?? Shader.Find("MetaCodex/TextBend") ?? Shader.Find("TextMeshPro/Mobile/Distance Field");
             if (mobile != null) _font.material.shader = mobile;
             var chain = new List<TMP_FontAsset>();
             foreach (var f in fallbackFonts ?? new Font[0])

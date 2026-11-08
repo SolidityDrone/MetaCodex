@@ -54,7 +54,7 @@ tool), phrase templates for the fast path, and a run function. The shell registe
 vault's GIT tab).
 
 `set_setting` settings (spoken names in brackets): `focus` (ambient focus, the dome), `focus_intensity`
-(intensity, darkness), `focus_radius` (radius, dome radius, dome size), `focus_blur` (blur), `focus_softness`, `opacity`,
+(intensity, darkness), `focus_radius` (radius, dome radius, dome size), `focus_blur` (blur), `occlusion` (real things in front of windows), `depth_camera` (sharp depth), `focus_softness`, `opacity`,
 `panel_distance`, `ui_scale` (scale, windows, text size), `sharpness`, `carousel_radius`, `bend`, `sounds`,
 `volume`, `speak`, `clap`, `hand_rays`, `foveation`, `views_auto_open`, `workspace_module`. Numbers are
 spoken freely: "zero", "fifty percent", "two point five", "30 cm", "max", "half", "a quarter"; "30" on a

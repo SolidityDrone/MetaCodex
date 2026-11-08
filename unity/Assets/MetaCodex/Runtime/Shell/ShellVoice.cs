@@ -703,6 +703,8 @@ namespace MetaCodex.Shell
             new VoiceSetting { Id = "focus_intensity", Key = "focusIntensity", Kind = "number", Min = 0f, Max = 1f, Unit = "%", Label = "Focus intensity", Names = new[] { "intensity", "focus intensity", "ambient intensity", "ambient focus intensity", "darkness", "dimming", "dim" } },
             new VoiceSetting { Id = "focus_radius", Key = "focusRadius", Kind = "number", Min = 0f, Max = 5f, Unit = "m", Label = "Focus radius", Names = new[] { "radius", "focus radius", "dome radius", "dome size", "focus range", "range" } },
             new VoiceSetting { Id = "focus_blur", Key = "focusBlur", Kind = "number", Min = 0f, Max = 1f, Unit = "%", Label = "Focus blur", Names = new[] { "blur", "focus blur", "blurring", "the blur", "background blur" } },
+            new VoiceSetting { Id = "occlusion", Key = "occludeUi", Kind = "bool", Label = "Real things in front of windows", Names = new[] { "occlusion", "real things in front", "things in front of windows", "see through windows", "hands in front" } },
+            new VoiceSetting { Id = "depth_camera", Key = "depthCamera", Kind = "bool", Label = "Sharp depth", Names = new[] { "sharp depth", "depth camera", "camera depth", "sharp edges" } },
             new VoiceSetting { Id = "focus_softness", Key = "focusSoftness", Kind = "number", Min = 0.05f, Max = 2f, Unit = "m", Label = "Focus softness", Names = new[] { "softness", "focus softness", "fade", "edge softness" } },
             new VoiceSetting { Id = "opacity", Key = "panelOpacity", Kind = "number", Min = 0.5f, Max = 1f, Unit = "%", Label = "Panel opacity", Names = new[] { "opacity", "panel opacity", "window opacity" } },
             new VoiceSetting { Id = "panel_distance", Key = "panelDistance", Kind = "number", Min = 0.5f, Max = 1.4f, Unit = "m", Label = "Panel distance", Names = new[] { "distance", "panel distance", "window distance" } },
@@ -800,7 +802,8 @@ namespace MetaCodex.Shell
             var sliders = new Dictionary<string, string> { { "DISTANCE", "panelDistance" }, { "CAROUSEL RADIUS", "carouselRadius" }, { "UI SCALE", "uiScale" }, { "SHARPNESS", "renderScale" },
                 { "PANEL OPACITY", "panelOpacity" }, { "VOLUME", "soundVolume" }, { "RADIUS", "focusRadius" }, { "INTENSITY", "focusIntensity" }, { "SOFTNESS", "focusSoftness" }, { "BLUR", "focusBlur" } };
             var toggles = new Dictionary<string, string> { { "Bend panels", "bendPanels" }, { "Sounds", "sounds" }, { "Clap gesture", "gestures.clapEnabled" }, { "Show hand rays", "gestures.rayVisible" },
-                { "Foveated", "foveation" }, { "Ambient focus", "focusEnabled" }, { "Speak answers", "voice.speak" } };
+                { "Foveated", "foveation" }, { "Ambient focus", "focusEnabled" }, { "Speak answers", "voice.speak" },
+                { "Real things in front", "occludeUi" }, { "Sharp depth", "depthCamera" } };
             foreach (var p in _panels.Values)
                 foreach (var e in p.Elements)
                 {
@@ -950,7 +953,7 @@ namespace MetaCodex.Shell
             float leftW = 0.33f;
             var ls = new UiStack(new Rect(c.x, c.y, leftW, c.height), t.Gap);
             _vStatus = p.Add(new UiLabel("", t.SmallSize) { Rect = ls.Next(0.05f), Wrap = true, Align = TextAlignmentOptions.TopLeft });
-            _vModels = p.Add(new UiLabel("", t.SmallSize) { Rect = ls.Next(0.085f), Wrap = true, Align = TextAlignmentOptions.TopLeft, UseMono = true, Color = t.TextDim });
+            _vModels = p.Add(new UiLabel("", t.SmallSize) { Rect = ls.Next(0.15f), Wrap = true, Align = TextAlignmentOptions.TopLeft, UseMono = true, Color = t.TextDim });
             _vInstall = p.Add(new UiProgress(0f) { Rect = ls.Next(0.008f) });
             AddButtons(p, ls.Next(t.ButtonHeight), new (string, Action)[]
             {
@@ -1028,6 +1031,9 @@ namespace MetaCodex.Shell
                     if ((string)m["install"] == "downloading" || (string)m["install"] == "verifying") { progSum += m["progress"]?.Value<float>() ?? 0f; prog++; }
                     string label = kv.Key == "asr" ? "speech→text" : kv.Key == "llm" ? "commands LLM" : "text→speech";
                     lines.Add($"{inst,-4} {label,-13} {m["sizeMB"],4} MB {eng}");
+                    // the model itself, quantization included (the service's catalogue: "Qwen3 0.6B instruct, tool calling (q4_0)")
+                    string name = (string)m["name"] ?? (string)m["id"];
+                    if (!string.IsNullOrEmpty(name)) lines.Add("     " + name);
                     if ((string)m["install"] == "failed") lines.Add("     " + Short((string)m["error"] ?? "", 40));
                 }
                 _vModels.Set(string.Join("\n", lines));

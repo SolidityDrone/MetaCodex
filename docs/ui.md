@@ -142,10 +142,17 @@ the darkness, BLUR how soft the room outside gets (0 = darkened only); BLACKOUT 
 windows and your hands. No Space Setup scan is needed (branch `feat/spatial-dome`, `docs/SPATIAL_DOME_PLAN.md`).
 
 - **Live depth.** Meta's Depth API (`EnvironmentDepthManager`, via `com.unity.xr.meta-openxr` and the OpenXR
-  features "Meta Quest: Session" + "Occlusion"; permission "spatial data", `USE_SCENE`) runs while focus is on. The
-  focus sphere (`Resources/Shaders/AmbientFocus`) reads the depth along each pixel's view ray and rebuilds the
-  real surface's world position (inverse of `_EnvironmentDepthReprojectionMatrices`), so walls, furniture and hands
-  near you stay and far ones fade. Meta's occlusion shaders stay off (no extra depth pass).
+  features "Meta Quest: Session" + "Occlusion"; permission "spatial data", `USE_SCENE`) runs while focus or "real
+  things in front of windows" is on. Meta's occlusion shaders stay off (no extra depth pass).
+- **Sharp depth** (`Resources/Shaders/DepthSharp`, every frame, both eyes): the sensor's 320 x 320 depth at twice the
+  resolution, guided by the passthrough camera's picture where the camera sees (joint bilateral upsampling: each of
+  the 3 x 3 readings around a texel weighs by distance and by how alike its colour is, so depth edges follow the
+  picture's edges; SandyBridge `docs/DEPTH_UPSCALE_PLAN.md`, option A), an edge-preserving depth-only filter
+  elsewhere, and a temporal filter (last frame's result reprojected, kept where it agrees within 2 cm + 2 %), so the
+  cut-out stops flickering and its edge is cleaner. "Sharp depth (camera)" in FOCUS (on).
+- **The dome**: the focus sphere (`Resources/Shaders/AmbientFocus`) reads the sharp depth along each pixel's view ray
+  and rebuilds the real surface's world position (inverse of `_EnvironmentDepthReprojectionMatrices`), so walls,
+  furniture and hands near you stay and far ones fade.
 - **The floor** is the tracking floor, corrected by the depth seen under your feet once three readings 0.3 s apart
   agree within 5 cm (SandyBridge's rule: the Guardian floor can be 10-30 cm off): a 48 x 48 copy of the depth
   (`FocusDepthCopy`) read back, the lowest level near you with enough points (not a table, not a patch read too
@@ -158,8 +165,15 @@ windows and your hands. No Space Setup scan is needed (branch `feat/spatial-dome
   so an app cannot blur the passthrough directly.
 - **Without depth** (permission not given yet, the Editor) the floor plane stands in: the floor near you stays,
   everything above the horizon fades.
-- **Hands** are cut out of the darkness and the blur (soft capsules along the tracked bones, `FocusMesh`), so they
-  always show, also at BLACKOUT.
+- **Hands** are cut out of everything (soft capsules along the tracked bones, `FocusMesh`, drawn after the windows and
+  depth-tested against the opaque ones): a hand in front of a window, in the darkness or in the blur always shows,
+  also during the system gesture (the gesture engine marks the hand untracked then; the cut-outs use the raw tracking).
+- **Real things in front of windows** (FOCUS toggle, on): every UI shader (`Shaders/McxOcclusion.hlsl` in SciFiUI,
+  TextBend, UiIcon, ViewImage, PanelUnlit, StageLit; the terminal's glyphs use TextBend now) fades where the sharp
+  depth puts a real surface 2-6 cm or more in front of it, so people, hands and objects in front of a window stay
+  visible.
+- **The Horizon OS menu**: while a hand does the system gesture or the app has lost input focus (the universal menu
+  is open), the windows and the focus darkness fade out (`_McxUiHide`), so the system menu shows; they come back after.
 
 ## Layouts
 

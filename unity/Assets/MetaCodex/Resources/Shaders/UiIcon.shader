@@ -23,6 +23,7 @@ Shader "MetaCodex/UiIcon"
             #pragma fragment frag
             #pragma multi_compile_instancing
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+            #include "Assets/MetaCodex/Shaders/McxOcclusion.hlsl"
 
             TEXTURE2D(_MainTex);
             SAMPLER(sampler_MainTex);
@@ -33,7 +34,7 @@ Shader "MetaCodex/UiIcon"
             CBUFFER_END
 
             struct Attributes { float4 positionOS : POSITION; half4 color : COLOR; float2 uv : TEXCOORD0; UNITY_VERTEX_INPUT_INSTANCE_ID };
-            struct Varyings { float4 positionCS : SV_POSITION; half4 color : COLOR; float2 uv : TEXCOORD0; UNITY_VERTEX_OUTPUT_STEREO };
+            struct Varyings { float4 positionCS : SV_POSITION; half4 color : COLOR; float2 uv : TEXCOORD0; float3 positionWS : TEXCOORD1; UNITY_VERTEX_OUTPUT_STEREO };
 
             Varyings vert(Attributes v)
             {
@@ -43,7 +44,8 @@ Shader "MetaCodex/UiIcon"
                 float3 p = v.positionOS.xyz;
                 float r = _PanelIndex >= 0.0 ? _PanelBend[(int)_PanelIndex].x : 0.0;
                 if (r > 0.01) { float a = p.x / r; p = float3(r * sin(a), p.y, p.z - r * (1.0 - cos(a))); }
-                o.positionCS = TransformObjectToHClip(p);
+                o.positionWS = TransformObjectToWorld(p);
+                o.positionCS = TransformWorldToHClip(o.positionWS);
                 o.color = v.color;
                 o.uv = v.uv;
                 return o;
@@ -51,8 +53,9 @@ Shader "MetaCodex/UiIcon"
 
             half4 frag(Varyings i) : SV_Target
             {
+                UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
                 half4 c = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, i.uv);
-                return half4(c.rgb * i.color.rgb, c.a * i.color.a);
+                return half4(c.rgb * i.color.rgb, c.a * i.color.a * (half)McxVisibility(i.positionWS));
             }
             ENDHLSL
         }

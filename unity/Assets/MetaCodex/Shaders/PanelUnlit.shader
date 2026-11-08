@@ -16,6 +16,7 @@ Shader "MetaCodex/PanelUnlit"
             #pragma fragment frag
             #pragma multi_compile_instancing
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+            #include "Assets/MetaCodex/Shaders/McxOcclusion.hlsl"
 
             struct Attributes
             {
@@ -28,6 +29,7 @@ Shader "MetaCodex/PanelUnlit"
             {
                 float4 positionCS : SV_POSITION;
                 half4 color : COLOR;
+                float3 positionWS : TEXCOORD0;
                 UNITY_VERTEX_OUTPUT_STEREO
             };
 
@@ -36,14 +38,18 @@ Shader "MetaCodex/PanelUnlit"
                 Varyings o;
                 UNITY_SETUP_INSTANCE_ID(v);
                 UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(o);
-                o.positionCS = TransformObjectToHClip(v.positionOS.xyz);
+                o.positionWS = TransformObjectToWorld(v.positionOS.xyz);
+                o.positionCS = TransformWorldToHClip(o.positionWS);
                 o.color = v.color;
                 return o;
             }
 
             half4 frag(Varyings i) : SV_Target
             {
-                return half4(i.color.rgb, 1);
+                // opaque: where something real is in front, write "nothing" (alpha 0 lets the passthrough show)
+                UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
+                half v = (half)McxVisibility(i.positionWS);
+                return half4(i.color.rgb * v, v);
             }
             ENDHLSL
         }

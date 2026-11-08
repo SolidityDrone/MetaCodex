@@ -2,10 +2,11 @@
 // depth test), that darkens the passthrough outside a dome standing on the floor around the user. Panels, terminals
 // and agent views draw afterwards, on top: at full intensity only the windows (and the hands) remain.
 //
-// Where each pixel's real surface is (MCX_DEPTH): Meta's live environment depth. A point 1 m along the view ray is
-// projected into the depth map (_EnvironmentDepthReprojectionMatrices, world -> depth clip space, as in Meta's
-// EnvironmentOcclusion.cginc), the depth there is read and turned back into a world position (_McxDepthToWorld, the
-// inverse matrices, set by ShellAmbient each frame). Walls, furniture and hands near you stay; far ones fade.
+// Where each pixel's real surface is (MCX_DEPTH): Meta's live environment depth made sharp and steady with the
+// passthrough camera (Resources/Shaders/DepthSharp). A point 1 m along the view ray is projected into the depth map
+// (_EnvironmentDepthReprojectionMatrices, world -> depth clip space, as in Meta's EnvironmentOcclusion.cginc), the
+// sharp depth there is read and turned back into a world position (_McxDepthToWorld, the inverse matrices, set by
+// ShellAmbient each frame). Walls, furniture and hands near you stay; far ones fade.
 // Without depth (or where it has none): the floor plane under the user; above the horizon there is no distance.
 //
 // Blur (MCX_BLUR): outside the dome, instead of black, the passthrough camera's image (a small mip-mapped copy, read
@@ -56,9 +57,12 @@ Shader "MetaCodex/AmbientFocus"
             CBUFFER_END
 
             #if defined(MCX_DEPTH)
-            // set by Meta's EnvironmentDepthManager (or by the self-tests); sampler_LinearClamp comes from URP
-            TEXTURE2D_ARRAY(_EnvironmentDepthTexture);
+            // Meta's matrices (EnvironmentDepthManager, or the self-tests) and the sharp depth made from its depth
+            // (Resources/Shaders/DepthSharp: linear metres, 0 = no reading)
+            Texture2DArray _McxDepthSharp;
+            SamplerState sampler_McxDepthSharp;
             float4x4 _EnvironmentDepthReprojectionMatrices[2];
+            float4 _EnvironmentDepthZBufferParams;
             float4x4 _McxDepthToWorld[2];
             #endif
             #if defined(MCX_BLUR)
@@ -102,9 +106,10 @@ Shader "MetaCodex/AmbientFocus"
                     float2 uv = (q.xy / q.w + 1.0) * 0.5;
                     if (q.w > 0.0 && all(uv > 0.002) && all(uv < 0.998))
                     {
-                        float ndc = SAMPLE_TEXTURE2D_ARRAY_LOD(_EnvironmentDepthTexture, sampler_LinearClamp, uv, eye, 0).r * 2.0 - 1.0;
-                        if (ndc < 0.9999)
+                        float lin = _McxDepthSharp.SampleLevel(sampler_McxDepthSharp, float3(uv, eye), 0).r;
+                        if (lin > 0.01)
                         {
+                            float ndc = _EnvironmentDepthZBufferParams.x / lin - _EnvironmentDepthZBufferParams.y;
                             float4 w = mul(_McxDepthToWorld[eye], float4(uv * 2.0 - 1.0, ndc, 1.0));
                             surface = w.xyz / w.w;
                             dist = length(surface - _FeetPos.xyz); // the dome, from the floor under the user
@@ -125,7 +130,7 @@ Shader "MetaCodex/AmbientFocus"
                         float2 uvc = (sensor - _McxCamCrop.xy) / _McxCamCrop.zw;
                         // inside the camera's view (fading over its last 6 %), else the plain darkness
                         float edge = saturate(min(min(uvc.x, 1.0 - uvc.x), min(uvc.y, 1.0 - uvc.y)) / 0.06 + 0.5);
-                        float2 tap = exp2(_BlurMip) / float2(256.0, 192.0) * 0.5;
+                        float2 tap = exp2(_BlurMip) / float2(512.0, 384.0) * 0.5;
                         half3 c = SAMPLE_TEXTURE2D_LOD(_McxCamTex, sampler_TrilinearClamp, saturate(uvc) + float2(tap.x, tap.y), _BlurMip).rgb;
                         c += SAMPLE_TEXTURE2D_LOD(_McxCamTex, sampler_TrilinearClamp, saturate(uvc) + float2(-tap.x, tap.y), _BlurMip).rgb;
                         c += SAMPLE_TEXTURE2D_LOD(_McxCamTex, sampler_TrilinearClamp, saturate(uvc) + float2(tap.x, -tap.y), _BlurMip).rgb;

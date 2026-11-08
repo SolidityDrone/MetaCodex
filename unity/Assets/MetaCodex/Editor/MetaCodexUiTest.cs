@@ -1280,6 +1280,52 @@ end)
         /// Renders the eye buffer (320 x 240, 60 degrees, looking along +z) with a synthetic environment depth: a 4 x 4 m
         /// wall `dist` metres ahead, nothing elsewhere (raw depth 1 = "far"), stored as Meta's texture does ((ndc + 1) / 2)
         /// with the same world -> depth clip matrix for both eyes.
+        /// Meta's ndc -> linear depth parameters for a projection with these planes: linear = x / (ndc + y).
+        private static Vector4 DepthZParams(float n, float f) => new Vector4(-2f * f * n / (f - n), -(f + n) / (f - n), 0f, 0f);
+
+        /// A synthetic environment depth as Meta's texture stores it ((ndc + 1) / 2), both eyes the same, from a
+        /// function giving each texel's distance along its ray (0 = no reading).
+        private static Texture2DArray DepthTexture(Matrix4x4 m, Vector3 eyePos, int dw, int dh, Func<int, int, Vector3, float> distance)
+        {
+            var inv = m.inverse;
+            var depth = new float[dw * dh];
+            for (int y = 0; y < dh; y++)
+                for (int x = 0; x < dw; x++)
+                {
+                    var farP = inv * new Vector4((x + 0.5f) / dw * 2f - 1f, (y + 0.5f) / dh * 2f - 1f, 1f, 1f);
+                    var dir = ((Vector3)farP / farP.w - eyePos).normalized;
+                    float r = distance(x, y, dir);
+                    float d = 1f;
+                    if (r > 0f)
+                    {
+                        var c = m * new Vector4(eyePos.x + dir.x * r, eyePos.y + dir.y * r, eyePos.z + dir.z * r, 1f);
+                        d = Mathf.Clamp01((c.z / c.w + 1f) * 0.5f);
+                    }
+                    depth[y * dw + x] = d;
+                }
+            var tex = new Texture2DArray(dw, dh, 2, TextureFormat.RFloat, false, true) { filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp };
+            tex.SetPixelData(depth, 0, 0);
+            tex.SetPixelData(depth, 0, 1);
+            tex.Apply(false);
+            return tex;
+        }
+
+        /// The sharp depth's slice 0 read back (metres, row 0 first).
+        private static float[] ReadSharp(MetaCodexShell shell, out int w, out int h)
+        {
+            var rt = shell.SharpDepthForTest;
+            w = rt != null ? rt.width : 0;
+            h = rt != null ? rt.height : 0;
+            if (rt == null) return new float[0];
+            var req = UnityEngine.Rendering.AsyncGPUReadback.Request(rt, 0, 0, w, 0, h, 0, 1, TextureFormat.RHalf, null);
+            req.WaitForCompletion();
+            if (req.hasError) return new float[0];
+            var raw = req.GetData<ushort>(0);
+            var outp = new float[raw.Length];
+            for (int k = 0; k < raw.Length; k++) outp[k] = Mathf.HalfToFloat(raw[k]);
+            return outp;
+        }
+
         private static Texture2D RenderWithDepth(MetaCodexShell shell, string file, Vector3 head, float dist, int dw, int dh)
         {
             const float fov = 60f, aspect = 320f / 240f;
@@ -1308,7 +1354,7 @@ end)
             tex.SetPixelData(depth, 0, 0);
             tex.SetPixelData(depth, 0, 1);
             tex.Apply(false);
-            shell.SetDepthForTest(tex, new[] { m, m });
+            shell.SetDepthForTest(tex, new[] { m, m }, DepthZParams(0.1f, 20f));
             shell.TickFocusForTest(0.2f);
             // a manual Editor render right after a material keyword changes still draws the old variant (measured:
             // 1.00 then 0.00 for the same frame): one warm-up render first
@@ -1662,7 +1708,7 @@ end)
             foreach (var t in new[] { blurFar, blurNear, narrow }) UnityEngine.Object.DestroyImmediate(t);
             shell.SetCameraForTest(null, default, default, default, default, default);
             UnityEngine.Object.DestroyImmediate(camImg);
-            shell.SetDepthForTest(null, null);
+            shell.SetDepthForTest(null, null, default);
             shell.Settings.focusBlur = 0f;
             shell.Settings.focusIntensity = 1f;
             // the floor under the feet (SandyBridge's rule): the lowest level with enough depth points near you, not
@@ -1718,6 +1764,98 @@ end)
                 crt.Release();
                 foreach (var o in new UnityEngine.Object[] { copyMat, arr, crt, back }) UnityEngine.Object.DestroyImmediate(o);
             }
+            // SHARP DEPTH (RGB-guided, SandyBridge docs/DEPTH_UPSCALE_PLAN.md option A): twice the sensor's resolution;
+            // the sensor puts a near object's edge between readings 29 and 30, the camera picture half a reading
+            // further: without the camera the sharp edge stays at the sensor's, with it it moves to the picture's
+            {
+                const int sw = 64, shh = 64;
+                var eyeP = head.position;
+                var viewM = Matrix4x4.Scale(new Vector3(1f, 1f, -1f)) * Matrix4x4.TRS(eyeP, Quaternion.identity, Vector3.one).inverse;
+                var mm = Matrix4x4.Perspective(60f, 1f, 0.1f, 20f) * viewM;
+                var zp = DepthZParams(0.1f, 20f);
+                var edgeTex = DepthTexture(mm, eyeP, sw, shh, (x, y, dir) => (x < 30 ? 1.0f : 3.0f) / dir.z);
+                var pic = new Texture2D(128, 128, TextureFormat.RGBA32, false, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
+                var pix = new Color32[128 * 128];
+                for (int y = 0; y < 128; y++) for (int x = 0; x < 128; x++) pix[y * 128 + x] = x < 61 ? new Color32(230, 40, 30, 255) : new Color32(30, 60, 230, 255);
+                pic.SetPixels32(pix);
+                pic.Apply(false);
+                float fpx = 64f / Mathf.Tan(30f * Mathf.Deg2Rad);
+                int EdgeColumn(float[] d, int w, int hh) { int row = hh / 2; for (int x = 0; x < w; x++) if (d[row * w + x] > 2f) return x; return -1; }
+                shell.SetCameraForTest(null, default, default, default, default, default);
+                shell.SetDepthForTest(edgeTex, new[] { mm, mm }, zp);
+                var plain = ReadSharp(shell, out int w1, out int h1);
+                int e0 = EdgeColumn(plain, w1, h1);
+                shell.SetCameraForTest(pic, new Pose(eyeP, Quaternion.identity), new Vector2(fpx, fpx), new Vector2(64f, 64f), new Vector2Int(128, 128), new Vector2Int(128, 128));
+                shell.SetDepthForTest(edgeTex, new[] { mm, mm }, zp);
+                var guided = ReadSharp(shell, out int w2, out int h2);
+                int e1 = EdgeColumn(guided, w2, h2);
+                float nearV = guided.Length > 0 ? guided[(h2 / 2) * w2 + 20] : 0f, farV = guided.Length > 0 ? guided[(h2 / 2) * w2 + 100] : 0f;
+                Check(w1 == 128 && h1 == 128 && e0 == 60 && e1 == 61 && Mathf.Abs(nearV - 1f) < 0.02f && Mathf.Abs(farV - 3f) < 0.05f,
+                    $"sharp depth: {w1} x {h1} from 64 x 64; edge at column {e0} from the depth alone (sensor 60), {e1} with the picture (picture 61); flat parts kept ({nearV:F2} m, {farV:F2} m)");
+                // temporal: a wall 2 m away read with ±2 cm noise each frame: the noise drops frame after frame
+                var rnd = new System.Random(3);
+                float WallNoise() => (float)(rnd.NextDouble() - 0.5) * 0.04f;
+                float Err(float[] d, int w, int hh)
+                {
+                    double sum = 0; int cnt = 0;
+                    for (int y = hh / 4; y < hh * 3 / 4; y++) for (int x = w / 4; x < w * 3 / 4; x++) { float e = d[y * w + x] - 2f; sum += e * e; cnt++; }
+                    return cnt > 0 ? (float)Math.Sqrt(sum / cnt) : 1f;
+                }
+                shell.SetCameraForTest(null, default, default, default, default, default);
+                var n0 = DepthTexture(mm, eyeP, 32, 32, (x, y, dir) => (2f + WallNoise()) / dir.z);
+                shell.SetDepthForTest(n0, new[] { mm, mm }, zp);
+                float err0 = Err(ReadSharp(shell, out int nw, out int nh), nw, nh);
+                UnityEngine.Object.DestroyImmediate(n0);
+                for (int k = 0; k < 10; k++)
+                {
+                    var nk = DepthTexture(mm, eyeP, 32, 32, (x, y, dir) => (2f + WallNoise()) / dir.z);
+                    shell.SetDepthForTest(nk, new[] { mm, mm }, zp, keepHistory: true);
+                    UnityEngine.Object.DestroyImmediate(nk);
+                }
+                float err1 = Err(ReadSharp(shell, out nw, out nh), nw, nh);
+                Check(err1 < err0 * 0.75f, $"sharp depth over time: noise {err0 * 100f:F2} cm on the first frame, {err1 * 100f:F2} cm after 10 (raw ±2 cm)");
+                UnityEngine.Object.DestroyImmediate(edgeTex);
+                UnityEngine.Object.DestroyImmediate(pic);
+            }
+            // REAL THINGS IN FRONT OF WINDOWS: a hand-sized thing 0.5 m away in front of the terminal (0.9 m): the terminal
+            // is hidden there and only there; the setting off covers it again
+            {
+                shell.SetFocus(false, false);
+                shell.TickFocusForTest(1f);
+                shell.Settings.occludeUi = true;
+                var eyeP = head.position;
+                var viewM = Matrix4x4.Scale(new Vector3(1f, 1f, -1f)) * Matrix4x4.TRS(eyeP, Quaternion.identity, Vector3.one).inverse;
+                var mm = Matrix4x4.Perspective(60f, 320f / 240f, 0.1f, 20f) * viewM;
+                var occTex = DepthTexture(mm, eyeP, 160, 120, (x, y, dir) => (Mathf.Abs(x - 80) < 16 && Mathf.Abs(y - 60) < 16 ? 0.5f : 3f) / dir.z);
+                shell.SetDepthForTest(occTex, new[] { mm, mm }, DepthZParams(0.1f, 20f));
+                shell.TickFocusForTest(0.2f);
+                UnityEngine.Object.DestroyImmediate(RenderRgba(null, eyeP, Quaternion.identity, 60f, 320, 240));
+                var occ = RenderRgba("ui-occlusion.png", eyeP, Quaternion.identity, 60f, 320, 240);
+                float aThing = occ.GetPixel(160, 120).a, aPanel = occ.GetPixel(160, 60).a;
+                shell.Settings.occludeUi = false;
+                shell.TickFocusForTest(0.2f);
+                UnityEngine.Object.DestroyImmediate(RenderRgba(null, eyeP, Quaternion.identity, 60f, 320, 240));
+                var off = RenderRgba(null, eyeP, Quaternion.identity, 60f, 320, 240);
+                float aOff = off.GetPixel(160, 120).a;
+                shell.Settings.occludeUi = true;
+                Check(aThing < 0.05f && aPanel > 0.9f && aOff > 0.9f, $"real things in front of windows: the terminal is hidden where something real is 0.5 m away ({aThing:F2}), kept elsewhere ({aPanel:F2}); setting off: covered again ({aOff:F2})");
+                // the Horizon OS menu: while it is open (input focus lost / system gesture) the windows step aside
+                shell.UiStepAsideOverride = true;
+                shell.TickFocusForTest(0.5f);
+                UnityEngine.Object.DestroyImmediate(RenderRgba(null, eyeP, Quaternion.identity, 60f, 320, 240));
+                var aside = RenderRgba("ui-step-aside.png", eyeP, Quaternion.identity, 60f, 320, 240);
+                float aAside = aside.GetPixel(160, 60).a;
+                shell.UiStepAsideOverride = null;
+                shell.TickFocusForTest(0.5f);
+                UnityEngine.Object.DestroyImmediate(RenderRgba(null, eyeP, Quaternion.identity, 60f, 320, 240));
+                var back = RenderRgba(null, eyeP, Quaternion.identity, 60f, 320, 240);
+                float aBack = back.GetPixel(160, 60).a;
+                Check(aAside < 0.05f && aBack > 0.9f, $"the Horizon OS menu: the windows step aside while it is open ({aAside:F2}) and come back after ({aBack:F2})");
+                foreach (var t in new[] { occ, off, aside, back }) UnityEngine.Object.DestroyImmediate(t);
+                shell.SetDepthForTest(null, null, default);
+                UnityEngine.Object.DestroyImmediate(occTex);
+                shell.SetFocus(true, false);
+            }
             // hands: always clear, even at BLACKOUT
             shell.ApplyFocusPreset("blackout");
             shell.PoseHand(Handedness.Right, 0.1f, 0.1f, 0.1f, 0.1f, 0.1f);
@@ -1728,6 +1866,26 @@ end)
             float aPalm = hands.GetPixel(160, 120).a, aAround = hands.GetPixel(10, 230).a;
             Check(aPalm < 0.1f && aAround > 0.95f, $"hands stay visible in the dark (palm {aPalm:F2}, around {aAround:F2})");
             UnityEngine.Object.DestroyImmediate(hands);
+            // ... and in front of a window: SETTINGS (opaque) 0.4 m behind the palm, focus off, no depth: the hand
+            // cut-outs are drawn after the windows and pass their depth only where the hand is in front
+            {
+                shell.SetFocus(false, false);
+                shell.TickFocusForTest(1f);
+                shell.OpenPanel("settings");
+                var sp = shell.PanelsById["settings"];
+                var dirP = (palmW - head.position).normalized;
+                sp.transform.SetPositionAndRotation(palmW + dirP * 0.4f, Quaternion.LookRotation(dirP));
+                shell.TickFocusForTest(0.2f);
+                var look = Quaternion.LookRotation(dirP);
+                UnityEngine.Object.DestroyImmediate(RenderRgba(null, head.position, look, 60f, 320, 240));
+                var front = RenderRgba("ui-hand-in-front.png", head.position, look, 60f, 320, 240);
+                float aHand = front.GetPixel(160, 120).a;
+                var px = front.GetPixels();
+                float win = px.Count(c => c.a > 0.9f) / (float)px.Length; // the window behind fills much of the view
+                Check(aHand < 0.1f && win > 0.2f, $"a hand in front of a window stays visible (palm {aHand:F2}; the window covers {win * 100f:0}% of the view around it)");
+                UnityEngine.Object.DestroyImmediate(front);
+                shell.ClosePanel("settings");
+            }
             shell.SimHands.Hide(Handedness.Right);
             shell.TickGesturesForTest(0.1f);
             shell.FloorYOverride = null;

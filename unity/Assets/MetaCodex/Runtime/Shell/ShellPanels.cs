@@ -572,6 +572,10 @@ end)
             _focusIntensity = tabs.AddTo(TabFocus, new UiSlider("INTENSITY", 0f, 1f, s.focusIntensity, v => { s.focusIntensity = v; OnSettingsChanged(); RefreshFocusPanel(); }) { Rect = fo.Next(rowH), Format = "0%" });
             _focusSoft = tabs.AddTo(TabFocus, new UiSlider("SOFTNESS", 0.05f, 2f, s.focusSoftness, v => { s.focusSoftness = v; OnSettingsChanged(); RefreshFocusPanel(); }) { Rect = fo.Next(rowH), Format = "0.0 m" });
             _focusBlur = tabs.AddTo(TabFocus, new UiSlider("BLUR", 0f, 1f, s.focusBlur, v => { s.focusBlur = v; OnSettingsChanged(); RefreshFocusPanel(); }) { Rect = fo.Next(rowH), Format = "0%" });
+            var fx = fo.Next(rowH);
+            float fxw = (fx.width - t.Gap) / 2f;
+            tabs.AddTo(TabFocus, new UiToggle("Real things in front of windows", s.occludeUi, v => { s.occludeUi = v; OnSettingsChanged(); RefreshFocusPanel(); }) { Rect = new Rect(fx.x, fx.y, fxw, fx.height) });
+            tabs.AddTo(TabFocus, new UiToggle("Sharp depth (camera)", s.depthCamera, v => { s.depthCamera = v; OnSettingsChanged(); RefreshFocusPanel(); }) { Rect = new Rect(fx.x + fxw + t.Gap, fx.y, fxw, fx.height) });
             var fp = fo.Next(t.ButtonHeight);
             float fpw = (fp.width - t.Gap * 2) / 3f;
             string[] presets = { "subtle", "focus", "blackout" };
@@ -581,7 +585,7 @@ end)
                 tabs.AddTo(TabFocus, new UiButton(preset.ToUpperInvariant(), () => { ApplyFocusPreset(preset); }) { Rect = new Rect(fp.x + i * (fpw + t.Gap), fp.y, fpw, fp.height) });
             }
             _focusInfo = tabs.AddTo(TabFocus, new UiLabel("", t.SmallSize) { Rect = fo.Next(0.046f), Wrap = true, Color = t.TextDim, Align = TextAlignmentOptions.TopLeft });
-            tabs.AddTo(TabFocus, new UiLabel("A dome standing on the floor around you, from the live depth of the room (no Space Setup scan): walls, furniture and your hands inside it stay, the rest fades to dark or, with BLUR, to a soft camera image (asks for the camera once). Your windows always stay. BLACKOUT leaves only the windows and your hands. FOCUS on the dock turns it on and off.", t.SmallSize) { Rect = fo.Rest(), Wrap = true, Color = t.TextDim, Align = TextAlignmentOptions.TopLeft });
+            tabs.AddTo(TabFocus, new UiLabel("A dome standing on the floor around you, from the live depth of the room (no Space Setup scan), sharpened with the camera picture: walls, furniture and your hands inside it stay, the rest fades to dark or, with BLUR, to a soft image. Hands, people and things in front of a window stay visible. BLACKOUT leaves only the windows and your hands; the Horizon OS menu always shows.", t.SmallSize) { Rect = fo.Rest(), Wrap = true, Color = t.TextDim, Align = TextAlignmentOptions.TopLeft });
             RefreshFocusPanel();
 
             // LOOK: one standard appearance; what is left are comfort settings

@@ -99,6 +99,7 @@ SubShader {
 		#include "UnityCG.cginc"
 		#include "UnityUI.cginc"
 		#include "Assets/TextMesh Pro/Shaders/TMPro_Properties.cginc"
+		#include "Assets/MetaCodex/Shaders/McxOcclusion.hlsl"
 
 		float4 _PanelBend[128];
 		float _PanelIndex;
@@ -126,6 +127,7 @@ SubShader {
 			float4	texcoord1		: TEXCOORD3;			// Texture UV, alpha, reserved
 			half2	underlayParam	: TEXCOORD4;			// Scale(x), Bias(y)
 			#endif
+			float3	worldPos		: TEXCOORD5;			// after the bend: compared with real things in front
 		};
 
 		float _UIMaskSoftnessX;
@@ -155,6 +157,7 @@ SubShader {
 				vert.xyz = p - _TextOffset.xyz;
 			}
 			float4 vPosition = UnityObjectToClipPos(vert);
+			output.worldPos = mul(unity_ObjectToWorld, float4(vert.xyz, 1.0)).xyz;
 
 			float2 pixelSize = vPosition.w;
 			pixelSize /= float2(_ScaleX, _ScaleY) * abs(mul((float2x2)UNITY_MATRIX_P, _ScreenParams.xy));
@@ -253,6 +256,10 @@ SubShader {
 			#if (UNDERLAY_ON | UNDERLAY_INNER)
 			c *= input.texcoord1.z;
 			#endif
+
+			// premultiplied: the whole colour fades where something real is in front of the text
+			UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
+			c *= McxVisibility(input.worldPos);
 
 			#if UNITY_UI_ALPHACLIP
 			clip(c.a - 0.001);
