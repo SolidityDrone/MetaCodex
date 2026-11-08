@@ -131,8 +131,8 @@ namespace MetaCodex.UI
             float fillStyle = Style == UiButtonStyle.Primary || Style == UiButtonStyle.Danger ? 1f : Style == UiButtonStyle.Ghost ? 2f : 0f;
             _shape = Panel.Shapes.Add(Panel.Shape(UiShapeKind.Button, Rect, Tint, Mathf.Min(Theme.CutBig * 0.55f, Rect.height * 0.5f), fillStyle, 0.006f));
             float size = TextSize > 0 ? TextSize : Mathf.Min(Theme.BodySize, Rect.height * 0.62f);
-            _label = UiText.Create(Panel, Rect, UiTheme.Pretty(Text), Style == UiButtonStyle.Tab || Style == UiButtonStyle.Primary ? Theme.Display : Theme.Body,
-                size, Theme.Text, TextAlignmentOptions.Center);
+            // console look: every button label in the display font (capitals, letter-spaced)
+            _label = UiText.Create(Panel, Rect, UiTheme.Pretty(Text), Theme.Display, size, Theme.Text, TextAlignmentOptions.Center);
             Refresh();
         }
 

@@ -56,8 +56,9 @@ namespace MetaCodex.UI
             {
                 var hr = new Rect(0.004f, 0.004f, width - 0.008f, Theme.HeaderHeight - 0.004f);
                 _header = Shapes.Add(Shape(UiShapeKind.Header, hr, Theme.Accent, Theme.CutBig * 0.8f, 0.002f, margin: 0.002f));
-                _title = UiText.Create(this, new Rect(Theme.Padding + 0.002f, 0.006f, width - 0.1f, Theme.HeaderHeight - 0.008f),
-                    UiTheme.Pretty(title), Theme.Display, Theme.TitleSize, Theme.Text, TextAlignmentOptions.MidlineLeft);
+                _title = UiText.Create(this, new Rect(Theme.Padding + 0.006f, 0.006f, width - 0.1f, Theme.HeaderHeight - 0.010f),
+                    ConsoleTitle(title), Theme.Display, Theme.TitleSize, Theme.TextAccent, TextAlignmentOptions.MidlineLeft);
+                _title.Tmp.characterSpacing = 5f;
                 _close = Add(new UiButton("✕", () => Close(), UiButtonStyle.Ghost)
                 {
                     Rect = new Rect(width - 0.044f, 0.006f, 0.036f, Theme.HeaderHeight - 0.010f),
@@ -129,8 +130,11 @@ namespace MetaCodex.UI
         public void SetTitle(string title)
         {
             Title = title;
-            if (_title != null) _title.Text = UiTheme.Pretty(title);
+            if (_title != null) _title.Text = ConsoleTitle(title);
         }
+
+        /// Panel titles in capitals (the console look), except what must keep its case (paths in titles are rare).
+        private static string ConsoleTitle(string title) => UiTheme.TitleCase ? UiTheme.Pretty(title) : (title ?? "").ToUpperInvariant();
 
         /// Hides the title bar's own close button (terminal frames have their own buttons there).
         public void HideCloseButton() => _close?.SetVisible(false);
@@ -421,7 +425,10 @@ namespace MetaCodex.UI
             go.transform.SetParent(panel.transform, false);
             var t = go.AddComponent<TextMeshPro>();
             ApplyFont(t, font);
-            t.fontSize = panel.Theme.FontSizeFor(lineHeight);
+            bool display = font != null && font == panel.Theme.Display;
+            // the display face (Rajdhani) is narrow with a small x-height: a little larger and letter-spaced
+            t.fontSize = panel.Theme.FontSizeFor(lineHeight) * (display ? 1.12f : 1f);
+            if (display) t.characterSpacing = 3f;
             t.color = color;
             t.alignment = align;
             t.textWrappingMode = wrap ? TextWrappingModes.Normal : TextWrappingModes.NoWrap;

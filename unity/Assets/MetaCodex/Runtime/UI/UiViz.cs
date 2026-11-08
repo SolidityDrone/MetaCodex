@@ -171,8 +171,10 @@ namespace MetaCodex.UI
             _nt++;
             var tmp = t.Tmp;
             if (font != null && tmp.font != font) UiText.ApplyFont(tmp, font);
-            float fs = Theme.FontSizeFor(lineHeight);
+            bool display = font == Theme.Display;
+            float fs = Theme.FontSizeFor(lineHeight) * (display ? 1.12f : 1f);
             if (!Mathf.Approximately(tmp.fontSize, fs)) tmp.fontSize = fs;
+            tmp.characterSpacing = display ? 3f : 0f;
             tmp.color = color;
             tmp.alignment = align;
             tmp.textWrappingMode = wrap ? TextWrappingModes.Normal : TextWrappingModes.NoWrap;
