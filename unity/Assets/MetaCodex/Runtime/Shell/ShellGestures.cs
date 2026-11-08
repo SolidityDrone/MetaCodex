@@ -94,7 +94,9 @@ namespace MetaCodex.Shell
                 case "lua": { var r = Scripts.Eval(arg); return r.StartsWith("error:") ? r : null; }
                 case "gesture": Gestures.RaiseExternal(arg.Trim(), "both", "tap", Time.unscaledTime, Vector3.zero, "action"); return null;
                 case "voice": return VoiceAction(arg);
-                default: return "unknown action '" + verb + "' (open/close/toggle/toast/run/type/url/layout/spin/select/keyboard/terminal/recenter/lua/gesture/voice)";
+                case "focus": { string a = arg.Trim().ToLowerInvariant(); SetFocus(a == "on" ? true : a == "off" ? false : !Settings.focusEnabled); return null; }
+                case "view": return OpenView(MetaCodexShell.SafeViewId(arg.Trim())) ? null : "no view " + arg;
+                default: return "unknown action '" + verb + "' (open/close/toggle/toast/run/type/url/layout/spin/select/keyboard/terminal/recenter/lua/gesture/voice/focus/view)";
             }
         }
 

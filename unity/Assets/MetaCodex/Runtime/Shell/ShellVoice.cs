@@ -97,7 +97,7 @@ namespace MetaCodex.Shell
         private JArray _voicePrefix;
         private int _voicePrefixRev = -1;
         private string _voiceGrammar;
-        public static readonly string[] VoicePanels = { "terminals", "files", "git", "agents", "threads", "browser", "scripts", "gestures", "vault", "settings", "voice" };
+        public static readonly string[] VoicePanels = { "terminals", "files", "git", "agents", "threads", "browser", "scripts", "gestures", "vault", "settings", "voice", "system" };
 
         private AudioSource _voiceAudio;
         private UiPanel _vHud;
@@ -471,6 +471,7 @@ namespace MetaCodex.Shell
                 ["repository"] = "git", ["repo"] = "git", ["source control"] = "git", ["branches"] = "git", ["commits"] = "git", ["get"] = "git", ["gift"] = "git",
                 ["terminal list"] = "terminals", ["consoles"] = "terminals", ["shells"] = "terminals",
                 ["microphone"] = "voice", ["voice control"] = "voice", ["assistant"] = "voice", ["speech"] = "voice",
+                ["storage"] = "system", ["disk"] = "system", ["disk space"] = "system", ["installed tools"] = "system", ["tools"] = "system", ["packages"] = "system", ["linux"] = "system",
             };
             string Label(string id) => id.ToUpperInvariant();
 
@@ -591,6 +592,22 @@ namespace MetaCodex.Shell
                 Llm = false,
                 Phrases = new[] { "(run|execute) [the] [command] {command} [in the terminal]" },
                 Run = a => { TerminalSend((string)a["command"] + "\r"); return "Running " + (string)a["command"]; },
+            });
+            Voice.Register(new VoiceCommand
+            {
+                Name = "set_focus",
+                Description = "Ambient focus: darken the room around you (on) or show it again (off)",
+                Parameters = VoiceCommands.Schema(("state", "string", new[] { "on", "off" }, "on or off", true)),
+                Synonyms = new Dictionary<string, Dictionary<string, string>>
+                {
+                    ["state"] = new Dictionary<string, string> { ["enable"] = "on", ["start"] = "on", ["disable"] = "off", ["stop"] = "off", ["end"] = "off" },
+                },
+                Phrases = new[]
+                {
+                    "[turn|switch|set] [the] [ambient] focus [mode] {state}", "(turn|switch) {state} [the] [ambient] focus [mode]",
+                    "(darken|dim|black out|blackout) [the] (room|world|surroundings|background) {state:on}", "(show|bring back) [the] (room|world|surroundings) {state:off}",
+                },
+                Run = a => { bool on = (string)a["state"] == "on"; SetFocus(on, false); return on ? "Focus on" : "Focus off"; },
             });
             Voice.Register(new VoiceCommand
             {

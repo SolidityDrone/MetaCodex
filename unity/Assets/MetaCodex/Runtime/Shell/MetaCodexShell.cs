@@ -212,6 +212,7 @@ namespace MetaCodex.Shell
             while (_main.TryDequeue(out var a)) { try { a(); } catch (Exception ex) { Log("main-thread callback failed: " + ex.Message); } }
             Scripts?.Tick(Time.unscaledTime);
             TickVoice();
+            UpdateFocus(Mathf.Min(Time.unscaledDeltaTime, 0.1f));
             FlushPendingRebuild();
             RunLater();
             ScanTerminalLinks();
@@ -234,8 +235,36 @@ namespace MetaCodex.Shell
 
         public IEnumerable<string> PanelIds => _panels.Keys;
 
+        /// Panels that moved inside another one: GIT is the vault's GIT tab now (ui.open("git") still works).
+        public static readonly Dictionary<string, (string panel, int tab)> PanelAliases = new Dictionary<string, (string, int)> { { "git", ("vault", 1) } };
+
+        private static bool Alias(ref string id, out int tab)
+        {
+            tab = -1;
+            if (id == null || !PanelAliases.TryGetValue(id, out var a)) return false;
+            id = a.panel;
+            tab = a.tab;
+            return true;
+        }
+
+        private UiTabs PanelTabs(string id) => id == "vault" ? _vTabs : id == "thread-ws" ? _wsTabs : null;
+
+        /// Open (an alias counts when its tab is the one shown).
+        public bool IsPanelOpen(string id)
+        {
+            bool alias = Alias(ref id, out int tab);
+            if (!_panels.TryGetValue(id ?? "", out var p) || !p.IsOpen) return false;
+            return !alias || PanelTabs(id)?.Selected == tab;
+        }
+
         public bool OpenPanel(string id)
         {
+            if (Alias(ref id, out int tab))
+            {
+                bool ok = OpenPanel(id);
+                PanelTabs(id)?.Select(tab);
+                return ok;
+            }
             if (!_panels.TryGetValue(id ?? "", out var p)) return false;
             if (!p.IsOpen)
             {
@@ -249,10 +278,23 @@ namespace MetaCodex.Shell
             return true;
         }
 
-        public bool ClosePanel(string id) { if (!_panels.TryGetValue(id ?? "", out var p)) return false; p.Close(); return true; }
+        public bool ClosePanel(string id)
+        {
+            Alias(ref id, out _);
+            if (!_panels.TryGetValue(id ?? "", out var p)) return false;
+            p.Close();
+            return true;
+        }
 
         public bool TogglePanel(string id)
         {
+            if (Alias(ref id, out int tab))
+            {
+                if (!_panels.TryGetValue(id, out var ap)) return false;
+                if (ap.IsOpen && PanelTabs(id)?.Selected == tab) ap.Close();
+                else { OpenPanel(id); PanelTabs(id)?.Select(tab); }
+                return true;
+            }
             if (!_panels.TryGetValue(id ?? "", out var p)) return false;
             if (p.IsOpen) p.Close(); else OpenPanel(id);
             return true;

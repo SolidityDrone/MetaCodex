@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Text.RegularExpressions;
 using MetaCodex.Security;
 using MetaCodex.UI;
@@ -127,29 +128,236 @@ namespace MetaCodex.Shell
 
         // ------------------------------------------------------------------ panel
 
+        private UiTabs _vTabs;
+        public UiTabs VaultTabsForTest => _vTabs;
+        public UiTabs SystemTabsForTest => _sysTabs;
+        public UiTabs WorkspaceTabsForTest => _wsTabs;
+        public string GitHubStatusForTest => _ghStatus?.Text ?? "";
+        private UiLabel _ghStatus;
+        private string _ghLogin, _ghName, _ghScopes, _gitUser, _gitEmail, _gitHelper;
+        public const string GitHubTokenName = "GITHUB_TOKEN";
+        public const string GitHelperValue = "!mcx-secret git-credential " + GitHubTokenName;
+
+        /// VAULT: SECRETS (API keys, tokens: sealed, handed out by policy) and GIT (GitHub account for git and
+        /// agents, git identity, and the repositories of this headset: status, branches, history).
         private void BuildVault()
         {
             var t = UiTheme.Current;
-            var p = Panel<UiPanel>("vault", "VAULT · SECRETS", 0.72f, 0.58f);
+            var p = Panel<UiPanel>("vault", "Vault", 0.76f, 0.66f);
             var c = p.Content;
+            _vTabs = p.Add(new UiTabs("SECRETS", "GIT") { Rect = new Rect(c.x, c.y, Mathf.Min(c.width, 0.32f), t.ButtonHeight) });
+            var area = new Rect(c.x, c.y + t.ButtonHeight + t.Gap * 2, c.width, c.height - t.ButtonHeight - t.Gap * 2);
+
+            // SECRETS
             float leftW = 0.26f;
-            var ls = new UiStack(new Rect(c.x, c.y, leftW, c.height), t.Gap);
-            _vList = p.Add(new UiList(0.034f, (item, idx) => { _vSel = item.Tag as string; ShowVaultDetail(); }) { Rect = ls.Next(c.height - t.ButtonHeight - t.Gap) });
-            p.Add(new UiButton("+ ADD SECRET…", AddSecretPrompt, UiButtonStyle.Primary) { Rect = ls.Next(t.ButtonHeight) });
-            var rs = new UiStack(new Rect(c.x + leftW + t.Gap * 2, c.y, c.width - leftW - t.Gap * 2, c.height), t.Gap);
-            _vInfo = p.Add(new UiLabel("", t.SmallSize) { Rect = rs.Next(0.036f), Wrap = true, Color = t.TextDim, Align = TextAlignmentOptions.TopLeft });
-            _vDetail = p.Add(new UiLabel("", t.SmallSize * 1.05f) { Rect = rs.Next(0.10f), Wrap = true, Align = TextAlignmentOptions.TopLeft });
-            _vPolicy = p.Add(new UiSegmented("POLICY", new[] { "ASK", "ONCE", "ALLOW", "DENY" }, 0, i => { if (_vSel != null) { Vault.SetPolicy(_vSel, SecretVault.Policies[i]); ShowVaultDetail(); } }) { Rect = rs.Next(0.032f), LabelWidth = 0.08f });
-            AddButtons(p, rs.Next(t.ButtonHeight), new (string, Action)[]
+            var ls = new UiStack(new Rect(area.x, area.y, leftW, area.height), t.Gap);
+            _vList = _vTabs.AddTo(0, new UiList(0.034f, (item, idx) => { _vSel = item.Tag as string; ShowVaultDetail(); }) { Rect = ls.Next(area.height - t.ButtonHeight - t.Gap) });
+            _vTabs.AddTo(0, new UiButton("+ ADD SECRET…", AddSecretPrompt, UiButtonStyle.Primary) { Rect = ls.Next(t.ButtonHeight) });
+            var rs = new UiStack(new Rect(area.x + leftW + t.Gap * 2, area.y, area.width - leftW - t.Gap * 2, area.height), t.Gap);
+            _vInfo = _vTabs.AddTo(0, new UiLabel("", t.SmallSize) { Rect = rs.Next(0.036f), Wrap = true, Color = t.TextDim, Align = TextAlignmentOptions.TopLeft });
+            _vDetail = _vTabs.AddTo(0, new UiLabel("", t.SmallSize * 1.05f) { Rect = rs.Next(0.10f), Wrap = true, Align = TextAlignmentOptions.TopLeft });
+            _vPolicy = _vTabs.AddTo(0, new UiSegmented("POLICY", new[] { "ASK", "ONCE", "ALLOW", "DENY" }, 0, i => { if (_vSel != null) { Vault.SetPolicy(_vSel, SecretVault.Policies[i]); ShowVaultDetail(); } }) { Rect = rs.Next(0.032f), LabelWidth = 0.08f });
+            TabButtons(_vTabs, 0, rs.Next(t.ButtonHeight), new (string, Action)[]
             {
                 ("NEW VALUE…", () => { if (_vSel != null) SecretValuePrompt(_vSel, Vault.Find(_vSel)?.kind ?? "api-key"); }),
                 ("→ MQH ENV", PushSecretToMqh),
                 ("RE-ARM", () => { Vault.Rearm(_vSel); Toast("Re-armed: 'once' secrets can be handed out again", "info"); }),
                 ("DELETE", () => { if (_vSel != null) Modal("DELETE SECRET", $"Delete '{_vSel}' from the vault?", new[] { "DELETE", "CANCEL" }, i => { if (i == 0) { Vault.Delete(_vSel); _vSel = null; RefreshVaultPanel(); } }); }),
             }, danger: 3);
-            p.Add(new UiLabel("ACCESS LOG", t.SmallSize) { Rect = rs.Next(0.018f), UseDisplay = true, Color = t.TextDim });
-            _vAudit = p.Add(new UiLabel("", t.SmallSize) { Rect = rs.Rest(), UseMono = true, Wrap = true, Align = TextAlignmentOptions.TopLeft, Color = t.TextDim });
+            _vTabs.AddTo(0, new UiLabel("ACCESS LOG", t.SmallSize) { Rect = rs.Next(0.018f), UseDisplay = true, Color = t.TextDim });
+            _vAudit = _vTabs.AddTo(0, new UiLabel("", t.SmallSize) { Rect = rs.Rest(), UseMono = true, Wrap = true, Align = TextAlignmentOptions.TopLeft, Color = t.TextDim });
+
+            // GIT
+            BuildGitTab(_vTabs, 1, area);
+            _vTabs.OnChanged = i => { if (i == 1) { GitRefreshRepos(); RefreshGitHubStatus(); } else RefreshVaultPanel(); };
             RefreshVaultPanel();
+        }
+
+        private static void TabButtons(UiTabs tabs, int page, Rect row, (string label, Action act)[] items, int primary = -1, int danger = -1)
+        {
+            var t = UiTheme.Current;
+            float bw = (row.width - t.Gap * (items.Length - 1)) / items.Length;
+            for (int i = 0; i < items.Length; i++)
+                tabs.AddTo(page, new UiButton(items[i].label, items[i].act, i == primary ? UiButtonStyle.Primary : i == danger ? UiButtonStyle.Danger : UiButtonStyle.Normal)
+                { Rect = new Rect(row.x + i * (bw + t.Gap), row.y, bw, row.height) });
+        }
+
+        private void BuildGitTab(UiTabs tabs, int page, Rect area)
+        {
+            var t = UiTheme.Current;
+            var st = new UiStack(area, t.Gap);
+            tabs.AddTo(page, new UiLabel("GITHUB ACCOUNT", t.SmallSize) { Rect = st.Next(0.018f), UseDisplay = true, Color = t.TextDim });
+            _ghStatus = tabs.AddTo(page, new UiLabel("", t.SmallSize * 1.05f) { Rect = st.Next(0.036f), Wrap = true, Align = TextAlignmentOptions.TopLeft });
+            TabButtons(tabs, page, st.Next(t.ButtonHeight), new (string, Action)[]
+            {
+                ("TOKEN…", GitHubTokenPrompt),
+                ("TEST", GitHubTest),
+                ("IDENTITY…", GitIdentityPrompt),
+                ("GIT USES IT", GitHelperInstall),
+                ("→ AGENTS", GitHubToAgents),
+            }, primary: 0);
+            tabs.AddTo(page, new UiDivider { Rect = st.Next(0.006f) });
+            var rest = st.Rest();
+            float leftW = 0.19f;
+            var left = new UiStack(new Rect(rest.x, rest.y, leftW, rest.height), t.Gap);
+            tabs.AddTo(page, new UiLabel("REPOSITORIES", t.SmallSize) { Rect = left.Next(0.018f), UseDisplay = true, Color = t.TextDim });
+            _gitRepos = tabs.AddTo(page, new UiList(0.03f, (item, idx) => GitOpen(item.Tag as string)) { Rect = left.Next(rest.height - 0.018f - t.ButtonHeight - t.Gap * 2) });
+            tabs.AddTo(page, new UiButton("⟳ SCAN", GitRefreshRepos) { Rect = left.Next(t.ButtonHeight) });
+            float rx = rest.x + leftW + t.Gap * 2;
+            var right = new UiStack(new Rect(rx, rest.y, rest.xMax - rx, rest.height), t.Gap);
+            _gitHead = tabs.AddTo(page, new UiLabel("Select a repository", t.BodySize) { Rect = right.Next(0.026f) });
+            var lists = right.NextSplit(0.11f, 0.56f, out var brRect);
+            _gitChanges = tabs.AddTo(page, new UiList(0.024f) { Rect = lists, Monospace = true });
+            _gitBranches = tabs.AddTo(page, new UiList(0.024f, (item, idx) => GitBranchPicked(item.Tag as GitBranch)) { Rect = brRect });
+            tabs.AddTo(page, new UiLabel("HISTORY", t.SmallSize) { Rect = right.Next(0.018f), UseDisplay = true, Color = t.TextDim });
+            _gitGraph = tabs.AddTo(page, new UiGitGraph { Rect = right.Next(rest.yMax - right.Y - t.ButtonHeight - t.Gap) });
+            TabButtons(tabs, page, right.Next(t.ButtonHeight), new (string, Action)[]
+            {
+                ("⟳", () => GitOpen(_gitRepo)),
+                ("FETCH", () => GitAction("fetch --all --prune")),
+                ("PULL", () => GitAction("pull --ff-only")),
+                ("COMMIT…", GitCommitPrompt),
+                ("PUSH", () => GitAction("push")),
+                ("TERMINAL", () => { if (_gitRepo != null) RunInNewTerminal("cd " + GitService.Quote(_gitRepo) + " && git status -sb"); }),
+            });
+        }
+
+        // ---- GitHub account: the token lives in the vault; git asks for it through mcx-secret (credential helper)
+
+        public void RefreshGitHubStatus()
+        {
+            if (_ghStatus == null) return;
+            var t = UiTheme.Current;
+            bool has = Vault != null && Vault.Has(GitHubTokenName);
+            ShowGitHubStatus();
+            Task.Run(async () =>
+            {
+                var r = await Git.Shell("git config --global --get user.name; echo '|'; git config --global --get user.email; echo '|'; git config --global --get-all credential.https://github.com.helper", 15000);
+                var parts = (r.output ?? "").Split('|');
+                _main.Enqueue(() =>
+                {
+                    _gitUser = parts.Length > 0 ? parts[0].Trim() : "";
+                    _gitEmail = parts.Length > 1 ? parts[1].Trim() : "";
+                    _gitHelper = parts.Length > 2 ? parts[2].Trim() : "";
+                    ShowGitHubStatus();
+                });
+            });
+            _ = has; _ = t;
+        }
+
+        private void ShowGitHubStatus()
+        {
+            if (_ghStatus == null) return;
+            var t = UiTheme.Current;
+            bool has = Vault != null && Vault.Has(GitHubTokenName);
+            bool helper = (_gitHelper ?? "").Contains("mcx-secret git-credential");
+            string who = _ghLogin != null ? $"<color=#{UiViz.Hex(t.Ok)}>● {UiViz.NoParse(_ghLogin)}</color>{(string.IsNullOrEmpty(_ghName) ? "" : " (" + UiViz.NoParse(_ghName) + ")")}" + (string.IsNullOrEmpty(_ghScopes) ? "" : $" <color=#{UiViz.Hex(t.TextDim)}>scopes {UiViz.NoParse(_ghScopes)}</color>")
+                : has ? "token in the vault · TEST checks it" : $"<color=#{UiViz.Hex(t.Warn)}>no token yet</color> · TOKEN… to add one (github.com > Settings > Developer settings > tokens)";
+            string id = string.IsNullOrEmpty(_gitUser) ? $"<color=#{UiViz.Hex(t.Warn)}>no git identity</color>" : $"{UiViz.NoParse(_gitUser)} &lt;{UiViz.NoParse(_gitEmail)}&gt;".Replace("&lt;", "‹").Replace("&gt;", "›");
+            _ghStatus.Set($"{who}\ngit: {id} · https pushes {(helper ? $"<color=#{UiViz.Hex(t.Ok)}>use the vault token</color>" : "do not use it yet (GIT USES IT)")}", t.Text);
+        }
+
+        private void GitHubTokenPrompt()
+        {
+            UiKeyboard.Edit("", true, null, value =>
+            {
+                value = (value ?? "").Trim();
+                if (value.Length == 0) { Toast("Nothing stored (empty token)", "warn"); return; }
+                var existing = Vault.Find(GitHubTokenName);
+                var err = Vault.Set(GitHubTokenName, value, "token", existing?.policy ?? "allow", existing?.note ?? "GitHub token: git over https (credential helper), gh, agents. VAULT > GIT");
+                if (err != null) { Toast("Not stored: " + err, "error"); return; }
+                Toast("GitHub token sealed in the vault", "ok");
+                _ghLogin = null;
+                RefreshVaultPanel();
+                GitHubTest();
+            });
+        }
+
+        /// Asks GitHub who the token belongs to (api.github.com/user), from the app (the token stays in the app).
+        public void GitHubTest()
+        {
+            var token = Vault?.Has(GitHubTokenName) == true ? Vault.Reveal(GitHubTokenName) : null;
+            if (string.IsNullOrEmpty(token)) { Toast("No GitHub token in the vault yet: TOKEN…", "warn"); return; }
+            Vault.Deliver(GitHubTokenName, "VAULT > GIT test (api.github.com)", true, "TEST");
+            Task.Run(async () =>
+            {
+                string login = null, name = null, scopes = null, error = null;
+                try
+                {
+                    using (var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(15) })
+                    using (var req = new System.Net.Http.HttpRequestMessage(System.Net.Http.HttpMethod.Get, "https://api.github.com/user"))
+                    {
+                        req.Headers.TryAddWithoutValidation("Authorization", "Bearer " + token);
+                        req.Headers.TryAddWithoutValidation("User-Agent", "MetaCodex");
+                        req.Headers.TryAddWithoutValidation("Accept", "application/vnd.github+json");
+                        using (var res = await http.SendAsync(req))
+                        {
+                            string body = await res.Content.ReadAsStringAsync();
+                            if (res.Headers.TryGetValues("X-OAuth-Scopes", out var sc)) scopes = string.Join(",", sc);
+                            if (!res.IsSuccessStatusCode) error = (int)res.StatusCode + " " + (res.StatusCode == System.Net.HttpStatusCode.Unauthorized ? "the token is not valid (expired or revoked)" : Trim(body, 80));
+                            else { var j = JObject.Parse(body); login = (string)j["login"]; name = (string)j["name"]; }
+                        }
+                    }
+                }
+                catch (Exception ex) { error = ex.Message; }
+                _main.Enqueue(() =>
+                {
+                    if (error != null) { _ghLogin = null; Toast("GitHub: " + error, "error"); }
+                    else { _ghLogin = login; _ghName = name; _ghScopes = scopes; Toast("GitHub: signed in as " + login, "ok"); }
+                    ShowGitHubStatus();
+                });
+            });
+        }
+
+        private void GitIdentityPrompt()
+        {
+            UiKeyboard.Edit(string.IsNullOrEmpty(_gitUser) ? (_ghName ?? _ghLogin ?? "") : _gitUser, false, null, name =>
+            {
+                name = (name ?? "").Trim();
+                if (name.Length == 0) return;
+                UiKeyboard.Edit(string.IsNullOrEmpty(_gitEmail) ? (_ghLogin != null ? _ghLogin + "@users.noreply.github.com" : "") : _gitEmail, false, null, email =>
+                {
+                    email = (email ?? "").Trim();
+                    if (email.Length == 0) return;
+                    GitGlobal($"git config --global user.name {GitService.Quote(name)} && git config --global user.email {GitService.Quote(email)}", "Git identity: " + name);
+                });
+            });
+        }
+
+        /// git over https to github.com takes the vault's token, asked for through mcx-secret at each use.
+        private void GitHelperInstall()
+        {
+            if (Vault?.Has(GitHubTokenName) != true) { Toast("Add the GitHub token first (TOKEN…)", "warn"); return; }
+            GitGlobal("git config --global --replace-all credential.https://github.com.helper '' && git config --global --add credential.https://github.com.helper " + GitService.Quote(GitHelperValue),
+                "git uses the vault's GitHub token for github.com");
+        }
+
+        private void GitGlobal(string command, string done)
+        {
+            if (!Git.InUserland) { Toast("(Editor) not changing this PC's git config: " + Trim(command, 60), "warn"); return; }
+            Task.Run(async () =>
+            {
+                var r = await Git.Shell(command, 15000);
+                _main.Enqueue(() => { Toast(r.code == 0 ? done : "git config failed: " + Last(r.output), r.code == 0 ? "ok" : "error"); RefreshGitHubStatus(); });
+            });
+        }
+
+        /// Agents (gh, git in their own shells) get the token as GH_TOKEN / GITHUB_TOKEN in MQH's environment.
+        private void GitHubToAgents()
+        {
+            var v = Vault?.Has(GitHubTokenName) == true ? Vault.Reveal(GitHubTokenName) : null;
+            if (v == null) { Toast("Add the GitHub token first (TOKEN…)", "warn"); return; }
+            Modal("GITHUB TOKEN FOR AGENTS", "Agents' commands (gh, git) will get it as GH_TOKEN and GITHUB_TOKEN. They can then push and open pull requests as you. Go on?", new[] { "GIVE IT", "CANCEL" }, i =>
+            {
+                if (i != 0) return;
+                Mqh.SetMachineEnvironment("GH_TOKEN", v, "GitHub token from the MetaCodex vault", r1 =>
+                    Mqh.SetMachineEnvironment(GitHubTokenName, v, "GitHub token from the MetaCodex vault", r2 =>
+                    {
+                        bool ok = r1 != null && r2 != null;
+                        Vault.Deliver(GitHubTokenName, "MQH machine environment", ok, ok ? "→MQH" : "MQH-ERR");
+                        Toast(ok ? "Agents now have GH_TOKEN / GITHUB_TOKEN" : "MQH: " + Mqh.LastError, ok ? "ok" : "error");
+                    }));
+            });
         }
 
         public void RefreshVaultPanel()

@@ -24,7 +24,6 @@ namespace MetaCodex.Shell
             BuildDock();
             BuildTerminals();
             BuildFiles();
-            BuildGit();
             BuildBrowser();
             BuildScripts();
             BuildSettings();
@@ -64,7 +63,6 @@ namespace MetaCodex.Shell
             switch (id)
             {
                 case "files": FilesNavigate(_filesPath ?? Settings.filesRoot); break;
-                case "git": GitRefreshRepos(); break;
                 case "scripts": RefreshScriptsPanel(); break;
                 case "terminals": RefreshTerminalsPanel(); break;
                 case "browser": RefreshBrowser(); ProbeLocalServers(); break;
@@ -72,8 +70,9 @@ namespace MetaCodex.Shell
                 case "gestures": RefreshGesturesPanel(); break;
                 case "agents": RefreshAgents(); break;
                 case "threads": RefreshThreads(); break;
-                case "vault": RefreshVaultPanel(); break;
+                case "vault": RefreshVaultPanel(); if (_vTabs != null && _vTabs.Selected == 1) { GitRefreshRepos(); RefreshGitHubStatus(); } break;
                 case "voice": EnsureVoiceService(); PollVoiceStatus(); break;
+                case "system": if (_sysTabs != null && _sysTabs.Selected == 1) RefreshStorage(false); else RefreshTools(false); break;
             }
         }
 
@@ -87,21 +86,23 @@ namespace MetaCodex.Shell
                 ("▶\nTERM", () => ShowOrNewTerminal()),
                 ("▤\nTERMS", () => TogglePanel("terminals")),
                 ("◫\nFILES", () => TogglePanel("files")),
-                ("⎇\nGIT", () => TogglePanel("git")),
-                ("◆\nAGENTS", () => TogglePanel("agents")),
                 ("☰\nTHREADS", () => TogglePanel("threads")),
+                ("◆\nAGENTS", () => TogglePanel("agents")),
                 ("◎\nWEB", () => TogglePanel("browser")),
                 ("ƒ\nSCRIPTS", () => TogglePanel("scripts")),
                 ("✋\nGESTURE", () => TogglePanel("gestures")),
-                ("⚿\nVAULT", () => TogglePanel("vault")),
+                ("⬢\nSYSTEM", () => TogglePanel("system")),
                 ("◉\nTALK", () => VoiceToggle()),
-                ("⚙\nSETUP", () => TogglePanel("settings")),
-                ("⌨\nKEYS", () => OpenKeyboard()),
-                ("⌖\nSELECT", () => SetSelectionMode(!Router.SelectionMode)),
-                ("⟲\nCENTER", () => app?.Recenter()),
                 ("♫\nVOICE", () => TogglePanel("voice")),
+                ("⚿\nVAULT", () => TogglePanel("vault")),
+                ("⎇\nGIT", () => TogglePanel("git")),
+                ("◐\nFOCUS", () => SetFocus(!Settings.focusEnabled)),
+                ("⌖\nSELECT", () => SetSelectionMode(!Router.SelectionMode)),
+                ("⌨\nKEYS", () => OpenKeyboard()),
+                ("⟲\nCENTER", () => app?.Recenter()),
+                ("⚙\nSETUP", () => TogglePanel("settings")),
             };
-            const int perRow = 8;
+            const int perRow = 9;
             float bw = 0.070f, gap = 0.006f, pad = 0.012f, bh = 0.058f, handle = 0.016f;
             float w = perRow * bw + (perRow - 1) * gap + 2 * pad, h = 2 * bh + gap + 2 * pad + handle;
             var dock = UiPanel.Create<UiPanel>("dock", "", w, h, _root, header: false);
@@ -118,6 +119,7 @@ namespace MetaCodex.Shell
                     TextSize = 0.0135f,
                 });
                 if (items[i].label.EndsWith("SELECT")) _selectButton = b;
+                if (items[i].label.EndsWith("FOCUS")) { _focusButton = b; b.SetSelected(Settings.focusEnabled); }
             }
             dock.gameObject.SetActive(false);
         }
@@ -244,38 +246,6 @@ namespace MetaCodex.Shell
         private UiGitGraph _gitGraph;
         private string _gitRepo;
         private GitStatus _gitStatus;
-
-        private void BuildGit()
-        {
-            var t = UiTheme.Current;
-            var p = Panel<UiPanel>("git", "GIT · WORKSPACES", 0.72f, 0.60f);
-            var c = p.Content;
-            float leftW = 0.20f;
-            var left = new UiStack(new Rect(c.x, c.y, leftW, c.height), t.Gap);
-            p.Add(new UiLabel("REPOSITORIES", t.SmallSize) { Rect = left.Next(0.02f), UseDisplay = true, Color = t.TextDim });
-            _gitRepos = p.Add(new UiList(0.030f, (item, idx) => GitOpen(item.Tag as string)) { Rect = left.Next(c.height - 0.02f - t.ButtonHeight - t.Gap * 2) });
-            p.Add(new UiButton("⟳ SCAN", GitRefreshRepos) { Rect = left.Next(t.ButtonHeight) });
-
-            var rx = c.x + leftW + t.Gap * 2;
-            var right = new UiStack(new Rect(rx, c.y, c.xMax - rx, c.height), t.Gap);
-            _gitHead = p.Add(new UiLabel("Select a repository", t.BodySize * 1.05f) { Rect = right.Next(0.026f), UseMono = false });
-            var lists = right.NextSplit(0.15f, 0.56f, out var brRect);
-            _gitChanges = p.Add(new UiList(0.025f) { Rect = lists, Monospace = true });
-            _gitBranches = p.Add(new UiList(0.025f, (item, idx) => GitBranchPicked(item.Tag as GitBranch)) { Rect = brRect });
-            p.Add(new UiLabel("HISTORY", t.SmallSize) { Rect = right.Next(0.018f), UseDisplay = true, Color = t.TextDim });
-            _gitGraph = p.Add(new UiGitGraph { Rect = right.Next(c.yMax - right.Y - t.ButtonHeight - t.Gap) });
-            var acts = right.Next(t.ButtonHeight);
-            var actions = new (string, Action)[]
-            {
-                ("⟳", () => GitOpen(_gitRepo)),
-                ("FETCH", () => GitAction("fetch --all --prune")),
-                ("PULL", () => GitAction("pull --ff-only")),
-                ("COMMIT…", GitCommitPrompt),
-                ("TERMINAL", () => { if (_gitRepo != null) TerminalSend($"cd {GitService.Quote(_gitRepo)} && git status\r"); }),
-            };
-            float bw = (acts.width - t.Gap * (actions.Length - 1)) / actions.Length;
-            for (int i = 0; i < actions.Length; i++) p.Add(new UiButton(actions[i].Item1, actions[i].Item2) { Rect = new Rect(acts.x + i * (bw + t.Gap), acts.y, bw, acts.height) });
-        }
 
         private string GitRoot()
         {
@@ -558,8 +528,8 @@ end)
             var s = Settings;
             var p = Panel<UiPanel>("settings", "SETTINGS", 0.62f, 0.58f);
             var c = p.Content;
-            var tabs = p.Add(new UiTabs("GESTURES", "DISPLAY", "LOOK", "DAEMON", "ABOUT") { Rect = new Rect(c.x, c.y, c.width, t.ButtonHeight) });
-            const int TabDisplay = 1, TabLook = 2, TabDaemon = 3, TabAbout = 4;
+            var tabs = p.Add(new UiTabs("GESTURES", "DISPLAY", "FOCUS", "LOOK", "DAEMON", "ABOUT") { Rect = new Rect(c.x, c.y, c.width, t.ButtonHeight) });
+            const int TabDisplay = 1, TabFocus = 2, TabLook = 3, TabDaemon = 4, TabAbout = 5;
             var area = new Rect(c.x, c.y + t.ButtonHeight + t.Gap * 2, c.width, c.height - t.ButtonHeight - t.Gap * 2);
             float rowH = 0.034f;
 
@@ -592,6 +562,24 @@ end)
             _layoutsLabel = tabs.AddTo(TabDisplay, new UiLabel("", t.SmallSize) { Rect = d.Next(0.024f), Color = t.TextDim });
             tabs.AddTo(TabDisplay, new UiButton("⟲ RECENTER EVERYTHING", () => app?.Recenter(), UiButtonStyle.Primary) { Rect = d.Next(t.ButtonHeight) });
             RefreshLayoutsLabel();
+
+            // FOCUS: Ambient Focus, the room fades out beyond a radius around you
+            var fo = new UiStack(area, t.Gap);
+            _focusToggle = tabs.AddTo(TabFocus, new UiToggle("Ambient focus: fade the room beyond a radius", s.focusEnabled, v => { SetFocus(v, false); RefreshFocusPanel(); }) { Rect = fo.Next(rowH) });
+            _focusRadius = tabs.AddTo(TabFocus, new UiSlider("RADIUS", 0f, 5f, s.focusRadius, v => { s.focusRadius = v; OnSettingsChanged(); RefreshFocusPanel(); }) { Rect = fo.Next(rowH), Format = "0.0 m" });
+            _focusIntensity = tabs.AddTo(TabFocus, new UiSlider("INTENSITY", 0f, 1f, s.focusIntensity, v => { s.focusIntensity = v; OnSettingsChanged(); RefreshFocusPanel(); }) { Rect = fo.Next(rowH), Format = "0%" });
+            _focusSoft = tabs.AddTo(TabFocus, new UiSlider("SOFTNESS", 0.05f, 2f, s.focusSoftness, v => { s.focusSoftness = v; OnSettingsChanged(); RefreshFocusPanel(); }) { Rect = fo.Next(rowH), Format = "0.0 m" });
+            var fp = fo.Next(t.ButtonHeight);
+            float fpw = (fp.width - t.Gap * 2) / 3f;
+            string[] presets = { "subtle", "focus", "blackout" };
+            for (int i = 0; i < 3; i++)
+            {
+                string preset = presets[i];
+                tabs.AddTo(TabFocus, new UiButton(preset.ToUpperInvariant(), () => { ApplyFocusPreset(preset); }) { Rect = new Rect(fp.x + i * (fpw + t.Gap), fp.y, fpw, fp.height) });
+            }
+            _focusInfo = tabs.AddTo(TabFocus, new UiLabel("", t.SmallSize) { Rect = fo.Next(0.03f), Wrap = true, Color = t.TextDim, Align = TextAlignmentOptions.TopLeft });
+            tabs.AddTo(TabFocus, new UiLabel("Distance is measured along the floor around you: the floor near you and your desk stay visible, walls and everything above the horizon fade first. BLACKOUT leaves only your windows. The passthrough can be darkened, not blurred (Horizon OS draws it). FOCUS on the dock turns it on and off.", t.SmallSize) { Rect = fo.Rest(), Wrap = true, Color = t.TextDim, Align = TextAlignmentOptions.TopLeft });
+            RefreshFocusPanel();
 
             // LOOK: one standard appearance; what is left are comfort settings
             var k = new UiStack(area, t.Gap);
