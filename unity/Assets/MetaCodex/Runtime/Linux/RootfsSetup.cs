@@ -11,7 +11,7 @@ namespace MetaCodex.Linux
     /// files that apps may not read. Idempotent; rerun after an app update with Apply().
     public static class RootfsSetup
     {
-        public const int Version = 1;
+        public const int Version = 2; // 2: the welcome text says what first use installs
 
         public static void Apply(string root, int[] groups, int cpuCount, IFileOps fs)
         {
@@ -122,7 +122,8 @@ namespace MetaCodex.Linux
 
         private const string Motd =
             "\x1b[1mMetaCodex Linux\x1b[0m: Debian 13 (arm64) inside the headset app.\n" +
-            "  first run:   apt update && apt install -y ca-certificates curl git nodejs npm python3\n" +
+            "  set up:      MetaCodex installs base tools, Node and the native app tools by itself (~/.metacodex/first-use.log)\n" +
+            "  native apps: mcx-app new|build|install|launch (skill quest-native-apps)\n" +
             "  your files:  /root, /work (private)   /mnt/quest (shared Android/data folder)\n\n";
 
         private const string VmStat =

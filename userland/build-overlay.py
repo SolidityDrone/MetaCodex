@@ -18,7 +18,7 @@ def mode_for(rel, is_dir):
     if is_dir:
         return 0o755
     parts = rel.split("/")
-    return 0o755 if any(p in ("bin", "sbin") for p in parts[:-1]) else 0o644
+    return 0o755 if any(p in ("bin", "sbin") for p in parts[:-1]) or rel.endswith(".sh") else 0o644
 
 
 raw = io.BytesIO()
@@ -36,8 +36,11 @@ with tarfile.open(fileobj=raw, mode="w", format=tarfile.PAX_FORMAT) as tf:
     skills_dst = "root/.claude/skills"
     trees = {}
     mqh_skills = os.path.join(root, "mqh", "plugins", "bb-guide", "skills")
-    for name in ("quest-scripting", "quest-gesture-plugins", "metacodex-context", "quest-views"):
+    for name in ("quest-scripting", "quest-gesture-plugins", "metacodex-context", "quest-views", "quest-native-apps"):
         trees[f"{skills_dst}/{name}"] = os.path.join(mqh_skills, name)
+    # the template of `mcx-app new` is Hello Native itself (sources only: its build/ folder stays out)
+    template = os.path.join(root, "native", "hello-native")
+    template_dst = "opt/metacodex/quest-native/template"
     bundled = os.path.join(root, "userland", "agent-skills")
     for group in ("unity", "meta"):
         gdir = os.path.join(bundled, group)
@@ -45,6 +48,10 @@ with tarfile.open(fileobj=raw, mode="w", format=tarfile.PAX_FORMAT) as tf:
             if os.path.isdir(os.path.join(gdir, name)):
                 trees[f"{skills_dst}/{name}"] = os.path.join(gdir, name)
     extra = {}
+    for f in ("AndroidManifest.xml", "build.sh"):
+        extra[f"{template_dst}/{f}"] = os.path.join(template, f)
+    for f in sorted(os.listdir(os.path.join(template, "src"))):
+        extra[f"{template_dst}/src/{f}"] = os.path.join(template, "src", f)
     for dst, srcdir in trees.items():
         for dp, dn, fn in os.walk(srcdir):
             dn.sort()
