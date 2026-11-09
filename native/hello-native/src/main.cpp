@@ -1,7 +1,7 @@
-// Hello Native: the smallest native Quest app MetaCodex builds and installs (branch feat/native-builder).
+// Hello Native: the smallest native Quest app MetaCodex builds and installs, and the template of `mcx-app new`.
 // Pure C++ (no Java, no Gradle, no Unity): OpenXR for the headset, OpenGL ES 3 for drawing, the NDK's native app
 // glue for the Android activity. It shows a dark space with three slowly turning coloured cubes in front of you.
-// Build: ../build.sh (on the PC with Unity's Android tools, or inside MetaCodex's Linux with the NDK tile).
+// Build: ../build.sh device (in MetaCodex's Linux; `mcx-app build`) or ../build.sh pc (WSL, Unity's Android tools).
 #include <android/log.h>
 #include <android_native_app_glue.h>
 #include <EGL/egl.h>
@@ -11,11 +11,70 @@
 #define XR_USE_GRAPHICS_API_OPENGL_ES
 #include <openxr/openxr.h>
 #include <openxr/openxr_platform.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
+#include <cerrno>
 #include <cmath>
+#include <cstdarg>
+#include <cstdio>
 #include <cstring>
 #include <vector>
 
-#define LOG(...) __android_log_print(ANDROID_LOG_INFO, "HelloNative", __VA_ARGS__)
+// the package name, from AndroidManifest.xml (build.sh passes -DAPP_ID_RAW=<package>)
+#define STR2_(x) #x
+#define STR_(x) STR2_(x)
+#ifdef APP_ID_RAW
+#define APP_ID STR_(APP_ID_RAW)
+#else
+#define APP_ID "com.metacodex.hellonative"
+#endif
+
+namespace {
+
+// Logs go to logcat and, when `mcx-app` listens in MetaCodex's Linux (127.0.0.1:47950), to the agent that built the
+// app (logcat cannot be read from there). Best effort and never blocking: no listener, no socket. Main thread only.
+int g_logFd = -2; // -2: not tried yet, -1: no listener
+void Log(const char* fmt, ...)
+{
+    char line[1024];
+    va_list ap;
+    va_start(ap, fmt);
+    int n = vsnprintf(line, sizeof line - 1, fmt, ap);
+    va_end(ap);
+    if (n < 0) return;
+    if (n > (int)sizeof line - 2) n = (int)sizeof line - 2;
+    __android_log_print(ANDROID_LOG_INFO, APP_ID, "%s", line);
+    if (g_logFd == -2)
+    {
+        g_logFd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+        sockaddr_in addr{};
+        addr.sin_family = AF_INET;
+        addr.sin_port = htons(47950);
+        addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        if (g_logFd >= 0 && connect(g_logFd, (sockaddr*)&addr, sizeof addr) != 0) { close(g_logFd); g_logFd = -1; }
+        if (g_logFd >= 0)
+        {
+            char hello[200];
+            int h = snprintf(hello, sizeof hello, "== %s connected\n", APP_ID);
+            send(g_logFd, hello, h, MSG_NOSIGNAL | MSG_DONTWAIT);
+        }
+    }
+    if (g_logFd >= 0)
+    {
+        line[n] = '\n';
+        if (send(g_logFd, line, n + 1, MSG_NOSIGNAL | MSG_DONTWAIT) < 0 && errno != EAGAIN && errno != EWOULDBLOCK)
+        {
+            close(g_logFd);
+            g_logFd = -1;
+        }
+    }
+}
+
+} // namespace
+
+#define LOG(...) Log(__VA_ARGS__)
 #define XR(call) do { XrResult r_ = (call); if (XR_FAILED(r_)) { LOG("%s failed: %d", #call, (int)r_); return false; } } while (0)
 
 namespace {
@@ -411,7 +470,7 @@ void android_main(android_app* android)
     android->onAppCmd = OnCmd;
     JNIEnv* env = nullptr;
     android->activity->vm->AttachCurrentThread(&env, nullptr);
-    LOG("starting");
+    LOG("starting %s (built %s %s)", APP_ID, __DATE__, __TIME__);
     bool ok = InitXr(a);
     if (!ok) LOG("OpenXR init failed: see the lines above");
     while (!android->destroyRequested && !a.exit)
@@ -428,8 +487,10 @@ void android_main(android_app* android)
         PollXr(a);
         if (a.running) RenderFrame(a);
     }
+    LOG("exiting");
     if (a.session != XR_NULL_HANDLE) xrDestroySession(a.session);
     if (a.instance != XR_NULL_HANDLE) xrDestroyInstance(a.instance);
+    if (g_logFd >= 0) close(g_logFd);
     android->activity->vm->DetachCurrentThread();
     ANativeActivity_finish(android->activity);
 }

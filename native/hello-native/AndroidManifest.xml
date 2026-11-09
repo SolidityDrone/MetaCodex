@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Hello Native: a pure native OpenXR app for Quest (no Java code: hasCode="false", NativeActivity). -->
+<!-- Hello Native: a pure native OpenXR app for Quest (no Java code: hasCode="false", NativeActivity).
+     The template of `mcx-app new`, which sets package, android:label and the library name (android.app.lib_name).
+     build.sh reads all three from this file. Settings from Meta's native manifest page: landscape, the black
+     fullscreen theme, these configChanges, the VR category, vr.headtracking, com.oculus.supportedDevices. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.metacodex.hellonative"
     android:versionCode="1"
@@ -15,6 +18,8 @@
     <!-- the Khronos OpenXR loader finds the runtime through its broker (from the loader's own manifest) -->
     <uses-permission android:name="org.khronos.openxr.permission.OPENXR" />
     <uses-permission android:name="org.khronos.openxr.permission.OPENXR_SYSTEM" />
+    <!-- only for the log lines sent to `mcx-app logs` on 127.0.0.1 (main.cpp, Log) -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <queries>
         <provider android:authorities="org.khronos.openxr.runtime_broker;org.khronos.openxr.system_runtime_broker" />
         <intent>
