@@ -236,7 +236,7 @@ Ambient Focus (branch feat/spatial-dome, no Space Setup needed):
 - [ ] Hands always visible, also at BLACKOUT and with BLUR, and in front of a window
 - [ ] The cut-out around near things (your hands, a chair, a person) is clean and steady: no flicker, no blocky edge (FOCUS: "camera: live …")
 - [ ] Someone walks in front of a window, or you hold an object up → it stays visible in front of the window ("Real things in front of windows" on); off → the window covers it
-- [ ] Palm up + pinch (Horizon OS menu) → the windows and the darkness fade out, the system menu shows; close it → they come back
+- [ ] Palm towards you + pinch (Horizon OS quick actions, left-hand settings) → the windows stay where they are (0.7.3: the gesture hides nothing); when a system menu has opened and taken the app's focus they step aside, and come back when it closes
 - [ ] Without the "spatial data" permission → the old floor-plane darkening still works
 - [ ] Frame rate with focus + blur on stays about 72 fps (Perf menu)
 
@@ -249,3 +249,18 @@ Voice:
 - [ ] "Turn on ambient focus and set intensity to 0" → focus on, intensity 0, the slider moves
 - [ ] "Set the dome radius to two meters", "radius 50 centimeters", "set the blur to fifty percent", "make the windows bigger", "volume a bit less", "turn off the sounds" → each changes that setting
 - [ ] "Show the installed tools" → SYSTEM on TOOLS; "how much disk space is left" → SYSTEM on STORAGE
+
+## 16. 0.7.3: UI scale, tools, vault, blur, wrist menu
+
+- [ ] Open and close panels for a while, change a slider, say a voice command: no panel changes size by itself (they keep the UI SCALE)
+- [ ] VOICE: everything inside the panel; FEMALE and MALE voices in two aligned rows on the right
+- [ ] Settings > LOOK has no SHARPNESS; text is as sharp as before at 1.6
+- [ ] SYSTEM > TOOLS: groups with a header each (AI AGENTS, JAVASCRIPT · TYPESCRIPT, PYTHON, NATIVE CODE, ANDROID · QUEST, GIT, TERMINAL UTILITIES, EDITORS); every tile has its logo or a pictogram, centred on its badge, nothing stretched or cut; no php / ruby / lua / deno
+- [ ] ANDROID · QUEST > ndk → install: downloads the NDK r27d for arm64 (~120 MB), checks its sha256, `/opt/android-ndk`; a new terminal has `ANDROID_NDK_HOME`; the tile shows 27.3.13750724
+- [ ] VAULT: "key: Android Keystore · tee" (or strongbox); on this development build a warning about `run-as`
+- [ ] Settings > DAEMON > TOKEN typed → `grep -c mqhToken files/settings.json` shows an empty value; the MQH connection still works
+- [ ] BLUR 50 %: turn the head slowly: the soft room is there all around where you have looked, no rectangle edge, it does not move with the head
+- [ ] BLUR on: say a few voice commands: speech-to-text about as fast as with BLUR off (VOICE history, asr ms)
+- [ ] Settings > DISPLAY > Main menu on the wrist: the dock goes; look at the back of the left wrist: the core appears; touch it with the right index finger: the rings unfold; touch FILES, SETUP, TALK; look away: it folds and hides; off again: the dock comes back
+- [ ] Wrist menu: frame rate about 72 while it is open (Perf menu)
+- [ ] Palm towards you + pinch: nothing vanishes; the Horizon OS quick actions menu is visible over the windows (if it is not, tell: it would need another way than hiding the windows)
