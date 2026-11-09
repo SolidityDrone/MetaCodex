@@ -258,12 +258,11 @@ end)
 
         // ------------------------------------------------------------------ the panel
 
-        private void BuildGestures()
+        /// GESTURES (a tab of MQH): the studio, with its own tabs. Its plugin list is MQH > PLUGINS now.
+        private void BuildGesturesTab(UiTabs outer, int outerPage, Rect c)
         {
             var t = UiTheme.Current;
-            var p = Panel<UiPanel>("gestures", "GESTURES · STUDIO", 0.80f, 0.62f);
-            var c = p.Content;
-            _gTabs = p.Add(new UiTabs("GESTURES", "LIVE", "BIND", "RECORD", "PLUGINS") { Rect = new Rect(c.x, c.y, c.width, t.ButtonHeight) });
+            _gTabs = outer.AddTo(outerPage, new UiTabs("ALL", "LIVE", "BIND", "RECORD") { Rect = new Rect(c.x, c.y, c.width, t.ButtonHeight) });
             var area = new Rect(c.x, c.y + t.ButtonHeight + t.Gap * 2, c.width, c.height - t.ButtonHeight - t.Gap * 2);
             float leftW = 0.30f;
             var right = new Rect(area.x + leftW + t.Gap * 2, area.y, area.width - leftW - t.Gap * 2, area.height);
@@ -305,7 +304,8 @@ end)
             var bottom = new Rect(area.x, area.y + area.height * 0.64f, area.width, area.height * 0.36f);
             _gEvents = _gTabs.AddTo(1, new UiLabel("", t.SmallSize) { Rect = new Rect(bottom.x, bottom.y, bottom.width * 0.62f, bottom.height), UseMono = true, Wrap = true, Align = TextAlignmentOptions.TopLeft, Color = t.TextAccent });
             _gCost = _gTabs.AddTo(1, new UiLabel("", t.SmallSize) { Rect = new Rect(bottom.x + bottom.width * 0.64f, bottom.y, bottom.width * 0.36f, bottom.height), UseMono = true, Wrap = true, Align = TextAlignmentOptions.TopLeft, Color = t.TextDim });
-            p.Tick += _ => { if (_gTabs != null && _gTabs.Selected == 1) RefreshGestureLive(); };
+            // the live bars refresh while MQH shows GESTURES > LIVE
+            _panels["mqh"].Tick += _ => { if (_gTabs != null && _gTabs.Selected == 1 && outer.Selected == outerPage) RefreshGestureLive(); };
 
             // BIND: gesture -> action
             var bs = new UiStack(new Rect(area.x, area.y, leftW + 0.08f, area.height), t.Gap);
@@ -352,20 +352,6 @@ end)
                 ("OPEN IN TERMINAL", () => TerminalSend("cd /mnt/quest/plugins && ls -la\r")),
             });
 
-            // PLUGINS
-            _gPlugins = _gTabs.AddTo(4, new UiList(0.032f, (item, idx) => ShowPluginDetail()) { Rect = new Rect(area.x, area.y, leftW + 0.06f, area.height) });
-            var pr = new UiStack(new Rect(area.x + leftW + 0.06f + t.Gap * 2, area.y, area.width - leftW - 0.06f - t.Gap * 2, area.height), t.Gap);
-            _gPluginDetail = _gTabs.AddTo(4, new UiLabel("", t.SmallSize) { Rect = pr.Next(area.height - t.ButtonHeight * 2 - t.Gap * 3), Wrap = true, UseMono = true, Align = TextAlignmentOptions.TopLeft, Color = t.TextDim });
-            AddRow(_gTabs, 4, pr.Next(t.ButtonHeight), new (string, Action)[]
-            {
-                ("ENABLE / DISABLE", () => { var e = SelectedPlugin(); if (e != null) Scripts.SetEnabled(e.Key, !e.Enabled); RefreshGesturesPanel(); }),
-                ("⟳ RELOAD", () => { Scripts.ReloadAll(); RefreshGesturesPanel(); }),
-            });
-            AddRow(_gTabs, 4, pr.Next(t.ButtonHeight), new (string, Action)[]
-            {
-                ("FOLDER", () => { var e = SelectedPlugin(); if (e != null) TerminalSend($"cd {GitService.Quote("/mnt/quest/plugins/" + e.Name)} && ls -la\r"); }),
-                ("DELETE", () => { var e = SelectedPlugin(); if (e != null) Modal("DELETE PLUGIN", $"Delete the folder of plugin {e.Name}?", new[] { "DELETE", "CANCEL" }, i => { if (i == 0) { Scripts.Delete(e.Key); RefreshGesturesPanel(); } }); }),
-            }, danger: 1);
             _gTabs.OnChanged = _ => RefreshGesturesPanel();
             RefreshGesturesPanel();
         }
@@ -412,17 +398,7 @@ end)
                 Badge = b.enabled ? "ON" : "OFF",
                 BadgeColor = b.enabled ? t.Ok : t.TextDim,
             }), keepScroll: true);
-            _gPlugins?.SetItems(Scripts.Entries.Where(e => e.Kind == "plugin").Select(e => new UiListItem
-            {
-                Icon = "▣",
-                IconColor = e.Error != null ? t.Danger : e.Enabled ? t.Ok : t.TextDim,
-                Title = e.Title.Length > 0 ? e.Title : e.Name,
-                Sub = e.Name + (e.Version.Length > 0 ? " · v" + e.Version : ""),
-                Badge = e.Error != null ? "ERROR" : !e.Enabled ? "OFF" : $"{e.Poses + e.Detectors} G",
-                BadgeColor = e.Error != null ? t.Danger : e.Enabled ? t.Ok : t.TextDim,
-                Tag = e,
-            }), keepScroll: true);
-            ShowPluginDetail();
+            RefreshPluginList();
         }
 
         private string BindingBadge(string gesture)
@@ -502,18 +478,6 @@ end)
                 Scripts.Scan();
                 RefreshGesturesPanel();
             });
-        }
-
-        private void ShowPluginDetail()
-        {
-            var e = SelectedPlugin();
-            if (_gPluginDetail == null) return;
-            if (e == null) { _gPluginDetail.Set("Select a plugin.\n\nPlugins live in /mnt/quest/plugins/<id>/ (plugin.json, main.lua, poses/*.json). Agents write them; the app reloads them within a second."); return; }
-            var t = UiTheme.Current;
-            var gestures = Gestures.Custom.Where(x => x.Owner == e.Key).Select(x => x.Name).ToList();
-            _gPluginDetail.Set($"<b>{e.Title}</b> {e.Version}\n{e.Description}\n\n/mnt/quest/plugins/{e.Name}\n{(e.Enabled ? "enabled" : "disabled")} · {e.Handlers} handlers · {e.Poses} poses · {e.Detectors} detectors\n" +
-                               (gestures.Count > 0 ? "gestures: " + string.Join(", ", gestures) + "\n" : "") +
-                               (e.Error != null ? $"<color=#FF5468>ERROR {e.Error}</color>\n" : "") + "\n" + string.Join("\n", e.Log.Skip(Math.Max(0, e.Log.Count - 5))), e.Error != null ? t.Danger : t.TextDim);
         }
 
         /// LIVE tab: finger curls, palm and thumb directions, active gestures, recent events, detector cost.

@@ -116,7 +116,7 @@ namespace MetaCodex.Shell
         private JArray _voicePrefix;
         private int _voicePrefixRev = -1;
         private string _voiceGrammar;
-        public static readonly string[] VoicePanels = { "terminals", "files", "git", "agents", "threads", "browser", "scripts", "gestures", "vault", "settings", "voice", "system", "focus", "storage", "tools" };
+        public static readonly string[] VoicePanels = { "terminals", "files", "git", "agents", "threads", "browser", "mqh", "skills", "plugins", "scripts", "gestures", "vault", "settings", "voice", "system", "focus", "storage", "tools" };
 
         private AudioSource _voiceAudio;
         private UiPanel _vHud;
@@ -586,7 +586,8 @@ namespace MetaCodex.Shell
                 ["thread"] = "threads", ["conversations"] = "threads", ["chats"] = "threads", ["sessions"] = "threads", ["projects"] = "threads", ["workspaces"] = "threads",
                 ["web"] = "browser", ["internet"] = "browser", ["website"] = "browser", ["web browser"] = "browser",
                 ["setup"] = "settings", ["preferences"] = "settings", ["options"] = "settings", ["config"] = "settings", ["configuration"] = "settings",
-                ["gesture"] = "gestures", ["hands"] = "gestures", ["plugins"] = "gestures", ["gesture studio"] = "gestures",
+                ["gesture"] = "gestures", ["hands"] = "gestures", ["gesture studio"] = "gestures",
+                ["skill"] = "skills", ["agent skills"] = "skills", ["plugin"] = "plugins", ["extensions"] = "mqh", ["harness"] = "mqh", ["daemon"] = "mqh", ["m q h"] = "mqh",
                 ["script"] = "scripts", ["lua"] = "scripts", ["lua scripts"] = "scripts",
                 ["secrets"] = "vault", ["keys"] = "vault", ["passwords"] = "vault", ["keystore"] = "vault", ["key vault"] = "vault", ["api keys"] = "vault", ["tokens"] = "vault", ["api key"] = "vault",
                 ["file"] = "files", ["explorer"] = "files", ["file manager"] = "files", ["folders"] = "files", ["file browser"] = "files",
@@ -600,7 +601,7 @@ namespace MetaCodex.Shell
                 ["terminale"] = "terminals", ["terminali"] = "terminals", ["cartella"] = "files", ["cartelle"] = "files", ["gestore dei file"] = "files", ["gestore file"] = "files",
                 ["controllo versione"] = "git", ["controllo di versione"] = "git", ["rami"] = "git", ["agenti"] = "agents", ["fornitori"] = "agents", ["modelli"] = "agents",
                 ["accesso"] = "agents", ["conversazioni"] = "threads", ["conversazione"] = "threads", ["discussioni"] = "threads", ["progetti"] = "threads",
-                ["navigatore"] = "browser", ["gesti"] = "gestures", ["gesti delle mani"] = "gestures", ["cassaforte"] = "vault", ["casa forte"] = "vault",
+                ["navigatore"] = "browser", ["competenze"] = "skills", ["abilità"] = "skills", ["estensioni"] = "mqh", ["gesti"] = "gestures", ["gesti delle mani"] = "gestures", ["cassaforte"] = "vault", ["casa forte"] = "vault",
                 ["segreti"] = "vault", ["chiavi"] = "vault", ["chiavi api"] = "vault", ["impostazioni"] = "settings", ["impostazione"] = "settings",
                 ["preferenze"] = "settings", ["opzioni"] = "settings", ["configurazione"] = "settings", ["voce"] = "voice", ["controllo vocale"] = "voice",
                 ["comandi vocali"] = "voice", ["microfono"] = "voice", ["assistente"] = "voice", ["sistema"] = "system", ["focus ambientale"] = "focus",
@@ -643,7 +644,8 @@ namespace MetaCodex.Shell
                 Name = "open_panel",
                 Description = "Open a panel to see or manage something: terminals (open terminals), files (folders), git (repositories, branches, commits), " +
                     "agents (AI providers: which are signed in, logins, accounts, models), threads (agent conversations, workspaces, projects), browser (web pages), " +
-                    "scripts (Lua scripts), gestures (hand gestures, plugins), vault (secrets, API keys), settings (look, layout, hands), voice (voice control, AI models)",
+                    "mqh (skills, plugins, scripts, gestures, the harness), skills (the agents' skills), plugins (MQH and gesture plugins), scripts (Lua scripts), " +
+                    "gestures (hand gestures), vault (secrets, API keys), settings (look, layout, hands), voice (voice control, AI models)",
                 Parameters = VoiceCommands.Schema(("panel", "string", VoicePanels, "the panel to open", true)),
                 Synonyms = new Dictionary<string, Dictionary<string, string>> { ["panel"] = panelSyn },
                 Phrases = new[]

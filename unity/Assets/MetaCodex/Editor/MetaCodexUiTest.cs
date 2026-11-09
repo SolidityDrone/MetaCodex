@@ -154,6 +154,7 @@ namespace MetaCodex.EditorTools
                 if (Want("focus")) Focus(shell, head, frame);
                 if (Want("system")) SystemPanel(shell, tmp);
                 if (Want("qol")) Qol(shell, head, hands);
+                if (Want("mqh")) MqhPanel(shell);
                 if (WantNamed("voiceexport")) VoiceExport(shell);
                 if (WantNamed("voicedecide")) VoiceDecideBench(shell);
             }
@@ -197,7 +198,7 @@ namespace MetaCodex.EditorTools
                     if (Vector3.Distance(open[i].transform.position, open[j].transform.position) < 0.03f) stacked++;
             Check(stacked == 0, $"{open.Count} open panels: none placed on top of another ({stacked} pairs within 3 cm)");
             Render(shell, "ui-overview.png", head.position, Quaternion.identity, 100f, 1920, 1080);
-            foreach (var id in new[] { "settings", "files", "browser", "scripts", "terminals", "dock", "vault" })
+            foreach (var id in new[] { "settings", "files", "browser", "mqh", "terminals", "dock", "vault" })
                 RenderPanel(shell.PanelsById[id], "ui-" + id + ".png");
             RenderPanel(frame, "ui-terminal.png");
         }
@@ -348,12 +349,17 @@ namespace MetaCodex.EditorTools
             Click(r, settings, new Vector2(track.x + track.width * 0.9f, pinch.Rect.center.y), new Vector2(track.x + track.width * 0.25f, pinch.Rect.center.y));
             Check(Mathf.Abs(pinch.Value - Mathf.Lerp(0.6f, 0.98f, 0.25f)) < 0.03f, $"slider drag sets pinch threshold ({pinch.Value:F2})");
 
-            var daemonTab = settings.Elements.OfType<UiButton>().First(b => b.Text == "DAEMON");
-            Click(r, settings, daemonTab.Rect.center);
+            // the link to MQH is MQH > DAEMON now (it was a Settings tab)
+            shell.ClosePanel("settings");
+            shell.OpenPanel("daemon");
+            var mqhPanel = shell.PanelsById["mqh"];
+            mqhPanel.ForceRefresh();
             UiKeyboard.EditorProvider = old => "http://127.0.0.1:38990";
-            var url = settings.Elements.OfType<UiTextField>().First(f => f.Caption == "MQH URL");
-            Click(r, settings, url.Rect.center);
-            Check(shell.Settings.mqhUrl == "http://127.0.0.1:38990", "text field edit (keyboard) updates the MQH URL");
+            var url = mqhPanel.Elements.OfType<UiTextField>().First(f => f.Caption == "MQH URL");
+            Click(r, mqhPanel, url.Rect.center);
+            Check(shell.Settings.mqhUrl == "http://127.0.0.1:38990", "text field edit (keyboard) updates the MQH URL (MQH > DAEMON)");
+            shell.ClosePanel("mqh");
+            shell.OpenPanel("settings"); // the steps below move it by its header
             Check(File.Exists(Path.Combine("Temp", "mcx-uitest", "settings.json")) && File.ReadAllText(Path.Combine("Temp", "mcx-uitest", "settings.json")).Contains("38990"), "settings persisted to disk");
 
             // files: a list row navigates
@@ -521,7 +527,7 @@ end)
             Check(host2.Entries.First(e => e.Name == "bad").Enabled == false, "disabled flag persisted across a restart");
             Check(host.Eval("return ui.panels and #ui.panels() > 5") == "true", "eval sees the panel API");
 
-            var sp = shell.PanelsById["scripts"];
+            var sp = shell.PanelsById["mqh"]; // SCRIPTS is a tab of MQH
             shell.OpenPanel("scripts");
             sp.ForceRefresh();
             RenderPanel(sp, "ui-scripts.png");
@@ -735,13 +741,13 @@ end)
 
             // the panel, tab by tab (alone, so the picture shows only it)
             foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
-            shell.OpenPanel("gestures");
-            var gp = shell.PanelsById["gestures"];
-            var tabs = gp.Elements.OfType<UiTabs>().First();
+            shell.OpenPanel("gestures"); // a tab of MQH, with the studio's own tabs
+            var gp = shell.PanelsById["mqh"];
+            var tabs = shell.GestureTabsForTest;
             shell.PoseHand(Handedness.Right, 0, 1, 1, 1, 1, Vector3.up);
             shell.PoseHand(Handedness.Left, 0.2f, 0, 0, 0, 0);
             shell.TickGesturesForTest(0.4f);
-            string[] names = { "gestures", "live", "bind", "record", "plugins" };
+            string[] names = { "all", "live", "bind", "record" };
             for (int i = 0; i < names.Length; i++)
             {
                 tabs.Select(i);
@@ -750,6 +756,9 @@ end)
                 RenderPanel(gp, $"ui-gestures-{names[i]}.png");
             }
             tabs.Select(0);
+            shell.OpenPanel("plugins"); // the gesture plugins are in MQH > PLUGINS now
+            gp.ForceRefresh();
+            RenderPanel(gp, "ui-gestures-plugins.png");
             hands.Hide(Handedness.Left);
             hands.Hide(Handedness.Right);
             shell.TickGesturesForTest(0.2f);
@@ -1637,7 +1646,7 @@ end)
             Check(pressed == 2 && shell.IsPanelOpen("files"), $"touching the FILES blade opens FILES (pressed {pressed})");
             shell.ClosePanel("settings");
             Step(8); // past the 0.3 s between two presses (a double tap is not two commands)
-            Poke(w.WorldOf(w.Inner.Count + 10));
+            Poke(w.WorldOf(w.Inner.Count + w.Outer.FindIndex(x => x.Label == "SETUP")));
             Check(shell.IsPanelOpen("settings"), "the outer ring works too: SETUP opens Settings");
             // a fingertip that goes through the surface and stays there presses once, not again and again
             int presses = 0;
@@ -1655,6 +1664,77 @@ end)
             shell.SetWristMenu(false);
             Check(shell.IsPanelOpen("dock") && !w.Visible, "DOCK mode: the dock is back, the wrist menu gone");
             foreach (var id in shell.PanelIds.ToList()) if (id != "dock") shell.ClosePanel(id);
+        }
+
+        /// MQH (owner 2026-11-09): one panel for SKILLS, PLUGINS, SCRIPTS, GESTURES and the daemon link; the skills that came
+        /// with MetaCodex or MQH are read-only, only added ones can be removed; fewer dock and wrist entries.
+        private static void MqhPanel(MetaCodexShell shell)
+        {
+            foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
+            var mp = shell.PanelsById["mqh"];
+            var tabs = shell.MqhTabsForTest;
+            Check(string.Join(",", tabs.Names) == "SKILLS,PLUGINS,SCRIPTS,GESTURES,DAEMON" && !shell.PanelIds.Contains("scripts") && !shell.PanelIds.Contains("gestures"),
+                "MQH: one panel with SKILLS, PLUGINS, SCRIPTS, GESTURES, DAEMON (no separate SCRIPTS or GESTURES panel)");
+            var tabOf = new (string id, int tab)[] { ("skills", 0), ("plugins", 1), ("scripts", 2), ("gestures", 3), ("daemon", 4) };
+            var bad = new List<string>();
+            foreach (var (id, tab) in tabOf)
+            {
+                shell.OpenPanel(id);
+                if (!mp.IsOpen || tabs.Selected != tab || !shell.IsPanelOpen(id) || tabOf.Any(o => o.id != id && shell.IsPanelOpen(o.id))) bad.Add(id);
+            }
+            shell.TogglePanel("daemon");
+            Check(bad.Count == 0 && !mp.IsOpen, bad.Count == 0 ? "the old ids open their MQH tab (ui.open, voice, bindings keep working); toggling the shown tab closes MQH" : "wrong tab for: " + string.Join(", ", bad));
+            var settingsTabs = shell.PanelsById["settings"].Elements.OfType<UiTabs>().First();
+            var dock = shell.PanelsById["dock"].Elements.OfType<UiButton>().Select(b => b.Text).ToList();
+            var outer = shell.Wrist.Outer.Select(x => x.Label).ToList();
+            Check(!settingsTabs.Names.Contains("DAEMON") && dock.Any(x => x.EndsWith("MQH")) && !dock.Any(x => x.EndsWith("SCRIPTS") || x.EndsWith("GESTURE"))
+                && outer.Contains("MQH") && !outer.Contains("SCRIPTS") && !outer.Contains("GESTURE"),
+                $"Settings without DAEMON; the dock and the wrist menu have one MQH entry instead of SCRIPTS and GESTURE ({dock.Count} dock buttons, {outer.Count} outer blades)");
+
+            // SKILLS: what MQH lists (canned), seen through the app's rules
+            shell.SetShippedSkillsForTest(new[] { "metacodex-context", "quest-native-apps", "unity-cli" });
+            string Id(char c) => "skill_" + new string(c, 64);
+            var list = new JObject
+            {
+                ["skills"] = new JArray
+                {
+                    new JObject { ["id"] = Id('a'), ["name"] = "metacodex-context", ["description"] = "Where you are in MetaCodex", ["provider"] = null, ["scope"] = "plugin", ["pluginId"] = "bb-guide", ["filePath"] = "/root/.mqh/plugins/bb-guide/skills/metacodex-context/SKILL.md", ["manageable"] = false, ["registrySkillId"] = null },
+                    new JObject { ["id"] = Id('b'), ["name"] = "metacodex-context", ["description"] = "Where you are in MetaCodex", ["provider"] = "claude-code", ["scope"] = "provider-user", ["pluginId"] = null, ["filePath"] = "/root/.claude/skills/metacodex-context/SKILL.md", ["manageable"] = true, ["registrySkillId"] = null },
+                    new JObject { ["id"] = Id('c'), ["name"] = "my-notes", ["description"] = "How I like my commits", ["provider"] = null, ["scope"] = "bb-user", ["pluginId"] = null, ["filePath"] = "/root/.mqh/skills/my-notes/SKILL.md", ["manageable"] = true, ["registrySkillId"] = null },
+                    new JObject { ["id"] = Id('d'), ["name"] = "skill-creator", ["description"] = "Create or improve MQH skills", ["provider"] = null, ["scope"] = "bb-builtin", ["pluginId"] = null, ["filePath"] = "/root/.mqh/builtin-skills/skill-creator/SKILL.md", ["manageable"] = false, ["registrySkillId"] = null },
+                    new JObject { ["id"] = Id('e'), ["name"] = "pdf", ["description"] = "Read and fill PDF files", ["provider"] = "claude-code", ["scope"] = "provider-user", ["pluginId"] = null, ["filePath"] = "/root/.claude/skills/pdf/SKILL.md", ["manageable"] = true, ["registrySkillId"] = "anthropics/skills/pdf" },
+                },
+            };
+            shell.OpenPanel("skills");
+            shell.SetSkillsFromMqh(list);
+            var rows = shell.SkillRowsForTest;
+            string RowOf(string n) { var r = rows.FirstOrDefault(x => x.name == n); return r.name == null ? "missing" : r.group + (r.locked ? "/locked" : ""); }
+            Check(rows.Count == 4 && RowOf("my-notes") == "YOURS" && RowOf("pdf") == "YOURS" && RowOf("metacodex-context") == "METACODEX/locked" && RowOf("skill-creator") == "MQH/locked"
+                && rows[0].group == "YOURS",
+                $"SKILLS: one row per skill, yours first; shipped and MQH's own read-only, even where a copy sits in an editable folder ({string.Join(", ", rows.Select(x => x.name + ":" + x.group + (x.locked ? "/locked" : "")))})");
+            var items = mp.Elements.OfType<UiList>().First(l => l.Items.Any(i => i.Title == "my-notes")).Items.ToList();
+            int iCtx = items.FindIndex(i => i.Title == "metacodex-context"), iMine = items.FindIndex(i => i.Title == "my-notes");
+            string noCtx = shell.SkillRemoveRefusal(iCtx), noMine = shell.SkillRemoveRefusal(iMine);
+            Check(noCtx != null && noCtx.Contains("read-only") && noMine == null, $"REMOVE refuses a shipped skill (“{noCtx}”) and allows one you added");
+            shell.SelectSkillForTest("metacodex-context");
+            mp.ForceRefresh();
+            RenderPanel(mp, "ui-mqh-skills.png");
+            var page = new JObject { ["skills"] = new JArray { new JObject { ["id"] = "anthropics/skills/xlsx", ["source"] = "anthropics/skills", ["skillId"] = "xlsx", ["name"] = "xlsx", ["installs"] = 1234, ["stars"] = 99, ["installUrl"] = null, ["url"] = "https://www.skills.sh/anthropics/skills/xlsx", ["topic"] = null, ["summary"] = "Spreadsheets" } } };
+            shell.SetSkillResultsForTest(page, "spreadsheet");
+            var reg = mp.Elements.OfType<UiList>().First(l => l.Items.Any(i => i.Title == "xlsx"));
+            Check(shell.SkillsRegistryForTest && reg.Items.Count == 1, "⌕ FIND shows the registry's results to install");
+            mp.ForceRefresh();
+            RenderPanel(mp, "ui-mqh-skills-registry.png");
+            string prompt = MetaCodexShell.NewSkillPrompt("tell the agents how I name my branches");
+            Check(prompt.Contains("~/.mqh/skills") && prompt.Contains("skill-creator") && prompt.Contains("metacodex-context") && prompt.Contains("Never edit the skills that came with"),
+                "+ NEW SKILL: the agent's brief names the place (~/.mqh/skills), skill-creator, metacodex-context, and the read-only rule");
+            // voice: the new names, and the old ones still reach their tab
+            var v = shell.Voice;
+            var ms = v.FastMatch("open the skills");
+            var mpl = v.FastMatch("show plugins");
+            Check(ms != null && (string)ms.Args["panel"] == "skills" && mpl != null && (string)mpl.Args["panel"] == "plugins" && MetaCodexShell.VoicePanels.Contains("mqh"),
+                $"voice: “open the skills” -> {(string)ms?.Args["panel"]}, “show plugins” -> {(string)mpl?.Args["panel"]}");
+            foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
         }
 
         private static void VoiceWords(MetaCodexShell shell)

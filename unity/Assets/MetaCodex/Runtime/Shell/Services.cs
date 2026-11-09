@@ -342,7 +342,8 @@ namespace MetaCodex.Shell
         /// Seconds a call may take: quick reads 15 s; starting threads, installs and provider checks longer.
         private static int TimeoutFor(HttpMethod m, string path) =>
             path.StartsWith("/api/v1/threads") && m == HttpMethod.Post && (path.Length <= "/api/v1/threads".Length + 1 || path.StartsWith("/api/v1/threads/fork")) ? 60 :
-            path.Contains("/providers/state") || path.Contains("/execution-options") ? 45 : 15;
+            path.Contains("/providers/state") || path.Contains("/execution-options") ? 45 :
+            path.StartsWith("/api/v1/skills-registry") ? 60 : 15; // the registry reads skills.sh and GitHub
 
         private HttpRequestMessage Req(HttpMethod m, string path, JToken body = null)
         {
@@ -395,6 +396,15 @@ namespace MetaCodex.Shell
 
         public void Version(Action<JToken> cb) => Call(HttpMethod.Get, "/api/v1/system/version", null, cb);
         public void Plugins(Action<JToken> cb) => Call(HttpMethod.Get, "/api/v1/plugins", null, cb);
+        /// Skills MQH gives the agents (its own, plugins', each provider's), seen from a project.
+        public void Skills(string projectId, Action<JToken> cb) => Call(HttpMethod.Get, $"/api/v1/projects/{E(projectId)}/skills?environmentId=", null, cb);
+        public void DeleteSkill(string projectId, string skillId, Action<JToken> cb) =>
+            Call(HttpMethod.Delete, $"/api/v1/projects/{E(projectId)}/skills", new JObject { ["skillId"] = skillId, ["environmentId"] = null }, cb);
+        /// The public skills registry (skills.sh), through MQH.
+        public void SearchSkills(string query, Action<JToken> cb) =>
+            Call(HttpMethod.Get, "/api/v1/skills-registry?page=0&perPage=24" + (string.IsNullOrWhiteSpace(query) ? "" : "&q=" + E(query.Trim())), null, cb);
+        public void InstallSkill(string registrySkillId, Action<JToken> cb) =>
+            Call(HttpMethod.Post, "/api/v1/skills-registry/install", new JObject { ["registrySkillId"] = registrySkillId }, cb);
         public void Providers(Action<JToken> cb) => Call(HttpMethod.Get, "/api/v1/system/providers", null, cb);
         public void SetPluginEnabled(string id, bool on, Action<JToken> cb) => Call(HttpMethod.Post, $"/api/v1/plugins/{Uri.EscapeDataString(id)}/{(on ? "enable" : "disable")}", new JObject(), cb);
         public void Preferences(Action<JToken> cb) => Call(HttpMethod.Get, "/api/v1/preferences/ui", null, cb);

@@ -247,10 +247,13 @@ namespace MetaCodex.Shell
 
         public IEnumerable<string> PanelIds => _panels.Keys;
 
-        /// Panels that moved inside another one: GIT is the vault's GIT tab now (ui.open("git") still works).
+        /// Panels that moved inside another one: GIT is the vault's GIT tab now (ui.open("git") still works), and SCRIPTS,
+        /// GESTURES and the daemon link are tabs of MQH with the new SKILLS and PLUGINS.
         public static readonly Dictionary<string, (string panel, int tab)> PanelAliases = new Dictionary<string, (string, int)>
         {
             { "git", ("vault", 1) }, { "focus", ("settings", 2) }, { "storage", ("system", 1) }, { "tools", ("system", 0) },
+            { "skills", ("mqh", MqhSkillsTab) }, { "plugins", ("mqh", MqhPluginsTab) }, { "scripts", ("mqh", MqhScriptsTab) },
+            { "gestures", ("mqh", MqhGesturesTab) }, { "daemon", ("mqh", MqhDaemonTab) },
         };
 
         private static bool Alias(ref string id, out int tab)
@@ -262,7 +265,7 @@ namespace MetaCodex.Shell
             return true;
         }
 
-        private UiTabs PanelTabs(string id) => id == "vault" ? _vTabs : id == "thread-ws" ? _wsTabs : id == "system" ? _sysTabs : id == "settings" ? _settingsTabs : null;
+        private UiTabs PanelTabs(string id) => id == "vault" ? _vTabs : id == "thread-ws" ? _wsTabs : id == "system" ? _sysTabs : id == "settings" ? _settingsTabs : id == "mqh" ? _mqhTabs : null;
 
         /// Open (an alias counts when its tab is the one shown).
         public bool IsPanelOpen(string id)

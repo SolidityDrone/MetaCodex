@@ -25,9 +25,8 @@ namespace MetaCodex.Shell
             BuildTerminals();
             BuildFiles();
             BuildBrowser();
-            BuildScripts();
             BuildSettings();
-            BuildGestures();
+            BuildMqh(); // SKILLS · PLUGINS · SCRIPTS · GESTURES · DAEMON
             BuildAgents();
             BuildThreads();
             BuildThread();
@@ -63,11 +62,9 @@ namespace MetaCodex.Shell
             switch (id)
             {
                 case "files": FilesNavigate(_filesPath ?? Settings.filesRoot); break;
-                case "scripts": RefreshScriptsPanel(); break;
                 case "terminals": RefreshTerminalsPanel(); break;
                 case "browser": RefreshBrowser(); ProbeLocalServers(); break;
-                case "settings": RefreshDaemon(); break;
-                case "gestures": RefreshGesturesPanel(); break;
+                case "mqh": RefreshMqhTab(_mqhTabs?.Selected ?? 0); break;
                 case "agents": RefreshAgents(); break;
                 case "threads": RefreshThreads(); break;
                 case "vault": RefreshVaultPanel(); if (_vTabs != null && _vTabs.Selected == 1) { GitRefreshRepos(); RefreshGitHubStatus(); } break;
@@ -89,8 +86,7 @@ namespace MetaCodex.Shell
                 ("☰\nTHREADS", () => TogglePanel("threads")),
                 ("◆\nAGENTS", () => TogglePanel("agents")),
                 ("◎\nWEB", () => TogglePanel("browser")),
-                ("ƒ\nSCRIPTS", () => TogglePanel("scripts")),
-                ("✋\nGESTURE", () => TogglePanel("gestures")),
+                ("⬡\nMQH", () => TogglePanel("mqh")),
                 ("⬢\nSYSTEM", () => TogglePanel("system")),
                 ("◉\nTALK", () => VoiceToggle()),
                 ("♫\nVOICE", () => TogglePanel("voice")),
@@ -439,13 +435,13 @@ namespace MetaCodex.Shell
         private UiLabel _scriptDetail;
         private UiButton _scriptToggle;
 
-        private void BuildScripts()
+        /// SCRIPTS (a tab of MQH): the Lua behaviours in /mnt/quest/scripts and plugins' main.lua, live.
+        private void BuildScriptsTab(UiTabs tabs, int page, Rect area)
         {
             var t = UiTheme.Current;
-            var p = Panel<UiPanel>("scripts", "SCRIPTS · LIVE BEHAVIOURS", 0.60f, 0.56f);
-            var st = new UiStack(p.Content, t.Gap);
-            _scriptList = p.Add(new UiList(0.032f, (item, idx) => ScriptPicked()) { Rect = st.Next(0.17f) });
-            _scriptDetail = p.Add(new UiLabel("", t.SmallSize) { Rect = st.Next(0.075f), Wrap = true, UseMono = true, Color = t.TextDim, Align = TextAlignmentOptions.TopLeft });
+            var st = new UiStack(area, t.Gap);
+            _scriptList = tabs.AddTo(page, new UiList(0.032f, (item, idx) => ScriptPicked()) { Rect = st.Next(0.17f) });
+            _scriptDetail = tabs.AddTo(page, new UiLabel("", t.SmallSize) { Rect = st.Next(0.075f), Wrap = true, UseMono = true, Color = t.TextDim, Align = TextAlignmentOptions.TopLeft });
             var row = st.Next(t.ButtonHeight);
             var acts = new (string, Action)[]
             {
@@ -458,12 +454,12 @@ namespace MetaCodex.Shell
             float bw = (row.width - t.Gap * (acts.Length - 1)) / acts.Length;
             for (int i = 0; i < acts.Length; i++)
             {
-                var b = p.Add(new UiButton(acts[i].Item1, acts[i].Item2, i == 4 ? UiButtonStyle.Danger : UiButtonStyle.Normal) { Rect = new Rect(row.x + i * (bw + t.Gap), row.y, bw, row.height) });
+                var b = tabs.AddTo(page, new UiButton(acts[i].Item1, acts[i].Item2, i == 4 ? UiButtonStyle.Danger : UiButtonStyle.Normal) { Rect = new Rect(row.x + i * (bw + t.Gap), row.y, bw, row.height) });
                 if (i == 0) _scriptToggle = b;
             }
-            p.Add(new UiDivider { Rect = st.Next(0.008f) });
-            p.Add(new UiLabel("GESTURE MONITOR", t.SmallSize) { Rect = st.Next(0.018f), UseDisplay = true, Color = t.TextDim });
-            _gestureMonitor = p.Add(new UiLabel("", t.SmallSize) { Rect = st.Rest(), Wrap = true, UseMono = true, Color = t.TextAccent, Align = TextAlignmentOptions.TopLeft });
+            tabs.AddTo(page, new UiDivider { Rect = st.Next(0.008f) });
+            tabs.AddTo(page, new UiLabel("GESTURE MONITOR", t.SmallSize) { Rect = st.Next(0.018f), UseDisplay = true, Color = t.TextDim });
+            _gestureMonitor = tabs.AddTo(page, new UiLabel("", t.SmallSize) { Rect = st.Rest(), Wrap = true, UseMono = true, Color = t.TextAccent, Align = TextAlignmentOptions.TopLeft });
             RefreshScriptsPanel();
         }
 
@@ -519,9 +515,8 @@ end)
 
         // ------------------------------------------------------------------ settings
 
-        private UiLabel _daemonStatus, _gestureLive;
+        private UiLabel _gestureLive;
         private UiTabs _settingsTabs;
-        private UiList _pluginList;
 
         private void BuildSettings()
         {
@@ -529,9 +524,9 @@ end)
             var s = Settings;
             var p = Panel<UiPanel>("settings", "SETTINGS", 0.62f, 0.58f);
             var c = p.Content;
-            var tabs = p.Add(new UiTabs("GESTURES", "DISPLAY", "FOCUS", "LOOK", "DAEMON", "ABOUT") { Rect = new Rect(c.x, c.y, c.width, t.ButtonHeight) });
+            var tabs = p.Add(new UiTabs("GESTURES", "DISPLAY", "FOCUS", "LOOK", "ABOUT") { Rect = new Rect(c.x, c.y, c.width, t.ButtonHeight) });
             _settingsTabs = tabs;
-            const int TabDisplay = 1, TabFocus = 2, TabLook = 3, TabDaemon = 4, TabAbout = 5;
+            const int TabDisplay = 1, TabFocus = 2, TabLook = 3, TabAbout = 4; // the link to MQH: MQH > DAEMON
             var area = new Rect(c.x, c.y + t.ButtonHeight + t.Gap * 2, c.width, c.height - t.ButtonHeight - t.Gap * 2);
             float rowH = 0.034f;
 
@@ -597,18 +592,6 @@ end)
             var sg = k.NextSplit(rowH, 0.4f, out var sg2);
             tabs.AddTo(TabLook, new UiToggle("Sounds", s.sounds, v => { s.sounds = v; OnSettingsChanged(); if (v) Sounds?.Play("toast"); }) { Rect = sg });
             tabs.AddTo(TabLook, new UiSlider("VOLUME", 0f, 1f, s.soundVolume, v => { s.soundVolume = v; OnSettingsChanged(); }) { Rect = sg2, LabelWidth = 0.08f, Format = "0.00" });
-
-            // DAEMON (MQH)
-            var m = new UiStack(area, t.Gap);
-            tabs.AddTo(TabDaemon, new UiTextField("MQH URL", s.mqhUrl, v => { s.mqhUrl = v.Trim(); OnSettingsChanged(); RefreshDaemon(); }) { Rect = m.Next(rowH) });
-            // a developer's own token goes into the vault (sealed, policy deny), never into settings.json
-            tabs.AddTo(TabDaemon, new UiTextField("TOKEN", Vault?.Has(MqhTokenOverrideName) == true ? "••••••••" : "", v => { if (v != "••••••••") SetMqhTokenOverride(v); RefreshDaemon(); }, "from the vault") { Rect = m.Next(rowH), Secure = true });
-            tabs.AddTo(TabDaemon, new UiToggle("Sync these settings with MQH", s.mqhSync, v => { s.mqhSync = v; OnSettingsChanged(); }) { Rect = m.Next(rowH) });
-            _daemonStatus = tabs.AddTo(TabDaemon, new UiLabel("not checked", t.SmallSize) { Rect = m.Next(0.024f), Color = t.TextDim });
-            _pluginList = tabs.AddTo(TabDaemon, new UiList(0.027f, (item, idx) => PluginPicked(item)) { Rect = m.Next(area.yMax - m.Y - t.ButtonHeight - t.Gap) });
-            var mb = m.NextSplit(t.ButtonHeight, 0.5f, out var mb2);
-            tabs.AddTo(TabDaemon, new UiButton("⟳ CONNECT", RefreshDaemon, UiButtonStyle.Primary) { Rect = mb });
-            tabs.AddTo(TabDaemon, new UiButton("PUSH SETTINGS", () => Mqh.PushQuestSettings(Settings.ToJObject(), ok => Toast(ok ? "Settings saved to MQH" : "MQH unreachable", ok ? "ok" : "error"))) { Rect = mb2 });
 
             // ABOUT
             var a2 = new UiStack(area, t.Gap);
@@ -681,48 +664,8 @@ end)
         private void RefreshLayoutsLabel() =>
             _layoutsLabel?.Set(Settings.layouts.Count == 0 ? "saved layouts: none" : "saved layouts: " + string.Join(" · ", Settings.layouts.Select(x => x.name)));
 
-        public void RefreshDaemon()
-        {
-            if (_daemonStatus == null) return;
-            var t = UiTheme.Current;
-            _daemonStatus.Set("connecting to " + Settings.mqhUrl + " …", t.TextDim);
-            Mqh.BaseUrl = Settings.mqhUrl;
-            Mqh.Token = MqhTokenNow();
-            Mqh.Version(v =>
-            {
-                if (v == null) { _daemonStatus.Set("⚠ " + (Mqh.LastError ?? "MQH not reachable"), t.Danger); _pluginList.SetItems(new UiListItem[0]); return; }
-                string ver = v["version"]?.ToString() ?? v["appVersion"]?.ToString() ?? v.ToString(Newtonsoft.Json.Formatting.None);
-                _daemonStatus.Set($"<color=#4DFFA6>● online</color>  MQH {Trim(ver, 60)}", t.Text);
-                Mqh.Plugins(pl =>
-                {
-                    var arr = pl?["plugins"] as JArray;
-                    if (arr == null) return;
-                    _pluginList.SetItems(arr.Select(x => new UiListItem
-                    {
-                        Icon = x["spatial"]?["hasSpatial"]?.Value<bool>() == true ? "◫" : "◆",
-                        Title = (string)x["id"],
-                        Sub = (string)x["name"] ?? "",
-                        Badge = ((string)x["status"] ?? "").ToUpperInvariant(),
-                        BadgeColor = (string)x["status"] == "running" ? t.Ok : (string)x["status"] == "disabled" ? t.TextDim : t.Warn,
-                        Tag = (string)x["id"],
-                    }));
-                });
-            });
-        }
-
         private static string Trim(string s, int n) => s == null ? "" : s.Length > n ? s.Substring(0, n) + "…" : s;
 
-        private void PluginPicked(UiListItem item)
-        {
-            var id = item.Tag as string;
-            if (id == null) return;
-            bool running = item.Badge == "RUNNING";
-            Modal("PLUGIN " + id.ToUpperInvariant(), running ? "Disable this plugin?" : "Enable this plugin?", new[] { running ? "DISABLE" : "ENABLE", "CANCEL" }, i =>
-            {
-                if (i != 0) return;
-                Mqh.SetPluginEnabled(id, !running, r => { Toast(r != null ? $"{id} {(running ? "disabled" : "enabled")}" : "MQH: " + Mqh.LastError, r != null ? "ok" : "error"); RefreshDaemon(); });
-            });
-        }
     }
 
     /// The git history as "metro lines": one vertical line per lane, a dot per commit, refs and subject.

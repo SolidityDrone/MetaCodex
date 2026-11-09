@@ -61,15 +61,22 @@ with tarfile.open(fileobj=raw, mode="w", format=tarfile.PAX_FORMAT) as tf:
     for f in ("SOURCES.md", "LICENSE-unity-skills.md", "LICENSE-meta-agentic-tools"):
         if os.path.isfile(os.path.join(bundled, f)):
             extra[f"{skills_dst}/THIRD-PARTY/{f}"] = os.path.join(bundled, f)
-    extra_dirs = sorted({"/".join(k.split("/")[:i]) for k in extra for i in range(1, len(k.split("/")))})
+    # the skills this overlay lays: read-only in the app's MQH > SKILLS (each update lays them again)
+    shipped = sorted(k.split("/")[-1] for k in trees if k.startswith(skills_dst + "/"))
+    generated = {"opt/metacodex/shipped-skills.txt": ("# skills shipped by MetaCodex in /root/.claude/skills (read-only in MQH > SKILLS)\n"
+                                                      + "".join(n + "\n" for n in shipped)).encode()}
+    extra_dirs = sorted({"/".join(k.split("/")[:i]) for k in list(extra) + list(generated) for i in range(1, len(k.split("/")))})
     entries = [(os.path.relpath(f, src).replace(os.sep, "/"), f) for f in entries]
-    entries += [(d, None) for d in extra_dirs if not os.path.isdir(os.path.join(src, d))] + sorted(extra.items())
+    entries += [(d, None) for d in extra_dirs if not os.path.isdir(os.path.join(src, d))] + sorted(extra.items()) + sorted(generated.items())
     for rel, full in entries:
         ti = tarfile.TarInfo(rel)
         ti.uid = ti.gid = 0
         ti.uname = ti.gname = "root"
         ti.mtime = MTIME
-        if full is None or os.path.isdir(full):
+        if isinstance(full, bytes):
+            ti.size, ti.mode = len(full), mode_for(rel, False)
+            tf.addfile(ti, io.BytesIO(full))
+        elif full is None or os.path.isdir(full):
             ti.type, ti.mode = tarfile.DIRTYPE, mode_for(rel, True)
             tf.addfile(ti)
         else:
