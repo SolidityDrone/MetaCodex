@@ -2023,17 +2023,43 @@ end)
             camImg.Apply(true);
             var camPose = new Pose(head.position, Quaternion.identity);
             shell.SetCameraForTest(camImg, camPose, new Vector2(457f, 457f), new Vector2(320f, 240f), new Vector2Int(640, 480), new Vector2Int(640, 480));
+            // the windows out of the way for these pictures (where the terminal is depends on the sections before)
+            var windows = UnityEngine.Object.FindObjectsByType<UiPanel>(FindObjectsSortMode.None).Select(x => x.gameObject)
+                .Concat(UnityEngine.Object.FindObjectsByType<TerminalView>(FindObjectsSortMode.None).Select(x => x.gameObject)).Where(g => g.activeSelf).Distinct().ToList();
+            foreach (var g in windows) g.SetActive(false);
             var blurFar = RenderWithDepth(shell, "ui-focus-blur-far.png", head.position, 4.0f, dw, dh);
-            var cb = blurFar.GetPixel(160, 215);
+            // probes over the middle of the view, inside the camera's round mask: the room's blurred picture covers it
             var blurNear = RenderWithDepth(shell, "ui-focus-blur-near.png", head.position, 1.0f, dw, dh);
             float aBlurNear = xs.Max(x => blurNear.GetPixel(x, 215).a);
-            Check(cb.a > 0.95f && cb.r > 0.15f && cb.r > cb.g && cb.g > cb.b && aBlurNear < 0.05f,
-                $"BLUR: outside the dome the camera image covers the passthrough (alpha {cb.a:F2}, colour {cb.r:F2} {cb.g:F2} {cb.b:F2}); inside it stays clear ({aBlurNear:F2})");
+            int orangeProbes = 0, probes = 0;
+            for (int y = 70; y < 170; y += 5)
+                for (int x = 60; x < 260; x += 5)
+                {
+                    var px = blurFar.GetPixel(x, y);
+                    probes++;
+                    if (px.a > 0.95f && px.r > 0.15f && px.r > px.g && px.g > px.b) orangeProbes++;
+                }
+            Check(orangeProbes > probes * 3 / 4 && aBlurNear < 0.05f,
+                $"BLUR: outside the dome the room's blurred picture covers the passthrough ({orangeProbes} of {probes} probes orange in the middle of the view); inside it stays clear ({aBlurNear:F2})");
+            // the blur is a panorama of the room, painted through a round mask: the picture's corners are not in it
+            // (a rectangle would be), and it stays with the room when the head turns; walking away starts a new one
+            float fwd = shell.BlurCoverageForTest(Vector3.forward);
+            Vector3 cornerUp = new Vector3(0.69f, 0.52f, 1f), cornerDown = new Vector3(0.69f, -0.52f, 1f); // a mirrored pair: row order does not matter
+            float cu = shell.BlurCoverageForTest(cornerUp), cd = shell.BlurCoverageForTest(cornerDown), side = shell.BlurCoverageForTest(Vector3.right);
+            Check(fwd > 0.9f && cu < 0.05f && cd < 0.05f && side < 0.01f,
+                $"BLUR panorama: ahead seen ({fwd:F2}); the picture's corners left out by the round mask ({cu:F2}, {cd:F2}: no rectangle); 90° right not seen yet ({side:F2})");
+            shell.AddCameraFrameForTest(camImg, new Pose(head.position, Quaternion.Euler(0f, 90f, 0f)), new Vector2(457f, 457f), new Vector2(320f, 240f), new Vector2Int(640, 480), new Vector2Int(640, 480));
+            float fwd2 = shell.BlurCoverageForTest(Vector3.forward), side2 = shell.BlurCoverageForTest(Vector3.right);
+            Check(fwd2 > 0.9f && side2 > 0.9f, $"BLUR stays with the room: the head turned 90°, what it saw ahead is kept ({fwd2:F2}) and the new side is added ({side2:F2})");
+            shell.AddCameraFrameForTest(camImg, new Pose(head.position + new Vector3(2f, 0f, 0f), Quaternion.Euler(0f, 90f, 0f)), new Vector2(457f, 457f), new Vector2(320f, 240f), new Vector2Int(640, 480), new Vector2Int(640, 480), 1);
+            float fwd3 = shell.BlurCoverageForTest(Vector3.forward);
+            Check(fwd3 < 0.05f, $"BLUR: 2 m further on, a new panorama starts (what was ahead from the old spot is dropped: {fwd3:F2})");
             // a narrow camera: the top of the view is beyond its image -> darkness only (alpha = intensity, no colour)
             shell.SetCameraForTest(camImg, camPose, new Vector2(1800f, 1800f), new Vector2(320f, 240f), new Vector2Int(640, 480), new Vector2Int(640, 480));
             var narrow = RenderWithDepth(shell, "ui-focus-blur-narrow.png", head.position, 4.0f, dw, dh);
             var cn = narrow.GetPixel(160, 215);
             Check(Mathf.Abs(cn.a - 0.5f) < 0.06f && cn.r < 0.05f, $"BLUR: beyond the camera's view the plain darkness (alpha {cn.a:F2}, red {cn.r:F2})");
+            foreach (var g in windows) g.SetActive(true);
             foreach (var t in new[] { blurFar, blurNear, narrow }) UnityEngine.Object.DestroyImmediate(t);
             shell.SetCameraForTest(null, default, default, default, default, default);
             UnityEngine.Object.DestroyImmediate(camImg);

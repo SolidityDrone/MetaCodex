@@ -137,7 +137,11 @@ panels are kept; older ones rebuild from their spec when opened again (workspace
 Settings > FOCUS, FOCUS on the dock, `focus:on|off|toggle` (actions), voice ("open ambient focus", "turn on
 ambient focus and set intensity to 0", "set the blur to fifty percent"). A dome stands on the floor around you:
 inside it the room stays visible, outside it the passthrough darkens or, with BLUR, turns into a soft image of
-itself. RADIUS is the dome's size (from the floor under your head), SOFTNESS the width of its edge, INTENSITY
+itself. The soft image is a panorama of the room (`Resources/Shaders/FocusBlurPano`, 1024 x 512, world-oriented):
+each camera frame is painted into it through a round mask, so it has no rectangle, stays with the room when you
+turn your head (what was seen is kept; what was never seen is the plain darkness), and starts over after you walk
+1.5 m away. The camera runs at 15 fps when only the blur needs it (30 with sharp depth) and pauses while a voice
+command is transcribed and decided, so speech-to-text keeps its cores. RADIUS is the dome's size (from the floor under your head), SOFTNESS the width of its edge, INTENSITY
 the darkness, BLUR how soft the room outside gets (0 = darkened only); BLACKOUT (radius 0, 100 %) leaves only the
 windows and your hands. No Space Setup scan is needed (branch `feat/spatial-dome`, `docs/SPATIAL_DOME_PLAN.md`).
 

@@ -79,11 +79,27 @@ namespace MetaCodex.Shell
         // ---- the passthrough camera: the blur, and the picture that sharpens the depth
         private Meta.XR.PassthroughCameraAccess _cam;
         private bool _askedCamera, _camLive, _camTest, _camRetried;
-        private RenderTexture _camRt;
+        private int _camFps;
         private System.DateTime _camStamp;
         private float _camDisabledAt = -1f;
         private static readonly int CamTexId = Shader.PropertyToID("_McxCamTex"), CamW2CId = Shader.PropertyToID("_McxCamWorldToCam"),
             CamIntrId = Shader.PropertyToID("_McxCamIntr"), CamCropId = Shader.PropertyToID("_McxCamCrop");
+
+        // ---- BLUR: the room around the user as the camera saw it (FocusBlurPano), read by AmbientFocus by direction
+        private RenderTexture _blurPano;
+        private Material _panoMat;
+        private CommandBuffer _panoCb;
+        private Vector3 _panoOrigin;
+        private bool _panoReady;
+        /// 1024 x 512 over 360 x 180 degrees: ~2.8 texels per degree before the blur's mip level.
+        private const int PanoW = 1024, PanoH = 512;
+        /// Walking further than this from where the panorama began starts a new one (another part of the room).
+        private const float PanoResetMetres = 1.5f;
+        /// How much of each camera frame goes in (the rest is what was there): steady, and quick to follow.
+        private const float PanoBlend = 0.35f;
+        private static readonly int PanoId = Shader.PropertyToID("_McxBlurPano"), PanoSrcId = Shader.PropertyToID("_McxCamSrc"),
+            PanoW2CId = Shader.PropertyToID("_PanoCamW2C"), PanoIntrId = Shader.PropertyToID("_PanoCamIntr"), PanoCropId = Shader.PropertyToID("_PanoCamCrop"),
+            PanoBlendId = Shader.PropertyToID("_PanoBlend");
 
         public void SetFocus(bool on, bool toast = true)
         {
@@ -127,7 +143,10 @@ namespace MetaCodex.Shell
             bool shown = _focusShown > 0f;
             bool wantDepth = shown || Settings.occludeUi;
             EnsureDepth(wantDepth);
-            EnsureCamera((shown && Settings.focusBlur > 0.001f) || (wantDepth && Settings.depthCamera && _depthLive));
+            // the camera pauses while speech is turned into text and the command decided (the AI service shares the
+            // cores the camera pipeline uses); the blur keeps the room it has, the sharp depth goes unguided meanwhile
+            bool voiceBusy = VoiceState == "transcribing" || VoiceState == "thinking";
+            EnsureCamera(((shown && Settings.focusBlur > 0.001f) || (wantDepth && Settings.depthCamera && _depthLive)) && !voiceBusy);
             Shader.SetGlobalFloat(OcclusionId, Settings.occludeUi && _sharpLive ? 1f : 0f);
             if (Settings.occludeUi || shown) UpdateHandCutouts(); else HideHandCutouts();
             if (!shown)
@@ -148,10 +167,11 @@ namespace MetaCodex.Shell
             _focusMat.SetFloat(FloorYId, floor);
             _focusMat.SetVector(FeetId, feet);
             SetKeyword(_focusMat, "MCX_DEPTH", _depthLive && _sharpLive);
-            bool blur = _camLive && Settings.focusBlur > 0.001f;
+            bool blur = _panoReady && Settings.focusBlur > 0.001f;
             SetKeyword(_focusMat, "MCX_BLUR", blur);
-            // BLUR 1 % .. 100 %: mip 2.5 (soft) .. 6 (only colours) of the 512 x 384 copy, 4 taps
-            if (blur) _focusMat.SetFloat(BlurMipId, Mathf.Lerp(2.5f, 6f, Mathf.Clamp01(Settings.focusBlur)));
+            // BLUR 1 % .. 100 %: mip 1.6 (soft) .. 5.1 (only colours) of the 1024 x 512 panorama (the old 2.5 .. 6 of a
+            // 512 x 384 camera copy, at the same angular softness)
+            if (blur) _focusMat.SetFloat(BlurMipId, Mathf.Lerp(1.6f, 5.1f, Mathf.Clamp01(Settings.focusBlur)));
             UpdateFloorFromDepth(head);
         }
 
@@ -461,10 +481,14 @@ namespace MetaCodex.Shell
                 UnityEngine.Android.Permission.RequestUserPermission(OVRPermissionsRequester.PassthroughCameraAccessPermission);
             }
 #endif
+            // 30 fps when it guides the sharp depth, 15 when only the blur needs it (half the camera work): a different
+            // rate means a new component (MaxFramerate cannot change while it runs)
+            int fps = Settings.depthCamera ? 30 : 15;
+            if (_cam != null && _camFps != fps) { Object.Destroy(_cam.gameObject); _cam = null; _camLive = false; }
             if (_cam == null)
             {
-                // left camera, 640 x 480, 30 fps: it feeds the blur and guides the sharp depth. Configured while the
-                // component is disabled (MaxFramerate refuses changes while it is enabled), then started.
+                // left camera, 640 x 480: it feeds the blur and guides the sharp depth. Configured while the component is
+                // disabled (MaxFramerate refuses changes while it is enabled), then started.
                 var go = new GameObject("PassthroughCamera");
                 go.SetActive(false);
                 go.transform.SetParent(_root, false);
@@ -472,7 +496,8 @@ namespace MetaCodex.Shell
                 _cam.enabled = false;
                 _cam.CameraPosition = Meta.XR.PassthroughCameraAccess.CameraPositionType.Left;
                 _cam.RequestedResolution = new Vector2Int(640, 480);
-                _cam.MaxFramerate = 30;
+                _cam.MaxFramerate = fps;
+                _camFps = fps;
                 go.SetActive(true);
                 _cam.enabled = true;
             }
@@ -516,31 +541,86 @@ namespace MetaCodex.Shell
                 SetFocusStatus(ref _camStatus, $"camera: no pose or intrinsics yet (|q|² {qn:F2}, f {ints.FocalLength.x:F0})");
                 return false;
             }
-            if (_camRt == null)
-            {
-                _camRt = new RenderTexture(512, 384, 0, RenderTextureFormat.ARGB32)
-                { name = "focus camera", useMipMap = true, autoGenerateMips = true, filterMode = FilterMode.Trilinear, wrapMode = TextureWrapMode.Clamp };
-                _camRt.Create();
-            }
-            Graphics.Blit(tex, _camRt);
-            SetCameraUniforms(_camRt, pose, ints.FocalLength, ints.PrincipalPoint, ints.SensorResolution, _cam.CurrentResolution, true);
+            // the camera's own texture guides the sharp depth (no copy); the blur paints it into the room panorama
+            var w2c = SetCameraUniforms(tex, pose, ints.FocalLength, ints.PrincipalPoint, ints.SensorResolution, _cam.CurrentResolution, true);
+            if (Settings.focusBlur > 0.001f) UpdateBlurPano(tex, w2c);
             return true;
         }
 
         /// The camera for the shader: world -> camera, intrinsics (sensor pixels) and the sensor region the image
         /// covers (as PassthroughCameraAccess.CalcSensorCropRegion). Its pose is in tracking space: into world space
         /// through the rig.
-        private void SetCameraUniforms(Texture tex, Pose pose, Vector2 focal, Vector2 principal, Vector2Int sensor, Vector2Int current, bool trackingSpace)
+        private Matrix4x4 SetCameraUniforms(Texture tex, Pose pose, Vector2 focal, Vector2 principal, Vector2Int sensor, Vector2Int current, bool trackingSpace)
         {
             var camToWorld = Matrix4x4.TRS(pose.position, pose.rotation, Vector3.one);
             var space = trackingSpace ? TrackingSpace() : null;
             if (space != null) camToWorld = space.localToWorldMatrix * camToWorld;
+            var w2c = camToWorld.inverse;
             Shader.SetGlobalTexture(CamTexId, tex);
-            Shader.SetGlobalMatrix(CamW2CId, camToWorld.inverse);
+            Shader.SetGlobalMatrix(CamW2CId, w2c);
             Shader.SetGlobalVector(CamIntrId, new Vector4(focal.x, focal.y, principal.x, principal.y));
             Vector2 s = sensor, k = new Vector2(current.x / Mathf.Max(1f, s.x), current.y / Mathf.Max(1f, s.y));
             k /= Mathf.Max(k.x, k.y);
             Shader.SetGlobalVector(CamCropId, new Vector4(s.x * (1f - k.x) * 0.5f, s.y * (1f - k.y) * 0.5f, s.x * k.x, s.y * k.y));
+            _lastCamTex = tex;
+            return w2c;
+        }
+
+        private Texture _lastCamTex;
+
+        /// One camera frame into the room panorama (FocusBlurPano), then its mip chain (the blur reads a high mip).
+        /// Uses the uniforms SetCameraUniforms just set. Cheap: one pass over 1024 x 512 per camera frame (15 or 30 Hz).
+        private void UpdateBlurPano(Texture camTex, Matrix4x4 w2c)
+        {
+            if (camTex == null) return;
+            if (_panoMat == null)
+            {
+                var sh = Resources.Load<Shader>("Shaders/FocusBlurPano") ?? Shader.Find("Hidden/MetaCodex/FocusBlurPano");
+                if (sh == null) return;
+                _panoMat = new Material(sh) { name = "focus blur panorama" };
+            }
+            Vector3 origin = w2c.inverse.GetColumn(3);
+            bool fresh = _blurPano == null || (origin - _panoOrigin).sqrMagnitude > PanoResetMetres * PanoResetMetres;
+            if (_blurPano == null)
+            {
+                _blurPano = new RenderTexture(PanoW, PanoH, 0, RenderTextureFormat.ARGB32)
+                { name = "focus blur panorama", useMipMap = true, autoGenerateMips = false, filterMode = FilterMode.Trilinear, wrapModeU = TextureWrapMode.Repeat, wrapModeV = TextureWrapMode.Clamp };
+                _blurPano.Create();
+            }
+            if (_panoCb == null) _panoCb = new CommandBuffer { name = "focus blur panorama" };
+            _panoCb.Clear();
+            _panoCb.SetRenderTarget(_blurPano, 0);
+            if (fresh) { _panoCb.ClearRenderTarget(false, true, Color.clear); _panoOrigin = origin; }
+            _panoMat.SetTexture(PanoSrcId, camTex);
+            _panoMat.SetMatrix(PanoW2CId, w2c);
+            _panoMat.SetVector(PanoIntrId, Shader.GetGlobalVector(CamIntrId));
+            _panoMat.SetVector(PanoCropId, Shader.GetGlobalVector(CamCropId));
+            _panoMat.SetFloat(PanoBlendId, PanoBlend);
+            _panoCb.DrawProcedural(Matrix4x4.identity, _panoMat, 0, MeshTopology.Triangles, 3);
+            _panoCb.GenerateMips(_blurPano);
+            Graphics.ExecuteCommandBuffer(_panoCb);
+            Shader.SetGlobalTexture(PanoId, _blurPano);
+            _panoReady = true;
+        }
+
+        /// Self-tests: how much of the room in a world direction the panorama has seen (0..1), read back at mip 0.
+        public float BlurCoverageForTest(Vector3 worldDir)
+        {
+            if (_blurPano == null) return 0f;
+            var d = worldDir.normalized;
+            float u = Mathf.Atan2(d.x, d.z) / (2f * Mathf.PI) + 0.5f, v = Mathf.Asin(Mathf.Clamp(d.y, -1f, 1f)) / Mathf.PI + 0.5f;
+            int x = Mathf.Clamp(Mathf.FloorToInt(u * PanoW), 0, PanoW - 1), y = Mathf.Clamp(Mathf.FloorToInt(v * PanoH), 0, PanoH - 1);
+            var prev = RenderTexture.active;
+            RenderTexture.active = _blurPano;
+            var px = new Texture2D(1, 1, TextureFormat.RGBA32, false);
+            // rows counted from the bottom, as the texture's uv (tests pick directions that do not depend on it anyway:
+            // the horizon is the middle row, corners are checked in mirrored pairs)
+            px.ReadPixels(new Rect(x, y, 1, 1), 0, 0);
+            px.Apply();
+            RenderTexture.active = prev;
+            float a = px.GetPixel(0, 0).a;
+            Object.DestroyImmediate(px);
+            return a;
         }
 
         /// Self-tests: a camera image as PassthroughCameraAccess would give it (a world-space pose); null clears it.
@@ -548,7 +628,19 @@ namespace MetaCodex.Shell
         {
             _camTest = image != null;
             _camLive = _camTest;
-            if (_camTest) SetCameraUniforms(image, worldPose, focal, principal, sensor, current, false);
+            // a new panorama for each test camera, filled by as many frames as a second of the real one
+            if (_blurPano != null) { _blurPano.Release(); Object.DestroyImmediate(_blurPano); _blurPano = null; }
+            _panoReady = false;
+            if (!_camTest) return;
+            var w2c = SetCameraUniforms(image, worldPose, focal, principal, sensor, current, false);
+            for (int i = 0; i < 12; i++) UpdateBlurPano(image, w2c);
+        }
+
+        /// Self-tests: one more test-camera frame into the panorama (the head turned; the camera sees elsewhere).
+        public void AddCameraFrameForTest(Texture image, Pose worldPose, Vector2 focal, Vector2 principal, Vector2Int sensor, Vector2Int current, int frames = 12)
+        {
+            var w2c = SetCameraUniforms(image, worldPose, focal, principal, sensor, current, false);
+            for (int i = 0; i < frames; i++) UpdateBlurPano(image, w2c);
         }
 
         // ---- hands: capsules on the tracked joints, always clear

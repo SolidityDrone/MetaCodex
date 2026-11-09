@@ -9,11 +9,12 @@
 // ShellAmbient each frame). Walls, furniture and hands near you stay; far ones fade.
 // Without depth (or where it has none): the floor plane under the user; above the horizon there is no distance.
 //
-// Blur (MCX_BLUR): outside the dome, instead of black, the passthrough camera's image (a small mip-mapped copy, read
-// at a high mip, so soft), projected per pixel through the camera's pose and intrinsics (as PassthroughCameraAccess.
-// WorldToViewportPoint) and darkened by _Intensity. Beyond the camera's narrower view it fades to the plain darkness.
+// Blur (MCX_BLUR): outside the dome, instead of black, the room as the passthrough camera saw it: a panorama around
+// the user that each camera frame paints into (Resources/Shaders/FocusBlurPano: world-oriented, round mask, no
+// rectangle), read by view direction at a high mip (so soft) and darkened by _Intensity. It stays with the room when
+// the head turns; where the camera has not looked yet (coverage 0) it is the plain darkness.
 //   _Radius  where darkening starts (m)   _Softness  width of the fade (m)   _Intensity  0..1   _FloorY  floor height
-//   _FeetPos the floor point under the user   _BlurMip  how soft the camera image is (a mip level of the copy)
+//   _FeetPos the floor point under the user   _BlurMip  how soft the room looks (a mip level of the panorama)
 Shader "MetaCodex/AmbientFocus"
 {
     Properties
@@ -66,10 +67,8 @@ Shader "MetaCodex/AmbientFocus"
             float4x4 _McxDepthToWorld[2];
             #endif
             #if defined(MCX_BLUR)
-            TEXTURE2D(_McxCamTex);
-            float4x4 _McxCamWorldToCam;   // world -> camera (x right, y up, z forward)
-            float4 _McxCamIntr;           // focal length xy, principal point zw (sensor pixels)
-            float4 _McxCamCrop;           // the sensor region of the image: x, y, width, height (sensor pixels)
+            TEXTURE2D(_McxBlurPano);      // premultiplied colour, coverage in alpha; wraps around in x
+            SAMPLER(sampler_McxBlurPano);
             #endif
 
             struct Attributes { float4 positionOS : POSITION; UNITY_VERTEX_INPUT_INSTANCE_ID };
@@ -123,25 +122,17 @@ Shader "MetaCodex/AmbientFocus"
                 half3 rgb = _Tint.rgb;
                 #if defined(MCX_BLUR)
                 {
-                    float3 pc = mul(_McxCamWorldToCam, float4(surface, 1.0)).xyz;
-                    if (pc.z > 0.05)
-                    {
-                        float2 sensor = pc.xy / pc.z * _McxCamIntr.xy + _McxCamIntr.zw;
-                        float2 uvc = (sensor - _McxCamCrop.xy) / _McxCamCrop.zw;
-                        // inside the camera's view (fading over its last 6 %), else the plain darkness
-                        float edge = saturate(min(min(uvc.x, 1.0 - uvc.x), min(uvc.y, 1.0 - uvc.y)) / 0.06 + 0.5);
-                        float2 tap = exp2(_BlurMip) / float2(512.0, 384.0) * 0.5;
-                        half3 c = SAMPLE_TEXTURE2D_LOD(_McxCamTex, sampler_TrilinearClamp, saturate(uvc) + float2(tap.x, tap.y), _BlurMip).rgb;
-                        c += SAMPLE_TEXTURE2D_LOD(_McxCamTex, sampler_TrilinearClamp, saturate(uvc) + float2(-tap.x, tap.y), _BlurMip).rgb;
-                        c += SAMPLE_TEXTURE2D_LOD(_McxCamTex, sampler_TrilinearClamp, saturate(uvc) + float2(tap.x, -tap.y), _BlurMip).rgb;
-                        c += SAMPLE_TEXTURE2D_LOD(_McxCamTex, sampler_TrilinearClamp, saturate(uvc) + float2(-tap.x, -tap.y), _BlurMip).rgb;
-                        c *= 0.25;
-                        // premultiplied: the blurred room shows through (1 - intensity), the passthrough is covered by m
-                        float aBlur = m * lerp(_Intensity, 1.0, edge);
-                        half3 premul = (half3)(m * edge * (1.0 - _Intensity)) * c;
-                        a = aBlur;
-                        rgb = a > 1e-4 ? premul / a : 0;
-                    }
+                    // the room in this direction, as the camera last saw it (the panorama is centred on the head)
+                    float3 d = normalize(dir);
+                    float2 puv = float2(atan2(d.x, d.z) / 6.28318531 + 0.5, asin(clamp(d.y, -1.0, 1.0)) / 3.14159265 + 0.5);
+                    half4 pano = SAMPLE_TEXTURE2D_LOD(_McxBlurPano, sampler_McxBlurPano, puv, _BlurMip);
+                    float cover = saturate(pano.a * 1.1);
+                    half3 c = pano.a > 1e-3 ? pano.rgb / pano.a : 0;
+                    // premultiplied: the blurred room shows through (1 - intensity), the passthrough is covered by m
+                    float aBlur = m * lerp(_Intensity, 1.0, cover);
+                    half3 premul = (half3)(m * cover * (1.0 - _Intensity)) * c;
+                    a = aBlur;
+                    rgb = a > 1e-4 ? premul / a : 0;
                 }
                 #endif
                 return half4(rgb, a);
