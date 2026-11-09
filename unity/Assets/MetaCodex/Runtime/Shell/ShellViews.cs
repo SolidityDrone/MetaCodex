@@ -527,6 +527,7 @@ namespace MetaCodex.Shell
             var mpb = new MaterialPropertyBlock();
             mpb.SetTexture("_MainTex", tex);
             mr.SetPropertyBlock(mpb);
+            p.TagRenderer(mr, Vector3.zero); // its panel's slot: it comes and goes with the panel's transition
             mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             return null;
         }

@@ -17,7 +17,11 @@ namespace MetaCodex.UI
         public bool Closable { get; set; } = true;
         public bool Draggable { get; set; } = true;
         public bool HasHeader { get; private set; } = true;
-        public bool IsOpen => gameObject.activeSelf;
+        /// Open as far as everything else is concerned: false as soon as Close() is called, while it may still be
+        /// animating out (the router, layouts and toggles see it closed at once). Only "closing while still drawn" is
+        /// kept as a flag: a panel turned on by its owner directly is open without any callback (the Editor calls no
+        /// OnEnable outside play mode).
+        public bool IsOpen => gameObject.activeSelf && !_closing;
         public UiTheme Theme => UiTheme.Current;
         public UiShapeMesh Shapes { get; private set; }
         private UiIconMesh _icons;
@@ -45,7 +49,7 @@ namespace MetaCodex.UI
         private int _body, _header;
         private UiText _title;
         private UiButton _close;
-        private float _openT = 1f;
+        private bool _closing, _presented, _activating, _destroyWhenClosed;
         private Vector3 _baseScale = Vector3.one;
 
         /// The panel's size (the UI scale setting). Set this, not transform.localScale: the open animation scales from it, so
@@ -54,8 +58,12 @@ namespace MetaCodex.UI
         public Vector3 BaseScale
         {
             get => _baseScale;
-            set { _baseScale = value; if (_openT >= 1f) transform.localScale = value; }
+            set { _baseScale = value; if (!Transitioning) transform.localScale = value; }
         }
+
+        /// The panel's world scale when it is not opening or closing (layouts and placement use this, not the
+        /// squashed scale of a transition).
+        public Vector3 RestLossyScale => transform.parent != null ? Vector3.Scale(transform.parent.lossyScale, _baseScale) : _baseScale;
 
         public static T Create<T>(string id, string title, float width, float height, Transform parent = null, bool header = true) where T : UiPanel
         {
@@ -263,23 +271,56 @@ namespace MetaCodex.UI
             return null;
         }
 
+        /// Opens with its transition (UiPanelFx): from a closed panel, or one made this frame; a closing one plays its
+        /// closing back from where it is. Outside play mode (Editor tools, self-tests) it is open at once.
         public void Open()
         {
-            if (!gameObject.activeSelf) gameObject.SetActive(true);
-            // the open animation runs in the frame loop; outside play mode (Editor tools, self-tests) it is done at once
-            _openT = Application.isPlaying ? 0f : 1f;
-            if (_openT >= 1f) transform.localScale = _baseScale;
-            if (Id != "toast") UiSounds.Fire("open");
+            bool pinged = false, started = false;
+            _closing = false;
+            _destroyWhenClosed = false;
+            if (!gameObject.activeSelf)
+            {
+                _activating = true;
+                gameObject.SetActive(true);
+                _activating = false;
+                BeginTransition(Phase.Opening);
+                started = true;
+            }
+            else if (TransitionPhase == Phase.Closing) { _tDir = -1; started = true; }
+            else if (TransitionPhase == Phase.Opening) { started = _tDir < 0; _tDir = 1; }
+            else if (!_presented) { BeginTransition(Phase.Opening); started = true; }
+            else { Ping(); pinged = true; } // already open: its brackets flash round it, so it is easy to spot
+            _presented = true;
+            if (!Light && (started || pinged)) UiSounds.Fire(pinged ? "ping" : "open"); // toasts and the HUD have their own
             Opened?.Invoke(this);
         }
 
+        /// Closed at once for everything else (IsOpen false, Closed raised); the panel goes with its transition and is
+        /// turned off when it is gone. An opening one plays its opening back.
         public void Close()
         {
-            if (!gameObject.activeSelf) return;
-            gameObject.SetActive(false);
-            if (Id != "toast") UiSounds.Fire("close");
+            if (!gameObject.activeSelf || _closing) return;
+            _closing = true;
+            bool seen = _presented;
+            // never seen (made and closed in the same frame, e.g. hidden until asked for): off at once, no light
+            if (!Animates || !_presented && TransitionPhase == Phase.Open) FinishClosed();
+            else if (TransitionPhase == Phase.Opening) _tDir = -1;
+            else if (TransitionPhase == Phase.Closing) _tDir = 1;
+            else BeginTransition(Phase.Closing);
+            if (!Light && seen) UiSounds.Fire("close");
             Closed?.Invoke(this);
         }
+
+        /// Closes with its transition, then destroys the panel (dialogs, toasts).
+        public void CloseAndDestroy()
+        {
+            _destroyWhenClosed = true;
+            if (gameObject.activeSelf && !_closing) Close();
+            else if (!Transitioning) FinishClosed();
+        }
+
+        /// Plays the opening of a panel that is already showing (made active by its owner, e.g. a toast).
+        public void PlayOpen() { _closing = false; _presented = true; if (gameObject.activeSelf) BeginTransition(Phase.Opening); }
 
         public void Toggle() { if (IsOpen) Close(); else Open(); }
 
@@ -338,7 +379,122 @@ namespace MetaCodex.UI
 
         protected virtual void OnDestroy()
         {
-            if (Slot >= 0 && Slots[Slot] == this) { Slots[Slot] = null; BendData[Slot] = Vector4.zero; }
+            if (Slot >= 0 && Slots[Slot] == this) { Slots[Slot] = null; BendData[Slot] = Vector4.zero; FxData[Slot] = Vector4.zero; }
+        }
+
+        // ------------------------------------------------------------------ opening and closing
+
+        // A panel opens and closes with a transition (UiPanelFx: the timelines and the light of the frame): its
+        // transform is squashed from the rest scale (so everything in it, shapes, texts, images, a terminal, a 3D stage,
+        // moves together, nothing out of line), its shaders read what the transition does to its surfaces from one
+        // more global array, _PanelFx[slot] = (flash, ghost, text hidden, half height), all 0 at rest, and a light
+        // overlay draws the corner brackets, the ignition line and the final flare at the panel's real size.
+        public enum Phase { Open, Opening, Closing }
+        public Phase TransitionPhase { get; private set; } = Phase.Open;
+        /// Progress of the current timeline 0..1 (Opening: 1 = open; Closing: 1 = gone).
+        public float TransitionT { get; private set; } = 1f;
+        public bool Transitioning => TransitionPhase != Phase.Open;
+        /// Self-tests: animate in the Editor too (they step it with TickTransitionForTest).
+        public static bool AnimateInEditor;
+        private static readonly Vector4[] FxData = new Vector4[MaxSlots];
+        private static readonly int FxArrayId = Shader.PropertyToID("_PanelFx");
+        private int _tDir = 1;
+        private UiPanelFx _fx;
+        private bool Animates => Application.isPlaying || AnimateInEditor;
+        private bool Light => Id == "toast" || Id == "voice-hud";
+
+        private void BeginTransition(Phase phase)
+        {
+            if (!Animates) { EndOpen(); return; }
+            TransitionPhase = phase;
+            TransitionT = 0f;
+            _tDir = 1;
+            ApplyTransition();
+        }
+
+        private float _pingT = 1f;
+
+        /// A short flash of the frame and its corner brackets (an open panel asked to open again).
+        public void Ping()
+        {
+            if (!Animates || TransitionPhase != Phase.Open || !gameObject.activeSelf) return;
+            _pingT = 0f;
+            StepPing(0f);
+        }
+
+        private void StepPing(float dt)
+        {
+            if (_pingT >= 1f) return;
+            _pingT = Mathf.Min(1f, _pingT + dt / 0.42f);
+            var tl = UiPanelFx.Ping(_pingT, Light);
+            if (Slot >= 0) FxData[Slot] = _pingT >= 1f ? Vector4.zero : new Vector4(tl.Flash, 0f, 0f, Height * 0.5f);
+            if (_fx == null) _fx = UiPanelFx.Create(this);
+            if (_pingT >= 1f) _fx.Hide(); else _fx.Draw(this, tl);
+        }
+
+        private void StepTransition(float dt)
+        {
+            if (TransitionPhase == Phase.Open) { StepPing(dt); return; }
+            _pingT = 1f;
+            float dur = UiPanelFx.Duration(TransitionPhase == Phase.Opening, Light);
+            TransitionT += _tDir * dt / dur;
+            bool opening = TransitionPhase == Phase.Opening;
+            if (TransitionT >= 1f) { if (opening) EndOpen(); else FinishClosed(); return; }
+            if (TransitionT <= 0f) { if (opening) FinishClosed(); else EndOpen(); return; }
+            ApplyTransition();
+        }
+
+        private void ApplyTransition()
+        {
+            var tl = UiPanelFx.Evaluate(TransitionPhase == Phase.Opening, TransitionT, Light);
+            transform.localScale = new Vector3(_baseScale.x * tl.Sx, _baseScale.y * tl.Sy, _baseScale.z);
+            if (Slot >= 0) FxData[Slot] = new Vector4(tl.Flash, tl.Ghost, tl.Hide, Height * 0.5f);
+            if (_fx == null) _fx = UiPanelFx.Create(this);
+            _fx.Draw(this, tl);
+        }
+
+        private void EndOpen()
+        {
+            TransitionPhase = Phase.Open;
+            TransitionT = 1f;
+            _tDir = 1;
+            transform.localScale = _baseScale;
+            if (Slot >= 0) FxData[Slot] = Vector4.zero;
+            if (_fx != null) _fx.Hide();
+        }
+
+        private void FinishClosed()
+        {
+            EndOpen();
+            _closing = false; // off now: turned on again it is open
+            if (_destroyWhenClosed) { if (Application.isPlaying) Destroy(gameObject); else DestroyImmediate(gameObject); return; }
+            if (gameObject.activeSelf) gameObject.SetActive(false);
+        }
+
+        // turned on or off by its owner directly (not Open / Close): no transition, as before
+        private void OnEnable()
+        {
+            if (_activating) return;
+            _closing = false;
+            if (Id != null) _presented = true; // turned on again by its owner (not while it is being made)
+            if (TransitionPhase != Phase.Open) EndOpen();
+        }
+
+        private void OnDisable()
+        {
+            if (TransitionPhase != Phase.Open) EndOpen();
+        }
+
+        /// Self-tests: one step of the transition or ping (the Editor has no frame loop).
+        public void TickTransitionForTest(float dt) { StepTransition(dt); }
+
+        /// Self-tests: shows a moment of a timeline (pictures of the transition).
+        public void PoseTransitionForTest(bool opening, float t)
+        {
+            TransitionPhase = opening ? Phase.Opening : Phase.Closing;
+            TransitionT = Mathf.Clamp01(t);
+            ApplyTransition();
+            PushBendGlobals();
         }
 
         public void SetBend(float radius)
@@ -370,6 +526,7 @@ namespace MetaCodex.UI
         public static void PushBendGlobals()
         {
             Shader.SetGlobalVectorArray(BendArrayId, BendData);
+            Shader.SetGlobalVectorArray(FxArrayId, FxData);
             _pushedFrame = Time.frameCount;
         }
 
@@ -411,12 +568,25 @@ namespace MetaCodex.UI
         /// Captures: draws this panel flat for one render (every other panel keeps its bend), then as it was.
         public void RenderFlat(Action render)
         {
-            if (Slot < 0 || BendData[Slot] == Vector4.zero) { render(); return; }
+            // at rest for the render too: no squash, no transition light (a capture during a transition is whole)
+            var keepScale = transform.localScale;
+            transform.localScale = _baseScale;
+            if (Slot < 0) { try { render(); } finally { transform.localScale = keepScale; } return; }
             var keep = BendData[Slot];
+            var keepFx = FxData[Slot];
             BendData[Slot] = Vector4.zero;
+            FxData[Slot] = Vector4.zero;
             Shader.SetGlobalVectorArray(BendArrayId, BendData);
+            Shader.SetGlobalVectorArray(FxArrayId, FxData);
             try { render(); }
-            finally { BendData[Slot] = keep; Shader.SetGlobalVectorArray(BendArrayId, BendData); }
+            finally
+            {
+                BendData[Slot] = keep;
+                FxData[Slot] = keepFx;
+                Shader.SetGlobalVectorArray(BendArrayId, BendData);
+                Shader.SetGlobalVectorArray(FxArrayId, FxData);
+                transform.localScale = keepScale;
+            }
         }
 
         private void LateUpdate()
@@ -427,21 +597,17 @@ namespace MetaCodex.UI
         protected virtual void Update()
         {
             EaseBend(Time.unscaledDeltaTime);
-            if (_openT < 1f)
-            {
-                _openT = Mathf.Min(1f, _openT + Time.unscaledDeltaTime / 0.18f);
-                float k = 1f - Mathf.Pow(1f - _openT, 3f);
-                transform.localScale = new Vector3(_baseScale.x * Mathf.Lerp(0.85f, 1f, k), _baseScale.y * Mathf.Lerp(0.04f, 1f, k), _baseScale.z);
-                Shapes.SetState(_body, 1f - k);
-            }
-            Tick?.Invoke(this);
+            _presented = true;
+            StepTransition(Time.unscaledDeltaTime);
+            if (this == null || !gameObject.activeSelf) return; // gone this frame
+            if (IsOpen) Tick?.Invoke(this);
             foreach (var e in Elements) if (e.Visible) e.Update();
         }
 
         /// Editor/self-test: lay out and upload everything without a frame loop.
         public void ForceRefresh()
         {
-            _openT = 1f;
+            if (TransitionPhase != Phase.Open) { if (!_closing) EndOpen(); else { FinishClosed(); return; } }
             SnapBend();
             PushBendGlobals();
             transform.localScale = _baseScale;

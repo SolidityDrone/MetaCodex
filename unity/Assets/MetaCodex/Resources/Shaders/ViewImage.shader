@@ -4,6 +4,7 @@ Shader "MetaCodex/ViewImage"
     Properties
     {
         _MainTex ("Image", 2D) = "white" {}
+        _PanelIndex ("Panel slot (set per renderer)", Float) = -1
     }
     SubShader
     {
@@ -24,8 +25,10 @@ Shader "MetaCodex/ViewImage"
 
             TEXTURE2D(_MainTex);
             SAMPLER(sampler_MainTex);
+            float4 _PanelFx[128]; // its panel opening or closing (UiPanelFx): x flash, y ghost, z hidden
             CBUFFER_START(UnityPerMaterial)
                 float4 _MainTex_ST;
+                float _PanelIndex; // set per renderer (UiPanel.TagRenderer); -1: not in a panel
             CBUFFER_END
 
             struct Attributes { float4 positionOS : POSITION; float2 uv : TEXCOORD0; UNITY_VERTEX_INPUT_INSTANCE_ID };
@@ -46,6 +49,10 @@ Shader "MetaCodex/ViewImage"
             {
                 UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
                 half4 c = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, i.uv);
+                // its panel opening or closing: the picture comes in after the glass, brighter in the flash
+                float4 pfx = _PanelIndex >= 0.0 ? _PanelFx[(int)_PanelIndex] : float4(0, 0, 0, 0);
+                c.a *= (half)saturate(1.0 - pfx.z * 1.15);
+                c.rgb = lerp(c.rgb, c.rgb + 0.3, saturate(pfx.x) * 0.5);
                 c.a *= (half)McxVisibility(i.positionWS); // something real in front of the image shows through
                 return c;
             }

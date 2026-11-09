@@ -364,7 +364,7 @@ namespace MetaCodex.Shell
         }
 
         /// Half the angle a panel covers seen from `distance` away (degrees).
-        public static float HalfAngle(UiPanel q, float distance) => Mathf.Atan2(q.Width * 0.5f * q.transform.lossyScale.x, distance) * Mathf.Rad2Deg;
+        public static float HalfAngle(UiPanel q, float distance) => Mathf.Atan2(q.Width * 0.5f * q.RestLossyScale.x, distance) * Mathf.Rad2Deg;
 
         /// The angle nearest `preferred` (searching outwards both ways up to `limit` degrees) where an interval of
         /// +-half fits between the occupied intervals with a small margin; NaN when there is no room.

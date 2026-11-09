@@ -37,11 +37,29 @@ carries its slot, so text that changes every frame bends with the panel and neve
 curvature eases in and out (about 0.3 s) instead of jumping. Rays and pokes hit the curved surface (ray-
 cylinder intersection), so the reticle sits where the beam meets the window.
 
+**Opening and closing** (owner 2026-11-09: "very cool spawning and disappearing transitions"; `UiPanelFx`). A
+window comes online like a console screen: a spark at its centre runs out into a line of light as wide as the window,
+four corner brackets lock on from outside, the line splits into two scan lines that ride the edges as the window
+unfolds (a slight overshoot), the glass materialises from a lattice of light (the front of the building runs hot,
+from the top down), controls and icons come in as their part is built, texts flicker in line by line with a short
+glitch sideways, and a last pulse settles it; the brackets end on the frame's own corner brackets (the outline offset
+4 mm, drawn by `SciFiUI` at rest). Closing: a surge, the window collapses into a bright line like an old screen
+powering off, the line shrinks to a point, a flare, gone; the brackets let go. 0.52 s in, 0.34 s out; toasts and the
+voice HUD use a lighter, quicker version without brackets; an open window asked to open again pings (a flash and the
+brackets closing in round it). Both play back from where they are when the user changes their mind. For the rest of
+the app a window is closed the moment `Close()` is called (`IsOpen` false, `Closed` raised) and open the moment
+`Open()` is; it is turned off when its closing ends (dialogs and toasts are destroyed then). How it is drawn: the
+window's transform carries the squash (everything in it moves together: shapes, texts, icons, images, a terminal, a
+3D stage), its shaders read the light from one more global table (`_PanelFx[slot]` = flash, ghost, texts hidden,
+half height, all 0 at rest), and a small overlay (the brackets, the lines, the flare; `MetaCodex/WristArt` lines over
+the panels) is counter-scaled so it stays at the window's real size and bends with it. Layouts and placement use the
+rest scale (`RestLossyScale`), never the squashed one; captures render a window at rest.
+
 ## Code map (`unity/Assets/MetaCodex/Runtime`)
 
 | Folder | What |
 |---|---|
-| `UI/` | `UiTheme` (colours, sizes, fonts), `UiShapeMesh` (batched shapes, rotated strokes), `UiPanel` (frame, header, open animation, drag, GPU bend slots, curved ray hits), `UiIconMesh` (tool logos atlas, batched icons), widgets (`UiButton`, `UiToggle`, `UiSegmented`, `UiSlider`, `UiTextField`, `UiList`, `UiTabs`, `UiProgress`, `UiDivider`), `UiViz` (canvases drawn from pooled shapes: `UiChart`, `UiFlow`, `UiSequence`, `UiTable`, `UiCodeView`, `UiRing`, `UiChangeMap`, `UiToolGrid`, `UiStorageBar`; the series palette), `UiMermaid` (flowchart / sequence / pie subset), `UiKeyboard` (Horizon OS system keyboard), `UiInputRouter` (pointers, beams, reticles, selection), `UiToasts`, `UiModal`, `UiSounds` |
+| `UI/` | `UiTheme` (colours, sizes, fonts), `UiShapeMesh` (batched shapes, rotated strokes), `UiPanel` (frame, header, opening / closing transitions, drag, GPU bend and transition slots, curved ray hits), `UiPanelFx` (the transitions' timelines and light), `UiIconMesh` (tool logos atlas, batched icons), widgets (`UiButton`, `UiToggle`, `UiSegmented`, `UiSlider`, `UiTextField`, `UiList`, `UiTabs`, `UiProgress`, `UiDivider`), `UiViz` (canvases drawn from pooled shapes: `UiChart`, `UiFlow`, `UiSequence`, `UiTable`, `UiCodeView`, `UiRing`, `UiChangeMap`, `UiToolGrid`, `UiStorageBar`; the series palette), `UiMermaid` (flowchart / sequence / pie subset), `UiKeyboard` (Horizon OS system keyboard), `UiInputRouter` (pointers, beams, reticles, selection), `UiToasts`, `UiModal`, `UiSounds` |
 | `Hands/` | `GestureEngine` (built-ins, pose templates, custom gestures with hold/cooldown, head-relative directions), `PoseSpec`, `OvrHandSource` (OVRHand/OVRSkeleton), `SimulatedHands` (any pose, for tests) |
 | `Scripting/` | `ScriptHost`: Lua (MoonSharp) scripts and plugin folders, hot reload, sandbox, instruction budget, detectors as persistent coroutines, persisted state; `PoseJson` |
 | `Security/` | `SecretVault` (Android Keystore sealer, Editor dev sealer, policies, access log) |
@@ -146,6 +164,12 @@ command is transcribed and decided, so speech-to-text keeps its cores. RADIUS is
 the darkness, BLUR how soft the room outside gets (0 = darkened only); BLACKOUT (radius 0, 100 %) leaves only the
 windows and your hands. No Space Setup scan is needed (branch `feat/spatial-dome`, `docs/SPATIAL_DOME_PLAN.md`).
 
+- **The void** (owner 2026-11-09: "in the fog some interesting effect, not simple black"). Outside the dome it is
+  not black but deep space: blue-black with a slow nebula drifting in two layers (a tiling noise drawn by code,
+  world-oriented, so it stays with the room) and sparse stars that twinkle; on the room's surfaces just past the edge
+  a faint holographic grid (50 cm, lines only across each surface, from its own slope), with a pulse running outwards
+  now and then; where the room crosses the dome, a contour of light (a ring on the floor round you). With BLUR only
+  the grid and the contour, over the blurred room. All of it is skipped inside the dome, where most of the picture is.
 - **Live depth.** Meta's Depth API (`EnvironmentDepthManager`, via `com.unity.xr.meta-openxr` and the OpenXR
   features "Meta Quest: Session" + "Occlusion"; permission "spatial data", `USE_SCENE`) runs while focus or "real
   things in front of windows" is on. Meta's occlusion shaders stay off (no extra depth pass).

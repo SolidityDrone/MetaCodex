@@ -288,3 +288,16 @@ Voice:
 - [ ] Wrist menu: slide the fingertip across the face on the way to the left tiles → nothing is pressed, the menu stays unfolded; a straight poke into a tile runs it once
 - [ ] Wrist menu: move the left arm around while looking at it → it stays on the wrist, no jitter when still, no lag when moving; turn the wrist away → it waits a moment, folds and fades; turn it back while it fades → it comes back from where it was
 - [ ] Settings > DISPLAY > wrist menu off while it is open → it folds and fades away, the dock comes back
+
+## 19. Window transitions and the void (owner 2026-11-09)
+
+- [ ] Open any window (dock, wrist, voice): a spark runs out into a line, corner brackets lock on, two scan lines unfold it, the glass builds from a lattice of light top-down, texts flicker in; it ends exactly as before (no offset, no wrong size, text sharp)
+- [ ] Close it: a surge, it collapses into a bright line, shrinks to a point, a flare; nothing left behind
+- [ ] Open and close quickly several times (dock button twice fast): it reverses smoothly, never jumps, never stays half open
+- [ ] FILES then FILES again from the dock while it is open: it pings (brackets flash round it), no re-opening
+- [ ] Dialogs (CLIPBOARD > CLEAR ALL) and toasts come and go with the transition; the voice HUD with the quick one
+- [ ] A terminal (TERM, hide with –) and a 3D view squash and unfold with their frame
+- [ ] Bent windows (Settings > DISPLAY, bending on): the brackets and lines follow the curve
+- [ ] Frame rate: open three windows at once and close them: no drop below 72 fps (Perf menu Snapshot)
+- [ ] Ambient Focus on (FOCUS preset): outside the dome deep blue-black space, a slow nebula, a few twinkling stars, a faint grid on the floor and walls just past the edge, a ring of light where the dome meets the floor; BLACKOUT: space around you, the windows stay; with BLUR 50 %: the blurred room with the grid and the ring
+- [ ] Ambient Focus while turning the head and walking: the nebula and stars stay with the room (no swimming), no flicker of the grid at the walls' edges

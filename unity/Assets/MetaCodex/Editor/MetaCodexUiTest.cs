@@ -155,6 +155,7 @@ namespace MetaCodex.EditorTools
                 if (Want("system")) SystemPanel(shell, tmp);
                 if (Want("qol")) Qol(shell, head, hands);
                 if (Want("wrist")) Wrist(shell, head, hands);
+                if (Want("transitions")) Transitions(shell, head);
                 if (Want("mqh")) MqhPanel(shell);
                 if (Want("captures")) Captures(shell, tmp);
                 if (Want("context")) SessionContextSection(shell, tmp);
@@ -1784,6 +1785,102 @@ end)
             foreach (var id in shell.PanelIds.ToList()) if (id != "dock") shell.ClosePanel(id);
         }
 
+        /// Panels open and close with a transition (owner 2026-11-09: "very cool spawning and disappearing transitions",
+        /// UiPanelFx): closed at once for everything else, animated out; reversed half way from where it is; dialogs and
+        /// toasts go with it; an open panel asked again pings; pictures of both timelines.
+        private static void Transitions(MetaCodexShell shell, Transform head)
+        {
+            foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
+            UiPanel.AnimateInEditor = false;
+            shell.OpenPanel("mqh");
+            var p = shell.PanelsById["mqh"];
+            p.ForceRefresh();
+            var rest = p.transform.localScale;
+            UiPanel.AnimateInEditor = true;
+            try
+            {
+                void Step(int n, float dt = 0.05f) { for (int i = 0; i < n; i++) p.TickTransitionForTest(dt); }
+                // closing: closed for everything else at once, still drawn while it goes
+                int closedEvents = 0;
+                p.Closed += _ => closedEvents++;
+                p.Close();
+                bool logical = !p.IsOpen && p.gameObject.activeSelf && closedEvents == 1 && p.TransitionPhase == UiPanel.Phase.Closing;
+                Step(3);
+                float midY = p.transform.localScale.y / rest.y;
+                // changed its mind: it opens again from where it is (no jump)
+                p.Open();
+                p.TickTransitionForTest(0.02f);
+                float backY = p.transform.localScale.y / rest.y;
+                Step(10);
+                bool restored = p.IsOpen && p.TransitionPhase == UiPanel.Phase.Open && (p.transform.localScale - rest).sqrMagnitude < 1e-10f;
+                Check(logical && midY > 0.05f && midY < 0.99f && backY >= midY - 0.01f && restored,
+                    $"Close: closed at once for the rest of the app ({logical}), animated out (height {midY:F2} after 0.15 s); Open half way plays it back from there ({midY:F2} -> {backY:F2}) to its exact rest scale ({restored})");
+                // all the way out: off at the end, nothing left of the transition
+                p.Close();
+                Step(4);
+                bool during = p.gameObject.activeSelf && p.Transitioning;
+                Step(6);
+                bool off = !p.gameObject.activeSelf && !p.Transitioning && (p.transform.localScale - rest).sqrMagnitude < 1e-10f;
+                Check(during && off, $"a closing panel is drawn for {UiPanelFx.CloseTime:F2} s ({during}), then turned off at its rest scale ({off})");
+                // opening: open at once for the app, it builds itself in 0.52 s
+                shell.OpenPanel("mqh");
+                bool opening = p.IsOpen && p.TransitionPhase == UiPanel.Phase.Opening && p.transform.localScale.y < rest.y * 0.2f;
+                var ys = new List<float>();
+                for (int k = 0; k < 12; k++) { p.TickTransitionForTest(0.05f); ys.Add(p.transform.localScale.y / rest.y); }
+                bool done = p.TransitionPhase == UiPanel.Phase.Open && (p.transform.localScale - rest).sqrMagnitude < 1e-10f;
+                Check(opening && done && ys[2] > ys[0] && ys.Max() < 1.06f,
+                    $"Open: open at once for the app ({opening}), it unfolds ({string.Join(" ", ys.Take(11).Select(y => y.ToString("F2")))}) and ends at its exact rest scale ({done})");
+                // opened again while open: a ping (a flash and the brackets round it), no squash
+                shell.OpenPanel("mqh");
+                Step(2);
+                var fxLight = p.GetComponentsInChildren<UiPanelFx>(true).FirstOrDefault();
+                bool ping = fxLight != null && fxLight.GetComponent<MeshRenderer>().enabled && (p.transform.localScale - rest).sqrMagnitude < 1e-10f;
+                Step(10);
+                bool pingDone = fxLight != null && !fxLight.GetComponent<MeshRenderer>().enabled;
+                Check(ping && pingDone, $"an open panel opened again pings: its light shows ({ping}) without any squash, and goes ({pingDone})");
+
+                // pictures: the opening and the closing, frame by frame
+                var cam = p.transform.position - p.transform.forward * 1.45f;
+                var look = Quaternion.LookRotation(p.transform.forward, p.transform.up);
+                float[] openAt = { 0.04f, 0.10f, 0.18f, 0.28f, 0.40f, 0.52f, 0.66f, 0.82f, 1.0f };
+                for (int k = 0; k < openAt.Length; k++) { p.PoseTransitionForTest(true, openAt[k]); RenderAt($"ui-open-{k}.png", cam, look, 42f, 800, 600); }
+                float[] closeAt = { 0.06f, 0.18f, 0.32f, 0.46f, 0.58f, 0.70f, 0.80f, 0.90f, 0.97f };
+                for (int k = 0; k < closeAt.Length; k++) { p.PoseTransitionForTest(false, closeAt[k]); RenderAt($"ui-close-{k}.png", cam, look, 42f, 800, 600); }
+                // a bent panel: the brackets and the lines follow its curve (pictures; the bend eases off afterwards)
+                float bend0 = p.BendRadius;
+                p.SetBend(0.55f);
+                p.ForceRefresh();
+                foreach (var (opens, tt, name) in new[] { (true, 0.06f, "ui-open-bent-line.png"), (true, 0.32f, "ui-open-bent.png"), (false, 0.62f, "ui-close-bent.png") })
+                {
+                    p.PoseTransitionForTest(opens, tt);
+                    RenderAt(name, cam + p.transform.up * 0.05f, look, 42f, 800, 600);
+                }
+                p.SetBend(bend0);
+                p.ForceRefresh();
+                Check(p.IsOpen && !p.Transitioning && (p.transform.localScale - rest).sqrMagnitude < 1e-10f, "ForceRefresh ends a transition at the rest scale");
+
+                // a dialog: comes with the opening, goes with the closing, then is destroyed
+                UiPanel dlg = null;
+                shell.Modal("TRANSITION TEST", "A dialog for the transition test.", new[] { "OK" }, _ => { });
+                dlg = UiModal.OpenPanels.FirstOrDefault();
+                bool dlgOpening = dlg != null && dlg.TransitionPhase == UiPanel.Phase.Opening;
+                if (dlg != null) { for (int k = 0; k < 12; k++) dlg.TickTransitionForTest(0.05f); dlg.Elements.OfType<UiButton>().First(b => b.Text == "OK").Click(); }
+                bool dlgClosing = dlg != null && dlg.gameObject.activeSelf && dlg.TransitionPhase == UiPanel.Phase.Closing && UiModal.OpenCount == 0;
+                if (dlg != null) for (int k = 0; k < 10; k++) { if (dlg == null) break; dlg.TickTransitionForTest(0.05f); }
+                Check(dlgOpening && dlgClosing && dlg == null, $"a dialog opens with the transition ({dlgOpening}), its answer closes it with the transition ({dlgClosing}), then it is destroyed ({dlg == null})");
+                // a toast comes in with the light variant (no brackets, 0.30 s)
+                shell.Toast("transition test");
+                var toast = shell.GetComponentsInChildren<UiPanel>(true).FirstOrDefault(x => x.Id == "toast" && x.Transitioning);
+                Check(toast != null && toast.TransitionPhase == UiPanel.Phase.Opening, "a toast comes in with the light transition");
+            }
+            finally
+            {
+                UiPanel.AnimateInEditor = false;
+                foreach (var pp in shell.GetComponentsInChildren<UiPanel>(true)) if (pp != null && pp.Transitioning) pp.ForceRefresh();
+                foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
+            }
+        }
+
         /// MQH (owner 2026-11-09): one panel for SKILLS, PLUGINS, SCRIPTS, GESTURES and the daemon link; the skills that came
         /// with MetaCodex or MQH are read-only, only added ones can be removed; fewer dock and wrist entries.
         private static void MqhPanel(MetaCodexShell shell)
@@ -2571,16 +2668,25 @@ end)
             shell.ApplyFocusPreset("focus");
             shell.TickFocusForTest(1f);
             Check(shell.FocusSphereForTest != null && shell.FocusSphereForTest.activeSelf && shell.FocusShownForTest >= 1f, "ambient focus: the sphere fades in around the head");
-            Render(shell, "ui-focus-up.png", head.position, up, 70f, 480, 270);
+            // the dome itself, judged with the void's effects off (the plain darkness, as it was before them)
+            shell.FocusMaterialForTest.SetFloat("_Void", 0f);
+            Render(shell, "ui-focus-up-plain.png", head.position, up, 70f, 480, 270);
             Render(shell, "ui-focus-down.png", head.position, down, 70f, 480, 270);
-            float onUp = Luma("ui-focus-up.png", new Rect(0f, 0.6f, 1f, 0.4f)), onDown = Luma("ui-focus-down.png", new Rect(0.3f, 0.3f, 0.4f, 0.4f));
+            float onUp = Luma("ui-focus-up-plain.png", new Rect(0f, 0.6f, 1f, 0.4f)), onDown = Luma("ui-focus-down.png", new Rect(0.3f, 0.3f, 0.4f, 0.4f));
             Check(onUp < offUp * 0.5f && onDown > onUp * 1.5f, $"ambient focus: the room above the horizon darkens ({offUp:F3} -> {onUp:F3}); the floor near you stays ({onDown:F3})");
+            // the void (owner 2026-11-09: "not simple black"): deep space, a little lighter than the plain darkness,
+            // still well darker than the room
+            shell.FocusMaterialForTest.SetFloat("_Void", 1f);
+            Render(shell, "ui-focus-up.png", head.position, up, 70f, 480, 270);
+            float voidUp = Luma("ui-focus-up.png", new Rect(0f, 0.6f, 1f, 0.4f));
+            Check(voidUp > onUp + 0.003f && voidUp < offUp * 0.7f, $"the void outside the dome: deep space, not plain black ({onUp:F3} -> {voidUp:F3}), still well darker than the room ({offUp:F3})");
             shell.ApplyFocusPreset("blackout");
             shell.TickFocusForTest(1f);
             Render(shell, "ui-focus-blackout.png", head.position, Quaternion.identity, 100f, 1280, 720);
             float black = Luma("ui-focus-blackout.png", new Rect(0f, 0.85f, 1f, 0.15f));
             float panel = Luma("ui-focus-blackout.png", new Rect(0.42f, 0.4f, 0.16f, 0.2f));
-            Check(black < 0.01f && panel > black + 0.02f, $"BLACKOUT: black around you ({black:F3}), the windows stay ({panel:F3})");
+            // the void (2026-11-09): deep space, not black, but dark: the windows stand out of it
+            Check(black < 0.05f && panel > black + 0.02f, $"BLACKOUT: dark space around you ({black:F3}), the windows stand out ({panel:F3})");
             // the dome from live depth, as Meta's EnvironmentDepthManager gives it (no Space Setup): a synthetic depth
             // map of a wall straight ahead, judged on the eye buffer's alpha (0 = the real world shows, 1 = black)
             shell.FloorYOverride = 0f; // the head stands 1.4 m above it
@@ -2821,7 +2927,7 @@ end)
             shell.ApplyFocusPreset("blackout");
             shell.PoseHand(Handedness.Right, 0.1f, 0.1f, 0.1f, 0.1f, 0.1f);
             shell.TickGesturesForTest(0.1f);
-            shell.TickFocusForTest(0.2f);
+            shell.TickFocusForTest(0.6f); // past the 0.4 s fade-in (focus was turned on again just before)
             var palmW = shell.Gestures.Right.Frame.Palm;
             var hands = RenderRgba("ui-focus-hands.png", head.position, Quaternion.LookRotation((palmW - head.position).normalized), 60f, 320, 240);
             float aPalm = hands.GetPixel(160, 120).a, aAround = hands.GetPixel(10, 230).a;

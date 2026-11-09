@@ -242,16 +242,20 @@ namespace MetaCodex.Shell
                 cam.backgroundColor = CaptureBackground; // opaque: the room behind the window never shows
                 cam.cullingMask = 1 << CaptureLayer;
                 cam.orthographic = true;
-                var s = p.transform.lossyScale;
-                cam.orthographicSize = r.height * s.y * 0.5f;
-                cam.aspect = r.width * s.x / Mathf.Max(1e-5f, r.height * s.y);
                 cam.nearClipPlane = 0.01f;
                 cam.farClipPlane = 1f;
-                var centre = p.transform.TransformPoint(p.PanelToLocal(r.center, 0f));
-                cam.transform.SetPositionAndRotation(centre - p.transform.forward * 0.3f, p.transform.rotation);
                 rt = new RenderTexture(pw, ph, 24, RenderTextureFormat.ARGB32) { antiAliasing = 4 };
                 cam.targetTexture = rt;
-                p.RenderFlat(cam.Render);
+                // RenderFlat draws the panel at rest (flat, not squashed by a transition): frame it then
+                p.RenderFlat(() =>
+                {
+                    var s = p.transform.lossyScale;
+                    cam.orthographicSize = r.height * s.y * 0.5f;
+                    cam.aspect = r.width * s.x / Mathf.Max(1e-5f, r.height * s.y);
+                    var centre = p.transform.TransformPoint(p.PanelToLocal(r.center, 0f));
+                    cam.transform.SetPositionAndRotation(centre - p.transform.forward * 0.3f, p.transform.rotation);
+                    cam.Render();
+                });
                 cam.targetTexture = null;
                 return rt;
             }
@@ -414,6 +418,7 @@ namespace MetaCodex.Shell
             var mpb = new MaterialPropertyBlock();
             mpb.SetTexture("_MainTex", tex);
             quad.GetComponent<MeshRenderer>().SetPropertyBlock(mpb);
+            p.TagRenderer(quad.GetComponent<MeshRenderer>(), Vector3.zero); // comes and goes with the panel's transition
             quad.SetActive(true);
             return tex;
         }

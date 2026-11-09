@@ -81,16 +81,16 @@ namespace MetaCodex.Shell
             float r = Mathf.Clamp(Settings.carouselRadius, 0.5f, 2f);
             var open = LayoutPanels().Where(p => p != null && p.IsOpen).ToList();
             if (open.Count == 0) return r;
-            float width = open.Sum(p => p.Width * p.transform.lossyScale.x);
+            float width = open.Sum(p => p.Width * p.RestLossyScale.x);
             float room = 2f * Mathf.PI * 0.94f - open.Count * RingGap * Mathf.Deg2Rad; // radians left for the panels themselves
             return room <= 0.2f ? 2.5f : Mathf.Clamp(Mathf.Max(r, width / room), r, 2.5f);
         }
 
         /// Half the angle a panel takes on the cylinder: a bent panel's width is an arc (conservative for flat ones).
-        private static float HalfArc(UiPanel p, float r) => p.Width * 0.5f * p.transform.lossyScale.x / Mathf.Max(r, 0.1f) * Mathf.Rad2Deg;
+        private static float HalfArc(UiPanel p, float r) => p.Width * 0.5f * p.RestLossyScale.x / Mathf.Max(r, 0.1f) * Mathf.Rad2Deg;
 
         private static bool SameRow(UiPanel a, float ha, UiPanel b, float hb) =>
-            Mathf.Abs(ha - hb) < (a.Height * a.transform.lossyScale.y + b.Height * b.transform.lossyScale.y) * 0.5f;
+            Mathf.Abs(ha - hb) < (a.Height * a.RestLossyScale.y + b.Height * b.RestLossyScale.y) * 0.5f;
 
         /// Angles taken by the open panels whose height range meets `p`'s, except `p`.
         private List<(float, float)> Occupied(UiPanel p, float height, float r)

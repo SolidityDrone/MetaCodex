@@ -23,9 +23,10 @@ namespace MetaCodex.UI
             var tint = kind == "error" ? t.Danger : kind == "warn" ? t.Warn : kind == "ok" ? t.Ok : t.Accent;
             panel.Add(new UiLabel((kind == "error" ? "⚠ " : kind == "ok" ? "✓ " : "◆ ") + text, t.BodySize) { Rect = new Rect(0.016f, 0.006f, 0.39f, 0.04f), Color = Color.Lerp(tint, Color.white, 0.5f) });
             panel.SetHighlight(0.6f);
+            panel.PlayOpen(); // comes in with the light transition of passing panels (UiPanelFx)
             UiSounds.Fire(kind == "error" ? "error" : "toast");
             _toasts.Insert(0, new Toast { Panel = panel, Until = Time.unscaledTime + seconds });
-            while (_toasts.Count > 4) { Kill(_toasts[_toasts.Count - 1].Panel.gameObject); _toasts.RemoveAt(_toasts.Count - 1); }
+            while (_toasts.Count > 4) { _toasts[_toasts.Count - 1].Panel.CloseAndDestroy(); _toasts.RemoveAt(_toasts.Count - 1); }
             Layout(true);
         }
 
@@ -34,7 +35,7 @@ namespace MetaCodex.UI
             for (int i = _toasts.Count - 1; i >= 0; i--)
             {
                 if (Time.unscaledTime < _toasts[i].Until) continue;
-                Kill(_toasts[i].Panel.gameObject);
+                if (_toasts[i].Panel != null) _toasts[i].Panel.CloseAndDestroy(); // and goes with it
                 _toasts.RemoveAt(i);
             }
             Layout(false);

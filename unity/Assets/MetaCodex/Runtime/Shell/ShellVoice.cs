@@ -1239,7 +1239,7 @@ namespace MetaCodex.Shell
                 if (_panels.TryGetValue("dock", out var dock) && dock.IsOpen)
                 {
                     var dt = dock.transform;
-                    _vHud.transform.SetPositionAndRotation(dt.position + dt.up * (dock.Height * 0.5f + _vHud.Height * 0.5f + 0.015f) * dt.lossyScale.y, dt.rotation);
+                    _vHud.transform.SetPositionAndRotation(dt.position + dt.up * (dock.Height * 0.5f + _vHud.Height * 0.5f + 0.015f) * dock.RestLossyScale.y, dt.rotation);
                 }
                 else if (Head != null) _vHud.PlaceInFront(Head, 0.62f, 0.18f);
                 _vHud.Open();

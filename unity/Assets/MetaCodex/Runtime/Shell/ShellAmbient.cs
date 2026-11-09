@@ -710,6 +710,9 @@ namespace MetaCodex.Shell
             t.localScale = new Vector3(radius * 2f, len * 0.5f + radius, radius * 2f);
         }
 
+        /// Self-tests: the focus material (the void's effects on / off).
+        public Material FocusMaterialForTest => _focusMat;
+
         /// Self-tests: run the fade for a while.
         public void TickFocusForTest(float seconds) { for (float t = 0; t < seconds; t += 0.05f) UpdateFocus(0.05f); }
 
@@ -719,6 +722,9 @@ namespace MetaCodex.Shell
             var sh = Resources.Load<Shader>("Shaders/AmbientFocus") ?? Shader.Find("MetaCodex/AmbientFocus");
             if (sh == null) { Log("ambient focus: shader missing"); Settings.focusEnabled = false; _focusShown = 0f; return false; }
             _focusMat = new Material(sh) { name = "ambient focus" };
+            // the void outside the dome (AmbientFocus): a tiling cloud noise for its nebula and the UI's accent colour
+            _focusMat.SetTexture("_McxNoise", VoidNoise());
+            _focusMat.SetColor("_Accent", UiTheme.Current.Accent);
             _focusSphere = GameObject.CreatePrimitive(PrimitiveType.Sphere);
             _focusSphere.name = "AmbientFocus";
             var col = _focusSphere.GetComponent<Collider>();
@@ -730,6 +736,46 @@ namespace MetaCodex.Shell
             r.shadowCastingMode = ShadowCastingMode.Off;
             r.receiveShadows = false;
             return true;
+        }
+
+        private static Texture2D _voidNoise;
+
+        /// A tiling cloud noise (four octaves of value noise, 128 x 128, seamless) for the void's nebula.
+        private static Texture2D VoidNoise()
+        {
+            if (_voidNoise != null) return _voidNoise;
+            const int n = 128;
+            var rnd = new System.Random(7);
+            var acc = new float[n * n];
+            float amp = 1f, total = 0f;
+            for (int oct = 0; oct < 4; oct++)
+            {
+                int cells = 4 << oct; // 4, 8, 16, 32 cells across: whole cells, so it tiles
+                var g = new float[cells * cells];
+                for (int k = 0; k < g.Length; k++) g[k] = (float)rnd.NextDouble();
+                for (int y = 0; y < n; y++)
+                    for (int x = 0; x < n; x++)
+                    {
+                        float fx = x * cells / (float)n, fy = y * cells / (float)n;
+                        int x0 = (int)fx, y0 = (int)fy, x1 = (x0 + 1) % cells, y1 = (y0 + 1) % cells;
+                        float tx = fx - x0, ty = fy - y0;
+                        tx = tx * tx * (3f - 2f * tx);
+                        ty = ty * ty * (3f - 2f * ty);
+                        float v = Mathf.Lerp(Mathf.Lerp(g[y0 * cells + x0], g[y0 * cells + x1], tx), Mathf.Lerp(g[y1 * cells + x0], g[y1 * cells + x1], tx), ty);
+                        acc[y * n + x] += v * amp;
+                    }
+                total += amp;
+                amp *= 0.5f;
+            }
+            var px = new byte[n * n];
+            for (int k = 0; k < px.Length; k++) px[k] = (byte)Mathf.Clamp(Mathf.RoundToInt(acc[k] / total * 255f), 0, 255);
+            _voidNoise = new Texture2D(n, n, TextureFormat.R8, true, true)
+            {
+                name = "mcx void noise", wrapMode = TextureWrapMode.Repeat, filterMode = FilterMode.Bilinear, hideFlags = HideFlags.DontSave,
+            };
+            _voidNoise.SetPixelData(px, 0); // the top level; Apply makes the mips
+            _voidNoise.Apply(true, true);
+            return _voidNoise;
         }
 
         private void RefreshFocusPanel()

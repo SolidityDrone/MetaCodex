@@ -102,8 +102,12 @@ SubShader {
 		#include "Assets/MetaCodex/Shaders/McxOcclusion.hlsl"
 
 		float4 _PanelBend[128];
+		// a panel opening or closing (UiPanel / UiPanelFx), all 0 at rest: x flash, y ghost, z texts hidden, w half height
+		float4 _PanelFx[128];
 		float _PanelIndex;
 		float4 _TextOffset;
+
+		float McxHash(float n) { return frac(sin(n * 12.9898) * 43758.5453); }
 
 		struct vertex_t {
 			UNITY_VERTEX_INPUT_INSTANCE_ID
@@ -128,6 +132,7 @@ SubShader {
 			half2	underlayParam	: TEXCOORD4;			// Scale(x), Bias(y)
 			#endif
 			float3	worldPos		: TEXCOORD5;			// after the bend: compared with real things in front
+			half4	panelFx			: TEXCOORD6;			// transition: how visible (0..1), flash, flicker seed, 1 = active
 		};
 
 		float _UIMaskSoftnessX;
@@ -148,6 +153,20 @@ SubShader {
 			float4 vert = input.vertex;
 			vert.x += _VertexOffsetX;
 			vert.y += _VertexOffsetY;
+			// a panel being built: its texts come in from the top down, line by line, each with a short glitch sideways
+			float4 pfx = _PanelIndex >= 0.0 ? _PanelFx[(int)_PanelIndex] : float4(0, 0, 0, 0);
+			output.panelFx = half4(1, 0, 0, 0);
+			if (pfx.z > 0.0005 || pfx.x > 0.0005)
+			{
+				float y = vert.y + _TextOffset.y;                                     // panel-local height
+				float top = saturate(0.5 - y / (2.0 * max(pfx.w, 1e-3)));             // 0 at the top .. 1 at the bottom
+				float vis = saturate((1.0 - pfx.z) * 1.6 - top * 0.6);
+				float lineId = floor(y / 0.011) + floor(_TextOffset.x * 97.0);
+				float seed = McxHash(lineId * 1.37 + 0.5);
+				float jitter = (McxHash(lineId + floor(fmod(_Time.y, 600.0) * 30.0) * 7.1) - 0.5) * 0.007 * (1.0 - vis) * step(0.02, vis);
+				vert.x += jitter;
+				output.panelFx = half4(vis, saturate(pfx.x), seed, 1);
+			}
 			float br = _PanelIndex >= 0.0 ? _PanelBend[(int)_PanelIndex].x : 0.0;
 			if (br > 0.01)
 			{
@@ -256,6 +275,16 @@ SubShader {
 			#if (UNDERLAY_ON | UNDERLAY_INNER)
 			c *= input.texcoord1.z;
 			#endif
+
+			// opening / closing: flickers in (a line is on, off, on, then stays), brighter in the panel's flash
+			if (input.panelFx.w > 0.5)
+			{
+				half vis = input.panelFx.x;
+				half n = (half)McxHash(floor(fmod(_Time.y, 600.0) * 26.0) + input.panelFx.z * 131.0); // wrapped: a hash of a huge number is not random on a phone GPU
+				half on = vis >= 0.995 ? 1.0 : step(n, vis * 1.25);
+				c *= vis * lerp(on, 1.0, vis * vis);
+				c.rgb += c.a * input.panelFx.y * 0.55;
+			}
 
 			// premultiplied: the whole colour fades where something real is in front of the text
 			UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);

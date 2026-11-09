@@ -35,6 +35,9 @@ Shader "MetaCodex/SciFiUI"
 
         // the bend of every panel: x = radius (0 flat), indexed by the renderer's _PanelIndex (UiPanel)
         float4 _PanelBend[128];
+        // a panel opening or closing (UiPanel / UiPanelFx), all 0 at rest: x = flash 0..1, y = ghost (0..1 the glass and
+        // controls not built yet, 1..2 fading out), z = texts hidden 0..1, w = the panel's half height (metres)
+        float4 _PanelFx[128];
 
         float3 BendPanel(float3 p, float r)
         {
@@ -51,6 +54,11 @@ Shader "MetaCodex/SciFiUI"
             float _Motion;
             float _Grid;
         CBUFFER_END
+
+        float4 PanelFx() { return _PanelIndex >= 0.0 ? _PanelFx[(int)_PanelIndex] : float4(0, 0, 0, 0); }
+        // how far the part of the panel at local height y is built: the panel builds itself from the top down
+        float BuiltAt(float ghost, float y, float halfH) { return saturate((1.0 - saturate(ghost)) * 1.5 - saturate(0.5 - y / (2.0 * max(halfH, 1e-3))) * 0.5); }
+        float Bump01(float x) { return sin(3.14159265 * saturate(x)); }
 
         struct Attributes
         {
@@ -70,6 +78,7 @@ Shader "MetaCodex/SciFiUI"
             float4 shape : TEXCOORD1;
             float4 style : TEXCOORD2;
             float3 positionWS : TEXCOORD3; // after the bend: what real things in front are compared with
+            float2 panelPos : TEXCOORD4;   // panel-local position before the bend (metres, y up from the centre)
             UNITY_VERTEX_OUTPUT_STEREO
         };
 
@@ -85,6 +94,7 @@ Shader "MetaCodex/SciFiUI"
             o.uv = v.uv;
             o.shape = v.shape;
             o.style = v.style;
+            o.panelPos = v.positionOS.xy;
             return o;
         }
 
@@ -124,7 +134,7 @@ Shader "MetaCodex/SciFiUI"
             {
                 UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
                 int kind = (int)round(i.shape.w);
-                if (kind != 0 || _Opacity < 0.75 || McxVisibility(i.positionWS) < 0.5) discard;
+                if (kind != 0 || _Opacity < 0.75 || PanelFx().y > 0.25 || McxVisibility(i.positionWS) < 0.5) discard; // a panel still being built hides nothing
                 float2 h = i.shape.xy * 0.5;
                 float2 p = (i.uv - 0.5) * (i.shape.xy + 2.0 * i.shape.z);
                 // the chamfered panel body (the colour pass's shape, without the anti-aliased edge)
@@ -187,6 +197,22 @@ Shader "MetaCodex/SciFiUI"
             {
                 UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
                 half4 c = fragBody(i);
+                float4 fx = PanelFx();
+                if (fx.x > 0.0005 || fx.y > 0.0005)
+                {
+                    // opening / closing (UiPanelFx): the controls come as their part of the panel is built (the body
+                    // builds its own glass in fragBody), a flash of light runs through everything, all fades at the end
+                    int kind = (int)round(i.shape.w);
+                    if (kind != 0)
+                    {
+                        float built = BuiltAt(fx.y, i.panelPos.y, fx.w);
+                        c.a *= (half)smoothstep(0.0, 1.0, built);
+                        // a control coming online: its colour runs hot for a moment
+                        c.rgb += i.color.rgb * (half)(Bump01(built) * 0.55);
+                        c.rgb += i.color.rgb * (half)(saturate(fx.x) * 0.40);
+                    }
+                    c.a *= (half)(1.0 - saturate(fx.y - 1.0));
+                }
                 c.a *= (half)McxVisibility(i.positionWS);
                 return c;
             }
@@ -267,6 +293,19 @@ Shader "MetaCodex/SciFiUI"
                     float inset = saturate(0.5 - (abs(d + 0.0032) - 0.00045) / aa);
                     fill = lerp(fill, tint * 0.55, inset * 0.55);
                     fillA = _Opacity;
+                    float4 pfx = PanelFx();
+                    if (pfx.y > 0.0005 || pfx.x > 0.0005)
+                    {
+                        // being built: first a lattice of light in clear dark glass, then the glass, from the top down;
+                        // the front of the building runs hot; the flash is energy in the lattice, not a wash
+                        float built = BuiltAt(pfx.y, i.panelPos.y, pfx.w);
+                        float lattice = hexLines(p, 0.022, 0.075);
+                        float front = Bump01(built);
+                        float3 build = float3(0.004, 0.010, 0.020) + tint * lattice * (0.85 + 1.6 * front);
+                        fill = lerp(build, fill, built);
+                        fillA = lerp(0.10 + 0.55 * lattice, fillA, built);
+                        fill += tint * lattice * saturate(pfx.x) * 0.55;
+                    }
                     float lit = smoothstep(-0.9, 1.0, yN);                       // the frame is lit from above
                     float3 steel = lerp(float3(0.16, 0.22, 0.30), float3(0.58, 0.68, 0.80), lit);
                     // corner brackets: the frame glows in the accent colour near each corner
@@ -276,6 +315,7 @@ Shader "MetaCodex/SciFiUI"
                     float ang = atan2(p.y * h.x, p.x * h.y) / 6.2831853 + 0.5;
                     float sweep = exp(-frac(ang - t * 0.07) * 24.0) * state;
                     edgeCol = lerp(steel, tint * 1.25 + 0.12, saturate(bracket * 0.85 + state * 0.6 + sweep));
+                    edgeCol += tint * saturate(pfx.x) * 1.1; // the frame carries the transition's flash
                     edgeA = 0.85;
                     glowA = 0.10 + 0.22 * state;
                     shadeA = 0.30;
@@ -358,6 +398,17 @@ Shader "MetaCodex/SciFiUI"
                 float outA = max(shade, halo);
                 col = lerp(col, outCol, saturate(outA * (1.0 - inside) / max(a + outA, 1e-4)));
                 a = max(a, outA);
+                if (kind == 0)
+                {
+                    // corner brackets: the frame's outline offset 4 mm outwards, near each corner only (the transition's
+                    // brackets lock on to exactly these, UiPanelFx); hidden while the panel opens or closes
+                    float cc = (p.x * p.y < 0.0) ? cBig : style2;
+                    float arm = clamp(max(min(0.030, min(h.x, h.y) * 0.32), cc + 0.006), 0.0, min(h.x, h.y));
+                    float near = step(h.x - arm, abs(p.x)) * step(h.y - arm, abs(p.y));
+                    float brk = saturate(0.5 - (abs(d - 0.004) - 0.00045) / aa) * near * (1.0 - saturate(PanelFx().y * 4.0));
+                    col = lerp(col, tint * 1.35 + 0.06, brk);
+                    a = max(a, brk * 0.78);
+                }
                 return half4(col, saturate(a * i.color.a));
             }
             ENDHLSL

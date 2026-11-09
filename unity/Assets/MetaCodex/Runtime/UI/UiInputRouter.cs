@@ -488,9 +488,8 @@ namespace MetaCodex.UI
                 foreach (var old in Open.Where(a => a.Owner == owner).ToList())
                 {
                     router.Unregister(old.Panel);
-                    old.Panel.Close();
-                    UiToasts.Kill(old.Panel.gameObject);
                     Open.Remove(old);
+                    old.Panel.CloseAndDestroy();
                 }
             var t = UiTheme.Current;
             int lines = Mathf.Clamp(1 + (text?.Length ?? 0) / 52, 1, 8);
@@ -506,8 +505,7 @@ namespace MetaCodex.UI
                 {
                     if (Time.realtimeSinceStartup - opened < grace) return;
                     router.Unregister(panel);
-                    panel.Close();
-                    UiToasts.Kill(panel.gameObject);
+                    panel.CloseAndDestroy(); // goes with its closing transition
                     onResult?.Invoke(k);
                 }, i == 0 ? UiButtonStyle.Primary : UiButtonStyle.Normal)
                 { Rect = new Rect(t.Padding + i * (bw + t.Gap), h - t.Padding - t.ButtonHeight, bw, t.ButtonHeight) });
@@ -516,7 +514,7 @@ namespace MetaCodex.UI
             {
                 router.Unregister(panel);
                 Open.RemoveAll(a => a.Panel == panel);
-                if (Application.isPlaying) UnityEngine.Object.Destroy(panel.gameObject); // closed by its ✕: not kept around
+                if (Application.isPlaying) panel.CloseAndDestroy(); // closed by its ✕: destroyed once its transition ends
             };
             if (owner != null && owner.IsOpen) PlaceOver(panel, owner);
             else panel.PlaceInFront(head, 0.6f, 0.02f);
@@ -532,8 +530,8 @@ namespace MetaCodex.UI
         public static void PlaceOver(UiPanel panel, UiPanel owner, float gap = 0.05f)
         {
             var ot = owner.transform;
-            float scale = Mathf.Max(1e-4f, ot.lossyScale.x);
-            float r = owner.BendNow * scale, half = panel.Width * panel.transform.lossyScale.x * 0.5f;
+            float scale = Mathf.Max(1e-4f, owner.RestLossyScale.x);
+            float r = owner.BendNow * scale, half = panel.Width * panel.RestLossyScale.x * 0.5f;
             float sag = r > 0.01f ? r - Mathf.Sqrt(Mathf.Max(0f, r * r - Mathf.Min(half, r) * Mathf.Min(half, r))) : 0f;
             panel.transform.SetPositionAndRotation(ot.position - ot.forward * (gap + sag), ot.rotation);
         }
