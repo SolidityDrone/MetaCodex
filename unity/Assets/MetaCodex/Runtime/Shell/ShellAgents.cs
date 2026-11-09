@@ -362,7 +362,7 @@ namespace MetaCodex.Shell
             p.Add(new UiButton("⟳", () => { _tlMaxSeq = -1; PollThread(); }) { Rect = new Rect(top.xMax - bw, top.y, bw, top.height), TextSize = t.SmallSize * 1.05f });
             _thMeta = p.Add(new UiLabel("", t.SmallSize) { Rect = st.Next(0.02f), Color = t.TextDim, UseMono = true });
             float chipH = 0.032f;
-            float bottom = chipH + t.ButtonHeight + t.Gap * 2;
+            float bottom = chipH + t.ButtonHeight + t.Gap * 2 + chipH + t.Gap; // + the attachments row
             _tlArea = new Rect(c.x, st.Y, c.width, c.yMax - st.Y - bottom - t.Gap);
             _thTimeline = p.Add(new UiLabel("", t.SmallSize * 1.05f) { Rect = TimelineRect(false), Wrap = true, Align = TextAlignmentOptions.BottomLeft });
             _tlUp = p.Add(new UiButton("▲", () => { _tlScroll = Mathf.Min(_tlScroll + 4, Math.Max(0, _tlLines.Count - 1)); RenderTimeline(); }, UiButtonStyle.Ghost));
@@ -378,10 +378,13 @@ namespace MetaCodex.Shell
                 var d = asks[i].decision;
                 _thAskButtons.Add(p.Add(new UiButton(asks[i].label, () => Resolve(d), i == 0 ? UiButtonStyle.Primary : i == 2 ? UiButtonStyle.Danger : UiButtonStyle.Normal) { Rect = new Rect(askRow.x + i * (aw + t.Gap), askRow.y, aw, askRow.height) }));
             }
-            // composer, then the bb-like chips: model, access, workspace, context, stop
+            // attachments (captures, Linux files) for the next message, then the composer with its + (owner 2026-11-09),
+            // then the bb-like chips: model, access, workspace, context, stop
             float cy = c.yMax - chipH - t.Gap - t.ButtonHeight;
-            float sendW = 0.11f;
-            _thComposer = p.Add(new UiTextField("", "", s => SendToThread(s), "message the agent…") { Rect = new Rect(c.x, cy, c.width - sendW - t.Gap, t.ButtonHeight), CaptionWidth = 0f });
+            float sendW = 0.11f, plusW = t.ButtonHeight * 1.2f;
+            BuildAttachRow(p, new Rect(c.x, cy - t.Gap - chipH, c.width, chipH));
+            _thPlus = p.Add(new UiButton("+", ToggleAttachMenu, UiButtonStyle.Primary) { Rect = new Rect(c.x, cy, plusW, t.ButtonHeight), TextSize = t.BodySize * 1.3f });
+            _thComposer = p.Add(new UiTextField("", "", s => SendToThread(s), "message the agent…") { Rect = new Rect(c.x + plusW + t.Gap, cy, c.width - sendW - plusW - t.Gap * 2, t.ButtonHeight), CaptionWidth = 0f });
             p.Add(new UiButton("SEND ▶", () => SendToThread(_thComposer.Text), UiButtonStyle.Primary) { Rect = new Rect(c.xMax - sendW, cy, sendW, t.ButtonHeight) });
             float y = c.yMax - chipH;
             float[] w = { 0.17f, 0.13f, 0.165f, 0.135f };
@@ -392,9 +395,12 @@ namespace MetaCodex.Shell
             _thWsChip = p.Add(new UiButton("▣ checkout", () => { OpenWorkspace(); _wsTabs?.Select(2); }) { Rect = new Rect(x, y, w[2], chipH), TextSize = ts }); x += w[2] + t.Gap;
             _thContext = p.Add(new UiRing { Rect = new Rect(x, y, w[3], chipH), OnClickAction = ContextPrompt }); x += w[3] + t.Gap;
             p.Add(new UiButton("■ STOP", () => { if (_threadOpen != null) Mqh.StopThread(_threadOpen, r => Toast(r != null ? "Stopping the turn" : "MQH: " + Mqh.LastError)); }, UiButtonStyle.Danger) { Rect = new Rect(x, y, c.xMax - x, chipH), TextSize = ts });
+            // the attach modal: drawn over the timeline area, inside this panel (not a panel of its own)
+            BuildAttachModal(p, _tlArea);
             p.Tick += _ => { if (_threadOpen != null && Time.unscaledTime >= _nextThreadPoll) PollThread(); };
-            p.Closed += _ => { if (_ws != null && _ws.IsOpen) _ws.Close(); };
+            p.Closed += _ => { if (_ws != null && _ws.IsOpen) _ws.Close(); CloseAttachModal(); SetAttachMenu(false); };
             SetAskVisible(false);
+            RefreshAttachRow();
         }
 
         private Rect TimelineRect(bool ask)
@@ -422,8 +428,9 @@ namespace MetaCodex.Shell
         public void OpenThread(string id)
         {
             if (string.IsNullOrEmpty(id)) return;
-            if (id != _threadOpen) { _thExec = null; _thUsage = null; _tlRaw = new JArray(); }
+            if (id != _threadOpen) { _thExec = null; _thUsage = null; _tlRaw = new JArray(); CloseAttachModal(); SetAttachMenu(false); }
             _threadOpen = id;
+            RefreshAttachRow(); // each thread keeps its own attachments for its next message
             var row = _threads.FirstOrDefault(x => (string)x["id"] == id) as JObject;
             if (row != null) { _threadInfo = row; _threadOpenProject = (string)row["projectId"]; }
             else _threadOpenProject = null;
@@ -901,8 +908,12 @@ namespace MetaCodex.Shell
             }
         }
 
+        private bool _askShown;
+
         private void SetAskVisible(bool v)
         {
+            _askShown = v;
+            if (_amOpen) return; // the attach modal covers the timeline: the row comes back when it closes
             _thAsk?.SetVisible(v);
             foreach (var b in _thAskButtons) b.SetVisible(v);
             if (_thTimeline != null && _thTimeline.Rect != TimelineRect(v)) { _thTimeline.SetRect(TimelineRect(v)); LayoutTimelineButtons(v); RenderTimeline(); }
@@ -922,16 +933,21 @@ namespace MetaCodex.Shell
 
         private void SendToThread(string text)
         {
-            if (string.IsNullOrWhiteSpace(text) || _threadOpen == null) return;
+            var att = AttachList;
+            bool hasAtt = att != null && att.Count > 0;
+            if ((string.IsNullOrWhiteSpace(text) && !hasAtt) || _threadOpen == null) return;
+            string msg = string.IsNullOrWhiteSpace(text) ? AttachmentsOnlyText(att) : text.Trim();
+            var sent = hasAtt ? att.ToList() : null;
             var o = Override(_threadOpen);
             var extra = new JObject();
             if (o.model != null) extra["model"] = o.model;
             if (o.effort != null) extra["reasoningLevel"] = o.effort;
             if (o.perm != null) extra["permissionMode"] = o.perm;
-            Mqh.SendMessage(_threadOpen, text.Trim(), extra, r =>
+            Mqh.SendMessage(_threadOpen, msg, extra, hasAtt ? AttachmentInputs(sent) : null, r =>
             {
                 if (r == null) { Toast("Not sent: " + Mqh.LastError, "error"); return; }
                 _thComposer.Set("");
+                if (sent != null) { foreach (var a in sent) att.Remove(a); RefreshAttachRow(); }
                 Toast((string)r["delivery"] == "queued" ? "Queued (the agent is busy)" : "Sent", "ok");
                 _tlScroll = 0;
                 PollThread();

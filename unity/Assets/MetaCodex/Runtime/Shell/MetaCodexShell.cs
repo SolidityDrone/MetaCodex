@@ -154,6 +154,7 @@ namespace MetaCodex.Shell
             var host = app != null ? app.Host : null;
             Git = new GitService(host);
             Files = new FileService(host, Application.isEditor ? Path.GetFullPath(Path.Combine(Application.dataPath, "../..")) : null);
+            InitClipboard();
 
             InitVoice(); // before the scripts: plugins register voice commands while they load
             string dir = scriptsDir ?? DefaultScriptsDir(host);
@@ -513,7 +514,15 @@ namespace MetaCodex.Shell
             // one selection per SELECT: the tool never stays on by surprise
             Router.SelectionMode = false;
             if (_selectButton != null) _selectButton.SetSelected(false);
-            Toast($"Selected {r.width * 100f:F0}×{r.height * 100f:F0} cm on {panel.Title} · select tool off", "ok");
+            // the area becomes a capture in the image clipboard (the window alone, opaque: nothing of the room)
+            string what = $"Selected {r.width * 100f:F0}×{r.height * 100f:F0} cm on {panel.Title}";
+            try
+            {
+                CapturePanelAreaAsync(panel, r, item => Toast(item != null
+                    ? $"{what}: captured {item.w}×{item.h} to CLIPBOARD ({Clipboard.Items.Count}/{Clipboard.Max})"
+                    : what + " (not captured) · select tool off", item != null ? "ok" : "warn"));
+            }
+            catch (Exception ex) { Log("capture: " + ex.Message); Toast(what + " · select tool off", "ok"); }
         }
 
         public (string panel, Rect rect) LastSelection { get; private set; }
@@ -766,6 +775,7 @@ namespace MetaCodex.Shell
                 case "voice": return VoiceControl(arg);
                 case "view": return ViewCommand(arg);
                 case "system": return SystemCommand(arg);
+                case "capture": return CaptureCommand(arg);
                 case "plugin":
                 {
                     var parts = arg.Split(new[] { ' ' }, 2, StringSplitOptions.RemoveEmptyEntries);

@@ -155,6 +155,7 @@ namespace MetaCodex.EditorTools
                 if (Want("system")) SystemPanel(shell, tmp);
                 if (Want("qol")) Qol(shell, head, hands);
                 if (Want("mqh")) MqhPanel(shell);
+                if (Want("captures")) Captures(shell, tmp);
                 if (WantNamed("voiceexport")) VoiceExport(shell);
                 if (WantNamed("voicedecide")) VoiceDecideBench(shell);
             }
@@ -1736,6 +1737,109 @@ end)
                 $"voice: “open the skills” -> {(string)ms?.Args["panel"]}, “show plugins” -> {(string)mpl?.Args["panel"]}");
             foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
         }
+
+        /// Captures (owner 2026-11-09): SELECT keeps the window's area as an opaque picture of the window alone (nothing of
+        /// the room even at its lowest opacity), the image clipboard keeps the newest N, CLIPBOARD lists them, and a
+        /// thread's + attaches captures or Linux files to the next message through a modal inside the thread panel.
+        private static void Captures(MetaCodexShell shell, string tmp)
+        {
+            foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
+            string dir = Path.Combine(tmp, "captures");
+            if (Directory.Exists(dir)) Directory.Delete(dir, true);
+            shell.SetClipboardDirForTest(dir);
+            string op0 = shell.GetSetting("panelOpacity");
+            int max0 = shell.Settings.clipboardMax;
+            shell.OpenPanel("system");
+            var p = shell.PanelsById["system"];
+            p.ForceRefresh();
+            var area = new Rect(0.04f, 0.07f, p.Width - 0.08f, p.Height * 0.45f);
+            Texture2D Png(CaptureClipboard.Item it) { var t = new Texture2D(2, 2); t.LoadImage(File.ReadAllBytes(shell.Clipboard.HostPath(it))); return t; }
+            shell.SetSetting("panelOpacity", "1");
+            var full = shell.CapturePanelArea(p, area);
+            // the same window at its lowest opacity, with something else (magenta, a colour the UI never uses) in front
+            shell.SetSetting("panelOpacity", "0.5");
+            var red = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            red.name = "uitest magenta";
+            UnityEngine.Object.DestroyImmediate(red.GetComponent<Collider>());
+            var redMat = new Material(Shader.Find("Universal Render Pipeline/Unlit")) { color = Color.magenta };
+            redMat.SetColor("_BaseColor", Color.magenta);
+            red.GetComponent<MeshRenderer>().sharedMaterial = redMat;
+            red.transform.SetPositionAndRotation(p.transform.TransformPoint(p.PanelToLocal(area.center, -0.04f)), p.transform.rotation);
+            red.transform.localScale = Vector3.one * 0.12f;
+            var thin = shell.CapturePanelArea(p, area);
+            float opAfter = shell.ShapeOpacityForTest;
+            UnityEngine.Object.DestroyImmediate(red);
+            var a = Png(full); var b = Png(thin);
+            var pa = a.GetPixels32(); var pb = b.GetPixels32();
+            bool Magenta(Color32 c) => c.r > 200 && c.b > 200 && c.g < 60;
+            int reds = pb.Count(Magenta) - pa.Count(Magenta);
+            double diff = pa.Length == pb.Length ? pa.Zip(pb, (x, y) => Math.Abs(x.r - y.r) + Math.Abs(x.g - y.g) + Math.Abs(x.b - y.b)).Average() / 3.0 : 999;
+            Check(full != null && thin != null && a.width == full.w && reds == 0 && diff < 2.0 && pb.All(c => c.a == 255) && Mathf.Approximately(opAfter, 0.5f),
+                $"capture: the window alone and opaque at 50 % opacity: {thin?.w}x{thin?.h}, {reds} pixels of the magenta thing in front, mean difference to 100 % opacity {diff:F2}/255; the window's opacity back to {opAfter:F2} after");
+            UnityEngine.Object.DestroyImmediate(a); UnityEngine.Object.DestroyImmediate(b);
+            shell.SetSetting("panelOpacity", op0);
+            // the clipboard keeps the newest N: one more deletes the oldest file
+            shell.Settings.clipboardMax = 3;
+            var c3 = shell.CapturePanelArea(p, new Rect(0.04f, 0.07f, 0.2f, 0.12f));
+            var c4 = shell.CapturePanelArea(p, new Rect(0.30f, 0.07f, 0.2f, 0.12f));
+            var items = shell.Clipboard.Items.ToList();
+            Check(items.Count == 3 && items[0].file == c4.file && !File.Exists(shell.Clipboard.HostPath(full)) && Directory.GetFiles(dir, "*.png").Length == 3,
+                $"the clipboard keeps the newest {shell.Clipboard.Max}: the oldest capture's file is gone ({items.Count} listed, {Directory.GetFiles(dir, "*.png").Length} files)");
+            var listed = JArray.Parse(shell.CaptureCommand("list"));
+            Check(listed.Count == 3 && ((string)listed[0]["path"]).StartsWith(MetaCodexShell.CapturesLinuxDir + "/capture-"), "mcx-ui capture list: the Linux paths, newest first: " + (string)listed[0]["path"]);
+            // CLIPBOARD: the list and a preview
+            shell.OpenPanel("clipboard");
+            var cp = shell.PanelsById["clipboard"];
+            cp.ForceRefresh();
+            Check(shell.ClipListForTest.Items.Count == 3 && shell.ClipPreviewForTest != null && shell.ClipPreviewForTest.activeSelf, "CLIPBOARD lists the captures and shows the selected one");
+            RenderPanel(cp, "ui-clipboard.png");
+            shell.ClosePanel("clipboard");
+            // a thread: + -> the menu; REFERENCE CAPTURE -> a modal inside the thread panel; two picked -> two chips
+            string root = GitService.ToLinuxPath(Path.GetFullPath(".."));
+            var row = new JObject { ["id"] = "thr_att", ["projectId"] = "prj_att", ["providerId"] = "claude-code", ["title"] = "Attachments", ["status"] = "idle", ["runtime"] = new JObject { ["displayStatus"] = "idle" }, ["environmentPath"] = "/userland", ["updatedAt"] = 0 };
+            var rows = new JArray { Row("conversation", 1, new JObject { ["role"] = "user", ["text"] = "Look at this" }) };
+            shell.LoadThreadForTest(row, rows, null, null, new JArray { new JObject { ["id"] = "prj_att", ["name"] = "att", ["sources"] = new JArray() } }, false);
+            shell.OpenPanel("thread");
+            var tp = shell.PanelsById["thread"];
+            shell.PressPlusForTest();
+            bool menu = shell.AttachMenuOpenForTest && tp.Elements.OfType<UiButton>().Any(x => x.Visible && x.Text.Contains("REFERENCE CAPTURE")) && tp.Elements.OfType<UiButton>().Any(x => x.Visible && x.Text.Contains("ATTACH FILES"));
+            shell.OpenAttachModal("capture");
+            var timeline = tp.Elements.OfType<UiLabel>().FirstOrDefault(l => (l.Text ?? "").Contains("Look at this"));
+            bool modal = shell.AttachModalOpenForTest && shell.AttachModalListForTest.Visible && shell.AttachModalListForTest.Items.Count == 3 && (timeline == null || !timeline.Visible);
+            shell.PickInAttachModalForTest(0);
+            shell.PickInAttachModalForTest(1);
+            tp.ForceRefresh();
+            RenderPanel(tp, "ui-thread-attach-capture.png");
+            shell.ConfirmAttachModalForTest();
+            Check(menu && modal && !shell.AttachModalOpenForTest && shell.AttachmentsForTest.Count == 2 && shell.AttachmentsForTest.All(x => x.Kind == "image"),
+                $"+ opens ATTACH FILES / REFERENCE CAPTURE; the capture modal is inside the thread panel over the timeline; two picked -> {shell.AttachmentsForTest.Count} chips");
+            // ATTACH FILES: a Linux folder, a file picked
+            shell.OpenAttachModal("files");
+            shell.SetAttachDirForTest("/userland/overlay/usr/local/bin");
+            bool listsFiles = shell.AttachModalListForTest.Items.Any(x => x.Title == "mcx-app");
+            shell.PickInAttachModalForTest("mcx-app");
+            shell.ConfirmAttachModalForTest();
+            var body = shell.ThreadSendBodyForTest("what is in these?");
+            var input = body["input"] as JArray;
+            var imgs = input.Where(x => (string)x["type"] == "localImage").ToList();
+            var fileIn = input.FirstOrDefault(x => (string)x["type"] == "localFile");
+            Check(listsFiles && input.Count == 4 && (string)input[0]["text"] == "what is in these?" && imgs.Count == 2 && imgs.All(x => ((string)x["path"]).StartsWith(MetaCodexShell.CapturesLinuxDir))
+                && fileIn != null && (string)fileIn["path"] == "/userland/overlay/usr/local/bin/mcx-app" && (string)fileIn["name"] == "mcx-app" && fileIn["sizeBytes"].Value<long>() > 0,
+                $"SEND posts the text, 2 localImage captures and 1 localFile ({input.Count} inputs): " + Trim(body["input"].ToString(Newtonsoft.Json.Formatting.None), 200));
+            tp.ForceRefresh();
+            RenderPanel(tp, "ui-thread-attachments.png");
+            var only = shell.ThreadSendBodyForTest("");
+            Check(((string)only["input"][0]["text"]).StartsWith("See the 2 attached images and the attached file"), "attachments alone are a message: " + (string)only["input"][0]["text"]);
+            // voice and the wrist menu reach it
+            var v = shell.Voice.FastMatch("open the clipboard");
+            Check(v != null && (string)v.Args["panel"] == "clipboard" && shell.Wrist.Outer.Any(x => x.Label == "CLIP") && shell.PanelsById["dock"].Elements.OfType<UiButton>().Any(x => x.Text.EndsWith("CLIP")),
+                $"voice “open the clipboard” -> {(string)v?.Args["panel"]}; CLIP on the wrist menu and the dock");
+            shell.Settings.clipboardMax = max0;
+            shell.ClosePanel("thread");
+            foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
+        }
+
+        private static string Trim(string s, int n) => s == null ? "" : s.Length > n ? s.Substring(0, n) + "…" : s;
 
         private static void VoiceWords(MetaCodexShell shell)
         {

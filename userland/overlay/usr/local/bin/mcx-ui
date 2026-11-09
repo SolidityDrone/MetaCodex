@@ -14,12 +14,13 @@
 #   mcx-ui system can-install | system install-apk <apk> | system install-status | system app <pkg> | system launch <pkg>
 #                              (native apps: Android's installer, the user confirms; use mcx-app, skill quest-native-apps)
 #   mcx-ui system first-use    (the setup MetaCodex runs by itself once: base tools, Node, native app tools)
+#   mcx-ui capture list | capture dir | capture clear   (the user's captures: PNGs of windows, newest first)
 #   mcx-ui status | screen
 # The token is new at every app start: /mnt/quest/control.token (the app's shared folder).
 set -euo pipefail
 TOKEN_FILE=${MCX_TOKEN_FILE:-/mnt/quest/control.token}
 PORT=${MCX_CONTROL_PORT:-47800}
-[[ $# -gt 0 ]] || { sed -n 2,18p "$0"; exit 2; }
+[[ $# -gt 0 ]] || { sed -n 2,19p "$0"; exit 2; }
 # views: the app reads the spec file itself (any size), so pass an absolute path; '-' takes stdin
 if [[ "$1" == view && ( "${2:-}" == show || "${2:-}" == mermaid ) && -n "${3:-}" ]]; then
   f=$3

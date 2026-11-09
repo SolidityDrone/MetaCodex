@@ -39,6 +39,7 @@ namespace MetaCodex.Shell
             I(Wrist.Outer, "◎", "WEB", () => TogglePanel("browser"), () => IsPanelOpen("browser"));
             // skills, plugins, scripts, gestures and the daemon link: one MQH panel (was SCRIPTS and GESTURE here)
             I(Wrist.Outer, "⬡", "MQH", () => TogglePanel("mqh"), () => IsPanelOpen("mqh"));
+            I(Wrist.Outer, "▣", "CLIP", () => TogglePanel("clipboard"), () => IsPanelOpen("clipboard"));
             I(Wrist.Outer, "⬢", "SYSTEM", () => TogglePanel("system"), () => IsPanelOpen("system"));
             I(Wrist.Outer, "♫", "VOICE", () => TogglePanel("voice"), () => IsPanelOpen("voice"));
             I(Wrist.Outer, "⚿", "VAULT", () => TogglePanel("vault"), () => IsPanelOpen("vault"));

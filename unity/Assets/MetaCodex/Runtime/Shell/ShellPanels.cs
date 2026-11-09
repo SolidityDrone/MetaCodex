@@ -27,6 +27,7 @@ namespace MetaCodex.Shell
             BuildBrowser();
             BuildSettings();
             BuildMqh(); // SKILLS · PLUGINS · SCRIPTS · GESTURES · DAEMON
+            BuildClipboard();
             BuildAgents();
             BuildThreads();
             BuildThread();
@@ -65,6 +66,7 @@ namespace MetaCodex.Shell
                 case "terminals": RefreshTerminalsPanel(); break;
                 case "browser": RefreshBrowser(); ProbeLocalServers(); break;
                 case "mqh": RefreshMqhTab(_mqhTabs?.Selected ?? 0); break;
+                case "clipboard": Clipboard.Reload(); RefreshClipboardPanel(); break;
                 case "agents": RefreshAgents(); break;
                 case "threads": RefreshThreads(); break;
                 case "vault": RefreshVaultPanel(); if (_vTabs != null && _vTabs.Selected == 1) { GitRefreshRepos(); RefreshGitHubStatus(); } break;
@@ -87,6 +89,7 @@ namespace MetaCodex.Shell
                 ("◆\nAGENTS", () => TogglePanel("agents")),
                 ("◎\nWEB", () => TogglePanel("browser")),
                 ("⬡\nMQH", () => TogglePanel("mqh")),
+                ("▣\nCLIP", () => TogglePanel("clipboard")),
                 ("⬢\nSYSTEM", () => TogglePanel("system")),
                 ("◉\nTALK", () => VoiceToggle()),
                 ("♫\nVOICE", () => TogglePanel("voice")),
@@ -554,6 +557,7 @@ end)
             tabs.AddTo(TabDisplay, new UiSlider("UI SCALE", 0.8f, 1.8f, s.uiScale, v => { s.uiScale = v; OnSettingsChanged(); }) { Rect = d.Next(rowH), Format = "0.00" });
             tabs.AddTo(TabDisplay, new UiToggle("Bend panels around you", s.bendPanels, v => { s.bendPanels = v; OnSettingsChanged(); UpdateFixedBend(); }) { Rect = d.Next(rowH) });
             tabs.AddTo(TabDisplay, new UiToggle("Main menu on the wrist (look at your left wrist, touch the core)", s.wristMenu, v => SetWristMenu(v)) { Rect = d.Next(rowH) });
+            tabs.AddTo(TabDisplay, new UiSlider("CLIPBOARD SIZE", 5f, 100f, s.clipboardMax, v => { s.clipboardMax = Mathf.RoundToInt(v); OnSettingsChanged(); Clipboard?.Trim(); }) { Rect = d.Next(rowH), Format = "0" });
             var lr = d.NextSplit(t.ButtonHeight, 0.5f, out var lr2);
             tabs.AddTo(TabDisplay, new UiButton("SAVE LAYOUT…", () => UiKeyboard.Edit("desk", false, null, n => { if (!string.IsNullOrWhiteSpace(n)) { SaveNamedLayout(n.Trim()); Toast($"Layout '{n.Trim()}' saved", "ok"); } })) { Rect = lr });
             tabs.AddTo(TabDisplay, new UiButton("LOAD NEXT LAYOUT", LoadNextLayout) { Rect = lr2 });

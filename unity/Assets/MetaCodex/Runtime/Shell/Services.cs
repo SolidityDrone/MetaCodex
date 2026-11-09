@@ -215,6 +215,8 @@ namespace MetaCodex.Shell
         // look and feel
         public float glow = 1f;
         public float panelOpacity = 0.92f;
+        /// The image clipboard keeps this many captures (the newest); one more deletes the oldest from the Linux.
+        public int clipboardMax = 20;
         public float motion = 0f;
         public bool grid = false;
         public bool sounds = true;
@@ -435,11 +437,20 @@ namespace MetaCodex.Shell
         public void Timeline(string id, Action<JToken> cb) => Call(HttpMethod.Get, $"/api/v1/threads/{E(id)}/timeline", null, cb);
         public void SendMessage(string id, string text, Action<JToken> cb) => SendMessage(id, text, null, cb);
         /// extra: the composer's choices for this and the next turns (model, reasoningLevel, permissionMode).
-        public void SendMessage(string id, string text, JObject extra, Action<JToken> cb)
+        public void SendMessage(string id, string text, JObject extra, Action<JToken> cb) => SendMessage(id, text, extra, null, cb);
+
+        /// A message with attachments: MQH's localImage / localFile inputs after the text (paths in the Linux, where
+        /// MQH and the agents run, so nothing is uploaded).
+        public void SendMessage(string id, string text, JObject extra, JArray attachments, Action<JToken> cb) =>
+            Call(HttpMethod.Post, $"/api/v1/threads/{E(id)}/send", SendBody(text, extra, attachments), cb);
+
+        public static JObject SendBody(string text, JObject extra, JArray attachments)
         {
-            var body = new JObject { ["input"] = new JArray { TextInput(text) }, ["mode"] = "auto" };
+            var input = new JArray { TextInput(text) };
+            if (attachments != null) foreach (var a in attachments) input.Add(a);
+            var body = new JObject { ["input"] = input, ["mode"] = "auto" };
             if (extra != null) foreach (var p in extra.Properties()) body[p.Name] = p.Value;
-            Call(HttpMethod.Post, $"/api/v1/threads/{E(id)}/send", body, cb);
+            return body;
         }
         /// The model, effort and access the thread's next turn uses (its last ones, or the defaults).
         public void ExecOptions(string id, Action<JToken> cb) => Call(HttpMethod.Get, $"/api/v1/threads/{E(id)}/default-execution-options", null, cb);

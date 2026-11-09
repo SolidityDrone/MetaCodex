@@ -30,6 +30,7 @@ description: Where you are when you run inside MetaCodex - a Meta Quest headset 
 | `/root/apps/<name>` | native Quest apps you build (skill `quest-native-apps`, `mcx-app`) |
 | `/opt/android-ndk`, `/opt/android-sdk`, `/opt/openxr` | native app tools (NDK r27d, android.jar 34, OpenXR 1.1.65) |
 | `/root/.metacodex/first-use.log` | what MetaCodex installed by itself at first use (`mcx-setup quest`) |
+| `/root/.metacodex/captures/` | the user's captures (image clipboard): PNGs of windows, newest 20 by default |
 
 ## Talking to the app
 
@@ -48,6 +49,10 @@ description: Where you are when you run inside MetaCodex - a Meta Quest headset 
   `/mnt/quest/system/tools.json` (or `mcx-ui system tools`) instead of probing with `--version` commands; the
   app keeps it current (SYSTEM > TOOLS; `mcx-ui system refresh` rescans). Each missing tool lists its install
   command. Disk use: `mcx-ui system storage`.
+- Captures: SELECT (wrist, dock or voice) on a window keeps that area as a PNG in the image clipboard (CLIPBOARD
+  panel): the window alone and always opaque, never the room or the hands. When the user attaches captures or files to
+  a message (the + in a thread), you get them as images / files with their Linux paths. `mcx-ui capture list` lists
+  the captures (JSON, newest first).
 - Skills and plugins: the user manages them in the MQH panel (dock or wrist: MQH): SKILLS lists what every agent has
   (theirs, removable; the ones that came with MetaCodex or MQH, read-only), PLUGINS has MQH's plugins and the gesture /
   behaviour plugins, then SCRIPTS, GESTURES, DAEMON. New skills go to `~/.mqh/skills/<name>/` (skill `skill-creator`);

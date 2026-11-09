@@ -408,6 +408,17 @@ namespace MetaCodex.UI
         /// Kept for callers of the old CPU bending: texts are bent on the GPU now.
         public void ApplyBendNow() { SnapBend(); PushBendGlobals(); }
 
+        /// Captures: draws this panel flat for one render (every other panel keeps its bend), then as it was.
+        public void RenderFlat(Action render)
+        {
+            if (Slot < 0 || BendData[Slot] == Vector4.zero) { render(); return; }
+            var keep = BendData[Slot];
+            BendData[Slot] = Vector4.zero;
+            Shader.SetGlobalVectorArray(BendArrayId, BendData);
+            try { render(); }
+            finally { BendData[Slot] = keep; Shader.SetGlobalVectorArray(BendArrayId, BendData); }
+        }
+
         private void LateUpdate()
         {
             if (_pushedFrame != Time.frameCount) PushBendGlobals();
