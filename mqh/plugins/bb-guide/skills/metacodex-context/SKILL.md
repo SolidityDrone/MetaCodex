@@ -27,6 +27,9 @@ description: Where you are when you run inside MetaCodex - a Meta Quest headset 
 | `/mnt/quest/qvac.token` | token for the local AI service (new at every start of the service) |
 | `~/.mqh` | MQH data (database, logs, plugin data) |
 | `~/.claude/skills` | skills for agents (this one, quest-*, Unity and Meta skills) |
+| `/root/apps/<name>` | native Quest apps you build (skill `quest-native-apps`, `mcx-app`) |
+| `/opt/android-ndk`, `/opt/android-sdk`, `/opt/openxr` | native app tools (NDK r27d, android.jar 34, OpenXR 1.1.65) |
+| `/root/.metacodex/first-use.log` | what MetaCodex installed by itself at first use (`mcx-setup quest`) |
 
 ## Talking to the app
 
@@ -45,6 +48,9 @@ description: Where you are when you run inside MetaCodex - a Meta Quest headset 
   `/mnt/quest/system/tools.json` (or `mcx-ui system tools`) instead of probing with `--version` commands; the
   app keeps it current (SYSTEM > TOOLS; `mcx-ui system refresh` rescans). Each missing tool lists its install
   command. Disk use: `mcx-ui system storage`.
+- Native apps: `mcx-app new|build|install|launch|logs` builds a separate Quest app (C++, OpenXR) here and installs
+  it with Android's installer; the user confirms in the headset (skill `quest-native-apps`). `mcx-ui system
+  can-install` says whether this MetaCodex may install apps.
 - Views: show charts, diagrams (Mermaid), tables, checklists, choices or a physics scene in the headset
   with a ```mcx-view``` / ```mermaid``` block in your reply, or `mcx-ui view show spec.json` from a shell
   (skill `quest-views`). A tapped choice comes back as the user's next message.
@@ -65,8 +71,9 @@ description: Where you are when you run inside MetaCodex - a Meta Quest headset 
   priority: prefix long commands with `nice -n 10` and, for CPU-heavy jobs, `taskset -c 0-2`
   (cores 0-2; the app renders on the others).
 - Android kills processes above 32 child processes app-wide: avoid huge parallel builds (`-j2`).
-- No GPU, no Docker, no systemd, no hard links (copies are made instead). Node comes from nodejs.org
-  (`mcx-setup` installs it); Debian packages work with `apt`.
+- No GPU, no Docker, no systemd, no hard links (copies are made instead). At first use MetaCodex runs
+  `mcx-setup quest` by itself (base tools, Node 24 from nodejs.org, the native app tools); Debian packages work with
+  `apt` (`mcx-ui system first-use` says whether that setup is done).
 - The user wears the headset: keep answers short, and say what to do with the hands or panels in body
   words ("make a fist", "open GESTURES from the dock").
 - Things you change for the app (plugins, scripts, settings) apply live; never ask for an app rebuild
