@@ -398,6 +398,8 @@ namespace MetaCodex.Shell
             var res = new VoiceResult { Transcript = (text ?? "").Trim(), AsrMs = asrMs, Started = t0 >= 0f ? t0 : Time.realtimeSinceStartup };
             if (res.Transcript.Length == 0) { res.Error = "heard nothing"; VoiceDone(res, done); return; }
             var fast = Voice.FastMatchAll(res.Transcript);
+            // a question that names a panel ("how many captures...") is answered, not run (AskInsteadOf)
+            if (fast != null && AskInsteadOf(fast, res.Transcript)) { res.Via = "fast+context"; VoiceAskSession(res, done); return; }
             if (fast != null) { VoiceExecuteAll(fast, res, done); return; }
             if (Settings.voice.decide && Decider != null && Decider.Usable && (_deciderTest || Qvac != null && Qvac.IsRunning))
             {
@@ -406,6 +408,7 @@ namespace MetaCodex.Shell
                 {
                     res.DecideMs = (int)((Time.realtimeSinceStartup - d0) * 1000f);
                     Log("voice decide: " + dr);
+                    if (dr.Error == null && dr.Matches.Count > 0 && AskInsteadOf(dr.Matches, res.Transcript)) { res.Via = "decide+context"; VoiceAskSession(res, done); return; }
                     if (dr.Error == null && dr.Matches.Count > 0) { VoiceExecuteAll(dr.Matches, res, done); return; }
                     if (IsInterpretation(res.Transcript)) { res.Via = "decide+context"; VoiceAskSession(res, done); return; }
                     if (Settings.voice.useLlm && Settings.voice.llmFallback && dr.Error == null) { VoiceAskLlm(res, done); return; }

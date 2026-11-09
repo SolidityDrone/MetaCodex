@@ -241,7 +241,32 @@ namespace MetaCodex.Shell
                 Line("extensions", $"MQH plugin {(string)m["id"]}: {(string)m["status"]}");
             // system
             Line("system", "first-use setup: " + FirstUseStatus);
-            if (Clipboard != null) Line("system", $"{Clipboard.Items.Count} captures in the clipboard");
+            var counts = new JObject();
+            if (Clipboard != null)
+            {
+                var clips = Clipboard.Items;
+                var shots = SessionMemory.Events.Where(e => e.Kind == "capture").ToList();
+                string newest = clips.Count > 0 && DateTime.TryParse(clips[0].time, out var nt) ? nt.ToString("HH:mm") : null;
+                counts["captures"] = clips.Count;
+                counts["capturesMax"] = Clipboard.Max;
+                counts["capturesTaken"] = shots.Count;
+                if (newest != null) counts["capturesNewest"] = newest;
+                if (shots.Count > 0) counts["capturesSince"] = shots[0].At.ToString("HH:mm");
+                Line("system", $"{clips.Count} captures in the clipboard (it keeps the newest {Clipboard.Max})" + (newest != null ? ", the newest from " + newest : ""));
+            }
+            counts["threads"] = _threads.Count;
+            counts["threadsRunning"] = _threads.OfType<JObject>().Count(x => ThreadStatus(x) == "running" || ThreadStatus(x) == "starting");
+            counts["threadsWaiting"] = _threads.OfType<JObject>().Count(x => x["hasPendingInteraction"]?.Value<bool>() == true);
+            counts["terminals"] = _frames.Values.Count(f => f.IsOpen);
+            counts["panels"] = _panels.Values.Count(x => x.IsOpen && x.Id != "dock" && x.Id != "voice-hud") + _frames.Values.Count(f => f.IsOpen);
+            if (Scripts != null)
+            {
+                counts["extensionsOn"] = Scripts.Entries.Count(e => e.Enabled && e.Error == null);
+                counts["extensionsOff"] = Scripts.Entries.Count(e => !e.Enabled);
+            }
+            data["counts"] = counts;
+            Line("system", $"{(int)counts["panels"]} windows open, {(int)counts["terminals"]} of them terminals");
+            Line("system", "ambient focus " + (Settings.focusEnabled ? "on" : "off") + "; main menu on the " + (Settings.wristMenu ? "wrist" : "dock"));
             Line("system", "local AI service: " + (Qvac == null ? "off" : Qvac.State.ToString().ToLowerInvariant()));
             // the mid-term memory, newest first
             foreach (var e in SessionMemory.Recent(TimeSpan.FromMinutes(90), now).Reverse().Take(14))
@@ -304,6 +329,14 @@ namespace MetaCodex.Shell
 
         /// Interpretation, not a command: a question about state (routed to ask_about_session).
         public static bool IsInterpretation(string text) => SessionQuestion.Parse(text).InterpretationScore() >= 0.6f;
+
+        /// A question about state that names a panel or a setting is answered, not run ("how many captures did we take?"
+        /// opened CLIPBOARD, owner 2026-11-09; "is the focus on?"): the phrase templates and the decision model match on
+        /// the nouns, so their match is set aside when the words ask rather than order and every match is one of the
+        /// shell's own actions (a plugin's command, or one that answers, keeps its match).
+        public static bool AskInsteadOf(IEnumerable<VoiceMatch> matches, string text) =>
+            matches != null && matches.Any() && IsInterpretation(text)
+            && matches.All(m => m.Command.Name != "ask_about_session" && m.Command.Owner == "shell" && !m.Command.SpeakReply);
 
         private void VoiceAskSession(VoiceResult res, Action<VoiceResult> done)
         {
