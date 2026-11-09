@@ -48,6 +48,10 @@ description: Where you are when you run inside MetaCodex - a Meta Quest headset 
   `/mnt/quest/system/tools.json` (or `mcx-ui system tools`) instead of probing with `--version` commands; the
   app keeps it current (SYSTEM > TOOLS; `mcx-ui system refresh` rescans). Each missing tool lists its install
   command. Disk use: `mcx-ui system storage`.
+- Skills and plugins: the user manages them in the MQH panel (dock or wrist: MQH): SKILLS lists what every agent has
+  (theirs, removable; the ones that came with MetaCodex or MQH, read-only), PLUGINS has MQH's plugins and the gesture /
+  behaviour plugins, then SCRIPTS, GESTURES, DAEMON. New skills go to `~/.mqh/skills/<name>/` (skill `skill-creator`);
+  never edit the shipped ones.
 - Native apps: `mcx-app new|build|install|launch|logs` builds a separate Quest app (C++, OpenXR) here and installs
   it with Android's installer; the user confirms in the headset (skill `quest-native-apps`). `mcx-ui system
   can-install` says whether this MetaCodex may install apps.

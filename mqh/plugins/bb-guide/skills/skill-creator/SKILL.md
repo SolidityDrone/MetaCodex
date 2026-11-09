@@ -1,13 +1,27 @@
 ---
 name: skill-creator
-description: "Create or improve BB skills, including their triggers, instructions, and supporting resources."
+description: "Create or improve MQH skills (the layer of skills MQH gives every agent: Claude Code, Codex, opencode), including their triggers, instructions, and supporting resources. In MetaCodex, the MQH panel's NEW SKILL starts a thread for this."
 ---
 
 # Skill creator
 
 Create skills that add useful domain knowledge and trigger only for relevant tasks.
-User skills live at `~/.bb/skills/<name>/SKILL.md`. Edit built-in and plugin
-skills at their source, not in generated runtime copies.
+User skills live at `~/.mqh/skills/<name>/SKILL.md`: MQH gives them to every agent it
+runs (Claude Code, Codex, opencode), on top of each agent's own skills. Edit built-in
+and plugin skills at their source, not in generated runtime copies.
+
+## In MetaCodex
+
+- You run in the headset's Linux; read `metacodex-context` first (paths, the app's
+  control port, the frame-rate rules) and the `quest-*` skill the new one builds on.
+- The skills that came with MetaCodex or MQH are read-only (the MQH panel shows them as
+  READ-ONLY; MetaCodex lays its own again at every update): metacodex-context, the
+  `quest-*` skills, this one, bb-plugin-authoring, bb-cli, submit-a-plugin and the
+  bundled Unity and Meta skills. Never edit or delete them; write a new skill that
+  adds what is missing, and tell the user what you would change in a shipped one.
+- New skills go to `~/.mqh/skills/<name>/` only. The user sees them under YOURS in
+  MQH > SKILLS and can remove them there.
+- Skills are for these agents, not for the headset's local AI model.
 
 ## Contract
 
@@ -25,7 +39,7 @@ single hyphens, with at most 64 characters. Descriptions have a 1024-character
 limit; use a short, discriminating sentence rather than filling that limit.
 Preserve supported metadata and invocation settings when editing.
 
-BB loads names and descriptions for discovery, the body when a skill is used,
+MQH loads names and descriptions for discovery, the body when a skill is used,
 and supporting files when needed. New threads discover revisions; existing
 threads may retain the version they started with.
 
