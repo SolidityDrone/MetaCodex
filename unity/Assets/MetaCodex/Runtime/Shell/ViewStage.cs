@@ -229,16 +229,19 @@ namespace MetaCodex.Shell
         /// One physics step's own work: carry bodies along when the panel moved, gravity, fingertips.
         public void Step(float dt)
         {
-            // the panel moved (dragged, carousel): move every body with it, keeping where it is on the stage
+            // the panel moved (dragged, carousel, opened): every body keeps where it is on the stage. Its transform, a child
+            // of the stage, moved with it already: put the physics body there. Adding the stage's move to Rb.position
+            // moved a body twice whenever its physics pose had been synced since (it then fell off the plate); the
+            // transform is right either way.
             if (transform.position != _lastPos || transform.rotation != _lastRot)
             {
                 var dq = transform.rotation * Quaternion.Inverse(_lastRot);
                 foreach (var b in _bodies)
                 {
                     if (b.Rb == null) continue;
-                    var rel = b.Rb.position - _lastPos;
-                    b.Rb.position = transform.position + dq * rel;
-                    b.Rb.rotation = dq * b.Rb.rotation;
+                    var tr = b.Rb.transform;
+                    b.Rb.position = tr.position;
+                    b.Rb.rotation = tr.rotation;
                     if (!b.Rb.isKinematic) { b.Rb.linearVelocity = dq * b.Rb.linearVelocity; b.Rb.angularVelocity = dq * b.Rb.angularVelocity; }
                 }
                 _lastPos = transform.position;
