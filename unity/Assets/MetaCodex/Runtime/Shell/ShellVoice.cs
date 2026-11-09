@@ -970,6 +970,7 @@ namespace MetaCodex.Shell
             ["foveation"] = new[] { "rendering foveato", "foveazione" },
             ["views_auto_open"] = new[] { "apertura automatica delle viste" },
             ["workspace_module"] = new[] { "modulo workspace", "pannello workspace" },
+            ["wrist_menu"] = new[] { "menu da polso", "menu sul polso", "menu al polso", "menu radiale" },
         };
 
         /// Settings that voice (and the local LLM) can change: id, the settings key, kind, range, unit, spoken names.
@@ -1001,6 +1002,7 @@ namespace MetaCodex.Shell
             new VoiceSetting { Id = "foveation", Key = "foveation", Kind = "bool", Label = "Foveated rendering", Names = new[] { "foveation", "foveated rendering" } },
             new VoiceSetting { Id = "views_auto_open", Key = "viewsAutoOpen", Kind = "bool", Label = "Agent views open by themselves", Names = new[] { "auto open views", "agent views auto open", "views auto open" } },
             new VoiceSetting { Id = "workspace_module", Key = "threadWorkspace", Kind = "bool", Label = "Thread workspace", Names = new[] { "workspace module", "thread workspace", "workspace panel" } },
+            new VoiceSetting { Id = "wrist_menu", Key = "wristMenu", Kind = "bool", Label = "Main menu on the wrist", Names = new[] { "wrist menu", "menu on the wrist", "radial menu", "watch menu" } },
         };
 
         private static readonly HashSet<string> OnWords = new HashSet<string> { "on", "yes", "true", "enable", "enabled", "active" };
@@ -1084,7 +1086,7 @@ namespace MetaCodex.Shell
                 { "PANEL OPACITY", "panelOpacity" }, { "VOLUME", "soundVolume" }, { "RADIUS", "focusRadius" }, { "INTENSITY", "focusIntensity" }, { "SOFTNESS", "focusSoftness" }, { "BLUR", "focusBlur" } };
             var toggles = new Dictionary<string, string> { { "Bend panels", "bendPanels" }, { "Sounds", "sounds" }, { "Clap gesture", "gestures.clapEnabled" }, { "Show hand rays", "gestures.rayVisible" },
                 { "Foveated", "foveation" }, { "Ambient focus", "focusEnabled" }, { "Speak answers", "voice.speak" },
-                { "Real things in front", "occludeUi" }, { "Sharp depth", "depthCamera" } };
+                { "Real things in front", "occludeUi" }, { "Sharp depth", "depthCamera" }, { "Main menu on the wrist", "wristMenu" } };
             foreach (var p in _panels.Values)
                 foreach (var e in p.Elements)
                 {

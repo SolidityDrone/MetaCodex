@@ -163,6 +163,7 @@ namespace MetaCodex.Shell
             UiKeyboard.TerminalKeyboardRequested += () => app?.Input?.ToggleSystemKeyboard();
 
             BuildPanels();
+            BuildWrist();
             if (app != null) foreach (var t in app.Terminals) WrapTerminal(t);
             Log($"shell up: {_panels.Count} panels, scripts in {dir}");
         }
@@ -388,7 +389,14 @@ namespace MetaCodex.Shell
         {
             foreach (var kv in _panels)
             {
-                if (kv.Key == "dock") { PlaceDefault("dock", kv.Value); if (!kv.Value.IsOpen) kv.Value.Open(); continue; }
+                if (kv.Key == "dock")
+                {
+                    // the WRIST main menu replaces the dock
+                    if (Settings.wristMenu) { if (kv.Value.IsOpen) kv.Value.Close(); continue; }
+                    PlaceDefault("dock", kv.Value);
+                    if (!kv.Value.IsOpen) kv.Value.Open();
+                    continue;
+                }
                 if (kv.Value.IsOpen) PlaceDefault(kv.Key, kv.Value);
             }
             ResetCarousel();
@@ -568,6 +576,7 @@ namespace MetaCodex.Shell
             Mqh.Token = MqhTokenNow();
             ApplyMaterialSettings();
             foreach (var p in _panels.Values) p.BaseScale = Vector3.one * Mathf.Clamp(Settings.uiScale, 0.6f, 1.8f);
+            ApplyMainMenuMode();
             if (rebuild) _rebuildPending = true; // next frame: never destroy panels inside the click that asked for it
             // sliders call this on every step: push to MQH once things are quiet for a moment
             if (Settings.mqhSync) _settingsPushDue = _clock.Elapsed.TotalSeconds + 1.5;

@@ -97,6 +97,8 @@ namespace MetaCodex.Shell
         public float carouselRadius = 0.95f;
         public bool bendPanels = true;
         public float uiScale = 1.2f;
+        /// MAIN MENU: false = the DOCK panel in front of you, true = the WRIST menu (look at the back of your left wrist).
+        public bool wristMenu = false;
         /// Render resolution x (supersampling). Fixed at MetaCodexShell.RenderScale (1.6, owner 2026-11-09: no SHARPNESS
         /// slider any more); kept so older settings files and MQH's copy still load.
         public float renderScale = 1.6f;

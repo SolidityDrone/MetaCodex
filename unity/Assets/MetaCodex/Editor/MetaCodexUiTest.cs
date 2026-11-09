@@ -153,6 +153,7 @@ namespace MetaCodex.EditorTools
                 if (Want("vaultgit")) VaultGit(shell);
                 if (Want("focus")) Focus(shell, head, frame);
                 if (Want("system")) SystemPanel(shell, tmp);
+                if (Want("qol")) Qol(shell, head, hands);
                 if (WantNamed("voiceexport")) VoiceExport(shell);
                 if (WantNamed("voicedecide")) VoiceDecideBench(shell);
             }
@@ -1531,6 +1532,108 @@ end)
             Check(hits >= 6, $"new commands with the real model: {hits}/{extra.Length}\n    " + string.Join("\n    ", got));
         }
 
+        /// 0.7.3 chores: panels keep the UI scale when they open; VOICE fits its panel; no SHARPNESS; the wrist menu.
+        private static void Qol(MetaCodexShell shell, Transform head, SimulatedHands hands)
+        {
+            foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
+            // a panel opened after the UI scale was set keeps it (the open animation used to end at 1.0, and the next
+            // settings change put it back: "the UI resizes by itself")
+            float s0 = shell.Settings.uiScale;
+            shell.Settings.uiScale = 1.3f;
+            shell.OnSettingsChanged();
+            shell.OpenPanel("files");
+            var fp = shell.PanelsById["files"];
+            fp.ForceRefresh();
+            Check(Mathf.Abs(fp.transform.localScale.x - 1.3f) < 0.001f && Mathf.Abs(fp.BaseScale.x - 1.3f) < 0.001f,
+                $"a panel opened at UI scale 1.3 stays 1.3 when its open animation ends ({fp.transform.localScale.x:F2}): no resizing by itself");
+            shell.ClosePanel("files");
+            shell.Settings.uiScale = s0;
+            shell.OnSettingsChanged();
+
+            // VOICE: everything inside the panel, the FEMALE and MALE voices in line
+            shell.OpenPanel("voice");
+            var vp = shell.PanelsById["voice"];
+            vp.ForceRefresh();
+            var vc = vp.Content;
+            // the header's own buttons (close, pin) sit above the content on purpose: only the body is checked
+            bool Inside(UiElement e) => e.Rect.xMin >= vc.xMin - 0.001f && e.Rect.xMax <= vc.xMax + 0.001f && e.Rect.yMax <= vc.yMax + 0.001f;
+            var outside = vp.Elements.Where(e => e.Visible && e.Rect.yMin >= vc.yMin - 0.001f && !Inside(e)).Select(e => e.GetType().Name + (e is UiSegmented sg ? " " + sg.Text : "")).ToList();
+            var fm = vp.Elements.OfType<UiSegmented>().Where(x => x.Text == "FEMALE" || x.Text == "MALE").ToList();
+            bool aligned = fm.Count == 2 && Mathf.Abs(fm[0].Rect.x - fm[1].Rect.x) < 1e-4f && Mathf.Abs(fm[0].Rect.width - fm[1].Rect.width) < 1e-4f && fm[0].LabelWidth == fm[1].LabelWidth;
+            Check(outside.Count == 0 && aligned, outside.Count == 0 && aligned ? "VOICE: every control inside the panel; FEMALE and MALE voices line up" : $"VOICE layout: outside {string.Join(", ", outside)}; aligned {aligned}");
+            RenderPanel(vp, "ui-voice-panel.png");
+            shell.ClosePanel("voice");
+            // the same rule for every panel (reported; VOICE is the one that must hold)
+            var spill = shell.PanelsById.Values.SelectMany(p => p.Elements.Where(e => e.Visible && (e.Rect.xMax > p.Content.xMax + 0.002f || e.Rect.yMax > p.Content.yMax + 0.002f)).Select(e => p.Id + ":" + e.GetType().Name)).Distinct().ToList();
+            Line("controls past their panel's edge (all panels): " + (spill.Count == 0 ? "none" : string.Join(", ", spill.Take(12))));
+
+            // SHARPNESS is gone: no slider, no voice setting, the render scale fixed at 1.6
+            bool sliderGone = !shell.PanelsById["settings"].Elements.OfType<UiSlider>().Any(x => x.Text == "SHARPNESS");
+            bool voiceGone = !(shell.Voice.Find("set_setting").Properties["setting"]["enum"] as JArray).Any(x => (string)x == "sharpness");
+            Check(sliderGone && voiceGone && MetaCodexShell.RenderScale == 1.6f && Mathf.Approximately(shell.Settings.renderScale, 1.6f),
+                $"SHARPNESS gone (slider {sliderGone}, voice {voiceGone}); the render scale is {MetaCodexShell.RenderScale}");
+
+            // the WRIST main menu: the left wrist held up as to read a watch, the right index finger presses
+            shell.SetWristMenu(true);
+            Check(!shell.IsPanelOpen("dock"), "WRIST mode puts the dock away");
+            var eye = head.position;
+            var rot0 = head.rotation;
+            var palm = eye + head.forward * 0.33f - head.up * 0.13f - head.right * 0.03f;
+            var toEye = (eye - palm).normalized;
+            hands.SetOpen(Handedness.Left, palm, (head.right * 0.9f + head.forward * 0.35f).normalized, -toEye); // palm away: the back faces the eyes
+            hands.SetOpen(Handedness.Right, eye + head.forward * 0.25f + head.right * 0.16f - head.up * 0.22f, head.forward, -head.up);
+            var w = shell.Wrist;
+            void Step(int n, float dt = 0.05f) { for (int i = 0; i < n; i++) { shell.TickGesturesForTest(dt); shell.TickWristForTest(dt); } }
+            Step(6);
+            Check(w.Visible && w.Shown01 > 0.9f && !w.Expanded, $"looking at the wrist as at a watch shows the core ({w.Shown01:F2})");
+            void Poke(Vector3 world)
+            {
+                // steps of 0.03 s: the gesture engine ticks at 36 Hz, so a shorter step would not pass the hand on
+                var lp = w.transform.InverseTransformPoint(world);
+                hands.Frames[1].IndexTip = w.transform.TransformPoint(new Vector3(lp.x, lp.y, -0.02f));
+                Step(1, 0.03f);
+                hands.Frames[1].IndexTip = w.transform.TransformPoint(new Vector3(lp.x, lp.y, 0.002f));
+                Step(1, 0.03f);
+                hands.Frames[1].IndexTip = w.transform.TransformPoint(new Vector3(lp.x, lp.y, -0.035f));
+                Step(1, 0.03f);
+            }
+            Poke(w.WorldOf(-2));
+            Step(12);
+            Check(w.Expanded && w.Expand01 > 0.99f, $"touching the core unfolds the rings ({w.Expand01:F2})");
+            // a picture: the finger hovering over FILES
+            var hoverAt = w.transform.InverseTransformPoint(w.WorldOf(2));
+            hands.Frames[1].IndexTip = w.transform.TransformPoint(new Vector3(hoverAt.x, hoverAt.y, -0.012f));
+            Step(4);
+            int verts = w.GetComponent<MeshFilter>().sharedMesh.vertexCount;
+            Check(w.Hover == 2 && verts > 200 && verts < 6000, $"the fingertip over FILES highlights it (hover {w.Hover}); the menu is one mesh of {verts} vertices");
+            RenderAt("ui-wrist-menu.png", eye, Quaternion.LookRotation(w.transform.position - eye, head.up), 34f, 1400, 1050);
+            shell.ClosePanel("files");
+            int pressed = -99;
+            w.Pressed += k => pressed = k;
+            Poke(w.WorldOf(2));
+            Check(pressed == 2 && shell.IsPanelOpen("files"), $"touching the FILES blade opens FILES (pressed {pressed})");
+            shell.ClosePanel("settings");
+            Step(8); // past the 0.3 s between two presses (a double tap is not two commands)
+            Poke(w.WorldOf(w.Inner.Count + 10));
+            Check(shell.IsPanelOpen("settings"), "the outer ring works too: SETUP opens Settings");
+            // a fingertip that goes through the surface and stays there presses once, not again and again
+            int presses = 0;
+            w.Pressed += k => presses++;
+            hands.Frames[1].IndexTip = w.transform.TransformPoint(new Vector3(hoverAt.x, hoverAt.y, 0.003f));
+            Step(10);
+            Check(presses == 1, $"a fingertip that stays through the surface presses once ({presses} presses in 0.5 s)");
+            hands.Frames[1].IndexTip = w.transform.TransformPoint(new Vector3(hoverAt.x, hoverAt.y, -0.04f));
+            Step(2);
+            // looking away folds and hides it
+            head.rotation = Quaternion.Euler(0f, 70f, 0f) * rot0;
+            Step(18);
+            Check(!w.Visible && !w.Expanded, $"looking away hides and folds it (shown {w.Shown01:F2})");
+            head.rotation = rot0;
+            shell.SetWristMenu(false);
+            Check(shell.IsPanelOpen("dock") && !w.Visible, "DOCK mode: the dock is back, the wrist menu gone");
+            foreach (var id in shell.PanelIds.ToList()) if (id != "dock") shell.ClosePanel(id);
+        }
+
         private static void VoiceWords(MetaCodexShell shell)
         {
             foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
@@ -2175,6 +2278,10 @@ end)
             // REAL THINGS IN FRONT OF WINDOWS: a hand-sized thing 0.5 m away in front of the terminal (0.9 m): the terminal
             // is hidden there and only there; the setting off covers it again
             {
+                // the terminal where these pictures expect it (other sections move it): 0.85 m ahead, a little below the eyes
+                Vector3 framePos = frame != null ? frame.transform.position : default;
+                Quaternion frameRot = frame != null ? frame.transform.rotation : default;
+                if (frame != null) { if (!frame.IsOpen) frame.Open(); frame.PlaceInFront(head, 0.85f, 0.12f); frame.ForceRefresh(); }
                 shell.SetFocus(false, false);
                 shell.TickFocusForTest(1f);
                 shell.Settings.occludeUi = true;
@@ -2237,10 +2344,6 @@ end)
             // ... and in front of a window: SETTINGS (opaque) 0.4 m behind the palm, focus off, no depth: the hand
             // cut-outs are drawn after the windows and pass their depth only where the hand is in front
             {
-                // the terminal where these pictures expect it (other sections move it): 0.85 m ahead, a little below the eyes
-                Vector3 framePos = frame != null ? frame.transform.position : default;
-                Quaternion frameRot = frame != null ? frame.transform.rotation : default;
-                if (frame != null) { if (!frame.IsOpen) frame.Open(); frame.PlaceInFront(head, 0.85f, 0.12f); frame.ForceRefresh(); }
                 shell.SetFocus(false, false);
                 shell.TickFocusForTest(1f);
                 shell.OpenPanel("settings");

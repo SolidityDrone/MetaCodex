@@ -558,6 +558,7 @@ end)
             tabs.AddTo(TabDisplay, new UiSlider("CAROUSEL RADIUS", 0.6f, 1.6f, s.carouselRadius, v => { s.carouselRadius = v; OnSettingsChanged(); }) { Rect = d.Next(rowH), Format = "0.00 m" });
             tabs.AddTo(TabDisplay, new UiSlider("UI SCALE", 0.8f, 1.8f, s.uiScale, v => { s.uiScale = v; OnSettingsChanged(); }) { Rect = d.Next(rowH), Format = "0.00" });
             tabs.AddTo(TabDisplay, new UiToggle("Bend panels around you", s.bendPanels, v => { s.bendPanels = v; OnSettingsChanged(); UpdateFixedBend(); }) { Rect = d.Next(rowH) });
+            tabs.AddTo(TabDisplay, new UiToggle("Main menu on the wrist (look at your left wrist, touch the core)", s.wristMenu, v => SetWristMenu(v)) { Rect = d.Next(rowH) });
             var lr = d.NextSplit(t.ButtonHeight, 0.5f, out var lr2);
             tabs.AddTo(TabDisplay, new UiButton("SAVE LAYOUT…", () => UiKeyboard.Edit("desk", false, null, n => { if (!string.IsNullOrWhiteSpace(n)) { SaveNamedLayout(n.Trim()); Toast($"Layout '{n.Trim()}' saved", "ok"); } })) { Rect = lr });
             tabs.AddTo(TabDisplay, new UiButton("LOAD NEXT LAYOUT", LoadNextLayout) { Rect = lr2 });
