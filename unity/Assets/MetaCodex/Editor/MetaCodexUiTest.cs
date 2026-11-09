@@ -2402,6 +2402,24 @@ end)
             Check(invJ != null && (invJ["tools"] as JArray).Any(x => (string)x["name"] == "git" && (bool)x["installed"] && !string.IsNullOrEmpty((string)x["version"])),
                 "the installed-tools inventory for agents is written (" + inv + ")");
             Check(shell.SystemCommand("tools").Contains("git\t") && shell.SystemCommand("tools json").Contains("\"installed\""), "control port: system tools / tools json");
+            // native Quest apps (mcx-app, skill quest-native-apps): what the agents call on the control port
+            string apkRel = "mcx-test-" + Guid.NewGuid().ToString("N").Substring(0, 6) + "/hello.apk";
+            string apkAndroid = Path.Combine(Application.persistentDataPath, apkRel);
+            Directory.CreateDirectory(Path.GetDirectoryName(apkAndroid));
+            File.WriteAllBytes(apkAndroid, new byte[] { 0x50, 0x4B, 3, 4 });
+            string inst = shell.SystemCommand("install-apk /mnt/quest/" + apkRel);
+            bool mapped = (SystemBridge.LastResult ?? "").Replace('\\', '/').EndsWith(apkRel);
+            Check(inst.StartsWith("installing") && mapped && shell.SystemCommand("install-apk /root/notes.txt").StartsWith("error: system install-apk")
+                && shell.SystemCommand("install-apk /mnt/quest/../x.apk").StartsWith("error: no file") && shell.AndroidPathOf("relative.apk") == null,
+                $"control port: system install-apk maps /mnt/quest/{apkRel} to the app's shared folder and hands it to the installer; refuses non-APKs, /../ and relative paths ({inst})");
+            Directory.Delete(Path.GetDirectoryName(apkAndroid), true);
+            Check(shell.SystemCommand("can-install").StartsWith("yes") && shell.SystemCommand("app com.metacodex.user.x").StartsWith("not installed")
+                && shell.SystemCommand("app").StartsWith("error") && shell.SystemCommand("launch").StartsWith("error") && !shell.SystemCommand("first-use").StartsWith("running"),
+                "control port: system can-install / app / launch / first-use answer (dry run; first use never runs in the Editor)");
+            var catalog = MetaCodexShell.ToolCatalog;
+            Check(catalog.Any(c => c.Name == "android-sdk" && c.Group == "android") && catalog.Any(c => c.Name == "openxr" && c.Group == "android")
+                && catalog.First(c => c.Name == "ndk").Install == "mcx-setup ndk" && MetaCodexShell.FirstUseCommand.Contains("mcx-setup quest"),
+                "TOOLS: android.jar and OpenXR tiles; every native app download is pinned in mcx-setup (the NDK tile and first use call it)");
             // every tool has its icon: the tool's own logo, or a pictogram of what it does (fzf: a filter)
             var noIcon = MetaCodexShell.ToolCatalog.Where(c => !UiIcons.TryGetIcon(c.Name, out _)).Select(c => c.Name).ToList();
             UiIcons.TryGetIcon("git", out var gitIc); UiIcons.TryGetIcon("fzf", out var fzfIc); UiIcons.TryGetIcon("ndk", out var ndkIc);

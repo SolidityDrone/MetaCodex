@@ -285,8 +285,36 @@
     0.75
    ]
   },
-  "si:openjdk": {
+  "lu:library": {
    "cell": 20,
+   "kind": "pictogram",
+   "source": "lucide",
+   "name": "library",
+   "title": "library",
+   "hex": null,
+   "box": [
+    0.1875,
+    0.1875,
+    0.8125,
+    0.8125
+   ]
+  },
+  "si:khronosgroup": {
+   "cell": 21,
+   "kind": "logo",
+   "source": "simple-icons",
+   "name": "khronosgroup",
+   "title": "Khronos Group",
+   "hex": "CC3333",
+   "box": [
+    0.0859,
+    0.4219,
+    0.9141,
+    0.5781
+   ]
+  },
+  "si:openjdk": {
+   "cell": 22,
    "kind": "logo",
    "source": "simple-icons",
    "name": "openjdk",
@@ -300,7 +328,7 @@
    ]
   },
   "lu:usb": {
-   "cell": 21,
+   "cell": 23,
    "kind": "pictogram",
    "source": "lucide",
    "name": "usb",
@@ -314,7 +342,7 @@
    ]
   },
   "lu:package-check": {
-   "cell": 22,
+   "cell": 24,
    "kind": "pictogram",
    "source": "lucide",
    "name": "package-check",
@@ -328,7 +356,7 @@
    ]
   },
   "si:vulkan": {
-   "cell": 23,
+   "cell": 25,
    "kind": "logo",
    "source": "simple-icons",
    "name": "vulkan",
@@ -342,7 +370,7 @@
    ]
   },
   "si:git": {
-   "cell": 24,
+   "cell": 26,
    "kind": "logo",
    "source": "simple-icons",
    "name": "git",
@@ -356,7 +384,7 @@
    ]
   },
   "si:github": {
-   "cell": 25,
+   "cell": 27,
    "kind": "logo",
    "source": "simple-icons",
    "name": "github",
@@ -370,7 +398,7 @@
    ]
   },
   "si:curl": {
-   "cell": 26,
+   "cell": 28,
    "kind": "logo",
    "source": "simple-icons",
    "name": "curl",
@@ -384,7 +412,7 @@
    ]
   },
   "lu:download": {
-   "cell": 27,
+   "cell": 29,
    "kind": "pictogram",
    "source": "lucide",
    "name": "download",
@@ -398,7 +426,7 @@
    ]
   },
   "lu:key-round": {
-   "cell": 28,
+   "cell": 30,
    "kind": "pictogram",
    "source": "lucide",
    "name": "key-round",
@@ -412,7 +440,7 @@
    ]
   },
   "lu:braces": {
-   "cell": 29,
+   "cell": 31,
    "kind": "pictogram",
    "source": "lucide",
    "name": "braces",
@@ -426,7 +454,7 @@
    ]
   },
   "lu:search": {
-   "cell": 30,
+   "cell": 32,
    "kind": "pictogram",
    "source": "lucide",
    "name": "search",
@@ -440,7 +468,7 @@
    ]
   },
   "lu:folder-search": {
-   "cell": 31,
+   "cell": 33,
    "kind": "pictogram",
    "source": "lucide",
    "name": "folder-search",
@@ -454,7 +482,7 @@
    ]
   },
   "lu:list-filter": {
-   "cell": 32,
+   "cell": 34,
    "kind": "pictogram",
    "source": "lucide",
    "name": "list-filter",
@@ -468,7 +496,7 @@
    ]
   },
   "si:tmux": {
-   "cell": 33,
+   "cell": 35,
    "kind": "logo",
    "source": "simple-icons",
    "name": "tmux",
@@ -482,7 +510,7 @@
    ]
   },
   "si:sqlite": {
-   "cell": 34,
+   "cell": 36,
    "kind": "logo",
    "source": "simple-icons",
    "name": "sqlite",
@@ -496,7 +524,7 @@
    ]
   },
   "si:nano": {
-   "cell": 35,
+   "cell": 37,
    "kind": "logo",
    "source": "simple-icons",
    "name": "nano",
@@ -510,7 +538,7 @@
    ]
   },
   "si:vim": {
-   "cell": 36,
+   "cell": 38,
    "kind": "logo",
    "source": "simple-icons",
    "name": "vim",
@@ -524,7 +552,7 @@
    ]
   },
   "si:neovim": {
-   "cell": 37,
+   "cell": 39,
    "kind": "logo",
    "source": "simple-icons",
    "name": "neovim",
@@ -559,6 +587,8 @@
   "cargo": "lu:package",
   "go": "si:go",
   "ndk": "si:android",
+  "android-sdk": "lu:library",
+  "openxr": "si:khronosgroup",
   "java": "si:openjdk",
   "adb": "lu:usb",
   "build-tools": "lu:package-check",

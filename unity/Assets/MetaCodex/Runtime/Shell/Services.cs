@@ -71,13 +71,51 @@ namespace MetaCodex.Shell
                 using (var activity = player.GetStatic<AndroidJavaObject>("currentActivity"))
                 using (var c = new AndroidJavaClass(InstallerClass))
                 {
-                    if (!c.CallStatic<bool>("canInstall", activity))
+                    string can = c.CallStatic<string>("canInstallText", activity);
+                    if (can.StartsWith("unavailable")) return can;
+                    if (!can.StartsWith("yes"))
                     {
                         string r = c.CallStatic<string>("openUnknownSourcesSettings", activity);
                         return r == "ok" ? "needs your OK: allow MetaCodex to install apps (the settings page is open), then install again" : r;
                     }
                     return c.CallStatic<string>("install", activity, androidPath);
                 }
+            }
+            catch (Exception ex) { return "failure: " + ex.Message; }
+#else
+            return "not on the headset";
+#endif
+        }
+
+        /// yes | no: the "install unknown apps" switch is off | unavailable: this build cannot install apps. Opens nothing.
+        public static string CanInstall()
+        {
+            if (DryRun) return "yes (dry run)";
+#if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var player = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+                using (var activity = player.GetStatic<AndroidJavaObject>("currentActivity"))
+                using (var c = new AndroidJavaClass(InstallerClass))
+                    return c.CallStatic<string>("canInstallText", activity);
+            }
+            catch (Exception ex) { return "failure: " + ex.Message; }
+#else
+            return "unavailable: not on the headset";
+#endif
+        }
+
+        /// installed: pkg version (code), installer, last update | not installed: pkg.
+        public static string AppInfo(string package)
+        {
+            if (DryRun) { LastResult = "app " + package; return "not installed: " + package + " (dry run)"; }
+#if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var player = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+                using (var activity = player.GetStatic<AndroidJavaObject>("currentActivity"))
+                using (var c = new AndroidJavaClass(InstallerClass))
+                    return c.CallStatic<string>("info", activity, package);
             }
             catch (Exception ex) { return "failure: " + ex.Message; }
 #else

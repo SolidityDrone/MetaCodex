@@ -43,4 +43,6 @@
   <!-- native apps built in the Linux userland: installed with Android's own installer, the user confirms each one
        (MetaCodexInstaller.java; the user allows "install unknown apps" for MetaCodex once) -->
   <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+  <!-- updates of apps MetaCodex installed itself go through without a new confirmation when Android allows it -->
+  <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" />
 </manifest>

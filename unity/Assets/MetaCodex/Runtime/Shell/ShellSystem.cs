@@ -44,22 +44,17 @@ namespace MetaCodex.Shell
             ("js", "JAVASCRIPT · TYPESCRIPT", "run web and Node apps, add packages", 2),
             ("python", "PYTHON", "scripts, data and AI tools", 0),
             ("native", "NATIVE CODE", "compilers and build tools for C, C++, Rust and Go", 1),
-            ("android", "ANDROID · QUEST", "build native apps for this headset (NDK, adb, APK tools, Vulkan shaders)", 3),
+            ("android", "ANDROID · QUEST", "build native apps for this headset (NDK, android.jar, OpenXR, APK tools, adb, Vulkan shaders)", 3),
             ("git", "GIT", "version control: history, branches, GitHub", 4),
             ("terminal", "TERMINAL UTILITIES", "download, connect, search, sessions, data", 7),
             ("editors", "EDITORS", "edit files right in the terminal", 5),
         };
 
-        private const string NdkUrl = "https://github.com/HomuHomu833/android-ndk-custom/releases/download/r27/android-ndk-r27d-aarch64-linux-gnu.tar.xz";
-        private const string NdkSha256 = "94a7e5a0dffee4ab68cc14adc081674c6f42116046d5ae1eafe1f3492a1045dc";
-
-        /// The Android NDK for this arm64 userland: Google ships Linux builds for x86_64 only, so this is the community
-        /// arm64 build of NDK r27d (LTS, HomuHomu833/android-ndk-custom), pinned to its sha256; checked before unpacking.
-        private static readonly string NdkInstall =
-            "f=/tmp/android-ndk-r27d.tar.xz && curl -fL --retry 3 -o $f " + NdkUrl + " && echo \"" + NdkSha256 + "  $f\" | sha256sum -c - && " +
-            "tar -xJf $f -C /opt && ln -sfn /opt/android-ndk-r27d /opt/android-ndk && rm -f $f && " +
-            "{ echo 'export ANDROID_NDK_HOME=/opt/android-ndk'; echo 'export ANDROID_NDK_ROOT=/opt/android-ndk'; echo 'export PATH=\"$PATH:/opt/android-ndk\"'; } > /etc/profile.d/android-ndk.sh && " +
-            "echo 'NDK r27d in /opt/android-ndk: open a new terminal (ANDROID_NDK_HOME is set there)'";
+        /// The native Quest app tools come from `mcx-setup` (one place pins every download and its sha256): the NDK alone
+        /// (`mcx-setup ndk`: the community arm64 build of NDK r27d, since Google ships Linux NDKs for x86_64 only), or
+        /// everything an app needs (`mcx-setup quest`: + APK tools, JDK, android.jar, OpenXR; what first use runs).
+        private const string NdkInstall = "mcx-setup ndk";
+        private const string QuestInstall = "mcx-setup quest";
 
         public static readonly ToolDef[] ToolCatalog =
         {
@@ -88,6 +83,9 @@ namespace MetaCodex.Shell
 
             new ToolDef("ndk", "android", "sed -n 's/^Pkg.Revision = //p' /opt/android-ndk/source.properties", NdkInstall, NdkInstall,
                 "rm -rf /opt/android-ndk-r27d /opt/android-ndk /etc/profile.d/android-ndk.sh", check: "/opt/android-ndk/source.properties"),
+            new ToolDef("android-sdk", "android", "sed -n 's/^AndroidVersion.ApiLevel=/API /p' /opt/android-sdk/platforms/android-34/source.properties", QuestInstall, QuestInstall,
+                "rm -rf /opt/android-sdk", check: "/opt/android-sdk/platforms/android-34/android.jar"),
+            new ToolDef("openxr", "android", "cat /opt/openxr/VERSION", QuestInstall, QuestInstall, "rm -rf /opt/openxr", check: "/opt/openxr/lib/arm64-v8a/libopenxr_loader.so"),
             new ToolDef("java", "android", "java -version", "apt:default-jdk-headless", "apt:default-jdk-headless", "apt:default-jdk-headless"),
             new ToolDef("adb", "android", "adb version", "apt:adb", "apt:adb", "apt:adb"),
             new ToolDef("build-tools", "android", "aapt2 version", "apt:aapt apksigner zipalign", "apt:aapt apksigner zipalign", "apt:aapt apksigner zipalign", check: "aapt2"),
@@ -164,6 +162,7 @@ namespace MetaCodex.Shell
             LoadToolsCache();
             ShowTools();
             ScheduleToolScan();
+            ScheduleFirstUse();
         }
 
         // ------------------------------------------------------------------ tools
@@ -353,8 +352,11 @@ namespace MetaCodex.Shell
                     return SystemBridge.InstallApk(androidPath);
                 }
                 case "install-status": return SystemBridge.InstallStatus();
+                case "can-install": return SystemBridge.CanInstall();
+                case "app": return parts.Length > 1 ? SystemBridge.AppInfo(parts[1].Trim()) : "error: system app <package>";
                 case "launch": return parts.Length > 1 ? SystemBridge.LaunchApp(parts[1].Trim()) : "error: system launch <package>";
-                default: return "error: system tools [json] | refresh | storage | inventory | install-apk <apk> | install-status | launch <package>";
+                case "first-use": return FirstUseStatus;
+                default: return "error: system tools [json] | refresh | storage | inventory | install-apk <apk> | install-status | can-install | app <package> | launch <package> | first-use";
             }
         }
 
@@ -369,6 +371,64 @@ namespace MetaCodex.Shell
                 return Path.Combine(shared, linuxPath.Substring("/mnt/quest/".Length));
             }
             return host != null ? host.RootfsDir + linuxPath : null;
+        }
+
+        // ------------------------------------------------------------------ first use
+        /// Bump when the first-use setup installs more: headsets that ran an older one run it once more.
+        public const int FirstUseVersion = 1;
+        public const string FirstUseLog = "/root/.metacodex/first-use.log";
+        /// What the app installs in the Linux by itself, once, at low priority on cores 0-2: base tools, Node, and
+        /// everything to build native Quest apps (APK tools, JDK, NDK, android.jar, OpenXR; skill quest-native-apps).
+        public const string FirstUseCommand =
+            "mkdir -p /root/.metacodex && T=; taskset -c 0-2 true 2>/dev/null && T='taskset -c 0-2'; " +
+            "nice -n 10 $T mcx-setup quest > " + FirstUseLog + " 2>&1; echo \"MCX_EXIT=$?\""; // taskset: only where cores 0-2 are allowed
+        public string FirstUseStatus { get; private set; } = "not started";
+        private bool _firstUseRunning;
+
+        /// The marker lives in the rootfs: a new Linux install runs the setup again.
+        private string FirstUseMarker => app?.Host != null ? app.Host.RootfsDir + "/root/.metacodex/first-use.done" : null;
+
+        /// Once per Linux install (and once more when FirstUseVersion grows): `mcx-setup quest` in the background, so a
+        /// new headset is ready for agents and native apps without anyone running setup commands.
+        private void ScheduleFirstUse()
+        {
+            After(20f, () =>
+            {
+                if (Application.isEditor) { FirstUseStatus = "not in the Editor"; return; }
+                if (!Git.InUserland) { ScheduleFirstUse(); return; } // the userland is not up yet
+                string marker = FirstUseMarker;
+                if (marker == null || _firstUseRunning) return;
+                try { if (File.Exists(marker) && File.ReadAllText(marker).Trim() == FirstUseVersion.ToString()) { FirstUseStatus = "done"; return; } }
+                catch (Exception ex) { Log("first use: " + ex.Message); }
+                _firstUseRunning = true;
+                FirstUseStatus = "running: mcx-setup quest (log " + FirstUseLog + ")";
+                Toast("Setting up Linux in the background: Node, the Android NDK and OpenXR for native apps (about 400 MB download)", "info");
+                var started = DateTime.Now;
+                Task.Run(async () =>
+                {
+                    var r = await Git.Shell(FirstUseCommand, 90 * 60 * 1000);
+                    bool ok = (r.output ?? "").Contains("MCX_EXIT=0");
+                    _main.Enqueue(() =>
+                    {
+                        _firstUseRunning = false;
+                        int min = (int)Math.Round((DateTime.Now - started).TotalMinutes);
+                        if (ok)
+                        {
+                            try { Directory.CreateDirectory(Path.GetDirectoryName(marker)); File.WriteAllText(marker, FirstUseVersion.ToString()); }
+                            catch (Exception ex) { Log("first use marker: " + ex.Message); }
+                            FirstUseStatus = $"done ({min} min)";
+                            Toast("Linux is set up: Node and the native Quest app tools are ready (mcx-app)", "ok");
+                            RefreshTools(true);
+                        }
+                        else
+                        {
+                            FirstUseStatus = "failed: see " + FirstUseLog + " (tried again at the next start, or run mcx-setup quest in a terminal)";
+                            Toast("Linux setup did not finish (offline?): it runs again at the next start", "warn");
+                        }
+                        Log("first use: " + FirstUseStatus);
+                    });
+                });
+            });
         }
 
         /// A while after start, the inventory is refreshed in the background (agents read it), at low priority.

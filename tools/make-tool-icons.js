@@ -18,7 +18,7 @@ const map = {
   node: 'si:nodedotjs', npm: 'si:npm', pnpm: 'si:pnpm', bun: 'si:bun',
   python3: 'si:python', pip: 'si:pypi', uv: 'si:uv',
   gcc: 'si:gnu', clang: 'si:llvm', make: 'lu:hammer', cmake: 'si:cmake', ninja: 'lu:zap', rustc: 'si:rust', cargo: 'lu:package', go: 'si:go',
-  ndk: 'si:android', java: 'si:openjdk', adb: 'lu:usb', 'build-tools': 'lu:package-check', glslc: 'si:vulkan',
+  ndk: 'si:android', 'android-sdk': 'lu:library', openxr: 'si:khronosgroup', java: 'si:openjdk', adb: 'lu:usb', 'build-tools': 'lu:package-check', glslc: 'si:vulkan',
   git: 'si:git', gh: 'si:github',
   curl: 'si:curl', wget: 'lu:download', ssh: 'lu:key-round', jq: 'lu:braces', rg: 'lu:search', fd: 'lu:folder-search', fzf: 'lu:list-filter',
   tmux: 'si:tmux', sqlite3: 'si:sqlite',
