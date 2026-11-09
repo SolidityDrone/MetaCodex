@@ -43,6 +43,65 @@ namespace MetaCodex.Shell
         }
 
         public static bool OpenHandSettings() => DeepLink("systemux://settings", "/hands");
+
+        // ---- installing apps built in the Linux userland (MetaCodexInstaller.java: Android's PackageInstaller)
+
+        private const string InstallerClass = "com.pnncl.metacodex.install.MetaCodexInstaller";
+
+        /// The installer's last state: idle, installing, waiting for the user to confirm, success: pkg, failure: why.
+        public static string InstallStatus()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            try { using (var c = new AndroidJavaClass(InstallerClass)) return c.CallStatic<string>("status"); }
+            catch (Exception ex) { return "failure: " + ex.Message; }
+#else
+            return DryRun ? "idle (dry run)" : "not on the headset";
+#endif
+        }
+
+        /// Installs an APK (an Android path the app can read). When the user has not let MetaCodex install apps yet,
+        /// opens that switch instead and says so.
+        public static string InstallApk(string androidPath)
+        {
+            if (DryRun) { LastResult = "install " + androidPath; return "installing (dry run)"; }
+#if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var player = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+                using (var activity = player.GetStatic<AndroidJavaObject>("currentActivity"))
+                using (var c = new AndroidJavaClass(InstallerClass))
+                {
+                    if (!c.CallStatic<bool>("canInstall", activity))
+                    {
+                        string r = c.CallStatic<string>("openUnknownSourcesSettings", activity);
+                        return r == "ok" ? "needs your OK: allow MetaCodex to install apps (the settings page is open), then install again" : r;
+                    }
+                    return c.CallStatic<string>("install", activity, androidPath);
+                }
+            }
+            catch (Exception ex) { return "failure: " + ex.Message; }
+#else
+            return "not on the headset";
+#endif
+        }
+
+        /// Starts an installed app by its package name.
+        public static string LaunchApp(string package)
+        {
+            if (DryRun) { LastResult = "launch " + package; return "ok (dry run)"; }
+#if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var player = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+                using (var activity = player.GetStatic<AndroidJavaObject>("currentActivity"))
+                using (var c = new AndroidJavaClass(InstallerClass))
+                    return c.CallStatic<string>("launch", activity, package);
+            }
+            catch (Exception ex) { return "failure: " + ex.Message; }
+#else
+            return "not on the headset";
+#endif
+        }
         public static bool OpenAppSettings() => DeepLink("systemux://settings", "/applications?package=" + Application.identifier);
         public static bool OpenFilesApp() => DeepLink("systemux://file-manager", null);
 

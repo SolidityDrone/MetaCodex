@@ -342,8 +342,33 @@ namespace MetaCodex.Shell
                     return _linuxBytes < 0 ? "not measured yet: open SYSTEM > STORAGE" :
                         $"linux {UiStorageBar.Size(_linuxBytes)}, free {UiStorageBar.Size(_devFree)} of {UiStorageBar.Size(_devTotal)}" + (Settings.linuxLimitGB > 0 ? $", limit {Settings.linuxLimitGB:0} GB" : "");
                 case "inventory": return ToolsInventoryPath;
-                default: return "error: system tools [json] | refresh | storage | inventory";
+                // apps built in the Linux userland: Android's own installer, the user confirms (MetaCodexInstaller)
+                case "install-apk":
+                {
+                    string linuxPath = parts.Length > 1 ? parts[1].Trim() : "";
+                    if (!linuxPath.EndsWith(".apk")) return "error: system install-apk <path to an .apk in Linux>";
+                    string androidPath = AndroidPathOf(linuxPath);
+                    if (androidPath == null || !File.Exists(androidPath)) return "error: no file " + linuxPath + (androidPath != null ? " (" + androidPath + ")" : "");
+                    Log("install-apk " + linuxPath + " -> " + androidPath);
+                    return SystemBridge.InstallApk(androidPath);
+                }
+                case "install-status": return SystemBridge.InstallStatus();
+                case "launch": return parts.Length > 1 ? SystemBridge.LaunchApp(parts[1].Trim()) : "error: system launch <package>";
+                default: return "error: system tools [json] | refresh | storage | inventory | install-apk <apk> | install-status | launch <package>";
             }
+        }
+
+        /// A file of the Linux userland as the app sees it: /mnt/quest is the shared folder, the rest is in the rootfs.
+        public string AndroidPathOf(string linuxPath)
+        {
+            if (string.IsNullOrEmpty(linuxPath) || !linuxPath.StartsWith("/") || linuxPath.Contains("/../")) return null;
+            var host = app != null ? app.Host : null;
+            if (linuxPath.StartsWith("/mnt/quest/"))
+            {
+                string shared = host != null && !string.IsNullOrEmpty(host.SharedDir) ? host.SharedDir : Application.persistentDataPath;
+                return Path.Combine(shared, linuxPath.Substring("/mnt/quest/".Length));
+            }
+            return host != null ? host.RootfsDir + linuxPath : null;
         }
 
         /// A while after start, the inventory is refreshed in the background (agents read it), at low priority.
