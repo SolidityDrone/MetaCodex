@@ -87,6 +87,18 @@ namespace MetaCodex.Security
         }
     }
 
+    /// The headset when the Android Keystore cannot be reached: nothing is sealed or opened (no plain-text fallback, no
+    /// key in a file). The vault shows why and stays locked until the keystore works again.
+    public sealed class LockedSealer : ISealer
+    {
+        public LockedSealer(string why) { LastError = "vault locked: " + why; }
+        public string Kind => "locked";
+        public string Level => "locked (Android Keystore unavailable)";
+        public string LastError { get; }
+        public string Seal(byte[] plain, string aad) => null;
+        public byte[] Open(string sealedValue, string aad) => null;
+    }
+
     /// Editor and tests only: AES-256-CBC + HMAC-SHA256 (encrypt-then-MAC) with a random key in a local file.
     /// Not a protection (the key sits next to the data); it exists so the vault logic runs off the headset.
     public sealed class DevFileSealer : ISealer
@@ -200,6 +212,10 @@ namespace MetaCodex.Security
 
         public string FilePath { get; }
         public ISealer Sealer { get; }
+        /// Why the vault file could not be read (it was kept aside as vault.json.unreadable-<time>), or null.
+        public string LoadError { get; private set; }
+        /// The vault can seal and open (false: locked, see Sealer.LastError).
+        public bool Usable => Sealer.Kind != "locked";
         public IReadOnlyList<VaultEntry> Entries => _file.entries;
         public readonly List<VaultEvent> Audit = new List<VaultEvent>();
         public event Action Changed;
@@ -215,18 +231,58 @@ namespace MetaCodex.Security
             Load();
         }
 
-        /// The headset: Android Keystore + no-backup folder. Elsewhere: the dev sealer in `fallbackDir`.
+        /// The headset: Android Keystore + no-backup folder, and nothing else: when the keystore cannot be reached the
+        /// vault is locked (it never falls back to a key in a file there: `fallbackDir` is the app's shared folder,
+        /// which the Linux userland and adb can read). Off the headset (Editor, tests): the dev sealer in `fallbackDir`.
         public static SecretVault OpenDefault(string fallbackDir)
         {
 #if UNITY_ANDROID && !UNITY_EDITOR
+            string why;
             try
             {
                 var dir = AndroidKeystoreSealer.NoBackupDir();
-                if (!string.IsNullOrEmpty(dir)) return new SecretVault(Path.Combine(dir, "vault.json"), new AndroidKeystoreSealer());
+                if (!string.IsNullOrEmpty(dir))
+                {
+                    var v = new SecretVault(Path.Combine(dir, "vault.json"), new AndroidKeystoreSealer());
+                    v.AdoptDevFile(Path.Combine(fallbackDir, "vault-dev"));
+                    return v;
+                }
+                why = "no no-backup folder";
             }
-            catch (Exception ex) { Debug.LogWarning("[MetaCodex] keystore vault unavailable: " + ex.Message); }
-#endif
+            catch (Exception ex) { why = ex.Message; }
+            Debug.LogWarning("[MetaCodex] keystore vault unavailable: " + why);
+            return new SecretVault(Path.Combine(fallbackDir, "vault-locked.json"), new LockedSealer(why));
+#else
             return new SecretVault(Path.Combine(fallbackDir, "vault-dev", "vault.json"), new DevFileSealer(Path.Combine(fallbackDir, "vault-dev", "dev.key")));
+#endif
+        }
+
+        /// Secrets an older build sealed with the dev sealer on the headset (its key sat in a file in the shared folder):
+        /// resealed under the keystore key, then the dev key and file are deleted. Returns how many moved.
+        public int AdoptDevFile(string devDir)
+        {
+            string keyPath = Path.Combine(devDir, "dev.key"), filePath = Path.Combine(devDir, "vault.json");
+            if (!File.Exists(keyPath) || !Usable) return 0;
+            int moved = 0;
+            try
+            {
+                if (File.Exists(filePath))
+                {
+                    var old = new SecretVault(filePath, new DevFileSealer(keyPath));
+                    foreach (var e in old.Entries.ToList())
+                    {
+                        if (Has(e.name)) continue;
+                        var plain = old.Reveal(e.name);
+                        if (plain == null) continue;
+                        if (Set(e.name, plain, e.kind, e.policy, e.note) == null) moved++;
+                    }
+                }
+                File.Delete(keyPath);
+                if (File.Exists(filePath)) File.Delete(filePath);
+                Debug.Log($"[MetaCodex] vault: {moved} secrets moved from the old dev file into the keystore vault; the dev key is deleted");
+            }
+            catch (Exception ex) { Debug.LogWarning("[MetaCodex] vault: the old dev file could not be adopted: " + ex.Message); }
+            return moved;
         }
 
         private static string Aad(string name) => "metacodex-vault:v1:" + name;
@@ -236,9 +292,16 @@ namespace MetaCodex.Security
         {
             try
             {
-                if (File.Exists(FilePath)) _file = JsonUtility.FromJson<VaultFile>(File.ReadAllText(FilePath)) ?? new VaultFile();
+                if (File.Exists(FilePath)) _file = JsonUtility.FromJson<VaultFile>(File.ReadAllText(FilePath)) ?? throw new Exception("empty file");
             }
-            catch (Exception ex) { Debug.LogWarning("[MetaCodex] vault unreadable: " + ex.Message); _file = new VaultFile(); }
+            catch (Exception ex)
+            {
+                // never overwrite what could not be read: keep it aside (its sealed values may still open later)
+                LoadError = ex.Message;
+                try { if (File.Exists(FilePath)) File.Move(FilePath, FilePath + ".unreadable-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss")); } catch (Exception) { }
+                Debug.LogWarning("[MetaCodex] vault unreadable (kept aside): " + ex.Message);
+                _file = new VaultFile();
+            }
             if (_file.entries == null) _file.entries = new List<VaultEntry>();
         }
 
@@ -258,6 +321,7 @@ namespace MetaCodex.Security
         /// Stores (or replaces) a value. Returns null or the error.
         public string Set(string name, string value, string kind = "api-key", string policy = "ask", string note = "")
         {
+            if (!Usable) return Sealer.LastError;
             if (name == null || !NamePattern.IsMatch(name)) return "name: letters, digits, . _ - (max 64)";
             if (string.IsNullOrEmpty(value)) return "empty value";
             var bytes = Encoding.UTF8.GetBytes(value);

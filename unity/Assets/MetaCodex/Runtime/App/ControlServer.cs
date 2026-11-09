@@ -30,6 +30,15 @@ namespace MetaCodex.App
         private readonly ConcurrentQueue<(string cmd, Action<string> reply)> _queue = new ConcurrentQueue<(string, Action<string>)>();
         private volatile bool _stop;
 
+        /// Same time whatever the input (no timing hints about the token).
+        private static bool FixedEquals(string a, string b)
+        {
+            if (a == null || b == null) return false;
+            int d = a.Length ^ b.Length;
+            for (int i = 0; i < b.Length; i++) d |= (i < a.Length ? a[i] : 0) ^ b[i];
+            return d == 0;
+        }
+
         public ControlServer(int port, Func<string, string> handler)
         {
             Port = port;
@@ -80,7 +89,7 @@ namespace MetaCodex.App
                 try
                 {
                     string first = reader.ReadLine();
-                    if (first == null || first.Trim() != "auth " + Token)
+                    if (first == null || !FixedEquals(first.Trim(), "auth " + Token))
                     {
                         writer.WriteLine("error: auth");
                         writer.WriteLine(".");

@@ -19,6 +19,11 @@ if [[ "${UNSAFE_GUARDS:-0}" != 1 ]]; then
   if [[ "$KILL_MB" -lt 700 ]]; then echo "KILL_MB=$KILL_MB raised to 700 (below that the bb IDE starves)"; KILL_MB=700; fi
   if [[ "$MIN_MB" -lt 3000 ]]; then echo "MIN_MB=$MIN_MB raised to 3000 (a UI test needs ~2.3 GB + bb's headroom)"; MIN_MB=3000; fi
 fi
+# variables the Windows Editor must see (WSL passes only those listed in WSLENV): MCX_RELEASE=1 builds a release
+# (non-debuggable) APK, MCX_UITEST_ONLY picks self-test sections, BEE_BUILD_THREADS caps the build's compile threads
+for v in MCX_RELEASE MCX_UITEST_ONLY BEE_BUILD_THREADS; do
+  if [[ -n "${!v:-}" && ":${WSLENV:-}:" != *":$v"* ]]; then export WSLENV="${WSLENV:+$WSLENV:}$v/w"; fi
+done
 VER=$(sed -n 's/^m_EditorVersion: //p' "$ROOT/ProjectSettings/ProjectVersion.txt")
 EXE_W="C:\\Program Files\\Unity $VER\\Editor\\Unity.exe"
 P_W=$(wslpath -w "$ROOT")

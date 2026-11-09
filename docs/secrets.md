@@ -127,3 +127,28 @@ and the user sees requests in VR.
 - Hardware-backed keys and StrongBox: https://proandroiddev.com/android-keystore-what-is-the-difference-between-strongbox-and-hardware-backed-keys-4c276ea78fd0
 - OWASP MASVS-STORAGE, backup leaks: https://developer.android.com/privacy-and-security/risks/backup-leaks
 - OWASP MASVS-CODE, backup best practices: https://developer.android.com/privacy-and-security/risks/backup-best-practices
+
+## Audit 2026-11-09 (owner: "solid key management, no plaintext keys")
+
+Checked: the keystore key (AES-256-GCM, 128-bit tag, random IV required, the name as associated data, StrongBox
+then TEE, non-exportable), the sealed file in the no-backup folder, release policies, the control port, `mcx-secret`,
+the git credential helper (asks the vault at each use; no `~/.git-credentials`), MQH's envelope key (memory only),
+logs (no values), the VAULT panel (values never shown again, no clipboard). Fixed:
+
+- **No fallback to a key in a file on the headset.** When the Android Keystore could not be reached, the vault used
+  the Editor's dev sealer, whose AES key sat in a file in the app's shared folder (which the userland and adb can
+  read): in effect plain text. Now the vault is **locked** instead (`LockedSealer`: nothing is stored, the panel says
+  why). Secrets an older build sealed that way are resealed under the keystore key at start, and the dev key and file
+  are deleted (`SecretVault.AdoptDevFile`).
+- **An unreadable vault file is kept aside** (`vault.json.unreadable-<time>`) instead of being replaced by an empty
+  vault at the next save.
+- **The MQH token typed in Settings > DAEMON** was stored in `settings.json` as plain text: it is sealed in the vault
+  now (`mqh.api-token.override`, policy deny) and moved there from older settings files.
+- **`mcx-secret env`** passed values as `env NAME=value cmd` (briefly visible in `ps` and `/proc/*/cmdline`); it exports
+  them and execs the command, so they are only in that command's environment.
+- The control port compares its token in constant time; the approval dialog marks the requester's name as unverified.
+
+Still true by design (same Android user, threat T3): an agent can read what the user lets it have (environment of its
+own processes, values it asked for). And a **debuggable APK** lets anyone with adb run code as the app (`run-as`) and
+so use its keystore key: development builds are debuggable (the VAULT panel warns); build with `MCX_RELEASE=1`
+(`tools/unity-batch.sh BatchBuild`) for a release APK before storing real keys on a shared device.

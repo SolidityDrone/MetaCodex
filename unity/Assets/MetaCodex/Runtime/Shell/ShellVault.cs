@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Text.RegularExpressions;
@@ -19,6 +20,8 @@ namespace MetaCodex.Shell
     {
         public SecretVault Vault { get; private set; }
         public const string MqhTokenName = "mqh.api-token";
+        /// A developer's own MQH token (Settings > DAEMON > TOKEN): sealed here, never in settings.json.
+        public const string MqhTokenOverrideName = "mqh.api-token.override";
         public const string MqhEnvKeyName = "mqh.machine-env-key";
 
         private UiList _vList;
@@ -28,8 +31,26 @@ namespace MetaCodex.Shell
         private static readonly Regex EnvName = new Regex("^[A-Z_][A-Z0-9_]*$");
         private string _vaultMqhToken;
 
-        /// The MQH token: the one typed in Settings > DAEMON wins (developer override), else the vault's.
-        private string MqhTokenNow() => !string.IsNullOrEmpty(Settings?.mqhToken) ? Settings.mqhToken : _vaultMqhToken;
+        /// The MQH token: the one typed in Settings > DAEMON wins (developer override, sealed in the vault), else the vault's.
+        private string MqhTokenNow() => !string.IsNullOrEmpty(_mqhTokenOverride) ? _mqhTokenOverride : _vaultMqhToken;
+        private string _mqhTokenOverride;
+        /// Tests: the settings file (to prove no secret is written there).
+        public string SettingsPathForTest => _settingsPath;
+
+        /// Settings > DAEMON > TOKEN: sealed in the vault (deny: it never leaves the app), not written to settings.json.
+        public void SetMqhTokenOverride(string value)
+        {
+            value = (value ?? "").Trim();
+            if (Vault == null || !Vault.Usable) { Toast("Vault locked: the token is not stored", "error"); return; }
+            if (value.Length == 0) { Vault.Delete(MqhTokenOverrideName); _mqhTokenOverride = null; }
+            else
+            {
+                var err = Vault.Set(MqhTokenOverrideName, value, "token", "deny", "MQH token typed in Settings > DAEMON (developer override)");
+                if (err != null) { Toast("Not stored: " + err, "error"); return; }
+                _mqhTokenOverride = value;
+            }
+            Mqh.Token = MqhTokenNow();
+        }
 
         private void InitVault()
         {
@@ -40,6 +61,17 @@ namespace MetaCodex.Shell
                 if (!Vault.Has(MqhTokenName))
                     Vault.Ensure(MqhTokenName, 32, "token", "allow", "MQH API token: the app sends it as Bearer; the MQH launcher passes it to MQH (MQH_API_TOKEN)");
                 _vaultMqhToken = Vault.Reveal(MqhTokenName);
+                // a token typed in older versions sat in settings.json as plain text: seal it, blank it there
+                if (!string.IsNullOrEmpty(Settings.mqhToken) && Vault.Usable)
+                {
+                    if (Vault.Set(MqhTokenOverrideName, Settings.mqhToken.Trim(), "token", "deny", "MQH token typed in Settings > DAEMON (developer override)") == null)
+                    {
+                        Settings.mqhToken = "";
+                        Settings.Save(_settingsPath);
+                        Log("vault: the MQH token override moved from settings.json into the vault");
+                    }
+                }
+                _mqhTokenOverride = Vault.Has(MqhTokenOverrideName) ? Vault.Reveal(MqhTokenOverrideName) : null;
                 Mqh.Token = MqhTokenNow();
                 Log($"vault: {Vault.Entries.Count} secrets, key {Vault.Sealer.Kind} ({Vault.Sealer.Level})");
             }
@@ -106,7 +138,7 @@ namespace MetaCodex.Shell
             bool answered = false;
             var e = Vault.Find(name);
             var modal = UiModal.Show(Router, Head, "SECRET REQUEST",
-                $"Something in Linux ('{Trim(requester, 40)}') asks for '{name}' ({e?.kind}). Allow it?", new[] { "ALLOW ONCE", "ALWAYS", "DENY" }, i =>
+                $"Something in Linux, calling itself '{Trim(requester, 40)}' (unverified), asks for '{name}' ({e?.kind}). Allow it?", new[] { "ALLOW ONCE", "ALWAYS", "DENY" }, i =>
                 {
                     if (answered) return;
                     answered = true;
@@ -374,7 +406,13 @@ namespace MetaCodex.Shell
                 BadgeColor = e.policy == "allow" ? t.Ok : e.policy == "deny" ? t.TextDim : t.Warn,
                 Tag = e.name,
             }), keepScroll: true);
-            _vInfo.Set($"key: <b>{(Vault.Sealer.Kind == "android-keystore" ? "Android Keystore" : "dev file (Editor)")}</b> · {Vault.Sealer.Level} · {Vault.Entries.Count} secrets\nstored sealed in {(Vault.Sealer.Kind == "android-keystore" ? "the app's no-backup folder (outside Linux)" : Vault.FilePath)}");
+            string keyName = Vault.Sealer.Kind == "android-keystore" ? "Android Keystore" : Vault.Sealer.Kind == "locked" ? "<color=#FF6B6B>LOCKED</color>" : "dev file (Editor)";
+            string where = Vault.Sealer.Kind == "android-keystore" ? "the app's no-backup folder (outside Linux)" : Vault.Sealer.Kind == "locked" ? Vault.Sealer.LastError : Vault.FilePath;
+            var warn = new List<string>();
+            if (Vault.LoadError != null) warn.Add("the vault file was unreadable and is kept aside: " + Trim(Vault.LoadError, 60));
+            // a debuggable APK lets anyone with adb run code as this app (run-as) and so use its keystore key
+            if (Debug.isDebugBuild && !Application.isEditor) warn.Add("development build: with adb, `run-as` can use this app's key; build a release APK (MCX_RELEASE=1) for real keys");
+            _vInfo.Set($"key: <b>{keyName}</b> · {Vault.Sealer.Level} · {Vault.Entries.Count} secrets\nstored sealed in {where}" + (warn.Count > 0 ? "\n<color=#FFB84D>⚠ " + string.Join(" · ", warn) + "</color>" : ""));
             ShowVaultDetail();
             _vAudit.Set(Vault.Audit.Count == 0 ? "no requests yet · from Linux: mcx-secret get NAME" : string.Join("\n", Vault.Audit.AsEnumerable().Reverse().Take(8).Select(a => a.ToString())));
         }

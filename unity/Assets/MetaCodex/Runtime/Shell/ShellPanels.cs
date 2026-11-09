@@ -601,7 +601,8 @@ end)
             // DAEMON (MQH)
             var m = new UiStack(area, t.Gap);
             tabs.AddTo(TabDaemon, new UiTextField("MQH URL", s.mqhUrl, v => { s.mqhUrl = v.Trim(); OnSettingsChanged(); RefreshDaemon(); }) { Rect = m.Next(rowH) });
-            tabs.AddTo(TabDaemon, new UiTextField("TOKEN", s.mqhToken, v => { s.mqhToken = v.Trim(); OnSettingsChanged(); RefreshDaemon(); }, "from the vault") { Rect = m.Next(rowH), Secure = true });
+            // a developer's own token goes into the vault (sealed, policy deny), never into settings.json
+            tabs.AddTo(TabDaemon, new UiTextField("TOKEN", Vault?.Has(MqhTokenOverrideName) == true ? "••••••••" : "", v => { if (v != "••••••••") SetMqhTokenOverride(v); RefreshDaemon(); }, "from the vault") { Rect = m.Next(rowH), Secure = true });
             tabs.AddTo(TabDaemon, new UiToggle("Sync these settings with MQH", s.mqhSync, v => { s.mqhSync = v; OnSettingsChanged(); }) { Rect = m.Next(rowH) });
             _daemonStatus = tabs.AddTo(TabDaemon, new UiLabel("not checked", t.SmallSize) { Rect = m.Next(0.024f), Color = t.TextDim });
             _pluginList = tabs.AddTo(TabDaemon, new UiList(0.027f, (item, idx) => PluginPicked(item)) { Rect = m.Next(area.yMax - m.Y - t.ButtonHeight - t.Gap) });

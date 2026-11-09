@@ -589,7 +589,9 @@ namespace MetaCodex.EditorTools
                 locationPathName = ApkPath,
                 target = BuildTarget.Android,
                 targetGroup = BuildTargetGroup.Android,
-                options = BuildOptions.Development, // debuggable: run-as for the private files while the userland is young
+                // debuggable (run-as for the private files while the userland is young) unless MCX_RELEASE=1: a release APK
+                // is not debuggable, so adb cannot run code as the app and use its keystore key (the vault warns otherwise)
+                options = Environment.GetEnvironmentVariable("MCX_RELEASE") == "1" ? BuildOptions.None : BuildOptions.Development,
             });
             var s = report.summary;
             string result = $"{s.result}: {s.totalErrors} errors, {s.totalTime.TotalSeconds:F0} s, {ApkPath} ({s.totalSize / (1024 * 1024)} MB)";

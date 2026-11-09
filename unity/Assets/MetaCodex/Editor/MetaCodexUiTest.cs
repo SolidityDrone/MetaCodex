@@ -1017,6 +1017,38 @@ end)
             Check(list.Contains("OPENAI_API_KEY") && !list.Contains("sk-test"), "secret list never shows values");
             var v2 = new MetaCodex.Security.SecretVault(v.FilePath, v.Sealer);
             Check(v2.Reveal("OPENAI_API_KEY") == "sk-test-1234567890", "vault reopened from disk");
+
+            // no plain text anywhere: a locked vault (no keystore) stores nothing, never falls back to a key in a file
+            string vdir = Path.Combine(Path.GetDirectoryName(v.FilePath), "..", "vault-tests");
+            if (Directory.Exists(vdir)) Directory.Delete(vdir, true);
+            Directory.CreateDirectory(vdir);
+            var locked = new MetaCodex.Security.SecretVault(Path.Combine(vdir, "locked.json"), new MetaCodex.Security.LockedSealer("test"));
+            Check(!locked.Usable && locked.Set("X", "plain-value") != null && !File.Exists(Path.Combine(vdir, "locked.json")) && locked.Ensure("K", 32) == null,
+                "a locked vault (keystore unavailable) refuses to store: no plain-text fallback, nothing written");
+            // an unreadable vault file is kept aside, never overwritten by the next save
+            File.WriteAllText(Path.Combine(vdir, "broken.json"), "{ not json");
+            var sealer = new MetaCodex.Security.DevFileSealer(Path.Combine(vdir, "a.key"));
+            var broken = new MetaCodex.Security.SecretVault(Path.Combine(vdir, "broken.json"), sealer);
+            broken.Set("NEW", "v1");
+            Check(broken.LoadError != null && Directory.GetFiles(vdir, "broken.json.unreadable-*").Length == 1, "an unreadable vault file is kept aside (" + broken.LoadError + "), not wiped");
+            // secrets an older build sealed with a key in a file move under the real key, and that key is deleted
+            string devDir = Path.Combine(vdir, "vault-dev");
+            var old = new MetaCodex.Security.SecretVault(Path.Combine(devDir, "vault.json"), new MetaCodex.Security.DevFileSealer(Path.Combine(devDir, "dev.key")));
+            old.Set("OLD_KEY", "old-secret", "api-key", "ask");
+            var fresh = new MetaCodex.Security.SecretVault(Path.Combine(vdir, "fresh.json"), new MetaCodex.Security.DevFileSealer(Path.Combine(vdir, "b.key")));
+            int moved = fresh.AdoptDevFile(devDir);
+            Check(moved == 1 && fresh.Reveal("OLD_KEY") == "old-secret" && fresh.Find("OLD_KEY").policy == "ask" && !File.Exists(Path.Combine(devDir, "dev.key")) && !File.Exists(Path.Combine(devDir, "vault.json")),
+                "secrets sealed with an old file key are resealed under the vault key; the old key and file are deleted");
+            // the MQH token typed in Settings > DAEMON is sealed in the vault, never written to settings.json
+            shell.SetMqhTokenOverride("dev-token-abcdef");
+            shell.OnSettingsChanged();
+            string settingsText = File.ReadAllText(shell.SettingsPathForTest);
+            Check(v.Has(MetaCodexShell.MqhTokenOverrideName) && v.Find(MetaCodexShell.MqhTokenOverrideName).policy == "deny" && shell.Mqh.Token == "dev-token-abcdef" && !settingsText.Contains("dev-token-abcdef"),
+                "the MQH token override is sealed in the vault (policy deny), used by the client, and not in settings.json");
+            shell.SetMqhTokenOverride("");
+            Check(!v.Has(MetaCodexShell.MqhTokenOverrideName) && shell.Mqh.Token == v.Reveal(MetaCodexShell.MqhTokenName), "clearing the override goes back to the vault's own MQH token");
+            Directory.Delete(vdir, true);
+
             foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
             shell.OpenPanel("vault");
             shell.RefreshVaultPanel();
