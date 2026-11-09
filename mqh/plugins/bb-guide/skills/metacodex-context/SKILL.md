@@ -39,8 +39,8 @@ description: Where you are when you run inside MetaCodex - a Meta Quest headset 
 - `mcx-ai ...` reaches the **local AI service** (QVAC, native on Horizon OS, 127.0.0.1:47810, OpenAI-style):
   `mcx-ai status`, `transcribe file.wav`, `say "text" out.wav`, `chat "prompt"`, `env` (prints
   `OPENAI_BASE_URL` / `OPENAI_API_KEY` for OpenAI-compatible tools). Speech-to-text (Whisper base), a 0.6B
-  LLM for commands and short answers (not for coding), text-to-speech (Supertonic 3). Private: nothing
-  leaves the headset. It shares 3 CPU cores with you at low priority: one request at a time per model.
+  LLM for short answers (not for coding), text-to-speech (Supertonic 3), sentence vectors for the voice
+  decision model (multilingual-e5-small, `POST /v1/embeddings`). Private: nothing leaves the headset. It shares 3 CPU cores with you at low priority: one request at a time per model.
 - Installed tools and their versions (git, node, bun, python3, rustc, compilers, agent CLIs, ...): read
   `/mnt/quest/system/tools.json` (or `mcx-ui system tools`) instead of probing with `--version` commands; the
   app keeps it current (SYSTEM > TOOLS; `mcx-ui system refresh` rescans). Each missing tool lists its install
@@ -48,9 +48,13 @@ description: Where you are when you run inside MetaCodex - a Meta Quest headset 
 - Views: show charts, diagrams (Mermaid), tables, checklists, choices or a physics scene in the headset
   with a ```mcx-view``` / ```mermaid``` block in your reply, or `mcx-ui view show spec.json` from a shell
   (skill `quest-views`). A tapped choice comes back as the user's next message.
-- Voice: the user speaks commands (TALK on the dock). `mcx-ui voice run "close all windows"` runs text as if
-  spoken; `mcx-ui voice list` lists commands; scripts and plugins add their own (`voice.command`, skill
-  `quest-scripting`).
+- Voice: the user speaks commands (TALK on the dock), in English or Italian. Phrase templates first, then a
+  decision model that picks the command from what each command declares (no LLM in the loop).
+  `mcx-ui voice registry` is the app's whole command surface as JSON (MCP-like: every enabled command with its
+  schema, spoken names, samples and lint warnings); `mcx-ui voice decide "accendi il focus e apri i file"` shows
+  what would run, nothing runs; `mcx-ui voice run "close all windows"` runs text as if spoken. Scripts and
+  plugins add their own commands (`voice.command`, skill `quest-scripting`): complete, or the user cannot reach
+  them; removed when the plugin is disabled.
 - Agents' API keys usually come from MQH's machine environment (the user pushes them from the vault);
   provider logins (`claude auth login`, `opencode auth login`, `codex login`) are done by the user in a
   terminal: the CLIs keep their own credentials. Never read, copy or print those credential files.
@@ -66,7 +70,11 @@ description: Where you are when you run inside MetaCodex - a Meta Quest headset 
 - The user wears the headset: keep answers short, and say what to do with the hands or panels in body
   words ("make a fist", "open GESTURES from the dock").
 - Things you change for the app (plugins, scripts, settings) apply live; never ask for an app rebuild
-  for behaviour changes.
+  for behaviour changes. **Review first:** show the user what you will change and get their OK before writing
+  plugins, scripts, gestures or voice commands.
+- Keep the command registry true: whatever you add declares all its options (skill `quest-scripting`, "MUST");
+  whatever you turn off or remove takes its commands with it, so no agent or the voice model ever offers a dead
+  one.
 
 ## MQH from inside
 

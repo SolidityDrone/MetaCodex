@@ -11,6 +11,7 @@ Each script is sandboxed (no `io`, `os`, `require`, `load`) and talks to the app
 
 ## Procedure
 
+0. Say what you will add or change (and how to undo it) and wait for the user's OK (Rules: review first).
 1. Pick a short file name for the behaviour: `/mnt/quest/scripts/double-clap-files.lua`.
 2. First line: `-- description: <what it does>` (shown in the Scripts panel).
 3. Use `gesture.sequence` for multi-step gestures (double clap), `gesture.on` for single ones.
@@ -66,7 +67,8 @@ New gestures (hand poses, swipes, two-hand shapes) belong in a **plugin** folder
 | `app.action("verb:arg")` | one action string: `open:` `close:` `toggle:<panel>`, `toast:`, `run:<cmd>`, `type:<text>`, `url:<url>`, `layout:fixed\|float`, `spin:<deg>`, `select`, `keyboard`, `terminal:new`, `recenter`, `gesture:<name>`, `voice:listen\|stop\|toggle\|say:<text>\|run:<text>` |
 | `head.pose()` | `{x, y, z, fx, fy, fz}`: eyes and look direction |
 | `voice.command{...}` | a voice command (below); removed when the script is disabled or deleted |
-| `voice.say(text)` / `voice.run(text)` / `voice.listen()` / `voice.list()` | speak with the local voice / run text as if spoken / start listening / command names |
+| `voice.say(text)` / `voice.run(text)` / `voice.listen()` / `voice.list()` | speak with the local voice / run text as if spoken / start listening / enabled command names |
+| `voice.remove(name)` / `voice.registry()` | remove one of this script's commands / the whole registry as JSON text (every enabled command, its schema, samples, warnings) |
 | `log(...)` / `print(...)` | lines in the script log (`mcx-ui script log <name>`) |
 
 Settings keys: `gestures.clickMode` (0 pinch, 1 poke, 2 both), `gestures.grabMode` (0 pinch the header,
@@ -83,17 +85,26 @@ Example: "move panels by closing my hand instead of pinching" = `settings.set("g
 ## Voice commands
 
 The user talks to the app with push-to-talk (TALK on the dock, or a gesture bound to `voice:toggle`).
-Speech becomes text on the headset (local speech-to-text, nothing leaves it); a phrase template that
-matches runs its command at once, anything else goes to a small local LLM that sees every command as a
-tool. A script adds its own command:
+Speech becomes text on the headset (local speech-to-text, nothing leaves it). Then, in this order:
+1. **phrase templates** (the fast path): a template that matches runs its command at once;
+2. the **decision model**: a small multilingual model compares each part of the sentence with every command's
+   samples, examples, phrases and description and picks the command (or none) in ~10-60 ms; values are read
+   from the command's schema (enum values and their synonyms, numbers with units, on / off, free text);
+3. the local LLM only when the user turned on "Ask the LLM when nothing fits".
+
+So a command is found by **what it declares**: its samples and synonyms are its training data. A script adds one:
 
 ```lua
 -- description: "git status" by voice
 voice.command{
   name = "git_status",                       -- snake_case, unique
-  description = "Show git status of the project in the terminal",   -- one line: the LLM reads it
+  description = "Show git status of a project folder in the terminal (path: the folder, default the current one)",
   params = { path = { type = "string", description = "folder", required = false } },
   phrases = { "(show|what is) [the] git status", "git status [of|in] {path}" },
+  samples = {                                -- REQUIRED: 4+ natural requests, English AND Italian
+    "what changed in the repo", "show me the git status", "is there anything to commit",
+    "mostrami lo stato di git", "cosa è cambiato nel repository", "ci sono modifiche da committare",
+  },
   vocabulary = { "git" },                    -- words to hear right and fix when misheard
   examples = { {"what changed in the repo", "git_status"} },
   run = function(args)                       -- args.path is nil when not said
@@ -104,35 +115,54 @@ voice.command{
 ```
 
 Phrase templates: plain words, `(a|b)` one of, `[a|b]` optional, `{param}` captures words for a parameter,
-`{param:value}` sets a fixed value ("(make|let) the panels follow me {mode:float}").
-For phrasings no template covers, the local LLM picks a command line: teach it with
-`examples = {{"make it orange", "set_accent amber"}}` (request, then the line: name and arguments in the
-order of `params`). `llm = false` keeps a command to its phrases only (use it for anything that types or
-deletes free text).
-Text is matched lower-case without punctuation, after polite fillers ("hey", "could you", "please") are
-dropped. Enum parameters (`enum = {"cyan","amber"}`) accept spoken synonyms:
-`synonyms = { color = { orange = "amber" } }`; a slot tries the known words first, longest first, so
-"dome radius" wins over "dome". `confirm = true` makes the user approve in VR before
-`run` (use it for anything that types or deletes). Return `"error: why"` when it fails.
+`{param:value}` sets a fixed value ("(make|let) the panels follow me {mode:float}"). Text is matched lower-case
+without punctuation, after polite fillers ("hey", "could you", "please", "per favore") are dropped. Enum
+parameters (`enum = {"cyan","amber"}`) accept spoken synonyms in any language:
+`synonyms = { color = { orange = "amber", arancione = "amber" } }`; the longest known name wins ("dome radius"
+before "dome"). `confirm = true` makes the user approve in VR before `run` (anything that deletes or cannot be
+undone). `llm = false` marks commands that take free words verbatim (typing, shell lines): they run only when
+the sentence starts with their own verb (a phrase's first word or a sample's first word). Return
+`"error: why"` when it fails. `speak = true` speaks the reply (answers, not confirmations).
 
-Give every command rich context, like an MCP tool: the local LLM and the speech recogniser only know what
-the command declares.
+### MUST: every command complete, like an MCP tool (all options usable)
 
-- `description`: one line, what it does and what its parameters mean.
-- `params`: `type` (`string`, `number`, `integer`, `boolean`), `description`, `required`, `enum`; numbers take
-  `min`, `max` and `unit` (`"%"`, `"m"`, `"s"`...). Spoken numbers are parsed for you: "fifty percent", "two
-  point five", "30 cm" (to metres), "max", "half".
-- `vocabulary = {"warpdrive", "nebula"}`: unusual words the command needs heard right. They go into the
-  speech-to-text prompt, and a misheard word one or two letters off ("warpdrove") is corrected to them.
-- `examples`: two to four requests no phrase covers, each with its command line.
+Voice, the decision model, the LLM and other agents only know what the command declares. Every
+`voice.command` you write or change MUST have:
 
-One sentence can hold several commands ("turn on ambient focus and set the intensity to zero"): the fast
-path splits on "and", "then", "also" and commas; the LLM may answer with up to three lines.
-Test without speaking: `mcx-ui voice match "git status"` (which command and arguments), then
-`mcx-ui voice run "git status"` (runs it, prints the result as JSON); `mcx-ui voice list` lists commands.
+- `description`: one line, what it does and every option it takes;
+- `params`: each with `type` (`string`, `number`, `integer`, `boolean`), `description`, `required`; `enum` for
+  closed sets; `min`, `max`, `unit` (`"%"`, `"m"`, `"s"`...) for numbers (spoken numbers are parsed for you in
+  English and Italian: "fifty percent", "due metri e mezzo", "30 cm", "max", "half");
+- `synonyms` for every enum value people say differently, English and Italian;
+- `phrases` for the common wordings and `samples`: 4 or more natural requests, English and Italian, covering
+  every option (a sample per enum value, with and without numbers);
+- `vocabulary` for unusual words, `examples` for tricky phrasings.
+
+The app checks this when the command registers: missing parts appear as `voice.command <name>: ...` lines in the
+script log (`mcx-ui script log <name>`) and as `warnings` in `mcx-ui voice registry`. Fix them all: a command
+with warnings is a command the user cannot reach.
+
+### Disabled means gone
+
+A script's or plugin's commands are removed when it is disabled, deleted or stopped by an error, and come back
+when it is enabled again. When your behaviour turns a feature off at runtime, remove its command too
+(`voice.remove("git_status")`) and register it again when it is back. Never leave a command whose action can no
+longer work: the decision model and agents would offer it.
+
+### Test, then tell
+
+`mcx-ui voice registry` (the full JSON: your command, its schema, samples, `warnings: []`),
+`mcx-ui voice decide "mostrami lo stato di git"` (what the decision model makes of a sentence, with scores;
+nothing runs), `mcx-ui voice match "git status"` (the fast path), then `mcx-ui voice run "git status"` (runs it,
+prints the result as JSON). One sentence can hold several commands ("turn on ambient focus and set the
+intensity to zero", "accendi il focus e poi apri i file"): they run in the spoken order, and a part without a
+verb ("e la morbidezza a mezzo metro") repeats the previous command with its own values.
 
 ## Rules
 
+- **Review first.** Before you create, change, enable or delete a script, a plugin, a gesture or a voice command,
+  show the user what will change (file, behaviour, commands added or removed, how to undo) and wait for their
+  OK. Then write it, test it as above and report the result.
 - One behaviour per file; keep callbacks short. A callback that runs more than 200,000 Lua instructions is
   stopped and the script disabled (shown as ERROR in the Scripts panel): no busy loops, use `app.every`.
 - Never put secrets in scripts. Scripts can type into the terminal, so they run with the user's rights.

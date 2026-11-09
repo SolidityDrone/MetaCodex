@@ -138,7 +138,8 @@ Rules that keep it working:
 `terminal.run(cmd)` · `terminal.send(text)` · `terminal.new()` · `browser.open(url)` ·
 `keyboard.open()` · `settings.get/set(key, value)` · `app.action("verb:arg")` · `app.after(s, fn)` ·
 `app.every(s, fn)` · `store.get/set` · `gesture.emit(name, hand, phase)` · `voice.listen()` ·
-`voice.say(text)` · `voice.command{...}` (the same plugin can add voice commands) · `log(...)`
+`voice.say(text)` · `voice.command{...}` (the same plugin can add voice commands: complete, with `samples` in
+English and Italian; skill `quest-scripting`, "MUST: every command complete") · `log(...)`
 
 Panels: `dock` `terminals` `files` `git` `browser` `scripts` `gestures` `agents` `threads` `thread`
 `thread-new` `vault` `settings` `voice`. Actions (`app.action`, bindings): `open:` `close:` `toggle:<panel>`,
@@ -148,6 +149,8 @@ Panels: `dock` `terminals` `files` `git` `browser` `scripts` `gestures` `agents`
 
 ## 5. Procedure (do all of it)
 
+0. Review first: tell the user what the plugin will add or change (gestures, reactions, voice commands) and how
+   to turn it off, and wait for their OK. The same for changes to an existing plugin.
 1. Restate the gesture as a precise shape/motion: which hand(s), which fingers straight or curled,
    where the palm and thumb point, what motion, how long. Pick the mechanism from section 0.
 2. `mcx-ui gesture list` and `mcx-ui plugin list`: reuse existing names; pick a new plugin id.
@@ -178,6 +181,12 @@ while they hold it.
 - [ ] No reliance on pinch / fist / point / palm-up-pinch alone
 - [ ] `mcx-ui plugin list` shows no error; the simulated event produced the reaction
 - [ ] The answer tells the user how to do it, how to see it live, and how to turn it off
+- [ ] The user saw the change and said OK before it was written (review first)
+- [ ] Voice commands the plugin adds are complete: `mcx-ui voice registry` shows them with `warnings: []`, and
+      `mcx-ui voice decide "<a sample in your own words>"` picks them; disabling the plugin
+      (`mcx-ui plugin disable <id>`) removes them from `mcx-ui voice registry`
+- [ ] Nothing stays registered that cannot run: a reaction or command that depends on something switched off
+      is removed with it (`voice.remove(name)`, or disable the plugin)
 
 ## Related skills
 
