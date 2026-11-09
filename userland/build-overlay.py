@@ -21,15 +21,21 @@ def mode_for(rel, is_dir):
     return 0o755 if any(p in ("bin", "sbin") for p in parts[:-1]) or rel.endswith(".sh") else 0o644
 
 
+def junk(name):
+    """Local caches a test run leaves behind (git ignores them): never shipped."""
+    return name in ("__pycache__", ".pytest_cache") or name.endswith((".pyc", ".pyo"))
+
+
 raw = io.BytesIO()
 with tarfile.open(fileobj=raw, mode="w", format=tarfile.PAX_FORMAT) as tf:
     entries = []
     for dirpath, dirnames, filenames in os.walk(src):
-        dirnames.sort()
+        dirnames[:] = sorted(d for d in dirnames if not junk(d))
         for d in dirnames:
             entries.append(os.path.join(dirpath, d))
         for f in sorted(filenames):
-            entries.append(os.path.join(dirpath, f))
+            if not junk(f):
+                entries.append(os.path.join(dirpath, f))
     # files kept elsewhere in the repo, placed into the rootfs too (one source of truth): agent skills, so
     # `claude` / `opencode` in a terminal find them as well as MQH threads do. MetaCodex's own skills come
     # from the MQH guide plugin; third-party ones from userland/agent-skills (tools/sync-agent-skills.sh).
@@ -54,8 +60,10 @@ with tarfile.open(fileobj=raw, mode="w", format=tarfile.PAX_FORMAT) as tf:
         extra[f"{template_dst}/src/{f}"] = os.path.join(template, "src", f)
     for dst, srcdir in trees.items():
         for dp, dn, fn in os.walk(srcdir):
-            dn.sort()
+            dn[:] = sorted(d for d in dn if not junk(d))
             for f in sorted(fn):
+                if junk(f):
+                    continue
                 full = os.path.join(dp, f)
                 extra[dst + "/" + os.path.relpath(full, srcdir).replace(os.sep, "/")] = full
     for f in ("SOURCES.md", "LICENSE-unity-skills.md", "LICENSE-meta-agentic-tools"):
