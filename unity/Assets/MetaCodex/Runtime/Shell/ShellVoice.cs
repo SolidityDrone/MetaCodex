@@ -149,6 +149,27 @@ namespace MetaCodex.Shell
             Qvac.StateChanged += OnQvacStateChanged;
             Qvac.Init(_main, Application.persistentDataPath, Settings.voice.threads);
             if (Settings.voice.enabled && Qvac.ModelsPresent) Qvac.StartService();
+            // first start of a new install: no models yet. Start the service and fetch them once by itself, so voice works
+            // without anyone opening VOICE > INSTALL (the marker keeps the user's later choice to remove them)
+            else if (Settings.voice.enabled && !File.Exists(VoiceAutoInstallMarker) && !Application.isEditor) { _autoInstallVoice = true; Qvac.StartService(); }
+        }
+
+        private static string VoiceAutoInstallMarker => Path.Combine(Application.persistentDataPath, "voice-models-auto-install.done");
+        private bool _autoInstallVoice;
+
+        /// The first-start download of the voice models (speech-to-text, LLM, text-to-speech, decision model), once.
+        private void AutoInstallVoiceModels()
+        {
+            _autoInstallVoice = false;
+            _embedInstallAsked = true; // the decision model comes with this request: no second one for it
+            try { File.WriteAllText(VoiceAutoInstallMarker, DateTime.Now.ToString("s")); } catch (Exception ex) { Log("voice auto install marker: " + ex.Message); }
+            if (ModelInstalled("asr")) return;
+            Qvac.Client.Install(new[] { "asr", "llm", "tts", "embed" }, (r, e) =>
+            {
+                if (e != null) { Log("voice: first-start model install: " + e); return; }
+                Toast("Downloading the voice models (about 660 MB) in the background: voice commands work when they are in", "info");
+                After(1f, PollVoiceStatus);
+            });
         }
 
         private void OnQvacStateChanged()
@@ -237,6 +258,7 @@ namespace MetaCodex.Shell
                 _nextVoicePoll = Time.unscaledTime + 2f;
                 PollVoiceStatus();
             }
+            if (_autoInstallVoice && Qvac != null && Qvac.IsRunning && QvacStatus != null) AutoInstallVoiceModels();
             // the decision model: (re)built from the registry when the service has its model and the commands changed
             if (Decider != null && Settings.voice.decide && Qvac != null && Qvac.IsRunning && !Decider.Ready && !Decider.Building
                 && Time.unscaledTime >= _nextDeciderTry && QvacStatus != null && !ModelInstalled("embed") && ModelInstalled("asr") && !_embedInstallAsked)
