@@ -808,6 +808,9 @@ namespace MetaCodex.UI
         public static Func<string, string> EditorProvider;
         /// The terminal asked for the keyboard (dock button): the terminal input owns that one.
         public static event Action TerminalKeyboardRequested;
+        /// Asked before the headset keyboard opens (for a field or the terminal): true = it shows something first and
+        /// calls `open` itself afterwards (the shell's Surface Keyboard tip, once a session).
+        public static Func<Action, bool> BeforeSystemKeyboard;
         private static TouchScreenKeyboard _kb;
         private static Action<string> _onChanged, _onDone;
         private static string _last;
@@ -820,6 +823,7 @@ namespace MetaCodex.UI
             _last = initial ?? "";
             if (TouchScreenKeyboard.isSupported && Application.platform == RuntimePlatform.Android)
             {
+                if (BeforeSystemKeyboard != null && BeforeSystemKeyboard(() => Edit(initial, secure, onChanged, onDone))) { _onChanged = null; _onDone = null; return; }
                 _kb = TouchScreenKeyboard.Open(_last, TouchScreenKeyboardType.Default, false, false, secure, false, "");
                 return;
             }
@@ -828,7 +832,11 @@ namespace MetaCodex.UI
             Finish(_last);
         }
 
-        public static void OpenForTerminal() => TerminalKeyboardRequested?.Invoke();
+        public static void OpenForTerminal()
+        {
+            if (BeforeSystemKeyboard != null && BeforeSystemKeyboard(OpenForTerminal)) return;
+            TerminalKeyboardRequested?.Invoke();
+        }
 
         /// Called every frame (by the input router).
         public static void Pump()

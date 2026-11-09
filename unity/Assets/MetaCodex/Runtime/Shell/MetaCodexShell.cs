@@ -163,6 +163,7 @@ namespace MetaCodex.Shell
             EnsureStarterPlugins();
             InitSessionContext(); // the session's context for the local model (docs/session-context.md)
             UiKeyboard.TerminalKeyboardRequested += () => app?.Input?.ToggleSystemKeyboard();
+            UiKeyboard.BeforeSystemKeyboard = KeyboardTip;
 
             BuildPanels();
             BuildWrist();
@@ -564,6 +565,32 @@ namespace MetaCodex.Shell
         }
 
         public void OpenKeyboard() => UiKeyboard.OpenForTerminal();
+
+        private bool _keyboardTipShown;
+
+        /// The first time in a session the headset keyboard is asked for (until DON'T SHOW AGAIN): a tip for the system's
+        /// Surface Keyboard and Touchpad (Settings > Experimental, Horizon OS v85+, Quest 3 / 3S), which lays the keyboard
+        /// on a table under the hands with a touchpad. Apps can neither place the system keyboard nor turn that mode on;
+        /// the owner chose the system's over our own (2026-11-09). Shown before the keyboard opens: once it is open the
+        /// app has no input focus and the windows step aside.
+        private bool KeyboardTip(Action open)
+        {
+            if (_keyboardTipShown || !Settings.surfaceKeyboardTip) return false;
+            _keyboardTipShown = true;
+            Modal("TYPE ON A TABLE",
+                "Quest 3 and 3S can turn a table into a keyboard with a touchpad: Settings > Experimental > Surface Keyboard and Touchpad " +
+                "(Horizon OS v85 or later, rolling out). Then, when the keyboard opens, rest both hands flat on the table.",
+                new[] { "OPEN KEYBOARD", "SETTINGS", "DON'T SHOW AGAIN" }, i =>
+                {
+                    if (i == 1) { SystemBridge.OpenSystemSettings(); return; }
+                    if (i == 2) { Settings.surfaceKeyboardTip = false; OnSettingsChanged(); }
+                    open();
+                });
+            return true;
+        }
+
+        /// Self-tests: the tip as at the start of a session.
+        public void ResetKeyboardTipForTest() => _keyboardTipShown = false;
 
         public string GetSetting(string key) => Settings.Get(key);
 

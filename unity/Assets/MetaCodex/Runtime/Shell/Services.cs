@@ -141,6 +141,8 @@ namespace MetaCodex.Shell
 #endif
         }
         public static bool OpenAppSettings() => DeepLink("systemux://settings", "/applications?package=" + Application.identifier);
+        /// The headset's Settings (its first page: no deep link to Experimental is known to work).
+        public static bool OpenSystemSettings() => DeepLink("systemux://settings", null);
         public static bool OpenFilesApp() => DeepLink("systemux://file-manager", null);
 
         private static bool DeepLink(string intentData, string uri)
@@ -246,6 +248,8 @@ namespace MetaCodex.Shell
         public float focusBlur = 0f;
         /// Real things (hands, people, objects) in front of a window are shown, from the room's live depth.
         public bool occludeUi = true;
+        /// The tip for the system's Surface Keyboard and Touchpad, the first time the keyboard is asked for in a session.
+        public bool surfaceKeyboardTip = true;
         /// The depth is sharpened with the passthrough camera's picture (cleaner cut-outs; the camera runs).
         public bool depthCamera = true;
         /// SYSTEM > STORAGE: warn when the Linux userland grows past this many GB (0: no limit).

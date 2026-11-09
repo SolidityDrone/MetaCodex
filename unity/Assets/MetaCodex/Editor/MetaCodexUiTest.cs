@@ -1587,6 +1587,25 @@ end)
                 $"SHARPNESS gone (slider {sliderGone}, voice {voiceGone}); the render scale is {MetaCodexShell.RenderScale}");
 
             // the WRIST main menu has its own section (wrist)
+            // the headset keyboard: the first time it is asked for, a tip for the system's Surface Keyboard and Touchpad
+            // (owner 2026-11-09), then the keyboard; DON'T SHOW AGAIN keeps it away
+            int asked = 0;
+            Action count = () => asked++;
+            UiKeyboard.TerminalKeyboardRequested += count;
+            bool tip0 = shell.Settings.surfaceKeyboardTip;
+            shell.Settings.surfaceKeyboardTip = true;
+            shell.ResetKeyboardTipForTest();
+            shell.OpenKeyboard();
+            var tip = UiModal.OpenPanels.FirstOrDefault(m => m.Title == "TYPE ON A TABLE");
+            bool tipFirst = tip != null && asked == 0;
+            tip?.Elements.OfType<UiButton>().First(b => b.Text == "DON'T SHOW AGAIN").Click();
+            int afterTip = asked;
+            shell.ResetKeyboardTipForTest(); // a new session: still not shown again
+            shell.OpenKeyboard();
+            Check(tipFirst && afterTip == 1 && asked == 2 && !shell.Settings.surfaceKeyboardTip && UiModal.OpenCount == 0,
+                $"keyboard: a Surface Keyboard tip comes first ({tipFirst}), then the keyboard ({afterTip}); after DON'T SHOW AGAIN it opens straight away ({asked} requests)");
+            UiKeyboard.TerminalKeyboardRequested -= count;
+            shell.Settings.surfaceKeyboardTip = tip0;
         }
 
         /// The WRIST main menu (owner 2026-11-09): firm on the wrist, never closing or running off while the right hand

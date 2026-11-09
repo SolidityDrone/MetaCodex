@@ -138,6 +138,7 @@ namespace MetaCodex.App
         public void ToggleSystemKeyboard()
         {
             if (_sys != null) { _sys.active = false; _sys = null; _sysClosedAt = Time.unscaledTime; return; }
+            if (MetaCodex.UI.UiKeyboard.BeforeSystemKeyboard != null && MetaCodex.UI.UiKeyboard.BeforeSystemKeyboard(ToggleSystemKeyboard)) return;
             _sys = TouchScreenKeyboard.Open("", TouchScreenKeyboardType.Default, false, false, false, false, "Type into the terminal");
             _sysText = "";
         }

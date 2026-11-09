@@ -651,7 +651,7 @@ namespace MetaCodex.Shell
             if (sh == null) return null;
             var m = new Material(sh) { name = "focus hand cut-out" };
             m.SetFloat(HandId, 1f);
-            m.SetFloat(IntensityId, 1f); // BlendOp Min: clear inside the hand, the outline keeps what is under it
+            m.SetFloat(IntensityId, 1f); // fully clear in the hand's core, a soft fade to its outline (FocusMesh)
             return m;
         }
 

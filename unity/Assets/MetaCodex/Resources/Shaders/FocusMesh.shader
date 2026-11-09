@@ -1,7 +1,10 @@
 // MetaCodex, the hands: capsules on the tracked hand joints, drawn after everything (windows, focus darkness, blur),
-// depth-tested against the opaque panels. Each fragment lowers the eye buffer (BlendOp Min, colour and alpha) so the
-// real hand shows through, with a soft silhouette: clear where the capsule faces you, the outline keeps what is under
-// it. A hand in front of a window is seen; one behind an opaque window stays hidden.
+// depth-tested against the opaque panels. Each fragment fades the eye buffer (colour and alpha together, multiplied by
+// 1 - a) so the real hand shows through: fully clear in the finger's core (where the capsule faces you), the window
+// fading back in smoothly towards the outline, untouched at it. A hand in front of a window is seen; one behind an
+// opaque window stays hidden. 0.7.7 lowered it with BlendOp Min and black: the colour went to 0 over the whole
+// capsule, its rim too, so a capsule wider than the finger cut a ring of passthrough round it out of the wrist menu
+// (owner 2026-11-09: "a halo through which I can see the passthrough, that cuts the radial menu").
 Shader "MetaCodex/FocusMesh"
 {
     Properties
@@ -19,8 +22,7 @@ Shader "MetaCodex/FocusMesh"
             Cull Off
             ZWrite Off
             ZTest LEqual // in front of opaque panels (their depth), never through one the hand is behind
-            BlendOp Min
-            Blend One One
+            Blend Zero OneMinusSrcAlpha // dst *= 1 - a: a soft hole, overlapping capsules simply clear a little more
             HLSLPROGRAM
             #pragma vertex vert
             #pragma fragment frag
@@ -51,7 +53,7 @@ Shader "MetaCodex/FocusMesh"
                 UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
                 float3 view = normalize(GetCameraPositionWS() - i.positionWS);
                 float facing = abs(dot(normalize(i.normalWS), view));
-                float a = _Intensity * (1.0 - smoothstep(0.12, 0.55, facing)); // clear inside, soft at the outline
+                float a = _Intensity * smoothstep(0.30, 0.80, facing); // the core clear, fading to nothing at the outline
                 return half4(0, 0, 0, a);
             }
             ENDHLSL
