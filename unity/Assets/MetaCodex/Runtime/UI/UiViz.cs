@@ -1220,55 +1220,129 @@ namespace MetaCodex.UI
 namespace MetaCodex.UI
 {
     /// Tiles for installed tools: a round category glyph, the name and the version; missing ones are dimmed.
+    /// Tool tiles in groups (SYSTEM > TOOLS): a header per group (its name and what it is for, so a beginner knows
+    /// what to pick), then its tiles. Each tile: the tool's icon on a badge (its own logo on the brand colour, or a
+    /// pictogram on the group's colour), name, version or how to get it. Icons are sized from their measured content
+    /// (UiIcons.TryGetIcon), centred on the badge, never stretched.
     public sealed class UiToolGrid : UiCanvas
     {
-        public sealed class Tile { public string Name, Version, Category, Glyph, Hint = "+ install"; public Color Tint; public bool Found; public object Tag; }
+        public sealed class Tile { public string Name, Version, Category, Group, Glyph, Hint = "+ install"; public Color Tint; public bool Found; public object Tag; }
+        public sealed class Group { public string Id, Title, Blurb; public Color Tint; }
         public readonly List<Tile> Tiles = new List<Tile>();
-        public float TileW = 0.112f, TileH = 0.044f;
+        public readonly List<Group> Groups = new List<Group>();
+        public float TileW = 0.112f, TileH = 0.044f, HeaderH = 0.026f;
         public Action<Tile> OnPick;
         public override bool Interactive => true;
         private readonly List<(Rect r, Tile t)> _hits = new List<(Rect, Tile)>();
         private Tile _hover;
-        private float _scroll, _dragStart;
+        private float _scroll, _dragStart, _contentH;
         private bool _dragged;
+        private const float Spacing = 0.004f;
 
-        private int Cols => Mathf.Max(1, Mathf.FloorToInt((Rect.width + 0.004f) / (TileW + 0.004f)));
-        private int RowsVisible => Mathf.Max(1, Mathf.FloorToInt((Rect.height + 0.004f) / (TileH + 0.004f)));
-        private int MaxScroll => Mathf.Max(0, Mathf.CeilToInt(Tiles.Count / (float)Cols) - RowsVisible);
+        private int Cols => Mathf.Max(1, Mathf.FloorToInt((Rect.width + Spacing) / (TileW + Spacing)));
+        public float MaxScroll => Mathf.Max(0f, _contentH - Rect.height);
+        /// Tests: where each drawn tile's badge and icon went.
+        public readonly List<(Tile tile, Rect badge, Rect icon, float aspect)> DrawnIcons = new List<(Tile, Rect, Rect, float)>();
+
+        /// The layout in content coordinates (y down from the top, unscrolled): group headers and tile rects.
+        private List<(Group g, Rect r, Tile t)> Layout(float tw)
+        {
+            var items = new List<(Group, Rect, Tile)>();
+            int cols = Cols;
+            float y = 0f;
+            var known = new HashSet<string>(Groups.Select(x => x.Id));
+            var order = Groups.Concat(Tiles.Any(x => x.Group == null || !known.Contains(x.Group)) ? new[] { new Group { Id = null, Title = "OTHER", Tint = Theme.Frame } } : new Group[0]);
+            foreach (var g in order)
+            {
+                var tiles = Tiles.Where(x => g.Id == null ? x.Group == null || !known.Contains(x.Group) : x.Group == g.Id).ToList();
+                if (tiles.Count == 0) continue;
+                if (Groups.Count > 0) { items.Add((g, new Rect(0f, y, Rect.width, HeaderH), null)); y += HeaderH + Spacing; }
+                for (int i = 0; i < tiles.Count; i++)
+                {
+                    items.Add((g, new Rect((i % cols) * (tw + Spacing), y + (i / cols) * (TileH + Spacing), tw, TileH), tiles[i]));
+                }
+                y += Mathf.CeilToInt(tiles.Count / (float)cols) * (TileH + Spacing) + Spacing * 2f;
+            }
+            _contentH = Mathf.Max(0f, y - Spacing * 3f);
+            return items;
+        }
 
         protected override void Draw()
         {
             _hits.Clear();
+            DrawnIcons.Clear();
             var t = Theme;
-            int cols = Cols, rows = RowsVisible;
-            float tw = (Rect.width - 0.004f * (cols - 1)) / cols;
-            int first = Mathf.FloorToInt(_scroll) * cols;
-            for (int i = first; i < Tiles.Count && i < first + cols * rows; i++)
+            int cols = Cols;
+            float tw = (Rect.width - Spacing * (cols - 1)) / cols;
+            var items = Layout(tw);
+            _scroll = Mathf.Clamp(_scroll, 0f, MaxScroll);
+            foreach (var (g, lr, tile) in items)
             {
-                var tile = Tiles[i];
-                int k = i - first;
-                var r = new Rect(Rect.x + (k % cols) * (tw + 0.004f), Rect.y + (k / cols) * (TileH + 0.004f), tw, TileH);
-                bool hov = tile == _hover;
-                Box(r, tile.Found ? tile.Tint : t.Frame, 0.006f, 0, hov ? 0.55f : tile.Found ? 0.14f : 0.04f, 0.002f);
-                float d = TileH * 0.66f;
-                var c = new Vector2(r.x + 0.006f + d * 0.5f, r.center.y);
-                bool logo = UiIcons.TryGet(tile.Name, out var uv, out var brand);
-                // the tool's own logo on its brand colour (dark brand colours get the steel plate instead)
-                var col = logo ? (brand.r * 0.3f + brand.g * 0.59f + brand.b * 0.11f < 0.12f ? UiTheme.Hex(0x2E3F55) : brand) : tile.Found ? tile.Tint : t.Frame;
-                Pill(new Rect(c.x - d * 0.5f, c.y - d * 0.5f, d, d), new Color(col.r, col.g, col.b, tile.Found ? 0.95f : 0.30f));
-                if (logo) Icon(new Rect(c.x - d * 0.36f, c.y - d * 0.36f, d * 0.72f, d * 0.72f), uv, tile.Found ? Color.white : new Color(1f, 1f, 1f, 0.45f));
-                else Txt(new Rect(c.x - d * 0.5f, c.y - d * 0.5f, d, d), tile.Glyph ?? "·", d * 0.62f, tile.Found ? Color.white : t.TextDim, TextAlignmentOptions.Center);
-                float tx = r.x + 0.012f + d;
-                Txt(new Rect(tx, r.y + 0.003f, r.xMax - tx - 0.004f, TileH * 0.5f), "<b>" + UiViz.NoParse(tile.Name) + "</b>", 0.0112f, tile.Found ? t.Text : t.TextDim);
-                Txt(new Rect(tx, r.y + TileH * 0.5f, r.xMax - tx - 0.004f, TileH * 0.45f), tile.Found ? UiViz.NoParse(UiViz.Cut(tile.Version ?? "", 18)) : UiViz.NoParse(tile.Hint), 0.0094f, tile.Found ? t.TextDim : t.TextAccent, TextAlignmentOptions.MidlineLeft, tile.Found ? t.Mono : null);
-                _hits.Add((r, tile));
+                // only what is wholly in view (a canvas cannot clip)
+                if (lr.y < _scroll - 0.0005f || lr.yMax > _scroll + Rect.height + 0.0005f) continue;
+                var r = new Rect(Rect.x + lr.x, Rect.y + lr.y - _scroll, lr.width, lr.height);
+                if (tile == null) { DrawHeader(r, g); continue; }
+                DrawTile(r, tile, g);
             }
-            if (MaxScroll > 0)
+            if (MaxScroll > 0f)
             {
-                float frac = rows / (float)(MaxScroll + rows), pos = _scroll / MaxScroll;
+                float frac = Rect.height / Mathf.Max(Rect.height, _contentH), pos = _scroll / MaxScroll;
                 float h = Rect.height * frac;
                 Pill(new Rect(Rect.xMax + 0.002f, Rect.y + (Rect.height - h) * pos, 0.003f, h), t.Accent);
             }
+        }
+
+        private void DrawHeader(Rect r, Group g)
+        {
+            var t = Theme;
+            Pill(new Rect(r.x, r.y + r.height * 0.28f, 0.004f, r.height * 0.44f), g.Tint);
+            string title = "<b>" + UiViz.NoParse(g.Title ?? "") + "</b>";
+            float tw = UiViz.TextWidth(g.Title ?? "", 0.0108f) + 0.012f;
+            Txt(new Rect(r.x + 0.008f, r.y, tw, r.height), title, 0.0108f, t.Text, TextAlignmentOptions.MidlineLeft, t.Display);
+            if (!string.IsNullOrEmpty(g.Blurb))
+                Txt(new Rect(r.x + 0.008f + tw, r.y, r.width - tw - 0.01f, r.height), UiViz.NoParse(g.Blurb), 0.0090f, t.TextDim, TextAlignmentOptions.MidlineLeft);
+            Stroke(new Vector2(r.x, r.yMax - 0.0006f), new Vector2(r.xMax, r.yMax - 0.0006f), 0.0007f, new Color(g.Tint.r, g.Tint.g, g.Tint.b, 0.35f));
+        }
+
+        private void DrawTile(Rect r, Tile tile, Group g)
+        {
+            var t = Theme;
+            bool hov = tile == _hover;
+            var tint = g?.Tint ?? tile.Tint;
+            Box(r, tile.Found ? tint : t.Frame, 0.006f, 0, hov ? 0.55f : tile.Found ? 0.14f : 0.04f, 0.002f);
+            float d = TileH * 0.70f;
+            var c = new Vector2(r.x + 0.005f + d * 0.5f, r.center.y);
+            var badge = new Rect(c.x - d * 0.5f, c.y - d * 0.5f, d, d);
+            bool has = UiIcons.TryGetIcon(tile.Name, out var ic);
+            // the tool's own logo on its brand colour (too dark ones get the steel plate); pictograms on the group's colour
+            Color col = has && ic.Logo && ic.HasBrand ? (ic.Brand.r * 0.3f + ic.Brand.g * 0.59f + ic.Brand.b * 0.11f < 0.12f ? UiTheme.Hex(0x2E3F55) : ic.Brand)
+                : has ? Color.Lerp(tint, Color.black, 0.25f) : tile.Found ? tint : t.Frame;
+            Pill(badge, new Color(col.r, col.g, col.b, tile.Found ? 0.95f : 0.30f));
+            if (has)
+            {
+                // fit the measured content: the long side gets more room the thinner the logo (Go, Vulkan, Android)
+                float a = ic.Aspect, thin = Mathf.Min(a, 1f / a);
+                float m = d * (0.58f + 0.16f * (1f - thin));
+                float w = a >= 1f ? m : m * a, h = a >= 1f ? m / a : m;
+                var ir = new Rect(c.x - w * 0.5f, c.y - h * 0.5f, w, h);
+                Icon(ir, ic.Uv, tile.Found ? Color.white : new Color(1f, 1f, 1f, 0.45f));
+                DrawnIcons.Add((tile, badge, ir, a));
+            }
+            else Txt(badge, tile.Glyph ?? "·", d * 0.6f, tile.Found ? Color.white : t.TextDim, TextAlignmentOptions.Center);
+            float tx = r.x + 0.011f + d;
+            Txt(new Rect(tx, r.y + 0.003f, r.xMax - tx - 0.004f, TileH * 0.5f), "<b>" + UiViz.NoParse(tile.Name) + "</b>", 0.0112f, tile.Found ? t.Text : t.TextDim);
+            Txt(new Rect(tx, r.y + TileH * 0.5f, r.xMax - tx - 0.004f, TileH * 0.45f), tile.Found ? UiViz.NoParse(UiViz.Cut(tile.Version ?? "", 18)) : UiViz.NoParse(tile.Hint), 0.0094f, tile.Found ? t.TextDim : t.TextAccent, TextAlignmentOptions.MidlineLeft, tile.Found ? t.Mono : null);
+            _hits.Add((r, tile));
+        }
+
+        /// Tests and the panel: scroll so the group's header is at the top.
+        public void ScrollTo(string group)
+        {
+            float tw = (Rect.width - Spacing * (Cols - 1)) / Cols;
+            var hit = Layout(tw).FirstOrDefault(x => x.t == null && x.g?.Id == group);
+            if (hit.g == null) return;
+            _scroll = Mathf.Clamp(hit.r.y, 0f, MaxScroll);
+            Redraw();
         }
 
         private Tile At(Vector2 p) { foreach (var h in _hits) if (h.r.Contains(p)) return h.t; return null; }
@@ -1280,8 +1354,9 @@ namespace MetaCodex.UI
             float dy = e.Point.y - e.PressPoint.y;
             if (Mathf.Abs(dy) > TileH * 0.4f) _dragged = true;
             if (!_dragged) return;
-            float s = Mathf.Clamp(_dragStart - dy / (TileH + 0.004f), 0, MaxScroll);
-            if (Mathf.FloorToInt(s) != Mathf.FloorToInt(_scroll)) { _scroll = s; Redraw(); } else _scroll = s;
+            float s = Mathf.Clamp(_dragStart - dy, 0f, MaxScroll);
+            // redraw in small steps (a whole canvas each time)
+            if (Mathf.Abs(s - _scroll) > 0.006f || s == 0f || s == MaxScroll) { _scroll = s; Redraw(); }
         }
         public override void OnRelease(UiPointerEvent e, bool inside) { if (!_dragged && inside) OnClick(e); _dragged = false; }
         public override void OnClick(UiPointerEvent e) { var h = At(e.PressPoint) ?? At(e.Point); if (h == null) return; UiSounds.Fire("click"); OnPick?.Invoke(h); }

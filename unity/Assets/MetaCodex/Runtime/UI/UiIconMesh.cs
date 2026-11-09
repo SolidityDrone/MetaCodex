@@ -23,21 +23,43 @@ namespace MetaCodex.UI
             try { if (json != null) _index = JObject.Parse(json.text); } catch (System.Exception) { _index = null; }
         }
 
-        /// The atlas rect (uv) of a tool's logo and its brand colour; false when the tool has no logo.
+        /// One icon: the atlas rect of its drawn content (not the whole cell), that content's width / height, its brand
+        /// colour (logos; pictograms have none) and whether it is the tool's own logo or a pictogram of what it does.
+        public struct Info { public Rect Uv; public float Aspect; public Color Brand; public bool HasBrand; public bool Logo; public string Title; }
+
+        /// The atlas rect (uv) of a tool's icon and its brand colour; false when the tool has none.
         public static bool TryGet(string tool, out Rect uv, out Color brand)
         {
-            uv = default;
-            brand = Color.white;
+            bool ok = TryGetIcon(tool, out var info);
+            uv = info.Uv;
+            brand = info.Brand;
+            return ok;
+        }
+
+        /// The icon of a tool (tools/make-tool-icons.js): uv of the measured content box, computed from the atlas size
+        /// the index records (the imported texture may be resized; fractions of the recorded size stay right).
+        public static bool TryGetIcon(string tool, out Info info)
+        {
+            info = new Info { Brand = Color.white, Aspect = 1f };
             Load();
             if (_atlas == null || _index == null || string.IsNullOrEmpty(tool)) return false;
             string slug = (string)_index["tools"]?[tool] ?? tool;
             var icon = _index["icons"]?[slug];
             if (icon == null) return false;
             int cell = (int)icon["cell"], cols = (int?)_index["columns"] ?? 8, size = (int?)_index["cell"] ?? 128;
-            float cw = size / (float)_atlas.width, ch = size / (float)_atlas.height;
+            float aw = (float?)_index["width"] ?? _atlas.width, ah = (float?)_index["height"] ?? _atlas.height;
             int cx = cell % cols, cy = cell / cols;
-            uv = new Rect(cx * cw, 1f - (cy + 1) * ch, cw, ch);
-            ColorUtility.TryParseHtmlString("#" + (string)icon["hex"], out brand);
+            // the content box in cell units, y down (whole cell for an index without boxes)
+            float bx0 = 0f, by0 = 0f, bx1 = 1f, by1 = 1f;
+            if (icon["box"] is JArray b && b.Count == 4) { bx0 = (float)b[0]; by0 = (float)b[1]; bx1 = (float)b[2]; by1 = (float)b[3]; }
+            float px0 = (cx + bx0) * size, px1 = (cx + bx1) * size, py0 = (cy + by0) * size, py1 = (cy + by1) * size;
+            info.Uv = new Rect(px0 / aw, 1f - py1 / ah, (px1 - px0) / aw, (py1 - py0) / ah);
+            info.Aspect = Mathf.Max(0.05f, (bx1 - bx0) / Mathf.Max(0.001f, by1 - by0));
+            info.Logo = (string)icon["kind"] != "pictogram";
+            info.Title = (string)icon["title"];
+            string hex = (string)icon["hex"];
+            info.HasBrand = !string.IsNullOrEmpty(hex) && ColorUtility.TryParseHtmlString("#" + hex, out info.Brand);
+            if (!info.HasBrand) info.Brand = Color.white;
             return true;
         }
     }

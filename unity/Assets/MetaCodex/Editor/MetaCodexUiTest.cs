@@ -2224,11 +2224,27 @@ end)
             Check(invJ != null && (invJ["tools"] as JArray).Any(x => (string)x["name"] == "git" && (bool)x["installed"] && !string.IsNullOrEmpty((string)x["version"])),
                 "the installed-tools inventory for agents is written (" + inv + ")");
             Check(shell.SystemCommand("tools").Contains("git\t") && shell.SystemCommand("tools json").Contains("\"installed\""), "control port: system tools / tools json");
-            Check(UiIcons.TryGet("git", out _, out _) && UiIcons.TryGet("python3", out _, out _) && UiIcons.TryGet("claude", out _, out _) && !UiIcons.TryGet("fzf", out _, out _),
-                "the tools' own logos (git, python3, claude), a category glyph for tools without one (fzf)");
+            // every tool has its icon: the tool's own logo, or a pictogram of what it does (fzf: a filter)
+            var noIcon = MetaCodexShell.ToolCatalog.Where(c => !UiIcons.TryGetIcon(c.Name, out _)).Select(c => c.Name).ToList();
+            UiIcons.TryGetIcon("git", out var gitIc); UiIcons.TryGetIcon("fzf", out var fzfIc); UiIcons.TryGetIcon("ndk", out var ndkIc);
+            Check(noIcon.Count == 0 && gitIc.Logo && !fzfIc.Logo && ndkIc.Logo && ndkIc.Title == "Android",
+                noIcon.Count == 0 ? $"every one of the {MetaCodexShell.ToolCatalog.Length} tools has an icon (git: its logo, fzf: a pictogram, ndk: Android)" : "tools without an icon: " + string.Join(", ", noIcon));
+            Check(UiIcons.Atlas != null && Mathf.IsPowerOfTwo(UiIcons.Atlas.width) && Mathf.IsPowerOfTwo(UiIcons.Atlas.height), $"the icon atlas is a power of two, never rescaled ({UiIcons.Atlas?.width}x{UiIcons.Atlas?.height})");
+            string[] gone = { "php", "ruby", "lua", "deno" };
+            Check(!MetaCodexShell.ToolCatalog.Any(c => gone.Contains(c.Name)) && MetaCodexShell.ToolCatalog.All(c => MetaCodexShell.ToolGroups.Any(g => g.id == c.Group)),
+                "the catalog: grouped, without php / ruby / lua / deno, with the Android and Quest group (" + string.Join(", ", MetaCodexShell.ToolCatalog.Where(c => c.Group == "android").Select(c => c.Name)) + ")");
             var sp = shell.PanelsById["system"];
             sp.ForceRefresh();
             RenderPanel(sp, "ui-system-tools.png");
+            var grid = sp.Elements.OfType<UiToolGrid>().First();
+            var drawn = grid.DrawnIcons.ToList();
+            var bad = drawn.Where(d => Mathf.Abs(d.icon.width / d.icon.height - d.aspect) > 0.01f || Vector2.Distance(d.icon.center, d.badge.center) > 0.0005f
+                || d.icon.width > d.badge.width + 0.0001f || d.icon.height > d.badge.height + 0.0001f).Select(d => d.tile.Name).ToList();
+            Check(drawn.Count >= 8 && bad.Count == 0, bad.Count == 0 ? $"{drawn.Count} tool icons drawn on their badges: centred, inside, never stretched (aspect kept)" : "icons off their badge or stretched: " + string.Join(", ", bad));
+            grid.ScrollTo("android");
+            RenderPanel(sp, "ui-system-tools-android.png");
+            Check(grid.DrawnIcons.Any(d => d.tile.Name == "ndk") && grid.DrawnIcons.Any(d => d.tile.Name == "glslc"), "scrolled to ANDROID · QUEST: ndk, adb, build-tools, glslc in view");
+            grid.ScrollTo("agents");
             shell.SystemTabsForTest.Select(1);
             sw.Restart();
             while (shell.SystemBusyForTest && sw.Elapsed.TotalSeconds < 120) shell.PumpForTest(1f);

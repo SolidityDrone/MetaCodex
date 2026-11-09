@@ -20,67 +20,98 @@ namespace MetaCodex.Shell
     ///            the app warns when Linux grows past it)
     public sealed partial class MetaCodexShell
     {
-        public sealed class ToolInfo { public string Name, Category, Install, Update, Remove, Path, Version, Raw; public bool Found; }
+        public sealed class ToolInfo { public string Name, Category, Group, Install, Update, Remove, Path, Version, Raw; public bool Found; }
 
-        private static readonly string[] KnownPathAdds = { "$HOME/.bun/bin", "$HOME/.cargo/bin", "$HOME/.deno/bin", "$HOME/.local/bin", "$HOME/go/bin", "/usr/local/go/bin", "/usr/local/bin" };
+        private static readonly string[] KnownPathAdds = { "$HOME/.bun/bin", "$HOME/.cargo/bin", "$HOME/.local/bin", "$HOME/go/bin", "/usr/local/go/bin", "/usr/local/bin", "/opt/android-ndk" };
 
-        // name, command line for the version, category, install, update, remove
-        private static readonly (string name, string ver, string cat, string install, string update, string remove)[] ToolCatalog =
+        /// A tool the TOOLS tab knows: how to see it (`check`: a command on PATH, or an absolute path that exists once it
+        /// is installed), its version line, its group, and how to install / update / remove it ("apt:<packages>",
+        /// "agents" = from the AGENTS panel, or a shell line run in a terminal).
+        public sealed class ToolDef
         {
-            ("git", "git --version", "vcs", "apt:git", "apt:git", "apt:git"),
-            ("gh", "gh --version", "vcs", "apt:gh", "apt:gh", "apt:gh"),
-            ("node", "node --version", "runtime", "mcx-setup", "mcx-setup", null),
-            ("npm", "npm --version", "pkg", "mcx-setup", "npm install -g npm", null),
-            ("pnpm", "pnpm --version", "pkg", "npm install -g pnpm", "npm install -g pnpm", "npm uninstall -g pnpm"),
-            ("bun", "bun --version", "runtime", "apt-get install -y unzip && curl -fsSL https://bun.sh/install | bash", "bun upgrade", "rm -rf ~/.bun"),
-            ("deno", "deno --version", "runtime", "apt-get install -y unzip && curl -fsSL https://deno.land/install.sh | sh", "deno upgrade", "rm -rf ~/.deno"),
-            ("python3", "python3 --version", "runtime", "apt:python3 python3-pip python3-venv", "apt:python3", null),
-            ("pip", "pip3 --version", "pkg", "apt:python3-pip", "apt:python3-pip", "apt:python3-pip"),
-            ("uv", "uv --version", "pkg", "curl -LsSf https://astral.sh/uv/install.sh | sh", "uv self update", "rm -f ~/.local/bin/uv ~/.local/bin/uvx"),
-            ("rustc", "rustc --version", "compiler", "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y", "rustup update", "rustup self uninstall -y"),
-            ("cargo", "cargo --version", "pkg", "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y", "rustup update", null),
-            ("go", "go version", "compiler", "apt:golang", "apt:golang", "apt:golang"),
-            ("gcc", "gcc --version", "compiler", "apt:build-essential", "apt:build-essential", null),
-            ("clang", "clang --version", "compiler", "apt:clang", "apt:clang", "apt:clang"),
-            ("make", "make --version", "build", "apt:make", "apt:make", null),
-            ("cmake", "cmake --version", "build", "apt:cmake", "apt:cmake", "apt:cmake"),
-            ("java", "java -version", "runtime", "apt:default-jdk-headless", "apt:default-jdk-headless", "apt:default-jdk-headless"),
-            ("ruby", "ruby --version", "runtime", "apt:ruby", "apt:ruby", "apt:ruby"),
-            ("php", "php --version", "runtime", "apt:php-cli", "apt:php-cli", "apt:php-cli"),
-            ("lua", "lua -v", "runtime", "apt:lua5.4", "apt:lua5.4", "apt:lua5.4"),
-            ("sqlite3", "sqlite3 --version", "data", "apt:sqlite3", "apt:sqlite3", "apt:sqlite3"),
-            ("jq", "jq --version", "tool", "apt:jq", "apt:jq", "apt:jq"),
-            ("rg", "rg --version", "tool", "apt:ripgrep", "apt:ripgrep", "apt:ripgrep"),
-            ("fd", "fdfind --version", "tool", "apt:fd-find", "apt:fd-find", "apt:fd-find"),
-            ("fzf", "fzf --version", "tool", "apt:fzf", "apt:fzf", "apt:fzf"),
-            ("tmux", "tmux -V", "tool", "apt:tmux", "apt:tmux", "apt:tmux"),
-            ("vim", "vim --version", "editor", "apt:vim", "apt:vim", "apt:vim"),
-            ("nano", "nano --version", "editor", "apt:nano", "apt:nano", null),
-            ("curl", "curl --version", "net", "apt:curl", "apt:curl", null),
-            ("wget", "wget --version", "net", "apt:wget", "apt:wget", "apt:wget"),
-            ("ssh", "ssh -V", "net", "apt:openssh-client", "apt:openssh-client", "apt:openssh-client"),
-            ("claude", "claude --version", "agent", "agents", null, null),
-            ("codex", "codex --version", "agent", "agents", null, null),
-            ("opencode", "opencode --version", "agent", "agents", null, null),
-            ("mqh", "mqh --version", "agent", null, null, null),
-        };
-
-        private static (string glyph, int series) CategoryLook(string cat)
-        {
-            switch (cat)
+            public string Name, Group, Ver, Check, Install, Update, Remove;
+            public ToolDef(string name, string group, string ver, string install, string update = null, string remove = null, string check = null)
             {
-                case "runtime": return ("λ", 0);
-                case "pkg": return ("▣", 2);
-                case "compiler": return ("⚙", 1);
-                case "build": return ("⚒", 3);
-                case "vcs": return ("⎇", 4);
-                case "data": return ("⛁", 6);
-                case "editor": return ("✎", 5);
-                case "net": return ("⇅", 7);
-                case "agent": return ("◆", 6);
-                default: return ("✦", 2);
+                // no update of its own: the same as installing again, except for agent CLIs (their own updaters, via AGENTS)
+                Name = name; Group = group; Ver = ver; Install = install; Update = update ?? (install == "agents" ? null : install); Remove = remove; Check = check ?? ver.Split(' ')[0];
             }
         }
+
+        /// The groups, in the order the tab shows them: what each is for, in words a beginner understands.
+        public static readonly (string id, string title, string blurb, int series)[] ToolGroups =
+        {
+            ("agents", "AI AGENTS", "assistants that read and write code with you", 6),
+            ("js", "JAVASCRIPT · TYPESCRIPT", "run web and Node apps, add packages", 2),
+            ("python", "PYTHON", "scripts, data and AI tools", 0),
+            ("native", "NATIVE CODE", "compilers and build tools for C, C++, Rust and Go", 1),
+            ("android", "ANDROID · QUEST", "build native apps for this headset (NDK, adb, APK tools, Vulkan shaders)", 3),
+            ("git", "GIT", "version control: history, branches, GitHub", 4),
+            ("terminal", "TERMINAL UTILITIES", "download, connect, search, sessions, data", 7),
+            ("editors", "EDITORS", "edit files right in the terminal", 5),
+        };
+
+        private const string NdkUrl = "https://github.com/HomuHomu833/android-ndk-custom/releases/download/r27/android-ndk-r27d-aarch64-linux-gnu.tar.xz";
+        private const string NdkSha256 = "94a7e5a0dffee4ab68cc14adc081674c6f42116046d5ae1eafe1f3492a1045dc";
+
+        /// The Android NDK for this arm64 userland: Google ships Linux builds for x86_64 only, so this is the community
+        /// arm64 build of NDK r27d (LTS, HomuHomu833/android-ndk-custom), pinned to its sha256; checked before unpacking.
+        private static readonly string NdkInstall =
+            "f=/tmp/android-ndk-r27d.tar.xz && curl -fL --retry 3 -o $f " + NdkUrl + " && echo \"" + NdkSha256 + "  $f\" | sha256sum -c - && " +
+            "tar -xJf $f -C /opt && ln -sfn /opt/android-ndk-r27d /opt/android-ndk && rm -f $f && " +
+            "{ echo 'export ANDROID_NDK_HOME=/opt/android-ndk'; echo 'export ANDROID_NDK_ROOT=/opt/android-ndk'; echo 'export PATH=\"$PATH:/opt/android-ndk\"'; } > /etc/profile.d/android-ndk.sh && " +
+            "echo 'NDK r27d in /opt/android-ndk: open a new terminal (ANDROID_NDK_HOME is set there)'";
+
+        public static readonly ToolDef[] ToolCatalog =
+        {
+            new ToolDef("claude", "agents", "claude --version", "agents"),
+            new ToolDef("codex", "agents", "codex --version", "agents"),
+            new ToolDef("opencode", "agents", "opencode --version", "agents"),
+            new ToolDef("mqh", "agents", "mqh --version", null),
+
+            new ToolDef("node", "js", "node --version", "mcx-setup"),
+            new ToolDef("npm", "js", "npm --version", "mcx-setup", "npm install -g npm"),
+            new ToolDef("pnpm", "js", "pnpm --version", "npm install -g pnpm", "npm install -g pnpm", "npm uninstall -g pnpm"),
+            new ToolDef("bun", "js", "bun --version", "apt-get install -y unzip && curl -fsSL https://bun.sh/install | bash", "bun upgrade", "rm -rf ~/.bun"),
+
+            new ToolDef("python3", "python", "python3 --version", "apt:python3 python3-pip python3-venv", "apt:python3"),
+            new ToolDef("pip", "python", "pip3 --version", "apt:python3-pip", "apt:python3-pip", "apt:python3-pip", check: "pip3"),
+            new ToolDef("uv", "python", "uv --version", "curl -LsSf https://astral.sh/uv/install.sh | sh", "uv self update", "rm -f ~/.local/bin/uv ~/.local/bin/uvx"),
+
+            new ToolDef("gcc", "native", "gcc --version", "apt:build-essential"),
+            new ToolDef("clang", "native", "clang --version", "apt:clang lld", "apt:clang lld", "apt:clang lld"),
+            new ToolDef("make", "native", "make --version", "apt:make"),
+            new ToolDef("cmake", "native", "cmake --version", "apt:cmake", "apt:cmake", "apt:cmake"),
+            new ToolDef("ninja", "native", "ninja --version", "apt:ninja-build", "apt:ninja-build", "apt:ninja-build"),
+            new ToolDef("rustc", "native", "rustc --version", "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y", "rustup update", "rustup self uninstall -y"),
+            new ToolDef("cargo", "native", "cargo --version", "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y", "rustup update"),
+            new ToolDef("go", "native", "go version", "apt:golang", "apt:golang", "apt:golang"),
+
+            new ToolDef("ndk", "android", "sed -n 's/^Pkg.Revision = //p' /opt/android-ndk/source.properties", NdkInstall, NdkInstall,
+                "rm -rf /opt/android-ndk-r27d /opt/android-ndk /etc/profile.d/android-ndk.sh", check: "/opt/android-ndk/source.properties"),
+            new ToolDef("java", "android", "java -version", "apt:default-jdk-headless", "apt:default-jdk-headless", "apt:default-jdk-headless"),
+            new ToolDef("adb", "android", "adb version", "apt:adb", "apt:adb", "apt:adb"),
+            new ToolDef("build-tools", "android", "aapt2 version", "apt:aapt apksigner zipalign", "apt:aapt apksigner zipalign", "apt:aapt apksigner zipalign", check: "aapt2"),
+            new ToolDef("glslc", "android", "glslc --version", "apt:glslc", "apt:glslc", "apt:glslc"),
+
+            new ToolDef("git", "git", "git --version", "apt:git", "apt:git", "apt:git"),
+            new ToolDef("gh", "git", "gh --version", "apt:gh", "apt:gh", "apt:gh"),
+
+            new ToolDef("curl", "terminal", "curl --version", "apt:curl"),
+            new ToolDef("wget", "terminal", "wget --version", "apt:wget", "apt:wget", "apt:wget"),
+            new ToolDef("ssh", "terminal", "ssh -V", "apt:openssh-client", "apt:openssh-client", "apt:openssh-client"),
+            new ToolDef("jq", "terminal", "jq --version", "apt:jq", "apt:jq", "apt:jq"),
+            new ToolDef("rg", "terminal", "rg --version", "apt:ripgrep", "apt:ripgrep", "apt:ripgrep"),
+            new ToolDef("fd", "terminal", "fdfind --version", "apt:fd-find", "apt:fd-find", "apt:fd-find"),
+            new ToolDef("fzf", "terminal", "fzf --version", "apt:fzf", "apt:fzf", "apt:fzf"),
+            new ToolDef("tmux", "terminal", "tmux -V", "apt:tmux", "apt:tmux", "apt:tmux"),
+            new ToolDef("sqlite3", "terminal", "sqlite3 --version", "apt:sqlite3", "apt:sqlite3", "apt:sqlite3"),
+
+            new ToolDef("nano", "editors", "nano --version", "apt:nano"),
+            new ToolDef("vim", "editors", "vim --version", "apt:vim", "apt:vim", "apt:vim"),
+            new ToolDef("nvim", "editors", "nvim --version", "apt:neovim", "apt:neovim", "apt:neovim"),
+        };
+
+        private static int GroupSeries(string group) { foreach (var g in ToolGroups) if (g.id == group) return g.series; return 2; }
 
         private readonly List<ToolInfo> _tools = new List<ToolInfo>();
         private readonly Dictionary<string, string> _sysCounts = new Dictionary<string, string>();
@@ -144,7 +175,17 @@ namespace MetaCodex.Shell
                 if (!File.Exists(ToolsCachePath)) return;
                 var j = JObject.Parse(File.ReadAllText(ToolsCachePath));
                 _tools.Clear();
-                foreach (var x in j["tools"] as JArray ?? new JArray()) _tools.Add(x.ToObject<ToolInfo>());
+                // only tools the catalog still has (php, ruby, lua, deno left in 0.7.3), with today's groups
+                foreach (var x in j["tools"] as JArray ?? new JArray())
+                {
+                    var info = x.ToObject<ToolInfo>();
+                    var def = ToolCatalog.FirstOrDefault(c => c.Name == info.Name);
+                    if (def == null) continue;
+                    info.Group = def.Group; info.Category = def.Group; info.Install = def.Install; info.Update = def.Update; info.Remove = def.Remove;
+                    _tools.Add(info);
+                }
+                foreach (var def in ToolCatalog.Where(c => _tools.All(x => x.Name != c.Name)))
+                    _tools.Add(new ToolInfo { Name = def.Name, Group = def.Group, Category = def.Group, Install = def.Install, Update = def.Update, Remove = def.Remove });
                 _sysCounts.Clear();
                 foreach (var p in (j["counts"] as JObject ?? new JObject()).Properties()) _sysCounts[p.Name] = (string)p.Value;
                 _toolsAt = (DateTime?)j["at"] ?? DateTime.MinValue;
@@ -171,8 +212,9 @@ namespace MetaCodex.Shell
             sb.Append("export PATH=\"").Append(string.Join(":", KnownPathAdds)).Append(":$PATH\"; ");
             foreach (var tool in ToolCatalog)
             {
-                string bin = tool.ver.Split(' ')[0];
-                sb.Append($"p=$(command -v {bin} 2>/dev/null) && echo \"T|{tool.name}|$p|$(timeout 6 {tool.ver} 2>&1 | head -1 | tr -d '|')\"; ");
+                // a command on PATH, or (installers that do not put one there) a file that exists once installed
+                string probe = tool.Check.StartsWith("/") ? $"p={tool.Check}; [ -e \"$p\" ]" : $"p=$(command -v {tool.Check} 2>/dev/null)";
+                sb.Append($"{probe} && echo \"T|{tool.Name}|$p|$(timeout 6 {tool.Ver} 2>&1 | head -1 | tr -d '|')\"; ");
             }
             sb.Append("echo \"C|apt|$(dpkg-query -W 2>/dev/null | wc -l)\"; ");
             sb.Append("echo \"C|manual|$(apt-mark showmanual 2>/dev/null | wc -l)\"; ");
@@ -210,12 +252,12 @@ namespace MetaCodex.Shell
             _tools.Clear();
             foreach (var tool in ToolCatalog)
             {
-                found.TryGetValue(tool.name, out var hit);
+                found.TryGetValue(tool.Name, out var hit);
                 var m = hit.raw != null ? VersionRe.Match(hit.raw) : Match.Empty;
                 if (hit.raw != null && !m.Success) m = Regex.Match(hit.raw, @"\b\d+\b"); // java -version: openjdk version "21" 
                 _tools.Add(new ToolInfo
                 {
-                    Name = tool.name, Category = tool.cat, Install = tool.install, Update = tool.update, Remove = tool.remove,
+                    Name = tool.Name, Category = tool.Group, Group = tool.Group, Install = tool.Install, Update = tool.Update, Remove = tool.Remove,
                     Found = hit.path != null, Path = hit.path, Raw = hit.raw, Version = m.Success ? m.Value : hit.raw != null ? Cut(hit.raw, 16) : null,
                 });
             }
@@ -226,10 +268,13 @@ namespace MetaCodex.Shell
             if (_toolGrid == null) return;
             var t = UiTheme.Current;
             _toolGrid.Tiles.Clear();
-            foreach (var tool in _tools.OrderBy(x => x.Found ? 0 : 1).ThenBy(x => Array.FindIndex(ToolCatalog, c => c.name == x.Name)))
+            if (_toolGrid.Groups.Count == 0)
+                foreach (var g in ToolGroups) _toolGrid.Groups.Add(new UiToolGrid.Group { Id = g.id, Title = g.title, Blurb = g.blurb, Tint = UiViz.Series(g.series) });
+            // the catalog's order inside each group: a tool keeps its place whether installed or not
+            foreach (var tool in _tools.OrderBy(x => Array.FindIndex(ToolCatalog, c => c.Name == x.Name)))
             {
-                var (glyph, series) = CategoryLook(tool.Category);
-                _toolGrid.Tiles.Add(new UiToolGrid.Tile { Name = tool.Name, Version = tool.Version, Category = tool.Category, Glyph = glyph, Tint = UiViz.Series(series), Found = tool.Found, Tag = tool, Hint = tool.Install == null ? "not found" : tool.Install == "agents" ? "+ in AGENTS" : "+ install" });
+                string group = tool.Group ?? ToolCatalog.FirstOrDefault(c => c.Name == tool.Name)?.Group;
+                _toolGrid.Tiles.Add(new UiToolGrid.Tile { Name = tool.Name, Version = tool.Version, Category = group, Group = group, Glyph = "✦", Tint = UiViz.Series(GroupSeries(group)), Found = tool.Found, Tag = tool, Hint = tool.Install == null ? "not found" : tool.Install == "agents" ? "+ in AGENTS" : "+ install" });
             }
             _toolGrid.Redraw();
             int n = _tools.Count(x => x.Found);
@@ -266,7 +311,7 @@ namespace MetaCodex.Shell
             ["note"] = "Kept current by MetaCodex (SYSTEM > TOOLS). Install missing tools there or with the command in `install`.",
             ["tools"] = new JArray(_tools.Select(x => new JObject
             {
-                ["name"] = x.Name, ["installed"] = x.Found, ["version"] = x.Version, ["path"] = x.Path, ["category"] = x.Category,
+                ["name"] = x.Name, ["installed"] = x.Found, ["version"] = x.Version, ["path"] = x.Path, ["group"] = x.Group ?? x.Category,
                 ["install"] = x.Found ? null : Cmd(x.Install, "install"),
             })),
         };
@@ -337,7 +382,7 @@ namespace MetaCodex.Shell
                 string what = item.Tag as string;
                 string cmd = what == "install" ? Cmd(tool.Install, "install") : what == "update" ? Cmd(tool.Update, "update") : what == "remove" ? Cmd(tool.Remove, "remove") : null;
                 if (what == "agents") { OpenPanel("agents"); return; }
-                if (what == "show") cmd = $"command -v {tool.Name}; {ToolCatalog.First(c => c.name == tool.Name).ver}";
+                if (what == "show") { var def = ToolCatalog.First(c => c.Name == tool.Name); cmd = (def.Check.StartsWith("/") ? $"ls -la {def.Check}; " : $"command -v {def.Check}; ") + def.Ver; }
                 if (cmd == null) return;
                 if (what == "remove")
                 {

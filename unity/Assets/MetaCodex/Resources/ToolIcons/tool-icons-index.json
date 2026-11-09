@@ -1,156 +1,582 @@
 {
  "cell": 128,
  "columns": 8,
+ "rows": 8,
+ "width": 1024,
+ "height": 1024,
  "icons": {
-  "git": {
+  "si:claude": {
    "cell": 0,
-   "hex": "F03C2E",
-   "title": "Git"
-  },
-  "github": {
-   "cell": 1,
-   "hex": "181717",
-   "title": "GitHub"
-  },
-  "nodedotjs": {
-   "cell": 2,
-   "hex": "5FA04E",
-   "title": "Node.js"
-  },
-  "npm": {
-   "cell": 3,
-   "hex": "CB3837",
-   "title": "npm"
-  },
-  "pnpm": {
-   "cell": 4,
-   "hex": "F69220",
-   "title": "pnpm"
-  },
-  "bun": {
-   "cell": 5,
-   "hex": "000000",
-   "title": "Bun"
-  },
-  "deno": {
-   "cell": 6,
-   "hex": "000000",
-   "title": "Deno"
-  },
-  "python": {
-   "cell": 7,
-   "hex": "3776AB",
-   "title": "Python"
-  },
-  "pypi": {
-   "cell": 8,
-   "hex": "3775A9",
-   "title": "PyPI"
-  },
-  "uv": {
-   "cell": 9,
-   "hex": "DE5FE9",
-   "title": "uv"
-  },
-  "rust": {
-   "cell": 10,
-   "hex": "000000",
-   "title": "Rust"
-  },
-  "go": {
-   "cell": 11,
-   "hex": "00ADD8",
-   "title": "Go"
-  },
-  "gnu": {
-   "cell": 12,
-   "hex": "A42E2B",
-   "title": "GNU"
-  },
-  "llvm": {
-   "cell": 13,
-   "hex": "262D3A",
-   "title": "LLVM"
-  },
-  "cmake": {
-   "cell": 14,
-   "hex": "064F8C",
-   "title": "CMake"
-  },
-  "openjdk": {
-   "cell": 15,
-   "hex": "000000",
-   "title": "OpenJDK"
-  },
-  "ruby": {
-   "cell": 16,
-   "hex": "CC342D",
-   "title": "Ruby"
-  },
-  "php": {
-   "cell": 17,
-   "hex": "777BB4",
-   "title": "PHP"
-  },
-  "lua": {
-   "cell": 18,
-   "hex": "000080",
-   "title": "Lua"
-  },
-  "sqlite": {
-   "cell": 19,
-   "hex": "003B57",
-   "title": "SQLite"
-  },
-  "tmux": {
-   "cell": 20,
-   "hex": "1BB91F",
-   "title": "tmux"
-  },
-  "vim": {
-   "cell": 21,
-   "hex": "019733",
-   "title": "Vim"
-  },
-  "curl": {
-   "cell": 22,
-   "hex": "073551",
-   "title": "curl"
-  },
-  "claude": {
-   "cell": 23,
+   "kind": "logo",
+   "source": "simple-icons",
+   "name": "claude",
+   "title": "Claude",
    "hex": "D97757",
-   "title": "Claude"
+   "box": [
+    0.0859,
+    0.0859,
+    0.9141,
+    0.9141
+   ]
+  },
+  "lu:bot": {
+   "cell": 1,
+   "kind": "pictogram",
+   "source": "lucide",
+   "name": "bot",
+   "title": "bot",
+   "hex": null,
+   "box": [
+    0.1172,
+    0.1875,
+    0.8828,
+    0.8125
+   ]
+  },
+  "si:opencode": {
+   "cell": 2,
+   "kind": "logo",
+   "source": "simple-icons",
+   "name": "opencode",
+   "title": "OpenCode",
+   "hex": "000000",
+   "box": [
+    0.1484,
+    0.0859,
+    0.8516,
+    0.9141
+   ]
+  },
+  "lu:network": {
+   "cell": 3,
+   "kind": "pictogram",
+   "source": "lucide",
+   "name": "network",
+   "title": "network",
+   "hex": null,
+   "box": [
+    0.1172,
+    0.1172,
+    0.8828,
+    0.8828
+   ]
+  },
+  "si:nodedotjs": {
+   "cell": 4,
+   "kind": "logo",
+   "source": "simple-icons",
+   "name": "nodedotjs",
+   "title": "Node.js",
+   "hex": "5FA04E",
+   "box": [
+    0.1328,
+    0.0859,
+    0.8672,
+    0.9141
+   ]
+  },
+  "si:npm": {
+   "cell": 5,
+   "kind": "logo",
+   "source": "simple-icons",
+   "name": "npm",
+   "title": "npm",
+   "hex": "CB3837",
+   "box": [
+    0.0859,
+    0.0859,
+    0.9141,
+    0.9141
+   ]
+  },
+  "si:pnpm": {
+   "cell": 6,
+   "kind": "logo",
+   "source": "simple-icons",
+   "name": "pnpm",
+   "title": "pnpm",
+   "hex": "F69220",
+   "box": [
+    0.0859,
+    0.0859,
+    0.9141,
+    0.9141
+   ]
+  },
+  "si:bun": {
+   "cell": 7,
+   "kind": "logo",
+   "source": "simple-icons",
+   "name": "bun",
+   "title": "Bun",
+   "hex": "000000",
+   "box": [
+    0.0859,
+    0.1328,
+    0.9141,
+    0.8672
+   ]
+  },
+  "si:python": {
+   "cell": 8,
+   "kind": "logo",
+   "source": "simple-icons",
+   "name": "python",
+   "title": "Python",
+   "hex": "3776AB",
+   "box": [
+    0.0859,
+    0.0859,
+    0.9141,
+    0.9141
+   ]
+  },
+  "si:pypi": {
+   "cell": 9,
+   "kind": "logo",
+   "source": "simple-icons",
+   "name": "pypi",
+   "title": "PyPI",
+   "hex": "3775A9",
+   "box": [
+    0.0859,
+    0.1328,
+    0.9141,
+    0.8672
+   ]
+  },
+  "si:uv": {
+   "cell": 10,
+   "kind": "logo",
+   "source": "simple-icons",
+   "name": "uv",
+   "title": "uv",
+   "hex": "DE5FE9",
+   "box": [
+    0.0859,
+    0.0859,
+    0.9141,
+    0.9141
+   ]
+  },
+  "si:gnu": {
+   "cell": 11,
+   "kind": "logo",
+   "source": "simple-icons",
+   "name": "gnu",
+   "title": "GNU",
+   "hex": "A42E2B",
+   "box": [
+    0.0859,
+    0.0938,
+    0.9141,
+    0.9063
+   ]
+  },
+  "si:llvm": {
+   "cell": 12,
+   "kind": "logo",
+   "source": "simple-icons",
+   "name": "llvm",
+   "title": "LLVM",
+   "hex": "262D3A",
+   "box": [
+    0.0859,
+    0.1875,
+    0.9141,
+    0.8125
+   ]
+  },
+  "lu:hammer": {
+   "cell": 13,
+   "kind": "pictogram",
+   "source": "lucide",
+   "name": "hammer",
+   "title": "hammer",
+   "hex": null,
+   "box": [
+    0.1172,
+    0.1484,
+    0.8828,
+    0.8828
+   ]
+  },
+  "si:cmake": {
+   "cell": 14,
+   "kind": "logo",
+   "source": "simple-icons",
+   "name": "cmake",
+   "title": "CMake",
+   "hex": "064F8C",
+   "box": [
+    0.0859,
+    0.0859,
+    0.9141,
+    0.9141
+   ]
+  },
+  "lu:zap": {
+   "cell": 15,
+   "kind": "pictogram",
+   "source": "lucide",
+   "name": "zap",
+   "title": "zap",
+   "hex": null,
+   "box": [
+    0.1875,
+    0.1172,
+    0.8125,
+    0.8828
+   ]
+  },
+  "si:rust": {
+   "cell": 16,
+   "kind": "logo",
+   "source": "simple-icons",
+   "name": "rust",
+   "title": "Rust",
+   "hex": "000000",
+   "box": [
+    0.0859,
+    0.0859,
+    0.9141,
+    0.9141
+   ]
+  },
+  "lu:package": {
+   "cell": 17,
+   "kind": "pictogram",
+   "source": "lucide",
+   "name": "package",
+   "title": "package",
+   "hex": null,
+   "box": [
+    0.1484,
+    0.1172,
+    0.8516,
+    0.8828
+   ]
+  },
+  "si:go": {
+   "cell": 18,
+   "kind": "logo",
+   "source": "simple-icons",
+   "name": "go",
+   "title": "Go",
+   "hex": "00ADD8",
+   "box": [
+    0.0859,
+    0.3359,
+    0.9141,
+    0.6641
+   ]
+  },
+  "si:android": {
+   "cell": 19,
+   "kind": "logo",
+   "source": "simple-icons",
+   "name": "android",
+   "title": "Android",
+   "hex": "3DDC84",
+   "box": [
+    0.0859,
+    0.25,
+    0.9141,
+    0.75
+   ]
+  },
+  "si:openjdk": {
+   "cell": 20,
+   "kind": "logo",
+   "source": "simple-icons",
+   "name": "openjdk",
+   "title": "OpenJDK",
+   "hex": "000000",
+   "box": [
+    0.1641,
+    0.0859,
+    0.8359,
+    0.9141
+   ]
+  },
+  "lu:usb": {
+   "cell": 21,
+   "kind": "pictogram",
+   "source": "lucide",
+   "name": "usb",
+   "title": "usb",
+   "hex": null,
+   "box": [
+    0.1484,
+    0.1484,
+    0.8516,
+    0.8516
+   ]
+  },
+  "lu:package-check": {
+   "cell": 22,
+   "kind": "pictogram",
+   "source": "lucide",
+   "name": "package-check",
+   "title": "package-check",
+   "hex": null,
+   "box": [
+    0.1484,
+    0.1172,
+    0.8828,
+    0.8828
+   ]
+  },
+  "si:vulkan": {
+   "cell": 23,
+   "kind": "logo",
+   "source": "simple-icons",
+   "name": "vulkan",
+   "title": "Vulkan",
+   "hex": "A41E22",
+   "box": [
+    0.0859,
+    0.3828,
+    0.9141,
+    0.6172
+   ]
+  },
+  "si:git": {
+   "cell": 24,
+   "kind": "logo",
+   "source": "simple-icons",
+   "name": "git",
+   "title": "Git",
+   "hex": "F03C2E",
+   "box": [
+    0.0859,
+    0.0859,
+    0.9141,
+    0.9141
+   ]
+  },
+  "si:github": {
+   "cell": 25,
+   "kind": "logo",
+   "source": "simple-icons",
+   "name": "github",
+   "title": "GitHub",
+   "hex": "181717",
+   "box": [
+    0.0859,
+    0.0938,
+    0.9141,
+    0.9063
+   ]
+  },
+  "si:curl": {
+   "cell": 26,
+   "kind": "logo",
+   "source": "simple-icons",
+   "name": "curl",
+   "title": "curl",
+   "hex": "073551",
+   "box": [
+    0.0859,
+    0.1484,
+    0.9141,
+    0.8516
+   ]
+  },
+  "lu:download": {
+   "cell": 27,
+   "kind": "pictogram",
+   "source": "lucide",
+   "name": "download",
+   "title": "download",
+   "hex": null,
+   "box": [
+    0.1484,
+    0.1484,
+    0.8516,
+    0.8516
+   ]
+  },
+  "lu:key-round": {
+   "cell": 28,
+   "kind": "pictogram",
+   "source": "lucide",
+   "name": "key-round",
+   "title": "key-round",
+   "hex": null,
+   "box": [
+    0.1172,
+    0.1172,
+    0.8828,
+    0.8828
+   ]
+  },
+  "lu:braces": {
+   "cell": 29,
+   "kind": "pictogram",
+   "source": "lucide",
+   "name": "braces",
+   "title": "braces",
+   "hex": null,
+   "box": [
+    0.1484,
+    0.1484,
+    0.8516,
+    0.8516
+   ]
+  },
+  "lu:search": {
+   "cell": 30,
+   "kind": "pictogram",
+   "source": "lucide",
+   "name": "search",
+   "title": "search",
+   "hex": null,
+   "box": [
+    0.1484,
+    0.1484,
+    0.8516,
+    0.8516
+   ]
+  },
+  "lu:folder-search": {
+   "cell": 31,
+   "kind": "pictogram",
+   "source": "lucide",
+   "name": "folder-search",
+   "title": "folder-search",
+   "hex": null,
+   "box": [
+    0.1172,
+    0.1484,
+    0.8828,
+    0.8516
+   ]
+  },
+  "lu:list-filter": {
+   "cell": 32,
+   "kind": "pictogram",
+   "source": "lucide",
+   "name": "list-filter",
+   "title": "list-filter",
+   "hex": null,
+   "box": [
+    0.1172,
+    0.2188,
+    0.8828,
+    0.7813
+   ]
+  },
+  "si:tmux": {
+   "cell": 33,
+   "kind": "logo",
+   "source": "simple-icons",
+   "name": "tmux",
+   "title": "tmux",
+   "hex": "1BB91F",
+   "box": [
+    0.0859,
+    0.0859,
+    0.9141,
+    0.9141
+   ]
+  },
+  "si:sqlite": {
+   "cell": 34,
+   "kind": "logo",
+   "source": "simple-icons",
+   "name": "sqlite",
+   "title": "SQLite",
+   "hex": "003B57",
+   "box": [
+    0.125,
+    0.0859,
+    0.875,
+    0.9141
+   ]
+  },
+  "si:nano": {
+   "cell": 35,
+   "kind": "logo",
+   "source": "simple-icons",
+   "name": "nano",
+   "title": "Nano",
+   "hex": "209CE9",
+   "box": [
+    0.1875,
+    0.0859,
+    0.8125,
+    0.9141
+   ]
+  },
+  "si:vim": {
+   "cell": 36,
+   "kind": "logo",
+   "source": "simple-icons",
+   "name": "vim",
+   "title": "Vim",
+   "hex": "019733",
+   "box": [
+    0.0859,
+    0.0859,
+    0.9141,
+    0.9141
+   ]
+  },
+  "si:neovim": {
+   "cell": 37,
+   "kind": "logo",
+   "source": "simple-icons",
+   "name": "neovim",
+   "title": "Neovim",
+   "hex": "57A143",
+   "box": [
+    0.1563,
+    0.0859,
+    0.8438,
+    0.9141
+   ]
   }
  },
  "tools": {
-  "git": "git",
-  "gh": "github",
-  "node": "nodedotjs",
-  "npm": "npm",
-  "pnpm": "pnpm",
-  "bun": "bun",
-  "deno": "deno",
-  "python3": "python",
-  "pip": "pypi",
-  "uv": "uv",
-  "rustc": "rust",
-  "cargo": "rust",
-  "go": "go",
-  "gcc": "gnu",
-  "clang": "llvm",
-  "make": "gnu",
-  "cmake": "cmake",
-  "java": "openjdk",
-  "ruby": "ruby",
-  "php": "php",
-  "lua": "lua",
-  "sqlite3": "sqlite",
-  "tmux": "tmux",
-  "vim": "vim",
-  "nano": "gnu",
-  "curl": "curl",
-  "wget": "gnu",
-  "claude": "claude"
- }
+  "claude": "si:claude",
+  "codex": "lu:bot",
+  "opencode": "si:opencode",
+  "mqh": "lu:network",
+  "node": "si:nodedotjs",
+  "npm": "si:npm",
+  "pnpm": "si:pnpm",
+  "bun": "si:bun",
+  "python3": "si:python",
+  "pip": "si:pypi",
+  "uv": "si:uv",
+  "gcc": "si:gnu",
+  "clang": "si:llvm",
+  "make": "lu:hammer",
+  "cmake": "si:cmake",
+  "ninja": "lu:zap",
+  "rustc": "si:rust",
+  "cargo": "lu:package",
+  "go": "si:go",
+  "ndk": "si:android",
+  "java": "si:openjdk",
+  "adb": "lu:usb",
+  "build-tools": "lu:package-check",
+  "glslc": "si:vulkan",
+  "git": "si:git",
+  "gh": "si:github",
+  "curl": "si:curl",
+  "wget": "lu:download",
+  "ssh": "lu:key-round",
+  "jq": "lu:braces",
+  "rg": "lu:search",
+  "fd": "lu:folder-search",
+  "fzf": "lu:list-filter",
+  "tmux": "si:tmux",
+  "sqlite3": "si:sqlite",
+  "nano": "si:nano",
+  "vim": "si:vim",
+  "nvim": "si:neovim"
+ },
+ "generated": "tools/make-tool-icons.js"
 }
