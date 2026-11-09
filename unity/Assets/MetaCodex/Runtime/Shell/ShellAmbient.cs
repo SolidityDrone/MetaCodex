@@ -140,7 +140,9 @@ namespace MetaCodex.Shell
             _uiHide = Mathf.MoveTowards(_uiHide, aside ? 1f : 0f, dt / 0.15f);
             Shader.SetGlobalFloat(UiHideId, _uiHide);
             _focusShown = Mathf.MoveTowards(_focusShown, Settings.focusEnabled && !aside ? 1f : 0f, dt / (aside ? 0.15f : 0.4f));
-            bool shown = _focusShown > 0f;
+            // on but drawing nothing (INTENSITY 0 and no BLUR): no sphere, no depth, no camera for it (0.7.7 kept all three
+            // running for an invisible darkness; the owner's settings were exactly that)
+            bool shown = _focusShown > 0f && (Settings.focusIntensity > 0.004f || Settings.focusBlur > 0.001f);
             bool wantDepth = shown || Settings.occludeUi;
             EnsureDepth(wantDepth);
             // the camera pauses while speech is turned into text and the command decided (the AI service shares the
@@ -172,6 +174,7 @@ namespace MetaCodex.Shell
             // BLUR 1 % .. 100 %: mip 1.6 (soft) .. 5.1 (only colours) of the 1024 x 512 panorama (the old 2.5 .. 6 of a
             // 512 x 384 camera copy, at the same angular softness)
             if (blur) _focusMat.SetFloat(BlurMipId, Mathf.Lerp(1.6f, 5.1f, Mathf.Clamp01(Settings.focusBlur)));
+            UpdateVoid();
             UpdateFloorFromDepth(head);
         }
 
@@ -674,14 +677,26 @@ namespace MetaCodex.Shell
                 bool on = st != null && st.Frame.Tracked;
                 var f = on ? st.Frame : default;
                 // palm, then each finger from its knuckle to its tip (the thumb from its knuckle), and the wrist
+                // fingers about as thick as real ones, their round cap ending 2.5 mm past the tracked tip: 13 mm capsules
+                // reaching a whole radius past the tip cut a halo of room round the finger over the wrist menu and windows
+                // (owner 2026-11-09)
                 Seg(h, 0, on, f.Wrist, f.Palm, 0.040f);
-                Seg(h, 1, on, f.ThumbKnuckle, f.ThumbTip, 0.014f);
-                Seg(h, 2, on, f.IndexKnuckle, f.IndexTip, 0.013f);
-                Seg(h, 3, on, f.MiddleKnuckle, f.MiddleTip, 0.013f);
-                Seg(h, 4, on, f.RingKnuckle, f.RingTip, 0.013f);
-                Seg(h, 5, on, f.LittleKnuckle, f.LittleTip, 0.012f);
+                Seg(h, 1, on, f.ThumbKnuckle, FingerEnd(f.ThumbKnuckle, f.ThumbTip, 0.0115f), 0.0115f);
+                Seg(h, 2, on, f.IndexKnuckle, FingerEnd(f.IndexKnuckle, f.IndexTip, 0.0100f), 0.0100f);
+                Seg(h, 3, on, f.MiddleKnuckle, FingerEnd(f.MiddleKnuckle, f.MiddleTip, 0.0100f), 0.0100f);
+                Seg(h, 4, on, f.RingKnuckle, FingerEnd(f.RingKnuckle, f.RingTip, 0.0100f), 0.0100f);
+                Seg(h, 5, on, f.LittleKnuckle, FingerEnd(f.LittleKnuckle, f.LittleTip, 0.0090f), 0.0090f);
                 Seg(h, 6, on, f.Palm, (f.IndexKnuckle + f.LittleKnuckle) * 0.5f, 0.042f);
             }
+        }
+
+        /// A finger capsule's end: back from the tracked tip so its round cap ends 2.5 mm past it.
+        private static Vector3 FingerEnd(Vector3 knuckle, Vector3 tip, float radius)
+        {
+            var d = tip - knuckle;
+            float len = d.magnitude;
+            if (len < 1e-4f) return tip;
+            return tip - d / len * Mathf.Clamp(radius - 0.0025f, 0f, len * 0.5f);
         }
 
         private void Seg(int h, int k, bool on, Vector3 a, Vector3 b, float radius)
@@ -722,9 +737,9 @@ namespace MetaCodex.Shell
             var sh = Resources.Load<Shader>("Shaders/AmbientFocus") ?? Shader.Find("MetaCodex/AmbientFocus");
             if (sh == null) { Log("ambient focus: shader missing"); Settings.focusEnabled = false; _focusShown = 0f; return false; }
             _focusMat = new Material(sh) { name = "ambient focus" };
-            // the void outside the dome (AmbientFocus): a tiling cloud noise for its nebula and the UI's accent colour
-            _focusMat.SetTexture("_McxNoise", VoidNoise());
+            // the void outside the dome (AmbientFocus): the UI's accent colour; its sky is drawn on a worker thread
             _focusMat.SetColor("_Accent", UiTheme.Current.Accent);
+            VoidSky(!Application.isPlaying);
             _focusSphere = GameObject.CreatePrimitive(PrimitiveType.Sphere);
             _focusSphere.name = "AmbientFocus";
             var col = _focusSphere.GetComponent<Collider>();
@@ -738,19 +753,106 @@ namespace MetaCodex.Shell
             return true;
         }
 
-        private static Texture2D _voidNoise;
+        // ---- the void's sky
 
-        /// A tiling cloud noise (four octaves of value noise, 128 x 128, seamless) for the void's nebula.
-        private static Texture2D VoidNoise()
+        private static Texture2D _voidSky;
+        private static System.Threading.Tasks.Task<byte[]> _voidSkyJob;
+        private static bool _voidSkyFailed;
+        private const int VoidSkySize = 1024;
+        private static readonly int VoidSkyId = Shader.PropertyToID("_McxVoidSky"), VoidRotId = Shader.PropertyToID("_VoidRot"), VoidTimeId = Shader.PropertyToID("_VoidTime");
+
+        /// The void's sky (AmbientFocus): deep space drawn ONCE into an octahedral map (1024 x 1024, sRGB): the nebula
+        /// (two layers of a tiling noise) and the stars (alpha = a star's twinkle phase, 0 = none). Computed per pixel it
+        /// cost the GPU far too much at render scale 1.6 (0.7.7 lagged with focus on, owner 2026-11-09); now the shader
+        /// reads one texel. Built on a worker thread (in the Editor at once, for the self-tests); null until ready, and the
+        /// void shows its plain deep blue meanwhile.
+        private Texture2D VoidSky(bool now = false)
         {
-            if (_voidNoise != null) return _voidNoise;
-            const int n = 128;
+            if (_voidSky != null || _voidSkyFailed) return _voidSky;
+            byte[] px = null;
+            if (now) px = BuildVoidSky(VoidSkySize);
+            else
+            {
+                if (_voidSkyJob == null) { _voidSkyJob = System.Threading.Tasks.Task.Run(() => BuildVoidSky(VoidSkySize)); return null; }
+                if (!_voidSkyJob.IsCompleted) return null;
+                if (_voidSkyJob.IsFaulted) { _voidSkyFailed = true; Log("ambient focus: the void's sky failed: " + _voidSkyJob.Exception?.GetBaseException().Message); return null; }
+                px = _voidSkyJob.Result;
+                _voidSkyJob = null;
+            }
+            _voidSky = new Texture2D(VoidSkySize, VoidSkySize, TextureFormat.RGBA32, false, false)
+            {
+                name = "mcx void sky", wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear, hideFlags = HideFlags.DontSave,
+            };
+            _voidSky.SetPixelData(px, 0);
+            _voidSky.Apply(false, true);
+            if (_focusMat != null) _focusMat.SetTexture(VoidSkyId, _voidSky);
+            return _voidSky;
+        }
+
+        /// The void's moving parts, each frame it shows: the sky turning slowly round the vertical, the stars' clock.
+        private void UpdateVoid()
+        {
+            var sky = VoidSky();
+            if (sky != null && _focusMat.GetTexture(VoidSkyId) != sky) _focusMat.SetTexture(VoidSkyId, sky);
+            float t = Time.unscaledTime % 3600f, ang = t * 0.0016f;
+            _focusMat.SetVector(VoidRotId, new Vector4(Mathf.Cos(ang), Mathf.Sin(ang), 0f, 0f));
+            _focusMat.SetFloat(VoidTimeId, t);
+        }
+
+        /// The pixels of the sky (RGBA32, rows from the bottom): plain System.Math only, it runs on a worker thread.
+        private static byte[] BuildVoidSky(int n)
+        {
+            var noise = VoidNoiseValues(128);
+            var px = new byte[n * n * 4];
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    var d = VoidOctDecode((x + 0.5f) / n, (y + 0.5f) / n);
+                    double lat = System.Math.Asin(System.Math.Max(-1.0, System.Math.Min(1.0, d.y)));
+                    float su = (float)(System.Math.Atan2(d.x, d.z) / (2.0 * System.Math.PI) + 0.5), sv = (float)(lat / System.Math.PI + 0.5);
+                    // the nebula: two layers, the second tints it between violet and the accent's blue
+                    float n1 = VoidNoiseAt(noise, 128, su * 4f, sv * 2f), n2 = VoidNoiseAt(noise, 128, su * 9f + 0.37f, sv * 4.5f + 0.61f);
+                    float neb = VoidClamp01(n1 * 0.68f + n2 * 0.32f);
+                    neb = neb * neb * (3f - 2f * neb);
+                    float k = (float)System.Math.Pow(neb, 2.6) * 0.9f;
+                    float r = VoidLerp(0.016f, 0.21f * 0.022f, n2) * k, g = VoidLerp(0.004f, 0.82f * 0.022f, n2) * k, b = VoidLerp(0.032f, 1.0f * 0.022f, n2) * k;
+                    // the stars: one in some cells of a grid on the sky (fewer towards the poles), a soft point
+                    float cx = su * 240f, cy = sv * 120f;
+                    float ix = (float)System.Math.Floor(cx), iy = (float)System.Math.Floor(cy);
+                    float h = VoidHash21(ix, iy);
+                    float a = 0f;
+                    if (h >= 0.915f + 0.08f * (1f - (float)System.Math.Cos(lat)))
+                    {
+                        float ox = (VoidHash21(ix + 17.3f, iy + 17.3f) - 0.5f) * 0.7f, oy = (VoidHash21(ix + 41.9f, iy + 41.9f) - 0.5f) * 0.7f;
+                        float fx = cx - ix - 0.5f - ox, fy = cy - iy - 0.5f - oy;
+                        float star = (float)System.Math.Exp(-(fx * fx + fy * fy) * 160.0) * (0.12f + 0.28f * VoidFrac(h * 13.7f));
+                        r += 0.55f * star; g += 0.75f * star; b += 1.0f * star;
+                        if (star > 0.004f) a = 0.05f + 0.95f * VoidFrac(h * 7.3f);
+                    }
+                    int i = (y * n + x) * 4;
+                    px[i] = VoidSrgb(r); px[i + 1] = VoidSrgb(g); px[i + 2] = VoidSrgb(b); px[i + 3] = (byte)System.Math.Round(VoidClamp01(a) * 255f);
+                }
+            return px;
+        }
+
+        /// The octahedral map's inverse (y up): uv 0..1 -> a direction. AmbientFocus's OctUv is the forward one.
+        private static Vector3 VoidOctDecode(float u, float v)
+        {
+            float fx = u * 2f - 1f, fz = v * 2f - 1f, y = 1f - System.Math.Abs(fx) - System.Math.Abs(fz);
+            if (y < 0f) { float ox = fx, oz = fz; fx = (1f - System.Math.Abs(oz)) * (ox >= 0f ? 1f : -1f); fz = (1f - System.Math.Abs(ox)) * (oz >= 0f ? 1f : -1f); }
+            float len = (float)System.Math.Sqrt(fx * fx + y * y + fz * fz);
+            return new Vector3(fx / len, y / len, fz / len);
+        }
+
+        /// A tiling cloud noise (four octaves of value noise, n x n, seamless), values 0..1.
+        private static float[] VoidNoiseValues(int n)
+        {
             var rnd = new System.Random(7);
             var acc = new float[n * n];
             float amp = 1f, total = 0f;
             for (int oct = 0; oct < 4; oct++)
             {
-                int cells = 4 << oct; // 4, 8, 16, 32 cells across: whole cells, so it tiles
+                int cells = 4 << oct; // whole cells across: it tiles
                 var g = new float[cells * cells];
                 for (int k = 0; k < g.Length; k++) g[k] = (float)rnd.NextDouble();
                 for (int y = 0; y < n; y++)
@@ -761,21 +863,39 @@ namespace MetaCodex.Shell
                         float tx = fx - x0, ty = fy - y0;
                         tx = tx * tx * (3f - 2f * tx);
                         ty = ty * ty * (3f - 2f * ty);
-                        float v = Mathf.Lerp(Mathf.Lerp(g[y0 * cells + x0], g[y0 * cells + x1], tx), Mathf.Lerp(g[y1 * cells + x0], g[y1 * cells + x1], tx), ty);
-                        acc[y * n + x] += v * amp;
+                        acc[y * n + x] += VoidLerp(VoidLerp(g[y0 * cells + x0], g[y0 * cells + x1], tx), VoidLerp(g[y1 * cells + x0], g[y1 * cells + x1], tx), ty) * amp;
                     }
                 total += amp;
                 amp *= 0.5f;
             }
-            var px = new byte[n * n];
-            for (int k = 0; k < px.Length; k++) px[k] = (byte)Mathf.Clamp(Mathf.RoundToInt(acc[k] / total * 255f), 0, 255);
-            _voidNoise = new Texture2D(n, n, TextureFormat.R8, true, true)
-            {
-                name = "mcx void noise", wrapMode = TextureWrapMode.Repeat, filterMode = FilterMode.Bilinear, hideFlags = HideFlags.DontSave,
-            };
-            _voidNoise.SetPixelData(px, 0); // the top level; Apply makes the mips
-            _voidNoise.Apply(true, true);
-            return _voidNoise;
+            for (int k = 0; k < acc.Length; k++) acc[k] /= total;
+            return acc;
+        }
+
+        /// The tiling noise at (u, v) in tiles (bilinear, wrapping).
+        private static float VoidNoiseAt(float[] t, int n, float u, float v)
+        {
+            float fx = (u - (float)System.Math.Floor(u)) * n, fy = (v - (float)System.Math.Floor(v)) * n;
+            int x0 = (int)fx % n, y0 = (int)fy % n, x1 = (x0 + 1) % n, y1 = (y0 + 1) % n;
+            float tx = fx - (int)fx, ty = fy - (int)fy;
+            return VoidLerp(VoidLerp(t[y0 * n + x0], t[y0 * n + x1], tx), VoidLerp(t[y1 * n + x0], t[y1 * n + x1], tx), ty);
+        }
+
+        private static float VoidHash21(float x, float y)
+        {
+            float px = VoidFrac(x * 123.34f), py = VoidFrac(y * 456.21f);
+            float dd = px * (px + 45.32f) + py * (py + 45.32f);
+            px += dd; py += dd;
+            return VoidFrac(px * py);
+        }
+
+        private static float VoidFrac(float v) => v - (float)System.Math.Floor(v);
+        private static float VoidClamp01(float v) => v < 0f ? 0f : v > 1f ? 1f : v;
+        private static float VoidLerp(float a, float b, float t) => a + (b - a) * t;
+        private static byte VoidSrgb(float lin)
+        {
+            double c = lin <= 0.0031308 ? 12.92 * lin : 1.055 * System.Math.Pow(lin, 1.0 / 2.4) - 0.055;
+            return (byte)System.Math.Round(System.Math.Max(0.0, System.Math.Min(1.0, c)) * 255.0);
         }
 
         private void RefreshFocusPanel()

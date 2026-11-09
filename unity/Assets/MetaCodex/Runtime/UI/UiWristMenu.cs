@@ -19,8 +19,10 @@ namespace MetaCodex.UI
     /// it moves); while the right hand is at it (or over the left hand) it holds still where it is and never closes,
     /// since that hand hides the left one from the cameras and the left hand's pose jumps or is lost; a jump of the
     /// tracked wrist (more than 8 cm at once) is ignored until it persists; a lost left hand keeps it 1.5 s, a wrist
-    /// turned away 0.45 s. A press is the fingertip going into a tile it has been over (a slide across the surface or
-    /// through the face on the way to the left side presses nothing).
+    /// turned away 0.45 s. A press is the fingertip touching a tile: within 5 mm of its surface (the finger's pad meets it
+    /// before the tracked tip does), steady on that tile, at most 0.2 s after the touch began; a slide across the surface
+    /// or through the face on the way to the left side presses nothing. No ring round the fingertip (owner: "a halo
+    /// around my finger").
     /// It floats in front of the wrist, towards the eyes (TowardEyes), and writes the depth of its glass (WristDepth),
     /// so the hand that carries it stays behind it; a fingertip in front of it still shows (0.7.5).
     public sealed class UiWristMenu : MonoBehaviour
@@ -71,8 +73,14 @@ namespace MetaCodex.UI
         private float[] _hoverAmt = new float[0], _flash = new float[0];
         private bool _expandTarget, _wantShow, _posed, _armed, _dismissing, _emitterOk, _tipOk;
         private float _present, _bloom, _watchFor, _awayFor, _idle, _cooldownUntil, _time, _engagedUntil, _jumpFor, _coreHover;
-        private int _hoverPart = -1;
-        private float _hoverSince, _prevZ = -1f, _faceTyped = 1f;
+        private int _hoverPart = -1, _touchPart = -1;
+        private float _hoverSince, _touchSince, _faceTyped = 1f;
+        private bool _touching;
+        /// Where a touch counts, menu-local metres before Scale (+z is away from the eyes, the surface is z = 0): a touch
+        /// is the tracked fingertip within TouchZ of the surface (the finger's pad meets the hologram before the tracked tip
+        /// point does; 0.7.7 needed the tip through the surface, owner: "I need to pass my finger through more than I
+        /// expected"), armed again once the tip is ArmZ out.
+        public const float TouchZ = -0.006f, ArmZ = -0.016f;
         private float _wave = 1f;
         private Vector2 _waveCenter;
         private Vector3 _anchor, _emitterWorld, _tipLocal, _tipPrev;
@@ -302,30 +310,36 @@ namespace MetaCodex.UI
             transform.localScale = Vector3.one * Scale;
             if (_tipOk && fresh) _tipLocal = _tipPrev = transform.InverseTransformPoint(R.IndexTip);
 
-            // the fingertip: over what, and pressed into the surface
+            // the fingertip: over what, and touching. A touch starts when the tip comes within TouchZ of the surface,
+            // over a part; it presses that part once it is steady on it (mostly straight in, over it for a moment), within
+            // 0.2 s of the touch starting: a slanted press that arrives sideways and stops still counts; a slide across the
+            // surface (a touch that starts over a gap, or moves on to another part) or a dip through the face on the way to
+            // the left side presses nothing
             Hover = -1;
             if (_tipOk && _present > 0.6f)
             {
-                var p = _tipLocal; // +z is away from the eyes: the surface is z = 0
+                var p = _tipLocal;
                 int part = HitTest(new Vector2(p.x, p.y));
-                bool inZone = p.z > -0.03f && p.z < 0.02f;
+                bool inZone = p.z > -0.035f && p.z < 0.03f;
                 if (inZone && p.z < 0.012f) Hover = part;
                 int zonePart = inZone ? part : -1;
                 if (zonePart != _hoverPart) { _hoverPart = zonePart; _hoverSince = _time; }
-                if (p.z < -0.006f) _armed = true;
+                if (p.z < ArmZ) _armed = true;
+                bool touching = p.z >= TouchZ && p.z < 0.03f;
+                if (touching && !_touching) { _touchPart = part; _touchSince = _time; }
+                _touching = touching;
                 var vel = dt > 1e-5f ? (p - _tipPrev) / dt : Vector3.zero;
-                bool crossing = _prevZ < -0.0008f && p.z >= -0.0008f && p.z < 0.02f;
-                bool straight = new Vector2(vel.x, vel.y).magnitude < Mathf.Max(0.15f, Mathf.Abs(vel.z) * 1.3f);
-                float dwell = part == -2 && _expandTarget ? 0.08f : 0.025f;
-                if (_armed && crossing && straight && part != -1 && part == _hoverPart && _time - _hoverSince >= dwell && _time >= _cooldownUntil)
+                bool steady = new Vector2(vel.x, vel.y).magnitude < Mathf.Max(0.25f, Mathf.Abs(vel.z) * 2f);
+                float dwell = part == -2 && _expandTarget ? 0.06f : 0.02f;
+                if (_armed && touching && part != -1 && part == _touchPart && _time - _touchSince <= 0.2f && steady
+                    && part == _hoverPart && _time - _hoverSince >= dwell && _time >= _cooldownUntil)
                 {
                     _armed = false;
                     _cooldownUntil = _time + 0.3f;
                     Press(part, R.IndexTip, new Vector2(p.x, p.y));
                 }
-                _prevZ = p.z;
             }
-            else { _hoverPart = -1; _prevZ = -1f; }
+            else { _hoverPart = -1; _touching = false; }
             if (_expandTarget && Hover == -1 && !Engaged) { _idle += dt; if (_idle > 7f) _expandTarget = false; } else _idle = 0f;
             for (int i = 0; i < _hoverAmt.Length; i++)
             {
@@ -512,7 +526,7 @@ namespace MetaCodex.UI
                 Color col = lit ? item.LitTint : accent;
                 float slide = -0.007f * (1f - eb);
                 float r0 = (inner ? InR0 : OutR0) + slide + h * 0.0008f, r1 = (inner ? InR1 : OutR1) + slide + h * 0.0016f;
-                float z = 0.006f * (1f - eo) - h * 0.0022f + f * 0.0012f;
+                float z = 0.006f * (1f - eo) + f * 0.0012f;
                 float alpha = Seg(B, s0, s0 + 0.16f) * P;
                 float prox = Hover == i && _tipOk ? Mathf.Clamp01(1f + _tipLocal.z / 0.03f) : 0f;
                 float state = Mathf.Clamp01(h * 0.75f + f);
@@ -581,12 +595,6 @@ namespace MetaCodex.UI
             if (B > 0.5f && _expandTarget && UiIconAtlas.TryGet("close", out var xr))
                 IconQuad(new Vector2(0f, -FaceR * 0.42f * faceScale), 0.0042f, -0.0008f, xr, accent, Seg(B, 0.6f, 1f) * P * (0.55f + 0.45f * _coreHover), 1f, _coreHover, 0.6f);
 
-            // the fingertip's reticle: a warm ring that closes in as the finger comes to the surface
-            if (_tipOk && (Hover >= 0 || Hover == -2))
-            {
-                float depth = Mathf.Clamp01(-_tipLocal.z / 0.03f);
-                Arc(new Vector2(_tipLocal.x, _tipLocal.y), 0.0016f + 0.0065f * depth, 0.00045f, 0f, 360f, 32, warm, 0.8f * P * (1f - 0.4f * depth), 0.7f, 0f, -0.0028f);
-            }
             if (_wave < 1f)
             {
                 float w = 1f - Mathf.Pow(1f - _wave, 3f);

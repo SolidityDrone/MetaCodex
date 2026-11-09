@@ -400,14 +400,33 @@ Shader "MetaCodex/SciFiUI"
                 a = max(a, outA);
                 if (kind == 0)
                 {
-                    // corner brackets: the frame's outline offset 4 mm outwards, near each corner only (the transition's
-                    // brackets lock on to exactly these, UiPanelFx); hidden while the panel opens or closes
+                    // corner brackets: the frame's outline offset 4 mm outwards, near each corner only, with a node of light
+                    // in the middle of each cut; drawn exactly like the transition's brackets (UiPanelFx: a 1.2 mm line
+                    // with a soft glow, the same node), which hand over to these (1 - ghost * 4) as the panel finishes
+                    // opening: the last frames of the opening and the panel at rest look the same (owner 2026-11-09)
                     float cc = (p.x * p.y < 0.0) ? cBig : style2;
                     float arm = clamp(max(min(0.030, min(h.x, h.y) * 0.32), cc + 0.006), 0.0, min(h.x, h.y));
                     float near = step(h.x - arm, abs(p.x)) * step(h.y - arm, abs(p.y));
-                    float brk = saturate(0.5 - (abs(d - 0.004) - 0.00045) / aa) * near * (1.0 - saturate(PanelFx().y * 4.0));
-                    col = lerp(col, tint * 1.35 + 0.06, brk);
-                    a = max(a, brk * 0.78);
+                    float keep = near * (1.0 - saturate(PanelFx().y * 4.0));
+                    if (keep > 0.0)
+                    {
+                        float off = abs(d - 0.004) - 0.0006;
+                        float brk = saturate(0.5 - off / aa);
+                        float brkGlow = exp(-max(off, 0.0) / 0.0017) * 0.45;
+                        // the node: the middle of the cut's offset line (as UiPanelFx draws it)
+                        float2 sg = float2(p.x >= 0.0 ? 1.0 : -1.0, p.y >= 0.0 ? 1.0 : -1.0);
+                        const float o = 0.004, k = 0.41421356;
+                        float2 a1 = sg * float2(h.x + o, h.y - cc + o * k), b1 = sg * float2(h.x - cc + o * k, h.y + o);
+                        float2 m = (a1 + b1) * 0.5, u = normalize(b1 - a1);
+                        float2 q = p - m;
+                        float dn = length(q - clamp(dot(q, u), -0.0015, 0.0015) * u) - 0.0014;
+                        float node = saturate(0.5 - dn / aa);
+                        float3 lineCol = tint * 1.35 + 0.06, hot = lerp(tint, white, 0.55) * 1.2;
+                        float lit = saturate(brk + brkGlow) * keep, nodeA = node * keep;
+                        col = lerp(col, lineCol, saturate(brk * keep + brkGlow * keep * 0.6));
+                        col = lerp(col, hot, nodeA);
+                        a = max(a, max(lit * 0.82, nodeA * 0.95));
+                    }
                 }
                 return half4(col, saturate(a * i.color.a));
             }

@@ -49,7 +49,9 @@ namespace MetaCodex.UI
                 o.Ghost = 1f - EaseInOut(Seg(p, 0.30f, 0.86f));
                 o.Hide = 1f - Seg(p, 0.42f, 0.92f);
                 o.BracketOut = 0.014f * (1f - EaseOut(Seg(p, 0.08f, 0.50f)));
-                o.Bracket = light ? 0f : Seg(p, 0f, 0.10f) * (1f - Seg(p, 0.70f, 1f));
+                // they hand over to the frame's own brackets (SciFiUI, the same shape and light): as those come in
+                // (1 - ghost * 4) these go, the sum stays the same, nothing changes when the transition ends
+                o.Bracket = light ? 0f : Seg(p, 0f, 0.10f) * Mathf.Clamp01(o.Ghost * 4f);
                 o.Line = Bump(p, 0f, 0.32f);
                 o.Flare = 0.9f * Bump(p, 0f, 0.15f);
                 o.FlareR = 0.005f + 0.012f * Seg(p, 0f, 0.15f);
@@ -63,7 +65,8 @@ namespace MetaCodex.UI
                 o.Ghost = 0.6f * Seg(q, 0f, 0.5f) + 0.4f * Seg(q, 0.5f, 0.84f) + Seg(q, 0.84f, 1f);
                 o.Hide = Seg(q, 0f, 0.28f);
                 o.BracketOut = 0.010f * EaseIn(Seg(q, 0.10f, 0.60f));
-                o.Bracket = light ? 0f : 0.8f * Bump(q, 0f, 0.62f);
+                // they take over from the frame's own brackets (which go as ghost * 4 rises) and let go
+                o.Bracket = light ? 0f : Mathf.Clamp01(o.Ghost * 4f) * (1f - Seg(q, 0.55f, 0.80f));
                 o.Line = Seg(q, 0.42f, 0.70f) * (1f - Seg(q, 0.88f, 1f));
                 o.Flare = Bump(q, 0.76f, 1f);
                 o.FlareR = 0.004f + 0.014f * Seg(q, 0.76f, 1f);

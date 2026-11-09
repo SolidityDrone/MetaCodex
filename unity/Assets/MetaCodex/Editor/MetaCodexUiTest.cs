@@ -1678,6 +1678,13 @@ end)
             Tip(new Vector3(hoverAt.x, hoverAt.y, 0.003f));
             Step(10);
             Check(presses == 1, $"a fingertip that stays in the surface presses once ({presses} presses in 0.5 s)");
+            // a touch, not a push through (owner 2026-11-09: "I need to pass my finger through more than I expected"): the
+            // tracked tip 5 mm short of the surface presses
+            Tip(new Vector3(hoverAt.x, hoverAt.y, -0.04f)); Step(8);
+            presses = 0;
+            for (int k = 0; k < 3; k++) { Tip(new Vector3(hoverAt.x, hoverAt.y, -0.02f)); Step(1, 0.03f); }
+            Tip(new Vector3(hoverAt.x, hoverAt.y, -0.0045f)); Step(2, 0.03f);
+            Check(presses == 1, $"the fingertip 5 mm short of the surface presses (a touch, not a push through): {presses} press");
             Tip(new Vector3(hoverAt.x, hoverAt.y, -0.04f));
             Step(8);
             // on the way to the left side the fingertip crosses the face (0.7.6: that folded the menu): no press, whether
@@ -1856,6 +1863,17 @@ end)
                     RenderAt(name, cam + p.transform.up * 0.05f, look, 42f, 800, 600);
                 }
                 p.SetBend(bend0);
+                // the last frames of the opening look like the panel at rest (owner 2026-11-09: they did not): the
+                // brackets hand over to the frame's own, nothing else is left of the transition
+                p.ForceRefresh();
+                var restPic = RenderRgba("ui-open-rest.png", cam, look, 42f, 800, 600);
+                p.PoseTransitionForTest(true, 0.94f);
+                var lastPic = RenderRgba("ui-open-last.png", cam, look, 42f, 800, 600);
+                var ra = restPic.GetPixels32(); var la = lastPic.GetPixels32();
+                int differ = 0;
+                for (int k = 0; k < ra.Length; k++) if (Math.Abs(ra[k].r - la[k].r) + Math.Abs(ra[k].g - la[k].g) + Math.Abs(ra[k].b - la[k].b) > 18) differ++;
+                UnityEngine.Object.DestroyImmediate(restPic); UnityEngine.Object.DestroyImmediate(lastPic);
+                Check(differ < ra.Length / 400, $"the opening's last frames look like the panel at rest: {differ} of {ra.Length} pixels differ (the brackets hand over, no pop at the end)");
                 p.ForceRefresh();
                 Check(p.IsOpen && !p.Transitioning && (p.transform.localScale - rest).sqrMagnitude < 1e-10f, "ForceRefresh ends a transition at the rest scale");
 
