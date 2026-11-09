@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.Concurrent;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -115,6 +116,27 @@ namespace MetaCodex.AI
 
         /// OpenAI-style chat completion (with `tools`); the first call after a load can take ~10 s.
         public void Chat(JObject body, Action<JToken, string> cb) => Call(() => Json(HttpMethod.Post, "/v1/chat/completions", body, 90), cb);
+
+        /// Sentence vectors (the decision model, multilingual-e5-small; L2-normalised by the service). The JSON is parsed on
+        /// the worker thread: a thousand vectors would otherwise cost the main thread a frame.
+        public void Embed(IList<string> texts, Action<EmbedResult, string> cb) => Call(async () =>
+        {
+            var j = await Json(HttpMethod.Post, "/v1/embeddings", new JObject { ["input"] = new JArray(texts) }, 120).ConfigureAwait(false);
+            var data = j["data"] as JArray;
+            if (data == null) throw new Exception((string)j["error"] ?? "no embeddings");
+            var vecs = new float[data.Count][];
+            foreach (var d in data)
+            {
+                int i = (int)d["index"];
+                var e = (JArray)d["embedding"];
+                var v = new float[e.Count];
+                for (int k = 0; k < v.Length; k++) v[k] = (float)e[k];
+                vecs[i] = v;
+            }
+            return new EmbedResult { Vectors = vecs, Ms = (int?)j["ms"] ?? 0, Model = (string)j["model"] };
+        }, cb);
+
+        public sealed class EmbedResult { public float[][] Vectors; public int Ms; public string Model; }
 
         /// Fills the LLM's prompt cache for a system prompt + tool set, so the next command answers fast.
         public void Warmup(JObject body, Action<JToken, string> cb) => Call(() => Json(HttpMethod.Post, "/v1/warmup", body, 180), cb);

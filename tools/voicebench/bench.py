@@ -201,7 +201,10 @@ def canon(cmd, args, clause=""):
     if cmd == "set_setting":
         sid = a.get("setting")
         if sid not in SETTINGS: return (cmd, {"setting": sid, "value": None})
-        return (cmd, {"setting": sid, "value": setting_value(sid, a.get("value", ""))})
+        val = setting_value(sid, a.get("value", ""))
+        # the setting "focus" on / off runs SetFocus, exactly what set_focus runs: one action, one canonical form
+        if sid == "focus" and val in ("on", "off"): return ("set_focus", {"state": val})
+        return (cmd, {"setting": sid, "value": val})
     if cmd == "set_focus":
         st = fold(str(a.get("state", "")))
         return (cmd, {"state": "off" if st in ("off", "disable", "stop", "end") else "on"})

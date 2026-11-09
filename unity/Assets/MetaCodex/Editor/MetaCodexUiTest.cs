@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
@@ -145,6 +146,7 @@ namespace MetaCodex.EditorTools
                 if (Want("fixes")) Fixes(shell, head, frame, term, view);
                 if (Want("opacitybend")) OpacityAndBend(shell, head);
                 if (Want("voicewords")) VoiceWords(shell);
+                if (Want("decider")) Decider(shell);
                 if (Want("views")) Views(shell, head, tmp);
                 if (Want("workspace")) Workspace(shell, head);
                 if (Want("threadgroups")) ThreadGroups(shell);
@@ -152,6 +154,7 @@ namespace MetaCodex.EditorTools
                 if (Want("focus")) Focus(shell, head);
                 if (Want("system")) SystemPanel(shell, tmp);
                 if (WantNamed("voiceexport")) VoiceExport(shell);
+                if (WantNamed("voicedecide")) VoiceDecideBench(shell);
             }
             catch (Exception ex) { Fail("exception: " + ex); }
             finally
@@ -908,7 +911,10 @@ end)
                 r = null;
                 shell.VoiceProcessWav(wav, x => r = x);
                 shell.PumpForTest(60f);
-                Check(r != null && r.Ok && r.Command == "open_panel" && r.Transcript.ToLowerInvariant().Contains("git") && shell.IsPanelOpen("git"),
+                // the synthetic voice says "git" with a soft g: Whisper may write a variant the registry knows ("jet", "get")
+                var gitWords = new[] { "git" }.Concat(shell.Voice.Find("open_panel").Synonyms["panel"].Where(kv => kv.Value == "git").Select(kv => kv.Key)).ToList();
+                string heard = VoiceCommands.Simplify(r?.Transcript ?? "");
+                Check(r != null && r.Ok && r.Command == "open_panel" && gitWords.Any(w => VoiceDecider.HasWord(heard, w)) && shell.IsPanelOpen("git"),
                     "spoken “Open the git panel.” -> " + r);
             }
             sw.Restart();
@@ -1218,27 +1224,10 @@ end)
             string dir = Path.Combine("Bench", "voice");
             Directory.CreateDirectory(dir);
             var v = shell.Voice;
-            var cmds = new JArray();
-            foreach (var c in v.All)
-            {
-                if (!c.Enabled) continue;
-                cmds.Add(new JObject
-                {
-                    ["name"] = c.Name, ["description"] = c.Description, ["owner"] = c.Owner, ["llm"] = c.Llm,
-                    ["parameters"] = c.Parameters.DeepClone(),
-                    ["synonyms"] = JObject.FromObject(c.Synonyms ?? new System.Collections.Generic.Dictionary<string, System.Collections.Generic.Dictionary<string, string>>()),
-                    ["phrases"] = new JArray(c.Phrases ?? new string[0]),
-                    ["examples"] = new JArray((c.Examples ?? new System.Collections.Generic.List<(string, string)>()).Select(e => new JArray(e.said, e.line))),
-                    ["vocabulary"] = new JArray(c.Vocabulary ?? new string[0]),
-                    ["usage"] = VoiceCommands.Usage(c),
-                });
-            }
-            var reg = new JObject
-            {
-                ["commands"] = cmds,
-                ["general_examples"] = new JArray(v.GeneralExamples.Select(e => new JArray(e.said, e.line))),
-                ["settings"] = MetaCodexShell.VoiceSettingsForBench(),
-            };
+            // the registry as agents and plugins see it (VoiceCommands.Describe), plus the settings voice can change
+            var reg = v.Describe();
+            reg["settings"] = MetaCodexShell.VoiceSettingsForBench();
+            var cmds = (JArray)reg["commands"];
             File.WriteAllText(Path.Combine(dir, "registry.json"), reg.ToString());
             var req = shell.VoiceLlmRequest("{{SAID}}");
             req["max_tokens"] = 48; // as the pipeline sends it
@@ -1261,6 +1250,253 @@ end)
             }
             File.WriteAllText(Path.Combine(dir, "fastpath.jsonl"), sb.ToString());
             Check(n > 300 && cmds.Count >= 13, $"voice bench export: {cmds.Count} commands, {n} sentences, the fast path matched {hit} ({Path.GetFullPath(dir)})");
+        }
+
+        /// The decision model's mechanics without the AI service: an oracle embedder gives each example and test clause the
+        /// vector of the command it belongs to, so what is checked is the rest: clauses and their order, values read
+        /// from the schema (English and Italian), a verbless part continuing the previous command, "none", verbatim
+        /// commands only with their verb, disabled / removed commands never offered, the registry complete.
+        private static void Decider(MetaCodexShell shell)
+        {
+            var v = shell.Voice;
+            foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
+            var lint = v.All.Where(c => c.Owner == "shell").SelectMany(c => VoiceCommands.Lint(c).Select(w => c.Name + ": " + w)).ToList();
+            Check(lint.Count == 0, lint.Count == 0 ? $"every shell command is complete for voice and agents ({v.All.Count(c => c.Owner == "shell")} commands: description, samples, described parameters)" : "registry gaps: " + string.Join("; ", lint));
+            var reg = v.Describe();
+            var regCmds = (JArray)reg["commands"];
+            Check(regCmds.Count == v.All.Count(c => c.Enabled) && regCmds.All(c => c["samples"] is JArray && c["parameters"]?["properties"] != null && c["synonyms"] != null),
+                $"registry JSON (voice registry): {regCmds.Count} enabled commands, each with schema, names, phrases, samples");
+
+            string J(List<string> l) => string.Join(" | ", l);
+            var cl = VoiceDecider.Clauses("Turn on ambient focus and set the intensity to 100%.");
+            Check(J(cl) == "turn on ambient focus | set the intensity to 100%", "clauses in the spoken order: " + J(cl));
+            cl = VoiceDecider.Clauses("Accendi il focus e poi imposta il raggio a due metri e mezzo.");
+            Check(J(cl) == "accendi il focus | imposta il raggio a due metri e mezzo", "Italian clauses (“e mezzo” stays in its part): " + J(cl));
+            cl = VoiceDecider.Clauses("Hey MetaCodex, open the files please!");
+            Check(J(cl) == "open the files", "fillers and punctuation off: " + J(cl));
+            var vals = new (string said, string want)[]
+            {
+                ("al 30 per cento", "30 percent"), ("a due metri e mezzo", "2.5 m"), ("a mezzo metro", "half m"), ("al massimo", "max"), ("to fifty percent", "50 percent"),
+                ("ventitre", "23"), ("novantanove per cento", "99 percent"), ("piu trasparenti", "-"), ("piu grandi", "+"), ("piu piccoli", "-"), ("a bit more", "+"), ("50 cm", "50 cm"),
+            };
+            var badVals = vals.Where(x => VoiceDecider.ValueText(VoiceDecider.Fold(x.said)) != x.want).Select(x => $"{x.said} -> {VoiceDecider.ValueText(VoiceDecider.Fold(x.said)) ?? "null"} (want {x.want})").ToList();
+            Check(badVals.Count == 0, badVals.Count == 0 ? $"values read in English and Italian ({vals.Length} cases: percent, metres, half, max, number words, more / less)" : "values: " + string.Join("; ", badVals));
+            string dec = VoiceDecider.ValueText(VoiceDecider.Clauses("metti la distanza a 2,5 metri")[0]);
+            Check(dec == "2.5 m", "a decimal comma: “2,5 metri” -> " + dec);
+
+            // the oracle: example texts -> their command's axis, test clauses -> the intended command's axis
+            var probe = new VoiceDecider(v, (t, done) => done(null, "unused"));
+            var ex = probe.BuildExamples();
+            var axes = new Dictionary<string, int>(); // command -> its axis; commands registered later get new ones
+            int Axis(string c) { if (!axes.TryGetValue(c, out int i)) { i = axes.Count; axes[c] = i; } return i; }
+            var oracle = new Dictionary<string, string>();
+            foreach (var (t, c) in ex) if (!oracle.ContainsKey(t)) oracle[t] = c;
+            var said = new Dictionary<string, string>
+            {
+                ["turn on ambient focus"] = "set_focus", ["set the intensity to 100 percent"] = "set_setting", ["imposta il volume al 30 per cento"] = "set_setting",
+                ["apri i file"] = "open_panel", ["show the keyboard"] = "show_keyboard", ["hello world"] = "type_text", ["scrivi buongiorno"] = "type_text",
+                ["esegui ls nel terminale"] = "run_in_terminal", ["usa il preset buio totale"] = "focus_preset", ["gira il carosello a destra"] = "spin_carousel",
+                ["apri il sito github punto com"] = "open_url", ["spegni il focus"] = "set_focus", ["apri le impostazioni"] = "open_panel", ["good morning"] = "none",
+                ["greet me"] = "say_hello",
+            };
+            float[] Vec(string text)
+            {
+                string t = text.StartsWith("query: ") ? text.Substring(7) : text;
+                var vec = new float[128];
+                string c = said.TryGetValue(t, out var s1) ? s1 : oracle.TryGetValue(t, out var s2) ? s2 : null;
+                if (c != null) vec[Axis(c)] = 1f;
+                return vec;
+            }
+            var d = new VoiceDecider(v, (texts, done) => done(texts.Select(Vec).ToArray(), null));
+            string err = "pending";
+            d.Build(e => err = e);
+            Check(err == null && d.Ready && d.ExampleCount > 300, $"decision model built from the registry: {d.Status} ({err})");
+            VoiceDecider.Result D(string text) { VoiceDecider.Result r = null; d.Decide(text, x => r = x); return r; }
+            string M(VoiceDecider.Result r) => r == null ? "no answer" : string.Join(" ; ", r.Matches.Select(m => m.Command.Name + " " + m.Args.ToString(Newtonsoft.Json.Formatting.None))) + (r.Error != null ? " ERROR " + r.Error : "");
+            bool Is(VoiceDecider.Result r, int i, string cmd, string key = null, string val = null) =>
+                r != null && r.Matches.Count > i && r.Matches[i].Command.Name == cmd && (key == null || (string)r.Matches[i].Args[key] == val);
+
+            var r1 = D("Turn on ambient focus and set the intensity to 100 percent.");
+            // focus on: set_focus on and set_setting focus on run the same SetFocus (as in voicewords)
+            bool focusOn1 = Is(r1, 0, "set_focus", "state", "on") || Is(r1, 0, "set_setting", "setting", "focus") && (string)r1.Matches[0].Args["value"] == "on";
+            Check(r1.Matches.Count == 2 && focusOn1 && Is(r1, 1, "set_setting", "setting", "focus_intensity") && (string)r1.Matches[1].Args["value"] == "100 percent",
+                "composite, in order: focus on, then intensity 100 % -> " + M(r1));
+            var r2 = D("Imposta il volume al 30 per cento e la morbidezza a mezzo metro.");
+            Check(r2.Matches.Count == 2 && Is(r2, 0, "set_setting", "setting", "volume") && (string)r2.Matches[0].Args["value"] == "30 percent" && Is(r2, 1, "set_setting", "setting", "focus_softness")
+                && (string)r2.Matches[1].Args["value"] == "half m" && r2.Clauses[1].Note != null, "Italian, a verbless part continues the command: volume 30 %, softness half a metre -> " + M(r2));
+            var r3 = D("apri i file e poi il terminale");
+            Check(r3.Matches.Count == 2 && Is(r3, 0, "open_panel", "panel", "files") && Is(r3, 1, "open_panel", "panel", "terminals"), "“apri i file e poi il terminale” -> " + M(r3));
+            var r4 = D("hello world");
+            Check(r4.Matches.Count == 0 && (r4.Clauses.FirstOrDefault()?.Note ?? "").Contains("verb"), "verbatim typing never without its verb: “hello world” -> " + (r4.Clauses.FirstOrDefault()?.Note ?? M(r4)));
+            var r5 = D("scrivi buongiorno");
+            Check(Is(r5, 0, "type_text", "text", "buongiorno"), "“scrivi buongiorno” -> " + M(r5));
+            var r6 = D("esegui ls nel terminale");
+            Check(Is(r6, 0, "run_in_terminal", "command", "ls"), "“esegui ls nel terminale” -> " + M(r6));
+            var r7 = D("usa il preset buio totale");
+            Check(Is(r7, 0, "focus_preset", "preset", "blackout"), "“usa il preset buio totale” -> " + M(r7));
+            var r8 = D("gira il carosello a destra");
+            Check(Is(r8, 0, "spin_carousel", "direction", "right") && r8.Matches[0].Args["panels"] == null, "“gira il carosello a destra” -> " + M(r8));
+            var r9 = D("apri il sito github punto com");
+            Check(Is(r9, 0, "open_url") && MetaCodexShell.SpokenUrl((string)r9.Matches[0].Args["url"]) == "https://github.com/", "“apri il sito github punto com” -> " + M(r9) + " -> " + MetaCodexShell.SpokenUrl((string)r9.Matches.FirstOrDefault()?.Args["url"]));
+            var r10 = D("good morning");
+            Check(r10.Matches.Count == 0 && r10.Clauses.Count == 1 && r10.Clauses[0].Command == "none", "chit-chat is no command: " + r10);
+            var j10 = r1.ToJson();
+            Check(j10["matches"] is JArray jm && jm.Count == 2 && j10["clauses"] is JArray jc && jc.Count == 2 && jc[0]["score"] != null, "decide JSON (voice decide): matches + clauses with scores");
+
+            // disabled: not offered at once (before the rebuild), not in the rebuilt examples, back when enabled
+            v.SetEnabled("show_keyboard", false);
+            var r11 = D("show the keyboard");
+            bool staleOk = d.Usable && !d.Ready && r11.Matches.Count == 0;
+            err = "pending"; d.Build(e => err = e);
+            var r12 = D("show the keyboard");
+            bool rebuiltOk = err == null && d.Ready && r12.Matches.Count == 0 && probe.BuildExamples().All(e => e.command != "show_keyboard");
+            v.SetEnabled("show_keyboard", true);
+            err = "pending"; d.Build(e => err = e);
+            var r13 = D("show the keyboard");
+            Check(staleOk && rebuiltOk && Is(r13, 0, "show_keyboard"), $"a disabled command is never offered (at once: {staleOk}, rebuilt: {rebuiltOk}) and is back when enabled: {M(r13)}");
+
+            // a plugin's command: in the registry with its samples, gone when the plugin is disabled
+            var host = shell.Scripts;
+            string pdir = Path.Combine(host.PluginsDir, "voicetest");
+            Directory.CreateDirectory(pdir);
+            File.WriteAllText(Path.Combine(pdir, "plugin.json"), "{ \"id\": \"voicetest\", \"name\": \"Voice test\", \"version\": \"1.0.0\", \"description\": \"a voice command for the decider test\" }");
+            File.WriteAllText(Path.Combine(pdir, "main.lua"),
+                "voice.command{ name = \"say_hello\", description = \"Say hello back (test plugin)\", phrases = { \"say hello\" },\n" +
+                "  samples = { \"greet me\", \"say hi to me\", \"salutami\", \"dimmi ciao\" }, run = function(a) return \"hello\" end }\n" +
+                "voice.command{ name = \"bare_test\", run = function(a) return \"ok\" end }\n");
+            host.Scan();
+            var pe = host.Find("plugin/voicetest");
+            var hello = v.Find("say_hello");
+            bool inReg = v.Describe()["commands"].Any(c => (string)c["name"] == "say_hello" && ((JArray)c["samples"]).Count == 4 && ((JArray)c["warnings"]).Count == 0);
+            bool warned = pe != null && pe.Log.Any(l => l.Contains("bare_test") && l.Contains("samples"));
+            err = "pending"; d.Build(e => err = e);
+            var r14 = D("greet me");
+            host.SetEnabled("plugin/voicetest", false);
+            bool gone = v.Find("say_hello") == null && v.Find("bare_test") == null && !v.Describe()["commands"].Any(c => (string)c["name"] == "say_hello")
+                && probe.BuildExamples().All(e => e.command != "say_hello");
+            var r15 = D("greet me");
+            Check(hello != null && inReg && warned && Is(r14, 0, "say_hello") && gone && r15.Matches.Count == 0,
+                $"plugin command: registered with samples ({inReg}), lint warns about the bare one ({warned}), decided ({M(r14)}); plugin disabled: gone everywhere ({gone}), not offered ({M(r15)})");
+            host.SetEnabled("plugin/voicetest", true);
+            try { Directory.Delete(pdir, true); } catch (Exception) { }
+            host.Scan();
+
+            // the shell's pipeline: fast path misses -> the decision model -> the commands run in order
+            var orig = shell.Decider;
+            shell.UseDeciderForTest(d, true);
+            shell.Settings.focusEnabled = true;
+            VoiceResult vr = null;
+            shell.VoiceProcessText("Spegni il focus, poi apri le impostazioni.", x => vr = x);
+            Check(vr != null && vr.Ok && !shell.Settings.focusEnabled && shell.IsPanelOpen("settings") && vr.Via == "decide",
+                "the shell decides and runs it: “spegni il focus, poi apri le impostazioni” -> " + vr);
+            shell.UseDeciderForTest(orig, false);
+            foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
+        }
+
+        /// The 355 bench sentences through the app's own pipeline (fast path -> decision model) with the real model in the
+        /// dev AI service (tools/qvac-dev.sh pc start). Writes Bench/voice/app.jsonl; tools/voicebench/score_app.py scores it.
+        private static void VoiceDecideBench(MetaCodexShell shell)
+        {
+            string devPath = Path.Combine("Bench", "qvac-dev.json");
+            if (!File.Exists(devPath)) { Fail("decision bench: no Bench/qvac-dev.json (tools/qvac-dev.sh pc start)"); return; }
+            var dev = JObject.Parse(File.ReadAllText(devPath));
+            string url = ((string)dev["url"]).TrimEnd('/') + "/v1/embeddings";
+            var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(120) };
+            http.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", (string)dev["token"]);
+            int calls = 0;
+            void Embed(IList<string> texts, Action<float[][], string> done)
+            {
+                try
+                {
+                    calls++;
+                    string body = new JObject { ["input"] = new JArray(texts) }.ToString(Newtonsoft.Json.Formatting.None);
+                    string txt = System.Threading.Tasks.Task.Run(async () =>
+                    {
+                        var resp = await http.PostAsync(url, new System.Net.Http.StringContent(body, Encoding.UTF8, "application/json")).ConfigureAwait(false);
+                        return await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
+                    }).Result;
+                    var j = JObject.Parse(txt);
+                    if (!(j["data"] is JArray data)) { done(null, (string)j["error"] ?? "no data"); return; }
+                    var vecs = new float[data.Count][];
+                    foreach (var e in data) vecs[(int)e["index"]] = ((JArray)e["embedding"]).Select(x => (float)x).ToArray();
+                    done(vecs, null);
+                }
+                catch (Exception ex) { done(null, ex.GetBaseException().Message); }
+            }
+            // honest numbers: no sample and no "none" example may be a bench sentence (AGENTS.md, the command registry)
+            string evalFile = Path.GetFullPath(Path.Combine("..", "tools", "voicebench", "eval.jsonl"));
+            var benchTexts = new HashSet<string>(File.ReadAllLines(evalFile).Where(l => l.Trim().Length > 0).Select(l => VoiceDecider.Fold((string)JObject.Parse(l)["text"]).Trim('.', ' ')));
+            var copies = shell.Voice.All.SelectMany(c => (c.Samples ?? new string[0]).Select(x => c.Name + ": " + x)).Concat(VoiceDecider.NoneExamples.Select(x => "none: " + x))
+                .Where(x => benchTexts.Contains(VoiceDecider.Fold(x.Substring(x.IndexOf(": ") + 2)).Trim('.', ' '))).ToList();
+            Check(copies.Count == 0, copies.Count == 0 ? "no sample or none example is a bench sentence" : "bench sentences copied into the registry: " + string.Join("; ", copies));
+            var d = new VoiceDecider(shell.Voice, Embed);
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            string err = "pending";
+            d.Build(e => err = e);
+            Check(err == null && d.Ready, $"decision model built with the real model: {d.Status} in {sw.ElapsedMilliseconds} ms ({err ?? "ok"})");
+            if (!d.Ready) return;
+            string evalPath = Path.GetFullPath(Path.Combine("..", "tools", "voicebench", "eval.jsonl"));
+            var sb = new StringBuilder();
+            int n = 0, fast = 0, decided = 0, none = 0, errors = 0;
+            var ms = new List<double>();
+            foreach (var line in File.ReadAllLines(evalPath))
+            {
+                if (string.IsNullOrWhiteSpace(line)) continue;
+                var row = JObject.Parse(line);
+                string text = (string)row["text"];
+                var t0 = System.Diagnostics.Stopwatch.StartNew();
+                var fm = shell.Voice.FastMatchAll(text);
+                var o = new JObject { ["id"] = row["id"] };
+                if (fm != null)
+                {
+                    fast++;
+                    o["via"] = "fast";
+                    o["matches"] = new JArray(fm.Select(m => new JObject { ["command"] = m.Command.Name, ["args"] = m.Args }));
+                }
+                else
+                {
+                    VoiceDecider.Result res = null;
+                    d.Decide(text, x => res = x);
+                    var jr = res.ToJson();
+                    o["via"] = "decide";
+                    o["matches"] = jr["matches"];
+                    o["clauses"] = jr["clauses"];
+                    if (res.Error != null) { o["error"] = res.Error; errors++; }
+                    if (res.Matches.Count > 0) decided++; else none++;
+                    ms.Add(t0.Elapsed.TotalMilliseconds);
+                }
+                o["ms"] = Math.Round(t0.Elapsed.TotalMilliseconds, 2);
+                sb.AppendLine(o.ToString(Newtonsoft.Json.Formatting.None));
+                n++;
+            }
+            string outPath = Path.Combine("Bench", "voice", "app.jsonl");
+            Directory.CreateDirectory(Path.GetDirectoryName(outPath));
+            File.WriteAllText(outPath, sb.ToString());
+            ms.Sort();
+            double med = ms.Count > 0 ? ms[ms.Count / 2] : 0, p90 = ms.Count > 0 ? ms[(int)(ms.Count * 0.9)] : 0;
+            Check(n > 300 && errors == 0, $"decision bench: {n} sentences, fast path {fast}, decision model {decided} + {none} no command, {errors} errors; decide {med:0} ms median, {p90:0} ms p90 (HTTP + model, PC) -> {Path.GetFullPath(outPath)} (score: tools/voicebench/score_app.py)");
+            // the commands added with the decision model (not in the 355 sentences): own wordings, not their samples
+            var extra = new (string said, string cmd, string key, string val)[]
+            {
+                ("switch to the gentle focus preset", "focus_preset", "preset", "subtle"), ("metti il preset cinema per favore", "focus_preset", "preset", "blackout"),
+                ("spin the ring to the left", "spin_carousel", "direction", "left"), ("gira i pannelli verso destra", "spin_carousel", "direction", "right"),
+                ("i want to select an area on this panel", "select_mode", "state", "on"), ("attiva lo strumento di selezione", "select_mode", "state", "on"),
+                ("visit the site wikipedia dot org", "open_url", null, null), ("naviga verso example punto com", "open_url", null, null),
+            };
+            var got = new List<string>();
+            int hits = 0;
+            foreach (var x in extra)
+            {
+                var fm2 = shell.Voice.FastMatchAll(x.said);
+                List<VoiceMatch> ms2 = fm2;
+                if (ms2 == null) { VoiceDecider.Result r2 = null; d.Decide(x.said, rr => r2 = rr); ms2 = r2?.Matches; }
+                var first = ms2?.FirstOrDefault();
+                bool ok = first != null && first.Command.Name == x.cmd && (x.key == null || (string)first.Args[x.key] == x.val)
+                    && (x.cmd != "open_url" || MetaCodexShell.SpokenUrl((string)first.Args["url"]) is string u && (u.Contains("wikipedia.org") || u.Contains("example.com")));
+                if (ok) hits++;
+                got.Add($"{(ok ? "ok" : "MISS")} “{x.said}” -> {(first == null ? "none" : first.Command.Name + " " + first.Args.ToString(Newtonsoft.Json.Formatting.None))}{(fm2 != null ? " (fast)" : "")}");
+            }
+            Check(hits >= 6, $"new commands with the real model: {hits}/{extra.Length}\n    " + string.Join("\n    ", got));
         }
 
         private static void VoiceWords(MetaCodexShell shell)

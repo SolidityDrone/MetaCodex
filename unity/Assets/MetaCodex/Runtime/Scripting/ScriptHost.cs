@@ -667,6 +667,10 @@ namespace MetaCodex.Scripting
             var ph = t.Get("phrases");
             if (ph.Type == DataType.Table) cmd.Phrases = ph.Table.Values.Where(v => v.Type == DataType.String).Select(v => v.String).ToArray();
             else if (ph.Type == DataType.String) cmd.Phrases = new[] { ph.String };
+            // samples = {"show git status", "mostrami lo stato di git"}: natural requests in any language; the decision model
+            // compares what was said with them (the more ways to ask, the better it finds the command)
+            var sa = t.Get("samples");
+            if (sa.Type == DataType.Table) cmd.Samples = sa.Table.Values.Where(v => v.Type == DataType.String).Select(v => v.String).ToArray();
             var sy = t.Get("synonyms");
             if (sy.Type == DataType.Table)
                 foreach (var pair in sy.Table.Pairs)
@@ -892,6 +896,8 @@ namespace MetaCodex.Scripting
                 try { _svc.Voice.Register(cmd); }
                 catch (ArgumentException ex) { throw new ScriptRuntimeException(ex.Message); }
                 e.Handlers++;
+                // what voice, the decision model and agents still lack to use it well (docs/scripting.md "Voice commands")
+                foreach (var w in MetaCodex.AI.VoiceCommands.Lint(cmd)) Say(e, "voice.command " + cmd.Name + ": " + w);
                 return DynValue.Nil;
             });
             Set(voice, "remove", a => DynValue.NewBoolean(_svc.Voice != null && _svc.Voice.Remove(Str(a, 0), e.Key)));
@@ -901,9 +907,11 @@ namespace MetaCodex.Scripting
             Set(voice, "list", a =>
             {
                 var t = new Table(s);
-                if (_svc.Voice != null) foreach (var c in _svc.Voice.All) t.Append(DynValue.NewString(c.Name));
+                if (_svc.Voice != null) foreach (var c in _svc.Voice.All) if (c.Enabled) t.Append(DynValue.NewString(c.Name));
                 return DynValue.NewTable(t);
             });
+            // the registry as JSON text: every enabled command with its schema, names, phrases, samples and warnings
+            Set(voice, "registry", a => DynValue.NewString(_svc.Voice == null ? "{}" : _svc.Voice.Describe().ToString(Newtonsoft.Json.Formatting.None)));
             g.Set("voice", DynValue.NewTable(voice));
 
             if (e.Kind == "plugin")

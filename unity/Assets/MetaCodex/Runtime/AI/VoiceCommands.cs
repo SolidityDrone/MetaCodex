@@ -35,6 +35,9 @@ namespace MetaCodex.AI
         public List<(string said, string line)> Examples = new List<(string, string)>();
         /// Words this command needs heard right (speech-to-text prompt) and fixed when misheard ("fogus" -> "focus").
         public string[] Vocabulary = new string[0];
+        /// More example requests, any language ("accendi il focus ambientale"): the decision model (VoiceDecider) compares
+        /// what was said with them; not shown to the LLM (its prompt stays short). The more natural ways to ask, the better.
+        public string[] Samples = new string[0];
         /// Runs on the main thread with validated arguments; returns a short reply (shown, optionally spoken),
         /// null for none, or "error: ..." when it failed.
         public Func<JObject, string> Run;
@@ -333,6 +336,8 @@ namespace MetaCodex.AI
         }
 
         /// Splits a template on spaces, keeping (..), [..] and {..} groups whole.
+        internal static IEnumerable<string> TemplateTokens(string template) => Tokens(template);
+
         private static IEnumerable<string> Tokens(string template)
         {
             var cur = new StringBuilder();
@@ -389,28 +394,67 @@ namespace MetaCodex.AI
         public static bool TryNumber(string raw, double? min, double? max, string unit, out double value)
         {
             value = 0;
-            string s = Simplify((raw ?? "").Replace("%", " percent ").Replace(",", "."));
+            string s = VoiceDecider.Fold((raw ?? "").Replace("%", " percent ").Replace(",", "."));
             if (s.Length == 0) return false;
-            bool percent = Regex.IsMatch(s, @"\b(percent|per cent|pc)\b");
-            bool cm = Regex.IsMatch(s, @"\b(cm|centimeters?|centimetres?)\b");
-            s = Regex.Replace(s, @"\b(percent|per cent|pc|meters?|metres?|m|cm|centimeters?|centimetres?|degrees?|seconds?|units?)\b", " ").Trim();
-            s = Regex.Replace(s, @"\b(to|at|of|the|a|an|by)\b", " ").Trim();
+            bool percent = Regex.IsMatch(s, @"\b(percent|per cent|pc|per cento|percento)\b");
+            bool cm = Regex.IsMatch(s, @"\b(cm|centimeters?|centimetres?|centimetri|centimetro)\b");
+            bool metres = Regex.IsMatch(s, @"\b(m|meters?|metres?|metri|metro)\b");
+            s = Regex.Replace(s, @"\b(percent|per cent|per cento|percento|pc|meters?|metres?|metri|metro|m|cm|centimeters?|centimetres?|centimetri|centimetro|degrees?|seconds?|units?)\b", " ").Trim();
+            s = Regex.Replace(s, @"\b(to|at|of|the|a|an|by|al|a|il|la|un|una)\b", " ").Trim();
             s = Regex.Replace(s, @"\s+", " ");
-            if (s == "max" || s == "maximum" || s == "full" || s == "all way" || s == "highest" || s == "top") { if (max == null) return false; value = max.Value; return true; }
-            if (s == "min" || s == "minimum" || s == "lowest" || s == "bottom" || s == "nothing" || s == "none") { if (min == null) return false; value = min.Value; return true; }
-            if (s == "half") { value = min != null && max != null ? (min.Value + max.Value) / 2 : 0.5; return true; }
+            if (s == "max" || s == "maximum" || s == "full" || s == "all way" || s == "highest" || s == "top" || s == "massimo" || s == "completely" || s == "completamente") { if (max == null) return false; value = max.Value; return true; }
+            if (s == "min" || s == "minimum" || s == "lowest" || s == "bottom" || s == "nothing" || s == "none" || s == "minimo") { if (min == null) return false; value = min.Value; return true; }
+            // "half a metre" is 0.5 m; "half" alone is the middle of the range
+            if ((s == "half" || s == "mezzo" || s == "meta") && metres) { value = 0.5; return true; }
+            if (s == "half" || s == "meta") { value = min != null && max != null ? (min.Value + max.Value) / 2 : 0.5; return true; }
+            if (s == "quarto") s = "quarter";
             if (s == "quarter") { value = min != null && max != null ? min.Value + (max.Value - min.Value) / 4 : 0.25; return true; }
             // digits ("0.5" or "0 5" after Simplify split the point)
-            var dm = Regex.Match(s, @"^(\d+)(?: (?:point )?(\d+))?$");
+            var dm = Regex.Match(s, @"^(\d+)(?:(?:\.| | point )(\d+))?$");
             double v;
             if (dm.Success) v = double.Parse(dm.Groups[1].Value + (dm.Groups[2].Success ? "." + dm.Groups[2].Value : ""), System.Globalization.CultureInfo.InvariantCulture);
-            else if (!TryWords(s, out v)) return false;
+            else if (!TryWords(s, out v) && !TryNumberWords(s, out v)) return false;
             if (percent && max != null && max.Value <= 1.0) v /= 100.0;
             if (cm && unit == "m") v /= 100.0;
             if (min != null) v = Math.Max(min.Value, v);
             if (max != null) v = Math.Min(max.Value, v);
             value = v;
             return true;
+        }
+
+        private static readonly Dictionary<string, int> ItalianNumbers = new Dictionary<string, int>
+        {
+            ["zero"] = 0, ["uno"] = 1, ["un"] = 1, ["una"] = 1, ["due"] = 2, ["tre"] = 3, ["quattro"] = 4, ["cinque"] = 5, ["sei"] = 6, ["sette"] = 7,
+            ["otto"] = 8, ["nove"] = 9, ["dieci"] = 10, ["undici"] = 11, ["dodici"] = 12, ["quindici"] = 15, ["venti"] = 20, ["trenta"] = 30, ["quaranta"] = 40,
+            ["cinquanta"] = 50, ["sessanta"] = 60, ["settanta"] = 70, ["ottanta"] = 80, ["novanta"] = 90, ["cento"] = 100,
+        };
+
+        /// The first group of number words in a text, English or Italian ("set it to twenty five percent" -> 25,
+        /// "al cinquanta per cento" -> 50, "ottantacinque" -> 85). false when there is none.
+        public static bool TryNumberWords(string text, out double v)
+        {
+            v = 0;
+            long total = 0;
+            bool any = false;
+            foreach (var w in (text ?? "").Split(' '))
+            {
+                if (w.Length == 0) continue;
+                int u = Array.IndexOf(Units, w), t = Array.IndexOf(Tens, w);
+                long add = -1;
+                if (u >= 0) add = u;
+                else if (t >= 2) add = t * 10;
+                else if (w == "hundred") { total = (total == 0 ? 1 : total) * 100; any = true; continue; }
+                else if (w != "un" && w != "una" && ItalianNumbers.TryGetValue(w, out int it)) add = it;
+                else
+                {
+                    var m = Regex.Match(w, @"^(venti|trenta|quaranta|cinquanta|sessanta|settanta|ottanta|novanta)(uno|due|tre|quattro|cinque|sei|sette|otto|nove)$");
+                    if (m.Success) add = ItalianNumbers[m.Groups[1].Value] + ItalianNumbers[m.Groups[2].Value];
+                }
+                if (add >= 0) { total += add; any = true; }
+                else if (any) break; // the number words ended
+            }
+            v = total;
+            return any;
         }
 
         /// "twenty five", "two point five", "one hundred" -> the number.
@@ -619,6 +663,57 @@ namespace MetaCodex.AI
                 args[props[i].Name] = value;
             }
             return new VoiceMatch { Command = c, Args = args, Via = "llm" };
+        }
+
+        /// The registry as JSON: what agents, plugins (voice.registry()), the control port (`voice registry`) and the voice
+        /// bench read. Every enabled command with all it carries: schema (enum values, ranges, units), spoken names per
+        /// value, phrase templates, examples, samples, vocabulary, flags, and the lint warnings it still has. Disabled and
+        /// removed commands are not in it, so nothing offers them.
+        public JObject Describe()
+        {
+            var cmds = new JArray();
+            foreach (var c in _all.Where(c => c.Enabled).OrderBy(c => c.Owner == "shell" ? 0 : 1).ThenBy(c => c.Name, StringComparer.Ordinal))
+                cmds.Add(DescribeCommand(c));
+            return new JObject
+            {
+                ["revision"] = Revision,
+                ["commands"] = cmds,
+                ["general_examples"] = new JArray(GeneralExamples.Select(e => new JArray(e.said, e.line))),
+            };
+        }
+
+        public static JObject DescribeCommand(VoiceCommand c) => new JObject
+        {
+            ["name"] = c.Name, ["description"] = c.Description ?? "", ["owner"] = c.Owner, ["confirm"] = c.Confirm, ["llm"] = c.Llm, ["speak"] = c.SpeakReply,
+            ["parameters"] = c.Parameters.DeepClone(),
+            ["synonyms"] = JObject.FromObject(c.Synonyms ?? new Dictionary<string, Dictionary<string, string>>()),
+            ["phrases"] = new JArray(c.Phrases ?? new string[0]),
+            ["examples"] = new JArray((c.Examples ?? new List<(string, string)>()).Select(e => new JArray(e.said, e.line))),
+            ["samples"] = new JArray(c.Samples ?? new string[0]),
+            ["vocabulary"] = new JArray(c.Vocabulary ?? new string[0]),
+            ["usage"] = Usage(c),
+            ["warnings"] = new JArray(Lint(c)),
+        };
+
+        /// What a command still lacks to be found and used well by voice, the decision model and agents (empty = complete).
+        /// Plugins hear these when they register (ScriptHost); the shell's own commands are tested to have none.
+        public static List<string> Lint(VoiceCommand c)
+        {
+            var w = new List<string>();
+            if (string.IsNullOrWhiteSpace(c.Description)) w.Add("no description (one line: what it does, its options)");
+            int samples = c.Samples?.Length ?? 0;
+            if ((c.Phrases?.Length ?? 0) == 0 && samples == 0) w.Add("nothing to recognise it by: add phrases and samples");
+            if (samples < 4) w.Add($"{samples} samples: add 4 or more natural requests (English and Italian)");
+            foreach (var p in c.Properties.Properties())
+            {
+                var prop = p.Value as JObject;
+                if (prop == null) continue;
+                if (string.IsNullOrWhiteSpace((string)prop["description"])) w.Add($"parameter {p.Name}: no description");
+                string type = (string)prop["type"] ?? "string";
+                if ((type == "number" || type == "integer") && prop["minimum"] == null && prop["maximum"] == null && (string)prop["description"] is string d && !Regex.IsMatch(d, @"\d"))
+                    w.Add($"parameter {p.Name}: give its range (min / max) and unit");
+            }
+            return w;
         }
 
         /// Every enabled command as an OpenAI-style tool. Order and text stay stable, so the service's prompt

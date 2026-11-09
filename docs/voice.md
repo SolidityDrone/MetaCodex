@@ -4,7 +4,9 @@ Status: v0.3, 2026-11-08. Runs in the APK on the Quest 3S (0.4: service process 
 installed on the headset); 0.5 makes the cycle faster (measured below) and fixes the service after the
 headset sleeps; 0.6 confirms actions silently (the HUD shows them) and adds `set_focus` and the SYSTEM panel;
 0.7 fixes misheard words against the commands' vocabulary, runs several commands said in one sentence and
-adds `set_setting` (every setting by voice: on / off, numbers, more / less).
+adds `set_setting` (every setting by voice: on / off, numbers, more / less). 0.7.2 replaces the LLM in the loop
+with a **decision model** (below: English and Italian, 79-81 % exact against the LLM's 58 %, ~10-60 ms
+instead of 0.5-9 s) and makes the registry complete (samples, Italian names, four more commands, `voice registry`).
 
 ## What it does
 
@@ -15,8 +17,10 @@ Push-to-talk, then the headset does the rest, privately, with no cloud:
    -> microphone (Unity, 16 kHz, stops after ~1 s of silence)
    -> speech-to-text (Whisper base, local AI service)
    -> fast path: a phrase template of a command matches        -> run it   (~0 ms)
-      else the local LLM writes one command line ("open_panel git"), held to the valid ones by a
-      grammar                                                   -> run it   (~0.5 s)
+      else the decision model: each part of the sentence is compared with every command's samples,
+      examples and phrases (multilingual sentence vectors); the best command, or none; values read
+      from the command's schema                                 -> run them in order (~10-60 ms)
+      else (only with "Ask the LLM when nothing fits") the local LLM writes the command lines (~0.5 s)
    -> HUD above the dock ("✓ Opened GIT"); actions are confirmed there only (0.6: a spoken "Opened GIT"
       arrived seconds after the action and was annoying); spoken replies are for answers (commands marked
       `speak`, e.g. a plugin's `voice.command{speak=true}`)
@@ -48,6 +52,15 @@ tool), phrase templates for the fast path, and a run function. The shell registe
 | `show_keyboard` | | "show the keyboard" |
 | `set_focus` | `state`: on off | "focus mode on", "turn off the focus", "darken the room" (Ambient Focus) |
 | `set_setting` | `setting` (see below), `value`: on, off, toggle, a number, + or - | "set the dome radius to two meters", "intensity 30", "turn off the sounds", "make the windows bigger", "volume a bit less" |
+| `focus_preset` | `preset`: subtle focus blackout | "use the subtle preset", "blackout preset", "usa il preset leggero" |
+| `spin_carousel` | `direction`: left right, `panels` (1-6, optional) | "spin the carousel to the right", "next panel", "gira il carosello a sinistra" (float layout) |
+| `select_mode` | `state`: on off | "turn on the selection tool", "stop selecting", "attiva la selezione" |
+| `open_url` | `url` (spoken: "github dot com slash docs") | "browse to example dot org", "open the website github dot com", "apri il sito github punto com" |
+
+Every command also carries **samples**: 4-15 natural requests in English and Italian that the decision model
+compares with (none of them copied from the bench sentences). Panels and settings have Italian names too
+(`impostazioni` -> settings, `cassaforte` -> vault, `morbidezza` -> focus_softness, `cupola` -> focus_radius...;
+`VoiceSettingOther` keeps them out of the speech-to-text prompt).
 
 `open_panel` also knows panels by their tabs: `focus` (Settings, FOCUS tab: "open ambient focus"),
 `storage` and `tools` (SYSTEM: "show the installed tools", "how much disk space is left"), `git` (the
@@ -97,13 +110,54 @@ not offered to the LLM: only their exact phrases ("type …", "run …") run the
 `find_thread` scores MQH thread titles and branch names against the spoken words (stems, one-letter
 slips) and opens the best match; `switch_workspace` matches MQH project names and folder names.
 
+## The decision model (0.7.2)
+
+Jev-style, without generating text: the options are the registry's enabled commands plus "none"; the answer is
+a command and its values, or nothing. Chosen by measurement (`docs/VOICE_DECISION_RESEARCH.md`,
+`tools/voicebench/`): on 355 sentences (English and Italian; single, composite, misheard, chit-chat) today's
+pipeline (fast path -> Qwen3 0.6B) was 58 % exact (Italian 34 %), fast path -> this model 79-81 % (Italian
+70-72 %), and the decision takes ~6-10 ms on the PC instead of ~205 ms for the LLM.
+
+- **Model:** multilingual-e5-small (118M parameters, q8_0 GGUF, 132 MB) in the local AI service
+  (`POST /v1/embeddings`, `@qvac/embed-llamacpp`), on the service's cores 0-2, unloaded after 60 idle minutes.
+  Installed with the voice models; a headset that already has them fetches it once by itself.
+- **Examples** (`VoiceDecider.BuildExamples`): each enabled command's phrase templates expanded with its enum
+  values and synonyms, its examples, samples and description; "none" from chit-chat in both languages. Their
+  vectors are cached on disk (`voice-decider-vectors.bin`, ~2 MB) and rebuilt only for what changed when a
+  plugin adds, removes or disables commands; a removed or disabled command is never offered, even before the
+  rebuild.
+- **Clauses:** the sentence is split on and / then / also / after that / commas and e / e poi / poi / anche,
+  keeping "and a half", "e mezzo" and decimal commas; fillers and punctuation are dropped. Each part is decided
+  on its own and they run in the spoken order ("turn on ambient focus and set the intensity to 100 %": focus on,
+  then intensity). A part without a verb repeats the previous command with its own values ("imposta il volume
+  al 30 per cento e la morbidezza a mezzo metro").
+- **Choice:** the best cosine against each command's nearest example; "none" wins chit-chat, and below 0.30
+  nothing runs. Commands that take words verbatim (`type_text`, `run_in_terminal`, `open_url`) run only when the
+  part starts with their own verb.
+- **Values from the schema:** enum values and synonyms (longest first, then one or two letters off), numbers
+  with units and percent (English and Italian words: "ventitré", "due metri e mezzo"), on / off, more / less
+  (the most specific word wins: "più trasparenti" is less opacity), free text without the command's own words.
+  The command's `Check` and the schema validate before anything runs.
+- **Settings:** VOICE > "Decision model for commands" (on), "Ask the LLM when nothing fits" (off). The VOICE
+  status line shows the model's state ("ready: 1500 examples, 17 commands").
+- **The LLM** stays for answers and, when that toggle is on, for sentences the model does not place.
+
+## The registry as JSON (agents, plugins)
+
+`mcx-ui voice registry` (control port), `voice.registry()` (Lua) and the bench export read
+`VoiceCommands.Describe()`: every enabled command with its schema (enum values, ranges, units), synonyms, phrases,
+examples, samples, vocabulary, flags and `warnings` (`VoiceCommands.Lint`: what it still lacks). A plugin hears its
+warnings in its log when it registers. `mcx-ui voice decide "<text>"` shows what the decision model would run,
+with each part's command, score and runner-up; nothing runs. Rules for every command, shell or plugin:
+`AGENTS.md` ("The command registry") and the in-app skill `quest-scripting` ("MUST").
+
 ## The local AI service
 
 QVAC (Tether's local AI stack) on the Bare runtime, in its own process: `qvac/server/` (Bare JS),
 packed by `tools/qvac-bundle.sh` into `StreamingAssets/qvac/runtime.tar.gz` (24 MB: QVAC addons for
 android-arm64 with CPU backends only, `libc++_shared.so` from NDK r29) plus `libbare.so` (the Bare
 executable, 62 MB, stripped) in `Plugins/Android/libs/arm64-v8a`. Models are not in the APK: VOICE >
-INSTALL MODELS downloads them once (530 MB) into the app's private storage, each checked against the
+INSTALL MODELS downloads them once (660 MB) into the app's private storage, each checked against the
 sha256 of the QVAC model registry.
 
 | Model | Size | Source | Use |
@@ -111,6 +165,7 @@ sha256 of the QVAC model registry.
 | Whisper base q8_0 (multilingual) | 78 MB | Hugging Face (ggerganov/whisper.cpp, pinned revision) | speech-to-text |
 | Qwen3 0.6B q4_0 | 364 MB | Hugging Face (unsloth/Qwen3-0.6B-GGUF, pinned revision) | picks commands (tool calling), short answers |
 | Supertonic 3 q4_0 | 81 MB | QVAC model registry (Hyperswarm) | spoken replies, 31 languages |
+| multilingual-e5-small q8_0 | 126 MB | Hugging Face (TwinSunsLLC/multilingual-e5-small-gguf, pinned revision) | the decision model's sentence vectors |
 
 How the app runs it (`Runtime/AI/QvacHost.cs`, `Plugins/Android/MetaCodexAiService.java`): the runtime is
 unpacked to `files/qvac/runtime` when its hash changes; a new token goes to `files/qvac/token` and
@@ -136,7 +191,8 @@ the service starts the Bare executable as its child.
 |---|---|
 | `GET /health` | no token; liveness |
 | `GET /status` | models (installed, download progress), engines (loaded, idle), busy, RAM |
-| `POST /v1/models/install` `{kinds:["asr","llm","tts"]}` | downloads in the background; progress in `/status` |
+| `POST /v1/models/install` `{kinds:["asr","llm","tts","embed"]}` | downloads in the background; progress in `/status` |
+| `POST /v1/embeddings` `{input: text or [texts]}` | OpenAI-style sentence vectors (multilingual-e5-small, L2-normalised; prefix texts with `query: `) |
 | `POST /v1/audio/transcriptions` | WAV body, raw `audio/pcm;rate=` or OpenAI-style multipart (`file`) -> `{text, ms, audioMs}` |
 | `POST /v1/audio/speech` `{input, voice}` | WAV (44.1 kHz, 16-bit mono) |
 | `POST /v1/chat/completions` | OpenAI-style, with `tools` -> `tool_calls`; `timings` |
@@ -146,7 +202,8 @@ the service starts the Bare executable as its child.
 
 From the Linux userland: `mcx-ai status | install | transcribe f.wav | say "text" | chat "prompt" | env`.
 From the app's control port: `mcx-ui voice status | list | match <text> | run <text> | say <text> |
-wav /mnt/quest/f.wav | listen | install | threads N | lang en|it|auto`.
+wav /mnt/quest/f.wav | listen | install | threads N | lang en|it|auto | registry | decide <text> | decider on|off |
+fallback on|off`.
 
 ## Faster cycle (0.5, measured)
 
@@ -206,7 +263,10 @@ vocabulary prompt fixes names ("MetaCodex", not "MedicoDex").
   `unity/Bench/qvac-dev.json`, which the Editor uses instead of starting a process.
 - Self-test: `MCX_UITEST_ONLY=voice tools/unity-batch.sh BatchUiTest` (fast path, actions, a Lua plugin
   command, the control port, MQH commands, and with a dev service: speech -> text -> command and the
-  LLM path).
+  LLM path); `decider` (the decision model's mechanics with an oracle embedder, the registry complete, a
+  plugin's commands gone when it is disabled); named `voiceexport,voicedecide` (the 355 bench sentences through
+  the app's pipeline with the real model in the dev service -> `Bench/voice/app.jsonl`, scored by
+  `tools/voicebench/score_app.py`).
 
 ## Files
 
@@ -216,7 +276,8 @@ vocabulary prompt fixes names ("MetaCodex", not "MedicoDex").
 | Bundle and dev runners | `tools/qvac-bundle.sh`, `tools/qvac-dev.sh`, `tools/remote-unzip.py` |
 | Process, client | `unity/Assets/MetaCodex/Runtime/AI/QvacHost.cs`, `QvacClient.cs` |
 | Microphone | `Runtime/AI/VoiceRecorder.cs` |
-| Registry, fast path | `Runtime/AI/VoiceCommands.cs` |
+| Registry, fast path, registry JSON and lint | `Runtime/AI/VoiceCommands.cs` |
+| Decision model | `Runtime/AI/VoiceDecider.cs`; bench `tools/voicebench/` (`bench.py`, `score_app.py`, `results/`) |
 | Pipeline, commands, VOICE panel, HUD | `Runtime/Shell/ShellVoice.cs` |
 | Lua API | `Runtime/Scripting/ScriptHost.cs` (`voice.*`) |
 | Userland | `userland/overlay/usr/local/bin/mcx-ai`, `mcx-ui voice ...` |

@@ -8,6 +8,7 @@
 #   mcx-ui action open:git     (any action: open/close/toggle:<panel>, toast:, run:, url:, layout:, spin:, voice:, ...)
 #   mcx-ui voice run "close all windows" | voice say "hello" | voice list | voice status | voice match "open git"
 #   mcx-ui voice listen | voice wav /mnt/quest/cmd.wav | voice install | voice threads 2 | voice lang en
+#   mcx-ui voice registry      (every enabled command as JSON: schema, names, samples, warnings) | voice decide "text"
 #   mcx-ui view show spec.json | view show - (stdin) | view mermaid f.mmd | view list | view wait <id> | view schema
 #   mcx-ui system tools [json] | system refresh | system storage   (installed tools: /mnt/quest/system/tools.json)
 #   mcx-ui status | screen
@@ -15,7 +16,7 @@
 set -euo pipefail
 TOKEN_FILE=${MCX_TOKEN_FILE:-/mnt/quest/control.token}
 PORT=${MCX_CONTROL_PORT:-47800}
-[[ $# -gt 0 ]] || { sed -n 2,14p "$0"; exit 2; }
+[[ $# -gt 0 ]] || { sed -n 2,15p "$0"; exit 2; }
 # views: the app reads the spec file itself (any size), so pass an absolute path; '-' takes stdin
 if [[ "$1" == view && ( "${2:-}" == show || "${2:-}" == mermaid ) && -n "${3:-}" ]]; then
   f=$3
