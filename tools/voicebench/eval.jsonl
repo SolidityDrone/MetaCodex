@@ -1,0 +1,355 @@
+{"id": "en-000", "lang": "en", "kind": "single", "text": "show me my terminals", "gold": [["open_panel", {"panel": "terminals"}]]}
+{"id": "en-001", "lang": "en", "kind": "single", "text": "list the open terminals", "gold": [["open_panel", {"panel": "terminals"}]]}
+{"id": "en-002", "lang": "en", "kind": "single", "text": "open the terminals page", "gold": [["open_panel", {"panel": "terminals"}]]}
+{"id": "en-003", "lang": "en", "kind": "single", "text": "open the file browser", "gold": [["open_panel", {"panel": "files"}]]}
+{"id": "en-004", "lang": "en", "kind": "single", "text": "show my files", "gold": [["open_panel", {"panel": "files"}]]}
+{"id": "en-005", "lang": "en", "kind": "single", "text": "I want to see my folders", "gold": [["open_panel", {"panel": "files"}]]}
+{"id": "en-006", "lang": "en", "kind": "single", "text": "open git", "gold": [["open_panel", {"panel": "git"}]]}
+{"id": "en-007", "lang": "en", "kind": "single", "text": "show me the source control", "gold": [["open_panel", {"panel": "git"}]]}
+{"id": "en-008", "lang": "en", "kind": "single", "text": "open the repository panel", "gold": [["open_panel", {"panel": "git"}]]}
+{"id": "en-009", "lang": "en", "kind": "single", "text": "open the providers page", "gold": [["open_panel", {"panel": "agents"}]]}
+{"id": "en-010", "lang": "en", "kind": "single", "text": "which AI providers are signed in", "gold": [["open_panel", {"panel": "agents"}]]}
+{"id": "en-011", "lang": "en", "kind": "single", "text": "show me the agents", "gold": [["open_panel", {"panel": "agents"}]]}
+{"id": "en-012", "lang": "en", "kind": "single", "text": "show my conversations", "gold": [["open_panel", {"panel": "threads"}]]}
+{"id": "en-013", "lang": "en", "kind": "single", "text": "open the threads list", "gold": [["open_panel", {"panel": "threads"}]]}
+{"id": "en-014", "lang": "en", "kind": "single", "text": "where are my chats", "gold": [["open_panel", {"panel": "threads"}]]}
+{"id": "en-015", "lang": "en", "kind": "single", "text": "open the web browser", "gold": [["open_panel", {"panel": "browser"}]]}
+{"id": "en-016", "lang": "en", "kind": "single", "text": "I need a browser", "gold": [["open_panel", {"panel": "browser"}]]}
+{"id": "en-017", "lang": "en", "kind": "single", "text": "bring up the browser", "gold": [["open_panel", {"panel": "browser"}]]}
+{"id": "en-018", "lang": "en", "kind": "single", "text": "open the scripts", "gold": [["open_panel", {"panel": "scripts"}]]}
+{"id": "en-019", "lang": "en", "kind": "single", "text": "show my lua scripts", "gold": [["open_panel", {"panel": "scripts"}]]}
+{"id": "en-020", "lang": "en", "kind": "single", "text": "go to the scripts panel", "gold": [["open_panel", {"panel": "scripts"}]]}
+{"id": "en-021", "lang": "en", "kind": "single", "text": "open the gestures studio", "gold": [["open_panel", {"panel": "gestures"}]]}
+{"id": "en-022", "lang": "en", "kind": "single", "text": "show the hand gestures", "gold": [["open_panel", {"panel": "gestures"}]]}
+{"id": "en-023", "lang": "en", "kind": "single", "text": "take me to gestures", "gold": [["open_panel", {"panel": "gestures"}]]}
+{"id": "en-024", "lang": "en", "kind": "single", "text": "open the vault", "gold": [["open_panel", {"panel": "vault"}]]}
+{"id": "en-025", "lang": "en", "kind": "single", "text": "where are my api keys", "gold": [["open_panel", {"panel": "vault"}]]}
+{"id": "en-026", "lang": "en", "kind": "single", "text": "show my secrets", "gold": [["open_panel", {"panel": "vault"}]]}
+{"id": "en-027", "lang": "en", "kind": "single", "text": "open settings", "gold": [["open_panel", {"panel": "settings"}]]}
+{"id": "en-028", "lang": "en", "kind": "single", "text": "I want to change the settings", "gold": [["open_panel", {"panel": "settings"}]]}
+{"id": "en-029", "lang": "en", "kind": "single", "text": "open the preferences", "gold": [["open_panel", {"panel": "settings"}]]}
+{"id": "en-030", "lang": "en", "kind": "single", "text": "open the voice panel", "gold": [["open_panel", {"panel": "voice"}]]}
+{"id": "en-031", "lang": "en", "kind": "single", "text": "show voice control", "gold": [["open_panel", {"panel": "voice"}]]}
+{"id": "en-032", "lang": "en", "kind": "single", "text": "open the speech settings", "gold": [["open_panel", {"panel": "voice"}]]}
+{"id": "en-033", "lang": "en", "kind": "single", "text": "open the system panel", "gold": [["open_panel", {"panel": "system"}]]}
+{"id": "en-034", "lang": "en", "kind": "single", "text": "show system info", "gold": [["open_panel", {"panel": "system"}]]}
+{"id": "en-035", "lang": "en", "kind": "single", "text": "go to system", "gold": [["open_panel", {"panel": "system"}]]}
+{"id": "en-036", "lang": "en", "kind": "single", "text": "open the ambient focus settings", "gold": [["open_panel", {"panel": "focus"}]]}
+{"id": "en-037", "lang": "en", "kind": "single", "text": "show the focus options", "gold": [["open_panel", {"panel": "focus"}]]}
+{"id": "en-038", "lang": "en", "kind": "single", "text": "open ambient focus", "gold": [["open_panel", {"panel": "focus"}]]}
+{"id": "en-039", "lang": "en", "kind": "single", "text": "how much storage do I have left", "gold": [["open_panel", {"panel": "storage"}]]}
+{"id": "en-040", "lang": "en", "kind": "single", "text": "show the disk usage", "gold": [["open_panel", {"panel": "storage"}]]}
+{"id": "en-041", "lang": "en", "kind": "single", "text": "open storage", "gold": [["open_panel", {"panel": "storage"}]]}
+{"id": "en-042", "lang": "en", "kind": "single", "text": "show the installed tools", "gold": [["open_panel", {"panel": "tools"}]]}
+{"id": "en-043", "lang": "en", "kind": "single", "text": "which tools are installed", "gold": [["open_panel", {"panel": "tools"}]]}
+{"id": "en-044", "lang": "en", "kind": "single", "text": "open the tools list", "gold": [["open_panel", {"panel": "tools"}]]}
+{"id": "en-045", "lang": "en", "kind": "single", "text": "close the vault", "gold": [["close_panel", {"panel": "vault"}]]}
+{"id": "en-046", "lang": "en", "kind": "single", "text": "hide the files", "gold": [["close_panel", {"panel": "files"}]]}
+{"id": "en-047", "lang": "en", "kind": "single", "text": "close git", "gold": [["close_panel", {"panel": "git"}]]}
+{"id": "en-048", "lang": "en", "kind": "single", "text": "close the settings", "gold": [["close_panel", {"panel": "settings"}]]}
+{"id": "en-049", "lang": "en", "kind": "single", "text": "dismiss the browser", "gold": [["close_panel", {"panel": "browser"}]]}
+{"id": "en-050", "lang": "en", "kind": "single", "text": "put away the scripts panel", "gold": [["close_panel", {"panel": "scripts"}]]}
+{"id": "en-051", "lang": "en", "kind": "single", "text": "close all windows", "gold": [["close_all_panels", {}]]}
+{"id": "en-052", "lang": "en", "kind": "single", "text": "close everything", "gold": [["close_all_panels", {}]]}
+{"id": "en-053", "lang": "en", "kind": "single", "text": "clear my view", "gold": [["close_all_panels", {}]]}
+{"id": "en-054", "lang": "en", "kind": "single", "text": "get rid of all the panels", "gold": [["close_all_panels", {}]]}
+{"id": "en-055", "lang": "en", "kind": "single", "text": "open a new terminal", "gold": [["new_terminal", {}]]}
+{"id": "en-056", "lang": "en", "kind": "single", "text": "I need another shell", "gold": [["new_terminal", {}]]}
+{"id": "en-057", "lang": "en", "kind": "single", "text": "give me a new console", "gold": [["new_terminal", {}]]}
+{"id": "en-058", "lang": "en", "kind": "single", "text": "start a terminal", "gold": [["new_terminal", {}]]}
+{"id": "en-059", "lang": "en", "kind": "single", "text": "find the thread where we fixed the keyboard", "gold": [["find_thread", {"keys": ["keyboard"]}]]}
+{"id": "en-060", "lang": "en", "kind": "single", "text": "which conversation was about the login page", "gold": [["find_thread", {"keys": ["login"]}]]}
+{"id": "en-061", "lang": "en", "kind": "single", "text": "search my chats for the database migration", "gold": [["find_thread", {"keys": ["database", "migration"]}]]}
+{"id": "en-062", "lang": "en", "kind": "single", "text": "look for the thread about voice commands", "gold": [["find_thread", {"keys": ["voice", "commands"]}]]}
+{"id": "en-063", "lang": "en", "kind": "single", "text": "switch to the workspace called metacodex", "gold": [["switch_workspace", {"name": "metacodex"}]]}
+{"id": "en-064", "lang": "en", "kind": "single", "text": "go to the sandybridge project", "gold": [["switch_workspace", {"name": "sandybridge"}]]}
+{"id": "en-065", "lang": "en", "kind": "single", "text": "change workspace", "gold": [["switch_workspace", {}]]}
+{"id": "en-066", "lang": "en", "kind": "single", "text": "open the alpha project workspace", "gold": [["switch_workspace", {"name": "alpha"}]]}
+{"id": "en-067", "lang": "en", "kind": "single", "text": "use the floating layout", "gold": [["set_layout", {"mode": "float"}]]}
+{"id": "en-068", "lang": "en", "kind": "single", "text": "let the windows float around me", "gold": [["set_layout", {"mode": "float"}]]}
+{"id": "en-069", "lang": "en", "kind": "single", "text": "fixed layout please", "gold": [["set_layout", {"mode": "fixed"}]]}
+{"id": "en-070", "lang": "en", "kind": "single", "text": "pin the panels in place", "gold": [["set_layout", {"mode": "fixed"}]]}
+{"id": "en-071", "lang": "en", "kind": "single", "text": "recenter", "gold": [["recenter", {}]]}
+{"id": "en-072", "lang": "en", "kind": "single", "text": "bring everything back in front of me", "gold": [["recenter", {}]]}
+{"id": "en-073", "lang": "en", "kind": "single", "text": "put the windows in front of me", "gold": [["recenter", {}]]}
+{"id": "en-074", "lang": "en", "kind": "single", "text": "reset the view position", "gold": [["recenter", {}]]}
+{"id": "en-075", "lang": "en", "kind": "single", "text": "show the keyboard", "gold": [["show_keyboard", {}]]}
+{"id": "en-076", "lang": "en", "kind": "single", "text": "bring up the keyboard", "gold": [["show_keyboard", {}]]}
+{"id": "en-077", "lang": "en", "kind": "single", "text": "I need the keyboard", "gold": [["show_keyboard", {}]]}
+{"id": "en-078", "lang": "en", "kind": "single", "text": "type hello world", "gold": [["type_text", {"text": "hello world"}]]}
+{"id": "en-079", "lang": "en", "kind": "single", "text": "run git status", "gold": [["run_in_terminal", {"command": "git status"}]]}
+{"id": "en-080", "lang": "en", "kind": "single", "text": "turn on ambient focus", "gold": [["set_focus", {"state": "on"}]]}
+{"id": "en-081", "lang": "en", "kind": "single", "text": "focus mode on", "gold": [["set_focus", {"state": "on"}]]}
+{"id": "en-082", "lang": "en", "kind": "single", "text": "darken the room", "gold": [["set_focus", {"state": "on"}]]}
+{"id": "en-083", "lang": "en", "kind": "single", "text": "turn off the focus", "gold": [["set_focus", {"state": "off"}]]}
+{"id": "en-084", "lang": "en", "kind": "single", "text": "show the room again", "gold": [["set_focus", {"state": "off"}]]}
+{"id": "en-085", "lang": "en", "kind": "single", "text": "disable ambient focus", "gold": [["set_focus", {"state": "off"}]]}
+{"id": "en-086", "lang": "en", "kind": "single", "text": "set the intensity to 50 percent", "gold": [["set_setting", {"setting": "focus_intensity", "value": 0.5}]]}
+{"id": "en-087", "lang": "en", "kind": "single", "text": "make the room completely dark", "gold": [["set_setting", {"setting": "focus_intensity", "value": 1.0}]]}
+{"id": "en-088", "lang": "en", "kind": "single", "text": "dim the room a bit more", "gold": [["set_setting", {"setting": "focus_intensity", "value": "+"}]]}
+{"id": "en-089", "lang": "en", "kind": "single", "text": "set the dome radius to two meters", "gold": [["set_setting", {"setting": "focus_radius", "value": 2.0}]]}
+{"id": "en-090", "lang": "en", "kind": "single", "text": "radius one and a half meters", "gold": [["set_setting", {"setting": "focus_radius", "value": 1.5}]]}
+{"id": "en-091", "lang": "en", "kind": "single", "text": "set the softness to half a meter", "gold": [["set_setting", {"setting": "focus_softness", "value": 0.5}]]}
+{"id": "en-092", "lang": "en", "kind": "single", "text": "set the blur to fifty percent", "gold": [["set_setting", {"setting": "focus_blur", "value": 0.5}]]}
+{"id": "en-093", "lang": "en", "kind": "single", "text": "set the opacity to max", "gold": [["set_setting", {"setting": "opacity", "value": 1.0}]]}
+{"id": "en-094", "lang": "en", "kind": "single", "text": "make the windows more transparent", "gold": [["set_setting", {"setting": "opacity", "value": "-"}]]}
+{"id": "en-095", "lang": "en", "kind": "single", "text": "set the panel distance to one meter", "gold": [["set_setting", {"setting": "panel_distance", "value": 1.0}]]}
+{"id": "en-096", "lang": "en", "kind": "single", "text": "make the windows bigger", "gold": [["set_setting", {"setting": "ui_scale", "value": "+"}]]}
+{"id": "en-097", "lang": "en", "kind": "single", "text": "make the text smaller", "gold": [["set_setting", {"setting": "ui_scale", "value": "-"}]]}
+{"id": "en-098", "lang": "en", "kind": "single", "text": "increase the sharpness", "gold": [["set_setting", {"setting": "sharpness", "value": "+"}]]}
+{"id": "en-099", "lang": "en", "kind": "single", "text": "turn on panel bending", "gold": [["set_setting", {"setting": "bend", "value": "on"}]]}
+{"id": "en-100", "lang": "en", "kind": "single", "text": "turn off the curved panels", "gold": [["set_setting", {"setting": "bend", "value": "off"}]]}
+{"id": "en-101", "lang": "en", "kind": "single", "text": "turn off the sounds", "gold": [["set_setting", {"setting": "sounds", "value": "off"}]]}
+{"id": "en-102", "lang": "en", "kind": "single", "text": "mute the clicks", "gold": [["set_setting", {"setting": "sounds", "value": "off"}]]}
+{"id": "en-103", "lang": "en", "kind": "single", "text": "set the volume to a quarter", "gold": [["set_setting", {"setting": "volume", "value": 0.25}]]}
+{"id": "en-104", "lang": "en", "kind": "single", "text": "volume up", "gold": [["set_setting", {"setting": "volume", "value": "+"}]]}
+{"id": "en-105", "lang": "en", "kind": "single", "text": "turn the volume down a bit", "gold": [["set_setting", {"setting": "volume", "value": "-"}]]}
+{"id": "en-106", "lang": "en", "kind": "single", "text": "turn on spoken answers", "gold": [["set_setting", {"setting": "speak", "value": "on"}]]}
+{"id": "en-107", "lang": "en", "kind": "single", "text": "hide the hand rays", "gold": [["set_setting", {"setting": "hand_rays", "value": "off"}]]}
+{"id": "en-108", "lang": "en", "kind": "single", "text": "show the pointer rays", "gold": [["set_setting", {"setting": "hand_rays", "value": "on"}]]}
+{"id": "en-109", "lang": "en", "kind": "single", "text": "turn off occlusion", "gold": [["set_setting", {"setting": "occlusion", "value": "off"}]]}
+{"id": "en-110", "lang": "en", "kind": "single", "text": "enable foveated rendering", "gold": [["set_setting", {"setting": "foveation", "value": "on"}]]}
+{"id": "en-111", "lang": "en", "kind": "single", "text": "disable the clap gesture", "gold": [["set_setting", {"setting": "clap", "value": "off"}]]}
+{"id": "en-112", "lang": "en", "kind": "single", "text": "set the carousel radius to one meter", "gold": [["set_setting", {"setting": "carousel_radius", "value": 1.0}]]}
+{"id": "en-113", "lang": "en", "kind": "single", "text": "set the volume to eighty percent", "gold": [["set_setting", {"setting": "volume", "value": 0.8}]]}
+{"id": "en-114", "lang": "en", "kind": "single", "text": "intensity 30", "gold": [["set_setting", {"setting": "focus_intensity", "value": 0.3}]]}
+{"id": "en-115", "lang": "en", "kind": "multi", "text": "turn on ambient focus and set intensity to 100%", "gold": [["set_focus", {"state": "on"}], ["set_setting", {"setting": "focus_intensity", "value": 1.0}]]}
+{"id": "en-116", "lang": "en", "kind": "multi", "text": "turn on ambient focus and set the intensity to zero", "gold": [["set_focus", {"state": "on"}], ["set_setting", {"setting": "focus_intensity", "value": 0.0}]]}
+{"id": "en-117", "lang": "en", "kind": "multi", "text": "set the intensity to 50 percent and turn on ambient focus", "gold": [["set_setting", {"setting": "focus_intensity", "value": 0.5}], ["set_focus", {"state": "on"}]]}
+{"id": "en-118", "lang": "en", "kind": "multi", "text": "close all windows and open the vault", "gold": [["close_all_panels", {}], ["open_panel", {"panel": "vault"}]]}
+{"id": "en-119", "lang": "en", "kind": "multi", "text": "open git and then open the files", "gold": [["open_panel", {"panel": "git"}], ["open_panel", {"panel": "files"}]]}
+{"id": "en-120", "lang": "en", "kind": "multi", "text": "open a new terminal and show the keyboard", "gold": [["new_terminal", {}], ["show_keyboard", {}]]}
+{"id": "en-121", "lang": "en", "kind": "multi", "text": "turn off the sounds and set the volume to 30 percent", "gold": [["set_setting", {"setting": "sounds", "value": "off"}], ["set_setting", {"setting": "volume", "value": 0.3}]]}
+{"id": "en-122", "lang": "en", "kind": "multi", "text": "recenter and use the floating layout", "gold": [["recenter", {}], ["set_layout", {"mode": "float"}]]}
+{"id": "en-123", "lang": "en", "kind": "multi", "text": "set the radius to two meters and the softness to half a meter", "gold": [["set_setting", {"setting": "focus_radius", "value": 2.0}], ["set_setting", {"setting": "focus_softness", "value": 0.5}]]}
+{"id": "en-124", "lang": "en", "kind": "multi", "text": "darken the room, then open settings", "gold": [["set_focus", {"state": "on"}], ["open_panel", {"panel": "settings"}]]}
+{"id": "en-125", "lang": "en", "kind": "multi", "text": "open the browser, the files and git", "gold": [["open_panel", {"panel": "browser"}], ["open_panel", {"panel": "files"}], ["open_panel", {"panel": "git"}]]}
+{"id": "en-126", "lang": "en", "kind": "multi", "text": "turn off ambient focus and close everything", "gold": [["set_focus", {"state": "off"}], ["close_all_panels", {}]]}
+{"id": "en-127", "lang": "en", "kind": "multi", "text": "make the windows bigger and increase the opacity", "gold": [["set_setting", {"setting": "ui_scale", "value": "+"}], ["set_setting", {"setting": "opacity", "value": "+"}]]}
+{"id": "en-128", "lang": "en", "kind": "multi", "text": "switch to the metacodex workspace and open the threads", "gold": [["switch_workspace", {"name": "metacodex"}], ["open_panel", {"panel": "threads"}]]}
+{"id": "en-129", "lang": "en", "kind": "multi", "text": "show the installed tools and the storage", "gold": [["open_panel", {"panel": "tools"}], ["open_panel", {"panel": "storage"}]]}
+{"id": "en-130", "lang": "en", "kind": "multi", "text": "turn on spoken answers and set the volume to max", "gold": [["set_setting", {"setting": "speak", "value": "on"}], ["set_setting", {"setting": "volume", "value": 1.0}]]}
+{"id": "en-131", "lang": "en", "kind": "multi", "text": "close all windows, turn on ambient focus and set the intensity to 80 percent", "gold": [["close_all_panels", {}], ["set_focus", {"state": "on"}], ["set_setting", {"setting": "focus_intensity", "value": 0.8}]]}
+{"id": "en-132", "lang": "en", "kind": "multi", "text": "find the thread about the keyboard and open the files", "gold": [["find_thread", {"keys": ["keyboard"]}], ["open_panel", {"panel": "files"}]]}
+{"id": "en-133", "lang": "en", "kind": "multi", "text": "hide the vault and show the agents", "gold": [["close_panel", {"panel": "vault"}], ["open_panel", {"panel": "agents"}]]}
+{"id": "en-134", "lang": "en", "kind": "multi", "text": "open settings, then recenter", "gold": [["open_panel", {"panel": "settings"}], ["recenter", {}]]}
+{"id": "en-135", "lang": "en", "kind": "multi", "text": "turn off the hand rays and turn on the sounds", "gold": [["set_setting", {"setting": "hand_rays", "value": "off"}], ["set_setting", {"setting": "sounds", "value": "on"}]]}
+{"id": "en-136", "lang": "en", "kind": "multi", "text": "use the fixed layout and close all windows", "gold": [["set_layout", {"mode": "fixed"}], ["close_all_panels", {}]]}
+{"id": "en-137", "lang": "en", "kind": "multi", "text": "open the voice panel and the system panel", "gold": [["open_panel", {"panel": "voice"}], ["open_panel", {"panel": "system"}]]}
+{"id": "en-138", "lang": "en", "kind": "multi", "text": "set the blur to 70 percent and the intensity to 40 percent", "gold": [["set_setting", {"setting": "focus_blur", "value": 0.7}], ["set_setting", {"setting": "focus_intensity", "value": 0.4}]]}
+{"id": "en-139", "lang": "en", "kind": "multi", "text": "open a new terminal, then close the vault, then recenter", "gold": [["new_terminal", {}], ["close_panel", {"panel": "vault"}], ["recenter", {}]]}
+{"id": "en-140", "lang": "en", "kind": "noisy", "text": "Ternon ambent forgoose.", "gold": [["set_focus", {"state": "on"}]]}
+{"id": "en-141", "lang": "en", "kind": "noisy", "text": "Turn off ambient fogus.", "gold": [["set_focus", {"state": "off"}]]}
+{"id": "en-142", "lang": "en", "kind": "noisy", "text": "Turn off from the infoguse.", "gold": [["set_focus", {"state": "off"}]]}
+{"id": "en-143", "lang": "en", "kind": "noisy", "text": "Reduce ambient fogus intensity.", "gold": [["set_setting", {"setting": "focus_intensity", "value": "-"}]]}
+{"id": "en-144", "lang": "en", "kind": "noisy", "text": "Closer panels.", "gold": [["close_all_panels", {}]]}
+{"id": "en-145", "lang": "en", "kind": "noisy", "text": "Closel windows", "gold": [["close_all_panels", {}]]}
+{"id": "en-146", "lang": "en", "kind": "noisy", "text": "Open panels for threads and agents.", "gold": [["open_panel", {"panel": "threads"}], ["open_panel", {"panel": "agents"}]]}
+{"id": "en-147", "lang": "en", "kind": "noisy", "text": "Obrans scripts.", "gold": [["open_panel", {"panel": "scripts"}]]}
+{"id": "en-148", "lang": "en", "kind": "noisy", "text": "Open the provider's page.", "gold": [["open_panel", {"panel": "agents"}]]}
+{"id": "en-149", "lang": "en", "kind": "noisy", "text": "Open ambient fogus.", "gold": [["open_panel", {"panel": "focus"}]]}
+{"id": "en-150", "lang": "en", "kind": "noisy", "text": "turn on ambient fogus and set intensity to zero", "gold": [["set_focus", {"state": "on"}], ["set_setting", {"setting": "focus_intensity", "value": 0.0}]]}
+{"id": "en-151", "lang": "en", "kind": "noisy", "text": "opn the vault", "gold": [["open_panel", {"panel": "vault"}]]}
+{"id": "en-152", "lang": "en", "kind": "noisy", "text": "clothes all windows", "gold": [["close_all_panels", {}]]}
+{"id": "en-153", "lang": "en", "kind": "noisy", "text": "turn of the sounds", "gold": [["set_setting", {"setting": "sounds", "value": "off"}]]}
+{"id": "en-154", "lang": "en", "kind": "noisy", "text": "set the volum to fifty percent", "gold": [["set_setting", {"setting": "volume", "value": 0.5}]]}
+{"id": "en-155", "lang": "en", "kind": "noisy", "text": "open the setings", "gold": [["open_panel", {"panel": "settings"}]]}
+{"id": "en-156", "lang": "en", "kind": "noisy", "text": "new terminel", "gold": [["new_terminal", {}]]}
+{"id": "en-157", "lang": "en", "kind": "noisy", "text": "re center", "gold": [["recenter", {}]]}
+{"id": "en-158", "lang": "en", "kind": "noisy", "text": "show the key board", "gold": [["show_keyboard", {}]]}
+{"id": "en-159", "lang": "en", "kind": "noisy", "text": "open the fails", "gold": [["open_panel", {"panel": "files"}]]}
+{"id": "en-160", "lang": "en", "kind": "noisy", "text": "open the voice pannel", "gold": [["open_panel", {"panel": "voice"}]]}
+{"id": "en-161", "lang": "en", "kind": "noisy", "text": "make the windows biger", "gold": [["set_setting", {"setting": "ui_scale", "value": "+"}]]}
+{"id": "en-162", "lang": "en", "kind": "noisy", "text": "find the thred about the keyboard", "gold": [["find_thread", {"keys": ["keyboard"]}]]}
+{"id": "en-163", "lang": "en", "kind": "noisy", "text": "use the floting layout", "gold": [["set_layout", {"mode": "float"}]]}
+{"id": "en-164", "lang": "en", "kind": "noisy", "text": "turn off ambient focus and open the vault", "gold": [["set_focus", {"state": "off"}], ["open_panel", {"panel": "vault"}]]}
+{"id": "en-165", "lang": "en", "kind": "none", "text": "Thank you.", "gold": []}
+{"id": "en-166", "lang": "en", "kind": "none", "text": "Ugh.", "gold": []}
+{"id": "en-167", "lang": "en", "kind": "none", "text": "What can you do for me?", "gold": []}
+{"id": "en-168", "lang": "en", "kind": "none", "text": "What is the name of this program?", "gold": []}
+{"id": "en-169", "lang": "en", "kind": "none", "text": "hello there", "gold": []}
+{"id": "en-170", "lang": "en", "kind": "none", "text": "what's the weather like", "gold": []}
+{"id": "en-171", "lang": "en", "kind": "none", "text": "good morning", "gold": []}
+{"id": "en-172", "lang": "en", "kind": "none", "text": "tell me a joke", "gold": []}
+{"id": "en-173", "lang": "en", "kind": "none", "text": "I'm tired", "gold": []}
+{"id": "en-174", "lang": "en", "kind": "none", "text": "who made you", "gold": []}
+{"id": "en-175", "lang": "en", "kind": "none", "text": "how are you", "gold": []}
+{"id": "en-176", "lang": "en", "kind": "none", "text": "what time is it", "gold": []}
+{"id": "en-177", "lang": "en", "kind": "none", "text": "that's great", "gold": []}
+{"id": "en-178", "lang": "en", "kind": "none", "text": "never mind", "gold": []}
+{"id": "en-179", "lang": "en", "kind": "none", "text": "hmm let me think", "gold": []}
+{"id": "it-180", "lang": "it", "kind": "single", "text": "mostrami i terminali", "gold": [["open_panel", {"panel": "terminals"}]]}
+{"id": "it-181", "lang": "it", "kind": "single", "text": "apri i terminali", "gold": [["open_panel", {"panel": "terminals"}]]}
+{"id": "it-182", "lang": "it", "kind": "single", "text": "elenca i terminali aperti", "gold": [["open_panel", {"panel": "terminals"}]]}
+{"id": "it-183", "lang": "it", "kind": "single", "text": "apri i file", "gold": [["open_panel", {"panel": "files"}]]}
+{"id": "it-184", "lang": "it", "kind": "single", "text": "mostrami le cartelle", "gold": [["open_panel", {"panel": "files"}]]}
+{"id": "it-185", "lang": "it", "kind": "single", "text": "apri il gestore dei file", "gold": [["open_panel", {"panel": "files"}]]}
+{"id": "it-186", "lang": "it", "kind": "single", "text": "apri git", "gold": [["open_panel", {"panel": "git"}]]}
+{"id": "it-187", "lang": "it", "kind": "single", "text": "mostra il controllo versione", "gold": [["open_panel", {"panel": "git"}]]}
+{"id": "it-188", "lang": "it", "kind": "single", "text": "apri il pannello del repository", "gold": [["open_panel", {"panel": "git"}]]}
+{"id": "it-189", "lang": "it", "kind": "single", "text": "apri la pagina dei provider", "gold": [["open_panel", {"panel": "agents"}]]}
+{"id": "it-190", "lang": "it", "kind": "single", "text": "quali provider AI sono collegati", "gold": [["open_panel", {"panel": "agents"}]]}
+{"id": "it-191", "lang": "it", "kind": "single", "text": "mostrami gli agenti", "gold": [["open_panel", {"panel": "agents"}]]}
+{"id": "it-192", "lang": "it", "kind": "single", "text": "mostra le mie conversazioni", "gold": [["open_panel", {"panel": "threads"}]]}
+{"id": "it-193", "lang": "it", "kind": "single", "text": "apri la lista dei thread", "gold": [["open_panel", {"panel": "threads"}]]}
+{"id": "it-194", "lang": "it", "kind": "single", "text": "dove sono le mie chat", "gold": [["open_panel", {"panel": "threads"}]]}
+{"id": "it-195", "lang": "it", "kind": "single", "text": "apri il browser", "gold": [["open_panel", {"panel": "browser"}]]}
+{"id": "it-196", "lang": "it", "kind": "single", "text": "mi serve il browser web", "gold": [["open_panel", {"panel": "browser"}]]}
+{"id": "it-197", "lang": "it", "kind": "single", "text": "fammi vedere il browser", "gold": [["open_panel", {"panel": "browser"}]]}
+{"id": "it-198", "lang": "it", "kind": "single", "text": "apri gli script", "gold": [["open_panel", {"panel": "scripts"}]]}
+{"id": "it-199", "lang": "it", "kind": "single", "text": "mostra i miei script lua", "gold": [["open_panel", {"panel": "scripts"}]]}
+{"id": "it-200", "lang": "it", "kind": "single", "text": "vai al pannello degli script", "gold": [["open_panel", {"panel": "scripts"}]]}
+{"id": "it-201", "lang": "it", "kind": "single", "text": "apri lo studio dei gesti", "gold": [["open_panel", {"panel": "gestures"}]]}
+{"id": "it-202", "lang": "it", "kind": "single", "text": "mostra i gesti delle mani", "gold": [["open_panel", {"panel": "gestures"}]]}
+{"id": "it-203", "lang": "it", "kind": "single", "text": "portami ai gesti", "gold": [["open_panel", {"panel": "gestures"}]]}
+{"id": "it-204", "lang": "it", "kind": "single", "text": "apri la cassaforte", "gold": [["open_panel", {"panel": "vault"}]]}
+{"id": "it-205", "lang": "it", "kind": "single", "text": "dove sono le mie chiavi api", "gold": [["open_panel", {"panel": "vault"}]]}
+{"id": "it-206", "lang": "it", "kind": "single", "text": "mostra i miei segreti", "gold": [["open_panel", {"panel": "vault"}]]}
+{"id": "it-207", "lang": "it", "kind": "single", "text": "apri le impostazioni", "gold": [["open_panel", {"panel": "settings"}]]}
+{"id": "it-208", "lang": "it", "kind": "single", "text": "voglio cambiare le impostazioni", "gold": [["open_panel", {"panel": "settings"}]]}
+{"id": "it-209", "lang": "it", "kind": "single", "text": "apri le preferenze", "gold": [["open_panel", {"panel": "settings"}]]}
+{"id": "it-210", "lang": "it", "kind": "single", "text": "apri il pannello voce", "gold": [["open_panel", {"panel": "voice"}]]}
+{"id": "it-211", "lang": "it", "kind": "single", "text": "mostra il controllo vocale", "gold": [["open_panel", {"panel": "voice"}]]}
+{"id": "it-212", "lang": "it", "kind": "single", "text": "apri le impostazioni della voce", "gold": [["open_panel", {"panel": "voice"}]]}
+{"id": "it-213", "lang": "it", "kind": "single", "text": "apri il pannello di sistema", "gold": [["open_panel", {"panel": "system"}]]}
+{"id": "it-214", "lang": "it", "kind": "single", "text": "mostra le informazioni di sistema", "gold": [["open_panel", {"panel": "system"}]]}
+{"id": "it-215", "lang": "it", "kind": "single", "text": "vai al sistema", "gold": [["open_panel", {"panel": "system"}]]}
+{"id": "it-216", "lang": "it", "kind": "single", "text": "apri le impostazioni del focus ambientale", "gold": [["open_panel", {"panel": "focus"}]]}
+{"id": "it-217", "lang": "it", "kind": "single", "text": "mostra le opzioni del focus", "gold": [["open_panel", {"panel": "focus"}]]}
+{"id": "it-218", "lang": "it", "kind": "single", "text": "apri il focus ambientale", "gold": [["open_panel", {"panel": "focus"}]]}
+{"id": "it-219", "lang": "it", "kind": "single", "text": "quanto spazio mi rimane", "gold": [["open_panel", {"panel": "storage"}]]}
+{"id": "it-220", "lang": "it", "kind": "single", "text": "mostra lo spazio su disco", "gold": [["open_panel", {"panel": "storage"}]]}
+{"id": "it-221", "lang": "it", "kind": "single", "text": "apri l'archiviazione", "gold": [["open_panel", {"panel": "storage"}]]}
+{"id": "it-222", "lang": "it", "kind": "single", "text": "mostra gli strumenti installati", "gold": [["open_panel", {"panel": "tools"}]]}
+{"id": "it-223", "lang": "it", "kind": "single", "text": "quali strumenti sono installati", "gold": [["open_panel", {"panel": "tools"}]]}
+{"id": "it-224", "lang": "it", "kind": "single", "text": "apri la lista degli strumenti", "gold": [["open_panel", {"panel": "tools"}]]}
+{"id": "it-225", "lang": "it", "kind": "single", "text": "chiudi la cassaforte", "gold": [["close_panel", {"panel": "vault"}]]}
+{"id": "it-226", "lang": "it", "kind": "single", "text": "nascondi i file", "gold": [["close_panel", {"panel": "files"}]]}
+{"id": "it-227", "lang": "it", "kind": "single", "text": "chiudi git", "gold": [["close_panel", {"panel": "git"}]]}
+{"id": "it-228", "lang": "it", "kind": "single", "text": "chiudi le impostazioni", "gold": [["close_panel", {"panel": "settings"}]]}
+{"id": "it-229", "lang": "it", "kind": "single", "text": "chiudi il browser", "gold": [["close_panel", {"panel": "browser"}]]}
+{"id": "it-230", "lang": "it", "kind": "single", "text": "togli il pannello degli script", "gold": [["close_panel", {"panel": "scripts"}]]}
+{"id": "it-231", "lang": "it", "kind": "single", "text": "chiudi tutte le finestre", "gold": [["close_all_panels", {}]]}
+{"id": "it-232", "lang": "it", "kind": "single", "text": "chiudi tutto", "gold": [["close_all_panels", {}]]}
+{"id": "it-233", "lang": "it", "kind": "single", "text": "pulisci la vista", "gold": [["close_all_panels", {}]]}
+{"id": "it-234", "lang": "it", "kind": "single", "text": "togli tutti i pannelli", "gold": [["close_all_panels", {}]]}
+{"id": "it-235", "lang": "it", "kind": "single", "text": "apri un nuovo terminale", "gold": [["new_terminal", {}]]}
+{"id": "it-236", "lang": "it", "kind": "single", "text": "mi serve un'altra shell", "gold": [["new_terminal", {}]]}
+{"id": "it-237", "lang": "it", "kind": "single", "text": "dammi una nuova console", "gold": [["new_terminal", {}]]}
+{"id": "it-238", "lang": "it", "kind": "single", "text": "avvia un terminale", "gold": [["new_terminal", {}]]}
+{"id": "it-239", "lang": "it", "kind": "single", "text": "trova il thread dove abbiamo sistemato la tastiera", "gold": [["find_thread", {"keys": ["tastiera"]}]]}
+{"id": "it-240", "lang": "it", "kind": "single", "text": "quale conversazione parlava della pagina di login", "gold": [["find_thread", {"keys": ["login"]}]]}
+{"id": "it-241", "lang": "it", "kind": "single", "text": "cerca nelle chat la migrazione del database", "gold": [["find_thread", {"keys": ["migrazione", "database"]}]]}
+{"id": "it-242", "lang": "it", "kind": "single", "text": "cerca la conversazione sui comandi vocali", "gold": [["find_thread", {"keys": ["comandi", "vocali"]}]]}
+{"id": "it-243", "lang": "it", "kind": "single", "text": "passa al workspace metacodex", "gold": [["switch_workspace", {"name": "metacodex"}]]}
+{"id": "it-244", "lang": "it", "kind": "single", "text": "vai al progetto sandybridge", "gold": [["switch_workspace", {"name": "sandybridge"}]]}
+{"id": "it-245", "lang": "it", "kind": "single", "text": "cambia workspace", "gold": [["switch_workspace", {}]]}
+{"id": "it-246", "lang": "it", "kind": "single", "text": "apri il workspace del progetto alpha", "gold": [["switch_workspace", {"name": "alpha"}]]}
+{"id": "it-247", "lang": "it", "kind": "single", "text": "usa il layout fluttuante", "gold": [["set_layout", {"mode": "float"}]]}
+{"id": "it-248", "lang": "it", "kind": "single", "text": "fai fluttuare le finestre intorno a me", "gold": [["set_layout", {"mode": "float"}]]}
+{"id": "it-249", "lang": "it", "kind": "single", "text": "layout fisso per favore", "gold": [["set_layout", {"mode": "fixed"}]]}
+{"id": "it-250", "lang": "it", "kind": "single", "text": "blocca i pannelli al loro posto", "gold": [["set_layout", {"mode": "fixed"}]]}
+{"id": "it-251", "lang": "it", "kind": "single", "text": "ricentra", "gold": [["recenter", {}]]}
+{"id": "it-252", "lang": "it", "kind": "single", "text": "riporta tutto davanti a me", "gold": [["recenter", {}]]}
+{"id": "it-253", "lang": "it", "kind": "single", "text": "metti le finestre davanti a me", "gold": [["recenter", {}]]}
+{"id": "it-254", "lang": "it", "kind": "single", "text": "riposiziona la vista", "gold": [["recenter", {}]]}
+{"id": "it-255", "lang": "it", "kind": "single", "text": "mostra la tastiera", "gold": [["show_keyboard", {}]]}
+{"id": "it-256", "lang": "it", "kind": "single", "text": "apri la tastiera", "gold": [["show_keyboard", {}]]}
+{"id": "it-257", "lang": "it", "kind": "single", "text": "mi serve la tastiera", "gold": [["show_keyboard", {}]]}
+{"id": "it-258", "lang": "it", "kind": "single", "text": "scrivi ciao mondo", "gold": [["type_text", {"text": "ciao mondo"}]]}
+{"id": "it-259", "lang": "it", "kind": "single", "text": "esegui git status", "gold": [["run_in_terminal", {"command": "git status"}]]}
+{"id": "it-260", "lang": "it", "kind": "single", "text": "accendi il focus ambientale", "gold": [["set_focus", {"state": "on"}]]}
+{"id": "it-261", "lang": "it", "kind": "single", "text": "attiva la modalità focus", "gold": [["set_focus", {"state": "on"}]]}
+{"id": "it-262", "lang": "it", "kind": "single", "text": "oscura la stanza", "gold": [["set_focus", {"state": "on"}]]}
+{"id": "it-263", "lang": "it", "kind": "single", "text": "spegni il focus", "gold": [["set_focus", {"state": "off"}]]}
+{"id": "it-264", "lang": "it", "kind": "single", "text": "mostrami di nuovo la stanza", "gold": [["set_focus", {"state": "off"}]]}
+{"id": "it-265", "lang": "it", "kind": "single", "text": "disattiva il focus ambientale", "gold": [["set_focus", {"state": "off"}]]}
+{"id": "it-266", "lang": "it", "kind": "single", "text": "imposta l'intensità al 50 per cento", "gold": [["set_setting", {"setting": "focus_intensity", "value": 0.5}]]}
+{"id": "it-267", "lang": "it", "kind": "single", "text": "rendi la stanza completamente buia", "gold": [["set_setting", {"setting": "focus_intensity", "value": 1.0}]]}
+{"id": "it-268", "lang": "it", "kind": "single", "text": "scurisci un po' di più la stanza", "gold": [["set_setting", {"setting": "focus_intensity", "value": "+"}]]}
+{"id": "it-269", "lang": "it", "kind": "single", "text": "imposta il raggio della cupola a due metri", "gold": [["set_setting", {"setting": "focus_radius", "value": 2.0}]]}
+{"id": "it-270", "lang": "it", "kind": "single", "text": "raggio un metro e mezzo", "gold": [["set_setting", {"setting": "focus_radius", "value": 1.5}]]}
+{"id": "it-271", "lang": "it", "kind": "single", "text": "imposta la morbidezza a mezzo metro", "gold": [["set_setting", {"setting": "focus_softness", "value": 0.5}]]}
+{"id": "it-272", "lang": "it", "kind": "single", "text": "metti la sfocatura al cinquanta per cento", "gold": [["set_setting", {"setting": "focus_blur", "value": 0.5}]]}
+{"id": "it-273", "lang": "it", "kind": "single", "text": "imposta l'opacità al massimo", "gold": [["set_setting", {"setting": "opacity", "value": 1.0}]]}
+{"id": "it-274", "lang": "it", "kind": "single", "text": "rendi le finestre più trasparenti", "gold": [["set_setting", {"setting": "opacity", "value": "-"}]]}
+{"id": "it-275", "lang": "it", "kind": "single", "text": "imposta la distanza dei pannelli a un metro", "gold": [["set_setting", {"setting": "panel_distance", "value": 1.0}]]}
+{"id": "it-276", "lang": "it", "kind": "single", "text": "rendi le finestre più grandi", "gold": [["set_setting", {"setting": "ui_scale", "value": "+"}]]}
+{"id": "it-277", "lang": "it", "kind": "single", "text": "rimpicciolisci il testo", "gold": [["set_setting", {"setting": "ui_scale", "value": "-"}]]}
+{"id": "it-278", "lang": "it", "kind": "single", "text": "aumenta la nitidezza", "gold": [["set_setting", {"setting": "sharpness", "value": "+"}]]}
+{"id": "it-279", "lang": "it", "kind": "single", "text": "attiva la curvatura dei pannelli", "gold": [["set_setting", {"setting": "bend", "value": "on"}]]}
+{"id": "it-280", "lang": "it", "kind": "single", "text": "spegni la curvatura dei pannelli", "gold": [["set_setting", {"setting": "bend", "value": "off"}]]}
+{"id": "it-281", "lang": "it", "kind": "single", "text": "disattiva i suoni", "gold": [["set_setting", {"setting": "sounds", "value": "off"}]]}
+{"id": "it-282", "lang": "it", "kind": "single", "text": "togli i click", "gold": [["set_setting", {"setting": "sounds", "value": "off"}]]}
+{"id": "it-283", "lang": "it", "kind": "single", "text": "metti il volume a un quarto", "gold": [["set_setting", {"setting": "volume", "value": 0.25}]]}
+{"id": "it-284", "lang": "it", "kind": "single", "text": "alza il volume", "gold": [["set_setting", {"setting": "volume", "value": "+"}]]}
+{"id": "it-285", "lang": "it", "kind": "single", "text": "abbassa un po' il volume", "gold": [["set_setting", {"setting": "volume", "value": "-"}]]}
+{"id": "it-286", "lang": "it", "kind": "single", "text": "attiva le risposte vocali", "gold": [["set_setting", {"setting": "speak", "value": "on"}]]}
+{"id": "it-287", "lang": "it", "kind": "single", "text": "nascondi i raggi delle mani", "gold": [["set_setting", {"setting": "hand_rays", "value": "off"}]]}
+{"id": "it-288", "lang": "it", "kind": "single", "text": "mostra i raggi", "gold": [["set_setting", {"setting": "hand_rays", "value": "on"}]]}
+{"id": "it-289", "lang": "it", "kind": "single", "text": "disattiva l'occlusione", "gold": [["set_setting", {"setting": "occlusion", "value": "off"}]]}
+{"id": "it-290", "lang": "it", "kind": "single", "text": "attiva il rendering foveato", "gold": [["set_setting", {"setting": "foveation", "value": "on"}]]}
+{"id": "it-291", "lang": "it", "kind": "single", "text": "disattiva il gesto dell'applauso", "gold": [["set_setting", {"setting": "clap", "value": "off"}]]}
+{"id": "it-292", "lang": "it", "kind": "single", "text": "imposta il raggio del carosello a un metro", "gold": [["set_setting", {"setting": "carousel_radius", "value": 1.0}]]}
+{"id": "it-293", "lang": "it", "kind": "single", "text": "metti il volume all'ottanta per cento", "gold": [["set_setting", {"setting": "volume", "value": 0.8}]]}
+{"id": "it-294", "lang": "it", "kind": "single", "text": "intensità 30", "gold": [["set_setting", {"setting": "focus_intensity", "value": 0.3}]]}
+{"id": "it-295", "lang": "it", "kind": "multi", "text": "accendi il focus ambientale e metti l'intensità al 100%", "gold": [["set_focus", {"state": "on"}], ["set_setting", {"setting": "focus_intensity", "value": 1.0}]]}
+{"id": "it-296", "lang": "it", "kind": "multi", "text": "accendi il focus ambientale e imposta l'intensità a zero", "gold": [["set_focus", {"state": "on"}], ["set_setting", {"setting": "focus_intensity", "value": 0.0}]]}
+{"id": "it-297", "lang": "it", "kind": "multi", "text": "imposta l'intensità al 50 per cento e accendi il focus ambientale", "gold": [["set_setting", {"setting": "focus_intensity", "value": 0.5}], ["set_focus", {"state": "on"}]]}
+{"id": "it-298", "lang": "it", "kind": "multi", "text": "chiudi tutte le finestre e apri la cassaforte", "gold": [["close_all_panels", {}], ["open_panel", {"panel": "vault"}]]}
+{"id": "it-299", "lang": "it", "kind": "multi", "text": "apri git e poi apri i file", "gold": [["open_panel", {"panel": "git"}], ["open_panel", {"panel": "files"}]]}
+{"id": "it-300", "lang": "it", "kind": "multi", "text": "apri un nuovo terminale e mostra la tastiera", "gold": [["new_terminal", {}], ["show_keyboard", {}]]}
+{"id": "it-301", "lang": "it", "kind": "multi", "text": "disattiva i suoni e metti il volume al 30 per cento", "gold": [["set_setting", {"setting": "sounds", "value": "off"}], ["set_setting", {"setting": "volume", "value": 0.3}]]}
+{"id": "it-302", "lang": "it", "kind": "multi", "text": "ricentra e usa il layout fluttuante", "gold": [["recenter", {}], ["set_layout", {"mode": "float"}]]}
+{"id": "it-303", "lang": "it", "kind": "multi", "text": "imposta il raggio a due metri e la morbidezza a mezzo metro", "gold": [["set_setting", {"setting": "focus_radius", "value": 2.0}], ["set_setting", {"setting": "focus_softness", "value": 0.5}]]}
+{"id": "it-304", "lang": "it", "kind": "multi", "text": "oscura la stanza, poi apri le impostazioni", "gold": [["set_focus", {"state": "on"}], ["open_panel", {"panel": "settings"}]]}
+{"id": "it-305", "lang": "it", "kind": "multi", "text": "apri il browser, i file e git", "gold": [["open_panel", {"panel": "browser"}], ["open_panel", {"panel": "files"}], ["open_panel", {"panel": "git"}]]}
+{"id": "it-306", "lang": "it", "kind": "multi", "text": "spegni il focus ambientale e chiudi tutto", "gold": [["set_focus", {"state": "off"}], ["close_all_panels", {}]]}
+{"id": "it-307", "lang": "it", "kind": "multi", "text": "rendi le finestre più grandi e aumenta l'opacità", "gold": [["set_setting", {"setting": "ui_scale", "value": "+"}], ["set_setting", {"setting": "opacity", "value": "+"}]]}
+{"id": "it-308", "lang": "it", "kind": "multi", "text": "passa al workspace metacodex e apri i thread", "gold": [["switch_workspace", {"name": "metacodex"}], ["open_panel", {"panel": "threads"}]]}
+{"id": "it-309", "lang": "it", "kind": "multi", "text": "mostra gli strumenti installati e l'archiviazione", "gold": [["open_panel", {"panel": "tools"}], ["open_panel", {"panel": "storage"}]]}
+{"id": "it-310", "lang": "it", "kind": "multi", "text": "attiva le risposte vocali e metti il volume al massimo", "gold": [["set_setting", {"setting": "speak", "value": "on"}], ["set_setting", {"setting": "volume", "value": 1.0}]]}
+{"id": "it-311", "lang": "it", "kind": "multi", "text": "chiudi tutte le finestre, accendi il focus ambientale e imposta l'intensità all'80 per cento", "gold": [["close_all_panels", {}], ["set_focus", {"state": "on"}], ["set_setting", {"setting": "focus_intensity", "value": 0.8}]]}
+{"id": "it-312", "lang": "it", "kind": "multi", "text": "trova il thread sulla tastiera e apri i file", "gold": [["find_thread", {"keys": ["tastiera"]}], ["open_panel", {"panel": "files"}]]}
+{"id": "it-313", "lang": "it", "kind": "multi", "text": "nascondi la cassaforte e mostra gli agenti", "gold": [["close_panel", {"panel": "vault"}], ["open_panel", {"panel": "agents"}]]}
+{"id": "it-314", "lang": "it", "kind": "multi", "text": "apri le impostazioni, poi ricentra", "gold": [["open_panel", {"panel": "settings"}], ["recenter", {}]]}
+{"id": "it-315", "lang": "it", "kind": "multi", "text": "spegni i raggi delle mani e accendi i suoni", "gold": [["set_setting", {"setting": "hand_rays", "value": "off"}], ["set_setting", {"setting": "sounds", "value": "on"}]]}
+{"id": "it-316", "lang": "it", "kind": "multi", "text": "usa il layout fisso e chiudi tutte le finestre", "gold": [["set_layout", {"mode": "fixed"}], ["close_all_panels", {}]]}
+{"id": "it-317", "lang": "it", "kind": "multi", "text": "apri il pannello voce e il pannello di sistema", "gold": [["open_panel", {"panel": "voice"}], ["open_panel", {"panel": "system"}]]}
+{"id": "it-318", "lang": "it", "kind": "multi", "text": "metti la sfocatura al 70 per cento e l'intensità al 40 per cento", "gold": [["set_setting", {"setting": "focus_blur", "value": 0.7}], ["set_setting", {"setting": "focus_intensity", "value": 0.4}]]}
+{"id": "it-319", "lang": "it", "kind": "multi", "text": "apri un nuovo terminale, poi chiudi la cassaforte, poi ricentra", "gold": [["new_terminal", {}], ["close_panel", {"panel": "vault"}], ["recenter", {}]]}
+{"id": "it-320", "lang": "it", "kind": "noisy", "text": "accendi il fokus ambientale", "gold": [["set_focus", {"state": "on"}]]}
+{"id": "it-321", "lang": "it", "kind": "noisy", "text": "spegni il focus ambientali", "gold": [["set_focus", {"state": "off"}]]}
+{"id": "it-322", "lang": "it", "kind": "noisy", "text": "apri le impostazione", "gold": [["open_panel", {"panel": "settings"}]]}
+{"id": "it-323", "lang": "it", "kind": "noisy", "text": "apri la casa forte", "gold": [["open_panel", {"panel": "vault"}]]}
+{"id": "it-324", "lang": "it", "kind": "noisy", "text": "metti il volume a cinquanta percento", "gold": [["set_setting", {"setting": "volume", "value": 0.5}]]}
+{"id": "it-325", "lang": "it", "kind": "noisy", "text": "chiudi tutte le finestra", "gold": [["close_all_panels", {}]]}
+{"id": "it-326", "lang": "it", "kind": "noisy", "text": "apri un nuovo terminali", "gold": [["new_terminal", {}]]}
+{"id": "it-327", "lang": "it", "kind": "noisy", "text": "ri centra", "gold": [["recenter", {}]]}
+{"id": "it-328", "lang": "it", "kind": "noisy", "text": "mostra la tastira", "gold": [["show_keyboard", {}]]}
+{"id": "it-329", "lang": "it", "kind": "noisy", "text": "apri i fail", "gold": [["open_panel", {"panel": "files"}]]}
+{"id": "it-330", "lang": "it", "kind": "noisy", "text": "apri il pannello vocce", "gold": [["open_panel", {"panel": "voice"}]]}
+{"id": "it-331", "lang": "it", "kind": "noisy", "text": "rendi le finestre piu grandi", "gold": [["set_setting", {"setting": "ui_scale", "value": "+"}]]}
+{"id": "it-332", "lang": "it", "kind": "noisy", "text": "trova il tred sulla tastiera", "gold": [["find_thread", {"keys": ["tastiera"]}]]}
+{"id": "it-333", "lang": "it", "kind": "noisy", "text": "usa il layout flutuante", "gold": [["set_layout", {"mode": "float"}]]}
+{"id": "it-334", "lang": "it", "kind": "noisy", "text": "accendi il focus e metti l'intensita al massimo", "gold": [["set_focus", {"state": "on"}], ["set_setting", {"setting": "focus_intensity", "value": 1.0}]]}
+{"id": "it-335", "lang": "it", "kind": "noisy", "text": "spegni il focus e apri la cassaforte", "gold": [["set_focus", {"state": "off"}], ["open_panel", {"panel": "vault"}]]}
+{"id": "it-336", "lang": "it", "kind": "noisy", "text": "apri gli scrip", "gold": [["open_panel", {"panel": "scripts"}]]}
+{"id": "it-337", "lang": "it", "kind": "noisy", "text": "disattiva i suonni", "gold": [["set_setting", {"setting": "sounds", "value": "off"}]]}
+{"id": "it-338", "lang": "it", "kind": "noisy", "text": "chiudi il brauser", "gold": [["close_panel", {"panel": "browser"}]]}
+{"id": "it-339", "lang": "it", "kind": "noisy", "text": "apri il sistemma", "gold": [["open_panel", {"panel": "system"}]]}
+{"id": "it-340", "lang": "it", "kind": "none", "text": "grazie", "gold": []}
+{"id": "it-341", "lang": "it", "kind": "none", "text": "ciao", "gold": []}
+{"id": "it-342", "lang": "it", "kind": "none", "text": "che tempo fa oggi", "gold": []}
+{"id": "it-343", "lang": "it", "kind": "none", "text": "buongiorno", "gold": []}
+{"id": "it-344", "lang": "it", "kind": "none", "text": "raccontami una barzelletta", "gold": []}
+{"id": "it-345", "lang": "it", "kind": "none", "text": "sono stanco", "gold": []}
+{"id": "it-346", "lang": "it", "kind": "none", "text": "chi ti ha creato", "gold": []}
+{"id": "it-347", "lang": "it", "kind": "none", "text": "come stai", "gold": []}
+{"id": "it-348", "lang": "it", "kind": "none", "text": "che ore sono", "gold": []}
+{"id": "it-349", "lang": "it", "kind": "none", "text": "perfetto", "gold": []}
+{"id": "it-350", "lang": "it", "kind": "none", "text": "lascia stare", "gold": []}
+{"id": "it-351", "lang": "it", "kind": "none", "text": "mmm fammi pensare", "gold": []}
+{"id": "it-352", "lang": "it", "kind": "none", "text": "cosa sai fare", "gold": []}
+{"id": "it-353", "lang": "it", "kind": "none", "text": "uffa", "gold": []}
+{"id": "it-354", "lang": "it", "kind": "none", "text": "va bene così", "gold": []}

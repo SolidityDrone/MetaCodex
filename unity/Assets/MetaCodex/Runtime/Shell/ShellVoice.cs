@@ -697,6 +697,12 @@ namespace MetaCodex.Shell
         }
 
         /// Settings that voice (and the local LLM) can change: id, the settings key, kind, range, unit, spoken names.
+        /// The settings voice can change (id, key, kind, range, unit, label, spoken names), for the voice bench.
+        public static JArray VoiceSettingsForBench() => new JArray(VoiceSettingsCatalog.Select(x => new JObject
+        {
+            ["id"] = x.Id, ["key"] = x.Key, ["kind"] = x.Kind, ["min"] = x.Min, ["max"] = x.Max, ["unit"] = x.Unit, ["label"] = x.Label, ["names"] = new JArray(x.Names),
+        }));
+
         private static readonly VoiceSetting[] VoiceSettingsCatalog =
         {
             new VoiceSetting { Id = "focus", Key = "focusEnabled", Kind = "bool", Label = "Ambient focus", Names = new[] { "ambient focus", "focus", "focus mode", "the dome", "dome" } },

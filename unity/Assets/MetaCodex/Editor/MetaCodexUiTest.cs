@@ -56,6 +56,14 @@ namespace MetaCodex.EditorTools
             return string.IsNullOrWhiteSpace(only) || only.Split(',').Any(x => x.Trim().Length > 0 && section.StartsWith(x.Trim(), StringComparison.OrdinalIgnoreCase));
         }
 
+        /// Sections that only run when named (benches, exports), never in the full suite.
+        private static bool WantNamed(string section)
+        {
+            string only = Environment.GetEnvironmentVariable("MCX_UITEST_ONLY");
+            if (string.IsNullOrWhiteSpace(only) && File.Exists(Path.Combine("Bench", "uitest-only"))) only = File.ReadAllText(Path.Combine("Bench", "uitest-only")).Trim();
+            return !string.IsNullOrWhiteSpace(only) && only.Split(',').Any(x => string.Equals(x.Trim(), section, StringComparison.OrdinalIgnoreCase));
+        }
+
         [MenuItem("MetaCodex/4. UI self-test")]
         public static string Run()
         {
@@ -143,6 +151,7 @@ namespace MetaCodex.EditorTools
                 if (Want("vaultgit")) VaultGit(shell);
                 if (Want("focus")) Focus(shell, head);
                 if (Want("system")) SystemPanel(shell, tmp);
+                if (WantNamed("voiceexport")) VoiceExport(shell);
             }
             catch (Exception ex) { Fail("exception: " + ex); }
             finally
@@ -1200,6 +1209,58 @@ end)
             Check(shell.ControlCommand("view", "mermaid graph TD\\nX-->Y").StartsWith("ok"), "view mermaid from one line");
             shell.ControlCommand("view", "clear");
             Check(shell.Views.Count == 0 && !shell.PanelsById.Keys.Any(k => k.StartsWith("view-")), "view clear removes the views and their panels");
+        }
+
+        /// The voice bench's inputs from the app itself (tools/voicebench): the command registry as plugins and the LLM
+        /// see it, the settings catalogue, the exact LLM request, and what today's fast path makes of every bench sentence.
+        private static void VoiceExport(MetaCodexShell shell)
+        {
+            string dir = Path.Combine("Bench", "voice");
+            Directory.CreateDirectory(dir);
+            var v = shell.Voice;
+            var cmds = new JArray();
+            foreach (var c in v.All)
+            {
+                if (!c.Enabled) continue;
+                cmds.Add(new JObject
+                {
+                    ["name"] = c.Name, ["description"] = c.Description, ["owner"] = c.Owner, ["llm"] = c.Llm,
+                    ["parameters"] = c.Parameters.DeepClone(),
+                    ["synonyms"] = JObject.FromObject(c.Synonyms ?? new System.Collections.Generic.Dictionary<string, System.Collections.Generic.Dictionary<string, string>>()),
+                    ["phrases"] = new JArray(c.Phrases ?? new string[0]),
+                    ["examples"] = new JArray((c.Examples ?? new System.Collections.Generic.List<(string, string)>()).Select(e => new JArray(e.said, e.line))),
+                    ["vocabulary"] = new JArray(c.Vocabulary ?? new string[0]),
+                    ["usage"] = VoiceCommands.Usage(c),
+                });
+            }
+            var reg = new JObject
+            {
+                ["commands"] = cmds,
+                ["general_examples"] = new JArray(v.GeneralExamples.Select(e => new JArray(e.said, e.line))),
+                ["settings"] = MetaCodexShell.VoiceSettingsForBench(),
+            };
+            File.WriteAllText(Path.Combine(dir, "registry.json"), reg.ToString());
+            var req = shell.VoiceLlmRequest("{{SAID}}");
+            req["max_tokens"] = 48; // as the pipeline sends it
+            File.WriteAllText(Path.Combine(dir, "llm-request.json"), req.ToString());
+            string evalPath = Path.GetFullPath(Path.Combine("..", "tools", "voicebench", "eval.jsonl"));
+            int n = 0, hit = 0;
+            var sb = new StringBuilder();
+            foreach (var line in File.ReadAllLines(evalPath))
+            {
+                if (string.IsNullOrWhiteSpace(line)) continue;
+                var row = JObject.Parse(line);
+                var t0 = System.Diagnostics.Stopwatch.StartNew();
+                var all = v.FastMatchAll((string)row["text"]);
+                double ms = t0.Elapsed.TotalMilliseconds;
+                var res = new JObject { ["id"] = row["id"], ["ms"] = Math.Round(ms, 3) };
+                res["matches"] = all == null ? null : new JArray(all.Select(m => new JObject { ["command"] = m.Command.Name, ["args"] = m.Args, ["corrected"] = m.Corrected }));
+                sb.AppendLine(res.ToString(Newtonsoft.Json.Formatting.None));
+                n++;
+                if (all != null) hit++;
+            }
+            File.WriteAllText(Path.Combine(dir, "fastpath.jsonl"), sb.ToString());
+            Check(n > 300 && cmds.Count >= 13, $"voice bench export: {cmds.Count} commands, {n} sentences, the fast path matched {hit} ({Path.GetFullPath(dir)})");
         }
 
         private static void VoiceWords(MetaCodexShell shell)
