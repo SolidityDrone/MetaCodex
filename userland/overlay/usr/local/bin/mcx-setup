@@ -92,9 +92,10 @@ esac
 
 case "$want" in quest|all)
   say "native Quest apps: APK tools, JDK, NDK, android.jar, OpenXR"
-  if ! command -v aapt2 >/dev/null || ! command -v zipalign >/dev/null || ! command -v apksigner >/dev/null \
-     || ! command -v keytool >/dev/null || ! command -v unzip >/dev/null; then
-    say "apt: aapt2, zipalign, apksigner, JDK"
+  missing=""
+  for c in aapt2 zipalign apksigner keytool unzip; do command -v $c >/dev/null || missing="$missing $c"; done
+  if [ -n "$missing" ]; then
+    say "apt: aapt2, zipalign, apksigner, JDK (not on PATH:$missing; PATH=$PATH)"
     "${APT[@]}" update
     "${APT[@]}" install --no-install-recommends aapt zipalign apksigner default-jdk-headless unzip
   fi
