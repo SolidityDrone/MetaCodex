@@ -513,6 +513,9 @@ namespace MetaCodex.Shell
         private void OnSelected(UiPanel panel, Rect r)
         {
             LastSelection = (panel.Id, r);
+            // the frame goes as the picture is taken: it is not left on the window, nor drawn into the capture (owner
+            // 2026-11-09: "the orange section we drew doesn't disappear")
+            Router.ClearSelection(panel);
             // one selection per SELECT: the tool never stays on by surprise
             Router.SelectionMode = false;
             if (_selectButton != null) _selectButton.SetSelected(false);
@@ -544,8 +547,9 @@ namespace MetaCodex.Shell
             if (Toasts != null) Toasts.Show(text, kind);
         }
 
+        /// A dialog; asked from a panel's button it opens over that panel (UiModal: parallel to it, in front of it).
         public void Modal(string title, string text, string[] buttons, Action<int> onResult) =>
-            UiModal.Show(Router, Head, title, text, buttons, onResult, _root);
+            UiModal.Show(Router, Head, title, text, buttons, onResult, _root, Router.ActivePanel);
 
         void IScriptServices.VoiceSay(string text) => VoiceSay(text);
         void IScriptServices.VoiceRun(string text) => VoiceProcessText(text, null);

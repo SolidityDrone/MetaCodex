@@ -1788,12 +1788,70 @@ end)
                 $"the clipboard keeps the newest {shell.Clipboard.Max}: the oldest capture's file is gone ({items.Count} listed, {Directory.GetFiles(dir, "*.png").Length} files)");
             var listed = JArray.Parse(shell.CaptureCommand("list"));
             Check(listed.Count == 3 && ((string)listed[0]["path"]).StartsWith(MetaCodexShell.CapturesLinuxDir + "/capture-"), "mcx-ui capture list: the Linux paths, newest first: " + (string)listed[0]["path"]);
+            // SELECT (owner 2026-11-09): the orange frame goes as the picture is taken, from the window and from the picture
+            var selArea = new Rect(0.05f, 0.08f, 0.25f, 0.14f);
+            string newest0 = shell.Clipboard.Items.FirstOrDefault()?.file;
+            shell.SetSelectionMode(true);
+            Click(shell.Router, p, selArea.min, selArea.max);
+            var shot = shell.Clipboard.Items.FirstOrDefault();
+            bool took = shot != null && shot.file != newest0;
+            bool frameGone = !shell.Router.SelectionShown(p);
+            var plain = shell.CapturePanelArea(p, selArea); // the same area, no selection: to compare
+            int OrangeEdge(Texture2D tx)
+            {
+                var px = tx.GetPixels32();
+                var wc = (Color32)UiTheme.Current.Warn;
+                int n = 0;
+                for (int y = 0; y < tx.height; y++)
+                    for (int x = 0; x < tx.width; x++)
+                    {
+                        if (x > 6 && x < tx.width - 7 && y > 6 && y < tx.height - 7) continue;
+                        var c = px[y * tx.width + x];
+                        if (Math.Abs(c.r - wc.r) < 45 && Math.Abs(c.g - wc.g) < 45 && Math.Abs(c.b - wc.b) < 45) n++;
+                    }
+                return n;
+            }
+            int oSel = -1, oPlain = -1;
+            if (took && plain != null)
+            {
+                var ts = Png(shot); var tq = Png(plain);
+                oSel = OrangeEdge(ts); oPlain = OrangeEdge(tq);
+                UnityEngine.Object.DestroyImmediate(ts); UnityEngine.Object.DestroyImmediate(tq);
+            }
+            Check(took && frameGone && !shell.Router.SelectionMode && oSel >= 0 && oSel <= oPlain + 4,
+                $"SELECT: the capture is taken ({took}), the orange frame is gone from the window ({frameGone}) and is not in the picture ({oSel} orange border pixels, {oPlain} in the same area without a selection)");
             // CLIPBOARD: the list and a preview
             shell.OpenPanel("clipboard");
             var cp = shell.PanelsById["clipboard"];
             cp.ForceRefresh();
             Check(shell.ClipListForTest.Items.Count == 3 && shell.ClipPreviewForTest != null && shell.ClipPreviewForTest.activeSelf, "CLIPBOARD lists the captures and shows the selected one");
             RenderPanel(cp, "ui-clipboard.png");
+            // CLEAR ALL pressed three times (owner 2026-11-09): one dialog, parallel to CLIPBOARD, centred on it and in
+            // front of it (never through it or half off its edge, a bent window's sides too); taps that land on it
+            // right away answer nothing
+            int clips0 = shell.Clipboard.Items.Count;
+            var clearAll = cp.Elements.OfType<UiButton>().First(b => b.Text == "CLEAR ALL");
+            for (int i = 0; i < 3; i++) Click(shell.Router, cp, clearAll.Rect.center);
+            var dlgs = UiModal.OpenPanels.ToList();
+            var dlg = dlgs.FirstOrDefault();
+            var ct = cp.transform;
+            float bendR = cp.BendNow * ct.lossyScale.x;
+            float Sag(float x) => bendR > 0.01f ? bendR - Mathf.Sqrt(Mathf.Max(0f, bendR * bendR - Mathf.Min(x * x, bendR * bendR))) : 0f;
+            float dAng = dlg != null ? Quaternion.Angle(dlg.transform.rotation, ct.rotation) : 999f;
+            float dAhead = dlg != null ? Vector3.Dot(ct.position - dlg.transform.position, ct.forward) : 0f;
+            float dOff = dlg != null ? Vector3.ProjectOnPlane(dlg.transform.position - ct.position, ct.forward).magnitude : 999f;
+            float clearance = dlg == null ? 0f : new[] { Vector2.zero, new Vector2(dlg.Width, 0f), new Vector2(0f, dlg.Height), new Vector2(dlg.Width, dlg.Height) }
+                .Min(c => { var rel = dlg.transform.TransformPoint(dlg.PanelToLocal(c)) - ct.position; return -Vector3.Dot(rel, ct.forward) - Sag(Vector3.Dot(rel, ct.right)); });
+            Check(dlgs.Count == 1 && dAng < 0.5f && dAhead > 0.03f && dOff < 0.005f && clearance > 0.03f && shell.Clipboard.Items.Count == clips0,
+                $"CLEAR ALL pressed 3 times: {dlgs.Count} dialog, parallel to CLIPBOARD ({dAng:F1}°), centred on it ({dOff * 100f:F1} cm off), {dAhead * 100f:F1} cm in front, its nearest corner {clearance * 100f:F1} cm clear of the window (bend {bendR:F2} m); the extra taps deleted nothing ({shell.Clipboard.Items.Count}/{clips0})");
+            if (dlg != null) dlg.ForceRefresh(); // edit mode: build its shapes before the picture
+            if (dlg != null) RenderAt("ui-dialog-over-window.png", ct.position - ct.forward * 0.9f + ct.right * 0.25f, Quaternion.LookRotation(ct.position - (ct.position - ct.forward * 0.9f + ct.right * 0.25f), Vector3.up), 50f, 900, 700);
+            if (dlg != null)
+            {
+                System.Threading.Thread.Sleep(Mathf.CeilToInt(UiModal.InputGrace * 1000f) + 80);
+                dlg.Elements.OfType<UiButton>().First(b => b.Text == "CANCEL").Click();
+            }
+            Check(UiModal.OpenCount == 0 && shell.Clipboard.Items.Count == clips0, $"CANCEL closes it, the captures stay ({UiModal.OpenCount} open, {shell.Clipboard.Items.Count} captures)");
             shell.ClosePanel("clipboard");
             // a thread: + -> the menu; REFERENCE CAPTURE -> a modal inside the thread panel; two picked -> two chips
             string root = GitService.ToLinuxPath(Path.GetFullPath(".."));

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using MetaCodex.Hands;
 using UnityEngine;
 
@@ -48,6 +49,9 @@ namespace MetaCodex.UI
         public bool SelectionMode;
         public event Action<UiPanel, Rect> Selected;
         public event Action<UiPanel, UiElement> Clicked;
+        /// The panel whose control is being pressed or released right now (null between): a dialog it opens belongs to
+        /// it (UiModal places it over that panel).
+        public UiPanel ActivePanel { get; private set; }
 
         private readonly UiPointer[] _hand = new UiPointer[4]; // 0 left ray, 1 right ray, 2 left poke, 3 right poke
         private readonly UiPointer _mouse = new UiPointer { Id = 9, Kind = PointerKind.Mouse, Hand = "mouse" };
@@ -274,7 +278,8 @@ namespace MetaCodex.UI
                     bool inside = ok && el.Rect.Contains(pt);
                     el.SetPressed(false);
                     p.Captured = null;
-                    el.OnRelease(ev, inside);
+                    ActivePanel = p.CapturedPanel;
+                    try { el.OnRelease(ev, inside); } finally { ActivePanel = null; }
                     if (inside) Clicked?.Invoke(p.CapturedPanel, el);
                     if (p.CapturedPanel == null) { Forget(p, null); p.HasHit = false; Finish(p); return; } // the click rebuilt or closed it
                 }
@@ -320,7 +325,8 @@ namespace MetaCodex.UI
                     p.CapturedPanel = panel;
                     p.PressPoint = point;
                     element.SetPressed(true);
-                    element.OnPress(new UiPointerEvent { Point = point, PressPoint = point, Pointer = p });
+                    ActivePanel = panel;
+                    try { element.OnPress(new UiPointerEvent { Point = point, PressPoint = point, Pointer = p }); } finally { ActivePanel = null; }
                 }
                 else if (panel.InHeader(point) && panel.Draggable && Settings.grabMode != 1 && p.Kind != PointerKind.Poke)
                 {
@@ -386,8 +392,8 @@ namespace MetaCodex.UI
                 if (el != null)
                 {
                     var ev = new UiPointerEvent { Point = p.SelectStart, PressPoint = p.SelectStart, Pointer = p };
-                    el.OnPress(ev);
-                    el.OnRelease(ev, true);
+                    ActivePanel = panel;
+                    try { el.OnPress(ev); el.OnRelease(ev, true); } finally { ActivePanel = null; }
                     Clicked?.Invoke(panel, el);
                 }
                 return;
@@ -398,6 +404,9 @@ namespace MetaCodex.UI
         }
 
         /// Hides the last committed selection frame on a panel.
+        /// Tests: whether a panel shows a selection frame.
+        public bool SelectionShown(UiPanel panel) => panel != null && _selectShape.TryGetValue(panel, out int id) && panel.Shapes.Get(id).Visible;
+
         public void ClearSelection(UiPanel panel)
         {
             if (panel != null && _selectShape.TryGetValue(panel, out int id)) panel.Shapes.SetVisible(id, false);
@@ -443,22 +452,59 @@ namespace MetaCodex.UI
     }
 
 
-    /// A small dialog in front of the user: title, text and a row of buttons; closes on any answer.
+    /// A small dialog: title, text and a row of buttons; closes on any answer.
+    /// One per question: asking the same again (a button pressed twice) brings the open one back instead of a second
+    /// copy, and a window asks one thing at a time (its new question replaces its open one). Asked from a window
+    /// (`owner`, the router's ActivePanel), it opens parallel to that window, centred on it and a few centimetres in
+    /// front of it, towards the user: on top of it, never through it or half off its edge (owner 2026-11-09).
+    /// Asked by voice or a script, it opens in front of the user.
     public static class UiModal
     {
-        public static UiPanel Show(UiInputRouter router, Transform head, string title, string text, string[] buttons, Action<int> onResult, Transform parent = null)
+        private sealed class Asked { public UiPanel Panel, Owner; public string Key; }
+        private static readonly List<Asked> Open = new List<Asked>();
+
+        /// Open dialogs (tests).
+        public static int OpenCount { get { Prune(); return Open.Count; } }
+        public static IEnumerable<UiPanel> OpenPanels { get { Prune(); return Open.Select(a => a.Panel); } }
+
+        private static void Prune() => Open.RemoveAll(a => a.Panel == null || !a.Panel.IsOpen);
+
+        /// Seconds a new dialog over a window ignores its buttons: the second tap of a double tap on the button that asked
+        /// lands on the dialog (it opens over that window) and must not answer it (DELETE ALL).
+        public static float InputGrace = 0.35f;
+
+        public static UiPanel Show(UiInputRouter router, Transform head, string title, string text, string[] buttons, Action<int> onResult, Transform parent = null, UiPanel owner = null)
         {
+            Prune();
+            string key = (title ?? "") + "\n" + (text ?? "") + "\n" + string.Join("|", buttons ?? new string[0]);
+            var same = Open.FirstOrDefault(a => a.Key == key);
+            if (same != null)
+            {
+                same.Panel.SetHighlight(1f);
+                UiSounds.Fire("click");
+                return same.Panel;
+            }
+            if (owner != null)
+                foreach (var old in Open.Where(a => a.Owner == owner).ToList())
+                {
+                    router.Unregister(old.Panel);
+                    old.Panel.Close();
+                    UiToasts.Kill(old.Panel.gameObject);
+                    Open.Remove(old);
+                }
             var t = UiTheme.Current;
             int lines = Mathf.Clamp(1 + (text?.Length ?? 0) / 52, 1, 8);
             float h = t.HeaderHeight + 0.03f + lines * 0.022f + t.ButtonHeight + 2 * t.Padding;
             var panel = UiPanel.Create<UiPanel>("modal", title, 0.50f, h, parent);
             panel.Add(new UiLabel(text, t.BodySize) { Rect = new Rect(t.Padding, t.HeaderHeight + t.Padding, 0.50f - 2 * t.Padding, lines * 0.022f + 0.01f), Wrap = true });
             float bw = (0.50f - 2 * t.Padding - t.Gap * (buttons.Length - 1)) / buttons.Length;
+            float opened = Time.realtimeSinceStartup, grace = owner != null ? InputGrace : 0f;
             for (int i = 0; i < buttons.Length; i++)
             {
                 int k = i;
                 panel.Add(new UiButton(buttons[i], () =>
                 {
+                    if (Time.realtimeSinceStartup - opened < grace) return;
                     router.Unregister(panel);
                     panel.Close();
                     UiToasts.Kill(panel.gameObject);
@@ -466,12 +512,30 @@ namespace MetaCodex.UI
                 }, i == 0 ? UiButtonStyle.Primary : UiButtonStyle.Normal)
                 { Rect = new Rect(t.Padding + i * (bw + t.Gap), h - t.Padding - t.ButtonHeight, bw, t.ButtonHeight) });
             }
-            panel.Closed += _ => router.Unregister(panel);
-            panel.PlaceInFront(head, 0.6f, 0.02f);
+            panel.Closed += _ =>
+            {
+                router.Unregister(panel);
+                Open.RemoveAll(a => a.Panel == panel);
+                if (Application.isPlaying) UnityEngine.Object.Destroy(panel.gameObject); // closed by its ✕: not kept around
+            };
+            if (owner != null && owner.IsOpen) PlaceOver(panel, owner);
+            else panel.PlaceInFront(head, 0.6f, 0.02f);
             panel.SetHighlight(1f);
             router.Register(panel);
             panel.Open();
+            Open.Add(new Asked { Panel = panel, Owner = owner, Key = key });
             return panel;
+        }
+
+        /// Parallel to `owner`, centred on it, `gap` metres in front of it towards the user, plus how far a bent owner's
+        /// sides come forward under the dialog's width (a bent panel curves towards the user): clear of it everywhere.
+        public static void PlaceOver(UiPanel panel, UiPanel owner, float gap = 0.05f)
+        {
+            var ot = owner.transform;
+            float scale = Mathf.Max(1e-4f, ot.lossyScale.x);
+            float r = owner.BendNow * scale, half = panel.Width * panel.transform.lossyScale.x * 0.5f;
+            float sag = r > 0.01f ? r - Mathf.Sqrt(Mathf.Max(0f, r * r - Mathf.Min(half, r) * Mathf.Min(half, r))) : 0f;
+            panel.transform.SetPositionAndRotation(ot.position - ot.forward * (gap + sag), ot.rotation);
         }
     }
 }
