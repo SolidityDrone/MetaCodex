@@ -11,3 +11,7 @@ node_modules/
 
 # personal status log (owner request: not versioned)
 /STATUS_LOG.md
+
+# native apps: build outputs and the local debug signing key (native/hello-native/build.sh makes both)
+/native/*/build/
+/native/.debug.keystore
