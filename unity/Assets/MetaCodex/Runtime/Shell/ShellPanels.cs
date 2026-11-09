@@ -37,7 +37,7 @@ namespace MetaCodex.Shell
             BuildVault();
             BuildVoice();
             BuildSystem();
-            foreach (var p in _panels.Values) p.transform.localScale = Vector3.one * Mathf.Clamp(Settings.uiScale, 0.6f, 1.8f);
+            foreach (var p in _panels.Values) p.BaseScale = Vector3.one * Mathf.Clamp(Settings.uiScale, 0.6f, 1.8f);
         }
 
         /// Accent colour changes are baked into shape tints: rebuild every panel, keeping where they are.
@@ -590,7 +590,6 @@ end)
 
             // LOOK: one standard appearance; what is left are comfort settings
             var k = new UiStack(area, t.Gap);
-            tabs.AddTo(TabLook, new UiSlider("SHARPNESS", 1f, 1.6f, s.renderScale, v => { s.renderScale = v; OnSettingsChanged(); }) { Rect = k.Next(rowH), Format = "0.00 x" });
             tabs.AddTo(TabLook, new UiSlider("PANEL OPACITY", 0.5f, 1f, s.panelOpacity, v => { s.panelOpacity = v; OnSettingsChanged(); }) { Rect = k.Next(rowH), Format = "0.00" });
             tabs.AddTo(TabLook, new UiSlider("SHADOWS", 0f, 2f, s.glow, v => { s.glow = v; OnSettingsChanged(); }) { Rect = k.Next(rowH), Format = "0.00" });
             tabs.AddTo(TabLook, new UiToggle("Foveated rendering (saves GPU, blurs the edges of the view)", s.foveation, v => { s.foveation = v; OnSettingsChanged(); }) { Rect = k.Next(rowH) });

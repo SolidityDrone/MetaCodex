@@ -96,7 +96,7 @@
 {"id": "en-095", "lang": "en", "kind": "single", "text": "set the panel distance to one meter", "gold": [["set_setting", {"setting": "panel_distance", "value": 1.0}]]}
 {"id": "en-096", "lang": "en", "kind": "single", "text": "make the windows bigger", "gold": [["set_setting", {"setting": "ui_scale", "value": "+"}]]}
 {"id": "en-097", "lang": "en", "kind": "single", "text": "make the text smaller", "gold": [["set_setting", {"setting": "ui_scale", "value": "-"}]]}
-{"id": "en-098", "lang": "en", "kind": "single", "text": "increase the sharpness", "gold": [["set_setting", {"setting": "sharpness", "value": "+"}]]}
+{"id": "en-098", "lang": "en", "kind": "single", "text": "increase the sharpness", "gold": []}
 {"id": "en-099", "lang": "en", "kind": "single", "text": "turn on panel bending", "gold": [["set_setting", {"setting": "bend", "value": "on"}]]}
 {"id": "en-100", "lang": "en", "kind": "single", "text": "turn off the curved panels", "gold": [["set_setting", {"setting": "bend", "value": "off"}]]}
 {"id": "en-101", "lang": "en", "kind": "single", "text": "turn off the sounds", "gold": [["set_setting", {"setting": "sounds", "value": "off"}]]}
@@ -276,7 +276,7 @@
 {"id": "it-275", "lang": "it", "kind": "single", "text": "imposta la distanza dei pannelli a un metro", "gold": [["set_setting", {"setting": "panel_distance", "value": 1.0}]]}
 {"id": "it-276", "lang": "it", "kind": "single", "text": "rendi le finestre più grandi", "gold": [["set_setting", {"setting": "ui_scale", "value": "+"}]]}
 {"id": "it-277", "lang": "it", "kind": "single", "text": "rimpicciolisci il testo", "gold": [["set_setting", {"setting": "ui_scale", "value": "-"}]]}
-{"id": "it-278", "lang": "it", "kind": "single", "text": "aumenta la nitidezza", "gold": [["set_setting", {"setting": "sharpness", "value": "+"}]]}
+{"id": "it-278", "lang": "it", "kind": "single", "text": "aumenta la nitidezza", "gold": []}
 {"id": "it-279", "lang": "it", "kind": "single", "text": "attiva la curvatura dei pannelli", "gold": [["set_setting", {"setting": "bend", "value": "on"}]]}
 {"id": "it-280", "lang": "it", "kind": "single", "text": "spegni la curvatura dei pannelli", "gold": [["set_setting", {"setting": "bend", "value": "off"}]]}
 {"id": "it-281", "lang": "it", "kind": "single", "text": "disattiva i suoni", "gold": [["set_setting", {"setting": "sounds", "value": "off"}]]}

@@ -68,7 +68,7 @@ vault's GIT tab).
 
 `set_setting` settings (spoken names in brackets): `focus` (ambient focus, the dome), `focus_intensity`
 (intensity, darkness), `focus_radius` (radius, dome radius, dome size), `focus_blur` (blur), `occlusion` (real things in front of windows), `depth_camera` (sharp depth), `focus_softness`, `opacity`,
-`panel_distance`, `ui_scale` (scale, windows, text size), `sharpness`, `carousel_radius`, `bend`, `sounds`,
+`panel_distance`, `ui_scale` (scale, windows, text size), `carousel_radius`, `bend`, `sounds`,
 `volume`, `speak`, `clap`, `hand_rays`, `foveation`, `views_auto_open`, `workspace_module`. Numbers are
 spoken freely: "zero", "fifty percent", "two point five", "30 cm", "max", "half", "a quarter"; "30" on a
 0-1 setting means 30 %. More / less words ("bigger", "darker", "a bit less") move it by a tenth of its

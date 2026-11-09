@@ -208,7 +208,7 @@ namespace MetaCodex.Shell
             float contentH = rowsH.Sum() + t.Gap * Mathf.Max(0, rowsH.Count - 1);
             float h = size != null && size.Length > 1 ? Mathf.Clamp(size[1], 0.18f, 0.9f) : Mathf.Clamp(contentH + t.HeaderHeight + 2 * t.Padding, 0.2f, 0.86f);
             var p = Panel<UiPanel>(pid, "View · " + v.Title, w, h);
-            p.transform.localScale = Vector3.one * Mathf.Clamp(Settings.uiScale, 0.6f, 1.8f);
+            p.BaseScale = Vector3.one * Mathf.Clamp(Settings.uiScale, 0.6f, 1.8f);
             var c0 = p.Content;
             float k = contentH > c0.height ? (c0.height - t.Gap * Mathf.Max(0, rowsH.Count - 1)) / Mathf.Max(0.01f, rowsH.Sum()) : 1f;
             float y = c0.y;

@@ -960,7 +960,6 @@ namespace MetaCodex.Shell
             ["opacity"] = new[] { "opacità", "opacità dei pannelli", "trasparenza", "trasparenti", "transparent", "transparency" },
             ["panel_distance"] = new[] { "distanza", "distanza dei pannelli", "distanza delle finestre" },
             ["ui_scale"] = new[] { "finestre", "pannelli", "dimensione del testo", "testo", "grandezza", "text", "bigger" },
-            ["sharpness"] = new[] { "nitidezza", "risoluzione" },
             ["carousel_radius"] = new[] { "raggio del carosello", "carosello", "dimensione del carosello" },
             ["bend"] = new[] { "curvatura", "pannelli curvi", "curva" },
             ["sounds"] = new[] { "suoni", "click", "suoni dell'interfaccia" },
@@ -992,7 +991,6 @@ namespace MetaCodex.Shell
             new VoiceSetting { Id = "opacity", Key = "panelOpacity", Kind = "number", Min = 0.5f, Max = 1f, Unit = "%", Label = "Panel opacity", Names = new[] { "opacity", "panel opacity", "window opacity" } },
             new VoiceSetting { Id = "panel_distance", Key = "panelDistance", Kind = "number", Min = 0.5f, Max = 1.4f, Unit = "m", Label = "Panel distance", Names = new[] { "distance", "panel distance", "window distance" } },
             new VoiceSetting { Id = "ui_scale", Key = "uiScale", Kind = "number", Min = 0.8f, Max = 1.8f, Unit = "x", Label = "UI scale", Names = new[] { "ui scale", "scale", "panel size", "window size", "windows", "panels", "text size", "size" } },
-            new VoiceSetting { Id = "sharpness", Key = "renderScale", Kind = "number", Min = 1f, Max = 1.6f, Unit = "x", Label = "Sharpness", Names = new[] { "sharpness", "resolution", "render scale" } },
             new VoiceSetting { Id = "carousel_radius", Key = "carouselRadius", Kind = "number", Min = 0.6f, Max = 1.6f, Unit = "m", Label = "Carousel radius", Names = new[] { "carousel radius", "ring radius", "carousel size", "carousel" } },
             new VoiceSetting { Id = "bend", Key = "bendPanels", Kind = "bool", Label = "Bend panels", Names = new[] { "bend", "bending", "bend panels", "curved panels", "curve" } },
             new VoiceSetting { Id = "sounds", Key = "sounds", Kind = "bool", Label = "Sounds", Names = new[] { "sounds", "sound", "ui sounds", "clicks" } },
@@ -1082,7 +1080,7 @@ namespace MetaCodex.Shell
         /// Sliders and toggles of open panels follow settings changed elsewhere (voice, scripts, MQH).
         public void SyncSettingsControls()
         {
-            var sliders = new Dictionary<string, string> { { "DISTANCE", "panelDistance" }, { "CAROUSEL RADIUS", "carouselRadius" }, { "UI SCALE", "uiScale" }, { "SHARPNESS", "renderScale" },
+            var sliders = new Dictionary<string, string> { { "DISTANCE", "panelDistance" }, { "CAROUSEL RADIUS", "carouselRadius" }, { "UI SCALE", "uiScale" },
                 { "PANEL OPACITY", "panelOpacity" }, { "VOLUME", "soundVolume" }, { "RADIUS", "focusRadius" }, { "INTENSITY", "focusIntensity" }, { "SOFTNESS", "focusSoftness" }, { "BLUR", "focusBlur" } };
             var toggles = new Dictionary<string, string> { { "Bend panels", "bendPanels" }, { "Sounds", "sounds" }, { "Clap gesture", "gestures.clapEnabled" }, { "Show hand rays", "gestures.rayVisible" },
                 { "Foveated", "foveation" }, { "Ambient focus", "focusEnabled" }, { "Speak answers", "voice.speak" },
@@ -1215,7 +1213,7 @@ namespace MetaCodex.Shell
             var t = UiTheme.Current;
             _vHud = UiPanel.Create<UiPanel>("voice-hud", "", 0.40f, 0.098f, _root, header: false);
             _vHud.Closable = false;
-            _vHud.transform.localScale = Vector3.one * Mathf.Clamp(Settings.uiScale, 0.6f, 1.8f);
+            _vHud.BaseScale = Vector3.one * Mathf.Clamp(Settings.uiScale, 0.6f, 1.8f);
             Router.Register(_vHud);
             var c = _vHud.Content;
             float bw = 0.062f;
@@ -1254,8 +1252,11 @@ namespace MetaCodex.Shell
             p.Add(new UiToggle("Ask the LLM when nothing fits", Settings.voice.useLlm && Settings.voice.llmFallback, v => { Settings.voice.llmFallback = v; if (v) Settings.voice.useLlm = true; OnSettingsChanged(); }) { Rect = ls.Next(0.03f) });
             p.Add(new UiToggle("Stop listening after a pause", Settings.voice.autoStop, v => { Settings.voice.autoStop = v; OnSettingsChanged(); }) { Rect = ls.Next(0.03f) });
             p.Add(new UiToggle("Start the AI service with the app", Settings.voice.enabled, v => { Settings.voice.enabled = v; OnSettingsChanged(); }) { Rect = ls.Next(0.03f) });
+            // right column: language and the reply voice on top (the left one is full), then the commands
+            var rs = new UiStack(new Rect(c.x + leftW + t.Gap * 2, c.y, c.width - leftW - t.Gap * 2, c.height), t.Gap);
+            const float pickLabel = 0.075f; // the same label column on every row: the buttons line up
             string[] langs = { "en", "it", "auto" };
-            p.Add(new UiSegmented("LANGUAGE", new[] { "EN", "IT", "AUTO" }, Math.Max(0, Array.IndexOf(langs, Settings.voice.language)), i => { Settings.voice.language = langs[i]; OnSettingsChanged(); PushVoiceConfig(); }) { Rect = ls.Next(0.032f), LabelWidth = 0.09f });
+            p.Add(new UiSegmented("LANGUAGE", new[] { "EN", "IT", "AUTO" }, Math.Max(0, Array.IndexOf(langs, Settings.voice.language)), i => { Settings.voice.language = langs[i]; OnSettingsChanged(); PushVoiceConfig(); }) { Rect = rs.Next(0.032f), LabelWidth = pickLabel });
             // the voice of spoken replies: Supertonic 3 has ten (F1-F5, M1-M5); picking one says a sample
             string[] fv = { "F1", "F2", "F3", "F4", "F5" }, mv = { "M1", "M2", "M3", "M4", "M5" };
             UiSegmented female = null, male = null;
@@ -1268,16 +1269,15 @@ namespace MetaCodex.Shell
                 PushVoiceConfig();
                 VoiceSay("Hi, this is voice " + v.Substring(1) + ".");
             }
-            female = p.Add(new UiSegmented("VOICE", fv, Array.IndexOf(fv, Settings.voice.voice), i => PickVoice(fv[i])) { Rect = ls.Next(0.032f), LabelWidth = 0.09f });
-            male = p.Add(new UiSegmented("", mv, Array.IndexOf(mv, Settings.voice.voice), i => PickVoice(mv[i])) { Rect = ls.Next(0.032f), LabelWidth = 0.09f });
+            female = p.Add(new UiSegmented("FEMALE", fv, Array.IndexOf(fv, Settings.voice.voice), i => PickVoice(fv[i])) { Rect = rs.Next(0.032f), LabelWidth = pickLabel });
+            male = p.Add(new UiSegmented("MALE", mv, Array.IndexOf(mv, Settings.voice.voice), i => PickVoice(mv[i])) { Rect = rs.Next(0.032f), LabelWidth = pickLabel });
 
-            var rs = new UiStack(new Rect(c.x + leftW + t.Gap * 2, c.y, c.width - leftW - t.Gap * 2, c.height), t.Gap);
             p.Add(new UiLabel("COMMANDS (say them, or anything close)", t.SmallSize) { Rect = rs.Next(0.018f), UseDisplay = true, Color = t.TextDim });
             _vCmdList = p.Add(new UiList(0.034f, (item, idx) =>
             {
                 var cmd = Voice.Find(item.Tag as string);
                 if (cmd != null) Toast($"{cmd.Name}: {cmd.Description}" + (cmd.Phrases.Length > 0 ? " · say “" + string.Join("”, “", cmd.Phrases.Take(3).Select(VoiceCommands.Example)) + "”" : ""), "info");
-            }) { Rect = rs.Next(0.25f) });
+            }) { Rect = rs.Next(0.21f) });
             p.Add(new UiLabel("LAST", t.SmallSize) { Rect = rs.Next(0.018f), UseDisplay = true, Color = t.TextDim });
             _vHistory = p.Add(new UiLabel("", t.SmallSize) { Rect = rs.Rest(), Wrap = true, Align = TextAlignmentOptions.TopLeft, UseMono = true, Color = t.TextDim });
             RefreshVoicePanel();

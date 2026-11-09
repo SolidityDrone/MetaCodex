@@ -97,8 +97,9 @@ namespace MetaCodex.Shell
         public float carouselRadius = 0.95f;
         public bool bendPanels = true;
         public float uiScale = 1.2f;
-        /// Render resolution x (supersampling): sharper text for some GPU time. 1 = the headset's default.
-        public float renderScale = 1.2f;
+        /// Render resolution x (supersampling). Fixed at MetaCodexShell.RenderScale (1.6, owner 2026-11-09: no SHARPNESS
+        /// slider any more); kept so older settings files and MQH's copy still load.
+        public float renderScale = 1.6f;
         /// Fixed foveated rendering: saves GPU, blurs the edges of the view (off for a text-heavy app).
         public bool foveation = false;
         /// One-time upgrades of saved settings (2: readability defaults, 2026-11-07). 0 in files written before.

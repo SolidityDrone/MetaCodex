@@ -252,6 +252,12 @@ for s in ["grazie", "ciao", "che tempo fa oggi", "buongiorno", "raccontami una b
           "come stai", "che ore sono", "perfetto", "lascia stare", "mmm fammi pensare", "cosa sai fare", "uffa", "va bene così"]:
     add("it", "none", s)
 
+# settings the app no longer has (0.7.3: the render scale is fixed, no "sharpness"): asking for them is no command.
+# Kept as rows, so every other sentence keeps its id (the LLM answers in llm.jsonl are cached by id).
+REMOVED_SETTINGS = {"sharpness"}
+for r in rows:
+    if any(g[0] == "set_setting" and g[1].get("setting") in REMOVED_SETTINGS for g in r["gold"]): r["gold"] = []
+
 with open(OUT, "w", encoding="utf-8") as f:
     for r in rows: f.write(json.dumps(r, ensure_ascii=False) + "\n")
 by = {}

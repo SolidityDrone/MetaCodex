@@ -23,7 +23,7 @@ Everything is drawn by one shader, `MetaCodex/SciFiUI`: each panel, button, head
 selection frame is a quad whose shape is computed per pixel from vertex data (size, chamfer, fill style,
 border, state), so a whole panel is one mesh and one draw call, crisp at any distance. Text is TextMeshPro
 with runtime SDF fonts drawn by `MetaCodex/TextBend` (TMP mobile SDF plus the panel bend); tool logos are
-one atlas drawn by `MetaCodex/UiIcon`. LOOK settings: sharpness (render scale), panel opacity, shadows,
+one atlas drawn by `MetaCodex/UiIcon`. LOOK settings (the render scale is fixed at 1.6): panel opacity, shadows,
 foveated rendering (off by default; it blurs the edges of the view), sounds and volume.
 
 **Opacity.** Passthrough is an underlay: the eye buffer's alpha decides how much of the room shows. Every UI
@@ -73,7 +73,7 @@ cylinder intersection), so the reticle sits where the beam meets the window.
 | System | TOOLS: a tile per known tool (runtimes, package managers, compilers, git, editors, network, agent CLIs) with its own logo on its brand colour (a category glyph when it has none) and its version; the list is also written for agents as `/mnt/quest/system/tools.json` (`mcx-ui system tools [json]`), so they know what is installed without probing the terminal; a tap installs (in a terminal, low priority), updates or removes it; PACKAGES… (Debian packages you chose, npm globals). STORAGE: the headset (Linux, AI models, shared folder, apps + system, free), Linux by folder with one-tap cleanups (apt, npm, bun, pip/uv, cargo, temp), a soft LINUX LIMIT (Android cannot reserve or cap an app's space: the app warns past it) |
 | Voice | the local AI service (state, RAM), models (install with progress, loaded or not), TALK, TYPE… (a command as text), SAY… (text to speech), spoken replies, LLM fallback, auto stop, language, threads, the command list (shell + plugins), the last requests with timings (`docs/voice.md`) |
 | Voice HUD | above the dock while a voice request runs: listening level, transcript, result; STOP |
-| Settings | GESTURES (click by pinch/poke/both, move panels by header pinch or closed hand, ray mode, pinch threshold, clap, plugin gestures on/off, select tool), DISPLAY (layout fixed/float, distance, carousel radius, scale, bending, save / load named layouts, recenter), FOCUS (Ambient Focus: on/off, radius, intensity, softness, presets SUBTLE / FOCUS / BLACKOUT), LOOK (sharpness, opacity, shadows, foveation, sounds), DAEMON (MQH URL and token, sync, status, plugins), ABOUT |
+| Settings | GESTURES (click by pinch/poke/both, move panels by header pinch or closed hand, ray mode, pinch threshold, clap, plugin gestures on/off, select tool), DISPLAY (layout fixed/float, distance, carousel radius, scale, bending, save / load named layouts, recenter), FOCUS (Ambient Focus: on/off, radius, intensity, softness, presets SUBTLE / FOCUS / BLACKOUT), LOOK (opacity, shadows, foveation, sounds), DAEMON (MQH URL and token, sync, status, plugins), ABOUT |
 
 ## Hands
 

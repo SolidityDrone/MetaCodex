@@ -109,6 +109,14 @@ namespace MetaCodex.Shell
                 Settings.Save(_settingsPath);
                 _localSettingsWin = true;
             }
+            if (Settings.settingsVersion < 4)
+            {
+                // sharpness is no longer a setting (owner, 0.7.3): always the sharpest render scale
+                Settings.renderScale = RenderScale;
+                Settings.settingsVersion = 4;
+                Settings.Save(_settingsPath);
+                _localSettingsWin = true;
+            }
             var theme = new UiTheme();
             theme.SetAccent(Settings.accent);
             theme.Body = UiTheme.MakeFont(bodyFont, symbolFonts);
@@ -189,6 +197,9 @@ namespace MetaCodex.Shell
             ApplyDisplaySettings();
         }
 
+        /// Render resolution x on the headset: text stays sharp on the curved panels (owner, 0.7.3: fixed, no slider).
+        public const float RenderScale = 1.6f;
+
         /// Render resolution and foveation on the headset (the Editor keeps its own: the URP asset is a file there).
         private void ApplyDisplaySettings()
         {
@@ -196,7 +207,7 @@ namespace MetaCodex.Shell
             try
             {
                 if (UnityEngine.Rendering.GraphicsSettings.currentRenderPipeline is UnityEngine.Rendering.Universal.UniversalRenderPipelineAsset urp)
-                    urp.renderScale = Mathf.Clamp(Settings.renderScale, 1f, 1.6f);
+                    urp.renderScale = RenderScale;
                 var displays = new List<UnityEngine.XR.XRDisplaySubsystem>();
                 SubsystemManager.GetSubsystems(displays);
                 foreach (var d in displays) d.foveatedRenderingLevel = Settings.foveation ? 0.5f : 0f;
@@ -556,7 +567,7 @@ namespace MetaCodex.Shell
             Mqh.BaseUrl = Settings.mqhUrl;
             Mqh.Token = MqhTokenNow();
             ApplyMaterialSettings();
-            foreach (var p in _panels.Values) p.transform.localScale = Vector3.one * Mathf.Clamp(Settings.uiScale, 0.6f, 1.8f);
+            foreach (var p in _panels.Values) p.BaseScale = Vector3.one * Mathf.Clamp(Settings.uiScale, 0.6f, 1.8f);
             if (rebuild) _rebuildPending = true; // next frame: never destroy panels inside the click that asked for it
             // sliders call this on every step: push to MQH once things are quiet for a moment
             if (Settings.mqhSync) _settingsPushDue = _clock.Elapsed.TotalSeconds + 1.5;

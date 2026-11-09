@@ -48,6 +48,15 @@ namespace MetaCodex.UI
         private float _openT = 1f;
         private Vector3 _baseScale = Vector3.one;
 
+        /// The panel's size (the UI scale setting). Set this, not transform.localScale: the open animation scales from it, so
+        /// a scale written straight to the transform was undone by the next open (panels jumped between 1.0 and the UI
+        /// scale whenever one opened or a setting changed).
+        public Vector3 BaseScale
+        {
+            get => _baseScale;
+            set { _baseScale = value; if (_openT >= 1f) transform.localScale = value; }
+        }
+
         public static T Create<T>(string id, string title, float width, float height, Transform parent = null, bool header = true) where T : UiPanel
         {
             var go = new GameObject("panel-" + id);
@@ -257,7 +266,9 @@ namespace MetaCodex.UI
         public void Open()
         {
             if (!gameObject.activeSelf) gameObject.SetActive(true);
-            _openT = 0f;
+            // the open animation runs in the frame loop; outside play mode (Editor tools, self-tests) it is done at once
+            _openT = Application.isPlaying ? 0f : 1f;
+            if (_openT >= 1f) transform.localScale = _baseScale;
             if (Id != "toast") UiSounds.Fire("open");
             Opened?.Invoke(this);
         }
