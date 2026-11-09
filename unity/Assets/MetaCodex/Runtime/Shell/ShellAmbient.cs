@@ -180,12 +180,9 @@ namespace MetaCodex.Shell
         private bool UiShouldStepAside()
         {
             if (UiStepAsideOverride.HasValue) return UiStepAsideOverride.Value;
-            if (Gestures != null)
-                for (int h = 0; h < 2; h++)
-                {
-                    var st = Gestures.Get((MetaCodex.Hands.Handedness)h);
-                    if (st != null && st.Frame.Tracked && st.Frame.SystemGesture) return true;
-                }
+            // not on the system gesture itself (palm towards you, pinch): Horizon OS reports it for as long as the palm
+            // faces you, and the windows vanished until the hands were lowered (owner, 0.7.3: the gesture must not hide
+            // anything). Only when a system menu has opened and taken the app's input focus.
 #if !UNITY_EDITOR
             if (OVRManager.instance != null && !OVRManager.hasInputFocus) return true;
 #endif

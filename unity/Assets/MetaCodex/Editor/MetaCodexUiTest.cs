@@ -151,7 +151,7 @@ namespace MetaCodex.EditorTools
                 if (Want("workspace")) Workspace(shell, head);
                 if (Want("threadgroups")) ThreadGroups(shell);
                 if (Want("vaultgit")) VaultGit(shell);
-                if (Want("focus")) Focus(shell, head);
+                if (Want("focus")) Focus(shell, head, frame);
                 if (Want("system")) SystemPanel(shell, tmp);
                 if (WantNamed("voiceexport")) VoiceExport(shell);
                 if (WantNamed("voicedecide")) VoiceDecideBench(shell);
@@ -1960,7 +1960,7 @@ end)
             return n > 0 ? sum / n : 0f;
         }
 
-        private static void Focus(MetaCodexShell shell, Transform head)
+        private static void Focus(MetaCodexShell shell, Transform head, UiPanel frame)
         {
             foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
             var sh = Resources.Load<Shader>("Shaders/AmbientFocus");
@@ -2206,10 +2206,23 @@ end)
                 var back = RenderRgba(null, eyeP, Quaternion.identity, 60f, 320, 240);
                 float aBack = back.GetPixel(160, 60).a;
                 Check(aAside < 0.05f && aBack > 0.9f, $"the Horizon OS menu: the windows step aside while it is open ({aAside:F2}) and come back after ({aBack:F2})");
+                // the system gesture itself (palm towards you, pinch) hides nothing: only an opened system menu does
+                var sim = shell.SimHands;
+                sim.SetOpen(Handedness.Left, eyeP + new Vector3(-0.1f, -0.15f, 0.35f), Vector3.up, -Vector3.forward);
+                sim.Frames[0].SystemGesture = true;
+                shell.TickGesturesForTest(0.1f);
+                shell.TickFocusForTest(0.5f);
+                float hideDuringGesture = Shader.GetGlobalFloat("_McxUiHide");
+                sim.Frames[0].SystemGesture = false;
+                sim.Frames[0].Tracked = false;
+                shell.TickGesturesForTest(0.1f);
+                shell.TickFocusForTest(0.5f);
+                Check(hideDuringGesture < 0.01f, $"the Horizon OS hand gesture (palm towards you, pinch) leaves the windows in place (UI hide {hideDuringGesture:F2})");
                 foreach (var t in new[] { occ, off, aside, back }) UnityEngine.Object.DestroyImmediate(t);
                 shell.SetDepthForTest(null, null, default);
                 UnityEngine.Object.DestroyImmediate(occTex);
                 shell.SetFocus(true, false);
+                if (frame != null) frame.transform.SetPositionAndRotation(framePos, frameRot);
             }
             // hands: always clear, even at BLACKOUT
             shell.ApplyFocusPreset("blackout");
@@ -2224,6 +2237,10 @@ end)
             // ... and in front of a window: SETTINGS (opaque) 0.4 m behind the palm, focus off, no depth: the hand
             // cut-outs are drawn after the windows and pass their depth only where the hand is in front
             {
+                // the terminal where these pictures expect it (other sections move it): 0.85 m ahead, a little below the eyes
+                Vector3 framePos = frame != null ? frame.transform.position : default;
+                Quaternion frameRot = frame != null ? frame.transform.rotation : default;
+                if (frame != null) { if (!frame.IsOpen) frame.Open(); frame.PlaceInFront(head, 0.85f, 0.12f); frame.ForceRefresh(); }
                 shell.SetFocus(false, false);
                 shell.TickFocusForTest(1f);
                 shell.OpenPanel("settings");

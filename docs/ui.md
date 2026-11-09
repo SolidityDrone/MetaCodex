@@ -176,8 +176,10 @@ windows and your hands. No Space Setup scan is needed (branch `feat/spatial-dome
   TextBend, UiIcon, ViewImage, PanelUnlit, StageLit; the terminal's glyphs use TextBend now) fades where the sharp
   depth puts a real surface 2-6 cm or more in front of it, so people, hands and objects in front of a window stay
   visible.
-- **The Horizon OS menu**: while a hand does the system gesture or the app has lost input focus (the universal menu
-  is open), the windows and the focus darkness fade out (`_McxUiHide`), so the system menu shows; they come back after.
+- **The Horizon OS menu**: while the app has lost input focus (a system menu is open), the windows and the focus
+  darkness fade out (`_McxUiHide`), so the system menu shows; they come back after. The system gesture itself (palm
+  towards you, pinch) hides nothing (0.7.3: Horizon OS reports it while the palm faces you, and the windows used to
+  vanish until the hands were lowered).
 
 ## Layouts
 
