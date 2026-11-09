@@ -22,6 +22,16 @@ const CATALOGUE = {
     sha256: '33bcc57074ec7b6eada5a90651ee546ec0c2b271002c22baf9f1b2dd1e8f75cb',
     url: 'https://huggingface.co/unsloth/Qwen3-0.6B-GGUF/resolve/50968a4468ef4233ed78cd7c3de230dd1d61a56b/Qwen3-0.6B-Q4_0.gguf'
   },
+  // voice commands decided Jev-style (VoiceDecider in the app): sentence vectors compared with the commands' examples;
+  // multilingual (English, Italian, ~100 languages), 118M parameters, ~10 ms a sentence on 2 CPU threads
+  embed: {
+    id: 'multilingual-e5-small-q8_0',
+    name: 'multilingual-e5-small, command decisions (q8_0)',
+    file: 'multilingual-e5-small-q8_0.gguf',
+    bytes: 132439008,
+    sha256: 'e011debc1208e31bf7b6aebee2d9fc8bd2ca11694a77ed66ac9d0c9d0a877c93',
+    url: 'https://huggingface.co/TwinSunsLLC/multilingual-e5-small-gguf/resolve/b6cac9615d4e/multilingual-e5-small-q8_0.gguf'
+  },
   tts: {
     id: 'supertonic3-q4_0',
     name: 'Supertonic 3, 31 languages (q4_0)',

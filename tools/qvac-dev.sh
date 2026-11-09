@@ -25,7 +25,7 @@ pc:start)
   D=$HOME/mcxwork/qvac-pc-data; mkdir -p "$D/models"
   rm -rf "$WORK/pkg/server" && cp -r "$ROOT/qvac/server" "$WORK/pkg/server"
   [ -f "$D/token" ] || head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n' > "$D/token"
-  for f in ggml-base-q8_0.bin Qwen3-0.6B-Q4_0.gguf supertonic3-q4_0.gguf; do # verified at download: mark them
+  for f in ggml-base-q8_0.bin Qwen3-0.6B-Q4_0.gguf supertonic3-q4_0.gguf multilingual-e5-small-q8_0.gguf; do # verified at download: mark them
     if [ -f "$MODELS/$f" ] && [ ! -f "$D/models/$f" ]; then ln -sf "$MODELS/$f" "$D/models/$f"; sha_of "$f" > "$D/models/$f.sha256"; fi
   done
   pkill -f '[q]vac-build/pkg/server/main.js' 2>/dev/null || true

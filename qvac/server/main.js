@@ -43,7 +43,7 @@ const DEFAULTS = {
   ttsLanguage: 'en',
   ttsSteps: 5, // Supertonic diffusion steps (model default): 3 and 2 are faster but garble words (measured)
   minAudioCtx: 512, // smallest whisper encoder window (frames, 50 per second): 256 repeats and mishears (measured)
-  idleMinutes: { asr: 30, llm: 30, tts: 10 } // keep models loaded while voice is in use: a reload costs 1-4 s
+  idleMinutes: { asr: 30, llm: 30, tts: 10, embed: 60 } // keep models loaded while voice is in use: a reload costs 1-4 s
 }
 const cfg = Object.assign({}, DEFAULTS, readJson(CONFIG) || {})
 if (args.threads) cfg.threads = Number(args.threads)
@@ -100,6 +100,13 @@ async function handle (req, res, body) {
       return speech(res, parseJson(body))
     case 'POST /v1/chat/completions':
       return completions(res, parseJson(body))
+    case 'POST /v1/embeddings': { // OpenAI-style: { input: string | string[] } -> { data: [{ index, embedding }] }
+      const j = parseJson(body)
+      const input = Array.isArray(j.input) ? j.input.map(String) : [String(j.input == null ? '' : j.input)]
+      if (!input.length || input.length > 4096) return send(res, 400, { error: 'input: 1-4096 strings' })
+      const r = await engines.embed(input)
+      return send(res, 200, { object: 'list', model: CATALOGUE.embed.id, ms: r.ms, data: r.vectors.map((embedding, index) => ({ object: 'embedding', index, embedding })) })
+    }
     case 'POST /v1/warmup': { // prefills system prompt + tools once (kept on disk), so commands decode only the user's words
       const j = parseJson(body)
       const r = await engines.warm(j.messages || [], Array.isArray(j.tools) ? j.tools : [])

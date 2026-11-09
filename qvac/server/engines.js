@@ -1,12 +1,12 @@
 'use strict'
-// The three engines (speech-to-text, LLM, text-to-speech): loaded on first use, one job at a time,
+// The engines (speech-to-text, LLM, text-to-speech, sentence vectors): loaded on first use, one job at a time,
 // unloaded after some idle minutes. CPU only, few threads: the GPU and the other cores belong to the
 // app's frame loop (docs/qvac.md, "Rules for a stable frame rate").
 const fs = require('bare-fs')
 const path = require('bare-path')
 const { CATALOGUE } = require('./models')
 
-const KINDS = ['asr', 'llm', 'tts']
+const KINDS = ['asr', 'llm', 'tts', 'embed']
 
 class Engines {
   constructor ({ models, cfg, log, cacheDir }) {
@@ -15,16 +15,16 @@ class Engines {
     this.log = log
     this.cacheDir = cacheDir
     fs.mkdirSync(cacheDir, { recursive: true })
-    this.inst = { asr: null, llm: null, tts: null }
-    this.state = { asr: 'unloaded', llm: 'unloaded', tts: 'unloaded' }
-    this.lastUsed = { asr: 0, llm: 0, tts: 0 }
+    this.inst = { asr: null, llm: null, tts: null, embed: null }
+    this.state = { asr: 'unloaded', llm: 'unloaded', tts: 'unloaded', embed: 'unloaded' }
+    this.lastUsed = { asr: 0, llm: 0, tts: 0, embed: 0 }
     this.loadMs = {}
     this.loadedWith = {}
     // one queue per engine: speech-to-text never waits behind an LLM warm-up, and each engine runs one job
     // at a time with `threads` threads (all of them pinned to cores 0-2 by the launcher)
-    this.chains = { asr: Promise.resolve(), llm: Promise.resolve(), tts: Promise.resolve() }
-    this.busy = { asr: null, llm: null, tts: null }
-    this.queued = { asr: 0, llm: 0, tts: 0 }
+    this.chains = { asr: Promise.resolve(), llm: Promise.resolve(), tts: Promise.resolve(), embed: Promise.resolve() }
+    this.busy = { asr: null, llm: null, tts: null, embed: null }
+    this.queued = { asr: 0, llm: 0, tts: 0, embed: 0 }
     this.paused = false
     this.waiters = []
     this.jobs = 0
@@ -187,8 +187,34 @@ class Engines {
     })
   }
 
+  /** Sentence vectors (multilingual-e5-small, mean pooled; L2-normalised here): texts -> { vectors: number[][], ms }.
+   * Batches of 64 per pass. Texts are used as given (e5 wants "query: " in front; the app adds it). */
+  embed (texts) {
+    return this.job('embed', 'embed', async () => {
+      const m = await this._ensure('embed')
+      const t0 = Date.now()
+      const vectors = []
+      for (let i = 0; i < texts.length; i += 64) {
+        const r = await m.run(texts.slice(i, i + 64))
+        let out = await r.await()
+        const isVec = (x) => ArrayBuffer.isView(x) || (Array.isArray(x) && typeof x[0] === 'number')
+        while (Array.isArray(out) && out.length && !isVec(out[0])) out = out[0]
+        for (const v of out) {
+          let n = 0
+          for (let k = 0; k < v.length; k++) n += v[k] * v[k]
+          n = Math.sqrt(n) || 1
+          const a = new Array(v.length)
+          for (let k = 0; k < v.length; k++) a[k] = Math.round((v[k] / n) * 1e5) / 1e5
+          vectors.push(a)
+        }
+      }
+      return { vectors, ms: Date.now() - t0 }
+    })
+  }
+
   _key (kind) {
     const c = this.cfg
+    if (kind === 'embed') return JSON.stringify([c.threads])
     if (kind === 'asr') return JSON.stringify([c.threads, this.asrWant.language || c.language, c.prompt, this.asrWant.actx])
     if (kind === 'llm') return JSON.stringify([c.threads, c.ctx])
     return JSON.stringify([c.threads, this.ttsWant.voice || c.voice, c.ttsLanguage, c.ttsSteps])
@@ -244,6 +270,9 @@ class Engines {
         config: { device: 'cpu', ctx_size: String(c.ctx), threads: String(c.threads), tools: 'true', reasoning_budget: '0', temp: '0', predict: '256' },
         opts: { stats: true }
       })
+    } else if (kind === 'embed') {
+      const GGMLBert = require('@qvac/embed-llamacpp')
+      m = new GGMLBert({ files: { model: [file] }, config: { device: 'cpu', threads: String(c.threads), batch_size: '512', ctx_size: '512' } })
     } else {
       const TTSGgml = require('@qvac/tts-ggml')
       m = new TTSGgml({

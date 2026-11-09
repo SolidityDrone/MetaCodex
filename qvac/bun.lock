@@ -7,6 +7,7 @@
       "dependencies": {
         "@qvac/asr-ggml": "0.12.0",
         "@qvac/asr-ggml-android-arm64": "0.12.0",
+        "@qvac/embed-llamacpp": "0.55.0",
         "@qvac/fabric": "0.26.0",
         "@qvac/fabric-android-arm64": "0.26.0",
         "@qvac/llm-llamacpp": "0.68.0",
@@ -38,6 +39,8 @@
     "@qvac/asr-ggml-linux-x64": ["@qvac/asr-ggml-linux-x64@0.12.0", "", { "os": "linux", "cpu": "x64" }, "sha512-pQaHdTCAO3pEgUviV0xZiAyChTLWbEoIKB8tsfxUDg4WgwAU9dzG6k+qpysLOBHr7et3baC2aVc77bjwCsgWZg=="],
 
     "@qvac/asr-ggml-win32-x64": ["@qvac/asr-ggml-win32-x64@0.12.0", "", { "os": "win32", "cpu": "x64" }, "sha512-g9X/WdRj90SK5zP4jF5UI2fCr4bpGv1DW0Y5Lt946Jpf9vFAMC8o+ZWTvEvA4n0J8hKUw3Nifrxo86hA1q/k8w=="],
+
+    "@qvac/embed-llamacpp": ["@qvac/embed-llamacpp@0.55.0", "", { "dependencies": { "@qvac/fabric": "^0.26.0", "@qvac/infer-base": "^0.8.0", "@qvac/logging": "^0.1.0", "bare-path": "^3.0.0" }, "optionalDependencies": { "@qvac/fabric-darwin-arm64": "^0.26.0", "@qvac/fabric-darwin-x64": "^0.26.0", "@qvac/fabric-linux-arm64": "^0.26.0", "@qvac/fabric-linux-x64": "^0.26.0", "@qvac/fabric-win32-x64": "^0.26.0" }, "peerDependencies": { "@qvac/fabric-android-arm64": "^0.26.0", "@qvac/fabric-ios": "^0.26.0" }, "optionalPeers": ["@qvac/fabric-android-arm64", "@qvac/fabric-ios"] }, "sha512-c72hPZD0V+7vqnd5wJIQ9g+RccULVL2HNsR91JurPSSTjyB9lvSc8HY0XaHUDWPLzRDTMjQUFk1SPCRxLuce+A=="],
 
     "@qvac/error": ["@qvac/error@0.1.1", "", {}, "sha512-Xv7p1wnC/JmsKimGrkvXlcq+AHsG1r33f+uayANuEYe5ThFi+FR3txnN2UPjulwBdDorEnger9/+9ftShAFOAw=="],
 
