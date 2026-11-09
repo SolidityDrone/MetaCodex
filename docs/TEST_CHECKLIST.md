@@ -264,3 +264,15 @@ Voice:
 - [ ] Settings > DISPLAY > Main menu on the wrist: the dock goes; look at the back of the left wrist: the core appears; touch it with the right index finger: the rings unfold; touch FILES, SETUP, TALK; look away: it folds and hides; off again: the dock comes back
 - [ ] Wrist menu: frame rate about 72 while it is open (Perf menu)
 - [ ] Palm towards you + pinch: nothing vanishes; the Horizon OS quick actions menu is visible over the windows (if it is not, tell: it would need another way than hiding the windows)
+
+## 17. 0.7.4-0.7.6: native apps, wrist menu, MQH, captures, session context
+
+- [ ] Native apps: in a terminal `mcx-app doctor` → all ok; `mcx-app run /root/apps/x` → Install asked once, the app opens; again → no prompt
+- [ ] Wrist menu: hold the left wrist as a watch; the rings stay whole, the hand behind them never cuts them; the right fingertip shows over a blade while pressing; windows still let hands and things in front show
+- [ ] Dock / wrist: one MQH entry (no SCRIPTS / GESTURE); MQH opens on SKILLS; the tabs PLUGINS, SCRIPTS, GESTURES, DAEMON work; Settings has no DAEMON tab
+- [ ] MQH > SKILLS: the shipped skills say READ-ONLY and REMOVE refuses them; + NEW SKILL opens NEW THREAD with the brief; ⌕ FIND finds skills, ⇣ INSTALL adds one under YOURS, REMOVE removes it
+- [ ] SELECT, then pinch-drag over a window at low PANEL OPACITY: CLIPBOARD has the capture, opaque, nothing of the room or the hands; no hitch at the moment of the capture (72 fps)
+- [ ] CLIPBOARD from the wrist (CLIP), the dock and by voice ("open the clipboard", "apri gli appunti"); 21 captures with CLIPBOARD SIZE 20 → the oldest is gone
+- [ ] A thread: + → REFERENCE CAPTURE → the list inside the thread panel; pick two → two chips; + → ATTACH FILES → a Linux file; SEND: the agent sees the images and the file
+- [ ] Ask by voice, with a thread waiting for an approval: "what is this command I'm asked to accept, is it safe?" → spoken answer naming the thread, the command and its risks, never "it's safe"
+- [ ] Ask by voice: "do we have the rust toolchain?", "is this build stuck?" (during a long `cargo build`), "what has this thread done so far?" (pointing at THREAD) → short spoken answers; "open settings" still opens Settings
