@@ -154,6 +154,7 @@ namespace MetaCodex.EditorTools
                 if (Want("focus")) Focus(shell, head, frame);
                 if (Want("system")) SystemPanel(shell, tmp);
                 if (Want("qol")) Qol(shell, head, hands);
+                if (Want("wrist")) Wrist(shell, head, hands);
                 if (Want("mqh")) MqhPanel(shell);
                 if (Want("captures")) Captures(shell, tmp);
                 if (Want("context")) SessionContextSection(shell, tmp);
@@ -1584,39 +1585,57 @@ end)
             Check(sliderGone && voiceGone && MetaCodexShell.RenderScale == 1.6f && Mathf.Approximately(shell.Settings.renderScale, 1.6f),
                 $"SHARPNESS gone (slider {sliderGone}, voice {voiceGone}); the render scale is {MetaCodexShell.RenderScale}");
 
-            // the WRIST main menu: the left wrist held up as to read a watch, the right index finger presses
+            // the WRIST main menu has its own section (wrist)
+        }
+
+        /// The WRIST main menu (owner 2026-11-09): firm on the wrist, never closing or running off while the right hand
+        /// covers the left one, a press only for a real poke, every change animated both ways; pictures of the timeline.
+        private static void Wrist(MetaCodexShell shell, Transform head, SimulatedHands hands)
+        {
+            foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
             shell.SetWristMenu(true);
             Check(!shell.IsPanelOpen("dock"), "WRIST mode puts the dock away");
             var eye = head.position;
             var rot0 = head.rotation;
             var palm = eye + head.forward * 0.33f - head.up * 0.13f - head.right * 0.03f;
             var toEye = (eye - palm).normalized;
-            hands.SetOpen(Handedness.Left, palm, (head.right * 0.9f + head.forward * 0.35f).normalized, -toEye); // palm away: the back faces the eyes
-            hands.SetOpen(Handedness.Right, eye + head.forward * 0.25f + head.right * 0.16f - head.up * 0.22f, head.forward, -head.up);
+            var lFingers = (head.right * 0.9f + head.forward * 0.35f).normalized;
+            void LeftAt(Vector3 at) => hands.SetOpen(Handedness.Left, at, lFingers, -toEye); // palm away: the back faces the eyes
+            var rightRest = eye + head.forward * 0.25f + head.right * 0.16f - head.up * 0.22f;
+            void RightAway() => hands.SetOpen(Handedness.Right, rightRest, head.forward, -head.up);
+            LeftAt(palm);
+            RightAway();
             var w = shell.Wrist;
+            w.HideNow();
             void Step(int n, float dt = 0.05f) { for (int i = 0; i < n; i++) { shell.TickGesturesForTest(dt); shell.TickWristForTest(dt); } }
-            Step(6);
-            Check(w.Visible && w.Shown01 > 0.9f && !w.Expanded, $"looking at the wrist as at a watch shows the core ({w.Shown01:F2})");
+            void Tip(Vector3 local) => hands.Frames[1].IndexTip = w.transform.TransformPoint(local);
+            // a real poke: over the part for a moment, into it, back out (steps of 0.03 s: the gesture engine ticks at
+            // 36 Hz, so a shorter step would not pass the hand on)
+            void Poke(Vector3 world)
+            {
+                var lp = w.transform.InverseTransformPoint(world);
+                for (int k = 0; k < 3; k++) { Tip(new Vector3(lp.x, lp.y, -0.02f)); Step(1, 0.03f); }
+                Tip(new Vector3(lp.x, lp.y, 0.002f)); Step(1, 0.03f);
+                Tip(new Vector3(lp.x, lp.y, -0.035f)); Step(1, 0.03f);
+            }
+            // the face comes in with its animation, never at once
+            Step(2);
+            float mid = w.Shown01;
+            Step(10);
+            Check(mid > 0.05f && mid < 0.6f && w.Visible && w.Shown01 > 0.99f && !w.Expanded,
+                $"looking at the wrist as at a watch brings the watch face in over {w.AppearTime:F2} s: {mid:F2} after 0.1 s, {w.Shown01:F2} after 0.6 s");
             // it floats in front of the hand that carries it, towards the eyes (0.7.5: the fingers were in front of the rings)
             float ahead = Vector3.Distance(eye, hands.Frames[0].Wrist) - Vector3.Distance(eye, w.transform.position);
             Check(ahead > 0.07f, $"the menu floats {ahead * 100f:F1} cm in front of the left wrist, towards the eyes: the hand stays behind the rings");
-            void Poke(Vector3 world)
-            {
-                // steps of 0.03 s: the gesture engine ticks at 36 Hz, so a shorter step would not pass the hand on
-                var lp = w.transform.InverseTransformPoint(world);
-                hands.Frames[1].IndexTip = w.transform.TransformPoint(new Vector3(lp.x, lp.y, -0.02f));
-                Step(1, 0.03f);
-                hands.Frames[1].IndexTip = w.transform.TransformPoint(new Vector3(lp.x, lp.y, 0.002f));
-                Step(1, 0.03f);
-                hands.Frames[1].IndexTip = w.transform.TransformPoint(new Vector3(lp.x, lp.y, -0.035f));
-                Step(1, 0.03f);
-            }
             Poke(w.WorldOf(-2));
+            Step(3);
+            float bloomMid = w.Expand01;
             Step(12);
-            Check(w.Expanded && w.Expand01 > 0.99f, $"touching the core unfolds the rings ({w.Expand01:F2})");
+            Check(w.Expanded && bloomMid > 0.05f && bloomMid < 0.7f && w.Expand01 > 0.99f,
+                $"touching the face unfolds the rings over {w.BloomTime:F2} s ({bloomMid:F2} after 0.18 s, {w.Expand01:F2} after 0.78 s)");
             // a picture: the finger hovering over FILES
             var hoverAt = w.transform.InverseTransformPoint(w.WorldOf(2));
-            hands.Frames[1].IndexTip = w.transform.TransformPoint(new Vector3(hoverAt.x, hoverAt.y, -0.012f));
+            Tip(new Vector3(hoverAt.x, hoverAt.y, -0.012f));
             Step(4);
             int verts = w.GetComponent<MeshFilter>().sharedMesh.vertexCount;
             Check(w.Hover == 2 && verts > 200 && verts < 6000, $"the fingertip over FILES highlights it (hover {w.Hover}); the menu is one mesh of {verts} vertices");
@@ -1645,26 +1664,123 @@ end)
             int pressed = -99;
             w.Pressed += k => pressed = k;
             Poke(w.WorldOf(2));
-            Check(pressed == 2 && shell.IsPanelOpen("files"), $"touching the FILES blade opens FILES (pressed {pressed})");
+            Check(pressed == 2 && shell.IsPanelOpen("files"), $"touching the FILES tile opens FILES (pressed {pressed})");
             shell.ClosePanel("settings");
             Step(8); // past the 0.3 s between two presses (a double tap is not two commands)
             Poke(w.WorldOf(w.Inner.Count + w.Outer.FindIndex(x => x.Label == "SETUP")));
             Check(shell.IsPanelOpen("settings"), "the outer ring works too: SETUP opens Settings");
-            // a fingertip that goes through the surface and stays there presses once, not again and again
+            // a fingertip that goes into the surface and stays there presses once, not again and again
+            Step(8);
             int presses = 0;
             w.Pressed += k => presses++;
-            hands.Frames[1].IndexTip = w.transform.TransformPoint(new Vector3(hoverAt.x, hoverAt.y, 0.003f));
+            for (int k = 0; k < 3; k++) { Tip(new Vector3(hoverAt.x, hoverAt.y, -0.02f)); Step(1, 0.03f); }
+            Tip(new Vector3(hoverAt.x, hoverAt.y, 0.003f));
             Step(10);
-            Check(presses == 1, $"a fingertip that stays through the surface presses once ({presses} presses in 0.5 s)");
-            hands.Frames[1].IndexTip = w.transform.TransformPoint(new Vector3(hoverAt.x, hoverAt.y, -0.04f));
+            Check(presses == 1, $"a fingertip that stays in the surface presses once ({presses} presses in 0.5 s)");
+            Tip(new Vector3(hoverAt.x, hoverAt.y, -0.04f));
+            Step(8);
+            // on the way to the left side the fingertip crosses the face (0.7.6: that folded the menu): no press, whether
+            // it slides along the surface or dips through it sideways
+            presses = 0;
+            Tip(new Vector3(0.0205f, 0.002f, -0.02f)); Step(3, 0.03f);   // in front of the gap between the face and the inner ring
+            for (int k = 0; k <= 10; k++) { Tip(new Vector3(Mathf.Lerp(0.0205f, -0.040f, k / 10f), 0.002f, 0.001f)); Step(1, 0.03f); }
+            Tip(new Vector3(-0.04f, 0.002f, -0.03f)); Step(2, 0.03f);
+            bool slid = w.Expanded && presses == 0;
+            Tip(new Vector3(0.03f, -0.002f, -0.02f)); Step(1, 0.03f);
+            Tip(new Vector3(0.0f, -0.002f, 0.002f)); Step(1, 0.03f);     // 3 cm sideways while going in, over the face
+            Tip(new Vector3(-0.03f, -0.002f, 0.004f)); Step(1, 0.03f);
+            Tip(new Vector3(-0.03f, -0.002f, -0.03f)); Step(2, 0.03f);
+            Check(slid && w.Expanded && presses == 0, $"a fingertip sliding across the face, or dipping through it sideways, presses nothing: still unfolded ({w.Expanded}), {presses} presses");
+
+            // the right hand over the left side of the menu hides the left hand from the cameras: lost, the menu stays
+            // open and does not move; a jump of the left hand's pose under it moves nothing
+            Tip(new Vector3(-0.055f, 0.010f, -0.015f));
             Step(2);
-            // looking away folds and hides it
+            var pos0 = w.transform.position;
+            hands.Frames[0].Tracked = false;
+            Step(30);
+            float drift = (w.transform.position - pos0).magnitude;
+            Check(w.Engaged && w.Visible && w.Expanded && w.Shown01 > 0.99f && drift < 0.001f,
+                $"the left hand lost for 1.5 s under the right one: the menu stays open ({w.Expanded}, shown {w.Shown01:F2}) and still ({drift * 1000f:F1} mm)");
+            LeftAt(palm + head.right * 0.25f); Step(4);
+            LeftAt(palm); Step(2);
+            drift = (w.transform.position - pos0).magnitude;
+            Check(drift < 0.001f && w.Expanded, $"the left wrist's pose jumping 25 cm under the right hand moves nothing ({drift * 1000f:F1} mm)");
+            // the right hand away: a short jump of the tracked wrist is ignored, a real move followed at once
+            RightAway();
+            Step(14);
+            // (up, away from the right hand: a jump towards it would be the hands over each other, which holds it)
+            var pos1 = w.transform.position;
+            LeftAt(palm + head.up * 0.25f); Step(3);
+            LeftAt(palm); Step(2);
+            float jumped = (w.transform.position - pos1).magnitude;
+            LeftAt(palm + head.up * 0.05f); Step(6);
+            float follow = Vector3.Dot(w.transform.position - pos1, head.up);
+            Step(30);
+            float settled = Vector3.Dot(w.transform.position - pos1, head.up);
+            Check(!w.Engaged && jumped < 0.01f && settled > 0.03f && follow > 0.85f * settled,
+                $"right hand away: a 0.15 s jump of the tracked wrist (25 cm) drags it {jumped * 100f:F1} cm; a real 5 cm move of the wrist is followed {follow * 100f:F1} of {settled * 100f:F1} cm within 0.3 s");
+            LeftAt(palm); Step(8);
+            // the left hand lost with the right hand away: it waits (1.5 s) and is still there when the hand is back
+            hands.Frames[0].Tracked = false;
+            Step(20);
+            bool waited = w.Visible && w.Expanded;
+            LeftAt(palm);
+            Step(4);
+            Check(waited && w.Expanded && w.Shown01 > 0.99f, $"the left hand lost for 1 s, the right hand away: the menu waits ({waited}) and is open when the hand is back");
+
+            // looking away: it waits, folds and goes with its animation
             head.rotation = Quaternion.Euler(0f, 70f, 0f) * rot0;
-            Step(18);
-            Check(!w.Visible && !w.Expanded, $"looking away hides and folds it (shown {w.Shown01:F2})");
+            Step(8);
+            bool grace = w.Expanded && w.Visible;
+            Step(5);
+            float folding = w.Expand01;
+            Step(16);
+            Check(grace && folding > 0.1f && folding < 0.9f && !w.Visible && !w.Expanded,
+                $"looking away: it waits {w.TurnAwayGrace:F2} s ({grace}), folds with its animation ({folding:F2} 0.25 s later), then goes (shown {w.Shown01:F2})");
+            // half way out, a look back brings it back from where it is
             head.rotation = rot0;
+            Step(12);
+            head.rotation = Quaternion.Euler(0f, 70f, 0f) * rot0;
+            Step(12);
+            float leaving = w.Shown01;
+            head.rotation = rot0;
+            Step(2);
+            float turned = w.Shown01;
+            Step(3);
+            float after = w.Shown01;
+            Check(leaving > 0.2f && leaving < 0.95f && turned > 0.1f && after > turned, $"a look back while it goes brings the face back from where it is: {leaving:F2} -> {turned:F2} -> {after:F2} (no jump)");
+            Step(10);
+
+            // pictures of the timeline: the face appearing, the rings unfolding
+            var camRot2 = Quaternion.LookRotation(w.transform.position - eye, head.up);
+            int fi = 0;
+            foreach (var (pp, bb) in new[] { (0.22f, 0f), (0.45f, 0f), (0.7f, 0f), (1f, 0f), (1f, 0.16f), (1f, 0.32f), (1f, 0.5f), (1f, 0.7f), (1f, 1f) })
+            {
+                w.PoseTimelineForTest(pp, bb);
+                RenderAt($"ui-wrist-anim-{fi++}.png", eye, camRot2, 30f, 640, 480);
+            }
+            // the icons
+            var atlas = UiIconAtlas.Texture;
+            var raw = UiIconAtlas.Pixels;
+            var sheet = new Texture2D(atlas.width, atlas.height, TextureFormat.RGBA32, false);
+            var px = new Color32[raw.Length];
+            for (int k = 0; k < raw.Length; k++) { float v = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.44f, 0.56f, raw[k] / 255f)); byte b = (byte)(30 + 225 * v); px[k] = new Color32(b, b, b, 255); }
+            sheet.SetPixels32(px);
+            sheet.Apply();
+            File.WriteAllBytes(Path.Combine(MetaCodexSetup.ReportDir, "ui-icons.png"), sheet.EncodeToPNG());
+            UnityEngine.Object.DestroyImmediate(sheet);
+            Line("icons: " + string.Join(" ", UiIconAtlas.Names));
+
+            // DOCK mode: the wrist menu leaves with its animation, then is off
+            w.PoseTimelineForTest(1f, 1f);
+            Step(2);
             shell.SetWristMenu(false);
-            Check(shell.IsPanelOpen("dock") && !w.Visible, "DOCK mode: the dock is back, the wrist menu gone");
+            bool goingOut = w.Visible;
+            Step(24);
+            Check(shell.IsPanelOpen("dock") && goingOut && !w.Visible && !w.enabled, $"DOCK mode: the dock is back; the wrist menu leaves with its animation ({goingOut}), then is off ({!w.enabled})");
+            head.rotation = rot0;
+            RightAway();
             foreach (var id in shell.PanelIds.ToList()) if (id != "dock") shell.ClosePanel(id);
         }
 

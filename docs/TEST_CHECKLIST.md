@@ -276,3 +276,15 @@ Voice:
 - [ ] A thread: + → REFERENCE CAPTURE → the list inside the thread panel; pick two → two chips; + → ATTACH FILES → a Linux file; SEND: the agent sees the images and the file
 - [ ] Ask by voice, with a thread waiting for an approval: "what is this command I'm asked to accept, is it safe?" → spoken answer naming the thread, the command and its risks, never "it's safe"
 - [ ] Ask by voice: "do we have the rust toolchain?", "is this build stuck?" (during a long `cargo build`), "what has this thread done so far?" (pointing at THREAD) → short spoken answers; "open settings" still opens Settings
+
+## 18. After 0.7.6 (owner's feedback): questions, dialogs, captures, the new wrist menu
+
+- [ ] Voice: "how many captures we took so far?" / "quante catture abbiamo fatto?" → a spoken count (and the newest's time); CLIPBOARD does not open. "open the clipboard" and "can I open the clipboard?" still open it
+- [ ] CLIPBOARD > CLEAR ALL pressed three times quickly: one dialog, parallel to CLIPBOARD, centred over it a few cm in front (never through it, never half off its edge); the extra taps delete nothing; CANCEL closes it
+- [ ] Any other window's dialog (MQH > SKILLS > REMOVE, a thread's dialogs) opens over that window, parallel to it; a dialog asked by voice opens in front of you
+- [ ] SELECT, pinch-drag over a window: the orange frame goes as soon as the capture is taken; the capture in CLIPBOARD has no orange border
+- [ ] Wrist menu, opening: look at the back of the left wrist → the watch face (the time, ticks, a warm seconds point) builds up with the projector rays from the wrist; touch it → a shock ring runs out, the inner tiles swing in one way and the outer the other, icons draw with a scan line, names type in; nothing pops in or out at once
+- [ ] Wrist menu, the left side: press FOCUS, CENTER, KEYS, SELECT with the right hand reaching over the left: the menu stays where it is and stays open, even when the left hand is lost for a moment; it does not run off
+- [ ] Wrist menu: slide the fingertip across the face on the way to the left tiles → nothing is pressed, the menu stays unfolded; a straight poke into a tile runs it once
+- [ ] Wrist menu: move the left arm around while looking at it → it stays on the wrist, no jitter when still, no lag when moving; turn the wrist away → it waits a moment, folds and fades; turn it back while it fades → it comes back from where it was
+- [ ] Settings > DISPLAY > wrist menu off while it is open → it folds and fades away, the dock comes back

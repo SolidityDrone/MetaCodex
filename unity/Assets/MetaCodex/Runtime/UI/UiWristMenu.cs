@@ -6,19 +6,26 @@ using UnityEngine;
 
 namespace MetaCodex.UI
 {
-    /// The main menu on the wrist (Settings > DISPLAY > MAIN MENU: WRIST): a holographic core floating over the back of
-    /// the left wrist, shown when the user looks at the wrist as at a watch (palm turned away, so it never meets the
-    /// Horizon OS palm-up menu gesture). Touch the core with the right index fingertip and it unfolds: an inner ring of
-    /// six blades (the most used actions) and an outer ring of twelve, chamfered glass with energy rims, under a ticking
-    /// ring, corner brackets and a radar sweep. Touching a blade runs it with a flash, a shockwave and a burst of
-    /// sparks. No pointing or pinching: the fingertip presses through the surface (and must come back out before the
-    /// next press). Idle seven seconds, or the wrist turned away, and it folds back to the core.
-    /// It floats well in front of the wrist, towards the eyes (TowardEyes), so the hand that carries it is behind it, and
-    /// it writes its depth (WristDepth): the hand cut-outs, drawn last, then keep that hand behind it instead of clearing
-    /// the menu wherever the hand is (0.7.5, owner: "the hand cuts it off"); a fingertip in front of it still shows.
+    /// The main menu on the wrist (Settings > DISPLAY > MAIN MENU: WRIST): a holographic instrument projected from the
+    /// back of the left wrist when the user looks at it as at a watch (palm turned away, so it never meets the Horizon OS
+    /// palm-up gesture). Folded, it is a watch face: a hexagon of glass with the time, sixty ticks and a seconds hand.
+    /// Touch it with the right index fingertip and it unfolds: a shock ring runs out, an inner ring of six tiles and an
+    /// outer ring of twelve swing in from opposite sides (each draws its line icon with a scan line, then types its
+    /// name), under a turning bezel, arcs and a radar sweep. Touching a tile runs it with a flash, a ring and sparks.
+    /// Nothing pops: the face and the rings each follow one timeline, played back from where they are when the user
+    /// changes their mind (owner 2026-11-09: "never appear / disappear instantly, always transition back or forth").
+    /// Stable on the wrist (owner 2026-11-09: "when i try to click stuff on the left side, the radial either gets far
+    /// away or it disappears"): it follows the wrist through a 1-euro filter (still when the wrist is still, no lag when
+    /// it moves); while the right hand is at it (or over the left hand) it holds still where it is and never closes,
+    /// since that hand hides the left one from the cameras and the left hand's pose jumps or is lost; a jump of the
+    /// tracked wrist (more than 8 cm at once) is ignored until it persists; a lost left hand keeps it 1.5 s, a wrist
+    /// turned away 0.45 s. A press is the fingertip going into a tile it has been over (a slide across the surface or
+    /// through the face on the way to the left side presses nothing).
+    /// It floats in front of the wrist, towards the eyes (TowardEyes), and writes the depth of its glass (WristDepth),
+    /// so the hand that carries it stays behind it; a fingertip in front of it still shows (0.7.5).
     public sealed class UiWristMenu : MonoBehaviour
     {
-        public sealed class Item { public string Glyph, Label; public Action Act; public Func<bool> Lit; public Color LitTint; }
+        public sealed class Item { public string Glyph, Label, Icon; public Action Act; public Func<bool> Lit; public Color LitTint; }
 
         public readonly List<Item> Inner = new List<Item>(), Outer = new List<Item>();
         /// The hands: left carries the menu, the right index fingertip presses.
@@ -31,37 +38,51 @@ namespace MetaCodex.UI
         public float OffBack = 0.040f, TowardEyes = 0.065f;
         /// Writes the menu's depth so the hand cut-outs keep the carrying hand behind it (tests turn it off to compare).
         public bool DepthWrite = true;
+        /// Seconds: the face appears / goes, the rings unfold / fold.
+        public float AppearTime = 0.45f, VanishTime = 0.34f, BloomTime = 0.62f, FoldTime = 0.42f;
+        /// Seconds it stays when the wrist is turned away, and when the left hand is lost (covered by the other one).
+        public float TurnAwayGrace = 0.45f, LostGrace = 1.5f;
 
-        public bool Visible => _shown > 0.01f;
+        public bool Visible => _present > 0.01f || _bloom > 0.01f;
         public bool Expanded => _expandTarget;
-        public float Shown01 => _shown;
-        public float Expand01 => _expand;
-        /// What the fingertip is over: -2 the core, 0.. a blade (inner ring first, then outer), -1 nothing.
+        public float Shown01 => _present;
+        public float Expand01 => _bloom;
+        /// What the fingertip is over: -2 the face, 0.. a tile (inner ring first, then outer), -1 nothing.
         public int Hover { get; private set; } = -1;
+        /// The right hand is at the menu (or over the left hand): it holds still and does not close.
+        public bool Engaged { get; private set; }
         public event Action<int> Pressed;
 
-        // geometry, metres before Scale: the core, its dashed ring, the two rings of blades, ticks and brackets
-        private const float CoreR0 = 0.0042f, CoreR1 = 0.0150f, DashR = 0.0189f;
-        private const float InR0 = 0.0236f, InR1 = 0.0470f, OutR0 = 0.0500f, OutR1 = 0.0690f;
-        private const float TickR0 = 0.0728f, TickR1 = 0.0752f, BracketR = 0.0800f, MidRingR = 0.0485f;
-        private const float InGapDeg = 3.4f, OutGapDeg = 2.6f, Chamfer = 0.0042f;
-        private const float InStart = 90f, OutStart = 75f; // the first blade's centre (degrees, counter-clockwise from +x)
+        // geometry, metres before Scale: the face, the two rings of tiles, the bezel and the arcs
+        private const float FaceR = 0.0205f, CoreHit = 0.0175f;
+        private const float InR0 = 0.0236f, InR1 = 0.0470f, OutR0 = 0.0500f, OutR1 = 0.0690f, MidRingR = 0.0485f;
+        private const float BezelR0 = 0.0722f, BezelR1 = 0.0740f, ArcR = 0.0790f, ArcR2 = 0.0822f;
+        private const float InGapDeg = 3.6f, OutGapDeg = 2.8f, Corner = 0.0016f;
+        private const float InStart = 90f, OutStart = 75f; // the first tile's centre (degrees, counter-clockwise from +x)
+        private const float JumpDist = 0.08f;
 
         private Mesh _mesh;
         private Material _mat, _sparkMat;
-        private MeshRenderer _depthMr;
+        private MeshRenderer _mr, _depthMr;
         private ParticleSystem _burst, _motes;
-        private TextMeshPro _coreGlyph, _hint;
+        private TextMeshPro _faceText, _hint;
         private readonly List<TextMeshPro> _labels = new List<TextMeshPro>();
+        private Vector4[] _iconRect = new Vector4[0];
         private float[] _hoverAmt = new float[0], _flash = new float[0];
-        private bool _expandTarget, _wantShow, _posed, _armed;
-        private float _shown, _expand, _watchFor, _awayFor, _idle, _cooldownUntil, _time;
+        private bool _expandTarget, _wantShow, _posed, _armed, _dismissing, _emitterOk, _tipOk;
+        private float _present, _bloom, _watchFor, _awayFor, _idle, _cooldownUntil, _time, _engagedUntil, _jumpFor, _coreHover;
+        private int _hoverPart = -1;
+        private float _hoverSince, _prevZ = -1f, _faceTyped = 1f;
         private float _wave = 1f;
         private Vector2 _waveCenter;
+        private Vector3 _anchor, _emitterWorld, _tipLocal, _tipPrev;
+        private Quaternion _rot = Quaternion.identity;
+        private OneEuro3 _filter;
+        private string _faceShown = "";
         private readonly List<Vector3> _v = new List<Vector3>();
         private readonly List<Color> _c = new List<Color>();
         private readonly List<Vector2> _uv = new List<Vector2>();
-        private readonly List<Vector4> _info = new List<Vector4>();
+        private readonly List<Vector4> _info = new List<Vector4>(), _extra = new List<Vector4>();
         private readonly List<int> _tri = new List<int>();
 
         // ------------------------------------------------------------------ set up
@@ -75,21 +96,23 @@ namespace MetaCodex.UI
             return m;
         }
 
-        /// Call after filling Inner / Outer: makes the labels, the mesh and the particle systems.
+        /// Call after filling Inner / Outer: makes the labels, the icons, the mesh and the particle systems.
         public void Build()
         {
-            var sh = Resources.Load<Shader>("Shaders/WristHolo") ?? Shader.Find("MetaCodex/WristHolo");
+            var sh = Resources.Load<Shader>("Shaders/WristArt") ?? Shader.Find("MetaCodex/WristArt");
             var ssh = Resources.Load<Shader>("Shaders/WristSpark") ?? Shader.Find("MetaCodex/WristSpark");
             _mat = new Material(sh) { name = "wrist menu" };
+            _mat.SetTexture("_IconAtlas", UiIconAtlas.Texture);
+            _mat.SetFloat("_IconRange", UiIconAtlas.Range);
             _sparkMat = ssh != null ? new Material(ssh) { name = "wrist sparks" } : null;
             _mesh = new Mesh { name = "wrist menu" };
             _mesh.MarkDynamic();
             gameObject.AddComponent<MeshFilter>().sharedMesh = _mesh;
-            var mr = gameObject.AddComponent<MeshRenderer>();
-            mr.sharedMaterial = _mat;
-            mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            mr.receiveShadows = false;
-            // the depth of the menu, after its light and before the hands (same mesh, a second renderer: its own queue)
+            _mr = gameObject.AddComponent<MeshRenderer>();
+            _mr.sharedMaterial = _mat;
+            _mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            _mr.receiveShadows = false;
+            // the depth of the glass, after its light and before the hands (same mesh, a second renderer: its own queue)
             var dsh = Resources.Load<Shader>("Shaders/WristDepth") ?? Shader.Find("MetaCodex/WristDepth");
             if (dsh != null)
             {
@@ -105,14 +128,17 @@ namespace MetaCodex.UI
             int n = Inner.Count + Outer.Count;
             _hoverAmt = new float[n];
             _flash = new float[n];
+            _iconRect = new Vector4[n];
             for (int i = 0; i < n; i++)
             {
                 var it = ItemAt(i);
                 bool inner = i < Inner.Count;
-                _labels.Add(Label("blade " + it.Label, $"<size=165%>{it.Glyph}</size>\n{it.Label}", inner ? 0.0047f : 0.0040f));
+                if (!UiIconAtlas.TryGet(it.Icon, out _iconRect[i])) UiIconAtlas.TryGet("mark", out _iconRect[i]);
+                _labels.Add(Label("tile " + it.Label, it.Label, inner ? 0.0034f : 0.0030f, Theme?.Display));
             }
-            _coreGlyph = Label("core", "◆", 0.0105f);
-            _hint = Label("hint", "MENU", 0.0040f);
+            _faceText = Label("face", "", 0.0056f, Theme?.Mono ?? Theme?.Display);
+            _faceText.characterSpacing = 1f;
+            _hint = Label("hint", "MENU", 0.0032f, Theme?.Display);
             if (_sparkMat != null)
             {
                 _burst = Sparks("sparks", false);
@@ -121,21 +147,21 @@ namespace MetaCodex.UI
             SetVisible(false);
         }
 
-        private TextMeshPro Label(string name, string text, float lineHeight)
+        private TextMeshPro Label(string name, string text, float lineHeight, TMP_FontAsset font)
         {
             var go = new GameObject(name);
             go.transform.SetParent(transform, false);
             var t = go.AddComponent<TextMeshPro>();
-            if (Theme?.Display != null) { t.font = Theme.Display; t.fontSharedMaterial = Theme.Display.material; }
+            if (font != null) { t.font = font; t.fontSharedMaterial = font.material; }
             t.fontSize = (Theme ?? UiTheme.Current).FontSizeFor(lineHeight) * 1.12f;
-            t.characterSpacing = 3f;
+            t.characterSpacing = 6f;
             t.alignment = TextAlignmentOptions.Center;
             t.textWrappingMode = TextWrappingModes.NoWrap;
-            t.richText = true;
-            t.lineSpacing = -18f;
-            t.rectTransform.sizeDelta = new Vector2(0.03f, 0.02f);
+            t.richText = false;
+            t.rectTransform.sizeDelta = new Vector2(0.03f, 0.012f);
             t.rectTransform.pivot = new Vector2(0.5f, 0.5f);
             t.text = text;
+            t.color = new Color(1f, 1f, 1f, 0f);
             var r = go.GetComponent<MeshRenderer>();
             if (r != null) r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             return t;
@@ -150,27 +176,26 @@ namespace MetaCodex.UI
             var main = ps.main;
             main.playOnAwake = false;
             main.loop = motes;
-            main.maxParticles = motes ? 24 : 72;
+            main.maxParticles = motes ? 20 : 72;
             main.simulationSpace = motes ? ParticleSystemSimulationSpace.Local : ParticleSystemSimulationSpace.World;
             main.scalingMode = ParticleSystemScalingMode.Hierarchy;
-            main.startLifetime = motes ? new ParticleSystem.MinMaxCurve(0.9f, 1.6f) : new ParticleSystem.MinMaxCurve(0.22f, 0.5f);
-            main.startSpeed = motes ? new ParticleSystem.MinMaxCurve(0.004f, 0.012f) : new ParticleSystem.MinMaxCurve(0.05f, 0.16f);
-            main.startSize = motes ? new ParticleSystem.MinMaxCurve(0.0007f, 0.0016f) : new ParticleSystem.MinMaxCurve(0.0012f, 0.0034f);
+            main.startLifetime = motes ? new ParticleSystem.MinMaxCurve(1.0f, 1.8f) : new ParticleSystem.MinMaxCurve(0.22f, 0.5f);
+            main.startSpeed = motes ? new ParticleSystem.MinMaxCurve(0.003f, 0.009f) : new ParticleSystem.MinMaxCurve(0.05f, 0.16f);
+            main.startSize = motes ? new ParticleSystem.MinMaxCurve(0.0006f, 0.0013f) : new ParticleSystem.MinMaxCurve(0.0012f, 0.0034f);
             var accent = (Theme ?? UiTheme.Current).Accent;
             main.startColor = new ParticleSystem.MinMaxGradient(accent, Color.Lerp(accent, Color.white, 0.6f));
             var em = ps.emission;
             em.enabled = motes;
-            if (motes) em.rateOverTime = 6f;
+            if (motes) em.rateOverTime = 5f;
             var shape = ps.shape;
             shape.enabled = true;
             shape.shapeType = motes ? ParticleSystemShapeType.Circle : ParticleSystemShapeType.Sphere;
-            shape.radius = motes ? CoreR1 * 1.2f : 0.003f;
-            if (motes) shape.rotation = new Vector3(0f, 0f, 0f);
+            shape.radius = motes ? FaceR * 1.1f : 0.003f;
             var col = ps.colorOverLifetime;
             col.enabled = true;
             var g = new Gradient();
             g.SetKeys(new[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(Color.white, 1f) },
-                new[] { new GradientAlphaKey(0f, 0f), new GradientAlphaKey(motes ? 0.55f : 1f, 0.12f), new GradientAlphaKey(0f, 1f) });
+                new[] { new GradientAlphaKey(0f, 0f), new GradientAlphaKey(motes ? 0.5f : 1f, 0.12f), new GradientAlphaKey(0f, 1f) });
             col.color = g;
             var size = ps.sizeOverLifetime;
             size.enabled = true;
@@ -187,11 +212,10 @@ namespace MetaCodex.UI
 
         private void SetVisible(bool on)
         {
-            var mr = GetComponent<MeshRenderer>();
-            if (mr != null && mr.enabled != on) mr.enabled = on;
+            if (_mr != null && _mr.enabled != on) _mr.enabled = on;
             if (!on && _depthMr != null && _depthMr.enabled) _depthMr.enabled = false; // never an invisible disc of depth
             foreach (var l in _labels) if (l.gameObject.activeSelf != on) l.gameObject.SetActive(on);
-            if (_coreGlyph != null && _coreGlyph.gameObject.activeSelf != on) _coreGlyph.gameObject.SetActive(on);
+            if (_faceText != null && _faceText.gameObject.activeSelf != on) _faceText.gameObject.SetActive(on);
             if (_hint != null && _hint.gameObject.activeSelf != on) _hint.gameObject.SetActive(on);
             if (_motes != null) { if (on && !_motes.isPlaying) _motes.Play(); else if (!on && _motes.isPlaying) _motes.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear); }
         }
@@ -200,17 +224,18 @@ namespace MetaCodex.UI
 
         private void Update() => Tick(Time.unscaledDeltaTime);
 
-        /// One step: watch pose, placement, the fingertip, animation, the mesh (tests call it with their own dt).
+        /// One step: watch pose, placement, the fingertip, the timelines, the mesh (tests call it with their own dt).
         public void Tick(float dt)
         {
             if (_mesh == null) return;
             _time += dt;
             (bool okL, HandFrame L) = Hand != null ? Hand(Handedness.Left) : (false, default);
             (bool okR, HandFrame R) = Hand != null ? Hand(Handedness.Right) : (false, default);
+            bool leftSeen = okL && !L.SystemGesture && Head != null;
             bool watching = false;
-            Vector3 anchor = default;
-            Quaternion rot = Quaternion.identity;
-            if (okL && Head != null && !L.SystemGesture)
+            Vector3 raw = default;
+            _emitterOk = false;
+            if (leftSeen)
             {
                 var back = -L.PalmNormal(Handedness.Left);
                 var fwd = (L.MiddleKnuckle - L.Wrist).normalized;
@@ -220,55 +245,102 @@ namespace MetaCodex.UI
                 // the back of the wrist turned to the eyes, and looked at (within ~44 degrees of the gaze)
                 watching = Vector3.Dot(back, toHead) > 0.45f && Vector3.Dot(Head.forward, -toHead) > 0.72f && dist > 0.12f && dist < 0.75f;
                 // in front of the hand, not in it: the fingers and knuckles must stay behind the rings
-                anchor = L.Wrist - fwd * 0.012f + back * OffBack + toHead * TowardEyes;
-                var toEye = (Head.position - anchor).normalized;
-                var up = Vector3.ProjectOnPlane(Head.up, toEye);
-                rot = Quaternion.LookRotation(-toEye, up.sqrMagnitude > 1e-4f ? up.normalized : Vector3.up);
+                raw = L.Wrist - fwd * 0.012f + back * OffBack + toHead * TowardEyes;
+                _emitterWorld = L.Wrist - fwd * 0.004f + back * 0.014f;
+                _emitterOk = true;
             }
-            if (watching) { _watchFor += dt; _awayFor = 0f; } else { _awayFor += dt; _watchFor = 0f; }
-            _wantShow = _wantShow ? _awayFor < 0.35f : _watchFor > 0.08f;
-            if (!_wantShow) _expandTarget = false;
-            _shown = Mathf.MoveTowards(_shown, _wantShow ? 1f : 0f, dt / (_wantShow ? 0.18f : 0.25f));
-            if (watching)
+
+            // the right hand at the menu, or over the left hand: hold still, stay open
+            _tipOk = okR && _posed;
+            _tipPrev = _tipLocal;
+            if (_tipOk) _tipLocal = transform.InverseTransformPoint(R.IndexTip);
+            bool near = false;
+            if (_tipOk && Visible)
             {
-                // follows the wrist smoothly; nearly still while a fingertip is about to press it
-                float near = okR && _posed ? Mathf.Abs(transform.InverseTransformPoint(R.IndexTip).z) : 1f;
-                float rate = near < 0.04f ? 3f : 16f;
-                if (!_posed || _shown < 0.02f) { transform.SetPositionAndRotation(anchor, rot); _posed = true; }
-                else
+                float reach = _bloom > 0.3f ? ArcR2 + 0.02f : FaceR + 0.05f;
+                near = _tipLocal.z > -0.11f && _tipLocal.z < 0.04f && new Vector2(_tipLocal.x, _tipLocal.y).magnitude < reach;
+            }
+            if (!near && okR && leftSeen && Visible && (R.IndexTip - L.Wrist).sqrMagnitude < 0.13f * 0.13f) near = true;
+            if (near) _engagedUntil = _time + 0.6f;
+            Engaged = Visible && _time < _engagedUntil;
+
+            // show or not: a grace before it goes, none of it while engaged
+            if (watching) { _watchFor += dt; _awayFor = 0f; }
+            else { _watchFor = 0f; if (!Engaged) _awayFor += dt; }
+            float grace = leftSeen ? TurnAwayGrace : LostGrace;
+            if (_dismissing) _wantShow = false;
+            else _wantShow = _wantShow ? Engaged || _awayFor < grace : _watchFor > 0.08f;
+            if (!_wantShow) _expandTarget = false;
+
+            // the timelines: the rings fold first, then the face goes
+            float bloomTarget = _expandTarget ? 1f : 0f;
+            _bloom = Mathf.MoveTowards(_bloom, bloomTarget, dt / (bloomTarget > _bloom ? BloomTime : FoldTime));
+            bool keepFace = _wantShow || _bloom > 0.35f;
+            _present = Mathf.MoveTowards(_present, keepFace ? 1f : 0f, dt / (keepFace ? AppearTime : VanishTime));
+
+            // placement: firm on the wrist, still while engaged, jumps of the tracked pose ignored until they persist
+            bool fresh = !_posed || _present <= 0.001f && _bloom <= 0.001f;
+            if (leftSeen)
+            {
+                if (fresh) { _filter.Reset(raw); _anchor = raw; _jumpFor = 0f; _posed = true; }
+                else if (!Engaged)
                 {
-                    float k = 1f - Mathf.Exp(-rate * dt);
-                    transform.SetPositionAndRotation(Vector3.Lerp(transform.position, anchor, k), Quaternion.Slerp(transform.rotation, rot, k));
+                    bool jump = (raw - _anchor).sqrMagnitude > JumpDist * JumpDist;
+                    _jumpFor = jump ? _jumpFor + dt : 0f;
+                    if ((!jump || _jumpFor > 0.3f) && L.HighConfidence) _anchor = _filter.Step(raw, dt, 1.6f, 6f, 1f);
+                }
+                else _jumpFor = 0f;
+                if (!Engaged || fresh)
+                {
+                    var toEye = (Head.position - _anchor).normalized;
+                    var up = Vector3.ProjectOnPlane(Head.up, toEye);
+                    var want = Quaternion.LookRotation(-toEye, up.sqrMagnitude > 1e-4f ? up.normalized : Vector3.up);
+                    _rot = fresh ? want : Quaternion.Slerp(_rot, want, 1f - Mathf.Exp(-18f * dt));
                 }
             }
+            if (_posed) transform.SetPositionAndRotation(_anchor, _rot);
             transform.localScale = Vector3.one * Scale;
-            _expand = Mathf.MoveTowards(_expand, _expandTarget ? 1f : 0f, dt / (_expandTarget ? 0.34f : 0.2f));
-            // the fingertip: over what, and pressed through the surface
+            if (_tipOk && fresh) _tipLocal = _tipPrev = transform.InverseTransformPoint(R.IndexTip);
+
+            // the fingertip: over what, and pressed into the surface
             Hover = -1;
-            if (okR && _shown > 0.5f)
+            if (_tipOk && _present > 0.6f)
             {
-                var p = transform.InverseTransformPoint(R.IndexTip); // +z is away from the eyes: the surface is z = 0
+                var p = _tipLocal; // +z is away from the eyes: the surface is z = 0
                 int part = HitTest(new Vector2(p.x, p.y));
-                if (p.z > -0.03f && p.z < 0.012f) Hover = part;
+                bool inZone = p.z > -0.03f && p.z < 0.02f;
+                if (inZone && p.z < 0.012f) Hover = part;
+                int zonePart = inZone ? part : -1;
+                if (zonePart != _hoverPart) { _hoverPart = zonePart; _hoverSince = _time; }
                 if (p.z < -0.006f) _armed = true;
-                if (_armed && p.z >= -0.0008f && p.z < 0.02f && part != -1 && _time >= _cooldownUntil)
+                var vel = dt > 1e-5f ? (p - _tipPrev) / dt : Vector3.zero;
+                bool crossing = _prevZ < -0.0008f && p.z >= -0.0008f && p.z < 0.02f;
+                bool straight = new Vector2(vel.x, vel.y).magnitude < Mathf.Max(0.15f, Mathf.Abs(vel.z) * 1.3f);
+                float dwell = part == -2 && _expandTarget ? 0.08f : 0.025f;
+                if (_armed && crossing && straight && part != -1 && part == _hoverPart && _time - _hoverSince >= dwell && _time >= _cooldownUntil)
                 {
                     _armed = false;
                     _cooldownUntil = _time + 0.3f;
                     Press(part, R.IndexTip, new Vector2(p.x, p.y));
                 }
+                _prevZ = p.z;
             }
-            if (_expandTarget && Hover == -1) { _idle += dt; if (_idle > 7f) _expandTarget = false; } else _idle = 0f;
+            else { _hoverPart = -1; _prevZ = -1f; }
+            if (_expandTarget && Hover == -1 && !Engaged) { _idle += dt; if (_idle > 7f) _expandTarget = false; } else _idle = 0f;
             for (int i = 0; i < _hoverAmt.Length; i++)
             {
-                _hoverAmt[i] = Mathf.MoveTowards(_hoverAmt[i], Hover == i ? 1f : 0f, dt * 9f);
+                _hoverAmt[i] = Mathf.MoveTowards(_hoverAmt[i], Hover == i ? 1f : 0f, dt * 10f);
                 _flash[i] = Mathf.Max(0f, _flash[i] - dt / 0.35f);
             }
-            if (_wave < 1f) _wave = Mathf.Min(1f, _wave + dt / 0.38f);
-            bool on = _shown > 0.001f;
+            _coreHover = Mathf.MoveTowards(_coreHover, Hover == -2 ? 1f : 0f, dt * 10f);
+            if (_wave < 1f) _wave = Mathf.Min(1f, _wave + dt / 0.42f);
+            _faceTyped = Mathf.Min(1f, _faceTyped + dt / 0.14f);
+
+            if (_dismissing && _present <= 0.001f && _bloom <= 0.001f) { _dismissing = false; HideNow(); enabled = false; return; }
+            bool on = _present > 0.001f || _bloom > 0.001f;
             SetVisible(on);
             // depth only once it is mostly there: a fading menu must not hide the hand behind it
-            bool depth = on && DepthWrite && _shown > 0.5f;
+            bool depth = on && DepthWrite && _present > 0.5f;
             if (_depthMr != null && _depthMr.enabled != depth) _depthMr.enabled = depth;
             if (on) Rebuild();
         }
@@ -277,14 +349,14 @@ namespace MetaCodex.UI
         public int HitTest(Vector2 q)
         {
             float r = q.magnitude, a = Mathf.Atan2(q.y, q.x) * Mathf.Rad2Deg;
-            if (r < CoreR1 * 1.15f) return -2;
-            if (_expand < 0.6f) return -1;
-            if (r >= InR0 - 0.001f && r <= InR1 + 0.0015f) { int i = BladeAt(a, Inner.Count, InStart, InGapDeg); if (i >= 0) return i; }
-            if (r >= OutR0 - 0.0015f && r <= OutR1 + 0.002f) { int i = BladeAt(a, Outer.Count, OutStart, OutGapDeg); if (i >= 0) return Inner.Count + i; }
+            if (r < CoreHit) return -2;
+            if (_bloom < 0.6f) return -1;
+            if (r >= InR0 - 0.001f && r <= InR1 + 0.0015f) { int i = TileAt(a, Inner.Count, InStart, InGapDeg); if (i >= 0) return i; }
+            if (r >= OutR0 - 0.0015f && r <= OutR1 + 0.002f) { int i = TileAt(a, Outer.Count, OutStart, OutGapDeg); if (i >= 0) return Inner.Count + i; }
             return -1;
         }
 
-        private static int BladeAt(float a, int n, float start, float gap)
+        private static int TileAt(float a, int n, float start, float gap)
         {
             if (n == 0) return -1;
             float step = 360f / n;
@@ -323,7 +395,7 @@ namespace MetaCodex.UI
             _burst.Emit(count);
         }
 
-        /// Tests and hints: the world position of a part's centre (core: -2, blades: 0..).
+        /// Tests and hints: the world position of a part's centre (face: -2, tiles: 0..).
         public Vector3 WorldOf(int part)
         {
             if (part == -2) return transform.position;
@@ -334,136 +406,233 @@ namespace MetaCodex.UI
             return transform.TransformPoint(new Vector3(Mathf.Cos(a) * r, Mathf.Sin(a) * r, 0f));
         }
 
-        /// Out of sight at once (the DOCK mode took over).
-        /// Off (DOCK mode, or the shell disabled it): its depth must not stay in the picture (HideNow hides the rest).
+        /// Off (DOCK mode, or the shell disabled it): its depth must not stay in the picture.
         private void OnDisable() { if (_depthMr != null) _depthMr.enabled = false; }
 
+        /// Out of sight at once (tests; the shell uses Dismiss).
         public void HideNow()
         {
-            _shown = 0f; _expand = 0f; _expandTarget = false; _wantShow = false; _posed = false;
+            _present = 0f; _bloom = 0f; _expandTarget = false; _wantShow = false; _posed = false; Engaged = false; _engagedUntil = 0f;
             SetVisible(false);
         }
 
+        /// Goes with its closing animation, then turns itself off (the DOCK took over).
+        public void Dismiss()
+        {
+            _dismissing = true;
+            _expandTarget = false;
+            if (!Visible) { _dismissing = false; HideNow(); enabled = false; }
+        }
+
+        /// On again (WRIST mode).
+        public void Resume() { _dismissing = false; enabled = true; }
+
         /// Tests: fold or unfold without a finger.
-        public void SetExpandedForTest(bool on) { _expandTarget = on; _expand = on ? 1f : 0f; }
+        public void SetExpandedForTest(bool on) { _expandTarget = on; _bloom = on ? 1f : 0f; }
 
-        // ------------------------------------------------------------------ the mesh
+        /// Tests: a frame of the timelines, drawn now (pictures of the animation).
+        public void PoseTimelineForTest(float present, float bloom)
+        {
+            _present = Mathf.Clamp01(present);
+            _bloom = Mathf.Clamp01(bloom);
+            SetVisible(true);
+            Rebuild();
+        }
 
+        // ------------------------------------------------------------------ the picture
+
+        private static float Seg(float x, float a, float b) => Mathf.Clamp01((x - a) / (b - a));
+        private static float EaseOut(float t) { t = Mathf.Clamp01(t); float u = 1f - t; return 1f - u * u * u; }
+        private static float EaseInOut(float t) { t = Mathf.Clamp01(t); return t < 0.5f ? 4f * t * t * t : 1f - Mathf.Pow(-2f * t + 2f, 3f) * 0.5f; }
         private static float EaseOutBack(float t) { const float c1 = 1.70158f, c3 = c1 + 1f; t = Mathf.Clamp01(t); return 1f + c3 * Mathf.Pow(t - 1f, 3f) + c1 * Mathf.Pow(t - 1f, 2f); }
+        private static float Bump(float x, float a, float b) => Mathf.Sin(Mathf.PI * Seg(x, a, b));
+
+        private float InnerStart(int j) => 0.14f + 0.055f * j;
+        private float OuterStart(int j) => 0.28f + 0.032f * j;
 
         private void Rebuild()
         {
-            _v.Clear(); _c.Clear(); _uv.Clear(); _info.Clear(); _tri.Clear();
+            _v.Clear(); _c.Clear(); _uv.Clear(); _info.Clear(); _extra.Clear(); _tri.Clear();
             var t = Theme ?? UiTheme.Current;
-            Color accent = t.Accent;
-            float shown = _shown, ex = _expand * shown;
-            float pulse = 0.5f + 0.5f * Mathf.Sin(_time * 2.4f);
+            Color accent = t.Accent, warm = t.Warn;
+            float P = _present, B = _bloom;
             float uiHide = Mathf.Clamp01(Shader.GetGlobalFloat("_McxUiHide"));
+            var now = DateTime.Now;
 
-            // the core: a hexagonal ring of glass, a dashed ring turning around it
-            bool coreHover = Hover == -2;
-            Band(Vector2.zero, CoreR0, CoreR1, 30f, 390f, 6, accent, shown * (0.85f + 0.15f * pulse), coreHover ? 0.8f : 0.12f + 0.12f * pulse, 0f, 0f, true);
-            for (int k = 0; k < 24; k++)
+            // the projector: rays from the back of the wrist to the face's ring while it appears or unfolds (none at rest)
+            float faceScale = Mathf.Lerp(0.55f, 1f, EaseOutBack(Seg(P, 0.15f, 0.85f))) * (1f - 0.07f * Bump(B, 0f, 0.3f));
+            float beam = _emitterOk && Head != null ? 0.85f * Bump(P, 0f, 0.9f) + 0.5f * Bump(B, 0f, 0.45f) : 0f;
+            if (beam > 0.01f)
             {
-                float a0 = -_time * 22f + k * 15f;
-                Line(Vector2.zero, DashR, 0.0009f, a0, a0 + 8f, 2, accent, shown * 0.75f, coreHover ? 0.6f : 0f);
+                var e = transform.InverseTransformPoint(_emitterWorld);
+                var eye = transform.InverseTransformPoint(Head.position);
+                float grow = EaseOut(Seg(P, 0f, 0.42f));
+                var corners = new Vector3[6];
+                for (int k = 0; k < 6; k++)
+                {
+                    float a = (90f + 60f * k) * Mathf.Deg2Rad;
+                    var target = new Vector3(Mathf.Cos(a), Mathf.Sin(a), 0f) * (FaceR * 0.955f * faceScale);
+                    corners[k] = Vector3.Lerp(e, target, grow);
+                }
+                for (int k = 0; k < 6; k++) Cone(e, corners[k], corners[(k + 1) % 6], accent, beam * 0.5f);
+                for (int k = 0; k < 6; k++) Ray(e, corners[k], eye, 0.0006f, accent, beam);
             }
-            if (ex > 0.01f)
+
+            // the radar sweep and the guides the shock ring leaves
+            if (B > 0.01f)
             {
-                // the rings of blades: they swing out of the core one after the other
-                int n = Inner.Count + Outer.Count;
-                for (int i = 0; i < n; i++)
+                float sweep = _time * 55f;
+                Sweep(InR0, OutR1, sweep - 36f, sweep, 14, accent, 0.07f * Seg(B, 0.75f, 1f));
+                float g = EaseInOut(Seg(B, 0.12f, 0.6f)) * 360f;
+                if (g > 0.5f)
                 {
-                    bool inner = i < Inner.Count;
-                    int j = inner ? i : i - Inner.Count, cnt = inner ? Inner.Count : Outer.Count;
-                    float step = 360f / cnt, gap = inner ? InGapDeg : OutGapDeg;
-                    float delay = (inner ? 0f : 0.28f) + 0.32f * j / Mathf.Max(1, cnt);
-                    float e = EaseOutBack((_expand * 1.6f - delay) / 0.62f);
-                    if (e <= 0.001f) continue;
-                    float centre = (inner ? InStart : OutStart) - j * step + (1f - e) * 32f;
-                    float h = _hoverAmt[i], f = _flash[i];
-                    var item = ItemAt(i);
-                    bool lit = item.Lit != null && item.Lit();
-                    Color col = lit ? item.LitTint : accent;
-                    if (f > 0f) col = Color.Lerp(col, Color.white, f * 0.7f);
-                    float push = (1f - e) * -0.014f + h * 0.0024f + f * 0.0015f;
-                    float r0 = (inner ? InR0 : OutR0) + push, r1 = (inner ? InR1 : OutR1) + push;
-                    float state = Mathf.Clamp01(h * 0.65f + f + (lit ? 0.45f : 0f));
-                    Band(Vector2.zero, r0, r1, centre - step * 0.5f + gap * 0.5f, centre + step * 0.5f - gap * 0.5f, inner ? 10 : 6, col, ex * Mathf.Clamp01(e) * (inner ? 1f : 0.88f), state, Chamfer, -h * 0.002f, false);
-                    var label = _labels[i];
-                    float ar = centre * Mathf.Deg2Rad, rm = (r0 + r1) * 0.5f;
-                    label.rectTransform.localPosition = new Vector3(Mathf.Cos(ar) * rm, Mathf.Sin(ar) * rm, -0.0009f - h * 0.002f);
-                    var lc = lit ? Color.Lerp(item.LitTint, Color.white, 0.55f) : Color.Lerp(t.Text, Color.white, h * 0.6f);
-                    lc.a = ex * Mathf.Clamp01(e) * (0.82f + 0.18f * h) * (1f - uiHide);
-                    if (label.color != lc) label.color = lc;
+                    Arc(Vector2.zero, InR0 - 0.0017f, 0.00026f, 90f - g, 90f, Mathf.Max(4, (int)(g / 6f)), accent, 0.38f, 0.4f);
+                    Arc(Vector2.zero, OutR1 + 0.0017f, 0.00026f, 90f - g, 90f, Mathf.Max(4, (int)(g / 5f)), accent, 0.38f, 0.4f);
                 }
-                // a thin ring between the two, the ticking ring, the brackets and the radar sweep
-                Line(Vector2.zero, MidRingR, 0.0006f, 0f, 360f, 96, accent, ex * 0.35f, 0f);
-                for (int k = 0; k < 48; k++)
+                Arc(Vector2.zero, MidRingR, 0.00030f, 0f, 360f, 72, accent, 0.22f * Seg(B, 0.3f, 0.7f), 0.3f);
+            }
+
+            // the rings of tiles: the inner six swing in clockwise, the outer twelve the other way, each a fan opening
+            int n = Inner.Count + Outer.Count;
+            for (int i = 0; i < n; i++)
+            {
+                bool inner = i < Inner.Count;
+                int j = inner ? i : i - Inner.Count, cnt = inner ? Inner.Count : Outer.Count;
+                float s0 = inner ? InnerStart(j) : OuterStart(j);
+                float e = Seg(B, s0, s0 + 0.34f);
+                var label = _labels[i];
+                if (e <= 0.001f) { HideLabel(label); continue; }
+                float eo = EaseOut(e), eb = EaseOutBack(e);
+                float step = 360f / cnt, gap = inner ? InGapDeg : OutGapDeg;
+                float half = (step * 0.5f - gap * 0.5f) * Mathf.Clamp01(eo * 1.05f);
+                float centre = (inner ? InStart : OutStart) - j * step + (inner ? 38f : -38f) * (1f - eo);
+                float h = _hoverAmt[i], f = _flash[i];
+                var item = ItemAt(i);
+                bool lit = item.Lit != null && item.Lit();
+                Color col = lit ? item.LitTint : accent;
+                float slide = -0.007f * (1f - eb);
+                float r0 = (inner ? InR0 : OutR0) + slide + h * 0.0008f, r1 = (inner ? InR1 : OutR1) + slide + h * 0.0016f;
+                float z = 0.006f * (1f - eo) - h * 0.0022f + f * 0.0012f;
+                float alpha = Seg(B, s0, s0 + 0.16f) * P;
+                float prox = Hover == i && _tipOk ? Mathf.Clamp01(1f + _tipLocal.z / 0.03f) : 0f;
+                float state = Mathf.Clamp01(h * 0.75f + f);
+                Tile(r0, r1, centre - half, centre + half, inner ? 10 : 6, z, col, alpha * (inner ? 1f : 0.92f), state, prox, lit ? 1f : 0f, f);
+                // the icon draws itself with a scan line, then the name types in under it
+                float ar = centre * Mathf.Deg2Rad, rm = (r0 + r1) * 0.5f;
+                var mid = new Vector2(Mathf.Cos(ar), Mathf.Sin(ar)) * rm;
+                float icon = (inner ? 0.0108f : 0.0094f) * (1f + 0.12f * h);
+                Color ink = lit ? item.LitTint : accent;
+                IconQuad(mid + new Vector2(0f, inner ? 0.0026f : 0.0022f), icon, z - 0.0005f, _iconRect[i], ink, alpha, Seg(B, s0 + 0.12f, s0 + 0.34f), state, 1f);
+                if (lit) TickLine(r1 - 0.0019f, r1 - 0.0007f, centre, 0.0011f, item.LitTint, alpha, 0.9f, z - 0.0004f);
+                float typed = Seg(B, s0 + 0.18f, s0 + 0.40f);
+                label.rectTransform.localPosition = new Vector3(mid.x, mid.y - (inner ? 0.0058f : 0.0050f), z - 0.0006f);
+                int chars = Mathf.CeilToInt(item.Label.Length * typed);
+                if (label.maxVisibleCharacters != chars) label.maxVisibleCharacters = chars;
+                var lc = lit ? Color.Lerp(item.LitTint, Color.white, 0.5f) : Color.Lerp(t.TextDim, Color.white, 0.25f + h * 0.75f);
+                lc.a = alpha * Seg(B, s0 + 0.2f, s0 + 0.42f) * (0.85f + 0.15f * h) * (1f - uiHide);
+                if (label.color != lc) label.color = lc;
+            }
+
+            // the bezel: seventy-two ticks drawn round from twelve, turning slowly; arcs that slide in and drift
+            if (B > 0.01f)
+            {
+                float tickIn = Seg(B, 0.45f, 0.85f), turn = -24f * (1f - EaseOut(Seg(B, 0.45f, 0.95f))) - _time * 1.2f;
+                for (int k = 0; k < 72; k++)
                 {
-                    float a = -_time * 6f + k * 7.5f;
-                    bool major = k % 4 == 0;
-                    Tick(TickR0, major ? TickR1 + 0.0016f : TickR1, a, major ? 0.0009f : 0.0006f, accent, ex * (major ? 0.9f : 0.5f));
+                    if (k / 72f > tickIn) break;
+                    bool major = k % 6 == 0;
+                    float a = 90f - k * 5f + turn;
+                    TickLine(BezelR0 - (major ? 0.0007f : 0f), BezelR1 + (major ? 0.0010f : 0f), a, major ? 0.00065f : 0.00042f, accent, (major ? 0.85f : 0.45f) * P, 0.5f);
                 }
-                for (int k = 0; k < 4; k++)
+                // twelve o'clock: a warm mark
+                if (tickIn > 0.01f) TickLine(BezelR1 + 0.0016f, BezelR1 + 0.0042f, 90f + turn, 0.0012f, warm, 0.9f * Seg(B, 0.5f, 0.8f) * P, 0.8f);
+                float arcs = Seg(B, 0.6f, 1f), slideIn = 0.008f * (1f - EaseOut(arcs)), drift = _time * 4f;
+                if (arcs > 0.001f)
                 {
-                    float a = 45f + k * 90f + _time * 3f;
-                    Line(Vector2.zero, BracketR, 0.0011f, a - 11f, a + 11f, 8, accent, ex * 0.8f, 0f);
-                    Tick(BracketR - 0.0035f, BracketR + 0.0006f, a - 11f, 0.0011f, accent, ex * 0.8f);
-                    Tick(BracketR - 0.0035f, BracketR + 0.0006f, a + 11f, 0.0011f, accent, ex * 0.8f);
+                    foreach (var (a0, len) in new[] { (20f, 64f), (128f, 36f), (214f, 92f) })
+                    {
+                        float s = a0 + drift;
+                        Arc(Vector2.zero, ArcR + slideIn, 0.0006f, s, s + len * EaseOut(arcs), 18, accent, 0.5f * arcs * P, 0.6f);
+                        TickLine(ArcR - 0.0022f + slideIn, ArcR + 0.0012f + slideIn, s, 0.0008f, accent, 0.8f * arcs * P, 0.6f);
+                        TickLine(ArcR - 0.0022f + slideIn, ArcR + 0.0012f + slideIn, s + len * EaseOut(arcs), 0.0008f, accent, 0.8f * arcs * P, 0.6f);
+                    }
+                    foreach (var (a0, len) in new[] { (60f, 22f), (250f, 30f), (318f, 12f) })
+                    {
+                        float s = a0 - drift * 1.6f;
+                        Arc(Vector2.zero, ArcR2 + slideIn * 1.4f, 0.0004f, s, s + len, 10, accent, 0.35f * arcs * P, 0.4f, 0f, -0.0003f, 7f, 0.55f);
+                    }
                 }
-                float sweep = _time * 75f;
-                Glow(Vector2.zero, InR0, OutR1, sweep - 42f, sweep, 14, accent, ex * 0.16f);
+            }
+
+            // the shock ring: out of the face to the outer ring when it unfolds, back in when it folds
+            float shock = Bump(B, 0.06f, 0.48f);
+            if (shock > 0.01f)
+            {
+                float k = EaseOut(Seg(B, 0.06f, 0.42f));
+                Arc(Vector2.zero, Mathf.Lerp(FaceR * 0.8f, OutR1 + 0.004f, k), Mathf.Lerp(0.0016f, 0.0004f, k), 0f, 360f, 72, Color.Lerp(accent, Color.white, 0.35f), shock * 0.9f, 1f);
+            }
+
+            // the face: the outline draws round, the glass fills, the outer ring is traced, the ticks come round
+            float ignite = Bump(P, 0.16f, 0.55f);
+            if (ignite > 0.01f) Arc(Vector2.zero, FaceR * EaseOut(Seg(P, 0.16f, 0.55f)), 0.0007f, 0f, 360f, 48, Color.Lerp(accent, Color.white, 0.5f), ignite, 1f, 0f, -0.0006f);
+            float sec = (now.Second + now.Millisecond / 1000f) / 60f;
+            var face = new Vector4(EaseInOut(Seg(P, 0.25f, 0.75f)), Seg(P, 0.45f, 1f), EaseInOut(Seg(P, 0.35f, 0.9f)), EaseOut(Seg(P, 0.55f, 1f)));
+            FaceQuad(FaceR * faceScale, -0.0004f, accent, Mathf.Clamp01(P * 3f), Mathf.Clamp01(_coreHover + 0.6f * Bump(B, 0f, 0.3f)), sec, face);
+            if (B > 0.5f && _expandTarget && UiIconAtlas.TryGet("close", out var xr))
+                IconQuad(new Vector2(0f, -FaceR * 0.42f * faceScale), 0.0042f, -0.0008f, xr, accent, Seg(B, 0.6f, 1f) * P * (0.55f + 0.45f * _coreHover), 1f, _coreHover, 0.6f);
+
+            // the fingertip's reticle: a warm ring that closes in as the finger comes to the surface
+            if (_tipOk && (Hover >= 0 || Hover == -2))
+            {
+                float depth = Mathf.Clamp01(-_tipLocal.z / 0.03f);
+                Arc(new Vector2(_tipLocal.x, _tipLocal.y), 0.0016f + 0.0065f * depth, 0.00045f, 0f, 360f, 32, warm, 0.8f * P * (1f - 0.4f * depth), 0.7f, 0f, -0.0028f);
             }
             if (_wave < 1f)
             {
                 float w = 1f - Mathf.Pow(1f - _wave, 3f);
-                Line(_waveCenter, Mathf.Lerp(0.004f, 0.034f, w), 0.0016f * (1f - _wave) + 0.0004f, 0f, 360f, 48, Color.Lerp(accent, Color.white, 0.4f), shown * (1f - _wave) * 0.9f, 1f);
+                Arc(_waveCenter, Mathf.Lerp(0.004f, 0.034f, w), 0.0016f * (1f - _wave) + 0.0004f, 0f, 360f, 48, Color.Lerp(accent, Color.white, 0.4f), P * (1f - _wave) * 0.9f, 1f, 0f, -0.002f);
             }
+
             _mesh.Clear();
             _mesh.SetVertices(_v);
             _mesh.SetColors(_c);
             _mesh.SetUVs(0, _uv);
             _mesh.SetUVs(1, _info);
+            _mesh.SetUVs(2, _extra);
             _mesh.SetTriangles(_tri, 0);
             _mesh.RecalculateBounds();
-            // the core's glyph and hint, the labels of a folded menu
-            _coreGlyph.text = _expandTarget ? "✕" : "◆";
-            _coreGlyph.rectTransform.localPosition = new Vector3(0f, 0f, -0.0009f);
-            var cg = Color.Lerp(t.TextAccent, Color.white, coreHover ? 0.7f : 0.2f * pulse);
-            cg.a = shown * (1f - uiHide);
-            _coreGlyph.color = cg;
-            _hint.rectTransform.localPosition = new Vector3(0f, -(DashR + 0.0058f), -0.0009f);
+
+            // the face's text: the time, or the name of what the fingertip is over while unfolded; the hint while folded
+            string want = B > 0.5f && Hover >= 0 ? ItemAt(Hover).Label : B > 0.5f && Hover == -2 ? "CLOSE" : now.ToString("HH:mm");
+            if (want != _faceShown) { _faceShown = want; _faceText.text = want; _faceTyped = 0f; }
+            int faceChars = Mathf.CeilToInt(want.Length * Mathf.Min(_faceTyped, Seg(P, 0.6f, 1f) * 1.0001f));
+            if (_faceText.maxVisibleCharacters != faceChars) _faceText.maxVisibleCharacters = faceChars;
+            bool name = want.Length > 0 && !char.IsDigit(want[0]);
+            float fs = (Theme ?? UiTheme.Current).FontSizeFor(name ? (want.Length > 6 ? 0.0030f : 0.0036f) : 0.0056f) * 1.12f;
+            if (!Mathf.Approximately(_faceText.fontSize, fs)) _faceText.fontSize = fs;
+            float cs = name ? 5f : 1f;
+            if (!Mathf.Approximately(_faceText.characterSpacing, cs)) _faceText.characterSpacing = cs;
+            _faceText.rectTransform.localPosition = new Vector3(0f, B > 0.5f && _expandTarget ? FaceR * 0.08f : 0f, -0.0010f);
+            var fc = name ? Color.Lerp(t.TextAccent, Color.white, 0.4f) : Color.Lerp(t.TextAccent, Color.white, 0.15f + 0.5f * _coreHover);
+            fc.a = Seg(P, 0.6f, 1f) * (1f - uiHide);
+            _faceText.color = fc;
+            _hint.rectTransform.localPosition = new Vector3(0f, -(FaceR + 0.0052f), -0.0009f);
             var hc = t.TextDim;
-            hc.a = shown * (1f - _expand) * 0.85f * (1f - uiHide);
+            hc.a = Seg(P, 0.75f, 1f) * (1f - B) * 0.8f * (1f - uiHide);
             _hint.color = hc;
-            if (ex <= 0.01f) foreach (var l in _labels) { var c = l.color; if (c.a != 0f) { c.a = 0f; l.color = c; } }
         }
 
-        /// A ring segment of glass (kind 0) from r0 to r1 between two angles; the outer corners cut by `chamfer`;
-        /// `closed`: a whole ring (the hexagonal core), whose start and end meet: no rim across the seam.
-        private void Band(Vector2 centre, float r0, float r1, float a0, float a1, int segs, Color col, float strength, float state, float chamfer, float z, bool closed)
+        private static void HideLabel(TextMeshPro l) { var c = l.color; if (c.a != 0f) { c.a = 0f; l.color = c; } }
+
+        // ------------------------------------------------------------------ mesh pieces (WristArt kinds)
+
+        private void Vert(Vector3 p, Color col, Vector2 uv, Vector4 info, Vector4 extra)
         {
-            if (strength <= 0.001f) return;
-            int b = _v.Count;
-            float span = (a1 - a0) * Mathf.Deg2Rad, lenOuter = Mathf.Abs(span) * r1, lenMid = Mathf.Abs(span) * (r0 + r1) * 0.5f;
-            var lin = col.linear;
-            lin.a = strength;
-            for (int i = 0; i <= segs; i++)
-            {
-                float k = i / (float)segs, a = (a0 + (a1 - a0) * k) * Mathf.Deg2Rad;
-                float sOut = lenOuter * k, cut = Mathf.Max(0f, chamfer - Mathf.Min(sOut, lenOuter - sOut));
-                var dir = new Vector2(Mathf.Cos(a), Mathf.Sin(a));
-                var pin = centre + dir * r0;
-                var pout = centre + dir * (r1 - cut);
-                // a closed ring: "along" stays far from both ends (no rim across the seam)
-                float along = closed ? 0.25f + 0.5f * k : k;
-                _v.Add(new Vector3(pin.x, pin.y, z)); _uv.Add(new Vector2(0f, along));
-                _v.Add(new Vector3(pout.x, pout.y, z)); _uv.Add(new Vector2(1f, along));
-                _c.Add(lin); _c.Add(lin);
-                var info = new Vector4(r1 - r0, closed ? 1000f : lenMid, 0f, state);
-                _info.Add(info); _info.Add(info);
-            }
+            _v.Add(p); _c.Add(col); _uv.Add(uv); _info.Add(info); _extra.Add(extra);
+        }
+
+        private void Strip(int b, int segs)
+        {
             for (int i = 0; i < segs; i++)
             {
                 int q = b + i * 2;
@@ -472,78 +641,166 @@ namespace MetaCodex.UI
             }
         }
 
-        /// An arc of light (kind 1) of width w around radius r.
-        private void Line(Vector2 centre, float r, float w, float a0, float a1, int segs, Color col, float strength, float state)
+        private void Quad(int b) { _tri.Add(b); _tri.Add(b + 1); _tri.Add(b + 2); _tri.Add(b); _tri.Add(b + 2); _tri.Add(b + 3); }
+
+        /// A tile of glass (kind 0) from r0 to r1 between two angles, its corners rounded.
+        private void Tile(float r0, float r1, float a0, float a1, int segs, float z, Color col, float strength, float state, float prox, float lit, float flash)
         {
-            if (strength <= 0.001f) return;
-            int b = _v.Count;
+            if (strength <= 0.002f || r1 <= r0 || a1 <= a0) return;
             var lin = col.linear;
             lin.a = strength;
+            float width = r1 - r0, span = (a1 - a0) * Mathf.Deg2Rad, l0 = span * r0, l1 = span * r1;
+            var ex = new Vector4(Mathf.Min(Corner, width * 0.3f, l0 * 0.3f), prox, lit, flash);
+            int b = _v.Count;
+            for (int i = 0; i <= segs; i++)
+            {
+                float k = i / (float)segs, a = (a0 + (a1 - a0) * k) * Mathf.Deg2Rad;
+                float cx = Mathf.Cos(a), sy = Mathf.Sin(a);
+                Vert(new Vector3(cx * r0, sy * r0, z), lin, new Vector2(0f, k * l0), new Vector4(width, l0, 0f, state), ex);
+                Vert(new Vector3(cx * r1, sy * r1, z), lin, new Vector2(width, k * l1), new Vector4(width, l1, 0f, state), ex);
+            }
+            Strip(b, segs);
+        }
+
+        /// An arc of light (kind 1) of width w around radius r, with room for its glow; dashes along it if asked.
+        private void Arc(Vector2 centre, float r, float w, float a0, float a1, int segs, Color col, float strength, float glow, float state = 0f, float z = -0.0003f, float dashes = 0f, float duty = 0.5f)
+        {
+            if (strength <= 0.002f || w <= 0f || segs < 1) return;
+            float qw = w + 2f * Mathf.Max(0.0007f, w * 2.4f) * Mathf.Clamp01(glow + 0.2f);
+            var lin = col.linear;
+            lin.a = strength;
+            var info = new Vector4(w, qw, 1f, state);
+            var ex = new Vector4(glow, dashes, duty, 0f);
+            int b = _v.Count;
             for (int i = 0; i <= segs; i++)
             {
                 float k = i / (float)segs, a = (a0 + (a1 - a0) * k) * Mathf.Deg2Rad;
                 var dir = new Vector2(Mathf.Cos(a), Mathf.Sin(a));
-                var p0 = centre + dir * (r - w * 0.5f);
-                var p1 = centre + dir * (r + w * 0.5f);
-                _v.Add(new Vector3(p0.x, p0.y, -0.0003f)); _uv.Add(new Vector2(0f, k));
-                _v.Add(new Vector3(p1.x, p1.y, -0.0003f)); _uv.Add(new Vector2(1f, k));
-                _c.Add(lin); _c.Add(lin);
-                var info = new Vector4(w, 0f, 1f, state);
-                _info.Add(info); _info.Add(info);
+                var p0 = centre + dir * Mathf.Max(0f, r - qw * 0.5f);
+                var p1 = centre + dir * (r + qw * 0.5f);
+                Vert(new Vector3(p0.x, p0.y, z), lin, new Vector2(0f, k), info, ex);
+                Vert(new Vector3(p1.x, p1.y, z), lin, new Vector2(1f, k), info, ex);
             }
-            for (int i = 0; i < segs; i++)
-            {
-                int q = b + i * 2;
-                _tri.Add(q); _tri.Add(q + 1); _tri.Add(q + 3);
-                _tri.Add(q); _tri.Add(q + 3); _tri.Add(q + 2);
-            }
+            Strip(b, segs);
         }
 
         /// A radial tick of light (kind 1) from r0 to r1 at angle a.
-        private void Tick(float r0, float r1, float aDeg, float w, Color col, float strength)
+        private void TickLine(float r0, float r1, float aDeg, float w, Color col, float strength, float glow, float z = -0.0003f)
         {
-            if (strength <= 0.001f) return;
+            if (strength <= 0.002f) return;
             float a = aDeg * Mathf.Deg2Rad;
             var dir = new Vector2(Mathf.Cos(a), Mathf.Sin(a));
-            var side = new Vector2(-dir.y, dir.x) * (w * 0.5f);
+            float qw = w + 2f * Mathf.Max(0.0006f, w * 2f) * Mathf.Clamp01(glow + 0.2f);
+            var side = new Vector2(-dir.y, dir.x) * (qw * 0.5f);
             var lin = col.linear;
             lin.a = strength;
+            var info = new Vector4(w, qw, 1f, 0f);
+            var ex = new Vector4(glow, 0f, 0.5f, 0f);
             int b = _v.Count;
             Vector2 p0 = dir * r0 - side, p1 = dir * r0 + side, p2 = dir * r1 + side, p3 = dir * r1 - side;
-            _v.Add(new Vector3(p0.x, p0.y, -0.0003f)); _uv.Add(new Vector2(0f, 0f));
-            _v.Add(new Vector3(p1.x, p1.y, -0.0003f)); _uv.Add(new Vector2(1f, 0f));
-            _v.Add(new Vector3(p2.x, p2.y, -0.0003f)); _uv.Add(new Vector2(1f, 1f));
-            _v.Add(new Vector3(p3.x, p3.y, -0.0003f)); _uv.Add(new Vector2(0f, 1f));
-            for (int k = 0; k < 4; k++) { _c.Add(lin); _info.Add(new Vector4(w, r1 - r0, 1f, 0f)); }
-            _tri.Add(b); _tri.Add(b + 1); _tri.Add(b + 2);
-            _tri.Add(b); _tri.Add(b + 2); _tri.Add(b + 3);
+            Vert(new Vector3(p0.x, p0.y, z), lin, new Vector2(0f, 0f), info, ex);
+            Vert(new Vector3(p1.x, p1.y, z), lin, new Vector2(1f, 0f), info, ex);
+            Vert(new Vector3(p2.x, p2.y, z), lin, new Vector2(1f, 1f), info, ex);
+            Vert(new Vector3(p3.x, p3.y, z), lin, new Vector2(0f, 1f), info, ex);
+            Quad(b);
         }
 
         /// A soft glow (kind 2) over a ring sector, brightest at its leading edge (a1): the radar sweep.
-        private void Glow(Vector2 centre, float r0, float r1, float a0, float a1, int segs, Color col, float strength)
+        private void Sweep(float r0, float r1, float a0, float a1, int segs, Color col, float strength)
         {
-            if (strength <= 0.001f) return;
-            int b = _v.Count;
+            if (strength <= 0.002f) return;
             var lin = col.linear;
             lin.a = strength;
+            var info = new Vector4(r1 - r0, 0f, 2f, 0f);
+            int b = _v.Count;
             for (int i = 0; i <= segs; i++)
             {
                 float k = i / (float)segs, a = (a0 + (a1 - a0) * k) * Mathf.Deg2Rad;
                 var dir = new Vector2(Mathf.Cos(a), Mathf.Sin(a));
-                var p0 = centre + dir * r0;
-                var p1 = centre + dir * r1;
-                _v.Add(new Vector3(p0.x, p0.y, -0.0002f)); _uv.Add(new Vector2(0f, k));
-                _v.Add(new Vector3(p1.x, p1.y, -0.0002f)); _uv.Add(new Vector2(1f, k));
-                _c.Add(lin); _c.Add(lin);
-                var info = new Vector4(r1 - r0, 0f, 2f, 0f);
-                _info.Add(info); _info.Add(info);
+                Vert(new Vector3(dir.x * r0, dir.y * r0, 0.0004f), lin, new Vector2(0f, k), info, Vector4.zero);
+                Vert(new Vector3(dir.x * r1, dir.y * r1, 0.0004f), lin, new Vector2(1f, k), info, Vector4.zero);
             }
-            for (int i = 0; i < segs; i++)
+            Strip(b, segs);
+        }
+
+        /// A line icon (kind 3) from the atlas, centred at c.
+        private void IconQuad(Vector2 c, float size, float z, Vector4 rect, Color col, float strength, float reveal, float state, float glow)
+        {
+            if (strength <= 0.002f) return;
+            float h = size * 0.5f * UiIconAtlas.Extent; // the cell holds the icon's -1..1 and its glow
+            var lin = col.linear;
+            lin.a = strength;
+            var info = new Vector4(glow, reveal, 3f, state);
+            int b = _v.Count;
+            Vert(new Vector3(c.x - h, c.y - h, z), lin, new Vector2(0f, 0f), info, rect);
+            Vert(new Vector3(c.x + h, c.y - h, z), lin, new Vector2(1f, 0f), info, rect);
+            Vert(new Vector3(c.x + h, c.y + h, z), lin, new Vector2(1f, 1f), info, rect);
+            Vert(new Vector3(c.x - h, c.y + h, z), lin, new Vector2(0f, 1f), info, rect);
+            Quad(b);
+        }
+
+        /// The watch face (kind 5): a quad of half size `half`.
+        private void FaceQuad(float half, float z, Color col, float strength, float state, float seconds, Vector4 extra)
+        {
+            if (strength <= 0.002f) return;
+            var lin = col.linear;
+            lin.a = strength;
+            var info = new Vector4(half, seconds, 5f, state);
+            int b = _v.Count;
+            Vert(new Vector3(-half, -half, z), lin, new Vector2(-1f, -1f), info, extra);
+            Vert(new Vector3(half, -half, z), lin, new Vector2(1f, -1f), info, extra);
+            Vert(new Vector3(half, half, z), lin, new Vector2(1f, 1f), info, extra);
+            Vert(new Vector3(-half, half, z), lin, new Vector2(-1f, 1f), info, extra);
+            Quad(b);
+        }
+
+        /// A ray of the projector (kind 4) from a to b, turned to face the eye.
+        private void Ray(Vector3 a, Vector3 b, Vector3 eye, float w, Color col, float strength)
+        {
+            var side = Vector3.Cross(b - a, (a + b) * 0.5f - eye);
+            if (side.sqrMagnitude < 1e-14f) return;
+            side = side.normalized * (w * 0.5f);
+            var lin = col.linear;
+            lin.a = strength;
+            var info = new Vector4(0f, 0f, 4f, 0f);
+            int i0 = _v.Count;
+            Vert(a - side, lin, new Vector2(0f, 0f), info, Vector4.zero);
+            Vert(a + side, lin, new Vector2(1f, 0f), info, Vector4.zero);
+            Vert(b + side, lin, new Vector2(1f, 1f), info, Vector4.zero);
+            Vert(b - side, lin, new Vector2(0f, 1f), info, Vector4.zero);
+            Quad(i0);
+        }
+
+        /// The faint cone of light between two rays (kind 4, x = 1).
+        private void Cone(Vector3 e, Vector3 p0, Vector3 p1, Color col, float strength)
+        {
+            var lin = col.linear;
+            lin.a = strength;
+            var info = new Vector4(1f, 0f, 4f, 0f);
+            int i0 = _v.Count;
+            Vert(e, lin, new Vector2(0.5f, 0f), info, Vector4.zero);
+            Vert(p0, lin, new Vector2(0f, 1f), info, Vector4.zero);
+            Vert(p1, lin, new Vector2(1f, 1f), info, Vector4.zero);
+            _tri.Add(i0); _tri.Add(i0 + 1); _tri.Add(i0 + 2);
+        }
+
+        /// A 1-euro filter (Casiez et al. 2012): smooth when still, quick when moving.
+        private struct OneEuro3
+        {
+            private bool _init;
+            private Vector3 _x, _dx;
+
+            public void Reset(Vector3 v) { _init = true; _x = v; _dx = Vector3.zero; }
+
+            public Vector3 Step(Vector3 v, float dt, float minCutoff, float beta, float dCutoff)
             {
-                int q = b + i * 2;
-                _tri.Add(q); _tri.Add(q + 1); _tri.Add(q + 3);
-                _tri.Add(q); _tri.Add(q + 3); _tri.Add(q + 2);
+                if (!_init || dt <= 1e-5f) { Reset(v); return v; }
+                _dx = Vector3.Lerp(_dx, (v - _x) / dt, Alpha(dt, dCutoff));
+                _x = Vector3.Lerp(_x, v, Alpha(dt, minCutoff + beta * _dx.magnitude));
+                return _x;
             }
+
+            private static float Alpha(float dt, float cutoff) { float tau = 1f / (2f * Mathf.PI * cutoff); return 1f / (1f + tau / dt); }
         }
     }
 }

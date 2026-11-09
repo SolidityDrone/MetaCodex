@@ -26,29 +26,30 @@ namespace MetaCodex.Shell
                 var st = Gestures?.Get(h);
                 return st != null && st.Frame.Tracked ? (true, st.Frame) : (false, default(HandFrame));
             };
-            void I(List<UiWristMenu.Item> list, string glyph, string label, Action act, Func<bool> lit = null, Color? tint = null) =>
-                list.Add(new UiWristMenu.Item { Glyph = glyph, Label = label, Act = act, Lit = lit, LitTint = tint ?? t.Ok });
+            // each with a line icon of UiIconAtlas (the glyph is the dock's)
+            void I(List<UiWristMenu.Item> list, string glyph, string icon, string label, Action act, Func<bool> lit = null, Color? tint = null) =>
+                list.Add(new UiWristMenu.Item { Glyph = glyph, Icon = icon, Label = label, Act = act, Lit = lit, LitTint = tint ?? t.Ok });
             // inner ring: what is used most
-            I(Wrist.Inner, "◉", "TALK", () => VoiceToggle(), () => VoiceState == "listening" || VoiceState == "transcribing", t.Danger);
-            I(Wrist.Inner, "▶", "TERM", () => ShowOrNewTerminal());
-            I(Wrist.Inner, "◫", "FILES", () => TogglePanel("files"), () => IsPanelOpen("files"));
-            I(Wrist.Inner, "☰", "THREADS", () => TogglePanel("threads"), () => IsPanelOpen("threads"));
-            I(Wrist.Inner, "◆", "AGENTS", () => TogglePanel("agents"), () => IsPanelOpen("agents"));
-            I(Wrist.Inner, "◐", "FOCUS", () => SetFocus(!Settings.focusEnabled), () => Settings.focusEnabled);
+            I(Wrist.Inner, "◉", "mic", "TALK", () => VoiceToggle(), () => VoiceState == "listening" || VoiceState == "transcribing", t.Danger);
+            I(Wrist.Inner, "▶", "terminal", "TERM", () => ShowOrNewTerminal());
+            I(Wrist.Inner, "◫", "folder", "FILES", () => TogglePanel("files"), () => IsPanelOpen("files"));
+            I(Wrist.Inner, "☰", "threads", "THREADS", () => TogglePanel("threads"), () => IsPanelOpen("threads"));
+            I(Wrist.Inner, "◆", "spark", "AGENTS", () => TogglePanel("agents"), () => IsPanelOpen("agents"));
+            I(Wrist.Inner, "◐", "aperture", "FOCUS", () => SetFocus(!Settings.focusEnabled), () => Settings.focusEnabled);
             // outer ring: everything else the dock has
-            I(Wrist.Outer, "◎", "WEB", () => TogglePanel("browser"), () => IsPanelOpen("browser"));
+            I(Wrist.Outer, "◎", "globe", "WEB", () => TogglePanel("browser"), () => IsPanelOpen("browser"));
             // skills, plugins, scripts, gestures and the daemon link: one MQH panel (was SCRIPTS and GESTURE here)
-            I(Wrist.Outer, "⬡", "MQH", () => TogglePanel("mqh"), () => IsPanelOpen("mqh"));
-            I(Wrist.Outer, "▣", "CLIP", () => TogglePanel("clipboard"), () => IsPanelOpen("clipboard"));
-            I(Wrist.Outer, "⬢", "SYSTEM", () => TogglePanel("system"), () => IsPanelOpen("system"));
-            I(Wrist.Outer, "♫", "VOICE", () => TogglePanel("voice"), () => IsPanelOpen("voice"));
-            I(Wrist.Outer, "⚿", "VAULT", () => TogglePanel("vault"), () => IsPanelOpen("vault"));
-            I(Wrist.Outer, "⎇", "GIT", () => TogglePanel("git"), () => IsPanelOpen("git"));
-            I(Wrist.Outer, "⌖", "SELECT", () => SetSelectionMode(!Router.SelectionMode), () => Router.SelectionMode, t.Warn);
-            I(Wrist.Outer, "⌨", "KEYS", () => OpenKeyboard());
-            I(Wrist.Outer, "⟲", "CENTER", () => app?.Recenter());
-            I(Wrist.Outer, "⚙", "SETUP", () => TogglePanel("settings"), () => IsPanelOpen("settings"));
-            I(Wrist.Outer, "▤", "TERMS", () => TogglePanel("terminals"), () => IsPanelOpen("terminals"));
+            I(Wrist.Outer, "⬡", "cube", "MQH", () => TogglePanel("mqh"), () => IsPanelOpen("mqh"));
+            I(Wrist.Outer, "▣", "photos", "CLIP", () => TogglePanel("clipboard"), () => IsPanelOpen("clipboard"));
+            I(Wrist.Outer, "⬢", "chip", "SYSTEM", () => TogglePanel("system"), () => IsPanelOpen("system"));
+            I(Wrist.Outer, "♫", "wave", "VOICE", () => TogglePanel("voice"), () => IsPanelOpen("voice"));
+            I(Wrist.Outer, "⚿", "lock", "VAULT", () => TogglePanel("vault"), () => IsPanelOpen("vault"));
+            I(Wrist.Outer, "⎇", "branch", "GIT", () => TogglePanel("git"), () => IsPanelOpen("git"));
+            I(Wrist.Outer, "⌖", "select", "SELECT", () => SetSelectionMode(!Router.SelectionMode), () => Router.SelectionMode, t.Warn);
+            I(Wrist.Outer, "⌨", "keyboard", "KEYS", () => OpenKeyboard());
+            I(Wrist.Outer, "⟲", "recenter", "CENTER", () => app?.Recenter());
+            I(Wrist.Outer, "⚙", "gear", "SETUP", () => TogglePanel("settings"), () => IsPanelOpen("settings"));
+            I(Wrist.Outer, "▤", "windows", "TERMS", () => TogglePanel("terminals"), () => IsPanelOpen("terminals"));
             Wrist.Build();
             _wristModeApplied = !Settings.wristMenu; // applied below
             ApplyMainMenuMode();
@@ -66,8 +67,8 @@ namespace MetaCodex.Shell
         {
             if (Wrist == null || _wristModeApplied == Settings.wristMenu) return;
             _wristModeApplied = Settings.wristMenu;
-            Wrist.enabled = Settings.wristMenu;
-            if (!Settings.wristMenu) Wrist.HideNow();
+            // the wrist menu goes with its closing animation (never at once), and comes back on the next look
+            if (Settings.wristMenu) Wrist.Resume(); else Wrist.Dismiss();
             if (_panels.TryGetValue("dock", out var dock))
             {
                 if (Settings.wristMenu) { if (dock.IsOpen) dock.Close(); }
@@ -76,6 +77,6 @@ namespace MetaCodex.Shell
         }
 
         /// Tests: one step of the wrist menu (the Editor has no frame loop).
-        public void TickWristForTest(float dt) { if (Wrist != null) { Wrist.Head = Head; Wrist.Tick(dt); } }
+        public void TickWristForTest(float dt) { if (Wrist != null && Wrist.enabled) { Wrist.Head = Head; Wrist.Tick(dt); } }
     }
 }
