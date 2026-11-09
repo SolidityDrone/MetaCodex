@@ -247,6 +247,7 @@ namespace MetaCodex.Shell
             {
                 if (th == null) { _threadsStatus.Set("⚠ " + (Mqh.LastError ?? "MQH not reachable"), UiTheme.Current.Danger); return; }
                 _threads = th as JArray ?? new JArray();
+                CtxThreadsUpdated();
                 RenderThreadGroups();
             });
         }
@@ -486,6 +487,7 @@ namespace MetaCodex.Shell
                 if (id != _threadOpen) return;
                 _interactions = ia as JArray ?? new JArray();
                 ShowAsk();
+                CtxInteractionsUpdated(id);
             });
         }
 

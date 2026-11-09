@@ -18,6 +18,8 @@ namespace MetaCodex.Shell
         public bool enabled = true;
         /// Speak the reply (text-to-speech) as well as showing it.
         public bool speak = false;
+        /// Speak the answers to questions about the session ("is the build stuck?") even when replies are not spoken.
+        public bool speakAnswers = true;
         /// When no phrase matches, ask the local LLM which command was meant (used when the decision model is off or
         /// not ready, and as its fallback when `llmFallback` is on).
         public bool useLlm = true;
@@ -137,6 +139,7 @@ namespace MetaCodex.Shell
             Recorder = new VoiceRecorder();
             Recorder.Finished += OnRecorderFinished;
             RegisterShellVoiceCommands();
+            RegisterSessionVoiceCommand(); // questions about the session (ShellContext)
             Decider = new VoiceDecider(Voice, (texts, done) =>
             {
                 if (Qvac == null || !Qvac.IsRunning) { done(null, "the AI service is not running"); return; }
@@ -404,6 +407,7 @@ namespace MetaCodex.Shell
                     res.DecideMs = (int)((Time.realtimeSinceStartup - d0) * 1000f);
                     Log("voice decide: " + dr);
                     if (dr.Error == null && dr.Matches.Count > 0) { VoiceExecuteAll(dr.Matches, res, done); return; }
+                    if (IsInterpretation(res.Transcript)) { res.Via = "decide+context"; VoiceAskSession(res, done); return; }
                     if (Settings.voice.useLlm && Settings.voice.llmFallback && dr.Error == null) { VoiceAskLlm(res, done); return; }
                     if (dr.Error != null && Settings.voice.useLlm) { VoiceAskLlm(res, done); return; }
                     res.Via = "decide";
@@ -412,6 +416,7 @@ namespace MetaCodex.Shell
                 });
                 return;
             }
+            if (IsInterpretation(res.Transcript)) { res.Via = "context"; VoiceAskSession(res, done); return; }
             VoiceAskLlm(res, done);
         }
 
@@ -449,6 +454,7 @@ namespace MetaCodex.Shell
         /// confirming asks first (the next ones wait); the first error stops the rest.
         private void VoiceExecuteAll(List<VoiceMatch> ms, VoiceResult res, Action<VoiceResult> done)
         {
+            _voiceUtterance = res.Transcript; // ask_about_session answers the whole question
             res.Via = ms[0].Via;
             res.Command = string.Join(" + ", ms.Select(x => x.Command.Name));
             res.Args = ms.Count == 1 ? ms[0].Args.ToString(Newtonsoft.Json.Formatting.None) : new JArray(ms.Select(x => (JToken)x.Args)).ToString(Newtonsoft.Json.Formatting.None);
@@ -514,12 +520,14 @@ namespace MetaCodex.Shell
             while (VoiceRecent.Count > 20) VoiceRecent.RemoveAt(VoiceRecent.Count - 1);
             Log("voice: " + res);
             string said = res.Transcript.Length > 0 ? "“" + Short(res.Transcript, 70) + "”" : "";
-            if (res.Ok) SetVoiceState("done", "✓ " + Short(res.Reply ?? res.Command ?? "done", 40), said + (res.Command != null ? $"\n{res.Command} · {res.Via} · {res.TotalMs} ms" : ""));
+            bool sessionAnswer = res.Ok && res.Command == "ask_about_session" && !string.IsNullOrEmpty(res.Reply);
+            if (sessionAnswer) SetVoiceState("done", "◆ ANSWER", Short(res.Reply, 260) + $"\n<size=80%>{said} · {res.TotalMs} ms</size>");
+            else if (res.Ok) SetVoiceState("done", "✓ " + Short(res.Reply ?? res.Command ?? "done", 40), said + (res.Command != null ? $"\n{res.Command} · {res.Via} · {res.TotalMs} ms" : ""));
             else SetVoiceState("error", "⚠ " + Short(res.Error, 46), said);
             Sounds?.Play(res.Ok ? "toast" : "error");
             EndBoostSoon();
-            _vHudCloseAt = Time.unscaledTime + (res.Ok ? 2.5f : 4.5f);
-            if (res.Ok && res.Answer && Settings.voice.speak && !string.IsNullOrEmpty(res.Reply)) VoiceSay(res.Reply);
+            _vHudCloseAt = Time.unscaledTime + (sessionAnswer ? Mathf.Clamp(4f + res.Reply.Length / 16f, 6f, 16f) : res.Ok ? 2.5f : 4.5f);
+            if (res.Ok && res.Answer && (Settings.voice.speak || sessionAnswer && Settings.voice.speakAnswers) && !string.IsNullOrEmpty(res.Reply)) VoiceSay(res.Reply);
             RefreshVoicePanel();
             done?.Invoke(res);
             VoiceState = "idle";

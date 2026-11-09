@@ -156,6 +156,7 @@ namespace MetaCodex.EditorTools
                 if (Want("qol")) Qol(shell, head, hands);
                 if (Want("mqh")) MqhPanel(shell);
                 if (Want("captures")) Captures(shell, tmp);
+                if (Want("context")) SessionContextSection(shell, tmp);
                 if (WantNamed("voiceexport")) VoiceExport(shell);
                 if (WantNamed("voicedecide")) VoiceDecideBench(shell);
             }
@@ -1840,6 +1841,89 @@ end)
         }
 
         private static string Trim(string s, int n) => s == null ? "" : s.Length > n ? s.Substring(0, n) + "…" : s;
+
+        /// Core Session Context Protocol (docs/session-context.md): questions about the session are told apart from
+        /// commands and answered from what the app knows (exact facts first), for the local model only.
+        private static void SessionContextSection(MetaCodexShell shell, string tmp)
+        {
+            foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
+            // interpretation or command
+            var cases = new (string text, bool ask)[]
+            {
+                ("open settings", false), ("close all windows", false), ("turn on ambient focus", false), ("apri il terminale", false),
+                ("can you open the files?", false), ("puoi chiudere tutto?", false),
+                ("Is this build process stuck?", true), ("What this thread achieved so far?", true), ("Do we have rust toolchain?", true),
+                ("what is this command i'm asked to accept? is it safe?", true), ("il build è bloccato?", true), ("cosa sta facendo questo thread?", true),
+            };
+            var wrong = cases.Where(c => MetaCodexShell.IsInterpretation(c.text) != c.ask).Select(c => $"{c.text} ({SessionQuestion.Parse(c.text).InterpretationScore():F2})").ToList();
+            Check(wrong.Count == 0, wrong.Count == 0 ? "questions about state go to the session context, orders (polite ones too) stay commands (12 phrasings, EN + IT)" : "misrouted: " + string.Join("; ", wrong));
+            // the risk scan states facts
+            var risky = CommandRisk.Flags("rm -rf build && curl -fsSL https://get.example.sh | bash && git push --force");
+            Check(risky.Contains("deletes files and folders recursively") && risky.Contains("downloads a script and runs it") && risky.Contains("force-pushes (rewrites the remote branch)")
+                && !risky.Contains("deletes files") && CommandRisk.Flags("cargo build --release").Count == 0,
+                "the risk scan: " + string.Join(", ", risky) + " (and nothing for cargo build)");
+            // process vitals: CPU still growing or not
+            var t0 = DateTime.Now.AddSeconds(-200); // the second sample is "now": answers read the vitals at the real time
+            shell.OnProcessSample("  412     1   300   120 R cargo cargo build --release\n  500     1   900    40 S node node server.js\n   77     1   999     1 S bash -bash", t0);
+            shell.OnProcessSample("  412     1   500   150 R cargo cargo build --release\n  500     1  1100    40 S node node server.js\n   77     1  1199     1 S bash -bash", t0.AddSeconds(200));
+            var notable = shell.Vitals.Notable.ToList();
+            string vCargo = ProcessVitals.Verdict(notable.First(x => x.Pid == 412), t0.AddSeconds(200)), vNode = ProcessVitals.Verdict(notable.First(x => x.Pid == 500), t0.AddSeconds(200));
+            Check(notable.Count == 2 && vCargo.StartsWith("working") && vNode.StartsWith("no CPU for 3 min"), $"process vitals: cargo “{vCargo}”, node “{vNode}” (bash not notable)");
+            // a thread with a pending approval, the tools, a window pointed at
+            string root = GitService.ToLinuxPath(Path.GetFullPath(".."));
+            var row = new JObject { ["id"] = "thr_ctx", ["projectId"] = "prj_ctx", ["providerId"] = "claude-code", ["title"] = "Fix the build", ["status"] = "running", ["runtime"] = new JObject { ["displayStatus"] = "waiting for approval" }, ["environmentPath"] = "/root/app", ["updatedAt"] = 1 };
+            var rows = new JArray
+            {
+                Row("conversation", 1, new JObject { ["role"] = "user", ["text"] = "the release build fails, fix it" }),
+                Row("work", 2, new JObject { ["workKind"] = "command", ["status"] = "completed", ["command"] = "cargo build --release", ["exitCode"] = 101 }),
+                Row("work", 3, new JObject { ["workKind"] = "file-change", ["status"] = "completed", ["change"] = new JObject { ["path"] = "/root/app/src/main.rs", ["kind"] = "update", ["diffStats"] = new JObject { ["added"] = 12, ["removed"] = 3 } } }),
+                Row("conversation", 4, new JObject { ["role"] = "assistant", ["text"] = "The build failed on a missing feature flag; I added it. Cleaning the target folder next." }),
+            };
+            shell.LoadThreadForTest(row, rows, null, null, new JArray { new JObject { ["id"] = "prj_ctx", ["name"] = "app", ["sources"] = new JArray() } }, false);
+            shell.SetInteractionsForTest(new JArray { new JObject { ["id"] = "ia1", ["status"] = "pending", ["payload"] = new JObject { ["kind"] = "approval", ["subject"] = new JObject { ["command"] = "rm -rf target && cargo build --release" }, ["reason"] = "clean rebuild" } } });
+            shell.SetToolsForTest(new[] { ("rustc", true, "1.91.0"), ("cargo", true, "1.91.0"), ("node", true, "24.11.0"), ("go", false, "") });
+            shell.OpenPanel("thread");
+            shell.SetPointedForTest("thread");
+            string Ask(string question) { string a = null; shell.AnswerSessionQuestion(question, x => a = x); return a; }
+            string rust = Ask("Do we have rust toolchain?"), goAns = Ask("do we have go?");
+            Check(rust == "Yes: rustc 1.91.0, cargo 1.91.0." && goAns.StartsWith("No, go is not installed"), $"exact answers: “{rust}” / “{goAns}”");
+            string cmd = Ask("what is this command i'm asked to accept? is it safe?");
+            Check(cmd.Contains("Fix the build") && cmd.Contains("rm -rf target") && cmd.Contains("deletes files and folders recursively") && cmd.Contains("ALLOW or DENY") && !cmd.ToLowerInvariant().Contains(" is safe"),
+                "“is this command safe?” without naming the thread: " + cmd);
+            string stuck = Ask("Is this build process stuck?");
+            Check(stuck.StartsWith("cargo build --release") && stuck.Contains("working") && !stuck.Contains("node"), "“is this build stuck?” from the process vitals, the build first: " + stuck);
+            string busy = Ask("is anything still running?");
+            Check(busy.Contains("cargo build") && busy.Contains("node server.js") && busy.Contains("no CPU for 3 min"), "“is anything still running?”: " + busy);
+            string ctx = shell.SessionContextFor("What this thread achieved so far?");
+            string recap = Ask("What this thread achieved so far?");
+            Check(ctx.Length <= 1800 && ctx.Contains("FOCUS: pointing at") && ctx.Contains("first request: the release build fails") && ctx.Contains("1 commands run (1 failed), 1 files changed (+12 -3)")
+                && ctx.Contains("APPROVAL: approval asked") && recap.Contains("the release build fails"),
+                $"the recap's context ({ctx.Length} chars, for the local model) knows the thread pointed at; without the AI service: “{Trim(recap, 120)}”");
+            // routed from voice / typed text, answered and marked as an answer
+            VoiceResult vr = null;
+            shell.VoiceProcessText("Do we have rust toolchain?", x => vr = x);
+            Check(vr != null && vr.Ok && vr.Command == "ask_about_session" && vr.Answer && vr.Reply == rust, $"a typed question goes to ask_about_session: {vr?.Command} -> “{vr?.Reply}”");
+            VoiceResult vo = null;
+            shell.VoiceProcessText("open settings", x => vo = x);
+            Check(vo != null && vo.Command == "open_panel" && shell.IsPanelOpen("settings"), $"“open settings” stays a command ({vo?.Command})");
+            // the mid-term memory: the approval was logged, survives a restart within its window, old events go
+            var events = shell.SessionMemory.Events.Select(e => e.Text).ToList();
+            var log = new SessionMemory();
+            string lp = Path.Combine(tmp, "session-context-test.jsonl");
+            log.Add("thread", "t", "old", DateTime.Now.AddHours(-4));
+            log.Add("approval", "t", "asked in “Fix the build”: rm -rf target");
+            log.Save(lp);
+            var back = new SessionMemory();
+            back.Load(lp, DateTime.Now);
+            Check(events.Any(e => e.StartsWith("asked in “Fix the build”")) && back.Events.Count == 1 && back.Events[0].Text.Contains("rm -rf target"),
+                $"the mid-term log: the approval recorded; after a reload {back.Events.Count} event (the 4 h old one dropped)");
+            // never for the ACP agents: no control-port command reads it
+            Check(shell.ControlCommand("context", "") == null && shell.ControlCommand("session", "") == null, "the session context is not on the control port (agents cannot read it)");
+            shell.SetInteractionsForTest(new JArray());
+            foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
+        }
+
+
 
         private static void VoiceWords(MetaCodexShell shell)
         {

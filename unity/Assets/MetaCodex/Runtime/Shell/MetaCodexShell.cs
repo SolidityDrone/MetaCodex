@@ -161,6 +161,7 @@ namespace MetaCodex.Shell
             Scripts = new ScriptHost(this, dir);
             Scripts.Changed += () => { RefreshScriptsPanel(); RefreshGesturesPanel(); };
             EnsureStarterPlugins();
+            InitSessionContext(); // the session's context for the local model (docs/session-context.md)
             UiKeyboard.TerminalKeyboardRequested += () => app?.Input?.ToggleSystemKeyboard();
 
             BuildPanels();
@@ -225,6 +226,7 @@ namespace MetaCodex.Shell
             while (_main.TryDequeue(out var a)) { try { a(); } catch (Exception ex) { Log("main-thread callback failed: " + ex.Message); } }
             Scripts?.Tick(Time.unscaledTime);
             TickVoice();
+            TickSessionContext();
             UpdateFocus(Mathf.Min(Time.unscaledDeltaTime, 0.1f));
             FlushPendingRebuild();
             RunLater();

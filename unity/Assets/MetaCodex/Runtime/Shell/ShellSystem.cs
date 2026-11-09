@@ -228,6 +228,7 @@ namespace MetaCodex.Shell
                     _toolsBusy = false;
                     ParseTools(r.output ?? "");
                     _toolsAt = DateTime.Now;
+                    CtxToolsUpdated();
                     SaveToolsCache();
                     WriteToolsInventory();
                     ShowTools();
