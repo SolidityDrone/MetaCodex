@@ -13,6 +13,9 @@ namespace MetaCodex.UI
     /// ring, corner brackets and a radar sweep. Touching a blade runs it with a flash, a shockwave and a burst of
     /// sparks. No pointing or pinching: the fingertip presses through the surface (and must come back out before the
     /// next press). Idle seven seconds, or the wrist turned away, and it folds back to the core.
+    /// It floats well in front of the wrist, towards the eyes (TowardEyes), so the hand that carries it is behind it, and
+    /// it writes its depth (WristDepth): the hand cut-outs, drawn last, then keep that hand behind it instead of clearing
+    /// the menu wherever the hand is (0.7.5, owner: "the hand cuts it off"); a fingertip in front of it still shows.
     public sealed class UiWristMenu : MonoBehaviour
     {
         public sealed class Item { public string Glyph, Label; public Action Act; public Func<bool> Lit; public Color LitTint; }
@@ -24,6 +27,10 @@ namespace MetaCodex.UI
         public UiTheme Theme;
         /// Overall size (1 = 15 cm across the outer ring).
         public float Scale = 0.85f;
+        /// Where it floats: this far off the back of the wrist, and this far from the wrist towards the eyes (metres).
+        public float OffBack = 0.040f, TowardEyes = 0.065f;
+        /// Writes the menu's depth so the hand cut-outs keep the carrying hand behind it (tests turn it off to compare).
+        public bool DepthWrite = true;
 
         public bool Visible => _shown > 0.01f;
         public bool Expanded => _expandTarget;
@@ -42,6 +49,7 @@ namespace MetaCodex.UI
 
         private Mesh _mesh;
         private Material _mat, _sparkMat;
+        private MeshRenderer _depthMr;
         private ParticleSystem _burst, _motes;
         private TextMeshPro _coreGlyph, _hint;
         private readonly List<TextMeshPro> _labels = new List<TextMeshPro>();
@@ -81,6 +89,19 @@ namespace MetaCodex.UI
             mr.sharedMaterial = _mat;
             mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             mr.receiveShadows = false;
+            // the depth of the menu, after its light and before the hands (same mesh, a second renderer: its own queue)
+            var dsh = Resources.Load<Shader>("Shaders/WristDepth") ?? Shader.Find("MetaCodex/WristDepth");
+            if (dsh != null)
+            {
+                var dgo = new GameObject("wrist menu depth");
+                dgo.transform.SetParent(transform, false);
+                dgo.AddComponent<MeshFilter>().sharedMesh = _mesh;
+                _depthMr = dgo.AddComponent<MeshRenderer>();
+                _depthMr.sharedMaterial = new Material(dsh) { name = "wrist menu depth" };
+                _depthMr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                _depthMr.receiveShadows = false;
+                _depthMr.enabled = false;
+            }
             int n = Inner.Count + Outer.Count;
             _hoverAmt = new float[n];
             _flash = new float[n];
@@ -168,6 +189,7 @@ namespace MetaCodex.UI
         {
             var mr = GetComponent<MeshRenderer>();
             if (mr != null && mr.enabled != on) mr.enabled = on;
+            if (!on && _depthMr != null && _depthMr.enabled) _depthMr.enabled = false; // never an invisible disc of depth
             foreach (var l in _labels) if (l.gameObject.activeSelf != on) l.gameObject.SetActive(on);
             if (_coreGlyph != null && _coreGlyph.gameObject.activeSelf != on) _coreGlyph.gameObject.SetActive(on);
             if (_hint != null && _hint.gameObject.activeSelf != on) _hint.gameObject.SetActive(on);
@@ -197,7 +219,8 @@ namespace MetaCodex.UI
                 toHead /= Mathf.Max(dist, 1e-4f);
                 // the back of the wrist turned to the eyes, and looked at (within ~44 degrees of the gaze)
                 watching = Vector3.Dot(back, toHead) > 0.45f && Vector3.Dot(Head.forward, -toHead) > 0.72f && dist > 0.12f && dist < 0.75f;
-                anchor = L.Wrist - fwd * 0.012f + back * 0.040f + toHead * 0.025f;
+                // in front of the hand, not in it: the fingers and knuckles must stay behind the rings
+                anchor = L.Wrist - fwd * 0.012f + back * OffBack + toHead * TowardEyes;
                 var toEye = (Head.position - anchor).normalized;
                 var up = Vector3.ProjectOnPlane(Head.up, toEye);
                 rot = Quaternion.LookRotation(-toEye, up.sqrMagnitude > 1e-4f ? up.normalized : Vector3.up);
@@ -244,6 +267,9 @@ namespace MetaCodex.UI
             if (_wave < 1f) _wave = Mathf.Min(1f, _wave + dt / 0.38f);
             bool on = _shown > 0.001f;
             SetVisible(on);
+            // depth only once it is mostly there: a fading menu must not hide the hand behind it
+            bool depth = on && DepthWrite && _shown > 0.5f;
+            if (_depthMr != null && _depthMr.enabled != depth) _depthMr.enabled = depth;
             if (on) Rebuild();
         }
 
@@ -309,6 +335,9 @@ namespace MetaCodex.UI
         }
 
         /// Out of sight at once (the DOCK mode took over).
+        /// Off (DOCK mode, or the shell disabled it): its depth must not stay in the picture (HideNow hides the rest).
+        private void OnDisable() { if (_depthMr != null) _depthMr.enabled = false; }
+
         public void HideNow()
         {
             _shown = 0f; _expand = 0f; _expandTarget = false; _wantShow = false; _posed = false;

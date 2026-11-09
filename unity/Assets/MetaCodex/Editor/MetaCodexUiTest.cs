@@ -1586,6 +1586,9 @@ end)
             void Step(int n, float dt = 0.05f) { for (int i = 0; i < n; i++) { shell.TickGesturesForTest(dt); shell.TickWristForTest(dt); } }
             Step(6);
             Check(w.Visible && w.Shown01 > 0.9f && !w.Expanded, $"looking at the wrist as at a watch shows the core ({w.Shown01:F2})");
+            // it floats in front of the hand that carries it, towards the eyes (0.7.5: the fingers were in front of the rings)
+            float ahead = Vector3.Distance(eye, hands.Frames[0].Wrist) - Vector3.Distance(eye, w.transform.position);
+            Check(ahead > 0.07f, $"the menu floats {ahead * 100f:F1} cm in front of the left wrist, towards the eyes: the hand stays behind the rings");
             void Poke(Vector3 world)
             {
                 // steps of 0.03 s: the gesture engine ticks at 36 Hz, so a shorter step would not pass the hand on
@@ -1607,6 +1610,26 @@ end)
             int verts = w.GetComponent<MeshFilter>().sharedMesh.vertexCount;
             Check(w.Hover == 2 && verts > 200 && verts < 6000, $"the fingertip over FILES highlights it (hover {w.Hover}); the menu is one mesh of {verts} vertices");
             RenderAt("ui-wrist-menu.png", eye, Quaternion.LookRotation(w.transform.position - eye, head.up), 34f, 1400, 1050);
+            // the hand cut-outs (capsules on the joints, drawn last, clear to the real hands): the left hand is behind the
+            // menu and must not cut it (0.7.5, owner: "the hand cuts it off"); the right fingertip in front shows through
+            shell.TickFocusForTest(0.1f); // places the capsules on the hands (UI occlusion is on by default)
+            var camRot = Quaternion.LookRotation(w.transform.position - eye, head.up);
+            const int cw = 700, ch = 525;
+            w.DepthWrite = false; shell.TickWristForTest(0.01f);
+            UnityEngine.Object.DestroyImmediate(RenderRgba(null, eye, camRot, 34f, cw, ch));
+            var cutNoDepth = RenderRgba("ui-wrist-cutout-no-depth.png", eye, camRot, 34f, cw, ch);
+            w.DepthWrite = true; shell.TickWristForTest(0.01f);
+            var cut = RenderRgba("ui-wrist-cutout.png", eye, camRot, 34f, cw, ch);
+            int Lit(Texture2D t) => t.GetPixels32().Count(c => c.a > 40);
+            float AlphaAt(Texture2D t, Vector3 world) { var q = ScreenOf(world, eye, camRot, 34f, cw, ch); return t.GetPixel(q.x, q.y).a; }
+            var coreBand = w.transform.TransformPoint(new Vector3(0.0096f, 0f, 0f)); // on the core's ring
+            int litNoDepth = Lit(cutNoDepth), litDepth = Lit(cut);
+            float coreNoDepth = AlphaAt(cutNoDepth, coreBand), coreDepth = AlphaAt(cut, coreBand), tipA = AlphaAt(cut, hands.Frames[1].IndexTip);
+            Check(litDepth > litNoDepth * 1.15f && coreDepth > 0.25f && coreNoDepth < 0.1f && tipA < 0.1f,
+                $"the left hand behind the menu no longer cuts it: {litNoDepth} -> {litDepth} lit pixels, the core ring {coreNoDepth:F2} -> {coreDepth:F2}; the right fingertip in front still shows through ({tipA:F2})");
+            UnityEngine.Object.DestroyImmediate(cutNoDepth);
+            UnityEngine.Object.DestroyImmediate(cut);
+            shell.Settings.occludeUi = false; shell.TickFocusForTest(0.05f); shell.Settings.occludeUi = true; // capsules away for the next pictures
             shell.ClosePanel("files");
             int pressed = -99;
             w.Pressed += k => pressed = k;
