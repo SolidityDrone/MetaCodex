@@ -585,7 +585,7 @@ end)
                 tabs.AddTo(TabFocus, new UiButton(preset.ToUpperInvariant(), () => { ApplyFocusPreset(preset); }) { Rect = new Rect(fp.x + i * (fpw + t.Gap), fp.y, fpw, fp.height) });
             }
             _focusInfo = tabs.AddTo(TabFocus, new UiLabel("", t.SmallSize) { Rect = fo.Next(0.046f), Wrap = true, Color = t.TextDim, Align = TextAlignmentOptions.TopLeft });
-            tabs.AddTo(TabFocus, new UiLabel("A dome standing on the floor around you, from the live depth of the room (no Space Setup scan), sharpened with the camera picture: walls, furniture and your hands inside it stay, the rest fades to dark or, with BLUR, to a soft image. Hands, people and things in front of a window stay visible. BLACKOUT leaves only the windows and your hands; the Horizon OS menu always shows.", t.SmallSize) { Rect = fo.Rest(), Wrap = true, Color = t.TextDim, Align = TextAlignmentOptions.TopLeft });
+            tabs.AddTo(TabFocus, new UiLabel("A dome standing on the floor around you, from the live depth of the room (no Space Setup scan), sharpened with the camera picture: walls, furniture and your hands inside it stay, the rest fades to dark or, with BLUR, to a soft image. Your hands always show in front of a window; REAL THINGS IN FRONT also shows people and things, from the room's depth. BLACKOUT leaves only the windows and your hands; the Horizon OS menu always shows.", t.SmallSize) { Rect = fo.Rest(), Wrap = true, Color = t.TextDim, Align = TextAlignmentOptions.TopLeft });
             RefreshFocusPanel();
 
             // LOOK: one standard appearance; what is left are comfort settings

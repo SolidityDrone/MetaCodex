@@ -339,3 +339,12 @@ Section 19's transition lines (the spark, the collapse into a line) are replaced
 - [ ] Look down at the wrist menu held to your left and press FILES: it opens in front of your body, not off to the left
 - [ ] With UI SCALE 0.8 and DISTANCE 1.3 m, open six windows: one goes above the row (tilted towards you) rather than far to the side; none goes below
 - [ ] Stand 70 cm from a wall and open a window (depth on: Settings > FOCUS > Real things in front): it opens in front of the wall, not inside it
+
+## 23. 0.7.10: the orb's artifacts, hands in front of windows, flat glass, performance (owner 2026-11-10)
+
+- [ ] The orb, for a minute (idle, touch it for its menu, move round it, put a hand near and behind it): no flat cream blocks, stripes or half discs on it, in any frame; it looks as before (core, plasma, rings), with four motes
+- [ ] A hand in front of a window shows, also with Settings > FOCUS > "Real things in front of windows" OFF (your headset had it off): poke the orb's menu and a big window from in front, the finger stays visible over the glass
+- [ ] A hand behind a window stays hidden behind it (the cut-out does not punch through an opaque window)
+- [ ] The glass of the windows: the honeycomb and the points are on the surface; moving the head sideways, nothing shifts inside the glass any more
+- [ ] Hovering and pressing buttons in a big window (MQH, SETTINGS): no stutter; the light on a button still follows the hover and the click
+- [ ] Frame rate (Perf menu Snapshot) with five windows open and the orb in view: 72 fps

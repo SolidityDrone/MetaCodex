@@ -1693,7 +1693,7 @@ end)
                 $"the left hand behind the menu no longer cuts it: {litNoDepth} -> {litDepth} lit pixels, the core ring {coreNoDepth:F2} -> {coreDepth:F2}; the right fingertip in front still shows through ({tipA:F2})");
             UnityEngine.Object.DestroyImmediate(cutNoDepth);
             UnityEngine.Object.DestroyImmediate(cut);
-            shell.Settings.occludeUi = false; shell.TickFocusForTest(0.05f); shell.Settings.occludeUi = true; // capsules away for the next pictures
+            shell.HandCutoutsForTest = false; shell.TickFocusForTest(0.05f); shell.HandCutoutsForTest = true; // capsules away for the next pictures
             shell.ClosePanel("files");
             int pressed = -99;
             w.Pressed += k => pressed = k;
@@ -2276,7 +2276,32 @@ end)
                 UnityEngine.Object.DestroyImmediate(dark); UnityEngine.Object.DestroyImmediate(lit);
                 Check(nearGain > 0.02f && farGain < 0.004f, $"a fingertip near the glass lights the lattice under it (+{nearGain:F3}) and nothing far from it (+{farGain:F3})");
                 shell.Router.SetPointerLightForTest(1, Vector3.zero, 0f);
-                // the glass has depth: seen from the side, the lattice shifts against the frame (two pictures for the eye to compare)
+                // a change of colour or state only (a hover, a click's flash, a selection) rewrites the colours and states of
+                // that shape, not the panel's geometry; and it still shows
+                {
+                    var shapes = p.Shapes;
+                    p.ForceRefresh();
+                    int rb0 = shapes.RebuildsForTest, rs0 = shapes.RestylesForTest;
+                    var btn = p.Elements.OfType<UiButton>().First(b => b.Visible && b.Style == UiButtonStyle.Normal);
+                    var plain = RenderRgba(null, eye, look, 50f, 750, 550);
+                    btn.SetSelected(true);
+                    shapes.Flush();
+                    int rb1 = shapes.RebuildsForTest, rs1 = shapes.RestylesForTest;
+                    var chosen = RenderRgba(null, eye, look, 50f, 750, 550);
+                    var pa = plain.GetPixels32(); var pb = chosen.GetPixels32();
+                    int changed = 0;
+                    for (int k = 0; k < pa.Length; k++) if (Math.Abs(pa[k].r - pb[k].r) + Math.Abs(pa[k].g - pb[k].g) + Math.Abs(pa[k].b - pb[k].b) > 24) changed++;
+                    UnityEngine.Object.DestroyImmediate(plain); UnityEngine.Object.DestroyImmediate(chosen);
+                    btn.SetSelected(false);
+                    shapes.Flush();
+                    Check(rb1 == rb0 && rs1 == rs0 + 1 && changed > 150 && changed < pa.Length / 20,
+                        $"selecting a button rewrites its colours only: {rb1 - rb0} geometry rebuilds, {rs1 - rs0} restyle, {changed} pixels changed (the button, nothing else)");
+                    int rb2 = shapes.RebuildsForTest;
+                    shapes.SetRect(0, shapes.Get(0).Center, shapes.Get(0).Size); // the same rect again
+                    shapes.Flush();
+                    Check(shapes.RebuildsForTest == rb2, "setting a shape's rect to the one it has rebuilds nothing");
+                }
+                // the glass is flat: the lattice is printed on it (0.7.9 drew it behind the surface, with parallax)
                 RenderAt("ui-look-files-left.png", eye - Vector3.right * 0.25f, Quaternion.LookRotation(p.transform.position - (eye - Vector3.right * 0.25f), Vector3.up), 50f, 1500, 1100);
                 shell.OpenPanel("settings");
                 var st = shell.PanelsById["settings"];
@@ -3558,6 +3583,18 @@ end)
                 float win = px.Count(c => c.a > 0.9f) / (float)px.Length; // the window behind fills much of the view
                 Check(aHand < 0.1f && win > 0.2f, $"a hand in front of a window stays visible (palm {aHand:F2}; the window covers {win * 100f:0}% of the view around it)");
                 UnityEngine.Object.DestroyImmediate(front);
+                // the same with "Real things in front of windows" off (the owner's headset, 2026-11-10): the hands still show,
+                // the setting is only the room's depth
+                shell.Settings.occludeUi = false;
+                shell.TickFocusForTest(0.2f);
+                UnityEngine.Object.DestroyImmediate(RenderRgba(null, head.position, look, 60f, 320, 240));
+                var front2 = RenderRgba("ui-hand-in-front-no-depth.png", head.position, look, 60f, 320, 240);
+                float aHand2 = front2.GetPixel(160, 120).a;
+                int cut = shell.HandCutoutsShownForTest;
+                UnityEngine.Object.DestroyImmediate(front2);
+                shell.Settings.occludeUi = true;
+                shell.TickFocusForTest(0.2f);
+                Check(aHand2 < 0.1f && cut >= 7, $"with REAL THINGS IN FRONT off a hand in front of a window still shows (palm {aHand2:F2}, {cut} cut-outs drawn)");
                 shell.ClosePanel("settings");
             }
             shell.SimHands.Hide(Handedness.Right);

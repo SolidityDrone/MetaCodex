@@ -61,7 +61,7 @@ namespace MetaCodex.UI
         private readonly UiShapeMesh[] _reticles = new UiShapeMesh[3];
         private readonly Dictionary<UiPanel, int> _selectShape = new Dictionary<UiPanel, int>();
         // the hands' light on the panels' glass (MetaCodex/SciFiUI): a fingertip, or a point just in front of a ray's cursor
-        private static readonly int PointersId = Shader.PropertyToID("_McxPointers");
+        private static readonly int[] PointerIds = { Shader.PropertyToID("_McxPointer0"), Shader.PropertyToID("_McxPointer1") };
         private readonly Vector4[] _pointerLights = new Vector4[2];
 
         public void Init()
@@ -459,15 +459,15 @@ namespace MetaCodex.UI
                 float now = Mathf.Lerp(_pointerLights[h].w, want, dt <= 0f ? 1f : 1f - Mathf.Exp(-dt * 14f));
                 if (now < 0.004f && want <= 0f) now = 0f;
                 _pointerLights[h] = new Vector4(at.x, at.y, at.z, now);
+                Shader.SetGlobalVector(PointerIds[h], _pointerLights[h]);
             }
-            Shader.SetGlobalVectorArray(PointersId, _pointerLights);
         }
 
         /// Self-tests: a light at a place in the world (strength 0 turns it off).
         public void SetPointerLightForTest(int hand, Vector3 at, float strength)
         {
             _pointerLights[hand] = new Vector4(at.x, at.y, at.z, strength);
-            Shader.SetGlobalVectorArray(PointersId, _pointerLights);
+            Shader.SetGlobalVector(PointerIds[hand], _pointerLights[hand]);
         }
 
         /// How far a fingertip is from the nearest open panel under it (within 14 cm in front, 3 cm behind).

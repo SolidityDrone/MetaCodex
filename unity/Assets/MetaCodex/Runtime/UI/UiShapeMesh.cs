@@ -7,6 +7,10 @@ namespace MetaCodex.UI
 {
     /// All shapes of one panel in one mesh (one draw call). Elements keep the index of their shapes and
     /// change state/tint in place; the mesh is re-uploaded once per frame at most, only when something changed.
+    /// A change of colour or state only (hover, press, selection, the flash after a click) rewrites that shape's
+    /// colours and states and uploads those two streams; only a change of size, place, kind or visibility rebuilds
+    /// the geometry (0.7.10: every hover and every frame of a click's flash rebuilt the whole panel, thousands of
+    /// vertices on a big one). Setting a shape, a rect or a state to what it already is changes nothing.
     [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
     public sealed class UiShapeMesh : MonoBehaviour
     {
@@ -19,6 +23,10 @@ namespace MetaCodex.UI
         private readonly List<Vector4> _shape = new List<Vector4>();
         private readonly List<Vector4> _style = new List<Vector4>();
         private readonly List<int> _tris = new List<int>();
+        // where each shape's vertices are in the lists (-1: not drawn), and the shapes whose colour or state changed
+        private readonly List<int> _first = new List<int>(), _count = new List<int>();
+        private readonly List<int> _restyle = new List<int>();
+        private bool _layout = true;
 
         public int Count => _shapes.Count;
 
@@ -45,13 +53,24 @@ namespace MetaCodex.UI
         public int Add(UiShape s)
         {
             _shapes.Add(s);
-            _dirty = true;
+            _dirty = _layout = true;
             return _shapes.Count - 1;
         }
 
         public UiShape Get(int id) => _shapes[id];
 
-        public void Set(int id, UiShape s) { _shapes[id] = s; _dirty = true; }
+        private static bool SameLayout(in UiShape a, in UiShape b) =>
+            a.Center == b.Center && a.Size == b.Size && a.Kind == b.Kind && a.CutBig == b.CutBig && a.CutSmall == b.CutSmall
+            && a.Border == b.Border && a.Margin == b.Margin && a.Rotation == b.Rotation && a.Visible == b.Visible;
+
+        public void Set(int id, UiShape s)
+        {
+            var old = _shapes[id];
+            if (!SameLayout(old, s)) { _shapes[id] = s; _dirty = _layout = true; return; }
+            if (old.Tint == s.Tint && Mathf.Abs(old.State - s.State) < 0.002f) return; // nothing changed
+            _shapes[id] = s;
+            Restyle(id);
+        }
 
         public void SetState(int id, float state)
         {
@@ -59,7 +78,7 @@ namespace MetaCodex.UI
             if (Mathf.Abs(s.State - state) < 0.002f) return;
             s.State = state;
             _shapes[id] = s;
-            _dirty = true;
+            Restyle(id);
         }
 
         public void SetTint(int id, Color tint)
@@ -68,7 +87,15 @@ namespace MetaCodex.UI
             if (s.Tint == tint) return;
             s.Tint = tint;
             _shapes[id] = s;
+            Restyle(id);
+        }
+
+        // only this shape's colour or state: its vertices are rewritten in place at the next Flush
+        private void Restyle(int id)
+        {
             _dirty = true;
+            if (_layout || id >= _first.Count || _first[id] < 0) { _layout |= _shapes[id].Visible; return; } // not in the mesh yet
+            _restyle.Add(id);
         }
 
         public void SetVisible(int id, bool visible)
@@ -77,19 +104,24 @@ namespace MetaCodex.UI
             if (s.Visible == visible) return;
             s.Visible = visible;
             _shapes[id] = s;
-            _dirty = true;
+            _dirty = _layout = true;
         }
 
         public void SetRect(int id, Vector3 center, Vector2 size)
         {
             var s = _shapes[id];
+            if (s.Center == center && s.Size == size) return;
             s.Center = center;
             s.Size = size;
             _shapes[id] = s;
-            _dirty = true;
+            _dirty = _layout = true;
         }
 
-        public void Clear() { _shapes.Clear(); _dirty = true; }
+        public void Clear() { _shapes.Clear(); _dirty = _layout = true; }
+
+        /// Self-tests: how many times the geometry was rebuilt and how many times only colours and states were.
+        public int RebuildsForTest { get; private set; }
+        public int RestylesForTest { get; private set; }
 
         private void LateUpdate() => Flush();
 
@@ -98,9 +130,31 @@ namespace MetaCodex.UI
         {
             if (!_dirty || _mesh == null) return;
             _dirty = false;
-            _v.Clear(); _c.Clear(); _uv.Clear(); _shape.Clear(); _style.Clear(); _tris.Clear();
+            if (!_layout)
+            {
+                // colours and states only: rewrite those shapes' vertices, upload the two streams
+                foreach (int id in _restyle)
+                {
+                    var s = _shapes[id];
+                    int f = _first[id], n = _count[id];
+                    if (f < 0) continue;
+                    var lin = UiTheme.Lin(s.Tint);
+                    var style = new Vector4(s.CutBig, s.CutSmall, s.Border, s.State);
+                    for (int k = f; k < f + n; k++) { _c[k] = lin; _style[k] = style; }
+                }
+                _restyle.Clear();
+                _mesh.SetColors(_c);
+                _mesh.SetUVs(2, _style);
+                RestylesForTest++;
+                return;
+            }
+            _layout = false;
+            _restyle.Clear();
+            RebuildsForTest++;
+            _v.Clear(); _c.Clear(); _uv.Clear(); _shape.Clear(); _style.Clear(); _tris.Clear(); _first.Clear(); _count.Clear();
             foreach (var s in _shapes)
             {
+                _first.Add(-1); _count.Add(0);
                 if (!s.Visible) continue;
                 float hw = s.Size.x * 0.5f + s.Margin, hh = s.Size.y * 0.5f + s.Margin;
                 var lin = UiTheme.Lin(s.Tint);
@@ -109,6 +163,8 @@ namespace MetaCodex.UI
                 // columns of about 1.5 cm, so the shader can bend wide shapes smoothly
                 int cols = Mathf.Clamp(Mathf.CeilToInt(hw * 2f / 0.015f), 1, 64);
                 int i0 = _v.Count;
+                _first[_first.Count - 1] = i0;
+                _count[_count.Count - 1] = (cols + 1) * 2;
                 float cs = 1f, sn = 0f; // rotated shapes (diagram edges, chart lines): around the centre, in the panel plane
                 if (s.Rotation != 0f) { cs = Mathf.Cos(s.Rotation); sn = Mathf.Sin(s.Rotation); }
                 for (int k = 0; k <= cols; k++)

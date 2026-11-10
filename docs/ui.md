@@ -19,20 +19,22 @@ ticks at their cuts and a sheen crossing them while hovered, quiet list rows (gl
 the accent floods into when chosen, segmented energy bars for progress and sliders, cyan accent (#35D0FF) with
 amber / red / green for warning, danger and ok; the light that casts a window is a warm white.
 
-**The glass has depth** (owner 2026-11-10: "much better aesthetics"). A hexagon lattice lies 12 mm behind the
-surface and a grid of points 30 mm behind it: each is drawn where the eye's own ray meets that depth (the
-vertex shader gives the view direction in the panel's frame, bent or flat), so they shift against the frame as
-the head moves and each eye sees its own shift: real stereo depth for the price of two offsets. A sheen crosses
-the glass with the head. A ruler runs down the left edge (a tick every 10 mm), a conduit of energy along the
+**The glass** (owner 2026-11-10: "much better aesthetics"; then "I like the texture, not that the panels seem to have a
+depth"). A hexagon lattice and a grid of points between its cells are printed on the glass, flat: 0.7.9 drew them
+behind the surface with parallax (each eye's ray met them 12 and 30 mm deep, and a sheen moved with the head), and
+the windows looked deep; 0.7.10 keeps the texture and drops the depth. A ruler runs down the left edge (a tick every 10 mm), a conduit of energy along the
 bottom from the right cut with a pulse in it. **Your hands light it**: a fingertip within 14 cm of a window, or
-the cursor of a hand's ray, is a point of light on the lattice and the frame (`_McxPointers`, set by the router
-every frame); the pool tightens as the finger comes closer, so it also shows how far the glass still is. Lattice
+the cursor of a hand's ray, is a point of light on the lattice and the frame (`_McxPointer0` / `_McxPointer1`, set by
+the router every frame); the pool tightens as the finger comes closer, so it also shows how far the glass still is. Lattice
 lines fade out with distance before they get thinner than a pixel (no shimmer). Titles and buttons use Rajdhani SemiBold in capitals with letter spacing (the console voice), body text
 Inter, code DejaVu Sans Mono. All OFL / free licences. Short UI sounds are synthesised in code.
 
 Everything is drawn by one shader, `MetaCodex/SciFiUI`: each panel, button, header, bar, line, dot and
 selection frame is a quad whose shape is computed per pixel from vertex data (size, chamfer, fill style,
-border, state), so a whole panel is one mesh and one draw call, crisp at any distance. Text is TextMeshPro
+border, state), so a whole panel is one mesh and one draw call, crisp at any distance. A change of colour or state
+only (a hover, a press, a selection, the flash after a click) rewrites that shape's colours and states in place and
+uploads those two streams; only a change of size, place or visibility rebuilds the panel's geometry (0.7.10: every
+hover and every frame of a click's flash rebuilt the whole mesh, thousands of vertices on a big panel). Text is TextMeshPro
 with runtime SDF fonts drawn by `MetaCodex/TextBend` (TMP mobile SDF plus the panel bend); tool logos are
 one atlas drawn by `MetaCodex/UiIcon`. LOOK settings (the render scale is fixed at 1.6): panel opacity, shadows,
 foveated rendering (off by default; it blurs the edges of the view), sounds and volume.
@@ -87,13 +89,20 @@ panels ... the source of the speech ... a billboard side notification system men
 
 - **How it looks.** One quad that faces each eye; every pixel follows its own ray through a unit sphere, so the
   orb has true depth per eye: a white-hot core, two shells of plasma filaments turning against each other (a
-  sheared, twice-warped sine field, seen on the near and the far side of each shell), a dark glass body with a
-  bright limb, three thin rings round it (two of warm gold, one dashed in its own colour; the distance between
-  the ray and each circle, so a ring is a tube from every side and passes behind the sphere), motes with short
-  tails, a halo. Premultiplied: its light is added over the room and its body darkens what is behind it, so it
-  reads in a bright room; a depth pass on its disc keeps a hand that is behind it from cutting it out. Cost:
-  the plasma only inside the sphere, the rings only where a ring can be (a ray further from the centre than the
-  ring's radius cannot meet it), the motes within 1.8 radii, and all light is windowed to zero inside the quad.
+  sheared, twice-warped sine field; the inner shell seen on its near and far side, the outer on its near side), a
+  dark glass body with a bright limb, three thin rings round it (two of warm gold, one dashed in its own colour; the
+  distance between the ray and each circle, so a ring is a tube from every side and passes behind the sphere), four
+  motes, a halo. Premultiplied: its light is added over the room and its body darkens what is behind it, so it
+  reads in a bright room; a depth pass on its disc keeps a hand that is behind it from cutting it out.
+- **Why the shader is plain straight-line code** (0.7.10). On the headset 0.7.9's orb showed flat cream blocks,
+  stripes and half discs over the sphere in two frames out of three, never in the Editor; they flickered frame to
+  frame, in a fixed colour whatever the orb's mood, in screen-aligned blocks: the Quest's GPU going wrong on that
+  shader, not its light (the depth was not even running then). That version had nested loops reading uniform
+  arrays, ternaries choosing between arrays, its inputs as globals outside any constant buffer, and a derivative
+  taken after an early return. Now: no loops, no arrays, every input an ordinary material property in
+  `UnityPerMaterial` (SRP Batcher compatible), the pixel-size derivative first and no early return. It is also
+  about 40 % cheaper per frame: three plasma evaluations instead of four, four motes without tails instead of twelve
+  points, and a quad of 2.3 radii instead of 2.7 (27 % fewer pixels).
 - **Moods.** Idle: calm cyan, slow. Listening: it turns gold and its three rings turn to face you, one inside the
   other. Thinking: violet, the plasma and the rings spin up. Speaking: its core pulses with the loudness of the
   words and a ripple leaves it at every syllable; the spoken answer comes from its place (the AudioSource sits
@@ -260,10 +269,13 @@ windows and your hands. No Space Setup scan is needed (branch `feat/spatial-dome
 - **Hands** are cut out of everything (soft capsules along the tracked bones, `FocusMesh`, drawn after the windows and
   depth-tested against the opaque ones): a hand in front of a window, in the darkness or in the blur always shows,
   also during the system gesture (the gesture engine marks the hand untracked then; the cut-outs use the raw tracking).
-- **Real things in front of windows** (FOCUS toggle, on): every UI shader (`Shaders/McxOcclusion.hlsl` in SciFiUI,
+  Always, whatever the settings (0.7.10: until then they were drawn only with Focus or "Real things in front of
+  windows" on, and with that toggle off, as on the owner's headset, every window covered the hands).
+- **Real things in front of windows** (FOCUS toggle, on): the room's depth, for what is not a hand (people, things):
+  every UI shader (`Shaders/McxOcclusion.hlsl` in SciFiUI,
   TextBend, UiIcon, ViewImage, PanelUnlit, StageLit; the terminal's glyphs use TextBend now) fades where the sharp
-  depth puts a real surface 2-6 cm or more in front of it, so people, hands and objects in front of a window stay
-  visible.
+  depth puts a real surface 2-6 cm or more in front of it, so people and objects in front of a window stay visible.
+  It runs the depth sensor and a sharpening pass every frame; off saves that GPU work, and the hands still show.
 - **The Horizon OS menu**: while the app has lost input focus (a system menu is open), the windows and the focus
   darkness fade out (`_McxUiHide`), so the system menu shows; they come back after. The system gesture itself (palm
   towards you, pinch) hides nothing (0.7.3: Horizon OS reports it while the palm faces you, and the windows used to

@@ -7,10 +7,10 @@
 //              3 list row), z = border width, w = state 0..1
 // Kinds: 0 panel body, 1 button, 2 header bar, 3 selection frame, 4 bar (state = fill), 5 line, 6 dot.
 // The look: a sci-fi command console in the spirit of RTS game interfaces (an original design, no game assets):
-// angular chamfered frames of steel lit from above, thick holographic glass (a hexagon lattice a centimetre behind
-// its surface and a grid of points deeper still: they shift against each other as the head moves, per eye, so the
-// glass has real depth), a sheen that crosses it with the head, light pooling on the lattice under a fingertip or a
-// ray's cursor, corner brackets, a ruler down the left edge, a conduit of energy along the bottom, a stepped energy
+// angular chamfered frames of steel lit from above, holographic glass with a hexagon lattice and a grid of points
+// printed on its surface (flat: 0.7.9 drew them behind the surface with parallax and the owner did not want windows to
+// look deep), light pooling on the lattice under a fingertip or a ray's cursor, corner brackets, a ruler down the left
+// edge, a conduit of energy along the bottom, a stepped energy
 // bar under each title with a pulse running in it, command-card buttons with a bevel that charge up when hovered,
 // quiet list rows the accent floods into when chosen. Everything is computed per pixel from the vertex data.
 // A panel is cast by a line of light (McxPanelFx.hlsl): behind the line the glass is a hot lattice whose cells close
@@ -41,8 +41,8 @@ Shader "MetaCodex/SciFiUI"
         #include "Assets/MetaCodex/Shaders/McxPanelFx.hlsl"
 
         // the hands' pointers (UiInputRouter): xyz = a fingertip, or a point just in front of a ray's cursor (world),
-        // w = how strong its light is (0 = none)
-        float4 _McxPointers[2];
+        // w = how strong its light is (0 = none). Two plain globals: no array indexed in a loop (see Orb.shader).
+        float4 _McxPointer0, _McxPointer1;
 
         float3 BendPanel(float3 p, float r)
         {
@@ -81,8 +81,6 @@ Shader "MetaCodex/SciFiUI"
             float4 shape : TEXCOORD1;
             float4 style : TEXCOORD2;
             float3 positionWS : TEXCOORD3; // after the bend: what real things in front are compared with
-            float4 panel : TEXCOORD4;      // xy = panel-local position before the bend (metres, y up from the centre),
-                                           // zw = where a thing behind the glass shifts to, per metre of its depth
             float3 scan : TEXCOORD5;       // xy = how the distance behind the scan line changes along the panel's x and
                                            // y (per metre of panel space), z = metres behind the scan line (10 at rest)
             UNITY_VERTEX_OUTPUT_STEREO
@@ -101,13 +99,9 @@ Shader "MetaCodex/SciFiUI"
             o.uv = v.uv;
             o.shape = v.shape;
             o.style = v.style;
-            // the panel's own frame at this vertex (it turns along a bent panel): tangent, and the normal towards the user
+            // the panel's own tangent at this vertex (it turns along a bent panel): how the scan line's distance changes
             float a = r > 0.01 ? v.positionOS.x / r : 0.0;
-            float sa = sin(a), ca = cos(a);
-            float3 tOS = float3(ca, 0.0, -sa), nOS = float3(-sa, 0.0, -ca);
-            float3 vOS = TransformWorldToObject(GetCameraPositionWS()) - bent;
-            float vz = max(abs(dot(vOS, nOS)), 0.3 * length(vOS));
-            o.panel = float4(v.positionOS.xy, clamp(-float2(dot(vOS, tOS), vOS.y) / vz, -2.5, 2.5));
+            float3 tOS = float3(cos(a), 0.0, -sin(a));
             float3 tWS = mul((float3x3)UNITY_MATRIX_M, tOS), uWS = mul((float3x3)UNITY_MATRIX_M, float3(0.0, 1.0, 0.0));
             float3 n = _PanelIndex >= 0.0 ? _PanelScan[(int)_PanelIndex].xyz : float3(0.0, 0.0, 0.0);
             o.scan = float3(dot(n, tWS), dot(n, uWS), McxBehindScan(_PanelIndex, o.positionWS));
@@ -276,7 +270,7 @@ Shader "MetaCodex/SciFiUI"
                     d = sdChamfer(p, h, cBig, small);
                 }
                 float aa = max(fwidth(d), 1e-5);
-                float px = max(fwidth(p.x) + fwidth(p.y), 1e-5) * 0.7; // about one pixel, in metres
+                float px = aa; // about one pixel, in metres (a distance field's gradient is 1: its fwidth is the pixel size)
                 float inside = saturate(0.5 - d / aa);
                 float ring = saturate(0.5 - (abs(d + border * 0.5) - border * 0.5) / aa);
                 float outsideFall = (1.0 - inside) * exp(-max(d, 0.0) / max(margin * 0.42, 1e-4));
@@ -291,35 +285,27 @@ Shader "MetaCodex/SciFiUI"
                 float bd = i.scan.z;    // metres behind the scan line while the panel is cast (10 at rest)
                 float heat = 0.0;
 
-                if (kind == 0) // panel: thick holographic glass in a steel frame
+                if (kind == 0) // panel: holographic glass in a steel frame
                 {
-                    float2 par = i.panel.zw;
                     float3 lo = float3(0.0045, 0.0125, 0.0245), hi = float3(0.017, 0.042, 0.076);
                     fill = lerp(lo, hi, smoothstep(-1.1, 1.0, yN));
                     fill *= 1.0 - 0.30 * smoothstep(0.55, 1.35, length(float2(xN, yN)));  // darker into the corners
                     float nearEdge = exp(d / 0.05);                                        // 1 at the frame, fading inwards
-                    // the hexagon lattice, 12 mm behind the surface: strongest at the frame
+                    // the hexagon lattice on the glass: strongest at the frame
                     float2 toCentre;
-                    float hd = HexCell(p + par * 0.012, 0.022, toCentre);
+                    float hd = HexCell(p, 0.022, toCentre);
                     float fw = px / 0.022;
                     float farFade = saturate(1.3 - fw * 10.0);                               // lines thinner than a pixel fade out
                     float lattice = HexLine(hd, 0.055, fw) * farFade;
                     fill += tint * lattice * (0.030 + 0.11 * nearEdge);
-                    // a grid of points, 30 mm behind the surface
-                    float2 g2 = frac((p + par * 0.030) / 0.011) - 0.5;
+                    // a grid of points between the cells
+                    float2 g2 = frac(p / 0.011) - 0.5;
                     float dots = saturate((0.085 - length(g2)) / (px / 0.011) + 0.5) * saturate(1.5 - px / 0.0014);
                     fill += accent * dots * 0.050 * (0.35 + 0.65 * smoothstep(-0.2, 1.0, yN));
                     fill += tint * 0.040 * smoothstep(0.55, 1.0, yN);                      // light from the top edge
-                    // a sheen that crosses the glass as the head moves
-                    float sh = (xN * 0.8 + yN * 0.45 - par.x * 0.9 - 0.15) / 0.22;
-                    fill += (tint * 0.5 + 0.5) * exp(-sh * sh) * 0.012;
                     // a fingertip, or a ray's cursor, lights the lattice round it
-                    float pl = 0.0;
-                    for (int k = 0; k < 2; k++)
-                    {
-                        float4 ptr = _McxPointers[k];
-                        if (ptr.w > 0.001) { float3 dq = i.positionWS - ptr.xyz; pl += ptr.w * 0.0009 / (dot(dq, dq) + 0.0009); }
-                    }
+                    float3 dq0 = i.positionWS - _McxPointer0.xyz, dq1 = i.positionWS - _McxPointer1.xyz;
+                    float pl = _McxPointer0.w * 0.0009 / (dot(dq0, dq0) + 0.0009) + _McxPointer1.w * 0.0009 / (dot(dq1, dq1) + 0.0009);
                     fill += accent * pl * (0.10 + 0.9 * lattice) * 0.55;
                     // the glass sits in the frame: an inner inset line
                     fill = lerp(fill, tint * 0.55, LineAt(d + 0.0032, 0.0009, aa) * 0.55);

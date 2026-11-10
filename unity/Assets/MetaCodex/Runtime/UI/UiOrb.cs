@@ -15,8 +15,8 @@ namespace MetaCodex.UI
     {
         public enum Mood { Idle, Listening, Thinking, Speaking }
 
-        /// The quad's half size in radii: room for the halo, the rings and the ripples.
-        public const float Extent = 2.7f;
+        /// The quad's half size in radii: room for the halo, the rings and the ripples (2.7 until 0.7.9: 27 % more pixels).
+        public const float Extent = 2.3f;
         public static readonly Color Gold = new Color(1f, 0.80f, 0.50f);
 
         public Transform Head;
@@ -56,14 +56,18 @@ namespace MetaCodex.UI
         private readonly float[] _phA = new float[3], _phB = new float[3], _ringTilt = new float[3], _ringPhase = new float[3], _mote = new float[4];
         private float _rotA, _rotB;
         private readonly float[] _ripples = { -1f, -1f, -1f, -1f };
-        private readonly Vector4[] _rowsA = new Vector4[3], _rowsB = new Vector4[3], _ringN = new Vector4[3], _ringU = new Vector4[3], _ringP = new Vector4[3], _ringQ = new Vector4[3];
-        private readonly Vector4[] _motes = new Vector4[12], _moteW = new Vector4[12];
-
+        // every input of MetaCodex/Orb is an ordinary material property (no arrays: see the shader's header)
         private static readonly int CenterId = Shader.PropertyToID("_OrbCenter"), StateId = Shader.PropertyToID("_OrbState"), TintId = Shader.PropertyToID("_OrbTint"),
             DeepId = Shader.PropertyToID("_OrbDeep"), GoldId = Shader.PropertyToID("_OrbGold"), PhaseAId = Shader.PropertyToID("_OrbPhaseA"), PhaseBId = Shader.PropertyToID("_OrbPhaseB"),
-            RotAId = Shader.PropertyToID("_OrbRotA"), RotBId = Shader.PropertyToID("_OrbRotB"), LookId = Shader.PropertyToID("_OrbLook"), ShieldId = Shader.PropertyToID("_OrbShield"),
-            RipplesId = Shader.PropertyToID("_OrbRipples"), RingNId = Shader.PropertyToID("_OrbRingN"), RingUId = Shader.PropertyToID("_OrbRingU"), RingPId = Shader.PropertyToID("_OrbRingP"),
-            RingQId = Shader.PropertyToID("_OrbRingQ"), MotesId = Shader.PropertyToID("_OrbMotes"), MoteWId = Shader.PropertyToID("_OrbMoteW");
+            LookId = Shader.PropertyToID("_OrbLook"), ShieldId = Shader.PropertyToID("_OrbShield"), RipplesId = Shader.PropertyToID("_OrbRipples"),
+            MoteWId = Shader.PropertyToID("_OrbMoteW"), MoteGoldId = Shader.PropertyToID("_OrbMoteGold");
+        private static readonly int[] RotAIds = { Shader.PropertyToID("_OrbRotA0"), Shader.PropertyToID("_OrbRotA1"), Shader.PropertyToID("_OrbRotA2") };
+        private static readonly int[] RotBIds = { Shader.PropertyToID("_OrbRotB0"), Shader.PropertyToID("_OrbRotB1"), Shader.PropertyToID("_OrbRotB2") };
+        private static readonly int[] RingNIds = { Shader.PropertyToID("_OrbRing0N"), Shader.PropertyToID("_OrbRing1N"), Shader.PropertyToID("_OrbRing2N") };
+        private static readonly int[] RingUIds = { Shader.PropertyToID("_OrbRing0U"), Shader.PropertyToID("_OrbRing1U"), Shader.PropertyToID("_OrbRing2U") };
+        private static readonly int[] RingPIds = { Shader.PropertyToID("_OrbRing0P"), Shader.PropertyToID("_OrbRing1P"), Shader.PropertyToID("_OrbRing2P") };
+        private static readonly int[] RingQIds = { Shader.PropertyToID("_OrbRing0Q"), Shader.PropertyToID("_OrbRing1Q"), Shader.PropertyToID("_OrbRing2Q") };
+        private static readonly int[] MoteIds = { Shader.PropertyToID("_OrbMote0"), Shader.PropertyToID("_OrbMote1"), Shader.PropertyToID("_OrbMote2"), Shader.PropertyToID("_OrbMote3") };
 
         public static UiOrb Create(Transform parent)
         {
@@ -216,11 +220,20 @@ namespace MetaCodex.UI
             _lastRipple = _time;
         }
 
-        private static void Rows(Quaternion q, Vector4[] rows)
+        private void Rows(Quaternion q, int[] ids)
         {
             var m = Matrix4x4.Rotate(q);
-            rows[0] = m.GetRow(0); rows[1] = m.GetRow(1); rows[2] = m.GetRow(2);
+            for (int r = 0; r < 3; r++) _mat.SetVector(ids[r], m.GetRow(r));
         }
+
+        private static readonly Vector3 AxisA = new Vector3(0.2f, 1f, 0.1f).normalized, AxisB = new Vector3(-0.4f, 1f, 0.3f).normalized;
+        private static readonly Quaternion[] MoteOrbits =
+        {
+            Quaternion.AngleAxis(0.6f * Mathf.Rad2Deg, new Vector3(1f, 0.3f, 0f).normalized),
+            Quaternion.AngleAxis(1.1f * Mathf.Rad2Deg, new Vector3(Mathf.Cos(2.1f), 0.3f, Mathf.Sin(2.1f)).normalized),
+            Quaternion.AngleAxis(1.6f * Mathf.Rad2Deg, new Vector3(Mathf.Cos(4.2f), 0.3f, Mathf.Sin(4.2f)).normalized),
+            Quaternion.AngleAxis(2.1f * Mathf.Rad2Deg, new Vector3(Mathf.Cos(6.3f), 0.3f, Mathf.Sin(6.3f)).normalized),
+        };
 
         // (tilt axis, base tilt, sway, radius, tube width, gold, dashes, duty, brightness): ring 0 is the halo ring that
         // faces the user, ring 1 a fine dashed ring across it, ring 2 a faint wide one with a single bright third
@@ -251,10 +264,8 @@ namespace MetaCodex.UI
             _mat.SetVector(GoldId, new Vector4(gold.r, gold.g, gold.b, 1f));
             _mat.SetVector(PhaseAId, new Vector4(_phA[0], _phA[1], _phA[2], 1.4f));
             _mat.SetVector(PhaseBId, new Vector4(_phB[0] + 2f, _phB[1] + 1f, _phB[2], -0.9f));
-            Rows(Quaternion.AngleAxis(_rotA * Mathf.Rad2Deg, new Vector3(0.2f, 1f, 0.1f).normalized), _rowsA);
-            Rows(Quaternion.AngleAxis(_rotB * Mathf.Rad2Deg, new Vector3(-0.4f, 1f, 0.3f).normalized), _rowsB);
-            _mat.SetVectorArray(RotAId, _rowsA);
-            _mat.SetVectorArray(RotBId, _rowsB);
+            Rows(Quaternion.AngleAxis(_rotA * Mathf.Rad2Deg, AxisA), RotAIds);
+            Rows(Quaternion.AngleAxis(_rotB * Mathf.Rad2Deg, AxisB), RotBIds);
             _mat.SetVector(LookId, new Vector4(_look.x, _look.y, _look.z, _shield * (1f - _shieldAt * _shieldAt)));
             _mat.SetVector(ShieldId, new Vector4(_shieldAt, Extent, 0f, 0f));
             _mat.SetVector(RipplesId, new Vector4(_ripples[0], _ripples[1], _ripples[2], _ripples[3]));
@@ -278,30 +289,28 @@ namespace MetaCodex.UI
                     u = u.sqrMagnitude < 1e-6f ? Vector3.Cross(n, Vector3.up).normalized : u.normalized;
                 }
                 float rho = d.rho * (1f + 0.05f * _pulse) * Mathf.Lerp(0.55f, 1f, open) - (i == 0 ? 0.06f : i == 2 ? -0.10f : 0f) * _aim;
-                _ringN[i] = n; _ringU[i] = u;
-                _ringP[i] = new Vector4(rho, d.width, _ringPhase[i], d.bright * open * (1f + 0.6f * _pulse));
-                _ringQ[i] = new Vector4(d.segs, d.duty, d.gold, 0f);
+                if (u.sqrMagnitude < 1e-6f) u = Mathf.Abs(n.x) < 0.9f ? Vector3.Cross(n, Vector3.right).normalized : Vector3.Cross(n, Vector3.forward).normalized; // never zero (the dashes' angle)
+                _mat.SetVector(RingNIds[i], n);
+                _mat.SetVector(RingUIds[i], u);
+                _mat.SetVector(RingPIds[i], new Vector4(rho, d.width, _ringPhase[i], d.bright * open * (1f + 0.6f * _pulse)));
+                _mat.SetVector(RingQIds[i], new Vector4(d.segs, d.duty, d.gold, 0f));
             }
-            _mat.SetVectorArray(RingNId, _ringN);
-            _mat.SetVectorArray(RingUId, _ringU);
-            _mat.SetVectorArray(RingPId, _ringP);
-            _mat.SetVectorArray(RingQId, _ringQ);
+            // four motes on their own orbits; a message not read yet makes its mote larger and gold
+            Vector4 weights = Vector4.zero, golden = Vector4.zero;
             for (int i = 0; i < 4; i++)
             {
-                var q = Quaternion.AngleAxis((0.6f + i * 0.5f) * Mathf.Rad2Deg, new Vector3(Mathf.Cos(i * 2.1f), 0.3f, Mathf.Sin(i * 2.1f)).normalized);
+                var q = MoteOrbits[i];
                 Vector3 n = q * Vector3.up, u = q * Vector3.right, v = Vector3.Cross(n, u);
                 float rho = 1.16f + 0.13f * i;
-                for (int k = 0; k < 3; k++)
-                {
-                    bool unread = i < Unread; // a message not read yet: this spark is larger and gold
-                    float backA = k * 0.16f, ang = _mote[i] - backA, size = (unread ? 0.046f : 0.028f) * (1f - backA * 1.2f);
-                    var p = rho * (u * Mathf.Cos(ang) + v * Mathf.Sin(ang));
-                    _motes[i * 3 + k] = new Vector4(p.x, p.y, p.z, size * size);
-                    _moteW[i * 3 + k] = new Vector4((k == 0 ? 1f : k == 1 ? 0.45f : 0.2f) * open, unread ? 1f : 0f, 0f, 0f);
-                }
+                bool unread = i < Unread;
+                float size = unread ? 0.046f : 0.030f;
+                var p = rho * (u * Mathf.Cos(_mote[i]) + v * Mathf.Sin(_mote[i]));
+                _mat.SetVector(MoteIds[i], new Vector4(p.x, p.y, p.z, size * size));
+                weights[i] = open * (unread ? 1f : 1.25f);
+                golden[i] = unread ? 1f : 0f;
             }
-            _mat.SetVectorArray(MotesId, _motes);
-            _mat.SetVectorArray(MoteWId, _moteW);
+            _mat.SetVector(MoteWId, weights);
+            _mat.SetVector(MoteGoldId, golden);
             FitBounds();
         }
 

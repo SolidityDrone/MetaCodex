@@ -180,6 +180,9 @@ namespace MetaCodex.UI
         private MeshRenderer _mr;
         private static Material _mat;
         private readonly List<Vector3> _v = new List<Vector3>();
+        // reused every frame of a cast (no garbage while a window is drawn)
+        private readonly List<Vector3> _line = new List<Vector3>(), _fan = new List<Vector3>();
+        private static readonly (float sx, float sy)[] Corners = { (-1f, 1f), (1f, 1f), (1f, -1f), (-1f, -1f) };
         private readonly List<Color> _c = new List<Color>();
         private readonly List<Vector2> _uv = new List<Vector2>();
         private readonly List<Vector4> _info = new List<Vector4>(), _extra = new List<Vector4>();
@@ -235,7 +238,7 @@ namespace MetaCodex.UI
                 // the brackets of the frame (SciFiUI draws them at rest): its chamfered outline offset outwards, near
                 // each corner; they come in from further out and lock on 4 mm off the frame
                 float o = 0.004f + tl.BracketOut, w = 0.0012f, k = 0.41421356f; // tan(22.5): the chamfer's offset
-                foreach (var (sx, sy) in new[] { (-1f, 1f), (1f, 1f), (1f, -1f), (-1f, -1f) })
+                foreach (var (sx, sy) in Corners)
                 {
                     float c = sx * sy < 0f ? t.CutBig : t.CutSmall; // as UiPanel's body: big cuts top-left and bottom-right
                     float arm = Mathf.Clamp(Mathf.Max(Mathf.Min(0.030f, Mathf.Min(hw, hh) * 0.32f), c + 0.006f), 0f, Mathf.Min(hw, hh));
@@ -267,7 +270,8 @@ namespace MetaCodex.UI
                 if (tl.Fan > 0.002f)
                 {
                     // the fan between the caster and the line, and a ray along each of its edges
-                    var fan = new List<Vector3>(line.Count);
+                    var fan = _fan;
+                    fan.Clear();
                     foreach (var q in line) fan.Add(new Vector3(q.x, q.y, q.z + z));
                     Fan(from, fan, accent, tl.Fan);
                     Ray(from, fan[0], eye, 0.0034f, Hot, tl.Fan);
@@ -299,7 +303,8 @@ namespace MetaCodex.UI
         /// line, a row along the arc when it lies across a bent panel.
         private List<Vector3> LinePoints(UiPanel p, float place)
         {
-            var pts = new List<Vector3>();
+            var pts = _line;
+            pts.Clear();
             float hw = p.Width * 0.5f, hh = p.Height * 0.5f, over = 0.007f, r = _bend;
             if (Axis == 0)
             {

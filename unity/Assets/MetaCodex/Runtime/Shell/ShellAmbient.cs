@@ -150,7 +150,9 @@ namespace MetaCodex.Shell
             bool voiceBusy = VoiceState == "transcribing" || VoiceState == "thinking";
             EnsureCamera(((shown && Settings.focusBlur > 0.001f) || (wantDepth && Settings.depthCamera && _depthLive)) && !voiceBusy);
             Shader.SetGlobalFloat(OcclusionId, Settings.occludeUi && _sharpLive ? 1f : 0f);
-            if (Settings.occludeUi || shown) UpdateHandCutouts(); else HideHandCutouts();
+            // your hands always show in front of windows (owner 2026-11-10: with "Real things in front of windows" off the
+            // windows covered them); that setting is only the room's depth: people and things
+            if (HandCutoutsForTest) UpdateHandCutouts(); else HideHandCutouts();
             if (!shown)
             {
                 if (_focusSphere != null && _focusSphere.activeSelf) _focusSphere.SetActive(false);
@@ -654,6 +656,15 @@ namespace MetaCodex.Shell
             m.SetFloat(HandId, 1f);
             m.SetFloat(IntensityId, 1f); // fully clear in the hand's core, a soft fade to its outline (FocusMesh)
             return m;
+        }
+
+        /// Self-tests: false hides the hand cut-outs (pictures that must not show them).
+        public bool HandCutoutsForTest { get; set; } = true;
+
+        /// Self-tests: how many hand cut-outs are drawn now.
+        public int HandCutoutsShownForTest
+        {
+            get { int n = 0; foreach (var t in _handParts) if (t != null && t.gameObject.activeSelf) n++; return n; }
         }
 
         private void HideHandCutouts()
