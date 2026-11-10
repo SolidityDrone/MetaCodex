@@ -562,6 +562,7 @@ namespace MetaCodex.Shell
             RefreshDaemon();
             if (IsPanelOpen("agents")) RefreshAgents();
             if (IsPanelOpen("threads")) RefreshThreads();
+            PushKeysToMqh(); // keys saved while MQH was not answering
             if (!_mqhOnlineToastShown) { _mqhOnlineToastShown = true; Toast("MQH is running in this headset", "ok"); }
         }
 

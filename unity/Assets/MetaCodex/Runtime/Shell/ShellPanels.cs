@@ -69,7 +69,7 @@ namespace MetaCodex.Shell
                 case "browser": RefreshBrowser(); ProbeLocalServers(); break;
                 case "mqh": RefreshMqhTab(_mqhTabs?.Selected ?? 0); break;
                 case "clipboard": Clipboard.Reload(); RefreshClipboardPanel(); break;
-                case "agents": RefreshAgents(); break;
+                case "agents": RefreshAgents(); ProbeAgents(); break;
                 case "threads": RefreshThreads(); break;
                 case "vault": RefreshVaultPanel(); if (_vTabs != null && _vTabs.Selected == 1) { GitRefreshRepos(); RefreshGitHubStatus(); } break;
                 case "voice": EnsureVoiceService(); PollVoiceStatus(); break;

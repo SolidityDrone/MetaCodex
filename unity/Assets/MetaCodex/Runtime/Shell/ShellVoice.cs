@@ -857,6 +857,36 @@ namespace MetaCodex.Shell
                 Samples = new[] { "can i have the keyboard", "pull up the keyboard", "voglio scrivere con la tastiera", "fammi vedere la tastiera", "tira fuori la tastiera" },
                 Run = a => { OpenKeyboard(); return "Keyboard"; },
             });
+            var agentSyn = new Dictionary<string, Dictionary<string, string>>
+            {
+                ["agent"] = new Dictionary<string, string>
+                {
+                    ["open code"] = "opencode", ["opencode"] = "opencode", ["open-code"] = "opencode",
+                    ["claude code"] = "claude", ["claude"] = "claude", ["cloud code"] = "claude", ["clod code"] = "claude",
+                    ["codex"] = "codex", ["open ai codex"] = "codex", ["openai codex"] = "codex", ["codecs"] = "codex",
+                },
+            };
+            Voice.Register(new VoiceCommand
+            {
+                Name = "install_agent",
+                Description = "Install (download) an AI coding agent in this headset's Linux: opencode, claude (Claude Code) or codex; it runs in a terminal",
+                Parameters = VoiceCommands.Schema(("agent", "string", GetAgents.Select(a => a.Id).ToArray(), "the agent to install", true)),
+                Synonyms = agentSyn,
+                Phrases = new[] { "(install|get|download|add) [the] {agent} [agent|cli|app]", "(installa|scarica) [il|l'] {agent}" },
+                Samples = new[] { "i want opencode on the headset", "put codex in the linux", "set up claude code for me", "installa opencode", "scarica codex", "mi serve claude code" },
+                Vocabulary = new[] { "opencode", "codex", "claude code" },
+                Run = a => { var d = GetAgents.FirstOrDefault(x => x.Id == (string)a["agent"]); if (d == null) return "error: no agent " + (string)a["agent"]; OpenPanel("agents"); StartAgentInstall(d); return "Installing " + d.Name; },
+            });
+            Voice.Register(new VoiceCommand
+            {
+                Name = "agent_key",
+                Description = "Add an API key for an agent (opencode, claude, codex): opens the dialog to paste it; it is sealed in the vault and given to the agents",
+                Parameters = VoiceCommands.Schema(("agent", "string", GetAgents.Select(a => a.Id).ToArray(), "the agent the key is for", true)),
+                Synonyms = agentSyn,
+                Phrases = new[] { "(add|set|paste|enter) [an|the|my] [api] key (for|to) {agent}", "{agent} [api] key" },
+                Samples = new[] { "i have a key for opencode", "let me paste my openai key for codex", "where do i put the anthropic key", "aggiungi la chiave di opencode", "incolla la chiave per codex", "voglio mettere la mia api key" },
+                Run = a => { OpenAgentKey((string)a["agent"]); return "API key for " + (string)a["agent"]; },
+            });
             Voice.Register(new VoiceCommand
             {
                 Name = "table_keyboard",

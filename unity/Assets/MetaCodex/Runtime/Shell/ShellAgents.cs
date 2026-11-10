@@ -44,8 +44,11 @@ namespace MetaCodex.Shell
         private void BuildAgents()
         {
             var t = UiTheme.Current;
-            var p = Panel<UiPanel>("agents", "AGENTS · PROVIDERS", 0.70f, 0.54f);
-            var c = p.Content;
+            var p = Panel<UiPanel>("agents", "AGENTS · PROVIDERS", 0.70f, 0.62f);
+            var c0 = p.Content;
+            const float getH = 0.058f;
+            BuildAgentGetRow(p, new Rect(c0.x, c0.y, c0.width, getH)); // GET: OpenCode, Claude Code, Codex, more soon
+            var c = new Rect(c0.x, c0.y + getH + t.Gap * 1.5f, c0.width, c0.height - getH - t.Gap * 1.5f);
             float leftW = 0.28f;
             _agentList = p.Add(new UiList(0.034f, (item, idx) => { _agentSel = item.Tag as string; ShowAgent(); }) { Rect = new Rect(c.x, c.y, leftW, c.height) });
             var rs = new UiStack(new Rect(c.x + leftW + t.Gap * 2, c.y, c.width - leftW - t.Gap * 2, c.height), t.Gap);
@@ -53,8 +56,9 @@ namespace MetaCodex.Shell
             AddButtons(p, rs.Next(t.ButtonHeight), new (string, Action)[]
             {
                 ("SIGN IN ▶", () => SignIn(_agentSel)),
+                ("⚿ API KEY", () => OpenAgentKey(AgentIdFor(_agentSel))),
                 ("INSTALL / UPDATE", () => InstallAgent(_agentSel)),
-                ("⟳", RefreshAgents),
+                ("⟳", () => { RefreshAgents(); ProbeAgents(); }),
             }, primary: 0);
             AddButtons(p, rs.Next(t.ButtonHeight), new (string, Action)[]
             {
@@ -62,8 +66,12 @@ namespace MetaCodex.Shell
                 ("NEW THREAD →", () => OpenNewThread(_agentSel)),
                 ("⇗ OPEN LINK", () => { if (LastLink != null) OpenBrowser(LastLink); else Toast("No link seen in a terminal yet", "warn"); }),
             });
-            _agentHint = p.Add(new UiLabel("SIGN IN runs the provider's own login in a new terminal. When it prints a link, tap ⇗ on that terminal (or OPEN LINK here): the Horizon browser opens it. Codes go back with ⎘ PASTE. Logins stay in the CLI's own files in the app's private storage; MetaCodex never reads them.", t.SmallSize) { Rect = rs.Rest(), Wrap = true, Color = t.TextDim, Align = TextAlignmentOptions.TopLeft });
+            _agentHint = p.Add(new UiLabel("GET installs an agent here. API KEY: paste your provider's key once (sealed in the vault, given to the agents MQH starts). SIGN IN runs the provider's own login in a terminal (a link opens in Horizon's browser with ⇗; codes go back with ⎘ PASTE); those logins stay in the CLI's own files, MetaCodex never reads them.", t.SmallSize) { Rect = rs.Rest(), Wrap = true, Color = t.TextDim, Align = TextAlignmentOptions.TopLeft });
         }
+
+        /// MQH's provider id (acp-opencode, codex, claude-code) -> the GET agent it is (opencode, codex, claude).
+        private static string AgentIdFor(string providerId) =>
+            providerId == null ? "opencode" : providerId.Contains("opencode") ? "opencode" : providerId.Contains("codex") ? "codex" : providerId.Contains("claude") ? "claude" : "opencode";
 
         private void EnsureHost(Action then)
         {

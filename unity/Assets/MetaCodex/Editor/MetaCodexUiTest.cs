@@ -169,6 +169,7 @@ namespace MetaCodex.EditorTools
                 if (Want("placement")) Placement(shell, head);
                 if (Want("perf")) Perf(shell, head, hands);
                 if (Want("web")) WebSection(shell, head);
+                if (Want("agentget")) AgentGetSection(shell);
                 if (Want("mqh")) MqhPanel(shell);
                 if (Want("captures")) Captures(shell, tmp);
                 if (Want("context")) SessionContextSection(shell, tmp);
@@ -1984,6 +1985,70 @@ end)
                 head.SetPositionAndRotation(keepPos, keepRot);
                 shell.TickOrbForTest(0.05f);
             }
+        }
+
+        /// MQH by itself, agents to GET, an API key pasted once (owner 2026-11-10: "I'd rather not connect MQH manually",
+        /// "a way to download Opencode, Claude Code, Codex, More (coming soon) disabled", "an easy way to paste my key").
+        private static void AgentGetSection(MetaCodexShell shell)
+        {
+            foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
+            bool L(string u) => MqhHost.IsLocalForTest(u);
+            Check(L("http://127.0.0.1:38990") && L("http://localhost:38990/") && L("") && !L("http://192.168.1.5:38990") && !L("http://127.0.0.1:4000"),
+                "MQH starts by itself for the local URL (127.0.0.1:38990); a developer's other URL (a PC's MQH) turns that off");
+            Check(shell.MqhHost != null && shell.MqhHost.State == MqhHost.HostState.Off, $"in the Editor MQH is not started (no Linux): {shell.MqhHost?.State}");
+
+            // GET: three agents and MORE (coming soon, not clickable); versions from the Linux
+            shell.AgentProbeForTest = () => "opencode 1.19.5\nclaude -\ncodex -";
+            shell.OpenPanel("agents");
+            var ap = shell.PanelsById["agents"];
+            ap.ForceRefresh();
+            string Tile(string id) => shell.GetTileTextForTest(id) ?? "";
+            bool tiles = Tile("opencode").StartsWith("OPENCODE") && Tile("claude").StartsWith("CLAUDE CODE") && Tile("codex").StartsWith("CODEX")
+                && ap.Elements.OfType<UiButton>().Any(b => b.Text.StartsWith("MORE") && b.Text.Contains("COMING SOON")) && !shell.MoreTileEnabledForTest;
+            Check(tiles && Tile("opencode").Contains("✓ 1.19.5") && Tile("claude").Contains("GET") && Tile("codex").Contains("GET"),
+                $"AGENTS > GET: “{Tile("opencode").Replace("\n", " ")}”, “{Tile("claude").Replace("\n", " ")}”, “{Tile("codex").Replace("\n", " ")}”, MORE · COMING SOON not clickable ({tiles})");
+            string cmd = MetaCodexShell.InstallCommand(MetaCodexShell.GetAgents.First(a => a.Id == "opencode"));
+            Check(cmd.StartsWith("npm i -g --allow-scripts=opencode-ai opencode-ai@latest") && cmd.Contains("opencode --version"),
+                "GET runs the official npm package in a terminal, its install script allowed (npm 11 skips it otherwise): " + cmd);
+            RenderPanel(ap, "ui-agents-get.png");
+
+            // API KEY: the providers of the agent, a key sealed (allow) and kept for MQH until it answers
+            shell.OpenAgentKey("opencode");
+            var kp = shell.PanelsById["agent-key"];
+            var list = kp.Elements.OfType<UiList>().First();
+            bool providers = list.Items.Count == 7 && list.Items.Any(i => i.Sub == "ANTHROPIC_API_KEY") && list.Items.Any(i => i.Sub == "OPENROUTER_API_KEY") && shell.AgentKeyEnvForTest == "OPENCODE_API_KEY";
+            const string Env = "ANTHROPIC_API_KEY";
+            bool had = shell.Vault != null && shell.Vault.Has(Env);
+            string old = had ? shell.Vault.Reveal(Env) : null;
+            try
+            {
+                shell.SelectAgentKeyForTest(Env);
+                string keepClip = GUIUtility.systemCopyBuffer;
+                GUIUtility.systemCopyBuffer = "sk-ant-test-0123456789abcdef";
+                shell.PasteAgentKeyForTest();
+                GUIUtility.systemCopyBuffer = keepClip;
+                var status = kp.Elements.OfType<UiLabel>().Select(x => x.Text).LastOrDefault(x => !string.IsNullOrEmpty(x)) ?? "";
+                bool pasted = status.Contains("Pasted 28 characters") && status.Contains("sk-a…cdef");
+                shell.SetAgentKeyForTest("sk-ant-test-0123456789abcdef");
+                var e = shell.Vault?.Find(Env);
+                bool sealedAllow = e != null && e.policy == "allow" && shell.Vault.Reveal(Env) == "sk-ant-test-0123456789abcdef";
+                bool notInSettings = !File.ReadAllText(shell.SettingsPathForTest).Contains("sk-ant-test");
+                RenderPanel(kp, "ui-agent-key.png");
+                Check(providers && pasted && sealedAllow && notInSettings,
+                    $"API KEY: opencode's 7 providers ({providers}); ⎘ PASTE takes the clipboard ({pasted}); SAVE seals {Env} in the vault, policy allow ({sealedAllow}), never in settings.json ({notInSettings})");
+            }
+            finally
+            {
+                if (had) shell.Vault.Set(Env, old, "api-key", shell.Vault.Find(Env)?.policy ?? "allow", "restored after the self-test");
+                else shell.Vault?.Delete(Env);
+                shell.ClosePanel("agent-key");
+                shell.ClosePanel("agents");
+                shell.AgentProbeForTest = null;
+            }
+
+            string V(string said) { var m = shell.Voice.FastMatch(said); return m == null ? "none" : m.Command.Name + " " + (string)m.Args["agent"]; }
+            Check(V("install opencode") == "install_agent opencode" && V("download codex") == "install_agent codex" && V("add an api key for claude code") == "agent_key claude",
+                $"voice: “install opencode” -> {V("install opencode")}, “download codex” -> {V("download codex")}, “add an api key for claude code” -> {V("add an api key for claude code")}");
         }
 
         /// WEB, the in-app browser (owner 2026-11-10: "it's boring to have the system browser turn the app off"):
