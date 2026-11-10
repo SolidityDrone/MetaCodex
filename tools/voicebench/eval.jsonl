@@ -13,9 +13,9 @@
 {"id": "en-012", "lang": "en", "kind": "single", "text": "show my conversations", "gold": [["open_panel", {"panel": "threads"}]]}
 {"id": "en-013", "lang": "en", "kind": "single", "text": "open the threads list", "gold": [["open_panel", {"panel": "threads"}]]}
 {"id": "en-014", "lang": "en", "kind": "single", "text": "where are my chats", "gold": [["open_panel", {"panel": "threads"}]]}
-{"id": "en-015", "lang": "en", "kind": "single", "text": "open the web browser", "gold": [["open_panel", {"panel": "browser"}]]}
-{"id": "en-016", "lang": "en", "kind": "single", "text": "I need a browser", "gold": [["open_panel", {"panel": "browser"}]]}
-{"id": "en-017", "lang": "en", "kind": "single", "text": "bring up the browser", "gold": [["open_panel", {"panel": "browser"}]]}
+{"id": "en-015", "lang": "en", "kind": "single", "text": "open the web browser", "gold": [["open_panel", {"panel": "web"}]]}
+{"id": "en-016", "lang": "en", "kind": "single", "text": "I need a browser", "gold": [["open_panel", {"panel": "web"}]]}
+{"id": "en-017", "lang": "en", "kind": "single", "text": "bring up the browser", "gold": [["open_panel", {"panel": "web"}]]}
 {"id": "en-018", "lang": "en", "kind": "single", "text": "open the scripts", "gold": [["open_panel", {"panel": "scripts"}]]}
 {"id": "en-019", "lang": "en", "kind": "single", "text": "show my lua scripts", "gold": [["open_panel", {"panel": "scripts"}]]}
 {"id": "en-020", "lang": "en", "kind": "single", "text": "go to the scripts panel", "gold": [["open_panel", {"panel": "scripts"}]]}
@@ -47,7 +47,7 @@
 {"id": "en-046", "lang": "en", "kind": "single", "text": "hide the files", "gold": [["close_panel", {"panel": "files"}]]}
 {"id": "en-047", "lang": "en", "kind": "single", "text": "close git", "gold": [["close_panel", {"panel": "git"}]]}
 {"id": "en-048", "lang": "en", "kind": "single", "text": "close the settings", "gold": [["close_panel", {"panel": "settings"}]]}
-{"id": "en-049", "lang": "en", "kind": "single", "text": "dismiss the browser", "gold": [["close_panel", {"panel": "browser"}]]}
+{"id": "en-049", "lang": "en", "kind": "single", "text": "dismiss the browser", "gold": [["close_panel", {"panel": "web"}]]}
 {"id": "en-050", "lang": "en", "kind": "single", "text": "put away the scripts panel", "gold": [["close_panel", {"panel": "scripts"}]]}
 {"id": "en-051", "lang": "en", "kind": "single", "text": "close all windows", "gold": [["close_all_panels", {}]]}
 {"id": "en-052", "lang": "en", "kind": "single", "text": "close everything", "gold": [["close_all_panels", {}]]}
@@ -123,7 +123,7 @@
 {"id": "en-122", "lang": "en", "kind": "multi", "text": "recenter and use the floating layout", "gold": [["recenter", {}], ["set_layout", {"mode": "float"}]]}
 {"id": "en-123", "lang": "en", "kind": "multi", "text": "set the radius to two meters and the softness to half a meter", "gold": [["set_setting", {"setting": "focus_radius", "value": 2.0}], ["set_setting", {"setting": "focus_softness", "value": 0.5}]]}
 {"id": "en-124", "lang": "en", "kind": "multi", "text": "darken the room, then open settings", "gold": [["set_focus", {"state": "on"}], ["open_panel", {"panel": "settings"}]]}
-{"id": "en-125", "lang": "en", "kind": "multi", "text": "open the browser, the files and git", "gold": [["open_panel", {"panel": "browser"}], ["open_panel", {"panel": "files"}], ["open_panel", {"panel": "git"}]]}
+{"id": "en-125", "lang": "en", "kind": "multi", "text": "open the browser, the files and git", "gold": [["open_panel", {"panel": "web"}], ["open_panel", {"panel": "files"}], ["open_panel", {"panel": "git"}]]}
 {"id": "en-126", "lang": "en", "kind": "multi", "text": "turn off ambient focus and close everything", "gold": [["set_focus", {"state": "off"}], ["close_all_panels", {}]]}
 {"id": "en-127", "lang": "en", "kind": "multi", "text": "make the windows bigger and increase the opacity", "gold": [["set_setting", {"setting": "ui_scale", "value": "+"}], ["set_setting", {"setting": "opacity", "value": "+"}]]}
 {"id": "en-128", "lang": "en", "kind": "multi", "text": "switch to the metacodex workspace and open the threads", "gold": [["switch_workspace", {"name": "metacodex"}], ["open_panel", {"panel": "threads"}]]}
@@ -193,9 +193,9 @@
 {"id": "it-192", "lang": "it", "kind": "single", "text": "mostra le mie conversazioni", "gold": [["open_panel", {"panel": "threads"}]]}
 {"id": "it-193", "lang": "it", "kind": "single", "text": "apri la lista dei thread", "gold": [["open_panel", {"panel": "threads"}]]}
 {"id": "it-194", "lang": "it", "kind": "single", "text": "dove sono le mie chat", "gold": [["open_panel", {"panel": "threads"}]]}
-{"id": "it-195", "lang": "it", "kind": "single", "text": "apri il browser", "gold": [["open_panel", {"panel": "browser"}]]}
-{"id": "it-196", "lang": "it", "kind": "single", "text": "mi serve il browser web", "gold": [["open_panel", {"panel": "browser"}]]}
-{"id": "it-197", "lang": "it", "kind": "single", "text": "fammi vedere il browser", "gold": [["open_panel", {"panel": "browser"}]]}
+{"id": "it-195", "lang": "it", "kind": "single", "text": "apri il browser", "gold": [["open_panel", {"panel": "web"}]]}
+{"id": "it-196", "lang": "it", "kind": "single", "text": "mi serve il browser web", "gold": [["open_panel", {"panel": "web"}]]}
+{"id": "it-197", "lang": "it", "kind": "single", "text": "fammi vedere il browser", "gold": [["open_panel", {"panel": "web"}]]}
 {"id": "it-198", "lang": "it", "kind": "single", "text": "apri gli script", "gold": [["open_panel", {"panel": "scripts"}]]}
 {"id": "it-199", "lang": "it", "kind": "single", "text": "mostra i miei script lua", "gold": [["open_panel", {"panel": "scripts"}]]}
 {"id": "it-200", "lang": "it", "kind": "single", "text": "vai al pannello degli script", "gold": [["open_panel", {"panel": "scripts"}]]}
@@ -227,7 +227,7 @@
 {"id": "it-226", "lang": "it", "kind": "single", "text": "nascondi i file", "gold": [["close_panel", {"panel": "files"}]]}
 {"id": "it-227", "lang": "it", "kind": "single", "text": "chiudi git", "gold": [["close_panel", {"panel": "git"}]]}
 {"id": "it-228", "lang": "it", "kind": "single", "text": "chiudi le impostazioni", "gold": [["close_panel", {"panel": "settings"}]]}
-{"id": "it-229", "lang": "it", "kind": "single", "text": "chiudi il browser", "gold": [["close_panel", {"panel": "browser"}]]}
+{"id": "it-229", "lang": "it", "kind": "single", "text": "chiudi il browser", "gold": [["close_panel", {"panel": "web"}]]}
 {"id": "it-230", "lang": "it", "kind": "single", "text": "togli il pannello degli script", "gold": [["close_panel", {"panel": "scripts"}]]}
 {"id": "it-231", "lang": "it", "kind": "single", "text": "chiudi tutte le finestre", "gold": [["close_all_panels", {}]]}
 {"id": "it-232", "lang": "it", "kind": "single", "text": "chiudi tutto", "gold": [["close_all_panels", {}]]}
@@ -303,7 +303,7 @@
 {"id": "it-302", "lang": "it", "kind": "multi", "text": "ricentra e usa il layout fluttuante", "gold": [["recenter", {}], ["set_layout", {"mode": "float"}]]}
 {"id": "it-303", "lang": "it", "kind": "multi", "text": "imposta il raggio a due metri e la morbidezza a mezzo metro", "gold": [["set_setting", {"setting": "focus_radius", "value": 2.0}], ["set_setting", {"setting": "focus_softness", "value": 0.5}]]}
 {"id": "it-304", "lang": "it", "kind": "multi", "text": "oscura la stanza, poi apri le impostazioni", "gold": [["set_focus", {"state": "on"}], ["open_panel", {"panel": "settings"}]]}
-{"id": "it-305", "lang": "it", "kind": "multi", "text": "apri il browser, i file e git", "gold": [["open_panel", {"panel": "browser"}], ["open_panel", {"panel": "files"}], ["open_panel", {"panel": "git"}]]}
+{"id": "it-305", "lang": "it", "kind": "multi", "text": "apri il browser, i file e git", "gold": [["open_panel", {"panel": "web"}], ["open_panel", {"panel": "files"}], ["open_panel", {"panel": "git"}]]}
 {"id": "it-306", "lang": "it", "kind": "multi", "text": "spegni il focus ambientale e chiudi tutto", "gold": [["set_focus", {"state": "off"}], ["close_all_panels", {}]]}
 {"id": "it-307", "lang": "it", "kind": "multi", "text": "rendi le finestre più grandi e aumenta l'opacità", "gold": [["set_setting", {"setting": "ui_scale", "value": "+"}], ["set_setting", {"setting": "opacity", "value": "+"}]]}
 {"id": "it-308", "lang": "it", "kind": "multi", "text": "passa al workspace metacodex e apri i thread", "gold": [["switch_workspace", {"name": "metacodex"}], ["open_panel", {"panel": "threads"}]]}
@@ -336,7 +336,7 @@
 {"id": "it-335", "lang": "it", "kind": "noisy", "text": "spegni il focus e apri la cassaforte", "gold": [["set_focus", {"state": "off"}], ["open_panel", {"panel": "vault"}]]}
 {"id": "it-336", "lang": "it", "kind": "noisy", "text": "apri gli scrip", "gold": [["open_panel", {"panel": "scripts"}]]}
 {"id": "it-337", "lang": "it", "kind": "noisy", "text": "disattiva i suonni", "gold": [["set_setting", {"setting": "sounds", "value": "off"}]]}
-{"id": "it-338", "lang": "it", "kind": "noisy", "text": "chiudi il brauser", "gold": [["close_panel", {"panel": "browser"}]]}
+{"id": "it-338", "lang": "it", "kind": "noisy", "text": "chiudi il brauser", "gold": [["close_panel", {"panel": "web"}]]}
 {"id": "it-339", "lang": "it", "kind": "noisy", "text": "apri il sistemma", "gold": [["open_panel", {"panel": "system"}]]}
 {"id": "it-340", "lang": "it", "kind": "none", "text": "grazie", "gold": []}
 {"id": "it-341", "lang": "it", "kind": "none", "text": "ciao", "gold": []}

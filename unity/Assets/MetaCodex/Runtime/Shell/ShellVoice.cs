@@ -859,6 +859,15 @@ namespace MetaCodex.Shell
             });
             Voice.Register(new VoiceCommand
             {
+                Name = "table_keyboard",
+                Description = "The system keyboard on a table (Surface Keyboard and Touchpad): asks to open it now (both hands flat on the table) or to turn it on in Settings",
+                Phrases = new[] { "(open|show|bring up) [the] (table|surface|desk) keyboard", "[the] keyboard on [the] (table|desk)", "(turn on|enable|activate) [the] (table|surface) keyboard" },
+                Samples = new[] { "i want to type on the table", "put the keyboard on my desk", "can i use the surface keyboard", "voglio scrivere sul tavolo", "metti la tastiera sul tavolo", "attiva la tastiera da tavolo" },
+                Vocabulary = new[] { "surface keyboard", "touchpad" },
+                Run = a => { OpenTableKeyboard(); return "Table keyboard"; },
+            });
+            Voice.Register(new VoiceCommand
+            {
                 Name = "focus_preset",
                 Description = "Ambient focus presets (turn focus on): subtle (light dimming, wide dome), focus (normal), blackout (dark all around)",
                 Parameters = VoiceCommands.Schema(("preset", "string", new[] { "subtle", "focus", "blackout" }, "the preset", true)),
