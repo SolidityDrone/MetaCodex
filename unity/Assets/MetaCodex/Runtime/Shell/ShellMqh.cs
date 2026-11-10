@@ -564,6 +564,8 @@ namespace MetaCodex.Shell
             if (IsPanelOpen("threads")) RefreshThreads();
             PushKeysToMqh(); // keys saved while MQH was not answering
             ProbeAgents();   // which agents are installed (AGENTS and NEW THREAD list them)
+            // Cursor, Pi and the rest: off in MQH from the start, not only once AGENTS is opened
+            Mqh.ProvidersState(st => { if (st?["providers"] is JArray all) { _providerStates = all; DisableUnsupportedProviders(); _providerStates = SupportedOnly(all); } });
             if (!_mqhOnlineToastShown) { _mqhOnlineToastShown = true; Toast("MQH is running in this headset", "ok"); }
         }
 
