@@ -5,7 +5,7 @@ import {
 } from "@bb/host-daemon-contract";
 import { createGuideArea } from "./areas/guide.js";
 import { createBbSdk, type BbSdk, type BbSdkAreas } from "./core.js";
-import { createNodeWebsocketFactory } from "./node-websocket.js";
+import { createNodeWebsocketFactory, withApiTokenFetch } from "./node-websocket.js";
 import {
   createRequestTimeoutFetch,
   DEFAULT_BB_REQUEST_TIMEOUT_MS,
@@ -50,11 +50,12 @@ export function createNodeTransport(
 ): BbSdkTransport {
   return createHttpTransport({
     baseUrl: args.baseUrl ?? resolveCliConfig(args.cliConfig).MQH_SERVER_URL,
-    fetch:
+    fetch: withApiTokenFetch(
       args.fetch ??
-      createRequestTimeoutFetch({
-        timeoutMs: args.timeoutMs ?? DEFAULT_BB_REQUEST_TIMEOUT_MS,
-      }),
+        createRequestTimeoutFetch({
+          timeoutMs: args.timeoutMs ?? DEFAULT_BB_REQUEST_TIMEOUT_MS,
+        }),
+    ),
     realtimeUrl: args.realtimeUrl,
     runtime: "node",
     websocket: args.websocket ?? createNodeWebsocketFactory(),
