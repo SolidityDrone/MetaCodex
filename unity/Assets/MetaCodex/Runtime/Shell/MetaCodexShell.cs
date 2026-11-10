@@ -196,6 +196,7 @@ namespace MetaCodex.Shell
                 shapeMaterial.SetFloat("_Opacity", Mathf.Clamp(Settings.panelOpacity, 0.3f, 1f));
                 shapeMaterial.SetFloat("_Motion", Mathf.Clamp(Settings.motion, 0f, 2f));
                 shapeMaterial.SetFloat("_Grid", Settings.grid ? 1f : 0f);
+                if (UiTheme.Current != null) shapeMaterial.SetVector("_Accent", UiTheme.Lin(UiTheme.Current.Accent)); // conduits, the cast's heat, the pointers' light
             }
             if (Sounds != null) { Sounds.Enabled = Settings.sounds; Sounds.Volume = Mathf.Clamp01(Settings.soundVolume); }
             ApplyDisplaySettings();

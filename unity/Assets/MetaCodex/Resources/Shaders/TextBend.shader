@@ -100,10 +100,8 @@ SubShader {
 		#include "UnityUI.cginc"
 		#include "Assets/TextMesh Pro/Shaders/TMPro_Properties.cginc"
 		#include "Assets/MetaCodex/Shaders/McxOcclusion.hlsl"
+		#include "Assets/MetaCodex/Shaders/McxPanelFx.hlsl" // _PanelBend, and the panel being cast (the scan line)
 
-		float4 _PanelBend[128];
-		// a panel opening or closing (UiPanel / UiPanelFx), all 0 at rest: x flash, y ghost, z texts hidden, w half height
-		float4 _PanelFx[128];
 		float _PanelIndex;
 		float4 _TextOffset;
 
@@ -132,7 +130,7 @@ SubShader {
 			half2	underlayParam	: TEXCOORD4;			// Scale(x), Bias(y)
 			#endif
 			float3	worldPos		: TEXCOORD5;			// after the bend: compared with real things in front
-			half4	panelFx			: TEXCOORD6;			// transition: how visible (0..1), flash, flicker seed, 1 = active
+			half4	panelFx			: TEXCOORD6;			// cast: how much of it is there (0..1), light added, flicker seed, 0 = at rest / 1 + heat
 		};
 
 		float _UIMaskSoftnessX;
@@ -153,20 +151,9 @@ SubShader {
 			float4 vert = input.vertex;
 			vert.x += _VertexOffsetX;
 			vert.y += _VertexOffsetY;
-			// a panel being built: its texts come in from the top down, line by line, each with a short glitch sideways
-			float4 pfx = _PanelIndex >= 0.0 ? _PanelFx[(int)_PanelIndex] : float4(0, 0, 0, 0);
+			float4 pfx = McxPanelFx(_PanelIndex);
 			output.panelFx = half4(1, 0, 0, 0);
-			if (pfx.z > 0.0005 || pfx.x > 0.0005)
-			{
-				float y = vert.y + _TextOffset.y;                                     // panel-local height
-				float top = saturate(0.5 - y / (2.0 * max(pfx.w, 1e-3)));             // 0 at the top .. 1 at the bottom
-				float vis = saturate((1.0 - pfx.z) * 1.6 - top * 0.6);
-				float lineId = floor(y / 0.011) + floor(_TextOffset.x * 97.0);
-				float seed = McxHash(lineId * 1.37 + 0.5);
-				float jitter = (McxHash(lineId + floor(fmod(_Time.y, 600.0) * 30.0) * 7.1) - 0.5) * 0.007 * (1.0 - vis) * step(0.02, vis);
-				vert.x += jitter;
-				output.panelFx = half4(vis, saturate(pfx.x), seed, 1);
-			}
+			float lineY = vert.y + _TextOffset.y;                                     // panel-local height
 			float br = _PanelIndex >= 0.0 ? _PanelBend[(int)_PanelIndex].x : 0.0;
 			if (br > 0.01)
 			{
@@ -177,6 +164,14 @@ SubShader {
 			}
 			float4 vPosition = UnityObjectToClipPos(vert);
 			output.worldPos = mul(unity_ObjectToWorld, float4(vert.xyz, 1.0)).xyz;
+			// its panel being cast: a text is there once the scan line has passed it, hot and flickering for a moment
+			if (pfx.x > 0.5 || pfx.y > 0.0005 || pfx.z > 0.0005)
+			{
+				float bd = McxBehindScan(_PanelIndex, output.worldPos);
+				float heat = McxHeat(bd - 0.004);
+				float lineId = floor(lineY / 0.011) + floor(_TextOffset.x * 97.0);
+				output.panelFx = half4(McxBuilt(bd - 0.004) * (1.0 - saturate(pfx.z)), saturate(pfx.y) + heat * 1.2, McxHash(lineId * 1.37 + 0.5), 1.0 + heat);
+			}
 
 			float2 pixelSize = vPosition.w;
 			pixelSize /= float2(_ScaleX, _ScaleY) * abs(mul((float2x2)UNITY_MATRIX_P, _ScreenParams.xy));
@@ -276,13 +271,14 @@ SubShader {
 			c *= input.texcoord1.z;
 			#endif
 
-			// opening / closing: flickers in (a line is on, off, on, then stays), brighter in the panel's flash
+			// its panel being cast: just behind the scan line a line of text flickers (on, off, on, then stays) and runs
+			// bright; brighter in the panel's flash
 			if (input.panelFx.w > 0.5)
 			{
-				half vis = input.panelFx.x;
+				half heat = input.panelFx.w - 1.0;
 				half n = (half)McxHash(floor(fmod(_Time.y, 600.0) * 26.0) + input.panelFx.z * 131.0); // wrapped: a hash of a huge number is not random on a phone GPU
-				half on = vis >= 0.995 ? 1.0 : step(n, vis * 1.25);
-				c *= vis * lerp(on, 1.0, vis * vis);
+				half on = heat > 0.3 ? step(n, 1.3 - heat) : 1.0;
+				c *= input.panelFx.x * lerp(1.0, on, 0.65);
 				c.rgb += c.a * input.panelFx.y * 0.55;
 			}
 

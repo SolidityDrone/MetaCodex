@@ -52,13 +52,13 @@ namespace MetaCodex.UI
         private bool _closing, _presented, _activating, _destroyWhenClosed;
         private Vector3 _baseScale = Vector3.one;
 
-        /// The panel's size (the UI scale setting). Set this, not transform.localScale: the open animation scales from it, so
-        /// a scale written straight to the transform was undone by the next open (panels jumped between 1.0 and the UI
-        /// scale whenever one opened or a setting changed).
+        /// The panel's size (the UI scale setting). Set this, not transform.localScale: the panel puts its own scale back
+        /// when a transition ends or it is refreshed (a scale written straight to the transform was undone then: panels
+        /// jumped between 1.0 and the UI scale).
         public Vector3 BaseScale
         {
             get => _baseScale;
-            set { _baseScale = value; if (!Transitioning) transform.localScale = value; }
+            set { _baseScale = value; transform.localScale = value; } // at once, also while it is cast: a cast scales nothing
         }
 
         /// The panel's world scale when it is not opening or closing (layouts and placement use this, not the
@@ -379,16 +379,16 @@ namespace MetaCodex.UI
 
         protected virtual void OnDestroy()
         {
-            if (Slot >= 0 && Slots[Slot] == this) { Slots[Slot] = null; BendData[Slot] = Vector4.zero; FxData[Slot] = Vector4.zero; }
+            if (Slot >= 0 && Slots[Slot] == this) { Slots[Slot] = null; BendData[Slot] = Vector4.zero; FxData[Slot] = Vector4.zero; ScanData[Slot] = Vector4.zero; }
         }
 
         // ------------------------------------------------------------------ opening and closing
 
-        // A panel opens and closes with a transition (UiPanelFx: the timelines and the light of the frame): its
-        // transform is squashed from the rest scale (so everything in it, shapes, texts, images, a terminal, a 3D stage,
-        // moves together, nothing out of line), its shaders read what the transition does to its surfaces from one
-        // more global array, _PanelFx[slot] = (flash, ghost, text hidden, half height), all 0 at rest, and a light
-        // overlay draws the corner brackets, the ignition line and the final flare at the panel's real size.
+        // A panel is cast and taken back (UiPanelFx: the timelines and the light): a line of light crosses it, and
+        // everything in it, shapes, texts, icons, images, a terminal, a 3D stage, exists only behind that line. Nothing
+        // is moved or scaled: the shaders read the line as a plane from two more global arrays (McxPanelFx.hlsl),
+        // _PanelFx[slot] = (1 while cast, flash, all hidden, own brackets hidden) and _PanelScan[slot] = the plane, all
+        // 0 at rest, and a light overlay draws the flying brackets, the line, the caster's fan and the last spark.
         public enum Phase { Open, Opening, Closing }
         public Phase TransitionPhase { get; private set; } = Phase.Open;
         /// Progress of the current timeline 0..1 (Opening: 1 = open; Closing: 1 = gone).
@@ -397,11 +397,17 @@ namespace MetaCodex.UI
         /// Self-tests: animate in the Editor too (they step it with TickTransitionForTest).
         public static bool AnimateInEditor;
         private static readonly Vector4[] FxData = new Vector4[MaxSlots];
+        private static readonly Vector4[] ScanData = new Vector4[MaxSlots];
         private static readonly int FxArrayId = Shader.PropertyToID("_PanelFx");
+        private static readonly int ScanArrayId = Shader.PropertyToID("_PanelScan");
         private int _tDir = 1;
         private UiPanelFx _fx;
         private bool Animates => Application.isPlaying || AnimateInEditor;
-        private bool Light => Id == "toast" || Id == "voice-hud";
+        /// A small passing panel (a callout, the voice HUD, the orb's menu): the line crosses it quickly, no brackets fly.
+        public bool LightTransition { get; set; }
+        private bool Light => LightTransition || Id == "toast" || Id == "voice-hud";
+        /// The transition's light (made on first use): which way the scan line crosses, tests.
+        public UiPanelFx Fx => _fx != null ? _fx : _fx = UiPanelFx.Create(this);
 
         private void BeginTransition(Phase phase)
         {
@@ -409,7 +415,26 @@ namespace MetaCodex.UI
             TransitionPhase = phase;
             TransitionT = 0f;
             _tDir = 1;
+            Fx.Plan(this); // the line leaves from the caster's side, and comes back to it
+            TagForeign();
             ApplyTransition();
+            UiPanelFx.RaiseCasting(this, phase == Phase.Opening);
+        }
+
+        private readonly HashSet<Renderer> _tagged = new HashSet<Renderer>();
+
+        /// Everything drawn inside the panel that it did not make itself (a terminal's rows and background, a 3D stage)
+        /// gets the panel's slot, so its shader is cast with the panel (shaders that do not know the slot ignore it).
+        private void TagForeign()
+        {
+            if (Slot < 0) return;
+            _tagged.RemoveWhere(r => r == null);
+            foreach (var r in GetComponentsInChildren<Renderer>(true))
+            {
+                if (_tagged.Contains(r) || (_fx != null && r == _fx.Renderer)) continue;
+                if (r.GetComponentInParent<UiPanel>() != this) continue; // another panel's (a panel inside this one): it has its own slot
+                TagRenderer(r, transform.InverseTransformPoint(r.transform.position));
+            }
         }
 
         private float _pingT = 1f;
@@ -419,7 +444,9 @@ namespace MetaCodex.UI
         {
             if (!Animates || TransitionPhase != Phase.Open || !gameObject.activeSelf) return;
             _pingT = 0f;
+            Fx.Plan(this);
             StepPing(0f);
+            UiPanelFx.RaiseCasting(this, true); // the caster turns to it and lights it up
         }
 
         private void StepPing(float dt)
@@ -427,9 +454,8 @@ namespace MetaCodex.UI
             if (_pingT >= 1f) return;
             _pingT = Mathf.Min(1f, _pingT + dt / 0.42f);
             var tl = UiPanelFx.Ping(_pingT, Light);
-            if (Slot >= 0) FxData[Slot] = _pingT >= 1f ? Vector4.zero : new Vector4(tl.Flash, 0f, 0f, Height * 0.5f);
-            if (_fx == null) _fx = UiPanelFx.Create(this);
-            if (_pingT >= 1f) _fx.Hide(); else _fx.Draw(this, tl);
+            if (Slot >= 0) FxData[Slot] = _pingT >= 1f ? Vector4.zero : new Vector4(0f, tl.Flash, 0f, 0f);
+            if (_pingT >= 1f) Fx.Hide(); else Fx.Draw(this, tl);
         }
 
         private void StepTransition(float dt)
@@ -439,7 +465,7 @@ namespace MetaCodex.UI
             float dur = UiPanelFx.Duration(TransitionPhase == Phase.Opening, Light);
             TransitionT += _tDir * dt / dur;
             bool opening = TransitionPhase == Phase.Opening;
-            if (TransitionT >= 1f) { if (opening) EndOpen(); else FinishClosed(); return; }
+            if (TransitionT >= 1f) { if (opening) EndOpen(); else { UiPanelFx.RaiseAbsorbed(this); FinishClosed(); } return; }
             if (TransitionT <= 0f) { if (opening) FinishClosed(); else EndOpen(); return; }
             ApplyTransition();
         }
@@ -447,10 +473,12 @@ namespace MetaCodex.UI
         private void ApplyTransition()
         {
             var tl = UiPanelFx.Evaluate(TransitionPhase == Phase.Opening, TransitionT, Light);
-            transform.localScale = new Vector3(_baseScale.x * tl.Sx, _baseScale.y * tl.Sy, _baseScale.z);
-            if (Slot >= 0) FxData[Slot] = new Vector4(tl.Flash, tl.Ghost, tl.Hide, Height * 0.5f);
-            if (_fx == null) _fx = UiPanelFx.Create(this);
-            _fx.Draw(this, tl);
+            if (Slot >= 0)
+            {
+                FxData[Slot] = new Vector4(1f, tl.Flash, tl.Hide, tl.BracketsOwn);
+                ScanData[Slot] = Fx.ScanPlane(this, tl.Scan); // every frame: the panel may be moved while it is cast
+            }
+            Fx.Draw(this, tl);
         }
 
         private void EndOpen()
@@ -459,7 +487,7 @@ namespace MetaCodex.UI
             TransitionT = 1f;
             _tDir = 1;
             transform.localScale = _baseScale;
-            if (Slot >= 0) FxData[Slot] = Vector4.zero;
+            if (Slot >= 0) { FxData[Slot] = Vector4.zero; ScanData[Slot] = Vector4.zero; }
             if (_fx != null) _fx.Hide();
         }
 
@@ -485,12 +513,17 @@ namespace MetaCodex.UI
             if (TransitionPhase != Phase.Open) EndOpen();
         }
 
+        /// Self-tests: what the shaders get for this panel (all zero at rest).
+        public Vector4 FxDataForTest => Slot >= 0 ? FxData[Slot] : Vector4.zero;
+        public Vector4 ScanDataForTest => Slot >= 0 ? ScanData[Slot] : Vector4.zero;
+
         /// Self-tests: one step of the transition or ping (the Editor has no frame loop).
         public void TickTransitionForTest(float dt) { StepTransition(dt); }
 
         /// Self-tests: shows a moment of a timeline (pictures of the transition).
         public void PoseTransitionForTest(bool opening, float t)
         {
+            if (TransitionPhase == Phase.Open) { Fx.Plan(this); TagForeign(); }
             TransitionPhase = opening ? Phase.Opening : Phase.Closing;
             TransitionT = Mathf.Clamp01(t);
             ApplyTransition();
@@ -527,6 +560,7 @@ namespace MetaCodex.UI
         {
             Shader.SetGlobalVectorArray(BendArrayId, BendData);
             Shader.SetGlobalVectorArray(FxArrayId, FxData);
+            Shader.SetGlobalVectorArray(ScanArrayId, ScanData);
             _pushedFrame = Time.frameCount;
         }
 
@@ -535,6 +569,7 @@ namespace MetaCodex.UI
         public void TagRenderer(Renderer r, Vector3 offset)
         {
             if (r == null) return;
+            _tagged.Add(r);
             _mpb ??= new MaterialPropertyBlock();
             r.GetPropertyBlock(_mpb);
             _mpb.SetFloat(IndexId, Slot);
@@ -568,24 +603,25 @@ namespace MetaCodex.UI
         /// Captures: draws this panel flat for one render (every other panel keeps its bend), then as it was.
         public void RenderFlat(Action render)
         {
-            // at rest for the render too: no squash, no transition light (a capture during a transition is whole)
-            var keepScale = transform.localScale;
-            transform.localScale = _baseScale;
-            if (Slot < 0) { try { render(); } finally { transform.localScale = keepScale; } return; }
+            // at rest for the render too: whole, no transition light (a capture while the panel is being cast is whole)
+            if (Slot < 0) { render(); return; }
             var keep = BendData[Slot];
             var keepFx = FxData[Slot];
+            var keepScan = ScanData[Slot];
+            bool light = _fx != null && _fx.Renderer != null && _fx.Renderer.enabled;
+            if (light) _fx.Renderer.enabled = false;
             BendData[Slot] = Vector4.zero;
             FxData[Slot] = Vector4.zero;
-            Shader.SetGlobalVectorArray(BendArrayId, BendData);
-            Shader.SetGlobalVectorArray(FxArrayId, FxData);
+            ScanData[Slot] = Vector4.zero;
+            PushBendGlobals();
             try { render(); }
             finally
             {
                 BendData[Slot] = keep;
                 FxData[Slot] = keepFx;
-                Shader.SetGlobalVectorArray(BendArrayId, BendData);
-                Shader.SetGlobalVectorArray(FxArrayId, FxData);
-                transform.localScale = keepScale;
+                ScanData[Slot] = keepScan;
+                PushBendGlobals();
+                if (light) _fx.Renderer.enabled = true;
             }
         }
 

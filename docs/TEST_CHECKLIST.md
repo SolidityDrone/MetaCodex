@@ -301,3 +301,18 @@ Voice:
 - [ ] Frame rate: open three windows at once and close them: no drop below 72 fps (Perf menu Snapshot)
 - [ ] Ambient Focus on (FOCUS preset): outside the dome deep blue-black space, a slow nebula, a few twinkling stars, a faint grid on the floor and walls just past the edge, a ring of light where the dome meets the floor; BLACKOUT: space around you, the windows stay; with BLUR 50 %: the blurred room with the grid and the ring
 - [ ] Ambient Focus while turning the head and walking: the nebula and stars stay with the room (no swimming), no flicker of the grid at the walls' edges
+
+## 20. Cast windows and the new look (owner 2026-11-10)
+
+Section 19's transition lines (the spark, the collapse into a line) are replaced by the cast below.
+
+- [ ] Open a window (wrist menu, dock or voice): brackets lock on where it will be with a faint outline, a warm-white line sweeps across and the window is built behind it (a glowing honeycomb whose cells close and cool into glass, then buttons and text, hot for a moment); it ends exactly at rest, no pop
+- [ ] Close it: the line runs back and takes the window with it, the brackets let go. Open and close quickly: it reverses from where it is, never jumps
+- [ ] A terminal (TERM) is built with its frame: its text and background appear behind the line, nothing shows before it
+- [ ] FILES then FILES again while it is open: it pings (a flash, the brackets close in round it), it is not cast again
+- [ ] The glass: move your head sideways in front of a window: the hexagon lattice shifts behind the surface (it is inside the glass), a second grid of points deeper; a soft sheen crosses the glass
+- [ ] Bring a fingertip slowly towards a window: a pool of light forms on the lattice under it and tightens as you come closer; the ray's cursor carries a light too
+- [ ] Lists (MQH > GESTURES, FILES, THREADS): quiet rows; the chosen row floods with cyan from the left; hovered rows and buttons show a light crossing them
+- [ ] Headers: a bright block before the title, the line under it steps up two thirds along, a pulse runs in it; a ruler down the left edge of large windows; a thin conduit along the bottom right with a pulse
+- [ ] Small cards (messages, the voice HUD) have no corner brackets; windows and dialogs do
+- [ ] Frame rate with five windows open: 72 fps (Perf menu Snapshot); the same while a window is cast

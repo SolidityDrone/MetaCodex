@@ -24,11 +24,10 @@ Shader "MetaCodex/UiIcon"
             #pragma multi_compile_instancing
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Assets/MetaCodex/Shaders/McxOcclusion.hlsl"
+            #include "Assets/MetaCodex/Shaders/McxPanelFx.hlsl" // _PanelBend, and the panel being cast (the scan line)
 
             TEXTURE2D(_MainTex);
             SAMPLER(sampler_MainTex);
-            float4 _PanelBend[128];
-            float4 _PanelFx[128]; // a panel opening or closing (UiPanelFx): x flash, y ghost, z hidden, w half height
             CBUFFER_START(UnityPerMaterial)
                 float4 _MainTex_ST;
                 float _PanelIndex;
@@ -49,10 +48,10 @@ Shader "MetaCodex/UiIcon"
                 o.positionCS = TransformWorldToHClip(o.positionWS);
                 o.color = v.color;
                 o.uv = v.uv;
-                // opening / closing: icons come with their part of the panel (from the top down), brighter in the flash
-                float4 pfx = _PanelIndex >= 0.0 ? _PanelFx[(int)_PanelIndex] : float4(0, 0, 0, 0);
-                float top = saturate(0.5 - v.positionOS.y / (2.0 * max(pfx.w, 1e-3)));
-                o.fx = pfx.z > 0.0005 || pfx.x > 0.0005 ? half2(saturate((1.0 - pfx.z) * 1.6 - top * 0.6), pfx.x) : half2(1, 0);
+                // its panel being cast: an icon is there once the scan line has passed it, bright for a moment
+                float4 pfx = McxPanelFx(_PanelIndex);
+                float bd = McxBehindScan(_PanelIndex, o.positionWS);
+                o.fx = half2(McxBuilt(bd) * (1.0 - saturate(pfx.z)), saturate(pfx.y) + McxHeat(bd));
                 return o;
             }
 

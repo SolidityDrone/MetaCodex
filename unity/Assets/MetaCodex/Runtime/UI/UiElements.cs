@@ -565,7 +565,8 @@ namespace MetaCodex.UI
             for (int i = 0; i < VisibleRows; i++)
             {
                 var r = RowRect(i);
-                int shape = Panel.Shapes.Add(Panel.Shape(UiShapeKind.Button, r, Theme.AccentSoft, 0.004f, 0.001f, 0.003f));
+                // fill style 3: a list row (quiet glass, a notch, the accent floods in when chosen)
+                int shape = Panel.Shapes.Add(Panel.Shape(UiShapeKind.Button, r, Theme.AccentSoft, 0.004f, 3f, 0.005f));
                 var icon = UiText.Create(Panel, new Rect(r.x + 0.006f, r.y, 0.024f, r.height), "", Theme.Body, Theme.BodySize, Theme.TextAccent, TextAlignmentOptions.Center);
                 var title = UiText.Create(Panel, new Rect(r.x + 0.032f, r.y, r.width * 0.62f, r.height), "", Monospace ? Theme.Mono : Theme.Body,
                     Monospace ? Theme.SmallSize * 1.1f : Theme.BodySize, Theme.Text);

@@ -11,9 +11,14 @@
 //   2 glow    uv0.x across 0..1, uv0.y along 0..1 (bright at 1): the radar sweep
 //   3 icon    uv0 in the icon's quad 0..1; x = glow, y = reveal 0..1 (a scan line draws it upwards);
 //             extra = the icon's rectangle in the atlas (offset xy, size zw)
-//   4 beam    uv0.x across 0..1, uv0.y along 0..1 (0 at the wrist); x = 0 a ray, 1 the cone between them
+//   4 beam    uv0.x across 0..1, uv0.y along 0..1 (0 at the wrist); x = 0 a ray, 1 the cone between them; y = 1 a
+//             plain ray (no pulses running in it: the spark of a closed panel flying home)
 //   5 face    uv0 -1..1 over the core's quad; y = the seconds hand 0..1 (clockwise from 12);
 //             extra = (outline drawn 0..1, glass 0..1, outer ring traced 0..1, ticks drawn 0..1)
+//   6 fan     a triangle of light from a caster (the orb) to a panel's scan line (UiPanelFx): uv0 = (0,0) at the
+//             caster, (1,0) and (0,1) at its two ends on the line; x, y = where those ends are across the whole fan 0..1
+//   7 scan    the scan line that casts a panel: uv0.x across the quad 0..1, uv0.y along the line 0..1; x = core
+//             width m, y = quad width m; extra.x = how many beads of light run along it
 // state 0..1 brightens it (hover, lit, a press). Everything fades with the UI while the Horizon OS menu is open.
 Shader "MetaCodex/WristArt"
 {
@@ -179,11 +184,38 @@ Shader "MetaCodex/WristArt"
                     float d = abs(i.uv.x - 0.5) * 2.0;
                     float core = exp(-d * d * 7.0);
                     float travel = frac(i.uv.y * 1.6 - _Time.y * 2.2);
-                    float pulse = smoothstep(0.70, 0.97, travel) * (1.0 - smoothstep(0.97, 1.0, travel));
+                    float pulse = smoothstep(0.70, 0.97, travel) * (1.0 - smoothstep(0.97, 1.0, travel)) * (1.0 - saturate(i.info.y));
                     return half4(c * s * core * (0.25 + 0.75 * i.uv.y) * (0.65 + 1.2 * pulse), 0.0);
                 }
                 float side = 1.0 - abs(i.uv.x - 0.5) * 2.0;
                 return half4(c * s * 0.085 * i.uv.y * i.uv.y * (0.6 + 0.4 * side), 0.0);
+            }
+
+            // the caster's fan: faint shafts of light, brighter towards the line it draws and along its two edges
+            half4 Fan(Varyings i, half3 c, half s)
+            {
+                float along = saturate(i.uv.x + i.uv.y);                           // 0 at the caster .. 1 at the line
+                float across = lerp(i.info.x, i.info.y, i.uv.y / max(i.uv.x + i.uv.y, 1e-4));
+                float tt = fmod(_Time.y, 600.0);
+                float shafts = 0.80 + 0.20 * sin(across * 23.0 + tt * 2.1) * sin(across * 57.0 - tt * 1.4);
+                float edge = exp(-min(across, 1.0 - across) * 26.0);
+                // faint: what it draws must stay readable through it; nothing at the caster itself, most at the line
+                float g = (0.010 + 0.040 * along * along) * shafts * smoothstep(0.0, 0.25, along) + edge * 0.035 * along;
+                return half4(c * s * g, 0.0);
+            }
+
+            // the scan line: a hot core, a glow on both sides, beads of light running along it
+            half4 Scan(Varyings i, half3 c, half s)
+            {
+                float dist = abs(i.uv.x - 0.5) * i.info.y;                         // metres from the line
+                float aa = max(fwidth(dist), 1e-6);
+                float core = saturate((i.info.x * 0.5 - dist) / aa + 0.5);
+                float glow = exp(-dist / 0.0040) * 0.55 + exp(-dist / 0.020) * 0.13;
+                float beads = pow(0.5 + 0.5 * sin(i.uv.y * i.extra.x * 6.2831853 - fmod(_Time.y, 600.0) * 9.0), 8.0);
+                float ends = smoothstep(0.0, 0.03, i.uv.y) * smoothstep(1.0, 0.97, i.uv.y);
+                half3 white = half3(1.0, 1.0, 1.0);
+                half3 rgb = (lerp(c, white, 0.5) * core * (1.0 + 0.8 * beads) + c * glow * (1.0 + 0.5 * beads)) * s * ends;
+                return half4(rgb, s * core * ends * 0.25);
             }
 
             half4 Face(Varyings i, half3 c, half s, float state)
@@ -242,6 +274,8 @@ Shader "MetaCodex/WristArt"
                 else if (kind == 2) o = Sweep(i, c, s);
                 else if (kind == 3) o = IconFrag(i, c, s, state);
                 else if (kind == 4) o = Beam(i, c, s);
+                else if (kind == 6) o = Fan(i, c, s);
+                else if (kind == 7) o = Scan(i, c, s);
                 else o = Face(i, c, s, state);
                 return o * shown;
             }

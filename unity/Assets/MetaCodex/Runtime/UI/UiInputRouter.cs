@@ -58,6 +58,9 @@ namespace MetaCodex.UI
         private readonly LineRenderer[] _beams = new LineRenderer[2];
         private readonly UiShapeMesh[] _reticles = new UiShapeMesh[3];
         private readonly Dictionary<UiPanel, int> _selectShape = new Dictionary<UiPanel, int>();
+        // the hands' light on the panels' glass (MetaCodex/SciFiUI): a fingertip, or a point just in front of a ray's cursor
+        private static readonly int PointersId = Shader.PropertyToID("_McxPointers");
+        private readonly Vector4[] _pointerLights = new Vector4[2];
 
         public void Init()
         {
@@ -435,6 +438,48 @@ namespace MetaCodex.UI
             }
             var poke = _hand[2].Active && _hand[2].HasHit ? _hand[2] : _hand[3];
             SetReticle(2, poke.Active && poke.HasHit, poke, poke.Down ? 1f : 0.35f, theme.Ok);
+            PushPointerLights(Time.unscaledDeltaTime);
+        }
+
+        /// The light each hand casts on the glass of the panels: its fingertip while it is within 14 cm of one (the
+        /// pool tightens as it comes closer), else the cursor of its ray. Eased, so it never pops.
+        public void PushPointerLights(float dt)
+        {
+            for (int h = 0; h < 2; h++)
+            {
+                Vector3 at = _pointerLights[h];
+                float want = 0f;
+                var poke = _hand[2 + h];
+                var ray = _hand[h];
+                if (poke != null && poke.Active && PokeProximity(poke.Tip, out float gap)) { at = poke.Tip; want = Mathf.Clamp01(1f - gap / 0.14f); }
+                else if (ray != null && ray.Active && ray.HasHit) { at = ray.HitPoint - ray.Ray.direction * 0.015f; want = ray.Down ? 1f : 0.7f; }
+                float now = Mathf.Lerp(_pointerLights[h].w, want, dt <= 0f ? 1f : 1f - Mathf.Exp(-dt * 14f));
+                if (now < 0.004f && want <= 0f) now = 0f;
+                _pointerLights[h] = new Vector4(at.x, at.y, at.z, now);
+            }
+            Shader.SetGlobalVectorArray(PointersId, _pointerLights);
+        }
+
+        /// Self-tests: a light at a place in the world (strength 0 turns it off).
+        public void SetPointerLightForTest(int hand, Vector3 at, float strength)
+        {
+            _pointerLights[hand] = new Vector4(at.x, at.y, at.z, strength);
+            Shader.SetGlobalVectorArray(PointersId, _pointerLights);
+        }
+
+        /// How far a fingertip is from the nearest open panel under it (within 14 cm in front, 3 cm behind).
+        private bool PokeProximity(Vector3 tip, out float gap)
+        {
+            gap = float.MaxValue;
+            foreach (var p in Panels)
+            {
+                if (p == null || !p.IsOpen) continue;
+                p.SurfaceOf(tip, out var pt, out float depth);
+                if (pt.x < -0.03f || pt.y < -0.03f || pt.x > p.Width + 0.03f || pt.y > p.Height + 0.03f) continue;
+                if (depth < -0.14f || depth > 0.03f) continue;
+                gap = Mathf.Min(gap, Mathf.Abs(depth));
+            }
+            return gap < float.MaxValue;
         }
 
         private void SetReticle(int slot, bool visible, UiPointer p, float state, Color tint)

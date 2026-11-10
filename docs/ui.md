@@ -12,11 +12,22 @@ Test list for the headset: `docs/TEST_CHECKLIST.md`.
 ## Style
 
 A real-time-strategy command console (owner: "keep the StarCraft 2 style, make it much better"; the design is
-our own, no game assets): dark navy glass with a faint hex lattice and fine scanlines, chamfered corners (a
-big cut top-left and bottom-right, small ones elsewhere), a steel frame lit from above with corner brackets,
-a header energy bar with a hatched edge, command-card buttons with a lit rim and a sweep on focus, segmented
-energy bars for progress and sliders, cyan accent (#35D0FF) with amber / red / green for warning, danger and
-ok. Titles and buttons use Rajdhani SemiBold in capitals with letter spacing (the console voice), body text
+our own, no game assets): thick dark navy glass, chamfered corners (a big cut top-left and bottom-right, small
+ones elsewhere), a steel frame lit from above with corner brackets, a stepped header energy bar with a lead
+block before the title, a pulse running in it and a hatched edge, command-card buttons with a bevel, accent
+ticks at their cuts and a sheen crossing them while hovered, quiet list rows (glass, a notch, a hair line) that
+the accent floods into when chosen, segmented energy bars for progress and sliders, cyan accent (#35D0FF) with
+amber / red / green for warning, danger and ok; the light that casts a window is a warm white.
+
+**The glass has depth** (owner 2026-11-10: "much better aesthetics"). A hexagon lattice lies 12 mm behind the
+surface and a grid of points 30 mm behind it: each is drawn where the eye's own ray meets that depth (the
+vertex shader gives the view direction in the panel's frame, bent or flat), so they shift against the frame as
+the head moves and each eye sees its own shift: real stereo depth for the price of two offsets. A sheen crosses
+the glass with the head. A ruler runs down the left edge (a tick every 10 mm), a conduit of energy along the
+bottom from the right cut with a pulse in it. **Your hands light it**: a fingertip within 14 cm of a window, or
+the cursor of a hand's ray, is a point of light on the lattice and the frame (`_McxPointers`, set by the router
+every frame); the pool tightens as the finger comes closer, so it also shows how far the glass still is. Lattice
+lines fade out with distance before they get thinner than a pixel (no shimmer). Titles and buttons use Rajdhani SemiBold in capitals with letter spacing (the console voice), body text
 Inter, code DejaVu Sans Mono. All OFL / free licences. Short UI sounds are synthesised in code.
 
 Everything is drawn by one shader, `MetaCodex/SciFiUI`: each panel, button, header, bar, line, dot and
@@ -37,35 +48,47 @@ carries its slot, so text that changes every frame bends with the panel and neve
 curvature eases in and out (about 0.3 s) instead of jumping. Rays and pokes hit the curved surface (ray-
 cylinder intersection), so the reticle sits where the beam meets the window.
 
-**Opening and closing** (owner 2026-11-09: "very cool spawning and disappearing transitions"; `UiPanelFx`). A
-window comes online like a console screen: a spark at its centre runs out into a line of light as wide as the window,
-four corner brackets lock on from outside, the line splits into two scan lines that ride the edges as the window
-unfolds (a slight overshoot), the glass materialises from a lattice of light (the front of the building runs hot,
-from the top down), controls and icons come in as their part is built, texts flicker in line by line with a short
-glitch sideways, and a last pulse settles it; the brackets end on the frame's own corner brackets (the outline offset
-4 mm, drawn by `SciFiUI` at rest). Closing: a surge, the window collapses into a bright line like an old screen
-powering off, the line shrinks to a point, a flare, gone; the brackets let go. 0.52 s in, 0.34 s out; toasts and the
-voice HUD use a lighter, quicker version without brackets; an open window asked to open again pings (a flash and the
-brackets closing in round it). Both play back from where they are when the user changes their mind. For the rest of
-the app a window is closed the moment `Close()` is called (`IsOpen` false, `Closed` raised) and open the moment
-`Open()` is; it is turned off when its closing ends (dialogs and toasts are destroyed then). How it is drawn: the
-window's transform carries the squash (everything in it moves together: shapes, texts, icons, images, a terminal, a
-3D stage), its shaders read the light from one more global table (`_PanelFx[slot]` = flash, ghost, texts hidden,
-half height, all 0 at rest), and a small overlay (the brackets, the lines, the flare; `MetaCodex/WristArt` lines over
-the panels) is counter-scaled so it stays at the window's real size and bends with it. Layouts and placement use the
-rest scale (`RestLossyScale`), never the squashed one; captures render a window at rest.
+**Opening and closing: a window is cast** (owner 2026-11-10; `UiPanelFx`, `McxPanelFx.hlsl`). It is drawn with
+light, like a hologram being printed, by its caster (`UiPanelFx.Caster`: the orb, when there is one). Opening
+(0.64 s): four corner brackets fly in and lock on where the window will be, with a faint outline of it; a fan of
+light opens from the caster to the edge nearest to it; a hot
+warm-white line, beads of light running in it, sweeps across between the brackets with the fan on it. Behind
+the line the window exists: first a glowing hexagon lattice whose cells close from their rims inwards and cool
+into glass, the frame, then the controls and icons coming online hot, the texts flickering for a moment; before
+the line nothing is there yet. The line runs on 16 cm past the far edge, so everything has cooled when it
+stops, a last pulse goes through the lattice and the frame, and the final frames are the window at rest (the
+flying brackets hand over to the frame's own, same shape and light). Closing (0.44 s): a surge, the line runs
+back and takes the window with it, the brackets let go, and a spark of what is left flies home to the caster. An
+open window asked to open again pings: the caster lights it up, its frame flashes, the brackets close in round it
+once. Small passing panels (messages, the voice HUD) use a quick variant (0.30 s in, 0.22 s out, no brackets). Both directions play back from where they are when the user changes their mind. For
+the rest of the app a window is closed the moment `Close()` is called (`IsOpen` false, `Closed` raised) and
+open the moment `Open()` is; it is turned off when its closing ends (dialogs and messages are destroyed then).
+
+How it is drawn: nothing is moved or scaled. The scan line is one plane in world space per window
+(`_PanelScan[slot]`, with `_PanelFx[slot]` = cast on, flash, all hidden, own brackets hidden; all zero at rest),
+and every shader that draws inside a window asks how far behind that plane its pixel is: `SciFiUI` (the body
+builds its lattice and glass, cell by cell; controls fade in 12 mm behind the line), `TextBend`, `UiIcon`,
+`ViewImage`, and the opaque ones, `PanelUnlit` (a terminal's background) and `StageLit` (a 3D stage), which
+clip what the line has not reached. Renderers a window did not make itself (a terminal's rows, a stage) get its
+slot when a cast starts (`TagForeign`). The line leaves from the caster's side (`UiPanelFx.Plan`: left, right,
+top or bottom, whichever edge is nearest to it) and comes back to it; without a caster it crosses from the left. A
+small overlay mesh in the window's own space draws the light itself with `MetaCodex/WristArt` (the flying
+brackets, the scan line, the fan and its two rays, the spark), bent like the window; on a bent window a
+horizontal line is an arc and the fan follows it. Captures render a window at rest. Sounds follow: two ticks as
+the brackets lock on, a rising sweep with a shimmer, a low thump and a clear note; a falling sweep, a quick
+rise as the spark flies home.
 
 ## Code map (`unity/Assets/MetaCodex/Runtime`)
 
 | Folder | What |
 |---|---|
-| `UI/` | `UiTheme` (colours, sizes, fonts), `UiShapeMesh` (batched shapes, rotated strokes), `UiPanel` (frame, header, opening / closing transitions, drag, GPU bend and transition slots, curved ray hits), `UiPanelFx` (the transitions' timelines and light), `UiIconMesh` (tool logos atlas, batched icons), widgets (`UiButton`, `UiToggle`, `UiSegmented`, `UiSlider`, `UiTextField`, `UiList`, `UiTabs`, `UiProgress`, `UiDivider`), `UiViz` (canvases drawn from pooled shapes: `UiChart`, `UiFlow`, `UiSequence`, `UiTable`, `UiCodeView`, `UiRing`, `UiChangeMap`, `UiToolGrid`, `UiStorageBar`; the series palette), `UiMermaid` (flowchart / sequence / pie subset), `UiKeyboard` (Horizon OS system keyboard), `UiInputRouter` (pointers, beams, reticles, selection), `UiToasts`, `UiModal`, `UiSounds` |
+| `UI/` | `UiTheme` (colours, sizes, fonts), `UiShapeMesh` (batched shapes, rotated strokes), `UiPanel` (frame, header, the cast, drag, GPU bend and cast slots, curved ray hits), `UiPanelFx` (the cast's timelines, its scan plane and its light), `UiIconMesh` (tool logos atlas, batched icons), widgets (`UiButton`, `UiToggle`, `UiSegmented`, `UiSlider`, `UiTextField`, `UiList`, `UiTabs`, `UiProgress`, `UiDivider`), `UiViz` (canvases drawn from pooled shapes: `UiChart`, `UiFlow`, `UiSequence`, `UiTable`, `UiCodeView`, `UiRing`, `UiChangeMap`, `UiToolGrid`, `UiStorageBar`; the series palette), `UiMermaid` (flowchart / sequence / pie subset), `UiKeyboard` (Horizon OS system keyboard), `UiInputRouter` (pointers, beams, reticles, selection), `UiToasts`, `UiModal`, `UiSounds` |
 | `Hands/` | `GestureEngine` (built-ins, pose templates, custom gestures with hold/cooldown, head-relative directions), `PoseSpec`, `OvrHandSource` (OVRHand/OVRSkeleton), `SimulatedHands` (any pose, for tests) |
 | `Scripting/` | `ScriptHost`: Lua (MoonSharp) scripts and plugin folders, hot reload, sandbox, instruction budget, detectors as persistent coroutines, persisted state; `PoseJson` |
 | `Security/` | `SecretVault` (Android Keystore sealer, Editor dev sealer, policies, access log) |
 | `AI/` | `QvacHost` (starts the local AI service process, token, restarts), `QvacClient` (HTTP), `VoiceRecorder` (microphone, end of speech), `VoiceCommands` (registry, phrase templates, tool specs) |
 | `Shell/` | `MetaCodexShell` (wiring, panels by id and aliases, control-port commands), `ShellPanels` (dock, terminals, files, git logic, browser, scripts, settings, saved layouts), `ShellGestures` (Gestures studio, bindings, actions, recording, starter plugins), `ShellAgents` (agents, threads grouped by project, thread with composer chips and fork, new thread, terminal links), `ShellWorkspace` (the thread's linked workspace module, the picker), `ShellViews` + `ViewStage` (agent views, the physics stage), `ShellVault` (vault: secrets and GIT with the GitHub account; secret broker), `ShellVoice` (voice pipeline, shell commands, VOICE panel, HUD), `ShellAmbient` (Ambient Focus), `ShellSystem` (installed tools, storage), `ShellLayout` (fixed / float carousel, the thread + workspace pair), `Services` (system deep links, settings, MQH client, git, files) |
-| `../Resources/Shaders/` | `AmbientFocus` (the dome: depth, floor plane, blur), `FocusMesh` (hand cut-outs), `FocusDepthCopy` (floor readback), `TextBend` (TMP SDF + bend), `UiIcon` (logos + bend), `StageLit` (physics bodies), `ViewImage` (images in views): in Resources so they ship without material assets |
+| `../Resources/Shaders/` | `AmbientFocus` (the dome: depth, floor plane, blur), `FocusMesh` (hand cut-outs), `FocusDepthCopy` (floor readback), `TextBend` (TMP SDF + bend), `UiIcon` (logos + bend), `StageLit` (physics bodies), `ViewImage` (images in views), `WristArt` (the wrist menu and the cast's light): in Resources so they ship without material assets; `../Shaders/McxPanelFx.hlsl` (the cast's scan plane, shared by every shader that draws inside a window) |
 | `../Resources/ToolIcons/` | tool logos (Simple Icons, CC0 SVG data; each logo is its owner's trademark, shown only to name the tool), built by `tools/make-tool-icons.js` |
 | `../Plugins/Android/MetaCodexVault.java` | the Keystore bridge (AES-256-GCM, StrongBox or TEE) |
 

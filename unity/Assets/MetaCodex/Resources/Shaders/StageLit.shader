@@ -5,6 +5,7 @@ Shader "MetaCodex/StageLit"
     Properties
     {
         _Color ("Color", Color) = (0.36, 0.6, 1, 1)
+        _PanelIndex ("Panel slot (set per renderer)", Float) = -1
     }
     SubShader
     {
@@ -19,9 +20,11 @@ Shader "MetaCodex/StageLit"
             #pragma multi_compile_instancing
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Assets/MetaCodex/Shaders/McxOcclusion.hlsl"
+            #include "Assets/MetaCodex/Shaders/McxPanelFx.hlsl" // its panel being cast (the scan line)
 
             CBUFFER_START(UnityPerMaterial)
                 half4 _Color;
+                float _PanelIndex;
             CBUFFER_END
 
             struct Attributes { float4 positionOS : POSITION; float3 normalOS : NORMAL; UNITY_VERTEX_INPUT_INSTANCE_ID };
@@ -40,6 +43,9 @@ Shader "MetaCodex/StageLit"
 
             half4 frag(Varyings i) : SV_Target
             {
+                // its panel being cast: a body exists only behind the scan line
+                float bd = McxBehindScan(_PanelIndex, i.positionWS);
+                clip(min(bd - 0.012, 0.5 - McxPanelFx(_PanelIndex).z));
                 float3 n = normalize(i.normalWS);
                 float3 l = normalize(float3(0.3, 1.0, -0.45));
                 float3 v = normalize(GetCameraPositionWS() - i.positionWS);
@@ -48,7 +54,7 @@ Shader "MetaCodex/StageLit"
                 float spec = pow(saturate(dot(n, normalize(l + v))), 40.0) * 0.35;
                 UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
                 half vis = (half)McxVisibility(i.positionWS); // opaque: alpha 0 where something real is in front
-                return half4((_Color.rgb * diffuse + rim + spec) * vis, vis);
+                return half4((_Color.rgb * diffuse + rim + spec + half3(0.04, 0.63, 1.0) * (half)(McxHeat(bd) * 0.6)) * vis, vis);
             }
             ENDHLSL
         }

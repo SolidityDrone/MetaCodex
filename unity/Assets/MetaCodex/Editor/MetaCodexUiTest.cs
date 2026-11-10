@@ -51,6 +51,9 @@ namespace MetaCodex.EditorTools
 
         private static bool Want(string section)
         {
+            // what the section before left behind goes first: on this machine a run has a few hundred MB to spare
+            GC.Collect();
+            EditorUtility.UnloadUnusedAssetsImmediate();
             Progress("before " + section);
             string only = Environment.GetEnvironmentVariable("MCX_UITEST_ONLY");
             if (string.IsNullOrWhiteSpace(only) && File.Exists(Path.Combine("Bench", "uitest-only"))) only = File.ReadAllText(Path.Combine("Bench", "uitest-only")).Trim();
@@ -70,6 +73,8 @@ namespace MetaCodex.EditorTools
         {
             _report = new StringBuilder();
             _ok = true;
+            _progress = null;
+            Progress("start");
             string dir = MetaCodexSetup.ReportDir;
             Directory.CreateDirectory(dir);
             SystemBridge.DryRun = true;
@@ -78,12 +83,13 @@ namespace MetaCodex.EditorTools
             Directory.CreateDirectory(tmp);
             string scripts = Path.Combine(tmp, "scripts");
 
-            foreach (var shaderName in new[] { "MetaCodex/SciFiUI", "MetaCodex/Beam" })
+            foreach (var shaderName in new[] { "MetaCodex/SciFiUI", "MetaCodex/Beam", "MetaCodex/PanelUnlit", "MetaCodex/TextBend", "MetaCodex/UiIcon", "MetaCodex/ViewImage", "MetaCodex/WristArt", "MetaCodex/StageLit" })
             {
                 var sh = Shader.Find(shaderName);
                 if (sh == null) { Fail("shader missing: " + shaderName); continue; }
-                int errors = ShaderUtil.GetShaderMessages(sh).Count(m => m.severity == UnityEditor.Rendering.ShaderCompilerMessageSeverity.Error);
-                Check(errors == 0, $"shader {shaderName} compiles ({errors} errors)");
+                var msgs = ShaderUtil.GetShaderMessages(sh).Where(m => m.severity == UnityEditor.Rendering.ShaderCompilerMessageSeverity.Error).ToList();
+                int errors = msgs.Count;
+                Check(errors == 0, $"shader {shaderName} compiles ({errors} errors)" + (errors > 0 ? ": " + string.Join(" | ", msgs.Take(3).Select(m => $"{m.message} (line {m.line})")) : ""));
             }
 
             var root = new GameObject("MetaCodexUiTest") { hideFlags = HideFlags.DontSave };
@@ -121,7 +127,9 @@ namespace MetaCodex.EditorTools
                     Path.Combine(tmp, "settings.json"));
                 shell.HeadOverride = head;
                 var hands = new SimulatedHands();
+                Progress("before the shell is built");
                 shell.Build(scripts, hands);
+                Progress("shell built");
                 UiTheme.Current.Mono = view.Font;
                 var frame = shell.WrapForTest(new TerminalInstance { Number = 1, Terminal = term, View = view });
                 view.Render();
@@ -156,6 +164,7 @@ namespace MetaCodex.EditorTools
                 if (Want("qol")) Qol(shell, head, hands);
                 if (Want("wrist")) Wrist(shell, head, hands);
                 if (Want("transitions")) Transitions(shell, head);
+                if (Want("look")) Look(shell, head);
                 if (Want("mqh")) MqhPanel(shell);
                 if (Want("captures")) Captures(shell, tmp);
                 if (Want("context")) SessionContextSection(shell, tmp);
@@ -578,6 +587,9 @@ end)
 
         private static void Layout(MetaCodexShell shell, Transform head, UiPanel frame)
         {
+            // its own windows only: with everything a section before left open the ring grows past the chosen radius
+            // (seen when this section ran right after `panels`: 1.39 m instead of 0.95)
+            foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
             foreach (var id in new[] { "dock", "settings", "files", "git", "scripts", "browser" }) shell.OpenPanel(id);
             shell.SetLayout("float");
             shell.TickLayoutForTest(0.05f, 80);
@@ -1811,6 +1823,79 @@ end)
             foreach (var id in shell.PanelIds.ToList()) if (id != "dock") shell.ClosePanel(id);
         }
 
+        /// The look at rest (owner 2026-11-10: "much better aesthetics"): thick glass with a lattice behind its surface, a
+        /// hand's light on it, quiet list rows; pictures at about the headset's pixel density.
+        private static void Look(MetaCodexShell shell, Transform head)
+        {
+            foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
+            UiPanel.AnimateInEditor = false;
+            head.SetPositionAndRotation(new Vector3(0f, 1.4f, 0f), Quaternion.identity);
+            var terms = shell.GetComponentsInChildren<UiPanel>(true).Where(x => x.Id != null && x.Id.StartsWith("term-") && x.gameObject.activeSelf).ToList();
+            foreach (var tm in terms) tm.gameObject.SetActive(false);
+            try
+            {
+                shell.OpenPanel("files");
+                var p = shell.PanelsById["files"];
+                p.transform.SetPositionAndRotation(head.position + Vector3.forward * 0.8f, Quaternion.identity);
+                p.SetBend(0f);
+                p.ForceRefresh();
+                var eye = head.position;
+                var look = Quaternion.LookRotation(p.transform.position - eye, Vector3.up);
+                shell.Router.SetPointerLightForTest(0, Vector3.zero, 0f);
+                shell.Router.SetPointerLightForTest(1, Vector3.zero, 0f);
+                var dark = RenderRgba("ui-look-files.png", eye, look, 50f, 1500, 1100);
+                // a fingertip 2 cm off the glass, right of the middle: the lattice under it lights up
+                var tip = p.transform.TransformPoint(new Vector3(0.12f, -0.03f, -0.02f));
+                shell.Router.SetPointerLightForTest(1, tip, 1f);
+                var lit = RenderRgba("ui-look-files-finger.png", eye, look, 50f, 1500, 1100);
+                // compare the glass round the fingertip and far from it
+                var cam = new GameObject("probe-cam") { hideFlags = HideFlags.DontSave }.AddComponent<Camera>();
+                cam.fieldOfView = 50f; cam.aspect = 1500f / 1100f; cam.transform.SetPositionAndRotation(eye, look);
+                var at = cam.WorldToViewportPoint(p.transform.TransformPoint(new Vector3(0.12f, -0.03f, 0f)));
+                var farAt = cam.WorldToViewportPoint(p.transform.TransformPoint(new Vector3(-0.2f, 0.12f, 0f)));
+                UnityEngine.Object.DestroyImmediate(cam.gameObject);
+                float Gain(Vector3 vp)
+                {
+                    float sum = 0f; int n = 0;
+                    for (int dy = -14; dy <= 14; dy += 2) for (int dx = -14; dx <= 14; dx += 2)
+                    {
+                        int x = (int)(vp.x * 1500f) + dx, y = (int)(vp.y * 1100f) + dy;
+                        var a = dark.GetPixel(x, y); var b = lit.GetPixel(x, y);
+                        sum += (b.r + b.g + b.b) - (a.r + a.g + a.b); n++;
+                    }
+                    return sum / Mathf.Max(1, n);
+                }
+                float nearGain = Gain(at), farGain = Gain(farAt);
+                UnityEngine.Object.DestroyImmediate(dark); UnityEngine.Object.DestroyImmediate(lit);
+                Check(nearGain > 0.02f && farGain < 0.004f, $"a fingertip near the glass lights the lattice under it (+{nearGain:F3}) and nothing far from it (+{farGain:F3})");
+                shell.Router.SetPointerLightForTest(1, Vector3.zero, 0f);
+                // the glass has depth: seen from the side, the lattice shifts against the frame (two pictures for the eye to compare)
+                RenderAt("ui-look-files-left.png", eye - Vector3.right * 0.25f, Quaternion.LookRotation(p.transform.position - (eye - Vector3.right * 0.25f), Vector3.up), 50f, 1500, 1100);
+                shell.OpenPanel("settings");
+                var st = shell.PanelsById["settings"];
+                st.transform.SetPositionAndRotation(head.position + Vector3.forward * 0.8f + Vector3.right * 2f, Quaternion.identity);
+                st.SetBend(0f);
+                st.ForceRefresh();
+                RenderAt("ui-look-settings.png", eye + Vector3.right * 2f, Quaternion.identity, 50f, 1500, 1100);
+                // list rows: quiet glass, the chosen one flooded with the accent
+                shell.OpenPanel("gestures");
+                var mq = shell.PanelsById["mqh"];
+                mq.transform.SetPositionAndRotation(head.position + Vector3.forward * 0.8f - Vector3.right * 2f, Quaternion.identity);
+                mq.SetBend(0f);
+                var gl = mq.Elements.OfType<UiList>().FirstOrDefault(l => l.Visible && l.Items.Count > 2);
+                if (gl != null) gl.SelectIndex(1);
+                mq.ForceRefresh();
+                RenderAt("ui-look-list.png", eye - Vector3.right * 2f, Quaternion.identity, 50f, 1500, 1100);
+            }
+            finally
+            {
+                shell.Router.SetPointerLightForTest(0, Vector3.zero, 0f);
+                shell.Router.SetPointerLightForTest(1, Vector3.zero, 0f);
+                foreach (var tm in terms) if (tm != null) tm.gameObject.SetActive(true);
+                foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
+            }
+        }
+
         /// Panels open and close with a transition (owner 2026-11-09: "very cool spawning and disappearing transitions",
         /// UiPanelFx): closed at once for everything else, animated out; reversed half way from where it is; dialogs and
         /// toasts go with it; an open panel asked again pings; pictures of both timelines.
@@ -1822,86 +1907,163 @@ end)
             var p = shell.PanelsById["mqh"];
             p.ForceRefresh();
             var rest = p.transform.localScale;
+            var restPos = p.transform.position;
+            var keepCaster = UiPanelFx.Caster;
             UiPanel.AnimateInEditor = true;
             try
             {
+                UiPanelFx.Caster = null; // no orb: the line crosses from the left
                 void Step(int n, float dt = 0.05f) { for (int i = 0; i < n; i++) p.TickTransitionForTest(dt); }
-                // closing: closed for everything else at once, still drawn while it goes
+                bool Still() => (p.transform.localScale - rest).sqrMagnitude < 1e-10f && (p.transform.position - restPos).sqrMagnitude < 1e-10f;
+                float ScanNow() => UiPanelFx.Evaluate(p.TransitionPhase == UiPanel.Phase.Opening, p.TransitionT, false).Scan;
+                // closing: closed for everything else at once, still drawn while the line takes it back
                 int closedEvents = 0;
                 p.Closed += _ => closedEvents++;
                 p.Close();
                 bool logical = !p.IsOpen && p.gameObject.activeSelf && closedEvents == 1 && p.TransitionPhase == UiPanel.Phase.Closing;
-                Step(3);
-                float midY = p.transform.localScale.y / rest.y;
-                // changed its mind: it opens again from where it is (no jump)
+                Step(4);
+                float mid = ScanNow();
+                bool cast = p.FxDataForTest.x > 0.5f && Still();
+                // changed its mind: it is cast again from where the line is (no jump)
                 p.Open();
                 p.TickTransitionForTest(0.02f);
-                float backY = p.transform.localScale.y / rest.y;
-                Step(10);
-                bool restored = p.IsOpen && p.TransitionPhase == UiPanel.Phase.Open && (p.transform.localScale - rest).sqrMagnitude < 1e-10f;
-                Check(logical && midY > 0.05f && midY < 0.99f && backY >= midY - 0.01f && restored,
-                    $"Close: closed at once for the rest of the app ({logical}), animated out (height {midY:F2} after 0.15 s); Open half way plays it back from there ({midY:F2} -> {backY:F2}) to its exact rest scale ({restored})");
+                float back = ScanNow();
+                Step(12);
+                bool restored = p.IsOpen && p.TransitionPhase == UiPanel.Phase.Open && p.FxDataForTest == Vector4.zero && p.ScanDataForTest == Vector4.zero && Still();
+                Check(logical && cast && mid > 0.05f && mid < 0.95f && back >= mid - 0.001f && restored,
+                    $"Close: closed at once for the rest of the app ({logical}), the line takes it back (built {mid:F2} after 0.2 s) and nothing is moved or scaled ({cast}); Open half way sends the line out again from there ({mid:F2} -> {back:F2}), and the panel is at rest ({restored})");
                 // all the way out: off at the end, nothing left of the transition
+                int absorbed = 0;
+                Action<UiPanel> onAbsorbed = q => { if (q == p) absorbed++; };
+                UiPanelFx.Absorbed += onAbsorbed;
                 p.Close();
                 Step(4);
                 bool during = p.gameObject.activeSelf && p.Transitioning;
                 Step(6);
-                bool off = !p.gameObject.activeSelf && !p.Transitioning && (p.transform.localScale - rest).sqrMagnitude < 1e-10f;
-                Check(during && off, $"a closing panel is drawn for {UiPanelFx.CloseTime:F2} s ({during}), then turned off at its rest scale ({off})");
-                // opening: open at once for the app, it builds itself in 0.52 s
+                UiPanelFx.Absorbed -= onAbsorbed;
+                bool off = !p.gameObject.activeSelf && !p.Transitioning && p.FxDataForTest == Vector4.zero && Still();
+                Check(during && off && absorbed == 1, $"a closing panel is drawn for {UiPanelFx.CloseTime:F2} s ({during}), then turned off with nothing left of the cast ({off}); its spark reaches the caster once ({absorbed})");
+                // opening: open at once for the app, the line builds it in 0.64 s
+                int castEvents = 0;
+                Action<UiPanel, bool> onCast = (q, opens) => { if (q == p && opens) castEvents++; };
+                UiPanelFx.Casting += onCast;
                 shell.OpenPanel("mqh");
-                bool opening = p.IsOpen && p.TransitionPhase == UiPanel.Phase.Opening && p.transform.localScale.y < rest.y * 0.2f;
-                var ys = new List<float>();
-                for (int k = 0; k < 12; k++) { p.TickTransitionForTest(0.05f); ys.Add(p.transform.localScale.y / rest.y); }
-                bool done = p.TransitionPhase == UiPanel.Phase.Open && (p.transform.localScale - rest).sqrMagnitude < 1e-10f;
-                Check(opening && done && ys[2] > ys[0] && ys.Max() < 1.06f,
-                    $"Open: open at once for the app ({opening}), it unfolds ({string.Join(" ", ys.Take(11).Select(y => y.ToString("F2")))}) and ends at its exact rest scale ({done})");
-                // opened again while open: a ping (a flash and the brackets round it), no squash
+                UiPanelFx.Casting -= onCast;
+                bool opening = p.IsOpen && p.TransitionPhase == UiPanel.Phase.Opening && ScanNow() < 0.01f && p.FxDataForTest.x > 0.5f && castEvents == 1;
+                var scans = new List<float>();
+                for (int k = 0; k < 14; k++) { p.TickTransitionForTest(0.05f); scans.Add(p.Transitioning ? ScanNow() : 1f); }
+                bool rising = true;
+                for (int k = 1; k < scans.Count; k++) if (scans[k] < scans[k - 1] - 1e-4f) rising = false;
+                bool done = p.TransitionPhase == UiPanel.Phase.Open && p.FxDataForTest == Vector4.zero && Still();
+                Check(opening && done && rising && scans[4] > 0.1f && scans[4] < 0.9f,
+                    $"Open: open at once for the app ({opening}), the line crosses once ({string.Join(" ", scans.Take(13).Select(y => y.ToString("F2")))}) and the panel is at rest, never moved or scaled ({done})");
+                // the scan plane the shaders get: at the line's place on the panel, facing the way it moves
+                p.PoseTransitionForTest(true, 0.5f);
+                float half = UiPanelFx.Evaluate(true, 0.5f, false).Scan;
+                var plane = p.ScanDataForTest;
+                var n3 = new Vector3(plane.x, plane.y, plane.z);
+                var onLine = p.transform.TransformPoint(new Vector3(p.Fx.LinePlace(p, half), 0.03f, 0f));
+                var leftEdge = p.transform.TransformPoint(new Vector3(-p.Width * 0.5f, 0f, 0f));
+                var rightEdge = p.transform.TransformPoint(new Vector3(p.Width * 0.5f, 0f, 0f));
+                bool planeOk = Mathf.Abs(Vector3.Dot(onLine, n3) - plane.w) < 1e-4f && Vector3.Dot(leftEdge, n3) < plane.w && Vector3.Dot(rightEdge, n3) > plane.w && Vector3.Angle(n3, p.transform.right) < 0.1f;
+                Check(planeOk && p.Fx.Axis == 0 && p.Fx.Sign > 0f, $"without a caster the line starts at the left edge and moves right; half way the shaders' plane is on it, the left built, the right not yet ({planeOk})");
+                // the line leaves from the caster's side: a caster to the right, above, below
+                var tr = p.transform;
+                (Vector3 at, int axis, float sign, string name)[] sides =
+                {
+                    (tr.position + tr.right * 0.6f - tr.forward * 0.4f, 0, -1f, "right"),
+                    (tr.position - tr.right * 0.6f - tr.forward * 0.4f, 0, 1f, "left"),
+                    (tr.position + tr.up * 0.6f - tr.forward * 0.3f, 1, -1f, "above"),
+                    (tr.position - tr.up * 0.6f - tr.forward * 0.3f, 1, 1f, "below"),
+                };
+                p.ForceRefresh();
+                var sideLog = new List<string>();
+                bool sidesOk = true;
+                foreach (var sd in sides)
+                {
+                    var at = sd.at;
+                    UiPanelFx.Caster = () => at;
+                    p.ForceRefresh();
+                    p.PoseTransitionForTest(true, 0.3f);
+                    var pl = p.ScanDataForTest;
+                    // the built side is the caster's side
+                    var near = tr.position + (sd.axis == 0 ? tr.right : tr.up) * (-sd.sign) * (sd.axis == 0 ? p.Width : p.Height) * 0.45f * (sd.axis == 0 ? tr.lossyScale.x : tr.lossyScale.y);
+                    bool ok = p.Fx.Axis == sd.axis && Mathf.Approximately(p.Fx.Sign, sd.sign) && Vector3.Dot(near, new Vector3(pl.x, pl.y, pl.z)) < pl.w;
+                    sidesOk &= ok;
+                    sideLog.Add($"{sd.name} {(p.Fx.Axis == 0 ? "x" : "y")}{(p.Fx.Sign > 0 ? "+" : "-")}");
+                }
+                p.ForceRefresh();
+                Check(sidesOk, "the scan line leaves from the caster's side and builds that side first: " + string.Join(", ", sideLog));
+
+                // opened again while open: a ping (a flash, the brackets round it, the caster's light on it), nothing cast again
+                var caster = tr.position - tr.right * 0.42f - tr.up * 0.16f - tr.forward * 0.55f;
+                UiPanelFx.Caster = () => caster;
                 shell.OpenPanel("mqh");
                 Step(2);
                 var fxLight = p.GetComponentsInChildren<UiPanelFx>(true).FirstOrDefault();
-                bool ping = fxLight != null && fxLight.GetComponent<MeshRenderer>().enabled && (p.transform.localScale - rest).sqrMagnitude < 1e-10f;
+                bool ping = fxLight != null && fxLight.GetComponent<MeshRenderer>().enabled && p.FxDataForTest.x < 0.5f && p.FxDataForTest.y > 0.01f && Still();
                 Step(10);
-                bool pingDone = fxLight != null && !fxLight.GetComponent<MeshRenderer>().enabled;
-                Check(ping && pingDone, $"an open panel opened again pings: its light shows ({ping}) without any squash, and goes ({pingDone})");
+                bool pingDone = fxLight != null && !fxLight.GetComponent<MeshRenderer>().enabled && p.FxDataForTest == Vector4.zero;
+                Check(ping && pingDone, $"an open panel opened again pings: its light shows ({ping}) and nothing is cast again, then it goes ({pingDone})");
 
-                // pictures: the opening and the closing, frame by frame
-                var cam = p.transform.position - p.transform.forward * 1.45f;
-                var look = Quaternion.LookRotation(p.transform.forward, p.transform.up);
-                float[] openAt = { 0.04f, 0.10f, 0.18f, 0.28f, 0.40f, 0.52f, 0.66f, 0.82f, 1.0f };
-                for (int k = 0; k < openAt.Length; k++) { p.PoseTransitionForTest(true, openAt[k]); RenderAt($"ui-open-{k}.png", cam, look, 42f, 800, 600); }
-                float[] closeAt = { 0.06f, 0.18f, 0.32f, 0.46f, 0.58f, 0.70f, 0.80f, 0.90f, 0.97f };
-                for (int k = 0; k < closeAt.Length; k++) { p.PoseTransitionForTest(false, closeAt[k]); RenderAt($"ui-close-{k}.png", cam, look, 42f, 800, 600); }
-                // a bent panel: the brackets and the lines follow its curve (pictures; the bend eases off afterwards)
+                // pictures: the cast and the taking back, frame by frame, with a caster where the orb floats
+                var cam = p.transform.position - p.transform.forward * 1.45f - p.transform.right * 0.10f;
+                var look = Quaternion.LookRotation(p.transform.position + p.transform.right * -0.05f - cam, p.transform.up);
+                float[] openAt = { 0.05f, 0.14f, 0.24f, 0.36f, 0.48f, 0.60f, 0.72f, 0.84f, 0.95f };
+                for (int k = 0; k < openAt.Length; k++) { p.ForceRefresh(); p.PoseTransitionForTest(true, openAt[k]); RenderAt($"ui-open-{k}.png", cam, look, 46f, 800, 600); }
+                float[] closeAt = { 0.06f, 0.18f, 0.32f, 0.46f, 0.58f, 0.70f, 0.78f, 0.88f, 0.96f };
+                for (int k = 0; k < closeAt.Length; k++) { p.ForceRefresh(); p.PoseTransitionForTest(false, closeAt[k]); RenderAt($"ui-close-{k}.png", cam, look, 46f, 800, 600); }
+                // half way: the side behind the line is drawn, the side before it is not there yet
+                p.ForceRefresh();
+                p.PoseTransitionForTest(true, 0.42f); // the line is about in the middle of the panel
+                var straight = Quaternion.LookRotation(p.transform.forward, p.transform.up);
+                var halfPic = RenderRgba("ui-open-half.png", p.transform.position - p.transform.forward * 1.2f, straight, 46f, 800, 600);
+                int builtPx = 0, aheadPx = 0;
+                for (int y = 200; y < 400; y += 4)
+                {
+                    for (int x = 150; x < 300; x += 4) { var c = halfPic.GetPixel(x, y); if (c.r + c.g + c.b > 0.20f) builtPx++; }
+                    for (int x = 520; x < 650; x += 4) { var c = halfPic.GetPixel(x, y); if (c.r + c.g + c.b > 0.20f) aheadPx++; }
+                }
+                UnityEngine.Object.DestroyImmediate(halfPic);
+                Check(builtPx > 600 && aheadPx < 40, $"half way through the cast the side behind the line is drawn ({builtPx} of 1900 probes lit) and the side before it is not there yet ({aheadPx} of 1650)");
+                // a bent panel: the brackets, the line and the fan follow its curve (pictures; the bend eases off afterwards)
                 float bend0 = p.BendRadius;
                 p.SetBend(0.55f);
                 p.ForceRefresh();
-                foreach (var (opens, tt, name) in new[] { (true, 0.06f, "ui-open-bent-line.png"), (true, 0.32f, "ui-open-bent.png"), (false, 0.62f, "ui-close-bent.png") })
+                foreach (var (opens, tt, name) in new[] { (true, 0.10f, "ui-open-bent-line.png"), (true, 0.50f, "ui-open-bent.png"), (false, 0.60f, "ui-close-bent.png") })
                 {
+                    p.ForceRefresh();
                     p.PoseTransitionForTest(opens, tt);
-                    RenderAt(name, cam + p.transform.up * 0.05f, look, 42f, 800, 600);
+                    RenderAt(name, cam + p.transform.up * 0.05f, look, 46f, 800, 600);
                 }
-                p.SetBend(bend0);
-                // the last frames of the opening look like the panel at rest (owner 2026-11-09: they did not): the
-                // brackets hand over to the frame's own, nothing else is left of the transition
+                // a caster above a bent panel: the line is an arc, the fan follows it
+                var above = tr.position + tr.up * 0.45f - tr.forward * 0.5f;
+                UiPanelFx.Caster = () => above;
                 p.ForceRefresh();
-                var restPic = RenderRgba("ui-open-rest.png", cam, look, 42f, 800, 600);
-                p.PoseTransitionForTest(true, 0.94f);
-                var lastPic = RenderRgba("ui-open-last.png", cam, look, 42f, 800, 600);
+                p.PoseTransitionForTest(true, 0.5f);
+                RenderAt("ui-open-bent-down.png", cam + p.transform.up * 0.05f, look, 46f, 800, 600);
+                UiPanelFx.Caster = () => caster;
+                p.SetBend(bend0);
+                // the last frames of the cast look like the panel at rest (owner 2026-11-09: they did not): the
+                // brackets have handed over to the frame's own, nothing else is left of the transition
+                p.ForceRefresh();
+                var restPic = RenderRgba("ui-open-rest.png", cam, look, 46f, 800, 600);
+                p.PoseTransitionForTest(true, 0.985f);
+                var lastPic = RenderRgba("ui-open-last.png", cam, look, 46f, 800, 600);
                 var ra = restPic.GetPixels32(); var la = lastPic.GetPixels32();
                 int differ = 0;
                 for (int k = 0; k < ra.Length; k++) if (Math.Abs(ra[k].r - la[k].r) + Math.Abs(ra[k].g - la[k].g) + Math.Abs(ra[k].b - la[k].b) > 18) differ++;
                 UnityEngine.Object.DestroyImmediate(restPic); UnityEngine.Object.DestroyImmediate(lastPic);
-                Check(differ < ra.Length / 400, $"the opening's last frames look like the panel at rest: {differ} of {ra.Length} pixels differ (the brackets hand over, no pop at the end)");
+                Check(differ < ra.Length / 400, $"the cast's last frames look like the panel at rest: {differ} of {ra.Length} pixels differ (the brackets hand over, no pop at the end)");
                 p.ForceRefresh();
-                Check(p.IsOpen && !p.Transitioning && (p.transform.localScale - rest).sqrMagnitude < 1e-10f, "ForceRefresh ends a transition at the rest scale");
+                Check(p.IsOpen && !p.Transitioning && p.FxDataForTest == Vector4.zero && Still(), "ForceRefresh ends a transition: the panel is at rest");
 
-                // a dialog: comes with the opening, goes with the closing, then is destroyed
+                // a dialog: comes with the cast, goes with the closing, then is destroyed
                 UiPanel dlg = null;
                 shell.Modal("TRANSITION TEST", "A dialog for the transition test.", new[] { "OK" }, _ => { });
                 dlg = UiModal.OpenPanels.FirstOrDefault();
                 bool dlgOpening = dlg != null && dlg.TransitionPhase == UiPanel.Phase.Opening;
-                if (dlg != null) { for (int k = 0; k < 12; k++) dlg.TickTransitionForTest(0.05f); dlg.Elements.OfType<UiButton>().First(b => b.Text == "OK").Click(); }
+                if (dlg != null) { for (int k = 0; k < 14; k++) dlg.TickTransitionForTest(0.05f); dlg.Elements.OfType<UiButton>().First(b => b.Text == "OK").Click(); }
                 bool dlgClosing = dlg != null && dlg.gameObject.activeSelf && dlg.TransitionPhase == UiPanel.Phase.Closing && UiModal.OpenCount == 0;
                 if (dlg != null) for (int k = 0; k < 10; k++) { if (dlg == null) break; dlg.TickTransitionForTest(0.05f); }
                 Check(dlgOpening && dlgClosing && dlg == null, $"a dialog opens with the transition ({dlgOpening}), its answer closes it with the transition ({dlgClosing}), then it is destroyed ({dlg == null})");
@@ -1912,6 +2074,7 @@ end)
             }
             finally
             {
+                UiPanelFx.Caster = keepCaster;
                 UiPanel.AnimateInEditor = false;
                 foreach (var pp in shell.GetComponentsInChildren<UiPanel>(true)) if (pp != null && pp.Transitioning) pp.ForceRefresh();
                 foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);

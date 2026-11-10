@@ -22,10 +22,10 @@ Shader "MetaCodex/ViewImage"
             #pragma multi_compile_instancing
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Assets/MetaCodex/Shaders/McxOcclusion.hlsl"
+            #include "Assets/MetaCodex/Shaders/McxPanelFx.hlsl" // the panel being cast (the scan line)
 
             TEXTURE2D(_MainTex);
             SAMPLER(sampler_MainTex);
-            float4 _PanelFx[128]; // its panel opening or closing (UiPanelFx): x flash, y ghost, z hidden
             CBUFFER_START(UnityPerMaterial)
                 float4 _MainTex_ST;
                 float _PanelIndex; // set per renderer (UiPanel.TagRenderer); -1: not in a panel
@@ -49,10 +49,11 @@ Shader "MetaCodex/ViewImage"
             {
                 UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
                 half4 c = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, i.uv);
-                // its panel opening or closing: the picture comes in after the glass, brighter in the flash
-                float4 pfx = _PanelIndex >= 0.0 ? _PanelFx[(int)_PanelIndex] : float4(0, 0, 0, 0);
-                c.a *= (half)saturate(1.0 - pfx.z * 1.15);
-                c.rgb = lerp(c.rgb, c.rgb + 0.3, saturate(pfx.x) * 0.5);
+                // its panel being cast: the picture is there once the scan line has passed, bright for a moment
+                float4 pfx = McxPanelFx(_PanelIndex);
+                float bd = McxBehindScan(_PanelIndex, i.positionWS);
+                c.a *= (half)(McxBuilt(bd) * (1.0 - saturate(pfx.z)));
+                c.rgb = lerp(c.rgb, c.rgb + 0.3, saturate(saturate(pfx.y) * 0.5 + McxHeat(bd) * 0.8));
                 c.a *= (half)McxVisibility(i.positionWS); // something real in front of the image shows through
                 return c;
             }
