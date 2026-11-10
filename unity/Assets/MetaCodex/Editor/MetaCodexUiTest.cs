@@ -1618,6 +1618,21 @@ end)
             shell.OpenKeyboard();
             Check(tipFirst && afterTip == 1 && asked == 2 && !shell.Settings.surfaceKeyboardTip && UiModal.OpenCount == 0,
                 $"keyboard: a Surface Keyboard tip comes first ({tipFirst}), then the keyboard ({afterTip}); after DON'T SHOW AGAIN it opens straight away ({asked} requests)");
+            // the wrist menu's TABLE: asks OPEN KEYBOARD (the keyboard at once, no second tip) or TURN ON (Settings)
+            bool onWrist = shell.Wrist != null && shell.Wrist.Outer.Any(it => it.Label == "TABLE" && it.Icon == "tablekeys") && UiIconAtlas.TryGet("tablekeys", out _);
+            shell.Settings.surfaceKeyboardTip = true;
+            shell.ResetKeyboardTipForTest();
+            int before = asked;
+            shell.OpenTableKeyboard();
+            var tk = UiModal.OpenPanels.FirstOrDefault(m => m.Title == "TABLE KEYBOARD");
+            bool three = tk != null && tk.Elements.OfType<UiButton>().Select(b => b.Text).SequenceEqual(new[] { "OPEN KEYBOARD", "TURN ON", "CANCEL" });
+            tk?.Elements.OfType<UiButton>().First(b => b.Text == "OPEN KEYBOARD").Click();
+            bool straight = asked == before + 1 && !UiModal.OpenPanels.Any(m => m.Title == "TYPE ON A TABLE");
+            shell.OpenTableKeyboard();
+            UiModal.OpenPanels.FirstOrDefault(m => m.Title == "TABLE KEYBOARD")?.Elements.OfType<UiButton>().First(b => b.Text == "TURN ON").Click();
+            bool settings = SystemBridge.LastResult.Contains("systemux://settings");
+            foreach (var m in UiModal.OpenPanels.ToList()) m.CloseAndDestroy();
+            Check(onWrist && three && straight && settings, $"wrist TABLE ({onWrist}): a dialog with OPEN KEYBOARD / TURN ON / CANCEL ({three}); OPEN KEYBOARD opens it at once, no second tip ({straight}); TURN ON opens Settings ({SystemBridge.LastResult})");
             UiKeyboard.TerminalKeyboardRequested -= count;
             shell.Settings.surfaceKeyboardTip = tip0;
         }
@@ -2124,7 +2139,7 @@ end)
                 foreach (var cd in cards) cd.ForceRefresh();
                 RenderAt("ui-orb-callouts.png", head.position, Quaternion.LookRotation(orb.Position - head.right * 0.16f - head.position, Vector3.up), 40f, 1400, 900);
 
-                // a touch: its menu, beside it and below; the messages are in it
+                // a touch: its menu, a small billboard next to it, just below its level, turned to the user; LOG opens MESSAGES
                 var rest = head.position + head.forward * 0.3f + head.right * 0.25f - head.up * 0.3f;
                 void TipAt(Vector3 at, float pinch = 0f) => hands.SetOpen(Handedness.Right, at - head.forward * 0.12f, head.forward, -head.up, 0f, pinch);
                 void TipTo(Vector3 tip, float pinch = 0f) { TipAt(tip, pinch); hands.Frames[1].IndexTip = tip; if (pinch > 0.5f) hands.Frames[1].ThumbTip = tip; }
@@ -2134,17 +2149,34 @@ end)
                 bool opened = menu != null && menu.IsOpen;
                 TipTo(rest); Step(14);
                 var toMenu = menu != null ? menu.transform.position - orb.Position : Vector3.zero;
-                bool menuPlace = menu != null && toMenu.y < -0.03f && Vector3.Dot(toMenu, head.right) < 0f && Vector3.Angle(menu.transform.forward, menu.transform.position - head.position) < 4f;
-                var list = menu != null ? menu.Elements.OfType<UiList>().FirstOrDefault() : null;
-                bool listed = list != null && list.Items.Count == 2 && list.Items[0].Title.Contains("battery");
+                bool small = menu != null && menu.Width <= MetaCodexShell.BillboardW + 1e-4f && menu.Height <= MetaCodexShell.BillboardH + 1e-4f && !menu.Elements.OfType<UiList>().Any();
+                bool menuPlace = menu != null && toMenu.y < -0.015f && toMenu.y > -0.12f && Vector3.Dot(toMenu, head.right) < 0f && toMenu.magnitude < 0.30f
+                    && Vector3.Angle(menu.transform.forward, menu.transform.position - head.position) < 8f;
+                var log = menu?.Elements.OfType<UiButton>().FirstOrDefault(b => b.Text.Contains("☰"));
+                bool counted = log != null && log.Text.Contains("2 NEW") && shell.OrbUnread == 2;
                 if (menu != null) menu.ForceRefresh();
                 foreach (var cd in shell.Toasts.Panels) cd.ForceRefresh();
-                RenderAt("ui-orb-menu.png", head.position, Quaternion.LookRotation(orb.Position - head.right * 0.16f - head.up * 0.08f - head.position, Vector3.up), 44f, 1400, 1000);
+                RenderAt("ui-orb-menu.png", head.position, Quaternion.LookRotation(orb.Position - head.right * 0.12f - head.up * 0.03f - head.position, Vector3.up), 34f, 1400, 1000);
+                Check(opened && small && menuPlace && counted, $"a fingertip in the orb opens its billboard ({opened}): small, four buttons, no list ({small}), next to it just below its level, turned to the user ({menuPlace}: {toMenu.y * 100f:F1} cm lower, {toMenu.magnitude:F2} m off); LOG says 2 NEW ({counted})");
+                log?.Click();
+                Step(2);
+                var msgs = shell.PanelsById.TryGetValue("messages", out var mp) ? mp : null;
+                var mlist = msgs != null ? msgs.Elements.OfType<UiList>().FirstOrDefault() : null;
+                bool listed = msgs != null && msgs.IsOpen && mlist != null && mlist.Items.Count == 2 && mlist.Items[0].Title.Contains("battery") && shell.OrbUnread == 0 && orb.Unread == 0;
+                bool billboardAway = menu != null && !menu.IsOpen;
+                if (msgs != null) { msgs.ForceRefresh(); RenderPanel(msgs, "ui-orb-messages.png"); }
+                shell.ClosePanel("messages");
+                Step(14);
+                Check(listed && billboardAway, $"LOG opens MESSAGES, newest first, and they are read now ({listed}); the billboard goes ({billboardAway})");
+                TipTo(orb.Position - head.forward * 0.12f); Step(12);
+                TipTo(orb.Position); Step(2);
+                bool reopened = menu != null && menu.IsOpen;
+                TipTo(rest); Step(14);
                 TipTo(orb.Position - head.forward * 0.12f); Step(12);
                 TipTo(orb.Position); Step(2);
                 bool closed = menu != null && !menu.IsOpen;
                 TipTo(rest); Step(14);
-                Check(opened && menuPlace && listed && closed, $"a fingertip in the orb opens its menu ({opened}) beside it and below, turned to the user ({menuPlace}), with the messages so far ({listed}); a second touch closes it ({closed})");
+                Check(reopened && closed, $"a touch opens the billboard again ({reopened}), the next one closes it ({closed})");
 
                 // pointing at it from afar and pinching does the same, and does not click the window behind it
                 var palm = head.position + head.right * 0.15f - head.up * 0.25f + head.forward * 0.15f;

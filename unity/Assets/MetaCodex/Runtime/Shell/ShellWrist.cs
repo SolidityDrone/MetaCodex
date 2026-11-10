@@ -47,6 +47,8 @@ namespace MetaCodex.Shell
             I(Wrist.Outer, "⎇", "branch", "GIT", () => TogglePanel("git"), () => IsPanelOpen("git"));
             I(Wrist.Outer, "⌖", "select", "SELECT", () => SetSelectionMode(!Router.SelectionMode), () => Router.SelectionMode, t.Warn);
             I(Wrist.Outer, "⌨", "keyboard", "KEYS", () => OpenKeyboard());
+            // the system's keyboard on a table (Surface Keyboard and Touchpad): bring it now, or turn it on (owner 2026-11-10)
+            I(Wrist.Outer, "⌨", "tablekeys", "TABLE", () => OpenTableKeyboard());
             I(Wrist.Outer, "⟲", "recenter", "CENTER", () => app?.Recenter());
             I(Wrist.Outer, "⚙", "gear", "SETUP", () => TogglePanel("settings"), () => IsPanelOpen("settings"));
             I(Wrist.Outer, "▤", "windows", "TERMS", () => TogglePanel("terminals"), () => IsPanelOpen("terminals"));

@@ -37,6 +37,7 @@ namespace MetaCodex.Shell
             BuildVault();
             BuildVoice();
             BuildSystem();
+            BuildMessagesPanel(); // the orb's messages (ShellOrb)
             foreach (var p in _panels.Values) p.BaseScale = Vector3.one * Mathf.Clamp(Settings.uiScale, 0.6f, 1.8f);
         }
 

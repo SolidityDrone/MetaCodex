@@ -448,30 +448,55 @@ namespace MetaCodex.Shell
                 else if (n.Kind == "ok") Orb.Flash(t.Ok, 1.0f);
                 else Orb.Flash(Color.Lerp(t.Accent, Color.white, 0.4f), 0.7f);
             }
-            if (_orbMenu != null && _orbMenu.IsOpen) RefreshOrbMenu();
+            if ((_orbMenu != null && _orbMenu.IsOpen) || (_messages != null && _messages.IsOpen)) RefreshOrbMenu();
         }
 
         // ------------------------------------------------------------------ its menu
+
+        // the billboard: four small buttons on a strip of glass beside the orb, always turned to the user (owner
+        // 2026-11-10: "that small menu kinda a billboard next to the orb", not a window with the messages in it)
+        public const float BillboardW = 0.236f, BillboardH = 0.060f;
 
         private void EnsureOrbMenu()
         {
             if (_orbMenu != null) return;
             var t = UiTheme.Current;
-            _orbMenu = UiPanel.Create<UiPanel>("orb-menu", "", 0.40f, 0.300f, _root, header: false);
+            _orbMenu = UiPanel.Create<UiPanel>("orb-menu", "", BillboardW, BillboardH, _root, header: false);
             _orbMenu.Closable = false;
             _orbMenu.Draggable = false;
             _orbMenu.LightTransition = true;
             Router.Register(_orbMenu);
-            var c = _orbMenu.Content;
-            float bw = (c.width - t.Gap * 3) / 4f, bh = 0.036f;
-            _orbMenu.Add(new UiButton("◉\nTALK", () => VoiceToggle(), UiButtonStyle.Primary) { Rect = new Rect(c.x, c.y, bw, bh), TextSize = 0.0105f });
-            _orbSpeakBtn = _orbMenu.Add(new UiButton("♫\nSPEAK", () => { Settings.voice.speak = !Settings.voice.speak; OnSettingsChanged(); SyncSettingsControls(); RefreshOrbMenu(); }) { Rect = new Rect(c.x + (bw + t.Gap), c.y, bw, bh), TextSize = 0.0105f });
-            _orbMenu.Add(new UiButton("⌖\nPLACE", () => { ResetOrbPlace(); Toast("The orb chooses its own place again · pinch it to put it anywhere", "info"); }) { Rect = new Rect(c.x + (bw + t.Gap) * 2, c.y, bw, bh), TextSize = 0.0105f });
-            _orbMenu.Add(new UiButton("✕\nCLEAR", () => { Toasts.History.Clear(); _orbUnread = 0; Orb.Unread = 0; RefreshOrbMenu(); }) { Rect = new Rect(c.x + (bw + t.Gap) * 3, c.y, bw, bh), TextSize = 0.0105f });
-            _orbStatus = _orbMenu.Add(new UiLabel("", t.SmallSize) { Rect = new Rect(c.x, c.y + bh + 0.006f, c.width, 0.018f), UseDisplay = true, Color = t.TextAccent });
-            float ly = c.y + bh + 0.028f;
-            _orbList = _orbMenu.Add(new UiList(0.027f) { Rect = new Rect(c.x, ly, c.width, c.yMax - ly) });
+            const float pad = 0.007f, gap = 0.005f;
+            float bw = (BillboardW - pad * 2f - gap * 3f) / 4f, bh = BillboardH - pad * 2f;
+            UiButton B(int k, string text, Action act, UiButtonStyle style = UiButtonStyle.Normal) =>
+                _orbMenu.Add(new UiButton(text, act, style) { Rect = new Rect(pad + k * (bw + gap), pad, bw, bh), TextSize = 0.0092f });
+            B(0, "◉\nTALK", () => VoiceToggle(), UiButtonStyle.Primary);
+            _orbSpeakBtn = B(1, "♫\nSPEAK", () => { Settings.voice.speak = !Settings.voice.speak; OnSettingsChanged(); SyncSettingsControls(); RefreshOrbMenu(); });
+            B(2, "⌖\nPLACE", () => { ResetOrbPlace(); Toast("The orb chooses its own place again · pinch it to put it anywhere", "info"); });
+            _orbLogBtn = B(3, "☰\nLOG", () => { if (_orbMenu.IsOpen) _orbMenu.Close(); OpenPanel("messages"); });
             _orbMenu.gameObject.SetActive(false);
+        }
+
+        private UiButton _orbLogBtn;
+        private UiPanel _messages;
+
+        /// MESSAGES: everything the app has said (the orb's callouts), newest first, with their age; CLEAR. A window like
+        /// the others (placed where there is room), opened from the orb's billboard (LOG) or by voice ("open messages").
+        private void BuildMessagesPanel()
+        {
+            var t = UiTheme.Current;
+            _messages = Panel<UiPanel>("messages", "MESSAGES", 0.50f, 0.42f);
+            var c = _messages.Content;
+            _orbStatus = _messages.Add(new UiLabel("", t.SmallSize) { Rect = new Rect(c.x, c.y, c.width - 0.11f, 0.024f), UseDisplay = true, Color = t.TextAccent });
+            _messages.Add(new UiButton("✕ CLEAR", () => { Toasts.History.Clear(); _orbUnread = 0; if (Orb != null) Orb.Unread = 0; RefreshOrbMenu(); }) { Rect = new Rect(c.xMax - 0.10f, c.y, 0.10f, 0.026f), TextSize = 0.010f });
+            float ly = c.y + 0.034f;
+            _orbList = _messages.Add(new UiList(0.028f) { Rect = new Rect(c.x, ly, c.width, c.yMax - ly) });
+            _messages.Opened += _ =>
+            {
+                _orbUnread = 0; // read now: the gold sparks round the orb go
+                if (Orb != null) Orb.Unread = 0;
+                RefreshOrbMenu();
+            };
         }
 
         public UiPanel OrbMenu => _orbMenu;
@@ -486,8 +511,6 @@ namespace MetaCodex.Shell
             if (_orbMenu.IsOpen) { _orbMenu.Close(); return; }
             _orbMenu.BaseScale = Vector3.one * OrbMenuScale();
             RefreshOrbMenu();
-            _orbUnread = 0; // read now
-            Orb.Unread = 0;
             PlaceOrbMenu(true);
             _orbMenu.Open();
         }
@@ -498,14 +521,15 @@ namespace MetaCodex.Shell
             return Mathf.Clamp(dist / 0.75f, 0.45f, 1.2f) * Mathf.Clamp(Settings.uiScale, 0.6f, 1.8f) / 1.2f * 1.05f;
         }
 
-        /// Beside the orb, below its level (its callouts rise above), turned to the user.
+        /// Next to the orb, on the side its callouts grow to, just below its level (the callouts rise above it), turned to
+        /// the user.
         private void PlaceOrbMenu(bool snap)
         {
             if (_orbMenu == null || Orb == null) return;
             var a = OrbCalloutAnchor();
             if (!a.HasValue) return;
             float s = _orbMenu.BaseScale.x;
-            var target = a.Value.Orb + a.Value.Side * (Orb.Radius * 2.15f + _orbMenu.Width * s * 0.5f + 0.012f) + Vector3.down * (Orb.Radius * 1.6f + _orbMenu.Height * s * 0.5f);
+            var target = a.Value.Orb + a.Value.Side * (Orb.Radius * 2.15f + _orbMenu.Width * s * 0.5f + 0.012f) + Vector3.down * (Orb.Radius * 0.9f + _orbMenu.Height * s * 0.5f);
             var tr = _orbMenu.transform;
             tr.position = snap ? target : Vector3.Lerp(tr.position, target, 0.16f);
             Vector3 eye = Head != null ? Head.position : target - Vector3.forward;
@@ -524,11 +548,16 @@ namespace MetaCodex.Shell
 
         private void RefreshOrbMenu()
         {
-            if (_orbMenu == null) return;
             var t = UiTheme.Current;
-            int n = Toasts.History.Count;
-            _orbStatus.Set((n == 0 ? "NO MESSAGES YET" : n == 1 ? "1 MESSAGE" : n + " MESSAGES") + (_orbUnread > 0 && n > 0 ? " · " + Mathf.Min(_orbUnread, n) + " NEW" : ""));
-            _orbSpeakBtn.SetSelected(Settings.voice.speak);
+            int n = Toasts.History.Count, fresh = Mathf.Min(_orbUnread, n);
+            if (_orbMenu != null)
+            {
+                _orbSpeakBtn.SetSelected(Settings.voice.speak);
+                _orbLogBtn.SetText(fresh > 0 ? "☰\n" + fresh + " NEW" : "☰\nLOG");
+                _orbLogBtn.SetSelected(fresh > 0);
+            }
+            if (_messages == null) return;
+            _orbStatus.Set((n == 0 ? "NO MESSAGES YET" : n == 1 ? "1 MESSAGE" : n + " MESSAGES") + (fresh > 0 ? " · " + fresh + " NEW" : ""));
             _orbList.SetItems(Toasts.History.Select(h => new UiListItem
             {
                 Icon = h.Kind == "error" ? "⚠" : h.Kind == "warn" ? "▲" : h.Kind == "ok" ? "✓" : "◆",

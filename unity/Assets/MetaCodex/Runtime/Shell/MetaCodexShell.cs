@@ -537,6 +537,26 @@ namespace MetaCodex.Shell
 
         public void OpenKeyboard() => UiKeyboard.OpenForTerminal();
 
+        /// The wrist menu's TABLE (owner 2026-11-10: "a command that spawns the experimental keyboard, or activates it,
+        /// or asks to"): Horizon OS's Surface Keyboard and Touchpad lays the system keyboard on a table under both hands,
+        /// once it is turned on in Settings > Experimental. Apps can neither turn it on nor tell whether it is on, so this
+        /// asks: OPEN KEYBOARD (now: rest both hands flat on the table) or TURN ON (Settings).
+        public void OpenTableKeyboard()
+        {
+            Modal("TABLE KEYBOARD",
+                "Rest both hands flat on a table when the keyboard opens: Horizon OS lays its Surface Keyboard and Touchpad under them. " +
+                "If it never comes, turn it on: Settings > Experimental > Surface Keyboard and Touchpad (Quest 3 and 3S, Horizon OS v85 or later).",
+                new[] { "OPEN KEYBOARD", "TURN ON", "CANCEL" }, i =>
+                {
+                    if (i == 0) { _keyboardTipShown = true; UiKeyboard.OpenForTerminal(); } // this dialog said it all: no second tip
+                    else if (i == 1)
+                    {
+                        bool ok = SystemBridge.OpenSystemSettings();
+                        Toast(ok ? "Settings: Experimental > Surface Keyboard and Touchpad" : SystemBridge.LastResult, ok ? "info" : "warn");
+                    }
+                });
+        }
+
         private bool _keyboardTipShown;
 
         /// The first time in a session the headset keyboard is asked for (until DON'T SHOW AGAIN): a tip for the system's

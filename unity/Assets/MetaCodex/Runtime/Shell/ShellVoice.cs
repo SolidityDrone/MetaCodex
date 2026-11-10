@@ -118,7 +118,7 @@ namespace MetaCodex.Shell
         private JArray _voicePrefix;
         private int _voicePrefixRev = -1;
         private string _voiceGrammar;
-        public static readonly string[] VoicePanels = { "terminals", "files", "git", "agents", "threads", "browser", "clipboard", "mqh", "skills", "plugins", "scripts", "gestures", "vault", "settings", "voice", "system", "focus", "storage", "tools" };
+        public static readonly string[] VoicePanels = { "terminals", "files", "git", "agents", "threads", "browser", "clipboard", "mqh", "skills", "plugins", "scripts", "gestures", "vault", "settings", "voice", "system", "focus", "storage", "tools", "messages" };
 
         private AudioSource _voiceAudio;
         private UiPanel _vHud;

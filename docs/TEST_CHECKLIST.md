@@ -348,3 +348,8 @@ Section 19's transition lines (the spark, the collapse into a line) are replaced
 - [ ] The glass of the windows: the honeycomb and the points are on the surface; moving the head sideways, nothing shifts inside the glass any more
 - [ ] Hovering and pressing buttons in a big window (MQH, SETTINGS): no stutter; the light on a button still follows the hover and the click
 - [ ] Frame rate (Perf menu Snapshot) with five windows open and the orb in view: 72 fps
+
+The orb's billboard and the table keyboard (same version):
+
+- [ ] The orb: touch it → a small billboard next to it (TALK, SPEAK, PLACE, LOG); LOG shows "n NEW" when messages came; it opens MESSAGES (the list, ✕ CLEAR)
+- [ ] Wrist menu > TABLE: OPEN KEYBOARD shows the keyboard; TURN ON opens Settings (Experimental > Surface Keyboard and Touchpad)

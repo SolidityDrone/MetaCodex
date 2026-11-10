@@ -273,6 +273,11 @@ namespace MetaCodex.UI
             for (int k = 0; k < 5; k++) kb.Disc(-0.56f + 0.28f * k, 0.24f, 0.075f);
             for (int k = 0; k < 4; k++) kb.Disc(-0.42f + 0.28f * k, 0f, 0.075f);
             d["keyboard"] = kb;
+            // table keys: a keyboard lying flat on a table (the system's Surface Keyboard), its edge nearer and wider
+            var tk = new Icon().Poly(true, -0.80f, -0.24f, 0.80f, -0.24f, 0.50f, 0.32f, -0.50f, 0.32f).Line(-0.94f, -0.50f, 0.94f, -0.50f);
+            for (int k = 0; k < 4; k++) tk.Disc(-0.34f + 0.227f * k, 0.15f, 0.06f);
+            for (int k = 0; k < 5; k++) tk.Disc(-0.48f + 0.24f * k, -0.06f, 0.065f);
+            d["tablekeys"] = tk;
             // center: a turning arrow around a point
             float ea = 60f * Mathf.Deg2Rad;
             var tip = new Vector2(Mathf.Cos(ea), Mathf.Sin(ea)) * 0.66f;
