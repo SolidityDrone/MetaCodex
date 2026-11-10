@@ -105,21 +105,53 @@ namespace MetaCodex.Shell
                 Mqh.Providers(cat =>
                 {
                     _providerCatalog = cat as JArray ?? new JArray();
-                    var t = UiTheme.Current;
-                    _agentList.SetItems(_providerStates.Select(x => new UiListItem
-                    {
-                        Icon = StatusIcon((string)x["status"]),
-                        IconColor = StatusColor((string)x["status"]),
-                        Title = (string)x["displayName"] ?? (string)x["providerId"],
-                        Sub = (string)x["accountEmail"] ?? (string)x["installedVersion"] ?? "",
-                        Badge = StatusBadge((string)x["status"]),
-                        BadgeColor = StatusColor((string)x["status"]),
-                        Tag = (string)x["providerId"],
-                    }), keepScroll: true);
-                    if (_agentSel == null && _providerStates.Count > 0) _agentSel = (string)_providerStates[0]["providerId"];
-                    ShowAgent();
+                    RenderAgentList();
+                    // agents MQH shows only once installed (opencode: visibility "installed") are not in providers/state;
+                    // its execution options list them after a health probe on the headset
+                    EnsureHost(() => Mqh.Models(null, _hostId, eo => { if (MergeInstalledProviders(eo)) RenderAgentList(); }));
                 });
             });
+        }
+
+        private void RenderAgentList()
+        {
+            _agentList.SetItems(_providerStates.Select(x => new UiListItem
+            {
+                Icon = StatusIcon((string)x["status"]),
+                IconColor = StatusColor((string)x["status"]),
+                Title = (string)x["displayName"] ?? (string)x["providerId"],
+                Sub = (string)x["accountEmail"] ?? (string)x["installedVersion"] ?? "",
+                Badge = StatusBadge((string)x["status"]),
+                BadgeColor = StatusColor((string)x["status"]),
+                Tag = (string)x["providerId"],
+            }), keepScroll: true);
+            if (_agentSel == null && _providerStates.Count > 0) _agentSel = (string)_providerStates[0]["providerId"];
+            ShowAgent();
+        }
+
+        /// The providers execution-options lists that providers/state does not (installed-only agents): added as
+        /// ready, with the version GET saw and the agent's own sign-in. True when something was added.
+        public bool MergeInstalledProviders(JToken executionOptions)
+        {
+            bool added = false;
+            foreach (var p in (executionOptions?["providers"] as JArray) ?? new JArray())
+            {
+                string id = (string)p["id"];
+                if (string.IsNullOrEmpty(id) || _providerStates.Any(x => (string)x["providerId"] == id)) continue;
+                string agent = AgentIdFor(id);
+                _agentVersions.TryGetValue(agent, out var v);
+                _providerStates.Add(new JObject
+                {
+                    ["providerId"] = id,
+                    ["displayName"] = (string)p["displayName"] ?? (string)p["name"] ?? id,
+                    ["status"] = "ready",
+                    ["installedVersion"] = v,
+                    ["loginCommand"] = id.Contains("opencode") ? "opencode auth login" : null,
+                    ["statusMessage"] = "installed here; MQH runs it through ACP",
+                });
+                added = true;
+            }
+            return added;
         }
 
         private static string StatusIcon(string s) => s == "ready" || s == "authenticated" ? "●" : s == "unauthenticated" || s == "auth_required" || s == "expired" ? "○" : s == "not_installed" ? "⇣" : "⚠";

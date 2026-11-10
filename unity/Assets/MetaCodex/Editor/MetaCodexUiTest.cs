@@ -2019,6 +2019,16 @@ end)
                 shell.AgentProbeForTest = null;
             }
 
+            // AGENTS lists the installed-only agents too (opencode: not in providers/state, in execution-options), as ready
+            var keepStates = shell.ProviderStatesForTest;
+            shell.ProviderStatesForTest = new JArray(new JObject { ["providerId"] = "codex", ["displayName"] = "Codex", ["status"] = "not_installed" });
+            bool merged = shell.MergeInstalledProviders(JObject.Parse("{\"providers\":[{\"id\":\"codex\"},{\"id\":\"acp-opencode\",\"displayName\":\"opencode\"}]}"));
+            var oc = shell.ProviderStatesForTest.FirstOrDefault(x => (string)x["providerId"] == "acp-opencode");
+            bool again = shell.MergeInstalledProviders(JObject.Parse("{\"providers\":[{\"id\":\"acp-opencode\"}]}"));
+            Check(merged && oc != null && (string)oc["status"] == "ready" && (string)oc["loginCommand"] == "opencode auth login" && !again && shell.ProviderStatesForTest.Count == 2,
+                $"AGENTS adds opencode from MQH's execution options (it is not in providers/state): {oc?["status"]}, sign in “{oc?["loginCommand"]}”, once ({!again})");
+            shell.ProviderStatesForTest = keepStates;
+
             string V(string said) { var m = shell.Voice.FastMatch(said); return m == null ? "none" : m.Command.Name + " " + (string)m.Args["agent"]; }
             Check(V("install opencode") == "install_agent opencode" && V("download codex") == "install_agent codex" && V("add an api key for claude code") == "agent_key claude",
                 $"voice: “install opencode” -> {V("install opencode")}, “download codex” -> {V("download codex")}, “add an api key for claude code” -> {V("add an api key for claude code")}");

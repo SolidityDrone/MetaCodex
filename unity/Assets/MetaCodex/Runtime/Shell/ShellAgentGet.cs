@@ -277,6 +277,7 @@ namespace MetaCodex.Shell
         public void SetAgentKeyForTest(string key) { _akField?.Set(key); SaveAgentKey(); }
         public void PasteAgentKeyForTest() => PasteAgentKey();
         public void SelectAgentKeyForTest(string env) => SelectAgentKey(env);
+        public Newtonsoft.Json.Linq.JArray ProviderStatesForTest { get => _providerStates; set => _providerStates = value; }
         public string GetTileTextForTest(string id) => _getTiles.TryGetValue(id, out var b) ? b.Text : null;
         public bool MoreTileEnabledForTest => _panels.TryGetValue("agents", out var p) && p.Elements.OfType<UiButton>().Any(b => b.Text.StartsWith("MORE") && b.Enabled);
     }
