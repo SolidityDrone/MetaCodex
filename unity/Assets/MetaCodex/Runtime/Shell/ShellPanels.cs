@@ -596,6 +596,8 @@ end)
             var sg = k.NextSplit(rowH, 0.4f, out var sg2);
             tabs.AddTo(TabLook, new UiToggle("Sounds", s.sounds, v => { s.sounds = v; OnSettingsChanged(); if (v) Sounds?.Play("toast"); }) { Rect = sg });
             tabs.AddTo(TabLook, new UiSlider("VOLUME", 0f, 1f, s.soundVolume, v => { s.soundVolume = v; OnSettingsChanged(); }) { Rect = sg2, LabelWidth = 0.08f, Format = "0.00" });
+            tabs.AddTo(TabLook, new UiToggle("Orb: it casts the windows, speaks, and shows messages beside it", s.orb, v => SetOrb(v)) { Rect = k.Next(rowH) });
+            tabs.AddTo(TabLook, new UiLabel("Touch the orb for its menu (the messages so far). Pinch it to put it anywhere: it keeps that place by you. Its menu's PLACE lets it choose again.", t.SmallSize) { Rect = k.Next(0.036f), Wrap = true, Color = t.TextDim, Align = TextAlignmentOptions.TopLeft });
 
             // ABOUT
             var a2 = new UiStack(area, t.Gap);

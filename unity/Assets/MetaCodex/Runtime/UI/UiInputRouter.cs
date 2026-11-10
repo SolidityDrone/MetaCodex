@@ -49,6 +49,8 @@ namespace MetaCodex.UI
         public bool SelectionMode;
         public event Action<UiPanel, Rect> Selected;
         public event Action<UiPanel, UiElement> Clicked;
+        /// A hand (0 left, 1 right) that is busy with something that is not a panel (the orb): it neither points nor pokes.
+        public Func<int, bool> HandBlocked;
         /// The panel whose control is being pressed or released right now (null between): a dialog it opens belongs to
         /// it (UiModal places it over that panel).
         public UiPanel ActivePanel { get; private set; }
@@ -157,6 +159,7 @@ namespace MetaCodex.UI
             {
                 var st = Gestures.Get((Handedness)h);
                 if (!st.Tracked) continue;
+                if (HandBlocked != null && HandBlocked(h) && _hand[h].Captured == null && _hand[h].DragPanel == null && _hand[2 + h].Captured == null) continue;
                 bool pinchClicks = Settings.clickMode != 1;
                 bool pokeClicks = Settings.clickMode != 0;
                 var ray = _hand[h];

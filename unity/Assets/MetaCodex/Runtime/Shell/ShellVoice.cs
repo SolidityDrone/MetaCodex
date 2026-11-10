@@ -564,6 +564,7 @@ namespace MetaCodex.Shell
                 }
                 _voiceAudio.volume = 0.9f;
                 _voiceAudio.clip = clip;
+                OnSpeechStarted(clip); // the orb speaks it: from its place, pulsing with the words
                 _voiceAudio.Play();
                 done?.Invoke(null);
             });
@@ -1040,6 +1041,7 @@ namespace MetaCodex.Shell
             new VoiceSetting { Id = "views_auto_open", Key = "viewsAutoOpen", Kind = "bool", Label = "Agent views open by themselves", Names = new[] { "auto open views", "agent views auto open", "views auto open" } },
             new VoiceSetting { Id = "workspace_module", Key = "threadWorkspace", Kind = "bool", Label = "Thread workspace", Names = new[] { "workspace module", "thread workspace", "workspace panel" } },
             new VoiceSetting { Id = "wrist_menu", Key = "wristMenu", Kind = "bool", Label = "Main menu on the wrist", Names = new[] { "wrist menu", "menu on the wrist", "radial menu", "watch menu" } },
+            new VoiceSetting { Id = "orb", Key = "orb", Kind = "bool", Label = "Orb", Names = new[] { "orb", "the orb", "energy sphere", "sphere", "companion" } },
         };
 
         private static readonly HashSet<string> OnWords = new HashSet<string> { "on", "yes", "true", "enable", "enabled", "active" };
@@ -1123,7 +1125,7 @@ namespace MetaCodex.Shell
                 { "PANEL OPACITY", "panelOpacity" }, { "VOLUME", "soundVolume" }, { "RADIUS", "focusRadius" }, { "INTENSITY", "focusIntensity" }, { "SOFTNESS", "focusSoftness" }, { "BLUR", "focusBlur" } };
             var toggles = new Dictionary<string, string> { { "Bend panels", "bendPanels" }, { "Sounds", "sounds" }, { "Clap gesture", "gestures.clapEnabled" }, { "Show hand rays", "gestures.rayVisible" },
                 { "Foveated", "foveation" }, { "Ambient focus", "focusEnabled" }, { "Speak answers", "voice.speak" },
-                { "Real things in front", "occludeUi" }, { "Sharp depth", "depthCamera" }, { "Main menu on the wrist", "wristMenu" } };
+                { "Real things in front", "occludeUi" }, { "Sharp depth", "depthCamera" }, { "Main menu on the wrist", "wristMenu" }, { "Orb", "orb" } };
             foreach (var p in _panels.Values)
                 foreach (var e in p.Elements)
                 {
@@ -1234,14 +1236,26 @@ namespace MetaCodex.Shell
             _vHudText.Set(text ?? "");
             _vHudLevel.Set(state == "listening" ? Recorder.Level : state == "done" ? 1f : 0f);
             _vHudCloseAt = -1f;
+            // done or failed: the orb says so in colour
+            if (Orb != null && Orb.Visible && (state == "done" || state == "error")) Orb.Flash(state == "error" ? UiTheme.Current.Danger : UiTheme.Current.Ok, 1.0f);
             if (!_vHud.IsOpen)
             {
-                if (_panels.TryGetValue("dock", out var dock) && dock.IsOpen)
+                if (OrbActive)
                 {
+                    // the first card of the orb's column (UiToasts keeps it there while it is open)
+                    _vHud.BaseScale = Vector3.one * OrbMenuScale();
+                    _vHud.gameObject.SetActive(true);
+                    Toasts.Pinned = _vHud;
+                    Toasts.LayoutNow();
+                    _vHud.gameObject.SetActive(false);
+                }
+                else if (_panels.TryGetValue("dock", out var dock) && dock.IsOpen)
+                {
+                    _vHud.BaseScale = Vector3.one * Mathf.Clamp(Settings.uiScale, 0.6f, 1.8f);
                     var dt = dock.transform;
                     _vHud.transform.SetPositionAndRotation(dt.position + dt.up * (dock.Height * 0.5f + _vHud.Height * 0.5f + 0.015f) * dock.RestLossyScale.y, dt.rotation);
                 }
-                else if (Head != null) _vHud.PlaceInFront(Head, 0.62f, 0.18f);
+                else if (Head != null) { _vHud.BaseScale = Vector3.one * Mathf.Clamp(Settings.uiScale, 0.6f, 1.8f); _vHud.PlaceInFront(Head, 0.62f, 0.18f); }
                 _vHud.Open();
             }
         }
@@ -1252,6 +1266,7 @@ namespace MetaCodex.Shell
             var t = UiTheme.Current;
             _vHud = UiPanel.Create<UiPanel>("voice-hud", "", 0.40f, 0.098f, _root, header: false);
             _vHud.Closable = false;
+            _vHud.Draggable = false; // it has its place: beside the orb, or over the dock
             _vHud.BaseScale = Vector3.one * Mathf.Clamp(Settings.uiScale, 0.6f, 1.8f);
             Router.Register(_vHud);
             var c = _vHud.Content;

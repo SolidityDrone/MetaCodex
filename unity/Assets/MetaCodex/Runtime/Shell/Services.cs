@@ -254,6 +254,14 @@ namespace MetaCodex.Shell
         public bool depthCamera = true;
         /// SYSTEM > STORAGE: warn when the Linux userland grows past this many GB (0: no limit).
         public float linuxLimitGB = 0f;
+        /// The orb: it casts the panels, speaks, and shows the app's messages beside it (Settings > LOOK).
+        public bool orb = true;
+        /// The user put the orb somewhere (a pinch): it keeps that place by them, yaw off the way they face and pitch in
+        /// degrees, metres away. Not pinned: it chooses a free place up to the right.
+        public bool orbPinned = false;
+        public float orbYaw = 32f, orbPitch = 16f, orbDist = 0.52f;
+        /// The one-time message that says what the orb is (touch it, pinch it) has been shown.
+        public bool orbTipShown = false;
 
         public static string PathOnDisk => Path.Combine(Application.persistentDataPath, "metacodex-settings.json");
 

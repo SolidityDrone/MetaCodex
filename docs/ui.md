@@ -78,17 +78,57 @@ horizontal line is an arc and the fan follows it. Captures render a window at re
 the brackets lock on, a rising sweep with a shimmer, a low thump and a clear note; a falling sweep, a quick
 rise as the spark flies home.
 
+## The orb
+
+A sphere of energy that floats by the user (owner 2026-11-10: "a protoss energy sphere ... the origin that casts
+panels ... the source of the speech ... a billboard side notification system menu"; `UiOrb` is its body,
+`ShellOrb` what it does, `MetaCodex/Orb` how it is drawn). Settings > LOOK > Orb turns it off (key `orb`, voice
+"turn the orb off"); then windows are cast from their left edge and messages float in the upper view as before.
+
+- **How it looks.** One quad that faces each eye; every pixel follows its own ray through a unit sphere, so the
+  orb has true depth per eye: a white-hot core, two shells of plasma filaments turning against each other (a
+  sheared, twice-warped sine field, seen on the near and the far side of each shell), a dark glass body with a
+  bright limb, three thin rings round it (two of warm gold, one dashed in its own colour; the distance between
+  the ray and each circle, so a ring is a tube from every side and passes behind the sphere), motes with short
+  tails, a halo. Premultiplied: its light is added over the room and its body darkens what is behind it, so it
+  reads in a bright room; a depth pass on its disc keeps a hand that is behind it from cutting it out. Cost:
+  the plasma only inside the sphere, the rings only where a ring can be (a ray further from the centre than the
+  ring's radius cannot meet it), the motes within 1.8 radii, and all light is windowed to zero inside the quad.
+- **Moods.** Idle: calm cyan, slow. Listening: it turns gold and its three rings turn to face you, one inside the
+  other. Thinking: violet, the plasma and the rings spin up. Speaking: its core pulses with the loudness of the
+  words and a ripple leaves it at every syllable; the spoken answer comes from its place (the AudioSource sits
+  on it, 80 % spatial). A message: it flashes in the message's colour and the plates of a hexagon shield run
+  over it. Casting: its rings turn to face the window and the fan goes out; a hand near it or a ray on it: it
+  brightens and turns its rings to that hand. It comes and goes with its own ignition (0.7 s / 0.4 s).
+- **Where it floats.** Up to the right of where you face (30 degrees right, 17 up, 0.52 m), in a frame that
+  follows you lazily: it stays where it is in the room while you only glance round, and comes along when you
+  turn (more than 34 degrees for 0.7 s; sooner while it has something to say) or walk away (25 cm), moving round
+  you, never through your head. It never sits in front of a window: when one covers its place for half a second
+  it takes the next free one (ten candidates, both sides, higher up) and goes back three seconds after its place
+  is free again (it looks at one candidate a frame, and stays put while it casts). Pinch it and put it anywhere:
+  it keeps that place by you (`orbPinned`, `orbYaw`, `orbPitch`, `orbDist`); its menu's PLACE lets it choose again.
+- **What it says.** Every message of the app (`Toast`) is a callout: a card cast by the orb in a column that
+  rises beside it, towards the middle of your view, from its own level; the newest lowest, up to four, joined to
+  the orb by a rail of light; the voice HUD is the first card of that column while it is shown. Touch the orb
+  with a fingertip, or point at it and pinch: its menu opens beside it and below (cast with the quick variant), with the last 40 messages
+  (kind, text, how long ago) and four actions: TALK, SPEAK (spoken answers on or off), PLACE, CLEAR. A message
+  not read yet rides round the orb as a larger gold spark (four at most) until the menu is opened; the menu's
+  first line says how many are new. A hand that is at the orb or points at it does not also click the window
+  behind it (`UiInputRouter.HandBlocked`). The first time the app runs with the orb, one message says what it
+  is (`orbTipShown`).
+- Control port: `orb on | off | menu | place | status`.
+
 ## Code map (`unity/Assets/MetaCodex/Runtime`)
 
 | Folder | What |
 |---|---|
-| `UI/` | `UiTheme` (colours, sizes, fonts), `UiShapeMesh` (batched shapes, rotated strokes), `UiPanel` (frame, header, the cast, drag, GPU bend and cast slots, curved ray hits), `UiPanelFx` (the cast's timelines, its scan plane and its light), `UiIconMesh` (tool logos atlas, batched icons), widgets (`UiButton`, `UiToggle`, `UiSegmented`, `UiSlider`, `UiTextField`, `UiList`, `UiTabs`, `UiProgress`, `UiDivider`), `UiViz` (canvases drawn from pooled shapes: `UiChart`, `UiFlow`, `UiSequence`, `UiTable`, `UiCodeView`, `UiRing`, `UiChangeMap`, `UiToolGrid`, `UiStorageBar`; the series palette), `UiMermaid` (flowchart / sequence / pie subset), `UiKeyboard` (Horizon OS system keyboard), `UiInputRouter` (pointers, beams, reticles, selection), `UiToasts`, `UiModal`, `UiSounds` |
+| `UI/` | `UiTheme` (colours, sizes, fonts), `UiShapeMesh` (batched shapes, rotated strokes), `UiPanel` (frame, header, the cast, drag, GPU bend and cast slots, curved ray hits), `UiPanelFx` (the cast's timelines, its scan plane and its light), `UiOrb` (the orb's body: moods, motion, the uniforms of its shader), `UiIconMesh` (tool logos atlas, batched icons), widgets (`UiButton`, `UiToggle`, `UiSegmented`, `UiSlider`, `UiTextField`, `UiList`, `UiTabs`, `UiProgress`, `UiDivider`), `UiViz` (canvases drawn from pooled shapes: `UiChart`, `UiFlow`, `UiSequence`, `UiTable`, `UiCodeView`, `UiRing`, `UiChangeMap`, `UiToolGrid`, `UiStorageBar`; the series palette), `UiMermaid` (flowchart / sequence / pie subset), `UiKeyboard` (Horizon OS system keyboard), `UiInputRouter` (pointers, beams, reticles, selection), `UiToasts`, `UiModal`, `UiSounds` |
 | `Hands/` | `GestureEngine` (built-ins, pose templates, custom gestures with hold/cooldown, head-relative directions), `PoseSpec`, `OvrHandSource` (OVRHand/OVRSkeleton), `SimulatedHands` (any pose, for tests) |
 | `Scripting/` | `ScriptHost`: Lua (MoonSharp) scripts and plugin folders, hot reload, sandbox, instruction budget, detectors as persistent coroutines, persisted state; `PoseJson` |
 | `Security/` | `SecretVault` (Android Keystore sealer, Editor dev sealer, policies, access log) |
 | `AI/` | `QvacHost` (starts the local AI service process, token, restarts), `QvacClient` (HTTP), `VoiceRecorder` (microphone, end of speech), `VoiceCommands` (registry, phrase templates, tool specs) |
-| `Shell/` | `MetaCodexShell` (wiring, panels by id and aliases, control-port commands), `ShellPanels` (dock, terminals, files, git logic, browser, scripts, settings, saved layouts), `ShellGestures` (Gestures studio, bindings, actions, recording, starter plugins), `ShellAgents` (agents, threads grouped by project, thread with composer chips and fork, new thread, terminal links), `ShellWorkspace` (the thread's linked workspace module, the picker), `ShellViews` + `ViewStage` (agent views, the physics stage), `ShellVault` (vault: secrets and GIT with the GitHub account; secret broker), `ShellVoice` (voice pipeline, shell commands, VOICE panel, HUD), `ShellAmbient` (Ambient Focus), `ShellSystem` (installed tools, storage), `ShellLayout` (fixed / float carousel, the thread + workspace pair), `Services` (system deep links, settings, MQH client, git, files) |
-| `../Resources/Shaders/` | `AmbientFocus` (the dome: depth, floor plane, blur), `FocusMesh` (hand cut-outs), `FocusDepthCopy` (floor readback), `TextBend` (TMP SDF + bend), `UiIcon` (logos + bend), `StageLit` (physics bodies), `ViewImage` (images in views), `WristArt` (the wrist menu and the cast's light): in Resources so they ship without material assets; `../Shaders/McxPanelFx.hlsl` (the cast's scan plane, shared by every shader that draws inside a window) |
+| `Shell/` | `MetaCodexShell` (wiring, panels by id and aliases, control-port commands), `ShellPanels` (dock, terminals, files, git logic, browser, scripts, settings, saved layouts), `ShellGestures` (Gestures studio, bindings, actions, recording, starter plugins), `ShellAgents` (agents, threads grouped by project, thread with composer chips and fork, new thread, terminal links), `ShellWorkspace` (the thread's linked workspace module, the picker), `ShellViews` + `ViewStage` (agent views, the physics stage), `ShellVault` (vault: secrets and GIT with the GitHub account; secret broker), `ShellVoice` (voice pipeline, shell commands, VOICE panel, HUD), `ShellAmbient` (Ambient Focus), `ShellSystem` (installed tools, storage), `ShellLayout` (fixed / float carousel, the thread + workspace pair), `ShellOrb` (the orb: where it floats, hands, the voice, callouts, its menu), `Services` (system deep links, settings, MQH client, git, files) |
+| `../Resources/Shaders/` | `AmbientFocus` (the dome: depth, floor plane, blur), `FocusMesh` (hand cut-outs), `FocusDepthCopy` (floor readback), `TextBend` (TMP SDF + bend), `UiIcon` (logos + bend), `StageLit` (physics bodies), `ViewImage` (images in views), `Orb` (the orb), `WristArt` (the wrist menu and the cast's light): in Resources so they ship without material assets; `../Shaders/McxPanelFx.hlsl` (the cast's scan plane, shared by every shader that draws inside a window) |
 | `../Resources/ToolIcons/` | tool logos (Simple Icons, CC0 SVG data; each logo is its owner's trademark, shown only to name the tool), built by `tools/make-tool-icons.js` |
 | `../Plugins/Android/MetaCodexVault.java` | the Keystore bridge (AES-256-GCM, StrongBox or TEE) |
 
@@ -253,5 +293,5 @@ end to end (including a script and a plugin written by real agents: `tools/agent
 `tools/agent-plugin-test.sh`), the vault (sealing, tamper check, policies, VR approval), sign-in link
 detection, themes, saved layouts, git through WSL, the float carousel, and MQH (providers, models,
 projects, a real thread, machine environment) when `tools/mqh-dev.sh start` runs. On the headset the
-control port adds `ui`, `script`, `plugin`, `gesture`, `hand`, `action` and `secret` commands (`tools/qterm`,
+control port adds `ui`, `orb`, `script`, `plugin`, `gesture`, `hand`, `action` and `secret` commands (`tools/qterm`,
 or `mcx-ui` / `mcx-secret` inside the userland).

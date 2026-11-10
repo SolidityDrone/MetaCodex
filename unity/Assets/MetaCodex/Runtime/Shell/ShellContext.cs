@@ -266,7 +266,8 @@ namespace MetaCodex.Shell
             }
             data["counts"] = counts;
             Line("system", $"{(int)counts["panels"]} windows open, {(int)counts["terminals"]} of them terminals");
-            Line("system", "ambient focus " + (Settings.focusEnabled ? "on" : "off") + "; main menu on the " + (Settings.wristMenu ? "wrist" : "dock"));
+            Line("system", "ambient focus " + (Settings.focusEnabled ? "on" : "off") + "; main menu on the " + (Settings.wristMenu ? "wrist" : "dock")
+                + "; the orb " + (Settings.orb ? "on" + (Toasts != null && Toasts.History.Count > 0 ? ", its last message: " + Toasts.History[0].Text : "") : "off"));
             Line("system", "local AI service: " + (Qvac == null ? "off" : Qvac.State.ToString().ToLowerInvariant()));
             // the mid-term memory, newest first
             foreach (var e in SessionMemory.Recent(TimeSpan.FromMinutes(90), now).Reverse().Take(14))

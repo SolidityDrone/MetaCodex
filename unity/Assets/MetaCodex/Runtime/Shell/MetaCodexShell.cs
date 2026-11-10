@@ -167,6 +167,7 @@ namespace MetaCodex.Shell
 
             BuildPanels();
             BuildWrist();
+            BuildOrb();
             if (app != null) foreach (var t in app.Terminals) WrapTerminal(t);
             Log($"shell up: {_panels.Count} panels, scripts in {dir}");
         }
@@ -236,6 +237,7 @@ namespace MetaCodex.Shell
             PushSettingsWhenQuiet();
             if (Settings != null && Settings.mqhSync && Time.unscaledTime >= _nextMqhPoll) { _nextMqhPoll = Time.unscaledTime + 5f; PullRemoteSettings(); }
             UpdateLayout();
+            TickOrb(Time.unscaledDeltaTime);
         }
 
         // ------------------------------------------------------------------ panels
@@ -407,6 +409,7 @@ namespace MetaCodex.Shell
                 }
                 if (kv.Value.IsOpen) PlaceDefault(kv.Key, kv.Value);
             }
+            if (Orb != null && Settings.orb) { FrameOrb(true); Orb.Teleport(OrbHome()); } // the orb comes along
             ResetCarousel();
         }
 
@@ -623,6 +626,7 @@ namespace MetaCodex.Shell
             ApplyMaterialSettings();
             foreach (var p in _panels.Values) p.BaseScale = Vector3.one * Mathf.Clamp(Settings.uiScale, 0.6f, 1.8f);
             ApplyMainMenuMode();
+            ApplyOrbSetting();
             if (rebuild) _rebuildPending = true; // next frame: never destroy panels inside the click that asked for it
             // sliders call this on every step: push to MQH once things are quiet for a moment
             if (Settings.mqhSync) _settingsPushDue = _clock.Elapsed.TotalSeconds + 1.5;
@@ -718,6 +722,21 @@ namespace MetaCodex.Shell
                         case "layout": SetLayout(id); return "ok, layout=" + Settings.layout;
                         case "spin": Spin(float.TryParse(id, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var deg) ? deg : 30f, 0f); return "ok, spin=" + CarouselSpin.ToString("F1");
                         default: return "error: ui list | open <id> | close <id> | click <id> <button> | toast <text> | select on|off | layout fixed|float | spin <deg>";
+                    }
+                }
+                case "orb":
+                {
+                    // the orb (ShellOrb): orb on | off | menu | place | status
+                    if (Orb == null) return "error: no orb";
+                    switch ((arg ?? "").Trim().ToLowerInvariant())
+                    {
+                        case "on": SetOrb(true); return "ok";
+                        case "off": SetOrb(false); return "ok";
+                        case "menu": ToggleOrbMenu(); return "ok, menu " + (OrbMenu != null && OrbMenu.IsOpen ? "open" : "closed");
+                        case "place": ResetOrbPlace(); return "ok";
+                        case "": case "status":
+                            return $"orb {(Settings.orb ? "on" : "off")} mood={Orb.State} at={Orb.Position.x:F2},{Orb.Position.y:F2},{Orb.Position.z:F2} pinned={Settings.orbPinned} messages={Toasts.History.Count}";
+                        default: return "error: orb on | off | menu | place | status";
                     }
                 }
                 case "script":

@@ -316,3 +316,17 @@ Section 19's transition lines (the spark, the collapse into a line) are replaced
 - [ ] Headers: a bright block before the title, the line under it steps up two thirds along, a pulse runs in it; a ruler down the left edge of large windows; a thin conduit along the bottom right with a pulse
 - [ ] Small cards (messages, the voice HUD) have no corner brackets; windows and dialogs do
 - [ ] Frame rate with five windows open: 72 fps (Perf menu Snapshot); the same while a window is cast
+
+## 21. The orb (owner 2026-11-10)
+
+- [ ] At start a sphere of energy ignites up to the right of where you face (about half a metre away): a white-hot core, plasma turning inside dark glass, three thin rings (two gold), small lights circling it; it reads in a bright room; no square of light round it. The first time a message says what it is
+- [ ] It has depth: move your head near it, the plasma and the rings shift like real things inside and round a glass ball
+- [ ] Glance left and right: it stays where it is in the room. Turn your chair a quarter turn: after a moment it comes along round you, never through your face. Walk two steps: it comes along
+- [ ] Open windows until one would be behind the orb: it moves to a free place; close that window: a few seconds later it goes back
+- [ ] It casts the windows: a fan of light opens from the orb to the window's nearest edge and rides on the scan line; its rings turn to face the window. A window to the left of the orb is built from its right edge, one below it from its top. Closing: a spark flies home to the orb
+- [ ] Voice (TALK): while it listens the orb is gold and its rings face you, the HUD card stands beside it; while it thinks it is violet and spins; a spoken answer comes from the orb's direction, the orb pulses with the words and ripples leave it
+- [ ] Any message (SELECT on and off gives two): a card beside the orb, towards the middle of your view, joined to it by a thin rail; a second message takes that place and the first moves up; the orb flashes in the message's colour (green ok, amber warning, red error); afterwards a larger gold spark circles the orb for each message not read yet
+- [ ] Touch the orb with a fingertip: its menu opens beside it (TALK, SPEAK, PLACE, CLEAR and the messages so far, the newest first, with their age; "N NEW"); the gold sparks go; touch it again: it closes. Point at the orb with a ray and pinch: the same; the window behind the orb is not clicked
+- [ ] Pinch the orb between thumb and index and move the hand: it follows; let go: it stays there and keeps that place by you when you turn. Its menu > PLACE: it goes back to choosing its own place
+- [ ] Settings > LOOK > Orb off (or voice "turn the orb off"): it fades out; windows are cast from their left edge; messages float in the upper view. On again: it ignites
+- [ ] Frame rate with the orb and five windows: 72 fps; bring the orb close to your face (pinch it there): still 72 fps

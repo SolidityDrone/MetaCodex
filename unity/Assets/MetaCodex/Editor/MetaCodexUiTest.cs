@@ -83,7 +83,7 @@ namespace MetaCodex.EditorTools
             Directory.CreateDirectory(tmp);
             string scripts = Path.Combine(tmp, "scripts");
 
-            foreach (var shaderName in new[] { "MetaCodex/SciFiUI", "MetaCodex/Beam", "MetaCodex/PanelUnlit", "MetaCodex/TextBend", "MetaCodex/UiIcon", "MetaCodex/ViewImage", "MetaCodex/WristArt", "MetaCodex/StageLit" })
+            foreach (var shaderName in new[] { "MetaCodex/SciFiUI", "MetaCodex/Beam", "MetaCodex/PanelUnlit", "MetaCodex/TextBend", "MetaCodex/UiIcon", "MetaCodex/ViewImage", "MetaCodex/WristArt", "MetaCodex/StageLit", "MetaCodex/Orb" })
             {
                 var sh = Shader.Find(shaderName);
                 if (sh == null) { Fail("shader missing: " + shaderName); continue; }
@@ -164,6 +164,7 @@ namespace MetaCodex.EditorTools
                 if (Want("qol")) Qol(shell, head, hands);
                 if (Want("wrist")) Wrist(shell, head, hands);
                 if (Want("transitions")) Transitions(shell, head);
+                if (Want("orb")) OrbSection(shell, head, hands);
                 if (Want("look")) Look(shell, head);
                 if (Want("mqh")) MqhPanel(shell);
                 if (Want("captures")) Captures(shell, tmp);
@@ -1821,6 +1822,270 @@ end)
             head.rotation = rot0;
             RightAway();
             foreach (var id in shell.PanelIds.ToList()) if (id != "dock") shell.ClosePanel(id);
+        }
+
+        /// THE ORB (owner 2026-11-10): a sphere of energy that floats by the user, casts the panels, is where the voice comes
+        /// from, and shows the app's messages beside it. It comes and goes with its own light, keeps a free place up to
+        /// the right, follows lazily, is touched for its menu and pinched to be put somewhere.
+        private static void OrbSection(MetaCodexShell shell, Transform head, SimulatedHands hands)
+        {
+            foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
+            shell.SetWristMenu(true); // no dock in the pictures
+            var keepPos = head.position; var keepRot = head.rotation;
+            head.SetPositionAndRotation(new Vector3(0f, 1.4f, 0f), Quaternion.identity);
+            hands.Frames[0].Tracked = false; hands.Frames[1].Tracked = false;
+            var orb = shell.Orb;
+            var keepCaster = UiPanelFx.Caster;
+            // an empty room: no terminal, no old messages
+            var terms = shell.GetComponentsInChildren<UiPanel>(true).Where(x => x.Id != null && x.Id.StartsWith("term-") && x.gameObject.activeSelf).ToList();
+            foreach (var tm in terms) tm.gameObject.SetActive(false);
+            foreach (var old in shell.Toasts.Panels.ToList()) old.CloseAndDestroy();
+            shell.Toasts.Tick(float.MaxValue);
+            void Step(int n, float dt = 0.05f) { for (int i = 0; i < n; i++) { shell.TickGesturesForTest(dt); shell.TickOrbForTest(dt); } }
+            (float yaw, float pitch, float dist) Where()
+            {
+                var rel = orb.Position - head.position;
+                float yaw = Mathf.DeltaAngle(Mathf.Atan2(head.forward.x, head.forward.z) * Mathf.Rad2Deg, Mathf.Atan2(rel.x, rel.z) * Mathf.Rad2Deg);
+                return (yaw, Mathf.Asin(rel.y / rel.magnitude) * Mathf.Rad2Deg, rel.magnitude);
+            }
+            try
+            {
+                Check(orb != null && shell.Settings.orb && shell.OrbActive, "the orb is there by default");
+                // it comes with its own light, never at once
+                shell.SetOrb(false);
+                Step(12);
+                bool gone = orb.Appear <= 0.001f && !orb.Drawn && UiPanelFx.Caster() == null;
+                shell.SetOrb(true);
+                Step(3);
+                float mid = orb.Appear;
+                Step(16);
+                Check(gone && mid > 0.05f && mid < 0.6f && orb.Appear > 0.999f && orb.Drawn,
+                    $"Orb off: it goes and nothing casts ({gone}); on: it ignites over 0.7 s ({mid:F2} after 0.15 s, {orb.Appear:F2} after 0.95 s) and is drawn");
+                // where it floats: up to the right of where the user looks, about half a metre away
+                Step(20);
+                var w0 = Where();
+                Check(Mathf.Abs(w0.yaw - 32f) < 3f && Mathf.Abs(w0.pitch - 16f) < 3f && Mathf.Abs(w0.dist - MetaCodexShell.OrbDistance) < 0.03f,
+                    $"it floats up to the right of the user's view: {w0.yaw:F0} deg right, {w0.pitch:F0} deg up, {w0.dist:F2} m away");
+                RenderAt("ui-orb.png", head.position, Quaternion.LookRotation(orb.Position - head.position, Vector3.up), 16f, 900, 900);
+                // a glance is not a turn: it stays where it is in the room; a real turn, and it comes along round the user
+                var before = orb.Position;
+                head.rotation = Quaternion.Euler(0f, 20f, 0f);
+                Step(30);
+                bool stays = Vector3.Distance(orb.Position, before) < 0.02f;
+                head.rotation = Quaternion.Euler(0f, 150f, 0f);
+                float nearest = float.MaxValue;
+                for (int k = 0; k < 60; k++) { Step(1); nearest = Mathf.Min(nearest, Vector3.Distance(orb.Position, head.position)); }
+                var w1 = Where();
+                Check(stays && Mathf.Abs(w1.yaw - 32f) < 4f && Mathf.Abs(w1.pitch - 16f) < 4f && nearest > 0.42f,
+                    $"a glance of 20 deg leaves it where it is in the room ({stays}); after a turn of 130 deg it is up to the right again ({w1.yaw:F0}, {w1.pitch:F0} deg) and it went round the user, never nearer than {nearest:F2} m");
+                head.position += new Vector3(0.7f, 0f, 0.4f);
+                Step(40);
+                var w2 = Where();
+                Check(Mathf.Abs(w2.yaw - 32f) < 4f && Mathf.Abs(w2.dist - MetaCodexShell.OrbDistance) < 0.04f, $"the user walks 0.8 m away: it comes along ({w2.yaw:F0} deg right, {w2.dist:F2} m)");
+                head.SetPositionAndRotation(new Vector3(0f, 1.4f, 0f), Quaternion.identity);
+                Step(60);
+
+                // never in front of a window: a window where it floats, and it takes the next free place; it comes back later
+                UiPanel.AnimateInEditor = false;
+                shell.OpenPanel("files");
+                var files = shell.PanelsById["files"];
+                var dir = (orb.Position - head.position).normalized;
+                files.transform.SetPositionAndRotation(head.position + dir * 0.9f, Quaternion.LookRotation(dir, Vector3.up));
+                files.ForceRefresh();
+                Step(30);
+                var spot = shell.OrbSpotForTest;
+                bool clear = !files.Raycast(new Ray(head.position, (orb.Position - head.position).normalized), out _, out _);
+                Check(clear && (spot.yaw != 32f || spot.pitch != 16f), $"a window where it floats: it moves to a free place ({spot.yaw:F0}, {spot.pitch:F0} deg), in front of no window ({clear})");
+                shell.ClosePanel("files");
+                Step(30);
+                bool waits = shell.OrbSpotForTest.yaw == spot.yaw;
+                Step(50);
+                Check(waits && shell.OrbSpotForTest.yaw == 32f, $"the window gone, it waits a moment ({waits}) and then goes back to its place");
+
+                // it casts the panels: the scan line leaves from its side, its rings turn to the panel
+                UiPanel.AnimateInEditor = true;
+                var mqh = shell.PanelsById["mqh"];
+                mqh.transform.position = Vector3.up * 50f; // not back where a test before left it: in front of the user
+                shell.OpenPanel("mqh");
+                // the orb is up to the right of the panel: the line starts at the panel's right edge and moves left
+                var orbLocal = mqh.transform.InverseTransformPoint(orb.Position);
+                bool fromOrb = UiPanelFx.Caster() != null && mqh.TransitionPhase == UiPanel.Phase.Opening && orbLocal.x > 0.05f && mqh.Fx.Axis == 0 && mqh.Fx.Sign < 0f;
+                Step(3);
+                for (int k = 0; k < 3; k++) mqh.TickTransitionForTest(0.05f);
+                float aim = orb.Aim;
+                float toPanel = Vector3.Dot(orb.Look, (mqh.transform.position - orb.Position).normalized);
+                Check(fromOrb && aim > 0.6f && toPanel > 0.9f, $"a panel that opens is cast by the orb: the line leaves from the orb's side ({fromOrb}: the orb {orbLocal.x:F2} m to the panel's right, axis {mqh.Fx.Axis}, sign {mqh.Fx.Sign:F0}), its rings aim at the panel (aim {aim:F2}, look {toPanel:F2})");
+                mqh.ForceRefresh();
+                mqh.PoseTransitionForTest(true, 0.46f);
+                var wide = head.position - head.forward * 0.25f + Vector3.up * 0.04f;
+                RenderAt("ui-orb-cast.png", wide, Quaternion.LookRotation(head.forward + head.right * 0.14f, Vector3.up), 62f, 1400, 900);
+                mqh.ForceRefresh();
+                mqh.PoseTransitionForTest(false, 0.86f);
+                RenderAt("ui-orb-absorb.png", wide, Quaternion.LookRotation(head.forward + head.right * 0.14f, Vector3.up), 62f, 1400, 900);
+                mqh.ForceRefresh();
+                UiPanel.AnimateInEditor = false;
+                shell.ClosePanel("mqh");
+                Step(90); // back at its place
+
+                // the voice: it pulses with the loudness of what is spoken and sends ripples out, then rests
+                var env = new float[100];
+                for (int k = 0; k < env.Length; k++) env[k] = (k / 12) % 2 == 0 ? 0.9f : 0.05f; // syllables
+                shell.OrbSpeakForTest(env);
+                float loud = 0f, quiet = 1f; int ripples = 0;
+                for (int k = 0; k < 30; k++) { Step(1); if (orb.State == UiOrb.Mood.Speaking) { loud = Mathf.Max(loud, orb.Pulse); quiet = Mathf.Min(quiet, orb.Pulse); ripples = Math.Max(ripples, orb.Ripples); } }
+                bool speaking = orb.State == UiOrb.Mood.Speaking;
+                RenderAt("ui-orb-speaking.png", head.position, Quaternion.LookRotation(orb.Position - head.position, Vector3.up), 16f, 900, 900);
+                Step(30);
+                Check(speaking && loud > 0.6f && quiet < 0.35f && ripples >= 2 && orb.State == UiOrb.Mood.Idle,
+                    $"it speaks: its pulse follows the voice (from {quiet:F2} to {loud:F2}), {ripples} ripples leave it; when the words end it rests ({orb.State})");
+                Check(MetaCodexShell.SpeechEnvelope(new float[] { 0f, 0f, 1f, -1f, 0.5f, -0.5f, 0f, 0f }, 1, 100).Length == 4
+                    && MetaCodexShell.SpeechEnvelope(new float[] { 0f, 0f, 1f, -1f, 0.5f, -0.5f, 0f, 0f }, 1, 100)[1] > 0.99f
+                    && MetaCodexShell.SpeechEnvelope(new float[] { 0f, 0f, 1f, -1f, 0.5f, -0.5f, 0f, 0f }, 1, 100)[0] < 0.01f, "the loudness curve of a clip: 50 values a second, loudest = 1");
+                // listening and thinking: its mood, and the voice HUD is the first card of its column
+                shell.SetVoiceStateForTest("listening", "LISTENING", "speak now");
+                Step(12);
+                var hud = shell.Toasts.Pinned;
+                float hudOff = hud != null ? Vector3.Distance(hud.transform.position, orb.Position) : -1f;
+                float hudTurn = hud != null ? Vector3.Angle(hud.transform.forward, hud.transform.position - head.position) : -1f;
+                bool hudThere = hud != null && hud.IsOpen && hudOff < 0.45f && hudTurn < 8f;
+                bool listening = orb.State == UiOrb.Mood.Listening && orb.Aim > 0.6f && Vector3.Dot(orb.Look, (head.position - orb.Position).normalized) > 0.9f;
+                if (hud != null) hud.ForceRefresh();
+                RenderAt("ui-orb-listening.png", head.position, Quaternion.LookRotation(orb.Position - head.right * 0.12f - head.position, Vector3.up), 34f, 1200, 800);
+                shell.SetVoiceStateForTest("thinking", "THINKING", "");
+                Step(12);
+                bool thinking = orb.State == UiOrb.Mood.Thinking && orb.Tint.r > orb.Tint.g * 0.6f; // violet in it
+                RenderAt("ui-orb-thinking.png", head.position, Quaternion.LookRotation(orb.Position - head.position, Vector3.up), 16f, 900, 900);
+                shell.SetVoiceStateForTest("idle", "", "");
+                if (hud != null && hud.IsOpen) hud.Close();
+                Step(12);
+                Check(listening && hudThere && thinking && orb.State == UiOrb.Mood.Idle,
+                    $"listening: it turns its rings to the user ({listening}) and the voice HUD stands beside it, turned to the user ({hudThere}: {hudOff:F2} m from it, {hudTurn:F1} deg off); thinking: it spins, violet ({thinking})");
+
+                // what the app has to say: callouts in a column beside it, towards the middle of the view
+                foreach (var old in shell.Toasts.Panels.ToList()) old.CloseAndDestroy();
+                shell.Toasts.Tick(float.MaxValue);
+                shell.Toasts.History.Clear();
+                shell.Toast("Build finished: 0 errors", "ok");
+                Step(8);
+                var card = shell.Toasts.Panels.FirstOrDefault();
+                var toCard = card != null ? card.transform.position - orb.Position : Vector3.zero;
+                float cardTurn = card != null ? Vector3.Angle(card.transform.forward, card.transform.position - head.position) : -1f;
+                bool beside = card != null && Vector3.Dot(toCard, head.right) < -0.05f && Mathf.Abs(toCard.y) < 0.03f && toCard.magnitude < 0.40f && cardTurn < 8f;
+                bool green = orb.Tint.g > orb.Tint.b;
+                shell.Toast("The headset is at 18 % battery", "warn");
+                Step(8);
+                var cards = shell.Toasts.Panels.ToList();
+                bool stacked = cards.Count == 2 && cards[1].transform.position.y > cards[0].transform.position.y + 0.02f;
+                Check(beside && stacked && shell.Toasts.RailShown && shell.Toasts.History.Count == 2 && shell.Toasts.History[0].Kind == "warn",
+                    $"a message is a callout beside the orb, towards the middle of the view, level with it and turned to the user ({beside}: {toCard.magnitude:F2} m from it, {toCard.y * 100f:F1} cm higher, {cardTurn:F1} deg off); the next one takes that place and the first moves up ({stacked}); a rail joins them to the orb; both are kept");
+                Check(green, "the orb flashes in the colour of the message (green for ok)");
+                foreach (var cd in cards) cd.ForceRefresh();
+                RenderAt("ui-orb-callouts.png", head.position, Quaternion.LookRotation(orb.Position - head.right * 0.16f - head.position, Vector3.up), 40f, 1400, 900);
+
+                // a touch: its menu, beside it and below; the messages are in it
+                var rest = head.position + head.forward * 0.3f + head.right * 0.25f - head.up * 0.3f;
+                void TipAt(Vector3 at, float pinch = 0f) => hands.SetOpen(Handedness.Right, at - head.forward * 0.12f, head.forward, -head.up, 0f, pinch);
+                void TipTo(Vector3 tip, float pinch = 0f) { TipAt(tip, pinch); hands.Frames[1].IndexTip = tip; if (pinch > 0.5f) hands.Frames[1].ThumbTip = tip; }
+                TipTo(orb.Position - head.forward * 0.12f); Step(3);
+                TipTo(orb.Position); Step(2);
+                var menu = shell.OrbMenu;
+                bool opened = menu != null && menu.IsOpen;
+                TipTo(rest); Step(14);
+                var toMenu = menu != null ? menu.transform.position - orb.Position : Vector3.zero;
+                bool menuPlace = menu != null && toMenu.y < -0.03f && Vector3.Dot(toMenu, head.right) < 0f && Vector3.Angle(menu.transform.forward, menu.transform.position - head.position) < 4f;
+                var list = menu != null ? menu.Elements.OfType<UiList>().FirstOrDefault() : null;
+                bool listed = list != null && list.Items.Count == 2 && list.Items[0].Title.Contains("battery");
+                if (menu != null) menu.ForceRefresh();
+                foreach (var cd in shell.Toasts.Panels) cd.ForceRefresh();
+                RenderAt("ui-orb-menu.png", head.position, Quaternion.LookRotation(orb.Position - head.right * 0.16f - head.up * 0.08f - head.position, Vector3.up), 44f, 1400, 1000);
+                TipTo(orb.Position - head.forward * 0.12f); Step(12);
+                TipTo(orb.Position); Step(2);
+                bool closed = menu != null && !menu.IsOpen;
+                TipTo(rest); Step(14);
+                Check(opened && menuPlace && listed && closed, $"a fingertip in the orb opens its menu ({opened}) beside it and below, turned to the user ({menuPlace}), with the messages so far ({listed}); a second touch closes it ({closed})");
+
+                // pointing at it from afar and pinching does the same, and does not click the window behind it
+                var palm = head.position + head.right * 0.15f - head.up * 0.25f + head.forward * 0.15f;
+                shell.OpenPanel("files");
+                var past = (orb.Position - palm).normalized; // a window half a metre behind the orb, seen from the hand
+                files.transform.SetPositionAndRotation(orb.Position + past * 0.5f, Quaternion.LookRotation(past, Vector3.up));
+                files.ForceRefresh();
+                void PointAt(Vector3 target, float pinch)
+                {
+                    hands.SetOpen(Handedness.Right, palm, (target - palm).normalized, Vector3.down, 0f, pinch);
+                    // the hand's own pointer pose (as the headset gives it): straight at the target
+                    hands.Frames[1].PointerValid = true; hands.Frames[1].PointerOrigin = palm; hands.Frames[1].PointerDirection = (target - palm).normalized;
+                }
+                PointAt(files.transform.position + files.transform.right * 0.25f, 0f); Step(4);
+                bool rayFree = !shell.OrbHoldsHandForTest(1) && files.Raycast(hands.Frames[1].Ray(), out _, out _);
+                PointAt(orb.Position, 0f); Step(4);
+                bool holds = shell.OrbHoldsHandForTest(1), behind = files.Raycast(hands.Frames[1].Ray(), out _, out _);
+                bool blocked = rayFree && shell.Router.HandBlocked != null && holds && behind;
+                PointAt(orb.Position, 1f); Step(3);
+                bool farOpened = menu != null && menu.IsOpen;
+                PointAt(orb.Position, 0f); Step(14);
+                PointAt(orb.Position, 1f); Step(3);
+                bool farClosed = menu != null && !menu.IsOpen;
+                PointAt(orb.Position, 0f); Step(3);
+                TipTo(rest); Step(8);
+                shell.ClosePanel("files");
+                hands.Frames[1].PointerValid = false;
+                Check(blocked && farOpened && farClosed, $"a ray that points at the orb, a window behind it, is the orb's: the router leaves that hand alone ({blocked}: free beside it {rayFree}, held on it {holds}, the window behind {behind}); a pinch from afar opens its menu ({farOpened}) and closes it ({farClosed})");
+
+                // a pinch at it: it goes where the fingers go and keeps that place by the user
+                Step(40);
+                TipTo(orb.Position + head.right * 0.03f, 0f); Step(3);
+                TipTo(orb.Position + head.right * 0.03f, 1f); Step(3);
+                bool held = shell.OrbGrabHandForTest == 1;
+                var put = head.position + head.forward * 0.45f - head.right * 0.22f - head.up * 0.12f;
+                for (int k = 1; k <= 10; k++) { TipTo(Vector3.Lerp(orb.Position, put, k / 10f), 1f); Step(2); }
+                TipTo(put, 1f); Step(6);
+                bool follows = Vector3.Distance(orb.Position, put) < 0.06f;
+                TipTo(put, 0f); Step(4);
+                TipTo(rest); Step(20);
+                bool pinned = shell.Settings.orbPinned && shell.OrbGrabHandForTest < 0 && Vector3.Distance(orb.Position, put) < 0.06f;
+                head.rotation = Quaternion.Euler(0f, -90f, 0f);
+                Step(70);
+                var w3 = Where();
+                bool keeps = Mathf.Abs(w3.yaw - shell.Settings.orbYaw) < 4f && Mathf.Abs(w3.pitch - shell.Settings.orbPitch) < 4f;
+                head.rotation = Quaternion.identity;
+                shell.ResetOrbPlace();
+                Step(70);
+                var w4 = Where();
+                Check(held && follows && pinned && keeps && !shell.Settings.orbPinned && Mathf.Abs(w4.yaw - 32f) < 4f,
+                    $"a pinch at the orb holds it ({held}), it goes with the fingers ({follows}) and stays where it is let go ({pinned}); the user turns and it keeps that place by them ({keeps}: {w3.yaw:F0}, {w3.pitch:F0} deg); PLACE lets it choose again ({w4.yaw:F0} deg)");
+                hands.Frames[1].Tracked = false;
+                Step(4);
+
+                // off: messages float in the upper view as before, panels are cast from their left edge
+                shell.SetOrb(false);
+                Step(12);
+                foreach (var old in shell.Toasts.Panels.ToList()) old.CloseAndDestroy();
+                shell.Toasts.Tick(float.MaxValue);
+                shell.Toast("no orb");
+                var freeCard = shell.Toasts.Panels.FirstOrDefault();
+                bool free = freeCard != null && Vector3.Distance(freeCard.transform.position, head.position + head.forward * 0.75f + Vector3.up * (0.20f + freeCard.Height * 0.5f)) < 0.02f && !shell.Toasts.RailShown;
+                Check(!shell.OrbActive && UiPanelFx.Caster() == null && free, $"Orb off: no caster, a message floats in the upper view as before ({free})");
+                shell.SetOrb(true);
+                Step(24);
+                Check(shell.OrbActive && orb.Appear > 0.99f, "Orb on again: it is back");
+            }
+            finally
+            {
+                UiPanel.AnimateInEditor = false;
+                UiPanelFx.Caster = keepCaster;
+                hands.Frames[0].Tracked = false; hands.Frames[1].Tracked = false;
+                foreach (var old in shell.Toasts.Panels.ToList()) old.CloseAndDestroy();
+                shell.Toasts.Tick(float.MaxValue);
+                foreach (var pp in shell.GetComponentsInChildren<UiPanel>(true)) if (pp != null && pp.Transitioning) pp.ForceRefresh();
+                if (shell.OrbMenu != null && shell.OrbMenu.IsOpen) { shell.OrbMenu.Close(); shell.OrbMenu.ForceRefresh(); }
+                shell.Settings.orbPinned = false;
+                foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
+                foreach (var tm in terms) if (tm != null) tm.gameObject.SetActive(true);
+                shell.SetWristMenu(false);
+                head.SetPositionAndRotation(keepPos, keepRot);
+                shell.TickOrbForTest(0.05f);
+            }
         }
 
         /// The look at rest (owner 2026-11-10: "much better aesthetics"): thick glass with a lattice behind its surface, a
