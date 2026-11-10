@@ -10,6 +10,12 @@ import {
   windowsInstallerFailureScript,
 } from "./services/machines/manual-enrollment-command.js";
 import { reconnectBootstrapForCredential } from "./services/machines/reconnect.js";
+import {
+  apiTokenRequiredResponse,
+  presentsApiToken,
+  requiresApiToken,
+  resolveApiToken,
+} from "./api-token.js";
 import { getMachineEnrollmentService } from "./services/machines/machine-services.js";
 import { withManualMachineProvider } from "./services/machines/manual-provider.js";
 import { registerDesktopBrowserRoutes } from "./routes/desktop-browsers.js";
@@ -289,6 +295,17 @@ export function createApp(
     }
     return next();
   });
+  // MetaCodex: with an API token set (the headset), the public API and the sockets answer only to its holder
+  const apiToken = resolveApiToken(deps.config.dataDir);
+  if (apiToken !== null) {
+    app.use("*", async (context, next) => {
+      if (!requiresApiToken(context.req.path)) return next();
+      if (presentsApiToken(apiToken, context.req.header("authorization"), context.req.query("token"))) {
+        return next();
+      }
+      return apiTokenRequiredResponse();
+    });
+  }
   app.use("*", async (context, next) => {
     captureTrustedRemoteAddress(context);
     return runWithTelemetryRequest(

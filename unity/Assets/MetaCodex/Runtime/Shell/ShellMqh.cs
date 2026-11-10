@@ -543,27 +543,43 @@ namespace MetaCodex.Shell
             const int page = MqhDaemonTab;
             float rowH = 0.032f;
             var m = new UiStack(new Rect(area.x, area.y, Mathf.Min(area.width, 0.56f), area.height), t.Gap);
-            _mqhTabs.AddTo(page, new UiLabel("MQH runs in this headset's Linux: the threads, the skills and the plugins of the agents (Claude Code, Codex, opencode). Its data is in ~/.mqh.", t.SmallSize) { Rect = m.Next(0.04f), Wrap = true, Color = t.TextDim, Align = TextAlignmentOptions.TopLeft });
+            _mqhTabs.AddTo(page, new UiLabel("MQH runs in this headset's Linux, started by the app (on the cores the frame loop does not use): the threads, the skills and the plugins of the agents (opencode, Claude Code, Codex). Its data is in ~/.mqh; a URL other than 127.0.0.1:38990 (a PC's MQH) stops the local one.", t.SmallSize) { Rect = m.Next(0.04f), Wrap = true, Color = t.TextDim, Align = TextAlignmentOptions.TopLeft });
             _mqhTabs.AddTo(page, new UiTextField("MQH URL", s.mqhUrl, v => { s.mqhUrl = v.Trim(); OnSettingsChanged(); RefreshDaemon(); }) { Rect = m.Next(rowH) });
             // a developer's own token goes into the vault (sealed, policy deny), never into settings.json
             _mqhTabs.AddTo(page, new UiTextField("TOKEN", Vault?.Has(MqhTokenOverrideName) == true ? "••••••••" : "", v => { if (v != "••••••••") SetMqhTokenOverride(v); RefreshDaemon(); }, "from the vault") { Rect = m.Next(rowH), Secure = true });
             _mqhTabs.AddTo(page, new UiToggle("Sync these settings with MQH", s.mqhSync, v => { s.mqhSync = v; OnSettingsChanged(); }) { Rect = m.Next(rowH) });
             _daemonStatus = _mqhTabs.AddTo(page, new UiLabel("not checked", t.SmallSize) { Rect = m.Next(0.024f), Color = t.TextDim });
             var mb = m.NextSplit(t.ButtonHeight, 0.5f, out var mb2);
-            _mqhTabs.AddTo(page, new UiButton("⟳ CONNECT", RefreshDaemon, UiButtonStyle.Primary) { Rect = mb });
+            _mqhTabs.AddTo(page, new UiButton("⟳ RESTART", () => { MqhHost?.Restart(); RefreshDaemon(); }, UiButtonStyle.Primary) { Rect = mb });
             _mqhTabs.AddTo(page, new UiButton("PUSH SETTINGS", () => Mqh.PushQuestSettings(Settings.ToJObject(), ok => Toast(ok ? "Settings saved to MQH" : "MQH unreachable", ok ? "ok" : "error"))) { Rect = mb2 });
         }
+
+        /// MQH answered (MqhHost: started by the app, or already running): the panels that need it read it now.
+        private void OnMqhOnline()
+        {
+            Mqh.BaseUrl = Settings.mqhUrl;
+            Mqh.Token = MqhTokenNow();
+            RefreshDaemon();
+            if (IsPanelOpen("agents")) RefreshAgents();
+            if (IsPanelOpen("threads")) RefreshThreads();
+            if (!_mqhOnlineToastShown) { _mqhOnlineToastShown = true; Toast("MQH is running in this headset", "ok"); }
+        }
+
+        private bool _mqhOnlineToastShown;
+
+        /// What MqhHost is doing, in a line (DAEMON, AGENTS when MQH does not answer).
+        private string MqhHostLine() => MqhHost == null || MqhHost.State == MqhHost.HostState.Off ? "" : MqhHost.Status;
 
         public void RefreshDaemon()
         {
             if (_daemonStatus == null) return;
             var t = UiTheme.Current;
-            _daemonStatus.Set("connecting to " + Settings.mqhUrl + " …", t.TextDim);
+            _daemonStatus.Set((MqhHostLine().Length > 0 ? MqhHostLine() + " · " : "") + "connecting to " + Settings.mqhUrl + " …", t.TextDim);
             Mqh.BaseUrl = Settings.mqhUrl;
             Mqh.Token = MqhTokenNow();
             Mqh.Version(v =>
             {
-                if (v == null) { _daemonStatus.Set("⚠ " + (Mqh.LastError ?? "MQH not reachable"), t.Danger); return; }
+                if (v == null) { _daemonStatus.Set("⚠ " + (MqhHostLine().Length > 0 ? MqhHostLine() : Mqh.LastError ?? "MQH not reachable"), MqhHost != null && MqhHost.State == MqhHost.HostState.Starting ? t.Warn : t.Danger); return; }
                 string ver = v["version"]?.ToString() ?? v["appVersion"]?.ToString() ?? v.ToString(Newtonsoft.Json.Formatting.None);
                 _daemonStatus.Set($"<color=#4DFFA6>● online</color>  MQH {Trim(ver, 60)}", t.Text);
             });

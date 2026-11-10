@@ -14,6 +14,8 @@ and its `knowledge/LEARNINGS.md` (search it for your topic). Plan of record:
   kills only its own PID). Never `taskkill /IM Unity.exe`: the owner runs other headless Editors.
 - **Build an APK only when the owner says so**, and only after the self-test passed and its picture
   (`unity/Bench/selftest/terminal.png`) looks right. Grep the build log for `error CS` and `Shader error in`.
+  Generated parts of the APK, refreshed before a build when their sources changed: `tools/qvac-bundle.sh` (the
+  local AI), `tools/mqh-build.sh && tools/mqh-bundle.sh` (MQH for the headset's Linux), `userland/build-overlay.py`.
 - Long commands (batch Editor, builds, `userland/g0-shell.sh`) run in the background; never wait in a
   foreground polling loop.
 - The headset: never scan the network for it. Ask for one USB plug-in, then Wi-Fi adb

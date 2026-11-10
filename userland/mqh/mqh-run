@@ -1,0 +1,49 @@
+#!/bin/bash
+# MetaCodex: runs MQH (server + host daemon) in the headset's Linux and stays in the foreground while both run.
+# The app starts it through its AI service process (Android places that one on cores 0-2, away from the frame
+# loop), with MQH_API_TOKEN in the environment; when this script ends, proot ends everything it started and the
+# app starts it again. Logs: ~/.mqh/logs/{server,host-daemon}.log (and mqh-run.log, written by the app).
+set -u
+M=/opt/mqh
+D="$HOME/.mqh"
+LOGS="$D/logs"
+URL=http://127.0.0.1:38990
+mkdir -p "$LOGS"
+umask 077
+export NODE_ENV=production
+# the token keeps other Android apps out of MQH's port (every app can reach 127.0.0.1); the CLI reads the file
+if [ -n "${MQH_API_TOKEN:-}" ]; then printf '%s' "$MQH_API_TOKEN" > "$D/api-token"; fi
+if [ -z "${MQH_API_TOKEN:-}" ] && [ -f "$D/api-token" ]; then MQH_API_TOKEN=$(cat "$D/api-token"); export MQH_API_TOKEN; fi
+AUTH=()
+[ -n "${MQH_API_TOKEN:-}" ] && AUTH=(-H "authorization: Bearer $MQH_API_TOKEN")
+
+echo "mqh-run: $(date '+%F %T') starting the server"
+node "$M/apps/server/dist/index.js" >> "$LOGS/server.log" 2>&1 < /dev/null &
+S=$!
+up=0
+for _ in $(seq 240); do
+  if curl -fsS -o /dev/null "$URL/health" 2>/dev/null; then up=1; break; fi
+  kill -0 "$S" 2>/dev/null || break
+  sleep 0.5
+done
+if [ "$up" != 1 ]; then echo "mqh-run: the server did not answer on $URL/health"; tail -n 30 "$LOGS/server.log"; kill "$S" 2>/dev/null; exit 1; fi
+echo "mqh-run: server up (pid $S)"
+
+# the local daemon enrolls once (its credential lands in ~/.mqh/auth.json)
+ENROLL=()
+if [ ! -f "$D/auth.json" ]; then
+  resp=$(curl -fsS -X POST -H 'content-type: application/json' "${AUTH[@]}" -d '{}' "$URL/internal/hosts/enroll-key")
+  key=$(printf '%s' "$resp" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);process.stdout.write(j.enrollKey||"")})')
+  host=$(printf '%s' "$resp" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);process.stdout.write(j.hostId||"")})')
+  if [ -n "$key" ]; then ENROLL=("MQH_HOST_ENROLL_KEY=$key" "MQH_HOST_ID=$host"); echo "mqh-run: enrolling this headset's daemon ($host)"; fi
+fi
+env MQH_SERVER_URL="$URL" MQH_DATA_DIR="$D" MQH_HOST_DAEMON_PORT=38991 MQH_BRIDGE_DIR="$M/apps/host-daemon/dist" \
+  MQH_CLI_DIR="$M/apps/host-daemon/dist" "${ENROLL[@]}" node "$M/apps/host-daemon/dist/index.js" >> "$LOGS/host-daemon.log" 2>&1 < /dev/null &
+H=$!
+echo "mqh-run: host daemon started (pid $H)"
+trap 'kill "$S" "$H" 2>/dev/null' TERM INT HUP
+wait -n "$S" "$H"
+echo "mqh-run: $(date '+%F %T') a process ended; stopping MQH"
+kill "$S" "$H" 2>/dev/null
+wait
+exit 1

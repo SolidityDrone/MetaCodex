@@ -32,6 +32,8 @@ namespace MetaCodex.Shell
         public GestureEngine Gestures { get; private set; }
         public ScriptHost Scripts { get; private set; }
         public MqhClient Mqh { get; private set; }
+        /// MQH in the headset's Linux, started and watched by the app (MqhHost).
+        public MqhHost MqhHost { get; private set; }
         public GitService Git { get; private set; }
         public FileService Files { get; private set; }
         public UiToasts Toasts { get; private set; }
@@ -151,6 +153,9 @@ namespace MetaCodex.Shell
 
             Mqh = new MqhClient(Settings.mqhUrl, Settings.mqhToken, _main);
             InitVault();
+            MqhHost = new MqhHost(() => app != null ? app.Host : null, () => Settings.mqhUrl, MqhTokenNow,
+                () => Vault?.Rearm(MqhEnvKeyName), Log, _main);
+            MqhHost.Online += OnMqhOnline;
             var host = app != null ? app.Host : null;
             Git = new GitService(host);
             Files = new FileService(host, Application.isEditor ? Path.GetFullPath(Path.Combine(Application.dataPath, "../..")) : null);
@@ -231,6 +236,7 @@ namespace MetaCodex.Shell
         {
             while (_main.TryDequeue(out var a)) { try { a(); } catch (Exception ex) { Log("main-thread callback failed: " + ex.Message); } }
             Scripts?.Tick(Time.unscaledTime);
+            MqhHost?.Tick();
             TickVoice();
             TickSessionContext();
             UpdateFocus(Mathf.Min(Time.unscaledDeltaTime, 0.1f));

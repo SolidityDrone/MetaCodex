@@ -84,7 +84,15 @@ namespace MetaCodex.Shell
             _agentDetail.Set("asking MQH at " + Settings.mqhUrl + " …", UiTheme.Current.TextDim);
             Mqh.ProvidersState(st =>
             {
-                if (st == null) { _agentDetail.Set("⚠ " + (Mqh.LastError ?? "MQH not reachable") + "\nStart MQH (Settings > DAEMON) and try ⟳.", UiTheme.Current.Danger); _agentList.SetItems(new UiListItem[0]); return; }
+                if (st == null)
+                {
+                    bool starting = MqhHost != null && (MqhHost.State == MqhHost.HostState.Starting || MqhHost.State == MqhHost.HostState.Waiting);
+                    _agentDetail.Set(starting ? "◌ " + MqhHost.Status + "\nThe list fills in by itself when MQH answers."
+                        : "⚠ " + (MqhHostLine().Length > 0 ? MqhHostLine() : Mqh.LastError ?? "MQH not reachable") + "\nMQH > DAEMON > RESTART tries again.",
+                        starting ? UiTheme.Current.TextDim : UiTheme.Current.Danger);
+                    _agentList.SetItems(new UiListItem[0]);
+                    return;
+                }
                 _providerStates = st["providers"] as JArray ?? new JArray();
                 Mqh.Providers(cat =>
                 {

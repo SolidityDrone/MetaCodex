@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import path from "node:path";
 import { WebSocket as NodeWsWebSocket, type RawData } from "ws";
 import {
   createRealtimeSocketAdapter,
@@ -30,11 +33,36 @@ export function wrapNodeWsWebsocket(url: string): BbRealtimeSocket {
   return adapter;
 }
 
+/** MetaCodex: the MQH API token (apps/server/src/api-token.ts) as `?token=` on loopback sockets (a WebSocket
+ *  cannot carry an Authorization header from the browser API); never added for another host. */
+export function withApiToken(url: string, env: NodeJS.ProcessEnv = process.env): string {
+  try {
+    const parsed = new URL(url);
+    if (!["127.0.0.1", "localhost", "[::1]", "::1"].includes(parsed.hostname)) return url;
+    if (parsed.searchParams.has("token")) return url;
+    let token = env.MQH_API_TOKEN?.trim() ?? "";
+    if (token.length === 0) {
+      const dataDir = env.MQH_DATA_DIR?.trim() || path.join(homedir(), ".mqh");
+      try {
+        token = readFileSync(path.join(dataDir, "api-token"), "utf8").trim();
+      } catch {
+        token = "";
+      }
+    }
+    if (token.length === 0) return url;
+    parsed.searchParams.set("token", token);
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+}
+
 export function createNodeWebsocketFactory(): BbRealtimeSocketFactory {
   return (url) => {
+    const target = withApiToken(url);
     if (typeof WebSocket !== "undefined") {
-      return wrapStandardWebsocket(new WebSocket(url));
+      return wrapStandardWebsocket(new WebSocket(target));
     }
-    return wrapNodeWsWebsocket(url);
+    return wrapNodeWsWebsocket(target);
   };
 }

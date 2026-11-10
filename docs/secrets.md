@@ -107,8 +107,8 @@ and the user sees requests in VR.
 - **Requester names** in the approval dialog are what the client says (`mcx-secret` sends its parent
   process); treat them as hints.
 - **Debuggable builds** allow `adb shell run-as` into the app's files: ship release builds.
-- **MQH API token enforcement** is roadmap step 1 (server middleware + CLI header); the token already
-  exists in the vault and the app already sends it.
+- **MQH API token enforcement**: done (2026-11-10, `mqh/apps/server/src/api-token.ts`, the CLI's `cliFetch`, the
+  SDK's socket factory); before that the token only existed in the vault and the app sent it unchecked.
 
 ## Files
 

@@ -32,6 +32,10 @@ namespace MetaCodex.Linux
         [Tooltip("Our files laid over the rootfs (scripts, the control-plane daemon), re-applied when they change")]
         [SerializeField] private string overlayAsset = "linux/overlay.tar.gz";
         [SerializeField] private string overlayInfoAsset = "linux/overlay.json";
+        /// MQH for this Linux (tools/mqh-bundle.sh): /opt/mqh, replaced whole when its sha256 changes.
+        public const string MqhAsset = "linux/mqh.tar.gz", MqhInfoAsset = "linux/mqh.json";
+        /// The MQH bundle on disk now (its mqh.json, "" when none was laid yet: MqhHost waits for it).
+        public string MqhApplied => File.Exists(Path.Combine(LinuxDir, "mqh.applied")) ? File.ReadAllText(Path.Combine(LinuxDir, "mqh.applied")) : "";
 
         private void Say(string s)
         {
@@ -62,6 +66,7 @@ namespace MetaCodex.Linux
                 // the user's installed packages live in there: never reinstall over it automatically
                 ApplySetupIfOld();
                 yield return ApplyOverlayIfChanged();
+                yield return ApplyBundleIfChanged(MqhAsset, MqhInfoAsset, "mqh.applied", "opt/mqh");
                 State = HostState.Ready;
                 Say("Linux ready");
                 yield break;
@@ -100,6 +105,7 @@ namespace MetaCodex.Linux
             File.WriteAllText(Path.Combine(LinuxDir, "setup.version"), RootfsSetup.Version.ToString());
             try { File.Delete(tarPath); } catch (Exception) { }
             yield return ApplyOverlayIfChanged();
+            yield return ApplyBundleIfChanged(MqhAsset, MqhInfoAsset, "mqh.applied", "opt/mqh");
             Progress = 1f;
             State = HostState.Ready;
             Say($"Linux installed in {(DateTime.UtcNow - started).TotalSeconds:F1} s: {task.Result}");
@@ -118,31 +124,50 @@ namespace MetaCodex.Linux
             catch (Exception ex) { Say("setup update failed: " + ex.Message); }
         }
 
-        /// Lays the bundled overlay (mcx-setup, later the daemon) over the rootfs when its sha256 changed.
-        private IEnumerator ApplyOverlayIfChanged()
+        /// Lays the bundled overlay (mcx-setup, the scripts) over the rootfs when its sha256 changed.
+        private IEnumerator ApplyOverlayIfChanged() => ApplyBundleIfChanged(overlayAsset, overlayInfoAsset, "overlay.applied", null);
+
+        /// A bundle laid over the rootfs when its info (sha256) changed; `replaceDir` (rootfs-relative) is deleted
+        /// first, so the files a new version no longer has are gone (MQH's /opt/mqh). No bundle in the APK: nothing.
+        private IEnumerator ApplyBundleIfChanged(string asset, string infoAsset, string appliedName, string replaceDir)
         {
             string info = null;
-            yield return ReadStreamingText(overlayInfoAsset, t => info = t);
+            yield return ReadStreamingText(infoAsset, t => info = t);
             if (info == null) yield break;
-            string applied = Path.Combine(LinuxDir, "overlay.applied");
+            string applied = Path.Combine(LinuxDir, appliedName);
             if (File.Exists(applied) && File.ReadAllText(applied) == info) yield break;
-            string tarPath = Path.Combine(LinuxDir, "overlay.tar.gz");
-            yield return CopyStreamingAsset(overlayAsset, tarPath, _ => { });
+            string tarPath = Path.Combine(LinuxDir, Path.GetFileName(asset));
+            yield return CopyStreamingAsset(asset, tarPath, _ => { });
             if (State == HostState.Failed) yield break;
+            Say("laying " + Path.GetFileName(asset) + " over the Linux");
             var task = Task.Run(() =>
             {
+                if (replaceDir != null)
+                {
+                    string old = Path.Combine(RootfsDir, replaceDir);
+                    if (Directory.Exists(old)) NativeFileOps.DeleteTree(old);
+                }
                 using (var f = new FileStream(tarPath, FileMode.Open, FileAccess.Read))
                     return TarGzExtractor.Extract(f, RootfsDir, new NativeFileOps());
             });
             while (!task.IsCompleted) yield return null;
             try { File.Delete(tarPath); } catch (Exception) { }
-            if (task.IsFaulted) { Say("overlay failed: " + task.Exception?.GetBaseException().Message); yield break; }
+            if (task.IsFaulted) { Say(Path.GetFileName(asset) + " failed: " + task.Exception?.GetBaseException().Message); yield break; }
             File.WriteAllText(applied, info);
-            Say("overlay applied: " + task.Result);
+            Say(Path.GetFileName(asset) + " applied: " + task.Result);
         }
 
         /// A login shell (or `bash -lc command`) as root in the Debian rootfs, in a pty of the given size.
         public PtySession StartShell(int rows, int cols, string command = null)
+        {
+            var argv = ProotArgv(command, null, out var env);
+            return PtySession.Start(argv[0], argv, env, FilesDir, rows, cols, s => Log?.Invoke(s));
+        }
+
+        /// The proot command line of a login shell (`bash -l`, or `bash -l -c command`) as root in the rootfs, with
+        /// `guestEnv` ("NAME=value") added inside, and the host environment proot itself needs. StartShell runs it
+        /// in a pty; MqhHost hands it to the AI service process (no pty, off the frame loop's cores).
+        public string[] ProotArgv(string command, IEnumerable<string> guestEnv, out string[] hostEnv)
         {
             if (State != HostState.Ready) throw new InvalidOperationException("Linux not ready: " + State);
             string proot = Path.Combine(NativeLibDir, "libproot.so");
@@ -180,11 +205,12 @@ namespace MetaCodex.Linux
                 "TERM=xterm-256color", "COLORTERM=truecolor", "LANG=C.UTF-8", "TMPDIR=/tmp",
                 "PATH=/root/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
                 "METACODEX=1",
-                "/bin/bash", "-l",
             });
+            if (guestEnv != null) argv.AddRange(guestEnv);
+            argv.AddRange(new[] { "/bin/bash", "-l" });
             if (!string.IsNullOrEmpty(command)) { argv.Add("-c"); argv.Add(command); }
 
-            var env = new[]
+            hostEnv = new[]
             {
                 "PROOT_LOADER=" + Path.Combine(NativeLibDir, "libproot-loader.so"),
                 "PROOT_TMP_DIR=" + tmp,
@@ -193,7 +219,7 @@ namespace MetaCodex.Linux
                 "TMPDIR=" + tmp,
                 "PATH=/system/bin:/system/xbin",
             };
-            return PtySession.Start(proot, argv.ToArray(), env, FilesDir, rows, cols, s => Log?.Invoke(s));
+            return argv.ToArray();
         }
 
         /// Starts over: deletes the userland (packages, /root, /work). Never follows symlinks.

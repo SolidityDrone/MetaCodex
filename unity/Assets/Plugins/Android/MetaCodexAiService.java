@@ -21,12 +21,13 @@ import java.util.concurrent.TimeUnit;
  * Horizon OS keeps the running immersive app, and every process it starts, in the "immersive" CPU set: cores
  * 3-5, the frame loop's cores; a child cannot leave it (taskset to 0-2 fails with EINVAL). A separate Android
  * process is placed by the system instead (the foreground / background sets, cores 0-2), and the child it starts
- * inherits that placement. So QvacHost asks this service to start the Bare runtime: extras "argv", "env", "cwd",
- * "log"; extra action=stop ends it. A new start always replaces the running child (it brings a new token).
+ * inherits that placement. So QvacHost asks this service to start the Bare runtime, and MqhHost MQH (proot +
+ * node): extras "argv", "env", "cwd", "log" and "name" (the child: "qvac" when absent, "mqh"); extra action=stop
+ * ends that child. A new start of a name replaces its running child (it brings a new token); the others go on.
  */
 public class MetaCodexAiService extends Service {
     private static final String TAG = "MetaCodexAI";
-    private static Process child;
+    private static final java.util.Map<String, Process> children = new java.util.HashMap<>();
 
     /** The app binds too: a bound service is not stopped when Android stops an idle app's started services
      *  (that ended the AI service while the headset slept). */
@@ -38,9 +39,11 @@ public class MetaCodexAiService extends Service {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         if (intent == null) return START_NOT_STICKY;
+        String name = intent.getStringExtra("name");
+        if (name == null || name.isEmpty()) name = "qvac";
         if ("stop".equals(intent.getStringExtra("action"))) {
-            stopChild();
-            stopSelf();
+            stopChild(name);
+            synchronized (children) { if (children.isEmpty()) stopSelf(); }
             return START_NOT_STICKY;
         }
         String[] argv = intent.getStringArrayExtra("argv");
@@ -48,7 +51,7 @@ public class MetaCodexAiService extends Service {
         String cwd = intent.getStringExtra("cwd");
         String log = intent.getStringExtra("log");
         if (argv == null || argv.length == 0) return START_NOT_STICKY;
-        stopChild();
+        stopChild(name);
         try {
             String allowed = cpusAllowed();
             List<String> cmd = new ArrayList<>();
@@ -68,8 +71,9 @@ public class MetaCodexAiService extends Service {
             }
             pb.redirectErrorStream(true);
             if (log != null) pb.redirectOutput(ProcessBuilder.Redirect.appendTo(new File(log)));
-            child = pb.start();
-            Log.i(TAG, "started (process cpus " + allowed + ", cpuset " + read("/proc/self/cpuset").trim() + "): " + cmd);
+            Process p = pb.start();
+            synchronized (children) { children.put(name, p); }
+            Log.i(TAG, "started " + name + " (process cpus " + allowed + ", cpuset " + read("/proc/self/cpuset").trim() + "): " + cmd);
         } catch (Exception ex) {
             Log.e(TAG, "start failed", ex);
         }
@@ -78,13 +82,15 @@ public class MetaCodexAiService extends Service {
 
     @Override
     public void onDestroy() {
-        stopChild();
+        String[] names;
+        synchronized (children) { names = children.keySet().toArray(new String[0]); }
+        for (String n : names) stopChild(n);
         super.onDestroy();
     }
 
-    private static void stopChild() {
-        Process p = child;
-        child = null;
+    private static void stopChild(String name) {
+        Process p;
+        synchronized (children) { p = children.remove(name); }
         if (p == null) return;
         try {
             p.destroy(); // SIGTERM
