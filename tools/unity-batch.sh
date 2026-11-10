@@ -5,8 +5,8 @@
 # MetaCodex.EditorTools.MetaCodexSetup.<method>. Run it in the background; it prints a summary at the end.
 # Guards for this machine (16 GB laptop, other Editors and bb running): refuses to start below
 # MIN_MB available RAM (default 4500, never below 3000), stops ITS OWN Unity process (by PID, never by
-# name) if Windows drops below KILL_MB (default 700, never below), or the time limit passes, and refuses
-# if another Editor already has this project open.
+# name) if Windows drops below KILL_MB (default 700, never below; watched every second), or the time limit
+# passes, and refuses if another Editor already has this project open.
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/../unity" && pwd)" # the Unity project
 METHOD="${1:?method: BatchSetup | BatchSelfTest | BatchBuild}"
@@ -44,13 +44,25 @@ PID=$(powershell.exe -NoProfile -Command "\$p = Start-Process -FilePath '$EXE_W'
 [[ -n "$PID" ]] || { echo "could not start Unity"; exit 1; }
 echo "started $METHOD: Unity pid $PID, log $LOG, $a MB available"
 t0=$(date +%s); low=$a; killed=""
-while tasklist.exe /FI "PID eq $PID" /NH 2>/dev/null | grep -q "$PID"; do
-  sleep 10
-  m=$(avail); [[ -n "$m" && "$m" -lt "$low" ]] && low=$m
+# Available memory, sampled every half second by one PowerShell that stays up (a new PowerShell per sample takes
+# 1-2 s, and with one sample every 10 s Windows went from 900 MB to 200 MB between two of them, 2026-11-10: the
+# Editor was stopped too late for the bb IDE). The loop below reads the last sample once a second.
+MEMF=$(mktemp)
+echo "$a" > "$MEMF"
+( powershell.exe -NoProfile -Command "\$c = New-Object System.Diagnostics.PerformanceCounter('Memory','Available MBytes'); while (\$true) { [int]\$c.NextValue(); Start-Sleep -Milliseconds 500 }" 2>/dev/null \
+    | while IFS= read -r line; do v="${line//[^0-9]/}"; [[ -n "$v" ]] && echo "$v" > "$MEMF"; done ) &
+SAMPLER=$!
+n=0
+while :; do
+  sleep 1; n=$((n + 1))
+  # is it still there: asked every 3 s (tasklist takes a moment)
+  if (( n % 3 == 0 )) && ! tasklist.exe /FI "PID eq $PID" /NH 2>/dev/null | grep -q "$PID"; then break; fi
+  m=$(cat "$MEMF" 2>/dev/null); [[ -n "$m" && "$m" -lt "$low" ]] && low=$m
   if [[ -n "$m" && "$m" -lt "$KILL_MB" ]]; then killed="low memory ($m MB)"; fi
   if (( $(date +%s) - t0 > MAXMIN * 60 )); then killed="time limit ($MAXMIN min)"; fi
   if [[ -n "$killed" ]]; then taskkill.exe /PID "$PID" /T /F >/dev/null 2>&1; echo "STOPPED Unity $PID: $killed"; break; fi
 done
+pkill -P "$SAMPLER" 2>/dev/null; kill "$SAMPLER" 2>/dev/null; rm -f "$MEMF"
 secs=$(( $(date +%s) - t0 ))
 echo "--- $METHOD finished in ${secs}s, lowest available ${low} MB"
 grep -E "\[MetaCodex\]|error CS|Shader error in|Exception|Exiting batchmode|Aborting batchmode|Scripts have compiler errors" "$LOG" 2>/dev/null | tr -d '\r' | grep -v "^UnityEngine\." | tail -40
