@@ -65,8 +65,12 @@ tools/device-test.sh                # install the APK and drive the in-app termi
 
 ## Credits
 
-PRoot (Termux build, GPL-2.0), talloc (LGPL-3.0), libandroid-shmem (BSD-3) ship as separate binaries,
-see `unity/Assets/Plugins/Android/libs/arm64-v8a/THIRD_PARTY_PROOT.md`. Debian (its own licences). Fonts:
-DejaVu (Bitstream Vera licence), Noto (OFL), Orbitron and Rajdhani (OFL). MoonSharp (BSD-3-Clause). MQH is based on
-bb (MIT, Copyright 2026 Michael Yong). Bundled agent skills: Unity Technologies (Unity Companion License) and Meta
-(Apache-2.0), see `userland/agent-skills/SOURCES.md`.
+Every third-party part (what ships in the APK, what the app and `mcx-setup` download, what is only in the repo), its
+licence, its source and what the licence asks of us: [docs/LICENSES.md](docs/LICENSES.md) (also on the headset in
+`/usr/share/doc/metacodex/`). In short: PRoot (Termux build, GPL-2.0), talloc (LGPL-3.0), libandroid-shmem (BSD-3)
+ship as separate binaries; Debian 13 (its own licences); Unity (Unity Terms, Unity Companion License) and Meta XR SDK
+205 (Oculus SDK License); MoonSharp (BSD-3-Clause); QVAC and Bare (Apache-2.0); fonts Inter, Rajdhani, Noto,
+Liberation Sans (OFL) and DejaVu (Bitstream Vera licence); models Whisper base (MIT), Qwen3 0.6B (Apache-2.0),
+multilingual-e5-small (MIT), Supertonic 3 (OpenRAIL-M, with use restrictions). MQH is based on bb (MIT, Copyright 2026
+Michael Yong). Bundled agent skills: Unity Technologies (Unity Companion License) and Meta (Apache-2.0), see
+`userland/agent-skills/SOURCES.md`. The app shows no third-party logos.

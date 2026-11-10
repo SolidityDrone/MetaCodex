@@ -24,22 +24,6 @@ namespace MetaCodex.UI
         public bool IsOpen => gameObject.activeSelf && !_closing;
         public UiTheme Theme => UiTheme.Current;
         public UiShapeMesh Shapes { get; private set; }
-        private UiIconMesh _icons;
-
-        /// The panel's icon layer (tool logos), made on first use.
-        public UiIconMesh Icons
-        {
-            get
-            {
-                if (_icons != null) return _icons;
-                var go = new GameObject("icons", typeof(MeshFilter), typeof(MeshRenderer));
-                go.transform.SetParent(transform, false);
-                _icons = go.AddComponent<UiIconMesh>();
-                _icons.Init();
-                TagRenderer(go.GetComponent<MeshRenderer>(), Vector3.zero);
-                return _icons;
-            }
-        }
         public readonly List<UiElement> Elements = new List<UiElement>();
         public event Action<UiPanel> Closed;
         public event Action<UiPanel> Opened;
@@ -614,7 +598,6 @@ namespace MetaCodex.UI
             Tick?.Invoke(this);
             foreach (var e in Elements) if (e.Visible) e.Update();
             Shapes.Flush();
-            _icons?.Flush();
             foreach (var t in GetComponentsInChildren<TextMeshPro>(true)) t.ForceMeshUpdate();
         }
     }
