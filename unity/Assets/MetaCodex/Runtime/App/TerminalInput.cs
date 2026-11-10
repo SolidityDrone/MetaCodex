@@ -6,8 +6,8 @@ using UnityEngine.InputSystem;
 namespace MetaCodex.App
 {
     /// Keyboard input for the terminal: a Bluetooth/USB keyboard through the Input System (text + special
-    /// keys + Ctrl/Alt chords) and the headset's system keyboard (TouchScreenKeyboard, typed with the
-    /// hands). Sticky Ctrl/Alt from the key bar apply to the next key from either.
+    /// keys + Ctrl/Alt chords) and MetaCodex's own keyboard (UiSurfaceKeyboard, through the shell's terminal
+    /// sink). Sticky Ctrl/Alt from the key bar apply to the next key from either.
     public sealed class TerminalInput : MonoBehaviour
     {
         public event Action<byte[]> Send;
@@ -16,17 +16,14 @@ namespace MetaCodex.App
         public Func<bool> BracketedPaste = () => false;
         public bool StickyCtrl { get; set; }
         public bool StickyAlt { get; set; }
-        public bool SystemKeyboardOpen => _sys != null;
+        /// The shell's keyboard is open for the terminal (the key bar lights its ⌨).
+        public Func<bool> KeyboardShown = () => false;
+        public bool SystemKeyboardOpen => KeyboardShown();
 
         private Keyboard _kb;
         private char _pendingHigh;
-        private TouchScreenKeyboard _sys;
-        private string _sysText = "";
-        private float _sysClosedAt = -10f;
-        /// The headset keyboard delivers its text twice: in its text box (read by PollSystemKeyboard) and again
-        /// as text input / key events on Keyboard.current (seen on Quest 3S: "ls" arrived as "lsls"). While it is
-        /// open, and for a moment after it closes, only the text box counts.
-        private bool SystemKeyboardBusy => _sys != null || Time.unscaledTime - _sysClosedAt < 1f;
+        /// No system keyboard any more (it delivered its text twice: "ls" arrived as "lsls"): nothing to filter.
+        private bool SystemKeyboardBusy => false;
 
         private static readonly (Key key, TermKey term)[] Specials =
         {
@@ -109,8 +106,7 @@ namespace MetaCodex.App
                 if (_kb != null && (_kb.enterKey.wasPressedThisFrame || _kb.numpadEnterKey.wasPressedThisFrame)) MetaCodex.UI.UiKeyboard.TypePhysical("\n");
                 return;
             }
-            if (_kb != null && !SystemKeyboardBusy) PollPhysical();
-            PollSystemKeyboard();
+            if (_kb != null) PollPhysical();
         }
 
         private void PollPhysical()
@@ -133,41 +129,7 @@ namespace MetaCodex.App
             if (_kb.slashKey.wasPressedThisFrame) Emit(KeyEncoder.Ctrl('_', Alt));
         }
 
-        /// The headset's own keyboard. Typed text is diffed against what was already sent, so each key
-        /// reaches the shell at once (tab completion, vim keys) instead of when the field is closed.
-        public void ToggleSystemKeyboard()
-        {
-            if (_sys != null) { _sys.active = false; _sys = null; _sysClosedAt = Time.unscaledTime; return; }
-            if (MetaCodex.UI.UiKeyboard.BeforeSystemKeyboard != null && MetaCodex.UI.UiKeyboard.BeforeSystemKeyboard(ToggleSystemKeyboard)) return;
-            _sys = TouchScreenKeyboard.Open("", TouchScreenKeyboardType.Default, false, false, false, false, "Type into the terminal");
-            _sysText = "";
-        }
-
-        private void PollSystemKeyboard()
-        {
-            if (_sys == null) return;
-            string t = _sys.text ?? "";
-            if (t != _sysText)
-            {
-                int p = 0;
-                while (p < t.Length && p < _sysText.Length && t[p] == _sysText[p]) p++;
-                for (int i = p; i < _sysText.Length; i++) Emit(new byte[] { 0x7F });
-                if (p < t.Length) TypeText(t.Substring(p));
-                _sysText = t;
-            }
-            switch (_sys.status)
-            {
-                case TouchScreenKeyboard.Status.Done:
-                    PressKey(TermKey.Enter);
-                    _sys = null;
-                    _sysClosedAt = Time.unscaledTime;
-                    break;
-                case TouchScreenKeyboard.Status.Canceled:
-                case TouchScreenKeyboard.Status.LostFocus:
-                    _sys = null;
-                    _sysClosedAt = Time.unscaledTime;
-                    break;
-            }
-        }
+        /// The keyboard for the terminal: MetaCodex's own (on a table under the hands, or floating), never the system one.
+        public void ToggleSystemKeyboard() => MetaCodex.UI.UiKeyboard.OpenForTerminal();
     }
 }

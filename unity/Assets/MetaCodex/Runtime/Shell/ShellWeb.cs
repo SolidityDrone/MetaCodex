@@ -214,8 +214,42 @@ namespace MetaCodex.Shell
 
         private static string Escape(string s) => (s ?? "").Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;").Replace("\"", "&quot;");
 
-        /// ⌨: what is typed goes into the page's focused field (tap the field first).
-        private void WebType() => UiKeyboard.Edit("", false, null, text => { if (!string.IsNullOrEmpty(text)) WebCall("text", text); });
+        /// ⌨: the keyboard types straight into the page's focused field (tap the field first), key by key.
+        private void WebType()
+        {
+            if (Keyboard == null) return;
+            _webSink ??= new WebSink(this);
+            if (Keyboard.Visible && Keyboard.Sink == _webSink) { Keyboard.Hide(); return; }
+            Keyboard.Show(_webSink);
+        }
+
+        private WebSink _webSink;
+
+        /// The keyboard's keys into the page (Android key codes for the special keys).
+        private sealed class WebSink : IKeySink
+        {
+            private readonly MetaCodexShell _s;
+            public WebSink(MetaCodexShell s) { _s = s; }
+            public string Title => "WEB PAGE";
+            public string Preview => null;
+            public bool KeepsKeyboard => true;
+            public void Type(string text, bool ctrl, bool alt) { if (!string.IsNullOrEmpty(text)) _s.WebCall("text", text); }
+            public void Key(KbKind key, bool ctrl, bool alt)
+            {
+                switch (key)
+                {
+                    case KbKind.Backspace: _s.WebKey(67); break;
+                    case KbKind.Enter: _s.WebKey(66); break;
+                    case KbKind.Tab: _s.WebKey(61); break;
+                    case KbKind.Escape: _s.WebKey(111); break;
+                    case KbKind.Left: _s.WebKey(21); break;
+                    case KbKind.Right: _s.WebKey(22); break;
+                    case KbKind.Up: _s.WebKey(19); break;
+                    case KbKind.Down: _s.WebKey(20); break;
+                    case KbKind.Paste: _s.WebCall("text", GUIUtility.systemCopyBuffer ?? ""); break;
+                }
+            }
+        }
 
         private void WebKey(int code) => WebCallInt("key", code);
 

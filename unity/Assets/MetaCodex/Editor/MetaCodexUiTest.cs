@@ -169,6 +169,7 @@ namespace MetaCodex.EditorTools
                 if (Want("placement")) Placement(shell, head);
                 if (Want("perf")) Perf(shell, head, hands);
                 if (Want("web")) WebSection(shell, head);
+                if (Want("keyboard")) KeyboardSection(shell, head, hands);
                 if (Want("agentget")) AgentGetSection(shell);
                 if (Want("mqh")) MqhPanel(shell);
                 if (Want("captures")) Captures(shell, tmp);
@@ -1604,43 +1605,15 @@ end)
                 $"SHARPNESS gone (slider {sliderGone}, voice {voiceGone}); the render scale is {MetaCodexShell.RenderScale}");
 
             // the WRIST main menu has its own section (wrist)
-            // the headset keyboard: the first time it is asked for, a tip for the system's Surface Keyboard and Touchpad
-            // (owner 2026-11-09), then the keyboard; DON'T SHOW AGAIN keeps it away
-            int asked = 0;
-            Action count = () => asked++;
-            UiKeyboard.TerminalKeyboardRequested += count;
-            bool tip0 = shell.Settings.surfaceKeyboardTip;
-            shell.Settings.surfaceKeyboardTip = true;
-            shell.ResetKeyboardTipForTest();
-            shell.OpenKeyboard();
-            var tip = UiModal.OpenPanels.FirstOrDefault(m => m.Title == "TYPE ON A TABLE");
-            bool tipFirst = tip != null && asked == 0;
-            tip?.Elements.OfType<UiButton>().First(b => b.Text == "DON'T SHOW AGAIN").Click();
-            int afterTip = asked;
-            shell.ResetKeyboardTipForTest(); // a new session: still not shown again
-            shell.OpenKeyboard();
-            Check(tipFirst && afterTip == 1 && asked == 2 && !shell.Settings.surfaceKeyboardTip && UiModal.OpenCount == 0,
-                $"keyboard: a Surface Keyboard tip comes first ({tipFirst}), then the keyboard ({afterTip}); after DON'T SHOW AGAIN it opens straight away ({asked} requests)");
-            // the wrist menu's TABLE: asks OPEN KEYBOARD (the keyboard at once, no second tip) or TURN ON (Settings)
+            // TABLE on the wrist and voice open MetaCodex's own keyboard (the keyboard section tests it on a table)
             bool onWrist = shell.Wrist != null && shell.Wrist.Outer.Any(it => it.Label == "TABLE" && it.Icon == "tablekeys") && UiIconAtlas.TryGet("tablekeys", out _);
-            shell.Settings.surfaceKeyboardTip = true;
-            shell.ResetKeyboardTipForTest();
-            int before = asked;
             shell.OpenTableKeyboard();
-            var tk = UiModal.OpenPanels.FirstOrDefault(m => m.Title == "TABLE KEYBOARD");
-            bool three = tk != null && tk.Elements.OfType<UiButton>().Where(b => b.Rect.yMin >= tk.Content.yMin - 0.001f).Select(b => b.Text).SequenceEqual(new[] { "OPEN KEYBOARD", "TURN ON", "CANCEL" });
-            tk?.Elements.OfType<UiButton>().First(b => b.Text == "OPEN KEYBOARD").Click();
-            bool straight = asked == before + 1 && !UiModal.OpenPanels.Any(m => m.Title == "TYPE ON A TABLE");
-            shell.OpenTableKeyboard();
-            UiModal.OpenPanels.FirstOrDefault(m => m.Title == "TABLE KEYBOARD")?.Elements.OfType<UiButton>().First(b => b.Text == "TURN ON").Click();
-            bool settings = SystemBridge.LastResult.Contains("systemux://settings");
-            foreach (var m in UiModal.OpenPanels.ToList()) m.CloseAndDestroy();
-            Check(onWrist && three && straight && settings, $"wrist TABLE ({onWrist}): a dialog with OPEN KEYBOARD / TURN ON / CANCEL ({three}); OPEN KEYBOARD opens it at once, no second tip ({straight}); TURN ON opens Settings ({SystemBridge.LastResult})");
+            bool ours = shell.Keyboard != null && shell.Keyboard.Visible && shell.Keyboard.Sink == shell.TerminalSinkForTest && UiModal.OpenCount == 0;
+            shell.Keyboard?.Hide();
+            Check(onWrist && ours, $"wrist TABLE ({onWrist}) opens MetaCodex's keyboard for the terminal, no dialog, no system keyboard ({ours})");
             string Cmd(string said) => shell.Voice.FastMatch(said)?.Command?.Name ?? "none";
             Check(Cmd("open the table keyboard") == "table_keyboard" && Cmd("turn on the surface keyboard") == "table_keyboard" && Cmd("open the keyboard") == "show_keyboard",
                 $"voice: “open the table keyboard” -> {Cmd("open the table keyboard")}, “turn on the surface keyboard” -> {Cmd("turn on the surface keyboard")}, “open the keyboard” -> {Cmd("open the keyboard")}");
-            UiKeyboard.TerminalKeyboardRequested -= count;
-            shell.Settings.surfaceKeyboardTip = tip0;
         }
 
         /// The WRIST main menu (owner 2026-11-09): firm on the wrist, never closing or running off while the right hand
@@ -2049,6 +2022,143 @@ end)
             string V(string said) { var m = shell.Voice.FastMatch(said); return m == null ? "none" : m.Command.Name + " " + (string)m.Args["agent"]; }
             Check(V("install opencode") == "install_agent opencode" && V("download codex") == "install_agent codex" && V("add an api key for claude code") == "agent_key claude",
                 $"voice: “install opencode” -> {V("install opencode")}, “download codex” -> {V("download codex")}, “add an api key for claude code” -> {V("add an api key for claude code")}");
+        }
+
+        /// MetaCodex's own keyboard (owner 2026-11-10: "never the default one; hands on a table, the keyboard locked on the
+        /// surface, a touchpad on the right, like the Experimental one"): in the air until hands rest on a table, then laid
+        /// under them (F under the left index, J under the right); a lift and a tap types, resting fingers and a hand put
+        /// down type nothing; the touchpad moves a cursor over the window in view and a tap clicks there.
+        private static void KeyboardSection(MetaCodexShell shell, Transform head, SimulatedHands hands)
+        {
+            foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
+            head.SetPositionAndRotation(new Vector3(0f, 1.4f, 0f), Quaternion.identity);
+            var kb = shell.Keyboard;
+            Check(kb != null && kb.KeyCountForTest > 60 && UiKeyboard.Keyboard == kb, $"the keyboard is MetaCodex's own ({kb?.KeyCountForTest} keys, the one UiKeyboard uses)");
+            if (kb == null) return;
+            var keepProvider = UiKeyboard.EditorProvider;
+            UiKeyboard.EditorProvider = null;
+            hands.Frames[0].Tracked = false; hands.Frames[1].Tracked = false;
+            kb.Hide();
+            kb.ForgetSurfaceForTest();
+            float now = 500f;
+            void Step(int n = 1) { for (int i = 0; i < n; i++) { now += 1f / 72f; kb.Tick(now); } }
+            try
+            {
+                // a field opens it in the air (no table yet): poke or pinch its keys; ⏎ ends the field and it goes
+                string got = null;
+                UiKeyboard.Edit("ab", false, null, x => got = x, "TEST · NAME");
+                bool air = kb.Visible && kb.Mode == UiSurfaceKeyboard.KbMode.Air && shell.Router.Panels.Contains(kb.Panel);
+                string strip = kb.StripTextForTest;
+                kb.Panel.ForceRefresh();
+                RenderAt("ui-keyboard-air.png", head.position, Quaternion.LookRotation(kb.Panel.transform.position - head.position, Vector3.up), 50f, 1400, 900);
+                kb.PressForTest("c"); kb.PressForTest("⇧"); kb.PressForTest("d"); kb.PressForTest("⌫"); kb.PressForTest("e");
+                string mid = UiKeyboard.EditingTextForTest;
+                kb.PressForTest("⏎");
+                Check(air && strip.Contains("TEST · NAME") && mid == "abce" && got == "abce" && !kb.Visible,
+                    $"a field opens the keyboard in the air ({air}, “{strip}”): c ⇧ d ⌫ e -> {mid}, ⏎ gives “{got}” and the keyboard goes ({!kb.Visible})");
+
+                // both hands rest flat on a table: it lies down under them, F under the left index tip, J under the right
+                float tableY = 0.76f;
+                var lp = new Vector3(-0.0575f, tableY, 0.36f); // index tips 6.5 cm apart, as on F and J
+                var rp = new Vector3(0.0575f, tableY, 0.36f);
+                void Rest() { hands.SetOpen(Handedness.Left, lp, Vector3.forward, Vector3.down); hands.SetOpen(Handedness.Right, rp, Vector3.forward, Vector3.down); }
+                got = null;
+                UiKeyboard.Edit("", false, null, x => got = x, "TEST · TABLE");
+                Rest(); Step(45);
+                bool surface = kb.Mode == UiSurfaceKeyboard.KbMode.Surface && !shell.Router.Panels.Contains(kb.Panel);
+                var li = hands.Frames[0].IndexTip; var ri = hands.Frames[1].IndexTip;
+                var fW = kb.KeyWorldForTest("f"); var jW = kb.KeyWorldForTest("j");
+                float fErr = new Vector2(fW.x - li.x, fW.z - li.z).magnitude, jErr = new Vector2(jW.x - ri.x, jW.z - ri.z).magnitude;
+                Check(surface && fErr < 0.006f && jErr < 0.006f && fW.y < li.y && li.y - fW.y < 0.012f,
+                    $"hands at rest on a table: the keyboard lies under them ({surface}, not in the router), F {fErr * 1000f:F1} mm and J {jErr * 1000f:F1} mm from the index tips, " +
+                    $"{(li.y - fW.y) * 1000f:F1} mm under the joints, keys scaled ×{kb.SurfaceScaleForTest:F2}");
+                foreach (var id2 in shell.PanelIds.ToList()) shell.ClosePanel(id2);
+                kb.Panel.ForceRefresh();
+                RenderAt("ui-keyboard-table.png", head.position, Quaternion.LookRotation(new Vector3(0f, tableY, 0.40f) - head.position, Vector3.up), 40f, 1400, 900);
+
+                // resting fingers type nothing; a lift and a tap types the key under the finger
+                string typed = "";
+                Action<KbKind, string> onSent = (k, x) => typed += x ?? "<" + k + ">";
+                kb.Sent += onSent;
+                Step(40);
+                bool quiet = typed.Length == 0;
+                void Tap(int hand, int finger, Vector3 at)
+                {
+                    float rest = hand == 0 ? li.y : ri.y;
+                    void SetTip(float y) { var f = hands.Frames[hand]; var p2 = new Vector3(at.x, y, at.z); if (finger == 1) f.IndexTip = p2; else if (finger == 2) f.MiddleTip = p2; else if (finger == 3) f.RingTip = p2; else if (finger == 4) f.LittleTip = p2; else f.ThumbTip = p2; hands.Frames[hand] = f; }
+                    SetTip(rest + 0.024f); Step(5);
+                    SetTip(rest + 0.012f); Step(1);
+                    SetTip(rest + 0.002f); Step(1);
+                    SetTip(rest); Step(8);
+                }
+                Tap(1, 1, kb.KeyWorldForTest("j"));
+                Tap(1, 2, kb.KeyWorldForTest("k"));
+                string afterTaps = typed, field = UiKeyboard.EditingTextForTest;
+                Rest(); Step(30);
+                Check(quiet && afterTaps == "jk" && field == "jk",
+                    $"resting fingers type nothing ({quiet}); the right index taps J, the middle K: “{afterTaps}” into the field (“{field}”)");
+
+                // a whole hand put down (four fingers landing together) is not typing
+                typed = "";
+                {
+                    var f = hands.Frames[0];
+                    Vector3 Up(Vector3 v) => v + Vector3.up * 0.024f;
+                    var keep = f;
+                    f.IndexTip = Up(f.IndexTip); f.MiddleTip = Up(f.MiddleTip); f.RingTip = Up(f.RingTip); f.LittleTip = Up(f.LittleTip);
+                    hands.Frames[0] = f; Step(6);
+                    hands.Frames[0] = keep; Step(12);
+                }
+                Check(typed.Length == 0, $"a hand put down on the keys types nothing (“{typed}”)");
+
+                // the touchpad on the right: the cursor lives on the window in view; a tap without moving clicks there
+                int hits = 0;
+                var tp = UiPanel.Create<UiPanel>("kb-target", "TARGET", 0.30f, 0.20f, null);
+                var hit = tp.Add(new UiButton("HIT", () => hits++) { Rect = new Rect(0.05f, 0.08f, 0.20f, 0.06f) });
+                tp.transform.SetPositionAndRotation(head.position + head.forward * 0.9f, Quaternion.LookRotation(head.forward, Vector3.up));
+                shell.Router.Register(tp);
+                tp.ForceRefresh();
+                kb.SetCursorForTest(tp, hit.Rect.center);
+                var pad = kb.PadWorldForTest(new Vector2(0.5f, 0.5f));
+                {
+                    var f = hands.Frames[1];
+                    var keep = f;
+                    f.IndexTip = new Vector3(pad.x, ri.y + 0.02f, pad.z); hands.Frames[1] = f; Step(4);
+                    f.IndexTip = new Vector3(pad.x, ri.y, pad.z); hands.Frames[1] = f; Step(4);   // touch
+                    f.IndexTip = new Vector3(pad.x, ri.y + 0.02f, pad.z); hands.Frames[1] = f; Step(3); // lift: a tap
+                    bool tapped = hits == 1;
+                    // a slide moves the cursor
+                    var c0 = kb.CursorPoint;
+                    f.IndexTip = new Vector3(pad.x, ri.y, pad.z); hands.Frames[1] = f; Step(3);
+                    for (int i = 1; i <= 8; i++) { f.IndexTip = new Vector3(pad.x + i * 0.003f, ri.y, pad.z); hands.Frames[1] = f; Step(1); }
+                    var c1 = kb.CursorPoint;
+                    f.IndexTip = new Vector3(pad.x + 0.024f, ri.y + 0.02f, pad.z); hands.Frames[1] = f; Step(3);
+                    hands.Frames[1] = keep;
+                    Check(tapped && hits == 1 && c1.x - c0.x > 0.03f && kb.CursorPanel == tp,
+                        $"touchpad: a tap clicks the button under the cursor ({tapped}), a 2.4 cm slide moves the cursor {(c1.x - c0.x) * 100f:F1} cm across the window (no click: {hits == 1})");
+                }
+                shell.Router.Unregister(tp);
+                UnityEngine.Object.DestroyImmediate(tp.gameObject);
+                kb.Sent -= onSent;
+                kb.PressForTest("⏎");
+                bool backOnTable = false;
+                UiKeyboard.Edit("", false, null, _ => { }, "TEST · AGAIN");
+                backOnTable = kb.Mode == UiSurfaceKeyboard.KbMode.Surface;
+                kb.PressForTest("ESC");
+                Check(got == "jk" && backOnTable && !kb.Visible, $"⏎ ends the field (“{got}”); the next field finds the keyboard where it was on the table ({backOnTable})");
+
+                // the terminal and the web page get their keys straight away (no field in between)
+                shell.ToggleTerminalKeyboard();
+                bool term = kb.Visible && kb.Sink == shell.TerminalSinkForTest && kb.Sink.KeepsKeyboard;
+                shell.ToggleTerminalKeyboard();
+                Check(term && !kb.Visible, $"KEYS toggles the keyboard for the terminal ({term}), which keeps it open until ⌨↓ or KEYS again");
+            }
+            finally
+            {
+                UiKeyboard.EditorProvider = keepProvider;
+                kb.Hide();
+                kb.ForgetSurfaceForTest();
+                hands.Frames[0].Tracked = false; hands.Frames[1].Tracked = false;
+            }
         }
 
         /// WEB, the in-app browser (owner 2026-11-10: "it's boring to have the system browser turn the app off"):

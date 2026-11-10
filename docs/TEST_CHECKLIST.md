@@ -363,3 +363,17 @@ The in-app browser, WEB (same version):
 - [ ] ⇗ in WEB opens the page in Horizon's browser; on a PC with USB adb, `chrome://inspect` lists the page (console, DOM)
 - [ ] Moving the WEB window, closing and reopening it: the page is still there; with "Bend panels" on it stays flat
 - [ ] Frame rate with WEB open on a scrolling page: 72 fps; closed: no cost
+
+## 24. 0.7.11: MQH by itself, agents to GET, an API key pasted, MetaCodex's own keyboard (owner 2026-11-10)
+
+- [ ] Start the app and wait half a minute: MQH > DAEMON says "running in this headset's Linux", a message says "MQH is running in this headset", AGENTS fills in by itself (nothing to connect)
+- [ ] AGENTS > GET OPENCODE: a terminal installs it (about a minute); the tile turns into "✓ 1.19.x"; opencode shows in the providers
+- [ ] ⚿ API KEY: pick your provider, copy your key (in WEB or Horizon's browser), ⎘ PASTE, SAVE: "✓ … set for the agents"
+- [ ] NEW THREAD with opencode: it answers (with your key, no terminal login)
+- [ ] GET CLAUDE CODE and GET CODEX install the same way; MORE · COMING SOON cannot be pressed
+- [ ] Any text field (the WEB address, a search, the API key): MetaCodex's keyboard floats in front of you; Horizon's keyboard never shows
+- [ ] Rest both hands flat on a table for a second: the keyboard lies down under them (F and J under the index fingers), the touchpad on its right
+- [ ] Type on the table: lift a finger and tap; resting fingers type nothing; putting a whole hand down types nothing; ⇧, ⇧⇧ (caps), ⌫ held repeats, ⎘ pastes, ⏎ ends a field, ⌨↓ puts it away
+- [ ] KEYS on the dock or TABLE on the wrist: the keyboard types into the terminal (`ls` ⏎, CTRL then c, the arrows)
+- [ ] Touchpad: look at a window, slide a finger on the pad: the cursor moves over that window; a tap clicks; two fingers scroll a list
+- [ ] Frame rate while typing on the table and with MQH running: 72 fps
