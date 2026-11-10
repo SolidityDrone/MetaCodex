@@ -2007,6 +2007,9 @@ end)
                 bool sealedAllow = e != null && e.policy == "allow" && shell.Vault.Reveal(Env) == "sk-ant-test-0123456789abcdef";
                 bool notInSettings = !File.ReadAllText(shell.SettingsPathForTest).Contains("sk-ant-test");
                 RenderPanel(kp, "ui-agent-key.png");
+                bool heading = kp.Elements.OfType<UiLabel>().Any(x => x.Text == "SUPPORTED PROVIDERS");
+                bool noLinks = !kp.Elements.OfType<UiButton>().Any(b => b.Text.Contains("GET A KEY") || b.Text.Contains("⇗"));
+                Check(heading && noLinks, $"API KEY: the list says SUPPORTED PROVIDERS ({heading}); no link to any provider's site ({noLinks})");
                 Check(providers && pasted && sealedAllow && notInSettings,
                     $"API KEY: opencode's 7 providers ({providers}); ⎘ PASTE takes the clipboard ({pasted}); SAVE seals {Env} in the vault, policy allow ({sealedAllow}), never in settings.json ({notInSettings})");
             }
@@ -2028,6 +2031,14 @@ end)
             Check(merged && oc != null && (string)oc["status"] == "ready" && (string)oc["loginCommand"] == "opencode auth login" && !again && shell.ProviderStatesForTest.Count == 2,
                 $"AGENTS adds opencode from MQH's execution options (it is not in providers/state): {oc?["status"]}, sign in “{oc?["loginCommand"]}”, once ({!again})");
             shell.ProviderStatesForTest = keepStates;
+
+            // only Claude Code, Codex and OpenCode, in that order (Cursor and Pi are not MetaCodex's)
+            var mqhStates = JArray.Parse("[{\"providerId\":\"acp-cursor\",\"displayName\":\"Cursor\",\"status\":\"not_installed\"},{\"providerId\":\"pi\",\"displayName\":\"Pi\",\"status\":\"not_installed\"},{\"providerId\":\"codex\",\"displayName\":\"Codex\",\"status\":\"ready\"}]");
+            var supported = shell.SupportedOnlyForTest(mqhStates);
+            string names = string.Join(", ", supported.Select(x => (string)x["displayName"] + ":" + (string)x["status"]));
+            Check(supported.Count == 3 && (string)supported[0]["providerId"] == "claude-code" && (string)supported[1]["providerId"] == "codex" && (string)supported[2]["providerId"] == "acp-opencode"
+                && !supported.Any(x => ((string)x["providerId"]).Contains("cursor") || (string)x["providerId"] == "pi") && (string)supported[1]["status"] == "ready",
+                "AGENTS lists Claude Code, Codex, OpenCode only (no Cursor, no Pi): " + names);
 
             string V(string said) { var m = shell.Voice.FastMatch(said); return m == null ? "none" : m.Command.Name + " " + (string)m.Args["agent"]; }
             Check(V("install opencode") == "install_agent opencode" && V("download codex") == "install_agent codex" && V("add an api key for claude code") == "agent_key claude",

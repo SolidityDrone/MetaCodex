@@ -563,6 +563,7 @@ namespace MetaCodex.Shell
             if (IsPanelOpen("agents")) RefreshAgents();
             if (IsPanelOpen("threads")) RefreshThreads();
             PushKeysToMqh(); // keys saved while MQH was not answering
+            ProbeAgents();   // which agents are installed (AGENTS and NEW THREAD list them)
             if (!_mqhOnlineToastShown) { _mqhOnlineToastShown = true; Toast("MQH is running in this headset", "ok"); }
         }
 

@@ -183,21 +183,20 @@ namespace MetaCodex.Shell
         {
             if (_agentKey != null) return;
             var t = UiTheme.Current;
-            var p = Panel<UiPanel>("agent-key", "API KEY", 0.50f, 0.46f);
+            var p = Panel<UiPanel>("agent-key", "API KEY", 0.50f, 0.48f);
             _agentKey = p;
             var st = new UiStack(p.Content, t.Gap);
-            p.Add(new UiLabel("Pick the provider, paste the key (copy it in the browser first) or type it, SAVE. It is sealed in the vault and handed to the agents MQH starts, never written in a file.", t.SmallSize)
+            p.Add(new UiLabel("Pick the provider, paste your key (⎘: what you copied) or type it, SAVE. It is sealed in the vault and handed to the agents MQH starts, never written in a file.", t.SmallSize)
                 { Rect = st.Next(0.036f), Wrap = true, Color = t.TextDim, Align = TextAlignmentOptions.TopLeft });
+            p.Add(new UiLabel("SUPPORTED PROVIDERS", t.SmallSize) { Rect = st.Next(0.018f), UseDisplay = true, Color = t.TextDim });
             _akList = p.Add(new UiList(0.028f, (item, idx) => SelectAgentKey(item.Tag as string)) { Rect = st.Next(0.17f) });
             _akInfo = p.Add(new UiLabel("", t.SmallSize) { Rect = st.Next(0.018f), Color = t.TextAccent });
             var row = st.Next(t.ButtonHeight);
             float pasteW = 0.09f;
             _akField = p.Add(new UiTextField("", "", _ => SaveAgentKey(), "paste or type the key") { Rect = new Rect(row.x, row.y, row.width - pasteW - t.Gap, row.height), Secure = true });
             p.Add(new UiButton("⎘ PASTE", PasteAgentKey) { Rect = new Rect(row.xMax - pasteW, row.y, pasteW, row.height) });
-            var bt = st.Next(t.ButtonHeight);
-            float half = (bt.width - t.Gap) / 2f;
-            p.Add(new UiButton("SAVE ✓", SaveAgentKey, UiButtonStyle.Primary) { Rect = new Rect(bt.x, bt.y, half, bt.height) });
-            p.Add(new UiButton("⇗ GET A KEY", OpenKeyPage) { Rect = new Rect(bt.x + half + t.Gap, bt.y, half, bt.height) });
+            p.Add(new UiButton("SAVE ✓", SaveAgentKey, UiButtonStyle.Primary) { Rect = st.Next(t.ButtonHeight) });
+            p.Tick += _ => TickKeyRetry();
             _akStatus = p.Add(new UiLabel("", t.SmallSize) { Rect = st.Rest(), Wrap = true, Color = t.TextDim, Align = TextAlignmentOptions.TopLeft });
         }
 
@@ -247,7 +246,7 @@ namespace MetaCodex.Shell
                 Mqh.SetMachineEnvironment(name, v, "API key from the MetaCodex vault", r =>
                 {
                     Vault?.Deliver(name, "MQH machine environment", r != null, r != null ? "→MQH" : "MQH-ERR");
-                    if (r == null) { _akStatus?.Set($"{name} is sealed here; MQH did not take it yet ({Mqh.LastError}): it goes when MQH answers.", UiTheme.Current.Warn); return; }
+                    if (r == null) { _akStatus?.Set($"{name} is sealed here; MQH did not take it yet ({Mqh.LastError}): trying again by itself.", UiTheme.Current.Warn); return; }
                     _keysForMqh.Remove(name);
                     _akStatus?.Set($"✓ {name} is set for the agents MQH starts. New threads use it; a running agent needs a new thread.", UiTheme.Current.Ok);
                     Toast($"{name} ready for the agents", "ok");
@@ -255,20 +254,15 @@ namespace MetaCodex.Shell
             }
         }
 
-        private void OpenKeyPage()
+        private float _keyRetryAt;
+
+        /// A key MQH did not take yet (MQH starting, an error): tried again every 20 s while the dialog is open, and
+        /// whenever MQH comes up (OnMqhOnline).
+        private void TickKeyRetry()
         {
-            string url = _akEnv switch
-            {
-                "ANTHROPIC_API_KEY" => "https://console.anthropic.com/settings/keys",
-                "OPENAI_API_KEY" => "https://platform.openai.com/api-keys",
-                "OPENROUTER_API_KEY" => "https://openrouter.ai/settings/keys",
-                "OPENCODE_API_KEY" => "https://opencode.ai/auth",
-                "GEMINI_API_KEY" => "https://aistudio.google.com/apikey",
-                "XAI_API_KEY" => "https://console.x.ai",
-                "DEEPSEEK_API_KEY" => "https://platform.deepseek.com/api_keys",
-                _ => null,
-            };
-            if (url != null) OpenBrowser(url); // sign-in pages go to Horizon's browser by themselves (ShellWeb)
+            if (_keysForMqh.Count == 0 || Time.unscaledTime < _keyRetryAt) return;
+            _keyRetryAt = Time.unscaledTime + 20f;
+            PushKeysToMqh();
         }
 
         /// Self-tests.
@@ -278,6 +272,7 @@ namespace MetaCodex.Shell
         public void PasteAgentKeyForTest() => PasteAgentKey();
         public void SelectAgentKeyForTest(string env) => SelectAgentKey(env);
         public Newtonsoft.Json.Linq.JArray ProviderStatesForTest { get => _providerStates; set => _providerStates = value; }
+        public Newtonsoft.Json.Linq.JArray SupportedOnlyForTest(Newtonsoft.Json.Linq.JArray states) => SupportedOnly(states);
         public string GetTileTextForTest(string id) => _getTiles.TryGetValue(id, out var b) ? b.Text : null;
         public bool MoreTileEnabledForTest => _panels.TryGetValue("agents", out var p) && p.Elements.OfType<UiButton>().Any(b => b.Text.StartsWith("MORE") && b.Enabled);
     }

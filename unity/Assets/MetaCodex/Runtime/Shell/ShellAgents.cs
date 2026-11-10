@@ -102,15 +102,59 @@ namespace MetaCodex.Shell
                     return;
                 }
                 _providerStates = st["providers"] as JArray ?? new JArray();
+                DisableUnsupportedProviders();
+                _providerStates = SupportedOnly(_providerStates);
                 Mqh.Providers(cat =>
                 {
                     _providerCatalog = cat as JArray ?? new JArray();
                     RenderAgentList();
                     // agents MQH shows only once installed (opencode: visibility "installed") are not in providers/state;
                     // its execution options list them after a health probe on the headset
-                    EnsureHost(() => Mqh.Models(null, _hostId, eo => { if (MergeInstalledProviders(eo)) RenderAgentList(); }));
+                    EnsureHost(() => Mqh.Models(null, _hostId, eo => { if (MergeInstalledProviders(eo)) { _providerStates = SupportedOnly(_providerStates); RenderAgentList(); } }));
                 });
             });
+        }
+
+        /// The agents MetaCodex supports (owner 2026-11-10: "leave Claude Code, Codex, OpenCode"; Cursor and the rest are
+        /// not shown and are switched off in MQH), in this order. Claude Code runs in a terminal until its MQH provider
+        /// plugin installs at first use (its bundle carries Anthropic's SDK: never in the APK).
+        public static readonly (string id, string name, string agent)[] SupportedProviders =
+            { ("claude-code", "Claude Code", "claude"), ("codex", "Codex", "codex"), ("acp-opencode", "OpenCode", "opencode") };
+
+        /// MQH's providers cut to the supported three (each present: as MQH has it, or what GET knows about it).
+        private JArray SupportedOnly(JArray states)
+        {
+            var result = new JArray();
+            foreach (var (id, name, agent) in SupportedProviders)
+            {
+                var mqh = states.FirstOrDefault(x => (string)x["providerId"] == id) as JObject;
+                if (mqh != null) { mqh["displayName"] = name; result.Add(mqh); continue; }
+                bool installed = _agentVersions.TryGetValue(agent, out var v) && v != null;
+                result.Add(new JObject
+                {
+                    ["providerId"] = id,
+                    ["displayName"] = name,
+                    ["status"] = !installed ? "not_installed" : id == "claude-code" ? "terminal" : "ready",
+                    ["installedVersion"] = v,
+                    ["loginCommand"] = id == "claude-code" ? "claude auth login" : id == "acp-opencode" ? "opencode auth login" : "codex login",
+                    ["statusMessage"] = id == "claude-code" ? "runs in a terminal (MQH threads with it: soon)" : !installed ? "GET it above" : null,
+                });
+            }
+            return result;
+        }
+
+        private readonly HashSet<string> _providersSwitchedOff = new HashSet<string>();
+
+        /// Cursor, Pi and any other provider MQH has but MetaCodex does not support: off in MQH (once per id), so no
+        /// thread, model list or probe uses them.
+        private void DisableUnsupportedProviders()
+        {
+            foreach (var x in _providerStates)
+            {
+                string id = (string)x["providerId"];
+                if (string.IsNullOrEmpty(id) || SupportedProviders.Any(sp => sp.id == id) || !_providersSwitchedOff.Add(id)) continue;
+                Mqh.SetProviderEnabled(id, false, r => { if (r == null) _providersSwitchedOff.Remove(id); });
+            }
         }
 
         private void RenderAgentList()
@@ -137,7 +181,13 @@ namespace MetaCodex.Shell
             foreach (var p in (executionOptions?["providers"] as JArray) ?? new JArray())
             {
                 string id = (string)p["id"];
-                if (string.IsNullOrEmpty(id) || _providerStates.Any(x => (string)x["providerId"] == id)) continue;
+                if (string.IsNullOrEmpty(id)) continue;
+                if (_providerStates.FirstOrDefault(x => (string)x["providerId"] == id) is JObject known)
+                {
+                    // listed already, from what GET saw: MQH found it installed, so it is
+                    if ((string)known["status"] == "not_installed") { known["status"] = "ready"; known["statusMessage"] = "installed here; MQH runs it through ACP"; added = true; }
+                    continue;
+                }
                 string agent = AgentIdFor(id);
                 _agentVersions.TryGetValue(agent, out var v);
                 _providerStates.Add(new JObject
@@ -154,14 +204,14 @@ namespace MetaCodex.Shell
             return added;
         }
 
-        private static string StatusIcon(string s) => s == "ready" || s == "authenticated" ? "●" : s == "unauthenticated" || s == "auth_required" || s == "expired" ? "○" : s == "not_installed" ? "⇣" : "⚠";
+        private static string StatusIcon(string s) => s == "ready" || s == "authenticated" ? "●" : s == "terminal" ? "▶" : s == "unauthenticated" || s == "auth_required" || s == "expired" ? "○" : s == "not_installed" ? "⇣" : "⚠";
         private Color StatusColor(string s)
         {
             var t = UiTheme.Current;
-            return s == "ready" || s == "authenticated" ? t.Ok : s == "unauthenticated" || s == "auth_required" || s == "expired" ? t.Warn : s == "not_installed" ? t.TextDim : t.Danger;
+            return s == "ready" || s == "authenticated" ? t.Ok : s == "terminal" ? t.Accent : s == "unauthenticated" || s == "auth_required" || s == "expired" ? t.Warn : s == "not_installed" ? t.TextDim : t.Danger;
         }
         private static string StatusBadge(string s) =>
-            s == "ready" || s == "authenticated" ? "READY" : s == "unauthenticated" || s == "auth_required" ? "SIGN IN" : s == "expired" ? "EXPIRED" : s == "not_installed" ? "INSTALL" : (s ?? "?").ToUpperInvariant().Replace('_', ' ');
+            s == "ready" || s == "authenticated" ? "READY" : s == "terminal" ? "TERMINAL" : s == "unauthenticated" || s == "auth_required" ? "SIGN IN" : s == "expired" ? "EXPIRED" : s == "not_installed" ? "INSTALL" : (s ?? "?").ToUpperInvariant().Replace('_', ' ');
 
         private JToken AgentState(string id) => _providerStates.FirstOrDefault(x => (string)x["providerId"] == id);
         private JToken AgentCatalog(string id) => _providerCatalog.FirstOrDefault(x => (string)x["id"] == id);
@@ -1037,22 +1087,36 @@ namespace MetaCodex.Shell
             Mqh.ProvidersState(st =>
             {
                 if (st == null) { _ntSummary?.Set("⚠ " + (Mqh.LastError ?? "MQH not reachable"), UiTheme.Current.Danger); return; }
-                _providerStates = st["providers"] as JArray ?? new JArray();
-                var t = UiTheme.Current;
-                var list = _providerStates.Where(x => (string)x["status"] != "not_installed").ToList();
-                _ntProviders.SetItems(list.Select(x => new UiListItem
+                var raw = st["providers"] as JArray ?? new JArray();
+                _providerStates = raw;
+                DisableUnsupportedProviders();
+                void Render()
                 {
-                    Icon = StatusIcon((string)x["status"]),
-                    IconColor = StatusColor((string)x["status"]),
-                    Title = (string)x["displayName"],
-                    Badge = StatusBadge((string)x["status"]),
-                    BadgeColor = StatusColor((string)x["status"]),
-                    Tag = (string)x["providerId"],
+                    _providerStates = SupportedOnly(raw);
+                    // MQH can run Codex and OpenCode once they are installed (Claude Code: in a terminal, for now)
+                    var list = _providerStates.Where(x => (string)x["status"] != "not_installed" && (string)x["status"] != "terminal").ToList();
+                    _ntProviders.SetItems(list.Select(x => new UiListItem
+                    {
+                        Icon = StatusIcon((string)x["status"]),
+                        IconColor = StatusColor((string)x["status"]),
+                        Title = (string)x["displayName"],
+                        Badge = StatusBadge((string)x["status"]),
+                        BadgeColor = StatusColor((string)x["status"]),
+                        Tag = (string)x["providerId"],
+                    }));
+                    if (_ntProvider == null || !list.Any(x => (string)x["providerId"] == _ntProvider)) _ntProvider = (string)list.FirstOrDefault()?["providerId"];
+                    int i = list.FindIndex(x => (string)x["providerId"] == _ntProvider);
+                    if (i >= 0) _ntProviders.SelectIndex(i, notify: false);
+                    LoadModels();
+                }
+                Render();
+                // opencode is installed-only in MQH: its execution options have it (then it is in the list as ready)
+                EnsureHost(() => Mqh.Models(null, _hostId, eo =>
+                {
+                    _providerStates = raw;
+                    if (MergeInstalledProviders(eo)) { raw = _providerStates; Render(); }
+                    else _providerStates = SupportedOnly(raw);
                 }));
-                if (_ntProvider == null || !list.Any(x => (string)x["providerId"] == _ntProvider)) _ntProvider = (string)list.FirstOrDefault()?["providerId"];
-                int i = list.FindIndex(x => (string)x["providerId"] == _ntProvider);
-                if (i >= 0) _ntProviders.SelectIndex(i, notify: false);
-                LoadModels();
             });
         }
 

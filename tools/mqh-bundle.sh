@@ -29,6 +29,9 @@ done
 mkdir -p "$D/packages/bundled-plugins"
 cp -r "$B/packages/bundled-plugins/dist" "$D/packages/bundled-plugins/"
 rm -rf "$D/packages/bundled-plugins/dist/provider-claude-code"
+# MetaCodex supports Claude Code, Codex and OpenCode (owner 2026-11-10): Pi's provider plugin stays out (Cursor is one
+# of the ACP plugin's agents: the app switches it off in MQH)
+rm -rf "$D/packages/bundled-plugins/dist/provider-pi"
 find "$D" -name '*.map' -delete
 
 # the packages the bundles keep outside (natives + the logger), installed for linux-arm64 / glibc from the lockfile
