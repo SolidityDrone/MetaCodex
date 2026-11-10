@@ -127,7 +127,7 @@ panels ... the source of the speech ... a billboard side notification system men
 | `Scripting/` | `ScriptHost`: Lua (MoonSharp) scripts and plugin folders, hot reload, sandbox, instruction budget, detectors as persistent coroutines, persisted state; `PoseJson` |
 | `Security/` | `SecretVault` (Android Keystore sealer, Editor dev sealer, policies, access log) |
 | `AI/` | `QvacHost` (starts the local AI service process, token, restarts), `QvacClient` (HTTP), `VoiceRecorder` (microphone, end of speech), `VoiceCommands` (registry, phrase templates, tool specs) |
-| `Shell/` | `MetaCodexShell` (wiring, panels by id and aliases, control-port commands), `ShellPanels` (dock, terminals, files, git logic, browser, scripts, settings, saved layouts), `ShellGestures` (Gestures studio, bindings, actions, recording, starter plugins), `ShellAgents` (agents, threads grouped by project, thread with composer chips and fork, new thread, terminal links), `ShellWorkspace` (the thread's linked workspace module, the picker), `ShellViews` + `ViewStage` (agent views, the physics stage), `ShellVault` (vault: secrets and GIT with the GitHub account; secret broker), `ShellVoice` (voice pipeline, shell commands, VOICE panel, HUD), `ShellAmbient` (Ambient Focus), `ShellSystem` (installed tools, storage), `ShellLayout` (fixed / float carousel, the thread + workspace pair), `ShellOrb` (the orb: where it floats, hands, the voice, callouts, its menu), `Services` (system deep links, settings, MQH client, git, files) |
+| `Shell/` | `MetaCodexShell` (wiring, panels by id and aliases, control-port commands), `ShellPanels` (dock, terminals, files, git logic, browser, scripts, settings, saved layouts), `ShellGestures` (Gestures studio, bindings, actions, recording, starter plugins), `ShellAgents` (agents, threads grouped by project, thread with composer chips and fork, new thread, terminal links), `ShellWorkspace` (the thread's linked workspace module, the picker), `ShellViews` + `ViewStage` (agent views, the physics stage), `ShellVault` (vault: secrets and GIT with the GitHub account; secret broker), `ShellVoice` (voice pipeline, shell commands, VOICE panel, HUD), `ShellAmbient` (Ambient Focus), `ShellSystem` (installed tools, storage), `ShellLayout` (fixed / float carousel, the thread + workspace pair), `ShellPlacement` (where a panel opens), `ShellOrb` (the orb: where it floats, hands, the voice, callouts, its menu), `Services` (system deep links, settings, MQH client, git, files) |
 | `../Resources/Shaders/` | `AmbientFocus` (the dome: depth, floor plane, blur), `FocusMesh` (hand cut-outs), `FocusDepthCopy` (floor readback), `TextBend` (TMP SDF + bend), `UiIcon` (logos + bend), `StageLit` (physics bodies), `ViewImage` (images in views), `Orb` (the orb), `WristArt` (the wrist menu and the cast's light): in Resources so they ship without material assets; `../Shaders/McxPanelFx.hlsl` (the cast's scan plane, shared by every shader that draws inside a window) |
 | `../Resources/ToolIcons/` | tool logos (Simple Icons, CC0 SVG data; each logo is its owner's trademark, shown only to name the tool), built by `tools/make-tool-icons.js` |
 | `../Plugins/Android/MetaCodexVault.java` | the Keystore bridge (AES-256-GCM, StrongBox or TEE) |
@@ -272,9 +272,20 @@ windows and your hands. No Space Setup scan is needed (branch `feat/spatial-dome
 ## Layouts
 
 - **Fixed**: panels are world-locked where you leave them, bent towards you when "Bend panels around you" is
-  on (terminals stay flat); new panels open where you look, in the
-  nearest free gap (within a head turn, ±110°); when none is left they cascade in front, each a little
-  closer, higher and to the side. Named layouts (Settings > DISPLAY) store the open panels relative to the head and put
+  on (terminals stay flat). **Where a new panel opens** (`ShellPlacement`, owner 2026-11-10: "smart positions"):
+  every open panel is a rectangle in your view (the yaw and pitch its corners span, bent or flat), and the new one
+  takes the free place that costs least: in front of where you face, just below eye level, when that is free; else
+  the nearest free place round it, to the side or, when that is nearer than a far turn of the head, above a window
+  (below only as a last resort: the hands and the dock are there; never higher than 50 degrees or lower than 42),
+  tilted to face you. A panel opened from a window's button (a thread from THREADS, VOICE from SYSTEM, a view from
+  a thread) opens right beside that window, to its right when there is room. A panel that was open before comes
+  back where you left it when that place is still free and within 70 degrees of where you face; else it is placed
+  anew. "In front" is where your body faces when you look down at the wrist menu or the dock to press (the frame
+  the orb floats in), not where your nose points. And never inside a wall: while the room's depth runs, its last
+  reading (the 48 x 48 points the floor is found from, every 0.3 s) says how far the real things are in each
+  direction; a panel opens at least 8 cm in front of them, and a direction where something real is nearer than
+  half a metre is a poor place (a hand in front of the eyes is not the room: nothing nearer than 0.55 m counts).
+  When nothing is free panels cascade in front, each a little closer, higher and to the side. Named layouts (Settings > DISPLAY) store the open panels relative to the head and put
   them back around wherever the user is.
 - **Float**: panels sit on an invisible cylinder around you that follows you horizontally (x/z), never
   your head's pitch or roll, 4° apart; when the open panels do not fit around it the cylinder grows, so

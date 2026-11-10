@@ -382,6 +382,7 @@ namespace MetaCodex.Shell
                     pts.Add(new Vector3(w.x / w.w, w.y / w.w, w.z / w.w));
                 }
                 AcceptFloor(EstimateFloor(pts, headPos, track), track);
+                SetRoomPoints(pts); // the same reading tells a panel that opens where the walls and the furniture are (ShellPlacement)
             });
         }
 

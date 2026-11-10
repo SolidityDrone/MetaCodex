@@ -166,6 +166,7 @@ namespace MetaCodex.EditorTools
                 if (Want("transitions")) Transitions(shell, head);
                 if (Want("orb")) OrbSection(shell, head, hands);
                 if (Want("look")) Look(shell, head);
+                if (Want("placement")) Placement(shell, head);
                 if (Want("mqh")) MqhPanel(shell);
                 if (Want("captures")) Captures(shell, tmp);
                 if (Want("context")) SessionContextSection(shell, tmp);
@@ -1822,6 +1823,147 @@ end)
             head.rotation = rot0;
             RightAway();
             foreach (var id in shell.PanelIds.ToList()) if (id != "dock") shell.ClosePanel(id);
+        }
+
+        /// WHERE A PANEL OPENS (owner 2026-11-10: "smart positions"): the free place that costs least in the user's view;
+        /// beside the window it was opened from; back where it was when that is still free and in view; in front of the
+        /// body when the user looks down at the wrist; never inside a wall.
+        private static void Placement(MetaCodexShell shell, Transform head)
+        {
+            foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
+            shell.SetWristMenu(true);
+            var keepPos = head.position; var keepRot = head.rotation;
+            float keepScale = shell.Settings.uiScale, keepDist = shell.Settings.panelDistance;
+            head.SetPositionAndRotation(new Vector3(0f, 1.4f, 0f), Quaternion.identity);
+            var terms = shell.GetComponentsInChildren<UiPanel>(true).Where(x => x.Id != null && x.Id.StartsWith("term-") && x.gameObject.activeSelf).ToList();
+            foreach (var tm in terms) tm.gameObject.SetActive(false);
+            UiPanel.AnimateInEditor = false;
+            shell.ClearRoomPoints();
+            foreach (var pp in shell.PanelsById.Values) pp.transform.position = Vector3.up * 50f; // nothing is "back where the user left it"
+            for (int k = 0; k < 30; k++) shell.TickOrbForTest(0.05f); // the frame the orb floats in: where the body faces
+            MetaCodexShell.ViewRect R(string id) { MetaCodexShell.ViewRectOf(shell.PanelsById[id], head.position, 0f, out var r); return r; }
+            float Dist(string id) => Vector3.Distance(shell.PanelsById[id].transform.position, head.position);
+            void CloseAll() { foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id); }
+            try
+            {
+                // the first panel: in front, just below eye level, at the panel distance
+                shell.OpenPanel("files");
+                var f = R("files");
+                float want = shell.Settings.panelDistance * 0.95f;
+                Check(Mathf.Abs(f.YawMid) < 1.5f && Mathf.Abs(f.PitchMid + 4.5f) < 3f && Mathf.Abs(Dist("files") - want) < 0.02f,
+                    $"the first panel opens in front of the user: {f.YawMid:F0} deg, {f.PitchMid:F0} deg, {Dist("files"):F2} m");
+                // more panels: each takes the nearest free place, none over another, all within reach of a turn of the head
+                var ids = new[] { "files", "settings", "threads", "terminals", "agents" };
+                foreach (var id in ids.Skip(1)) shell.OpenPanel(id);
+                int over = 0;
+                for (int i = 0; i < ids.Length; i++) for (int j = i + 1; j < ids.Length; j++) if (R(ids[i]).Overlaps(R(ids[j]), 0f)) over++;
+                bool reach = ids.All(id => Mathf.Abs(R(id).YawMid) <= MetaCodexShell.PlaceYawLimit + 1f);
+                var second = R("settings");
+                Check(over == 0 && reach && second.Gap(f).yaw < 4f && Mathf.Abs(second.PitchMid - f.PitchMid) < 2f,
+                    $"five panels: none over another ({over} pairs), the second right beside the first ({second.Gap(f).yaw:F1} deg apart, same height): " + string.Join(", ", ids.Select(id => $"{id} {R(id).YawMid:F0}")));
+                Render(shell, "ui-placement.png", head.position - Vector3.forward * 0.1f, Quaternion.identity, 110f, 1800, 1000);
+
+                // opened from a window's button: right beside that window, not in front of the nose
+                CloseAll();
+                shell.OpenPanel("storage"); // SYSTEM, the STORAGE tab: its AI MODELS button opens VOICE
+                var sys = shell.PanelsById["system"];
+                sys.ForceRefresh();
+                head.rotation = Quaternion.Euler(0f, 100f, 0f); // the user has turned away from it
+                var models = sys.Elements.OfType<UiButton>().FirstOrDefault(b => b.Visible && b.Text != null && b.Text.Contains("AI MODELS"));
+                if (models != null) Click(shell.Router, sys, models.Rect.center);
+                var sr = R("system"); var vr = R("voice");
+                bool beside = shell.IsPanelOpen("voice") && !vr.Overlaps(sr, 0f) && vr.Gap(sr).yaw < 4f && vr.YawMid > sr.YawMid && Mathf.Abs(vr.YawMid - 100f) > 30f;
+                Check(models != null && beside, $"VOICE opened from SYSTEM's button opens right beside SYSTEM, to its right ({vr.Gap(sr).yaw:F1} deg apart; SYSTEM at {sr.YawMid:F0}, VOICE at {vr.YawMid:F0}), not in front of the user who looks at 100");
+                head.rotation = Quaternion.identity;
+
+                // a panel that was open comes back where it was: when that place is free and in view
+                CloseAll();
+                shell.OpenPanel("files");
+                var filesP = shell.PanelsById["files"];
+                filesP.transform.position += head.right * 0.35f + Vector3.up * 0.05f; // the user moved it
+                var left = filesP.transform.position;
+                shell.ClosePanel("files");
+                shell.OpenPanel("files");
+                bool back = Vector3.Distance(filesP.transform.position, left) < 1e-4f;
+                shell.ClosePanel("files");
+                shell.OpenPanel("settings");
+                var st = shell.PanelsById["settings"];
+                st.transform.SetPositionAndRotation(left, filesP.transform.rotation); // another window takes its place
+                shell.OpenPanel("files");
+                bool moved = !R("files").Overlaps(R("settings"), 0f) && Vector3.Distance(filesP.transform.position, left) > 0.2f;
+                CloseAll();
+                head.rotation = Quaternion.Euler(0f, 150f, 0f); // the user faces the other way
+                shell.OpenPanel("files");
+                MetaCodexShell.ViewRectOf(filesP, head.position, 150f, out var turned);
+                Check(back && moved && Mathf.Abs(turned.YawMid) < 2f,
+                    $"closed and opened again it is back where the user left it ({back}); when another window took that place it opens beside it ({moved}); when the user faces the other way it opens in front of them ({turned.YawMid:F0} deg)");
+                head.rotation = Quaternion.identity;
+
+                // looking down at the wrist to press: the panel opens where the body faces, not where the nose points
+                CloseAll();
+                for (int k = 0; k < 30; k++) shell.TickOrbForTest(0.05f);
+                head.rotation = Quaternion.Euler(32f, -20f, 0f); // down and to the left wrist
+                shell.OpenPanel("agents");
+                var ag = R("agents");
+                head.rotation = Quaternion.Euler(0f, -20f, 0f); // looking that way on purpose: there it opens
+                shell.PanelsById["threads"].transform.position = Vector3.up * 50f;
+                shell.OpenPanel("threads");
+                var th = R("threads");
+                Check(Mathf.Abs(ag.YawMid) < 2f && !th.Overlaps(ag, 0f), $"the user looks down at the wrist menu (20 deg to the left) and presses: the panel opens in front of the body ({ag.YawMid:F0} deg), not at the wrist's side");
+                head.rotation = Quaternion.identity;
+
+                // smaller windows further away: above a window is nearer than a far turn of the head, and tilted to the user
+                CloseAll();
+                shell.Settings.uiScale = 0.8f; shell.Settings.panelDistance = 1.3f;
+                shell.OnSettingsChanged();
+                var many = new[] { "files", "settings", "threads", "terminals", "agents", "browser" };
+                foreach (var id in many) shell.OpenPanel(id);
+                int over2 = 0;
+                for (int i = 0; i < many.Length; i++) for (int j = i + 1; j < many.Length; j++) if (R(many[i]).Overlaps(R(many[j]), 0f)) over2++;
+                // the fifth does not fit beside the others within an easy turn of the head: it goes above the row
+                var last = R("agents");
+                var lastP = shell.PanelsById["agents"];
+                bool above = last.PitchMid - R("files").PitchMid > 12f && Mathf.Abs(last.YawMid) < 50f && last.Pitch1 <= MetaCodexShell.PlaceTop + 1f;
+                bool tilted = Vector3.Angle(lastP.transform.forward, lastP.transform.position - head.position) < 3f && Mathf.Abs(lastP.transform.forward.y) > 0.1f;
+                bool notBelow = many.All(id => R(id).PitchMid > R("files").PitchMid - 6f); // below is where the hands and the dock are
+                Check(over2 == 0 && above && tilted && notBelow, $"six smaller windows: none over another ({over2}); one goes above the row, nearer than a far turn of the head ({last.YawMid:F0} deg, {last.PitchMid:F0} deg up), tilted to face the user ({tilted}); none below it ({notBelow}): "
+                    + string.Join(", ", many.Select(id => $"{id} {R(id).YawMid:F0}/{R(id).PitchMid:F0}")));
+                Render(shell, "ui-placement-rows.png", head.position - Vector3.forward * 0.1f, Quaternion.Euler(-8f, 0f, 0f), 110f, 1800, 1000);
+                CloseAll();
+                shell.Settings.uiScale = keepScale; shell.Settings.panelDistance = keepDist;
+                shell.OnSettingsChanged();
+
+                // never inside a wall: a wall 0.62 m in front of the user, and the panel opens in front of it
+                var wall = new List<Vector3>();
+                for (float x = -1.2f; x <= 1.2f; x += 0.04f) for (float y = 0.6f; y <= 2.2f; y += 0.04f) wall.Add(new Vector3(x, y, 0.62f));
+                shell.SetRoomPoints(wall);
+                filesP.transform.position = Vector3.up * 50f; // placed anew
+                shell.OpenPanel("files");
+                float nearest = float.MinValue;
+                foreach (var corner in new[] { new Vector2(0f, 0f), new Vector2(filesP.Width, 0f), new Vector2(0f, filesP.Height), new Vector2(filesP.Width, filesP.Height) })
+                    nearest = Mathf.Max(nearest, filesP.SurfacePoint(corner).z);
+                var wr = R("files");
+                Check(nearest < 0.62f - 0.04f && Mathf.Abs(wr.YawMid) < 2f, $"a wall 0.62 m in front: the panel opens in front of it (its furthest corner at {nearest:F2} m), still in front of the user");
+                shell.ClosePanel("files");
+                // a reading of a hand (nearer than 0.55 m) is not the room
+                var hand = new List<Vector3>();
+                for (float x = -0.1f; x <= 0.1f; x += 0.01f) for (float y = 1.2f; y <= 1.4f; y += 0.01f) hand.Add(new Vector3(x, y, 0.35f));
+                shell.SetRoomPoints(hand);
+                filesP.transform.position += Vector3.right * 5f; // not back where it was: placed anew
+                shell.OpenPanel("files");
+                Check(Mathf.Abs(Dist("files") - want) < 0.02f, $"a hand in front of the eyes is not a wall: the panel opens at its distance ({Dist("files"):F2} m)");
+            }
+            finally
+            {
+                shell.ClearRoomPoints();
+                shell.Settings.uiScale = keepScale; shell.Settings.panelDistance = keepDist;
+                shell.OnSettingsChanged();
+                foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
+                foreach (var tm in terms) if (tm != null) tm.gameObject.SetActive(true);
+                shell.SetWristMenu(false);
+                head.SetPositionAndRotation(keepPos, keepRot);
+                shell.TickOrbForTest(0.05f);
+            }
         }
 
         /// THE ORB (owner 2026-11-10): a sphere of energy that floats by the user, casts the panels, is where the voice comes

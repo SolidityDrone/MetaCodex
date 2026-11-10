@@ -330,3 +330,12 @@ Section 19's transition lines (the spark, the collapse into a line) are replaced
 - [ ] Pinch the orb between thumb and index and move the hand: it follows; let go: it stays there and keeps that place by you when you turn. Its menu > PLACE: it goes back to choosing its own place
 - [ ] Settings > LOOK > Orb off (or voice "turn the orb off"): it fades out; windows are cast from their left edge; messages float in the upper view. On again: it ignites
 - [ ] Frame rate with the orb and five windows: 72 fps; bring the orb close to your face (pinch it there): still 72 fps
+
+## 22. Smart positions (owner 2026-11-10)
+
+- [ ] The first window opens in front of you; the next ones right beside it, none over another
+- [ ] SYSTEM > STORAGE > AI MODELS: VOICE opens right beside SYSTEM (also when you look elsewhere). THREADS > a thread: it opens beside THREADS
+- [ ] Close a window you had dragged somewhere and open it again: it is back there. Put another window in that place first: it opens beside instead. Turn right round and open it: it opens in front of you
+- [ ] Look down at the wrist menu held to your left and press FILES: it opens in front of your body, not off to the left
+- [ ] With UI SCALE 0.8 and DISTANCE 1.3 m, open six windows: one goes above the row (tilted towards you) rather than far to the side; none goes below
+- [ ] Stand 70 cm from a wall and open a window (depth on: Settings > FOCUS > Real things in front): it opens in front of the wall, not inside it

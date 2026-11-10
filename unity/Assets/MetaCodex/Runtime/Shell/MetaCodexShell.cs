@@ -293,7 +293,9 @@ namespace MetaCodex.Shell
             if (!_panels.TryGetValue(id ?? "", out var p)) return false;
             if (!p.IsOpen)
             {
-                if (!_placed.Contains(id) || Head != null && Vector3.Distance(p.transform.position, Head.position) > 3f) PlaceDefault(id, p);
+                // back where the user left it when that place is still free and in view, else the best free place:
+                // beside the window it is opened from, or in front (ShellPlacement)
+                if (!_placed.Contains(id) || !OldPlaceStillGood(p)) PlaceSmart(id, p, OpenerNow());
                 p.Open();
                 _placed.Add(id);
             }
@@ -327,45 +329,9 @@ namespace MetaCodex.Shell
 
         private readonly HashSet<string> _placed = new HashSet<string>();
 
-        /// Opens where the user looks: level, at the panel distance, in the nearest gap (within 75 degrees) that
-        /// no other open panel or terminal covers. When the front is full it floats a little closer, in front.
-        private void PlaceDefault(string id, UiPanel p)
-        {
-            var head = Head;
-            if (id == "dock") { p.PlaceInFront(head, 0.55f, 0.42f); TiltTowards(p, head); return; }
-            Vector3 eye = head != null ? head.position : new Vector3(0f, 1.4f, 0f);
-            var f = head != null ? head.forward : Vector3.forward;
-            float gaze = Mathf.Atan2(f.x, f.z) * Mathf.Rad2Deg;
-            float dist = Settings.panelDistance * 0.95f;
-            var occupied = new List<(float, float)>();
-            foreach (var q in _panels.Values.Where(q => q != p && q.IsOpen && q.Id != "dock").Concat(_frames.Values.Where(q => q.IsOpen)))
-            {
-                var d = q.transform.position - eye;
-                float qd = Mathf.Max(new Vector2(d.x, d.z).magnitude, 0.1f);
-                occupied.Add((Mathf.Atan2(d.x, d.z) * Mathf.Rad2Deg, HalfAngle(q, qd)));
-            }
-            float yaw = FindFreeYaw(gaze, HalfAngle(p, dist), occupied, 75f);
-            if (float.IsNaN(yaw)) yaw = FindFreeYaw(gaze, HalfAngle(p, dist), occupied, 110f); // turn your head to see it
-            float lift = 0f;
-            if (float.IsNaN(yaw))
-            {
-                // full circle: cascade in front, each extra panel a bit closer, higher and to the side; take the
-                // first cascade slot no open panel already sits in
-                var taken = _panels.Values.Where(q => q != p && q.IsOpen && q.Id != "dock").Select(q => q.transform.position).ToList();
-                float baseDist = dist;
-                for (int k = 0; k < 16; k++)
-                {
-                    float y = gaze + 4f * k, d = Mathf.Max(0.45f, baseDist - 0.07f * (k + 1)), l = 0.035f * k;
-                    float ar = y * Mathf.Deg2Rad;
-                    var pos = eye + new Vector3(Mathf.Sin(ar), 0f, Mathf.Cos(ar)) * d + Vector3.down * 0.06f + Vector3.up * l;
-                    yaw = y; dist = d; lift = l;
-                    if (!taken.Any(q => Vector3.Distance(q, pos) < 0.05f)) break;
-                }
-            }
-            float a = yaw * Mathf.Deg2Rad;
-            var dir = new Vector3(Mathf.Sin(a), 0f, Mathf.Cos(a));
-            p.transform.SetPositionAndRotation(eye + dir * dist + Vector3.down * 0.06f + Vector3.up * lift, Quaternion.LookRotation(dir, Vector3.up));
-        }
+        /// The best free place for a panel that is about to open (ShellPlacement: in front of where the user faces,
+        /// else the nearest free place round it).
+        private void PlaceDefault(string id, UiPanel p) => PlaceSmart(id, p);
 
         /// Half the angle a panel covers seen from `distance` away (degrees).
         public static float HalfAngle(UiPanel q, float distance) => Mathf.Atan2(q.Width * 0.5f * q.RestLossyScale.x, distance) * Mathf.Rad2Deg;
@@ -397,6 +363,7 @@ namespace MetaCodex.Shell
 
         private void OnRecentered(Vector3 center, Quaternion rot)
         {
+            var settled = new List<UiPanel>();
             foreach (var kv in _panels)
             {
                 if (kv.Key == "dock")
@@ -407,7 +374,7 @@ namespace MetaCodex.Shell
                     if (!kv.Value.IsOpen) kv.Value.Open();
                     continue;
                 }
-                if (kv.Value.IsOpen) PlaceDefault(kv.Key, kv.Value);
+                if (kv.Value.IsOpen) { PlaceSmart(kv.Key, kv.Value, null, settled.ToList()); settled.Add(kv.Value); } // one by one, clear of those already placed
             }
             if (Orb != null && Settings.orb) { FrameOrb(true); Orb.Teleport(OrbHome()); } // the orb comes along
             ResetCarousel();
