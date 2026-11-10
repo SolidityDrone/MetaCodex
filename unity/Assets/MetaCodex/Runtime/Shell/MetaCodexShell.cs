@@ -261,6 +261,7 @@ namespace MetaCodex.Shell
             { "git", ("vault", 1) }, { "focus", ("settings", 2) }, { "storage", ("system", 1) }, { "tools", ("system", 0) },
             { "skills", ("mqh", MqhSkillsTab) }, { "plugins", ("mqh", MqhPluginsTab) }, { "scripts", ("mqh", MqhScriptsTab) },
             { "gestures", ("mqh", MqhGesturesTab) }, { "daemon", ("mqh", MqhDaemonTab) },
+            { "links", ("browser", -1) }, // WEB's bookmarks and local servers (the panel kept its old id: saved layouts name it)
         };
 
         private static bool Alias(ref string id, out int tab)
@@ -279,7 +280,7 @@ namespace MetaCodex.Shell
         {
             bool alias = Alias(ref id, out int tab);
             if (!_panels.TryGetValue(id ?? "", out var p) || !p.IsOpen) return false;
-            return !alias || PanelTabs(id)?.Selected == tab;
+            return !alias || tab < 0 || PanelTabs(id)?.Selected == tab;
         }
 
         public bool OpenPanel(string id)
@@ -287,7 +288,7 @@ namespace MetaCodex.Shell
             if (Alias(ref id, out int tab))
             {
                 bool ok = OpenPanel(id);
-                PanelTabs(id)?.Select(tab);
+                if (tab >= 0) PanelTabs(id)?.Select(tab);
                 return ok;
             }
             if (!_panels.TryGetValue(id ?? "", out var p)) return false;
@@ -318,8 +319,8 @@ namespace MetaCodex.Shell
             if (Alias(ref id, out int tab))
             {
                 if (!_panels.TryGetValue(id, out var ap)) return false;
-                if (ap.IsOpen && PanelTabs(id)?.Selected == tab) ap.Close();
-                else { OpenPanel(id); PanelTabs(id)?.Select(tab); }
+                if (ap.IsOpen && (tab < 0 || PanelTabs(id)?.Selected == tab)) ap.Close();
+                else { OpenPanel(id); if (tab >= 0) PanelTabs(id)?.Select(tab); }
                 return true;
             }
             if (!_panels.TryGetValue(id ?? "", out var p)) return false;
@@ -528,12 +529,6 @@ namespace MetaCodex.Shell
 
         public void TerminalSend(string text) => app?.SendText(text);
         public void TerminalNew() => app?.NewTerminal();
-
-        public void OpenBrowser(string url)
-        {
-            bool ok = SystemBridge.OpenBrowser(url);
-            Toast(ok ? "Opening " + url : SystemBridge.LastResult, ok ? "info" : "warn");
-        }
 
         public void OpenKeyboard() => UiKeyboard.OpenForTerminal();
 

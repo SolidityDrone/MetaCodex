@@ -68,9 +68,9 @@ Helpers on the PC: `tools/qterm` (control port), `adb logcat -s Unity`, `files/s
 - [ ] FILES: /root, QUEST, / ; tap folders to open; CD HERE / VIEW / EDIT / PATH ⇥ act in the focused terminal
 - [ ] GIT: SCAN finds repos under /root (clone one first: `git clone https://github.com/SolidityDrone/MetaCodex /root/MetaCodex`)
 - [ ] GIT: branch, ahead/behind, changes, branches, metro history; FETCH, PULL, COMMIT… (keyboard), CHECKOUT (tap a branch)
-- [ ] WEB: type a URL → GO opens the Horizon browser; bookmarks add/remove; LOCAL SERVERS lists running ports
-- [ ] WEB: start `python3 -m http.server 8000` in a terminal → SCAN shows :8000 → opens in the browser
-- [ ] WEB: HANDS ⚙ / APP ⚙ / FILES APP open the Horizon system pages
+- [ ] WEB: the in-app browser window (section 23); ☰ LINKS: bookmarks add/remove; LOCAL SERVERS lists running ports
+- [ ] WEB: start `python3 -m http.server 8000` in a terminal → LINKS > SCAN shows :8000 → opens in the WEB window
+- [ ] LINKS: HANDS ⚙ / APP ⚙ / FILES APP open the Horizon system pages
 
 ## 6. Lua scripts
 
@@ -353,3 +353,13 @@ The orb's billboard and the table keyboard (same version):
 
 - [ ] The orb: touch it → a small billboard next to it (TALK, SPEAK, PLACE, LOG); LOG shows "n NEW" when messages came; it opens MESSAGES (the list, ✕ CLEAR)
 - [ ] Wrist menu > TABLE: OPEN KEYBOARD shows the keyboard; TURN ON opens Settings (Experimental > Surface Keyboard and Touchpad)
+
+The in-app browser, WEB (same version):
+
+- [ ] WEB on the dock or the wrist: a window opens beside the others on a start page (bookmarks, local servers); the app stays on, everything else stays visible
+- [ ] Type `localhost:8000` (with `python3 -m http.server 8000` running in a terminal) → GO: the page shows in the window; tap a link with a pinch and with a fingertip; drag the page to scroll; ◀ ▶ ⟳ work; the title and "loading %" show under the toolbar
+- [ ] Tap a text field on a page, ⌨, type, done: the text is in the field; ⏎ submits, ⌫ deletes
+- [ ] A Vite / dev server link printed in a terminal (`⇗` or OPEN LINK) opens in the WEB window; a sign-in link (`claude auth login`) opens in Horizon's browser instead, as before
+- [ ] ⇗ in WEB opens the page in Horizon's browser; on a PC with USB adb, `chrome://inspect` lists the page (console, DOM)
+- [ ] Moving the WEB window, closing and reopening it: the page is still there; with "Bend panels" on it stays flat
+- [ ] Frame rate with WEB open on a scrolling page: 72 fps; closed: no cost

@@ -25,6 +25,7 @@ namespace MetaCodex.Shell
             BuildTerminals();
             BuildFiles();
             BuildBrowser();
+            BuildWeb(); // the in-app browser window (ShellWeb)
             BuildSettings();
             BuildMqh(); // SKILLS · PLUGINS · SCRIPTS · GESTURES · DAEMON
             BuildClipboard();
@@ -88,7 +89,7 @@ namespace MetaCodex.Shell
                 ("◫\nFILES", () => TogglePanel("files")),
                 ("☰\nTHREADS", () => TogglePanel("threads")),
                 ("◆\nAGENTS", () => TogglePanel("agents")),
-                ("◎\nWEB", () => TogglePanel("browser")),
+                ("◎\nWEB", () => TogglePanel("web")),
                 ("⬡\nMQH", () => TogglePanel("mqh")),
                 ("▣\nCLIP", () => TogglePanel("clipboard")),
                 ("⬢\nSYSTEM", () => TogglePanel("system")),
@@ -358,7 +359,7 @@ namespace MetaCodex.Shell
         private void BuildBrowser()
         {
             var t = UiTheme.Current;
-            var p = Panel<UiPanel>("browser", "BROWSER · HORIZON", 0.56f, 0.50f);
+            var p = Panel<UiPanel>("browser", "WEB · LINKS", 0.56f, 0.50f);
             var st = new UiStack(p.Content, t.Gap);
             var row = st.NextSplit(t.ButtonHeight, 0.80f, out var go);
             _url = p.Add(new UiTextField("", "https://", u => OpenBrowser(u), "type a URL…") { Rect = row });
@@ -430,6 +431,7 @@ namespace MetaCodex.Shell
                     BadgeColor = UiTheme.Current.Ok,
                     Tag = $"http://127.0.0.1:{port}",
                 })));
+                _main.Enqueue(() => { if (_webOnStart) WebStartPage(); }); // the WEB start page lists them too
             });
         }
 

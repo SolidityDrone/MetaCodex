@@ -153,7 +153,8 @@ panels ... the source of the speech ... a billboard side notification system men
 | Terminal frames | every terminal in a frame: drag by the header, `⇗` open the link the terminal printed (sign-in flows), `⎘` paste the clipboard, `⌨` keyboard, `+` new, `–` hide (the shell keeps running), `✕` end it (the last one is hidden instead), tap to focus. The first terminal starts hidden: TERM on the dock shows it |
 | Terminals | list of terminal instances (hidden ones marked): new, show, hide, close |
 | Files | the Linux userland's folders (`/root`, `/mnt/quest`, `/`): open folders, cd / view / edit / paste path |
-| Browser | URL field (system keyboard) opens the Horizon OS browser (`systemux://browser`), bookmarks, local servers on 127.0.0.1, shortcuts to Horizon settings and Files |
+| WEB (the in-app browser, `ShellWeb`) | a window like the others, beside them (Horizon OS cannot show its own browser next to an immersive app: even Web Tasks send the app to the background). The page is Android's WebView (`Plugins/Android/MetaCodexWebView.java`): laid out off screen at 1280 × 800, drawn into an `ImageReader` only when the page changes (30 fps at most, nothing while the window is closed), copied into one buffer that Unity uploads into the page's texture (`AndroidJNI.GetDirectByteBuffer`: a view, no copy, no unsafe code). Toolbar ◀ ▶ ⟳, the address (localhost:5173 → http, a word with a dot → https, words → a search), GO, ⌨ (types into the page's focused field), ⏎ ⌫, ☰ (LINKS), ⇗ (this page in Horizon's browser). A pinch or a fingertip on the page is a touch, a drag scrolls, the pointer hovers; the window never bends (`ShellLayout.StaysFlat`). Opens on a start page with the bookmarks and the local servers found. Remote debugging is on: `chrome://inspect` on the PC (USB adb) shows the page's console and DOM. Every page the app opens goes here (GO, bookmarks, local servers, terminal links, voice `open_url`, Lua `browser.open`) except sign-in pages (`SignInHosts`, `SignInPaths`: claude.ai, anthropic, openai, Google, GitHub /login, …/oauth…): those open in Horizon's browser, also when a page links to one, so no account's web session ever stays in the app's cookies |
+| LINKS (panel id `browser`, alias `links`) | the address field, bookmarks (add / remove), local servers on 127.0.0.1 (SCAN of the usual dev ports), shortcuts to Horizon's hand and app settings and Files; a tap opens the page in WEB |
 | Scripts | Lua scripts and plugins: status, enable/disable, reload, example, delete, log; gesture monitor |
 | Gestures | studio: GESTURES (all gestures with source, live state, bindings, TEST, source, delete pose), LIVE (finger curls of both hands, palm/thumb direction, velocity, active gestures, recent events, Lua detector cost), BIND (gesture → action, no code), RECORD (3-2-1, the hand's pose becomes a named gesture in plugin `my-poses`; new plugin from a template), PLUGINS (enable/disable/reload/delete/folder) |
 | Agents | MQH's providers with sign-in state, version, account; SIGN IN runs the provider's own login in a new terminal; INSTALL / UPDATE through MQH; enable/disable; NEW THREAD; OPEN LINK |
@@ -208,7 +209,8 @@ All data from MQH's public API on 127.0.0.1:38990: `/system/providers/state` (si
 command per provider), `/system/execution-options?providerId=&hostId=` (models), `/projects`, `/threads`,
 `/threads/:id/timeline`, `/threads/:id/send`, `/threads/:id/stop`, `/threads/:id/interactions`,
 `/settings/machine-environment`. Sign-in never goes through MetaCodex: the provider CLI prints a link,
-the terminal frame offers `⇗`, the Horizon browser opens it, and the CLI keeps its own credentials.
+the terminal frame offers `⇗`, the Horizon browser opens it, and the CLI keeps its own credentials (a sign-in
+page never opens in the in-app WEB window: `ShellWeb.IsSignInPage`).
 
 ## Agent views
 

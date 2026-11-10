@@ -118,7 +118,7 @@ namespace MetaCodex.Shell
         private JArray _voicePrefix;
         private int _voicePrefixRev = -1;
         private string _voiceGrammar;
-        public static readonly string[] VoicePanels = { "terminals", "files", "git", "agents", "threads", "browser", "clipboard", "mqh", "skills", "plugins", "scripts", "gestures", "vault", "settings", "voice", "system", "focus", "storage", "tools", "messages" };
+        public static readonly string[] VoicePanels = { "terminals", "files", "git", "agents", "threads", "web", "links", "clipboard", "mqh", "skills", "plugins", "scripts", "gestures", "vault", "settings", "voice", "system", "focus", "storage", "tools", "messages" };
 
         private AudioSource _voiceAudio;
         private UiPanel _vHud;
@@ -596,7 +596,8 @@ namespace MetaCodex.Shell
             {
                 ["provider"] = "agents", ["providers"] = "agents", ["agent"] = "agents", ["ai"] = "agents", ["models"] = "agents", ["sign in"] = "agents", ["login"] = "agents",
                 ["thread"] = "threads", ["conversations"] = "threads", ["chats"] = "threads", ["sessions"] = "threads", ["projects"] = "threads", ["workspaces"] = "threads",
-                ["web"] = "browser", ["internet"] = "browser", ["website"] = "browser", ["web browser"] = "browser",
+                ["browser"] = "web", ["internet"] = "web", ["website"] = "web", ["web browser"] = "web", ["web page"] = "web", ["page"] = "web", ["site"] = "web",
+                ["bookmarks"] = "links", ["local servers"] = "links", ["dev servers"] = "links", ["bookmark"] = "links",
                 ["setup"] = "settings", ["preferences"] = "settings", ["options"] = "settings", ["config"] = "settings", ["configuration"] = "settings",
                 ["gesture"] = "gestures", ["hands"] = "gestures", ["gesture studio"] = "gestures",
                 ["captures"] = "clipboard", ["capture"] = "clipboard", ["screenshots"] = "clipboard", ["screenshot"] = "clipboard", ["screen captures"] = "clipboard",
@@ -615,7 +616,7 @@ namespace MetaCodex.Shell
                 ["terminale"] = "terminals", ["terminali"] = "terminals", ["cartella"] = "files", ["cartelle"] = "files", ["gestore dei file"] = "files", ["gestore file"] = "files",
                 ["controllo versione"] = "git", ["controllo di versione"] = "git", ["rami"] = "git", ["agenti"] = "agents", ["fornitori"] = "agents", ["modelli"] = "agents",
                 ["accesso"] = "agents", ["conversazioni"] = "threads", ["conversazione"] = "threads", ["discussioni"] = "threads", ["progetti"] = "threads",
-                ["navigatore"] = "browser", ["appunti"] = "clipboard", ["catture"] = "clipboard", ["schermate"] = "clipboard", ["istantanee"] = "clipboard", ["competenze"] = "skills", ["abilità"] = "skills", ["estensioni"] = "mqh", ["gesti"] = "gestures", ["gesti delle mani"] = "gestures", ["cassaforte"] = "vault", ["casa forte"] = "vault",
+                ["navigatore"] = "web", ["segnalibri"] = "links", ["collegamenti"] = "links", ["appunti"] = "clipboard", ["catture"] = "clipboard", ["schermate"] = "clipboard", ["istantanee"] = "clipboard", ["competenze"] = "skills", ["abilità"] = "skills", ["estensioni"] = "mqh", ["gesti"] = "gestures", ["gesti delle mani"] = "gestures", ["cassaforte"] = "vault", ["casa forte"] = "vault",
                 ["segreti"] = "vault", ["chiavi"] = "vault", ["chiavi api"] = "vault", ["impostazioni"] = "settings", ["impostazione"] = "settings",
                 ["preferenze"] = "settings", ["opzioni"] = "settings", ["configurazione"] = "settings", ["voce"] = "voice", ["controllo vocale"] = "voice",
                 ["comandi vocali"] = "voice", ["microfono"] = "voice", ["assistente"] = "voice", ["sistema"] = "system", ["focus ambientale"] = "focus",
@@ -657,7 +658,7 @@ namespace MetaCodex.Shell
             {
                 Name = "open_panel",
                 Description = "Open a panel to see or manage something: terminals (open terminals), files (folders), git (repositories, branches, commits), " +
-                    "agents (AI providers: which are signed in, logins, accounts, models), threads (agent conversations, workspaces, projects), browser (web pages), " +
+                    "agents (AI providers: which are signed in, logins, accounts, models), threads (agent conversations, workspaces, projects), web (the browser: web pages, localhost), links (bookmarks and local dev servers), " +
                     "clipboard (captures, screenshots of windows), mqh (skills, plugins, scripts, gestures, the harness), skills (the agents' skills), plugins (MQH and gesture plugins), scripts (Lua scripts), " +
                     "gestures (hand gestures), vault (secrets, API keys), settings (look, layout, hands), voice (voice control, AI models)",
                 Parameters = VoiceCommands.Schema(("panel", "string", VoicePanels, "the panel to open", true)),

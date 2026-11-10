@@ -39,7 +39,7 @@ tool), phrase templates for the fast path, and a run function. The shell registe
 
 | Command | Arguments | Phrases (fast path) |
 |---|---|---|
-| `open_panel` | `panel`: terminals files git agents threads browser scripts gestures vault settings voice | "open [the] {panel} [page]", "show me the {panel}", "go to {panel}" + synonyms (providers -> agents, source control -> git, secrets -> vault, ...) |
+| `open_panel` | `panel`: terminals files git agents threads web (the browser) links (bookmarks, local servers) scripts gestures vault settings voice messages … | "open [the] {panel} [page]", "show me the {panel}", "go to {panel}" + synonyms (providers -> agents, source control -> git, secrets -> vault, ...) |
 | `close_panel` | `panel` | "close [the] {panel}" |
 | `close_all_panels` | | "close all [windows]", "clear the view" |
 | `new_terminal` | | "open a new terminal", "new shell" |

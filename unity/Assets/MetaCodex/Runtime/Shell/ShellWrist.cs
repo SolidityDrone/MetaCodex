@@ -37,7 +37,7 @@ namespace MetaCodex.Shell
             I(Wrist.Inner, "◆", "spark", "AGENTS", () => TogglePanel("agents"), () => IsPanelOpen("agents"));
             I(Wrist.Inner, "◐", "aperture", "FOCUS", () => SetFocus(!Settings.focusEnabled), () => Settings.focusEnabled);
             // outer ring: everything else the dock has
-            I(Wrist.Outer, "◎", "globe", "WEB", () => TogglePanel("browser"), () => IsPanelOpen("browser"));
+            I(Wrist.Outer, "◎", "globe", "WEB", () => TogglePanel("web"), () => IsPanelOpen("web"));
             // skills, plugins, scripts, gestures and the daemon link: one MQH panel (was SCRIPTS and GESTURE here)
             I(Wrist.Outer, "⬡", "cube", "MQH", () => TogglePanel("mqh"), () => IsPanelOpen("mqh"));
             I(Wrist.Outer, "▣", "photos", "CLIP", () => TogglePanel("clipboard"), () => IsPanelOpen("clipboard"));

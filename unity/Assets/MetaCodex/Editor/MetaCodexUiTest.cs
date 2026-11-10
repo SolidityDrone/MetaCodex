@@ -167,6 +167,7 @@ namespace MetaCodex.EditorTools
                 if (Want("orb")) OrbSection(shell, head, hands);
                 if (Want("look")) Look(shell, head);
                 if (Want("placement")) Placement(shell, head);
+                if (Want("web")) WebSection(shell, head);
                 if (Want("mqh")) MqhPanel(shell);
                 if (Want("captures")) Captures(shell, tmp);
                 if (Want("context")) SessionContextSection(shell, tmp);
@@ -1979,6 +1980,94 @@ end)
                 head.SetPositionAndRotation(keepPos, keepRot);
                 shell.TickOrbForTest(0.05f);
             }
+        }
+
+        /// WEB, the in-app browser (owner 2026-11-10: "it's boring to have the system browser turn the app off"):
+        /// every page the app opens goes to this window, beside the rest; it never bends; a pointer on the page
+        /// becomes a touch at the right page pixel. (No WebView in the Editor: the page itself is a headset check.)
+        private static void WebSection(MetaCodexShell shell, Transform head)
+        {
+            foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
+            head.SetPositionAndRotation(new Vector3(0f, 1.4f, 0f), Quaternion.identity);
+            string A(string u) => MetaCodexShell.WebAddress(u);
+            Check(A("localhost:5173") == "http://localhost:5173" && A("127.0.0.1:8080/x") == "http://127.0.0.1:8080/x" && A("192.168.1.7:3000") == "http://192.168.1.7:3000"
+                && A("github.com") == "https://github.com" && A("https://a.dev/b?c=1") == "https://a.dev/b?c=1" && A("unity fwidth") == "https://duckduckgo.com/?q=unity%20fwidth"
+                && A("https://") == "" && A("  ") == "",
+                $"addresses: localhost:5173 -> {A("localhost:5173")}, github.com -> {A("github.com")}, words -> a search, an empty https:// -> nothing");
+
+            // sign-in pages never load in the app's WebView (its cookies would keep the account's session): Horizon's browser
+            bool S(string u) => MetaCodexShell.IsSignInPage(u);
+            Check(S("https://claude.ai/oauth/authorize?code=true") && S("https://console.anthropic.com/") && S("https://auth.openai.com/authorize") && S("https://accounts.google.com/o/oauth2")
+                && S("https://github.com/login/device") && !S("http://localhost:5173/login") && !S("http://127.0.0.1:1455/auth/callback") && !S("https://developer.mozilla.org/en-US/")
+                && !S("https://github.com/SolidityDrone/MetaCodex") && !S("about:blank"),
+                "sign-in pages (claude.ai, anthropic, openai, Google, github.com/login) go to Horizon's browser; localhost callbacks, docs and repos stay in WEB");
+            shell.OpenBrowser("https://claude.ai/oauth/authorize?code=true"); // a terminal's sign-in link (the tests never launch anything)
+            Check(!shell.IsPanelOpen("web") && SystemBridge.LastResult.Contains("claude.ai/oauth"),
+                $"a sign-in link from a terminal opens in Horizon's browser ({SystemBridge.LastResult}), not in the WEB window ({shell.IsPanelOpen("web")})");
+
+            // the dock's WEB, the wrist's WEB and voice open the WEB window (not Horizon OS's browser, not the links)
+            var dockWeb = shell.PanelsById["dock"].Elements.OfType<UiButton>().FirstOrDefault(b => b.Text.EndsWith("WEB"));
+            dockWeb?.Click();
+            bool byDock = shell.IsPanelOpen("web") && !shell.IsPanelOpen("browser");
+            shell.ClosePanel("web");
+            shell.Wrist.Outer.FirstOrDefault(x => x.Label == "WEB")?.Act?.Invoke();
+            bool byWrist = shell.IsPanelOpen("web");
+            shell.ClosePanel("web");
+            var vb = shell.Voice.FastMatch("open the browser");
+            var vl = shell.Voice.FastMatch("open the bookmarks");
+            Check(byDock && byWrist && (string)vb?.Args["panel"] == "web" && (string)vl?.Args["panel"] == "links",
+                $"the dock's WEB ({byDock}) and the wrist's WEB ({byWrist}) open the WEB window; voice “open the browser” -> {(string)vb?.Args["panel"]}, “open the bookmarks” -> {(string)vl?.Args["panel"]}");
+            shell.OpenPanel("links");
+            bool linksOpen = shell.IsPanelOpen("links") && shell.IsPanelOpen("browser");
+            shell.TogglePanel("links");
+            Check(linksOpen && !shell.IsPanelOpen("browser"), $"“links” is the bookmarks panel: opens ({linksOpen}) and toggles closed ({!shell.IsPanelOpen("browser")})");
+
+            // a link from anywhere (a terminal, a bookmark, voice, Lua) loads in the window
+            shell.OpenPanel("web");
+            bool start = shell.WebOnStartForTest;
+            shell.OpenBrowser("localhost:5173");
+            var wp = shell.PanelsById["web"];
+            Check(start && shell.IsPanelOpen("web") && shell.WebUrlForTest == "http://localhost:5173" && !shell.WebOnStartForTest,
+                $"WEB opens on its start page ({start}); OpenBrowser(\"localhost:5173\") loads {shell.WebUrlForTest} in the window");
+
+            // the page: 16:10 inside the window, a drawn quad of the window (cast with it), a 1280x800 texture
+            var r = shell.WebPageRectForTest;
+            var c = wp.Content;
+            float aspect = r.width / Mathf.Max(1e-5f, r.height);
+            var quad = wp.GetComponentsInChildren<MeshRenderer>(true).FirstOrDefault(m => m.name == "web page");
+            var tex = shell.WebTextureForTest;
+            Check(r.width > 0.6f && Mathf.Abs(aspect - 1.6f) < 0.01f && r.xMin >= c.xMin - 1e-4f && r.xMax <= c.xMax + 1e-4f && r.yMax <= c.yMax + 1e-4f
+                && quad != null && quad.sharedMaterial != null && quad.sharedMaterial.shader.name == "MetaCodex/ViewImage" && tex != null && tex.width == 1280 && tex.height == 800,
+                $"the page: {r.width * 100f:F1} x {r.height * 100f:F1} cm (aspect {aspect:F3}) inside the window, its quad {(quad != null ? quad.sharedMaterial?.shader.name : "missing")}, texture {tex?.width}x{tex?.height}");
+            var spill = wp.Elements.Where(e => e.Visible && (e.Rect.xMax > c.xMax + 0.002f || e.Rect.yMax > c.yMax + 0.002f || e.Rect.xMin < c.xMin - 0.002f)).Select(e => e.GetType().Name).ToList();
+            Check(spill.Count == 0, spill.Count == 0 ? "every WEB control inside the window" : "WEB controls past the edge: " + string.Join(", ", spill));
+
+            // a pinch on the page is a touch at that page pixel; a drag moves it; the release lifts it
+            var page = wp.HitTest(r.center);
+            var at = new Vector2(r.x + r.width * 0.25f, r.y + r.height * 0.75f);
+            page?.OnPress(new UiPointerEvent { Point = r.center, PressPoint = r.center });
+            var down = shell.WebLastTouchForTest;
+            page?.OnDrag(new UiPointerEvent { Point = at, PressPoint = r.center });
+            var move = shell.WebLastTouchForTest;
+            page?.OnRelease(new UiPointerEvent { Point = at, PressPoint = r.center }, true);
+            var up = shell.WebLastTouchForTest;
+            bool Near(Vector2 a, float x, float y) => Mathf.Abs(a.x - x) < 1f && Mathf.Abs(a.y - y) < 1f;
+            Check(page != null && down.action == 0 && Near(down.page, 640f, 400f) && move.action == 2 && Near(move.page, 320f, 600f) && up.action == 1 && Near(up.page, 320f, 600f),
+                $"a pinch at the page's centre touches page pixel ({down.page.x:F0}, {down.page.y:F0}); dragged to a quarter across and three quarters down: ({move.page.x:F0}, {move.page.y:F0}); lifted there");
+
+            // it never bends (the page is one flat picture), when the other windows do
+            bool bend0 = shell.Settings.bendPanels;
+            shell.Settings.bendPanels = true;
+            shell.OpenPanel("files");
+            shell.UpdateFixedBend();
+            float webBend = wp.BendRadius, filesBend = shell.PanelsById["files"].BendRadius;
+            Check(webBend == 0f && filesBend > 0f, $"with Bend panels on, FILES bends ({filesBend:F2} m) and WEB stays flat ({webBend:F2})");
+            shell.Settings.bendPanels = bend0;
+            shell.UpdateFixedBend();
+            shell.ClosePanel("files");
+            wp.ForceRefresh();
+            RenderPanel(wp, "ui-web-panel.png");
+            shell.ClosePanel("web");
         }
 
         /// THE ORB (owner 2026-11-10): a sphere of energy that floats by the user, casts the panels, is where the voice comes
