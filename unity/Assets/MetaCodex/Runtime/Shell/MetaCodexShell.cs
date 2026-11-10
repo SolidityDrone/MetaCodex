@@ -224,6 +224,9 @@ namespace MetaCodex.Shell
             catch (Exception ex) { Log("display settings: " + ex.Message); }
         }
 
+        /// Self-tests: one frame of the shell's own Update (voice, focus, layout, the orb...).
+        public void UpdateForTest() => Update();
+
         private void Update()
         {
             while (_main.TryDequeue(out var a)) { try { a(); } catch (Exception ex) { Log("main-thread callback failed: " + ex.Message); } }

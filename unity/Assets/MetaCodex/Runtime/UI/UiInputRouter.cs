@@ -137,6 +137,9 @@ namespace MetaCodex.UI
             if (ptr.Captured != null && (ptr.Captured.Panel == null || ptr.Captured.Panel == gone)) { ptr.Captured = null; ptr.CapturedPanel = null; }
         }
 
+        /// Self-tests: one frame of the router (keyboard, gestures, pointers, beams).
+        public void UpdateForTest() => Update();
+
         private void Update()
         {
             UiKeyboard.Pump();

@@ -167,6 +167,7 @@ namespace MetaCodex.EditorTools
                 if (Want("orb")) OrbSection(shell, head, hands);
                 if (Want("look")) Look(shell, head);
                 if (Want("placement")) Placement(shell, head);
+                if (Want("perf")) Perf(shell, head, hands);
                 if (Want("web")) WebSection(shell, head);
                 if (Want("mqh")) MqhPanel(shell);
                 if (Want("captures")) Captures(shell, tmp);
@@ -1626,7 +1627,7 @@ end)
             int before = asked;
             shell.OpenTableKeyboard();
             var tk = UiModal.OpenPanels.FirstOrDefault(m => m.Title == "TABLE KEYBOARD");
-            bool three = tk != null && tk.Elements.OfType<UiButton>().Select(b => b.Text).SequenceEqual(new[] { "OPEN KEYBOARD", "TURN ON", "CANCEL" });
+            bool three = tk != null && tk.Elements.OfType<UiButton>().Where(b => b.Rect.yMin >= tk.Content.yMin - 0.001f).Select(b => b.Text).SequenceEqual(new[] { "OPEN KEYBOARD", "TURN ON", "CANCEL" });
             tk?.Elements.OfType<UiButton>().First(b => b.Text == "OPEN KEYBOARD").Click();
             bool straight = asked == before + 1 && !UiModal.OpenPanels.Any(m => m.Title == "TYPE ON A TABLE");
             shell.OpenTableKeyboard();
@@ -1634,6 +1635,9 @@ end)
             bool settings = SystemBridge.LastResult.Contains("systemux://settings");
             foreach (var m in UiModal.OpenPanels.ToList()) m.CloseAndDestroy();
             Check(onWrist && three && straight && settings, $"wrist TABLE ({onWrist}): a dialog with OPEN KEYBOARD / TURN ON / CANCEL ({three}); OPEN KEYBOARD opens it at once, no second tip ({straight}); TURN ON opens Settings ({SystemBridge.LastResult})");
+            string Cmd(string said) => shell.Voice.FastMatch(said)?.Command?.Name ?? "none";
+            Check(Cmd("open the table keyboard") == "table_keyboard" && Cmd("turn on the surface keyboard") == "table_keyboard" && Cmd("open the keyboard") == "show_keyboard",
+                $"voice: “open the table keyboard” -> {Cmd("open the table keyboard")}, “turn on the surface keyboard” -> {Cmd("turn on the surface keyboard")}, “open the keyboard” -> {Cmd("open the keyboard")}");
             UiKeyboard.TerminalKeyboardRequested -= count;
             shell.Settings.surfaceKeyboardTip = tip0;
         }
@@ -2039,7 +2043,8 @@ end)
             Check(r.width > 0.6f && Mathf.Abs(aspect - 1.6f) < 0.01f && r.xMin >= c.xMin - 1e-4f && r.xMax <= c.xMax + 1e-4f && r.yMax <= c.yMax + 1e-4f
                 && quad != null && quad.sharedMaterial != null && quad.sharedMaterial.shader.name == "MetaCodex/ViewImage" && tex != null && tex.width == 1280 && tex.height == 800,
                 $"the page: {r.width * 100f:F1} x {r.height * 100f:F1} cm (aspect {aspect:F3}) inside the window, its quad {(quad != null ? quad.sharedMaterial?.shader.name : "missing")}, texture {tex?.width}x{tex?.height}");
-            var spill = wp.Elements.Where(e => e.Visible && (e.Rect.xMax > c.xMax + 0.002f || e.Rect.yMax > c.yMax + 0.002f || e.Rect.xMin < c.xMin - 0.002f)).Select(e => e.GetType().Name).ToList();
+            var spill = wp.Elements.Where(e => e.Visible && e.Rect.yMin >= c.yMin - 0.001f && (e.Rect.xMax > c.xMax + 0.002f || e.Rect.yMax > c.yMax + 0.002f || e.Rect.xMin < c.xMin - 0.002f))
+                .Select(e => e.GetType().Name + (e is UiButton wb ? " " + wb.Text : "")).ToList();
             Check(spill.Count == 0, spill.Count == 0 ? "every WEB control inside the window" : "WEB controls past the edge: " + string.Join(", ", spill));
 
             // a pinch on the page is a touch at that page pixel; a drag moves it; the release lifts it
@@ -2068,6 +2073,92 @@ end)
             wp.ForceRefresh();
             RenderPanel(wp, "ui-web-panel.png");
             shell.ClosePanel("web");
+        }
+
+        /// What a frame costs on the CPU, per part, in a busy scene (owner 2026-11-10: "ultra optimized, more prompt"):
+        /// five windows, the wrist menu open, the orb, a message, the right hand's ray sweeping over a list. Times are the
+        /// Editor's (the headset's cores are several times slower); allocations are the same everywhere, and garbage per
+        /// frame is what makes the headset hitch when the collector runs.
+        private static void Perf(MetaCodexShell shell, Transform head, SimulatedHands hands)
+        {
+            foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
+            head.SetPositionAndRotation(new Vector3(0f, 1.4f, 0f), Quaternion.identity);
+            UiPanel.AnimateInEditor = false;
+            foreach (var pp in shell.PanelsById.Values) pp.transform.position = Vector3.up * 50f;
+            foreach (var id in new[] { "files", "settings", "threads", "mqh", "agents" }) shell.OpenPanel(id);
+            foreach (var pp in shell.PanelsById.Values) if (pp.IsOpen) pp.ForceRefresh();
+            shell.SetWristMenu(true);
+            shell.Toast("perf: a message beside the orb");
+            // the wrist menu open on the left wrist (as in the wrist section)
+            var eye = head.position;
+            var palm = eye + head.forward * 0.33f - head.up * 0.13f - head.right * 0.03f;
+            var toEye = (eye - palm).normalized;
+            var lFingers = (head.right * 0.9f + head.forward * 0.35f).normalized;
+            hands.SetOpen(Handedness.Left, palm, lFingers, -toEye);
+            var files = shell.PanelsById["files"];
+            var list = files.Elements.OfType<UiList>().FirstOrDefault();
+            const int frames = 300;
+            const float dt = 1f / 72f;
+            var names = new[] { "router + gestures", "shell (voice, focus, layout, orb logic)", "panels' Update", "panel meshes (Flush)", "texts (changed ones)", "wrist menu", "orb body", "messages" };
+            var ticks = new long[names.Length];
+            var bytes = new long[names.Length];
+            var worst = new double[names.Length];
+            var sw = new System.Diagnostics.Stopwatch();
+            // the per-thread allocation counter is not kept by every Mono garbage collector: trust a 0 only if it sees a
+            // known allocation, else count the managed heap's growth (a collection in between is reported)
+            long probe0 = GC.GetAllocatedBytesForCurrentThread();
+            var probe = new byte[8192];
+            bool perThread = GC.GetAllocatedBytesForCurrentThread() - probe0 >= 8192;
+            GC.KeepAlive(probe);
+            long Alloc() => perThread ? GC.GetAllocatedBytesForCurrentThread() : GC.GetTotalMemory(false);
+            int gc0 = GC.CollectionCount(0);
+            var panels = shell.GetComponentsInChildren<UiPanel>(true);
+            var meshes = shell.GetComponentsInChildren<UiShapeMesh>(true);
+            var texts = shell.GetComponentsInChildren<TMPro.TextMeshPro>(true);
+            for (int f = -30; f < frames; f++) // 30 frames to settle first
+            {
+                // the right hand's ray sweeps down the list and back: hovers change, the pointer light moves
+                float k = Mathf.PingPong(f / 90f, 1f);
+                var target = list != null ? files.SurfacePoint(new Vector2(list.Rect.center.x, list.Rect.y + list.Rect.height * k)) : files.transform.position;
+                var rp = eye + head.right * 0.18f - head.up * 0.25f + head.forward * 0.2f;
+                hands.SetOpen(Handedness.Right, rp, (target - rp).normalized, Vector3.down);
+                hands.Frames[1].PointerValid = true; hands.Frames[1].PointerOrigin = rp; hands.Frames[1].PointerDirection = (target - rp).normalized;
+                for (int part = 0; part < names.Length; part++)
+                {
+                    long b0 = Alloc();
+                    sw.Restart();
+                    switch (part)
+                    {
+                        case 0: shell.TickGesturesForTest(dt); shell.Router.UpdateForTest(); break;
+                        case 1: shell.UpdateForTest(); break;
+                        case 2: foreach (var p in panels) if (p != null && p.gameObject.activeInHierarchy) p.UpdateForTest(); break;
+                        case 3: foreach (var m in meshes) if (m != null && m.gameObject.activeInHierarchy) m.Flush(); break;
+                        case 4: foreach (var t in texts) if (t != null && t.gameObject.activeInHierarchy && t.havePropertiesChanged) t.ForceMeshUpdate(); break;
+                        case 5: shell.TickWristForTest(dt); break;
+                        case 6: shell.Orb?.Tick(dt); break;
+                        case 7: shell.Toasts.Tick(Time.unscaledTime); break;
+                    }
+                    sw.Stop();
+                    if (f < 0) continue;
+                    ticks[part] += sw.ElapsedTicks;
+                    bytes[part] += Math.Max(0L, Alloc() - b0);
+                    worst[part] = Math.Max(worst[part], sw.Elapsed.TotalMilliseconds);
+                }
+            }
+            double total = 0, totalKb = 0;
+            Line($"perf: {frames} frames, {panels.Count(p => p != null && p.gameObject.activeInHierarchy)} panels drawn, wrist menu {(shell.Wrist != null && shell.Wrist.Visible ? "shown" : "hidden")}, orb {(shell.OrbActive ? "on" : "off")}; "
+                + $"garbage counted {(perThread ? "per thread" : "as heap growth")}, {GC.CollectionCount(0) - gc0} collections");
+            for (int part = 0; part < names.Length; part++)
+            {
+                double ms = ticks[part] * 1000.0 / System.Diagnostics.Stopwatch.Frequency / frames, kb = bytes[part] / 1024.0 / frames;
+                total += ms; totalKb += kb;
+                Line($"perf:   {names[part],-42} {ms,7:F3} ms a frame (worst {worst[part],6:F2} ms), {kb,7:F2} KB of garbage a frame");
+            }
+            Line($"perf:   {"total",-42} {total,7:F3} ms a frame, {totalKb,7:F2} KB of garbage a frame");
+            Check(total < 50.0, $"perf: the scene ran ({total:F2} ms a frame in the Editor)");
+            hands.Frames[0].Tracked = false; hands.Frames[1].Tracked = false; hands.Frames[1].PointerValid = false;
+            foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
+            shell.SetWristMenu(false);
         }
 
         /// THE ORB (owner 2026-11-10): a sphere of energy that floats by the user, casts the panels, is where the voice comes
@@ -2210,7 +2301,7 @@ end)
                 // what the app has to say: callouts in a column beside it, towards the middle of the view
                 foreach (var old in shell.Toasts.Panels.ToList()) old.CloseAndDestroy();
                 shell.Toasts.Tick(float.MaxValue);
-                shell.Toasts.History.Clear();
+                shell.PanelsById["messages"].Elements.OfType<UiButton>().First(b => b.Text == "✕ CLEAR").Click(); // earlier sections' messages: not new here
                 shell.Toast("Build finished: 0 errors", "ok");
                 Step(8);
                 var card = shell.Toasts.Panels.FirstOrDefault();
@@ -2623,7 +2714,9 @@ end)
                 // a toast comes in with the light variant (no brackets, 0.30 s)
                 shell.Toast("transition test");
                 var toast = shell.GetComponentsInChildren<UiPanel>(true).FirstOrDefault(x => x.Id == "toast" && x.Transitioning);
-                Check(toast != null && toast.TransitionPhase == UiPanel.Phase.Opening, "a toast comes in with the light transition");
+                var toastsNow = shell.GetComponentsInChildren<UiPanel>(true).Where(x => x.Id == "toast").Select(x => $"{x.TransitionPhase}/{(x.gameObject.activeSelf ? "on" : "off")}/slot {x.Slot}").ToList();
+                Check(toast != null && toast.TransitionPhase == UiPanel.Phase.Opening, "a toast comes in with the light transition"
+                    + (toast != null ? "" : $" (toasts: {string.Join(", ", toastsNow)}; {shell.Toasts.Count} shown; under the shell: {shell.Toasts.transform.IsChildOf(shell.transform)})"));
             }
             finally
             {

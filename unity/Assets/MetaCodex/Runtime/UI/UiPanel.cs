@@ -630,6 +630,9 @@ namespace MetaCodex.UI
             if (_pushedFrame != Time.frameCount) PushBendGlobals();
         }
 
+        /// Self-tests: one frame of this panel (the Editor has no frame loop).
+        public void UpdateForTest() => Update();
+
         protected virtual void Update()
         {
             EaseBend(Time.unscaledDeltaTime);
