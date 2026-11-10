@@ -564,10 +564,16 @@ namespace MetaCodex.Shell
             if (IsPanelOpen("threads")) RefreshThreads();
             PushKeysToMqh(); // keys saved while MQH was not answering
             ProbeAgents();   // which agents are installed (AGENTS and NEW THREAD list them)
-            // Cursor, Pi and the rest: off in MQH from the start, not only once AGENTS is opened
-            Mqh.ProvidersState(st => { if (st?["providers"] is JArray all) { _providerStates = all; DisableUnsupportedProviders(); _providerStates = SupportedOnly(all); } });
+            // Cursor, Pi and the rest: off in MQH from the start, not only once AGENTS is opened; again after 20 s and 60 s
+            // (MQH answers /health before its plugins have registered their providers: seen on the headset, 0.7.13)
+            SwitchOffUnsupportedProviders();
+            After(20f, SwitchOffUnsupportedProviders);
+            After(60f, SwitchOffUnsupportedProviders);
             if (!_mqhOnlineToastShown) { _mqhOnlineToastShown = true; Toast("MQH is running in this headset", "ok"); }
         }
+
+        private void SwitchOffUnsupportedProviders() =>
+            Mqh.ProvidersState(st => { if (st?["providers"] is JArray all) { _providerStates = all; DisableUnsupportedProviders(); _providerStates = SupportedOnly(all); } });
 
         private bool _mqhOnlineToastShown;
 
