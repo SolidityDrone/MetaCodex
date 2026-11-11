@@ -295,9 +295,22 @@ namespace MetaCodex.Shell
                 _orbWasInside[h] = inside;
                 _orbWasPinch[h] = hand.pinch;
             }
+            // looking straight at it counts too (owner 2026-11-11: "less invasive but always available")
+            if (Head != null)
+            {
+                var toOrb = Orb.Position - Head.position;
+                float gazeDeg = Vector3.Angle(Head.forward, toOrb);
+                if (gazeDeg < 8f) attention = Mathf.Max(attention, 0.5f * (1f - gazeDeg / 8f));
+            }
             Orb.Attention = Mathf.Lerp(Orb.Attention, attention, 1f - Mathf.Exp(-dt * 10f));
             if (attention > 0.01f) Orb.AttendTo = attendTo;
+            // idle (no hand, no gaze, no message, menu closed): 80 % of its size; it grows back as a hand comes near
+            bool idle = Orb.Attention < 0.15f && Toasts.Count == 0 && (_orbMenu == null || !_orbMenu.IsOpen) && Orb.State == UiOrb.Mood.Idle;
+            if (_orbBaseRadius <= 0f) _orbBaseRadius = Orb.Radius;
+            Orb.Radius = Mathf.Lerp(Orb.Radius, _orbBaseRadius * (idle ? 0.8f : 1f), 1f - Mathf.Exp(-dt * 4f));
         }
+
+        private float _orbBaseRadius;
 
         /// Let go: it keeps this place by the user (yaw off the frame, pitch, distance) from now on.
         private void EndOrbGrab()

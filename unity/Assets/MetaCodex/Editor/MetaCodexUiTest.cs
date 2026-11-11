@@ -2577,7 +2577,7 @@ end)
                 Check(listening && hudThere && thinking && orb.State == UiOrb.Mood.Idle,
                     $"listening: it turns its rings to the user ({listening}) and the voice HUD stands beside it, turned to the user ({hudThere}: {hudOff:F2} m from it, {hudTurn:F1} deg off); thinking: it spins, violet ({thinking})");
 
-                // what the app has to say: callouts in a column beside it, towards the middle of the view
+                // what the app has to say: callouts in a column beside it, always on its right (owner 2026-11-11: never swapped)
                 foreach (var old in shell.Toasts.Panels.ToList()) old.CloseAndDestroy();
                 shell.Toasts.Tick(float.MaxValue);
                 shell.PanelsById["messages"].Elements.OfType<UiButton>().First(b => b.Text == "✕ CLEAR").Click(); // earlier sections' messages: not new here
@@ -2586,19 +2586,19 @@ end)
                 var card = shell.Toasts.Panels.FirstOrDefault();
                 var toCard = card != null ? card.transform.position - orb.Position : Vector3.zero;
                 float cardTurn = card != null ? Vector3.Angle(card.transform.forward, card.transform.position - head.position) : -1f;
-                bool beside = card != null && Vector3.Dot(toCard, head.right) < -0.05f && Mathf.Abs(toCard.y) < 0.03f && toCard.magnitude < 0.40f && cardTurn < 8f;
+                bool beside = card != null && Vector3.Dot(toCard, head.right) > 0.05f && Mathf.Abs(toCard.y) < 0.03f && toCard.magnitude < 0.40f && cardTurn < 8f;
                 bool green = orb.Tint.g > orb.Tint.b;
                 shell.Toast("The headset is at 18 % battery", "warn");
                 Step(8);
                 var cards = shell.Toasts.Panels.ToList();
                 bool stacked = cards.Count == 2 && cards[1].transform.position.y > cards[0].transform.position.y + 0.02f;
                 Check(beside && stacked && shell.Toasts.RailShown && shell.Toasts.History.Count == 2 && shell.Toasts.History[0].Kind == "warn",
-                    $"a message is a callout beside the orb, towards the middle of the view, level with it and turned to the user ({beside}: {toCard.magnitude:F2} m from it, {toCard.y * 100f:F1} cm higher, {cardTurn:F1} deg off); the next one takes that place and the first moves up ({stacked}); a rail joins them to the orb; both are kept");
+                    $"a message is a callout beside the orb, on its right, level with it and turned to the user ({beside}: {toCard.magnitude:F2} m from it, {toCard.y * 100f:F1} cm higher, {cardTurn:F1} deg off); the next one takes that place and the first moves up ({stacked}); a rail joins them to the orb; both are kept");
                 Check(green, "the orb flashes in the colour of the message (green for ok)");
                 foreach (var cd in cards) cd.ForceRefresh();
                 RenderAt("ui-orb-callouts.png", head.position, Quaternion.LookRotation(orb.Position - head.right * 0.16f - head.position, Vector3.up), 40f, 1400, 900);
 
-                // a touch: its menu, a small billboard next to it, just below its level, turned to the user; LOG opens MESSAGES
+                // a touch: its menu, a small billboard on its left (the callouts take its right), level with it, turned to the user
                 var rest = head.position + head.forward * 0.3f + head.right * 0.25f - head.up * 0.3f;
                 void TipAt(Vector3 at, float pinch = 0f) => hands.SetOpen(Handedness.Right, at - head.forward * 0.12f, head.forward, -head.up, 0f, pinch);
                 void TipTo(Vector3 tip, float pinch = 0f) { TipAt(tip, pinch); hands.Frames[1].IndexTip = tip; if (pinch > 0.5f) hands.Frames[1].ThumbTip = tip; }
@@ -2609,14 +2609,14 @@ end)
                 TipTo(rest); Step(14);
                 var toMenu = menu != null ? menu.transform.position - orb.Position : Vector3.zero;
                 bool small = menu != null && menu.Width <= MetaCodexShell.BillboardW + 1e-4f && menu.Height <= MetaCodexShell.BillboardH + 1e-4f && !menu.Elements.OfType<UiList>().Any();
-                bool menuPlace = menu != null && toMenu.y < -0.015f && toMenu.y > -0.12f && Vector3.Dot(toMenu, head.right) < 0f && toMenu.magnitude < 0.30f
+                bool menuPlace = menu != null && Mathf.Abs(toMenu.y) < 0.03f && Vector3.Dot(toMenu, head.right) < -0.05f && toMenu.magnitude < 0.30f
                     && Vector3.Angle(menu.transform.forward, menu.transform.position - head.position) < 8f;
                 var log = menu?.Elements.OfType<UiButton>().FirstOrDefault(b => b.Text.Contains("☰"));
                 bool counted = log != null && log.Text.Contains("2 NEW") && shell.OrbUnread == 2;
                 if (menu != null) menu.ForceRefresh();
                 foreach (var cd in shell.Toasts.Panels) cd.ForceRefresh();
                 RenderAt("ui-orb-menu.png", head.position, Quaternion.LookRotation(orb.Position - head.right * 0.12f - head.up * 0.03f - head.position, Vector3.up), 34f, 1400, 1000);
-                Check(opened && small && menuPlace && counted, $"a fingertip in the orb opens its billboard ({opened}): small, four buttons, no list ({small}), next to it just below its level, turned to the user ({menuPlace}: {toMenu.y * 100f:F1} cm lower, {toMenu.magnitude:F2} m off); LOG says 2 NEW ({counted})");
+                Check(opened && small && menuPlace && counted, $"a fingertip in the orb opens its billboard ({opened}): small, four buttons, no list ({small}), on its left, level with it, turned to the user ({menuPlace}: {toMenu.y * 100f:F1} cm higher, {toMenu.magnitude:F2} m off); LOG says 2 NEW ({counted})");
                 log?.Click();
                 Step(2);
                 var msgs = shell.PanelsById.TryGetValue("messages", out var mp) ? mp : null;

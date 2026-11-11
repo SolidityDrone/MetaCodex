@@ -65,7 +65,7 @@ namespace MetaCodex.Shell
                 dot.Center = p.PanelToLocal(new Vector2(pad + 0.0055f, h * 0.5f), -0.0004f);
                 c.Dot = p.Shapes.Add(dot);
                 // the title on top, PROJECT and STATE under it, each cut with … at its edge
-                c.Title = p.Add(new UiLabel("", 0.0135f) { Rect = new Rect(0.026f, 0.004f, w - 0.026f - pad, 0.024f), Color = t.Text });
+                c.Title = p.Add(new UiLabel("", 0.0135f) { Rect = new Rect(0.026f, 0.004f, w - 0.026f - pad, 0.023f), Color = t.Text });
                 c.Project = p.Add(new UiLabel("", 0.0095f) { Rect = new Rect(0.026f, 0.027f, 0.110f, 0.019f), UseDisplay = true, Color = t.TextDim });
                 c.Status = p.Add(new UiLabel("", 0.0095f) { Rect = new Rect(0.140f, 0.027f, w - 0.140f - pad, 0.019f), UseDisplay = true, Align = TextAlignmentOptions.MidlineRight, Color = t.TextDim });
                 p.gameObject.SetActive(false);

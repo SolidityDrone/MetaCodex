@@ -113,12 +113,13 @@ namespace MetaCodex.EditorTools
                         tmp.ForceMeshUpdate();
                         var b = tmp.textBounds;
                         bool ok = b.size.x <= 0f || b.min.x >= -0.0006f && b.max.x <= ls[j].Rect.width + 0.0006f;
-                        bool cols = ls[j].Rect.xMax <= cards[k].Width + 1e-4f && (j == 2 || ls[j].Rect.xMax <= ls[j + 1].Rect.x + 1e-4f);
+                        // two rows: the title (j 1) across the top; PROJECT (j 0) left of STATE (j 2) under it
+                        bool cols = ls[j].Rect.xMax <= cards[k].Width + 1e-4f && (j == 1 ? ls[1].Rect.yMax <= ls[0].Rect.y + 1e-4f : j == 0 ? ls[0].Rect.xMax <= ls[2].Rect.x + 1e-4f : true);
                         if (!ok || !cols) { inside = false; worst = $"card {k} col {j}: {b.min.x:F4}..{b.max.x:F4} in {ls[j].Rect.width:F4}"; }
                         if (k == 4 && j < 2) cut |= tmp.isTextTruncated;
                     }
                 }
-                Check(inside && cut, $"every text stays in its column ({(inside ? "yes" : worst)}); the long project and title are cut with … ({cut})");
+                Check(inside && cut, $"every text stays in its place (title on top, project and state under it) ({(inside ? "yes" : worst)}); the long project and title are cut with … ({cut})");
                 foreach (var c in cards) c.ForceRefresh();
                 menu.ForceRefresh();
                 var mid = menu.transform.position - menu.transform.up * 0.08f * menu.transform.lossyScale.y;
