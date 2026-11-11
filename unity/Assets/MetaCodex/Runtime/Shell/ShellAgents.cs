@@ -562,10 +562,14 @@ namespace MetaCodex.Shell
             _thPermChip = p.Add(new UiButton("✎ Edits ▾", PermissionPrompt) { Rect = new Rect(x, y, w[1], chipH), TextSize = ts }); x += w[1] + t.Gap;
             _thWsChip = p.Add(new UiButton("▣ checkout", () => { OpenWorkspace(); _wsTabs?.Select(2); }) { Rect = new Rect(x, y, w[2], chipH), TextSize = ts }); x += w[2] + t.Gap;
             _thContext = p.Add(new UiRing { Rect = new Rect(x, y, w[3], chipH), OnClickAction = ContextPrompt }); x += w[3] + t.Gap;
-            p.Add(new UiButton("■ STOP", () => { if (_threadOpen != null) Mqh.StopThread(_threadOpen, r => Toast(r != null ? "Stopping the turn" : "MQH: " + Mqh.LastError)); }, UiButtonStyle.Danger) { Rect = new Rect(x, y, c.xMax - x, chipH), TextSize = ts });
+            p.Add(new UiButton("■ STOP", () => { if (_threadOpen != null) Mqh.StopThread(_threadOpen, r => { Toast(r != null ? "Stopping the turn" : "MQH: " + Mqh.LastError); if (r != null) ResyncThread(1.5f); }); }, UiButtonStyle.Danger) { Rect = new Rect(x, y, c.xMax - x, chipH), TextSize = ts });
             // the attach modal: drawn over the timeline area, inside this panel (not a panel of its own)
             BuildAttachModal(p, _tlArea);
-            p.Tick += _ => { if (_threadOpen != null && Time.unscaledTime >= _nextThreadPoll) PollThread(); };
+            p.Tick += _ =>
+            {
+                if (_resyncAt > 0f && Time.unscaledTime >= _resyncAt) { _resyncAt = -1f; ResyncThread(); return; }
+                if (_threadOpen != null && Time.unscaledTime >= _nextThreadPoll) PollThread();
+            };
             p.Closed += _ => { if (_ws != null && _ws.IsOpen) _ws.Close(); CloseAttachModal(); SetAttachMenu(false); };
             SetAskVisible(false);
             RefreshAttachRow();
@@ -622,6 +626,21 @@ namespace MetaCodex.Shell
 
         /// Refreshes the open thread: the timeline (a delta; every 0.8 s while the agent works, so text streams in),
         /// and every 2-3 s its row and pending approvals.
+        /// Reads the open thread's state and whole timeline from MQH again now (after a resume, a Stop, a reconnect), and
+        /// once more after `again` seconds: the panel never keeps a state the server no longer has.
+        public void ResyncThread(float again = 0f)
+        {
+            _tlTag = null;
+            _tlInFlight = false;
+            _nextThreadMeta = 0f;
+            _nextThreadPoll = 0f;
+            if (_threadOpen != null && _thTitle != null) PollThread();
+            if (again > 0f) _resyncAt = Time.unscaledTime + again;
+            RefreshThreads();
+        }
+
+        private float _resyncAt = -1f;
+
         public void PollThread()
         {
             if (_threadOpen == null || _thTitle == null) return;
@@ -648,7 +667,8 @@ namespace MetaCodex.Shell
                     _spaces = WorkspaceMap.Build(_threads, _environments);
                     ShowThreadHeader();
                     PollThreadQueue(id); // a turn MQH holds (the workspace guard): its reason, SEND NOW
-                    if (statusChanged) RebuildChat(); // working <-> idle changes what is live
+                    // working <-> idle: parse the whole timeline again with the new status (a delta may say "no change")
+                    if (statusChanged) { _tlTag = null; _tlInFlight = false; RebuildChat(); RequestTimeline(id); }
                 });
                 Mqh.Interactions(id, ia =>
                 {

@@ -1,5 +1,6 @@
 using System.IO;
 using System.Linq;
+using MetaCodex.AI;
 using MetaCodex.Shell;
 using MetaCodex.UI;
 using Newtonsoft.Json.Linq;
@@ -55,6 +56,16 @@ namespace MetaCodex.EditorTools
             shell.HandleReturn(Ret(id, "com.metacodex.user.t2", false, null).ToString());
             Check(shell.AttachmentsForTest.Count == att1 && shell.IsPanelOpen("thread"), "Back without a report: the thread is open, no new chips");
             foreach (var p in Directory.GetFiles(dir, "report-test-*")) File.Delete(p);
+            // the thread's state after a pause (0.7.16 bug): a timeline whose last turn is still "pending" in the cache, while
+            // MQH says the thread is idle (the turn ended or was stopped while MetaCodex was paused): not working
+            var stale = new JArray
+            {
+                new JObject { ["kind"] = "conversation", ["id"] = "u1", ["role"] = "user", ["text"] = "go", ["startedAt"] = 1000, ["createdAt"] = 1000, ["sourceSeqStart"] = 1, ["sourceSeqEnd"] = 1 },
+                new JObject { ["kind"] = "turn", ["id"] = "t1:turn", ["turnId"] = "t1", ["status"] = "pending", ["startedAt"] = 1500, ["createdAt"] = 2000, ["completedAt"] = null, ["summaryCount"] = 0, ["sourceSeqEnd"] = 2, ["children"] = new JArray() },
+            };
+            bool idleRun = ThreadTimeline.Parse(stale, new JObject(), "idle").Running, activeRun = ThreadTimeline.Parse(stale, new JObject(), "active").Running;
+            bool unknownRun = ThreadTimeline.Parse(stale, new JObject(), "").Running;
+            Check(!idleRun && activeRun && unknownRun, $"thread state: the server's status wins over a pending turn left in the cache (idle -> working {idleRun}, active -> {activeRun}, unknown -> {unknownRun})");
             // a launch request (mcx-app launch): a dialog, "pending"; LATER keeps it; the tap launches it (dry run)
             SystemBridge.DryRun = true;
             int modals0 = UiModal.OpenCount;

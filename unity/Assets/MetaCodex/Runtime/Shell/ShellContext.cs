@@ -68,7 +68,7 @@ namespace MetaCodex.Shell
         private void OnApplicationPause(bool paused)
         {
             if (paused && SessionMemory.Dirty) SessionMemory.Save(SessionLogPath);
-            if (!paused) _returnCheckAt = 0f; // look for a return from a launched app at once
+            if (!paused) { _returnCheckAt = 0f; ResyncThread(); } // a return at once; the threads as MQH has them now
         }
         private void OnApplicationQuit() { if (SessionMemory.Dirty) SessionMemory.Save(SessionLogPath); }
 

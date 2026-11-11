@@ -135,7 +135,9 @@ namespace MetaCodex.AI
             }
             var last = tl.Last;
             string lastTurn = last != null && exTurns.TryGetValue(last, out var lt) && lt.Count > 0 ? turns[lt[lt.Count - 1]].status : "";
-            tl.Running = IsWorking(threadStatus) || lastTurn == "pending";
+            // the server's thread status wins when it is known: a "pending" last turn left in a cached timeline (the turn
+            // ended or was stopped while MetaCodex was paused, and no row changed after) must not keep it "working"
+            tl.Running = string.IsNullOrEmpty(threadStatus) ? lastTurn == "pending" : IsWorking(threadStatus);
 
             foreach (var ex in tl.Exchanges)
             {
