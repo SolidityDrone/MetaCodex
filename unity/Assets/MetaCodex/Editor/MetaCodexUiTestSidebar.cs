@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using MetaCodex.AI;
@@ -146,6 +147,29 @@ printf 'echo hi\n' > notes/run.sh
             RenderPanel(p, file);
         }
 
+        /// What text lies over THREAD's face in the sidebar pictures: every live text in the scene whose middle falls inside
+        /// THREAD's rectangle (seen straight on, within 0.6 m of its face), with its owner. The "Status" seen over THREAD's
+        /// prompt in an earlier ui-sidebar-diff.png was the test terminal's "git status" row: the fixture terminal stood in
+        /// THREAD's own plane.
+        private static void SbTextsOverThread(MetaCodexShell shell, UiPanel th, UiPanel sb)
+        {
+            var lines = new List<string>();
+            foreach (var tmp in UnityEngine.Object.FindObjectsByType<TMPro.TMP_Text>(FindObjectsSortMode.None))
+            {
+                if (tmp == null || !tmp.isActiveAndEnabled || string.IsNullOrWhiteSpace(tmp.text) || tmp.color.a < 0.05f) continue;
+                var c = tmp.transform.TransformPoint(tmp.textBounds.center);
+                var local = th.transform.InverseTransformPoint(c);
+                float hw = th.Width * 0.5f, hh = th.Height * 0.5f;
+                if (Mathf.Abs(local.x) > hw || Mathf.Abs(local.y) > hh || Mathf.Abs(local.z) > 0.6f) continue;
+                if (tmp.transform.IsChildOf(th.transform) || tmp.transform.IsChildOf(sb.transform)) continue;
+                string path = tmp.name;
+                for (var tr = tmp.transform.parent; tr != null; tr = tr.parent) path = tr.name + "/" + path;
+                var owner = tmp.GetComponentInParent<UiPanel>(true);
+                lines.Add($"'{tmp.text.Replace("\n", " ").Substring(0, Math.Min(40, tmp.text.Length))}' {path} (panel {owner?.Id}, open {owner?.IsOpen}, {local.z * 100f:F0} cm off THREAD's face, size {tmp.fontSize:F3})");
+            }
+            Check(lines.Count == 0, "no other panel's text is drawn over THREAD's chat in the pictures: " + (lines.Count == 0 ? "none" : string.Join(" | ", lines)));
+        }
+
         private static void SidebarSection(MetaCodexShell shell, Transform head, SimulatedHands hands)
         {
             foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
@@ -153,6 +177,10 @@ printf 'echo hi\n' > notes/run.sh
             bool bend0 = shell.Settings.bendPanels;
             shell.Settings.bendPanels = false;
             shell.ForgetSidebarMemoryForTest();
+            // the test's terminal sits 0.85 m ahead, in the very plane THREAD is put in below: its rows ("git status") would
+            // be drawn through the chat in every picture. Out of the way for this section (no real layout puts a window there)
+            var terms = shell.GetComponentsInChildren<UiPanel>(true).Where(x => x.Id != null && x.Id.StartsWith("term-") && x.gameObject.activeSelf).ToList();
+            foreach (var tm in terms) tm.transform.position += Vector3.up * 30f;
             string userWin = Environment.GetEnvironmentVariable("USERPROFILE") ?? @"C:\Users\pnncl";
             string dirWin = Path.Combine(userWin, "mcxcheck-sidebar");
             Directory.CreateDirectory(dirWin);
@@ -226,6 +254,7 @@ printf 'echo hi\n' > notes/run.sh
             Check(shell.SidebarDiffLabelForTest.Contains("Calc.cs") && shell.SidebarDiffLabelForTest.Contains("+3 −3") && shell.SidebarDiffLabelForTest.Contains("modified"), "the diff's header: " + shell.SidebarDiffLabelForTest);
             Check(dv.TextSize >= 0.0155f && dv.Advance > 0.006f, $"code text: {dv.TextSize * 1000f:F1} mm line size (an em of {UiTheme.Current.FontSizeFor(dv.TextSize) * 100f:F1} mm, ~{Mathf.Atan(UiTheme.Current.FontSizeFor(dv.TextSize) * 0.1f * shell.Settings.uiScale / 0.8f) * Mathf.Rad2Deg:F2}° at 0.8 m and UI scale {shell.Settings.uiScale}), {dv.Columns} columns");
             SbPic(shell, sb, "ui-sidebar-diff.png");
+            SbTextsOverThread(shell, th, sb);
             // a long line: scroll sideways (drag) or wrap
             int longRow = Enumerable.Range(0, doc.RowCount).FirstOrDefault(i => doc.Diff.Lines[i].Text.Contains("LONG-LINE-START"));
             dv.ScrollToRow(Mathf.Max(0, longRow - 3));
@@ -432,6 +461,7 @@ printf 'echo hi\n' > notes/run.sh
             shell.ClosePanel("thread");
             Check(!sb.IsOpen && !shell.Voice.Find("thread_sidebar").Enabled && !shell.Voice.Find("init_git").Enabled, "closing the thread closes its sidebar; its commands are withdrawn while no thread is open");
             shell.Settings.bendPanels = bend0;
+            foreach (var tm in terms) if (tm != null) tm.transform.position -= Vector3.up * 30f;
         }
     }
 }
