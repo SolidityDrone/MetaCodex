@@ -4,6 +4,7 @@ import {
   cliCommand,
   defineCli,
   type BbPluginApi,
+  type MessageDispatchHookContext,
   type MessageDispatchHookDecision,
   type PluginThreadEventName,
 } from "@get-bb/plugin-sdk";
@@ -19,6 +20,8 @@ import {
 
 const CONFIGURATION_KEY = "configuration";
 const CAPACITIES_KEY = "host-capacities";
+/** MQH: one working thread per workspace folder (on unless turned off). */
+const WORKSPACE_GUARD_KEY = "workspace-guard";
 const CONFIGURATION_CHANGED_CHANNEL = "configuration-changed";
 const RETRY_MIN_MS = 1_000;
 const RETRY_MAX_MS = 30_000;
@@ -138,6 +141,48 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+// ---------------------------------------------------------------------------
+// MQH: the workspace guard. Two agents in one folder (the project checkout, or a
+// worktree a fork reuses) edit the same files, see each other's half-done
+// changes in their builds and tests, and commit each other's work. A turn that
+// would start in a folder where another thread is working waits until that one
+// goes idle; the reason names it. A fresh worktree is the thread's own folder and
+// never waits. The user's Send now on the queued row still overrides it.
+// ---------------------------------------------------------------------------
+
+export interface WorkspaceTarget {
+  readonly environmentId: string | null;
+  readonly path: string | null;
+  readonly hostId: string | null;
+  readonly isWorktree: boolean;
+}
+
+export function sameWorkspacePath(left: string, right: string): boolean {
+  const norm = (value: string): string =>
+    value.replace(/\\/gu, "/").replace(/\/+$/u, "") || "/";
+  return norm(left) === norm(right);
+}
+
+function stringInput(inputs: unknown, key: string): string | null {
+  if (typeof inputs !== "object" || inputs === null || Array.isArray(inputs))
+    return null;
+  const value = (inputs as Record<string, unknown>)[key];
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+export function workspaceWaitReason(
+  holderTitle: string,
+  target: WorkspaceTarget,
+): string {
+  const kind = target.isWorktree ? "worktree" : "checkout";
+  const title =
+    holderTitle.length > 60 ? `${holderTitle.slice(0, 59)}…` : holderTitle;
+  const reason = `“${title}” is working in this ${kind}: this turn starts when it is done (Send now shares the ${kind})`;
+  return reason.length <= MAX_REASON_LENGTH
+    ? reason
+    : `${reason.slice(0, MAX_REASON_LENGTH - 1)}…`;
+}
+
 function parseLimitArgument(
   raw: string,
   automaticKeyword: "auto" | "unlimited",
@@ -198,6 +243,8 @@ export default async function concurrencyLimitPlugin(
   let configuration = storedConfiguration.success
     ? normalizeConfiguration(storedConfiguration.data)
     : DEFAULT_CONFIGURATION;
+  let workspaceGuard =
+    (await bb.storage.kv.get<unknown>(WORKSPACE_GUARD_KEY)) !== false;
   const storedCapacities = capacityRecordsSchema.safeParse(
     await bb.storage.kv.get<unknown>(CAPACITIES_KEY),
   );
@@ -313,6 +360,38 @@ export default async function concurrencyLimitPlugin(
                 : configuration.globalLimit === null
                   ? "Unlimited"
                   : String(configuration.globalLimit),
+            };
+          },
+        }),
+        workspace: cliCommand({
+          summary: "Show or set the one-thread-per-workspace rule",
+          positionals: [
+            {
+              name: "state",
+              description:
+                "on (a turn waits while another thread works in the same folder) or off; omit it to print the rule",
+            },
+          ],
+          options: { json: JSON_OPTION },
+          async run(input) {
+            const requested = input.positionals.state;
+            if (requested !== undefined) {
+              if (requested !== "on" && requested !== "off") {
+                throw new PluginCliError("State must be on or off", {
+                  code: "invalid_state",
+                });
+              }
+              workspaceGuard = requested === "on";
+              await bb.storage.kv.set(WORKSPACE_GUARD_KEY, workspaceGuard);
+              await bb.experimental_hooks.recheck("message.dispatch");
+            }
+            return {
+              exitCode: 0,
+              stdout: input.options.json
+                ? JSON.stringify({ workspaceGuard })
+                : workspaceGuard
+                  ? "On: one working thread per workspace folder"
+                  : "Off: threads may work in the same folder at once",
             };
           },
         }),
@@ -521,6 +600,85 @@ export default async function concurrencyLimitPlugin(
     });
   }
 
+  /** The folder this turn would work in; null when it is the thread's own (a fresh worktree) or unknown. */
+  async function workspaceTarget(
+    context: MessageDispatchHookContext,
+  ): Promise<WorkspaceTarget | null> {
+    const env = context.environment;
+    if (env !== null) {
+      return {
+        environmentId: env.id,
+        path: env.path,
+        hostId: env.hostId,
+        isWorktree: env.isWorktree,
+      };
+    }
+    const intent = context.environmentIntent;
+    if (intent === null) return null;
+    if (intent.kind === "environment") {
+      try {
+        const reused = await bb.sdk.environments.get({
+          environmentId: intent.environmentId,
+        });
+        return {
+          environmentId: reused.id,
+          path: reused.path,
+          hostId: reused.hostId,
+          isWorktree: reused.isWorktree,
+        };
+      } catch {
+        return null;
+      }
+    }
+    // a provider makes the environment: only the project checkout is a shared folder
+    if (intent.environmentProviderId !== "project-checkout") return null;
+    const path = stringInput(intent.inputs, "path");
+    if (path === null) return null;
+    return {
+      environmentId: null,
+      path,
+      hostId: intent.machine.type === "existing" ? intent.machine.hostId : null,
+      isWorktree: false,
+    };
+  }
+
+  /** The title of another running thread in the same folder, or null. */
+  async function workspaceHolder(
+    target: WorkspaceTarget,
+    threadId: string,
+    runningThreads: readonly { id: string; hostId: string | null }[],
+  ): Promise<string | null> {
+    for (const entry of runningThreads) {
+      if (entry.id === threadId) continue;
+      if (
+        target.hostId !== null &&
+        entry.hostId !== null &&
+        entry.hostId !== target.hostId
+      )
+        continue;
+      try {
+        const other = await bb.sdk.threads.get({ threadId: entry.id });
+        if (other.environmentId === null) continue;
+        let same =
+          target.environmentId !== null &&
+          other.environmentId === target.environmentId;
+        if (!same && target.path !== null) {
+          const env = await bb.sdk.environments.get({
+            environmentId: other.environmentId,
+          });
+          same =
+            env.path !== null &&
+            sameWorkspacePath(env.path, target.path) &&
+            (target.hostId === null || env.hostId === target.hostId);
+        }
+        if (same) return other.title ?? other.titleFallback ?? other.id;
+      } catch {
+        // a thread or environment that cannot be read does not hold the folder
+      }
+    }
+    return null;
+  }
+
   bb.experimental_hooks.on("message.dispatch", async (context) => {
     if (
       context.attempt === "join-turn" ||
@@ -531,10 +689,18 @@ export default async function concurrencyLimitPlugin(
     }
 
     const host = context.host;
-    if (configuration.globalLimit === null && host === null) {
+    const target = workspaceGuard ? await workspaceTarget(context) : null;
+    if (target === null && configuration.globalLimit === null && host === null) {
       return { action: "proceed" };
     }
     const running = await bb.sdk.threads.listRunning();
+
+    if (target !== null) {
+      const holder = await workspaceHolder(target, context.thread.id, running);
+      if (holder !== null) {
+        return { action: "wait", reason: workspaceWaitReason(holder, target) };
+      }
+    }
 
     if (
       configuration.globalLimit !== null &&

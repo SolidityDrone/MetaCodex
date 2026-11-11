@@ -74,6 +74,9 @@ interface SetupOptions {
   running?: RunningThread[];
   detectedParallelism?: number;
   subscribe?: BbPluginApi["sdk"]["subscribe"];
+  /** MQH's workspace guard reads the running threads and their environments. */
+  threadsGet?: (args: { threadId: string }) => Promise<unknown>;
+  environmentsGet?: (args: { environmentId: string }) => Promise<unknown>;
 }
 
 async function setup(options: SetupOptions = {}) {
@@ -88,7 +91,13 @@ async function setup(options: SetupOptions = {}) {
             ? options.hosts()
             : (options.hosts ?? []),
       },
-      threads: { listRunning: async () => options.running ?? [] },
+      threads: {
+        listRunning: async () => options.running ?? [],
+        ...(options.threadsGet === undefined ? {} : { get: options.threadsGet }),
+      },
+      ...(options.environmentsGet === undefined
+        ? {}
+        : { environments: { get: options.environmentsGet } }),
     },
     experimental_callHostRpc: () => ({
       availableParallelism: options.detectedParallelism ?? 8,
@@ -333,7 +342,7 @@ describe("configuration", () => {
     });
 
     const help = (await harness.behavior.runCli(["host", "--help"])).stdout;
-    expect(help).toContain("bb concurrency-limit host");
+    expect(help).toContain("mqh concurrency-limit host");
     expect(help).toContain("0 to 10000");
 
     const envelope = await harness.behavior.runCli([
@@ -493,3 +502,131 @@ describe("capacity wake events", () => {
     expect(harness.recheckCount).toBe(4);
   });
 });
+
+describe("workspace guard (MQH): one working thread per folder", () => {
+  const checkout = { id: "env-checkout", path: "/root/app", hostId: "host-a", isWorktree: false };
+  const otherThread = (environmentId: string | null) => async ({ threadId }: { threadId: string }) =>
+    makeThreadResponse({ id: threadId, environmentId, title: "Fix the build" });
+  const environments = (rows: Array<typeof checkout>) => async ({ environmentId }: { environmentId: string }) => {
+    const row = rows.find((candidate) => candidate.id === environmentId);
+    if (row === undefined) throw new Error("no such environment");
+    return row;
+  };
+  const turn = (overrides: Parameters<typeof makeMessageDispatchHookContext>[0] = {}) =>
+    makeMessageDispatchHookContext({
+      thread: { id: "thr_1", status: "idle" },
+      attempt: "start-turn",
+      host: { id: "host-a", name: "host-a" },
+      ...overrides,
+    });
+
+  it("holds a turn while another thread works in the same checkout, naming it", async () => {
+    const { hook } = await setup({
+      running: [running({ id: "thr_other", hostId: "host-a" })],
+      capacities: [{ hostId: "host-a", availableParallelism: 8 }, { hostId: "host-b", availableParallelism: 8 }],
+      threadsGet: otherThread("env-checkout"),
+      environmentsGet: environments([checkout]),
+    });
+    await expect(hook(turn({ environment: checkout }))).resolves.toEqual({
+      action: "wait",
+      reason:
+        "“Fix the build” is working in this checkout: this turn starts when it is done (Send now shares the checkout)",
+    });
+  });
+
+  it("sees a new thread's project checkout before its environment exists", async () => {
+    const { hook } = await setup({
+      running: [running({ id: "thr_other", hostId: "host-a" })],
+      capacities: [{ hostId: "host-a", availableParallelism: 8 }, { hostId: "host-b", availableParallelism: 8 }],
+      threadsGet: otherThread("env-checkout"),
+      environmentsGet: environments([checkout]),
+    });
+    const decision = await hook(
+      turn({
+        thread: { id: "thr_new", status: "pending" },
+        environment: null,
+        environmentIntent: {
+          kind: "provider",
+          environmentProviderId: "project-checkout",
+          machine: { type: "existing", hostId: "host-a" },
+          inputs: { path: "/root/app/" },
+        },
+      }),
+    );
+    expect(decision).toMatchObject({ action: "wait" });
+  });
+
+  it("never holds a fresh worktree: it is the thread's own folder", async () => {
+    const { hook } = await setup({
+      running: [running({ id: "thr_other", hostId: "host-a" })],
+      capacities: [{ hostId: "host-a", availableParallelism: 8 }, { hostId: "host-b", availableParallelism: 8 }],
+      threadsGet: otherThread("env-checkout"),
+      environmentsGet: environments([checkout]),
+    });
+    await expect(
+      hook(
+        turn({
+          thread: { id: "thr_new", status: "pending" },
+          environment: null,
+          environmentIntent: {
+            kind: "provider",
+            environmentProviderId: "git-worktree",
+            machine: { type: "existing", hostId: "host-a" },
+            inputs: { branch: { kind: "default" } },
+          },
+        }),
+      ),
+    ).resolves.toEqual({ action: "proceed" });
+  });
+
+  it("holds a fork that reuses a worktree another thread works in", async () => {
+    const worktree = { id: "env-wt", path: "/root/app-wt/feat", hostId: "host-a", isWorktree: true };
+    const { hook } = await setup({
+      running: [running({ id: "thr_other", hostId: "host-a" })],
+      capacities: [{ hostId: "host-a", availableParallelism: 8 }, { hostId: "host-b", availableParallelism: 8 }],
+      threadsGet: otherThread("env-wt"),
+      environmentsGet: environments([worktree]),
+    });
+    const decision = await hook(
+      turn({
+        thread: { id: "thr_fork", status: "pending" },
+        environment: null,
+        environmentIntent: { kind: "environment", environmentId: "env-wt" },
+      }),
+    );
+    expect(decision).toMatchObject({ action: "wait" });
+    expect(decision.action === "wait" && decision.reason).toContain("this worktree");
+  });
+
+  it("lets threads in other folders, on other hosts, or joining a turn go at once", async () => {
+    const elsewhere = { id: "env-wt2", path: "/root/app-wt/other", hostId: "host-a", isWorktree: true };
+    const { hook } = await setup({
+      running: [running({ id: "thr_other", hostId: "host-a" })],
+      capacities: [{ hostId: "host-a", availableParallelism: 8 }, { hostId: "host-b", availableParallelism: 8 }],
+      threadsGet: otherThread("env-checkout"),
+      environmentsGet: environments([checkout, elsewhere]),
+    });
+    await expect(hook(turn({ environment: elsewhere }))).resolves.toEqual({ action: "proceed" });
+    await expect(
+      hook(turn({ host: { id: "host-b", name: "host-b" }, environment: { ...checkout, id: "env-b", hostId: "host-b" } })),
+    ).resolves.toEqual({ action: "proceed" });
+    await expect(hook(turn({ environment: checkout, attempt: "join-turn" }))).resolves.toEqual({ action: "proceed" });
+  });
+
+  it("can be turned off from the CLI (and says so)", async () => {
+    const { hook, harness } = await setup({
+      running: [running({ id: "thr_other", hostId: "host-a" })],
+      capacities: [{ hostId: "host-a", availableParallelism: 8 }, { hostId: "host-b", availableParallelism: 8 }],
+      threadsGet: otherThread("env-checkout"),
+      environmentsGet: environments([checkout]),
+    });
+    await expect(harness.behavior.runCli(["workspace"])).resolves.toMatchObject({
+      exitCode: 0,
+      stdout: "On: one working thread per workspace folder",
+    });
+    await expect(harness.behavior.runCli(["workspace", "off"])).resolves.toMatchObject({ exitCode: 0 });
+    await expect(hook(turn({ environment: checkout }))).resolves.toEqual({ action: "proceed" });
+    await expect(harness.behavior.runCli(["workspace", "sometimes"])).resolves.toMatchObject({ exitCode: 1 });
+  });
+});
+
