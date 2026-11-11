@@ -24,7 +24,8 @@ namespace MetaCodex.Shell
             Wrist.Hand = h =>
             {
                 var st = Gestures?.Get(h);
-                return st != null && st.Frame.Tracked ? (true, st.Frame) : (false, default(HandFrame));
+                // a hand over the table keyboard types: it neither carries the menu nor presses it
+                return st != null && st.Frame.Tracked && !Gestures.IsMuted(h) ? (true, st.Frame) : (false, default(HandFrame));
             };
             // each with a line icon of UiIconAtlas (the glyph is the dock's)
             void I(List<UiWristMenu.Item> list, string glyph, string icon, string label, Action act, Func<bool> lit = null, Color? tint = null) =>

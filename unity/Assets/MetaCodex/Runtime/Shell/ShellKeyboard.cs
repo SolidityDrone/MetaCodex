@@ -1,6 +1,7 @@
 using System;
 using MetaCodex.Hands;
 using MetaCodex.Terminal;
+using MetaCodex.Typing;
 using MetaCodex.UI;
 using UnityEngine;
 
@@ -21,6 +22,9 @@ namespace MetaCodex.Shell
             Keyboard = go.AddComponent<UiSurfaceKeyboard>();
             Keyboard.Init(Router, () => Head, () => Gestures?.Source, _root);
             UiKeyboard.Keyboard = Keyboard;
+            // a hand over the keyboard on the table types and does nothing else: no ray, no pinch, no poke on a window,
+            // no wrist menu, no gesture (owner 2026-11-11: "sometimes I click around when trying to type")
+            if (Gestures != null) Gestures.Muted = h => Keyboard != null && Keyboard.HandInZone((int)h);
             _terminalSink = new TerminalSink(this);
             UiKeyboard.TerminalKeyboardRequested += ToggleTerminalKeyboard;
             if (app?.Input != null) app.Input.KeyboardShown = () => Keyboard != null && Keyboard.Visible && Keyboard.Sink == _terminalSink;
@@ -52,6 +56,7 @@ namespace MetaCodex.Shell
             public string Title => "TERMINAL";
             public string Preview => null;
             public bool KeepsKeyboard => true;
+            public KeyContext Context => KeyContext.Code;
 
             public void Type(string text, bool ctrl, bool alt)
             {
@@ -62,11 +67,11 @@ namespace MetaCodex.Shell
                 input.TypeText(text);
             }
 
-            public void Key(KbKind key, bool ctrl, bool alt)
+            public void Key(KbKind key, bool ctrl, bool alt, bool shift, int fn)
             {
                 var input = _s.app?.Input;
                 if (input == null) return;
-                var mods = (ctrl ? KeyMods.Ctrl : KeyMods.None) | (alt ? KeyMods.Alt : KeyMods.None);
+                var mods = (ctrl ? KeyMods.Ctrl : KeyMods.None) | (alt ? KeyMods.Alt : KeyMods.None) | (shift ? KeyMods.Shift : KeyMods.None);
                 switch (key)
                 {
                     case KbKind.Backspace: input.PressKey(TermKey.Backspace, mods); break;
@@ -77,6 +82,13 @@ namespace MetaCodex.Shell
                     case KbKind.Right: input.PressKey(TermKey.Right, mods); break;
                     case KbKind.Up: input.PressKey(TermKey.Up, mods); break;
                     case KbKind.Down: input.PressKey(TermKey.Down, mods); break;
+                    case KbKind.Home: input.PressKey(TermKey.Home, mods); break;
+                    case KbKind.End: input.PressKey(TermKey.End, mods); break;
+                    case KbKind.Delete: input.PressKey(TermKey.Delete, mods); break;
+                    // as on a real keyboard in a terminal: Shift + Page Up / Down scrolls back through what was printed
+                    case KbKind.PageUp: if (shift) input.Scroll(10); else input.PressKey(TermKey.PageUp, mods); break;
+                    case KbKind.PageDown: if (shift) input.Scroll(-10); else input.PressKey(TermKey.PageDown, mods); break;
+                    case KbKind.Function: if (fn >= 1 && fn <= 12) input.PressKey(TermKey.F1 + (fn - 1), mods); break;
                     case KbKind.Paste: input.Paste(GUIUtility.systemCopyBuffer); break;
                 }
             }

@@ -173,7 +173,11 @@ namespace MetaCodex.EditorTools
             var config = OVRProjectConfig.CachedProjectConfig;
             // hands are enough for everything (contest rule); controllers stay usable while developing
             config.handTrackingSupport = OVRProjectConfig.HandTrackingSupport.ControllersAndHands;
-            config.handTrackingFrequency = OVRProjectConfig.HandTrackingFrequency.HIGH;
+            // the default hand tracking (30 poses a second), not HIGH: HIGH is Fast Motion Mode, made for fitness and
+            // rhythm games; Meta: it "may increase jitter, impacting high accuracy interactions like direct touch or
+            // typing", and with passthrough the tracked hands run ahead of the hands you see. This app is poking,
+            // pinching and typing (it shipped with HIGH up to 0.7.13: "the hands are not precise in this app")
+            config.handTrackingFrequency = OVRProjectConfig.HandTrackingFrequency.LOW;
             config.insightPassthroughSupport = OVRProjectConfig.FeatureSupport.Required;
             // Ambient Focus: the Depth API needs the "spatial data" permission (USE_SCENE), no Space Setup scan; its
             // blur reads the passthrough camera (horizonos.permission.HEADSET_CAMERA, MR Utility Kit)

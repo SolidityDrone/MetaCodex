@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Text;
+using MetaCodex.Typing;
 using MetaCodex.UI;
 using TMPro;
 using UnityEngine;
@@ -233,8 +234,9 @@ namespace MetaCodex.Shell
             public string Title => "WEB PAGE";
             public string Preview => null;
             public bool KeepsKeyboard => true;
+            public KeyContext Context => KeyContext.Code;
             public void Type(string text, bool ctrl, bool alt) { if (!string.IsNullOrEmpty(text)) _s.WebCall("text", text); }
-            public void Key(KbKind key, bool ctrl, bool alt)
+            public void Key(KbKind key, bool ctrl, bool alt, bool shift, int fn)
             {
                 switch (key)
                 {
@@ -246,6 +248,12 @@ namespace MetaCodex.Shell
                     case KbKind.Right: _s.WebKey(22); break;
                     case KbKind.Up: _s.WebKey(19); break;
                     case KbKind.Down: _s.WebKey(20); break;
+                    case KbKind.Delete: _s.WebKey(112); break;
+                    case KbKind.Home: _s.WebKey(122); break;
+                    case KbKind.End: _s.WebKey(123); break;
+                    case KbKind.PageUp: _s.WebKey(92); break;
+                    case KbKind.PageDown: _s.WebKey(93); break;
+                    case KbKind.Function: if (fn >= 1 && fn <= 12) _s.WebKey(130 + fn); break;
                     case KbKind.Paste: _s.WebCall("text", GUIUtility.systemCopyBuffer ?? ""); break;
                 }
             }

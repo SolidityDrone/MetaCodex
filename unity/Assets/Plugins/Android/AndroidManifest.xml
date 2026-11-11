@@ -22,7 +22,7 @@
          app's cores 3-5 (docs/voice.md) -->
     <service android:name="com.pnncl.metacodex.ai.MetaCodexAiService" android:process=":ai" android:exported="false" />
     <meta-data android:name="unityplayer.SkipPermissionsDialog" android:value="false" />
-    <meta-data android:name="com.oculus.handtracking.frequency" android:value="HIGH" />
+    <meta-data android:name="com.oculus.handtracking.frequency" android:value="LOW" />
     <meta-data android:name="com.oculus.ossplash.background" android:value="black" />
     <meta-data android:name="com.oculus.trade_cpu_for_gpu_amount" android:value="-1" />
     <meta-data android:name="com.oculus.telemetry.project_guid" android:value="6835c1e9-f2e1-4412-9e03-da6580345280" />

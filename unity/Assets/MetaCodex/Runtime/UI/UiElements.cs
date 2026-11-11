@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using MetaCodex.Typing;
 using TMPro;
 using UnityEngine;
 
@@ -876,6 +877,8 @@ namespace MetaCodex.UI
             public string Title => _caption ?? "TEXT";
             public string Preview => _last == null ? "" : _secure ? new string('•', Mathf.Min(_last.Length, 32)) : _last;
             public bool KeepsKeyboard => false;
+            /// A masked field holds a password, a token, an API key: its keys are chosen by place alone.
+            public KeyContext Context => _secure ? KeyContext.Secret : KeyContext.Text;
 
             public void Type(string text, bool ctrl, bool alt)
             {
@@ -884,7 +887,7 @@ namespace MetaCodex.UI
                 _onChanged?.Invoke(_last);
             }
 
-            public void Key(KbKind key, bool ctrl, bool alt)
+            public void Key(KbKind key, bool ctrl, bool alt, bool shift, int fn)
             {
                 if (!Active) return;
                 switch (key)

@@ -10,6 +10,7 @@ using MetaCodex.Hands;
 using MetaCodex.Scripting;
 using MetaCodex.Shell;
 using MetaCodex.Terminal;
+using MetaCodex.Typing;
 using MetaCodex.UI;
 using Newtonsoft.Json.Linq;
 using TMPro;
@@ -2046,16 +2047,27 @@ end)
         }
 
         /// MetaCodex's own keyboard (owner 2026-11-10: "never the default one; hands on a table, the keyboard locked on the
-        /// surface, a touchpad on the right, like the Experimental one"): in the air until hands rest on a table, then laid
-        /// under them (F under the left index, J under the right); a lift and a tap types, resting fingers and a hand put
-        /// down type nothing; the touchpad moves a cursor over the window in view and a tap clicks there.
+        /// surface, a touchpad on the right, like the Experimental one"; 2026-11-11: "the exact layout and design of a
+        /// normal keyboard ... same proportions", "when a hand is close enough to the keyboard we disable every other
+        /// gesture"): in the air until hands rest on a table, then laid under them at its real size; a lift and a strike
+        /// types, resting fingers, a finger dragged down by its neighbour and a hand put down type nothing; a hand over
+        /// it does nothing else; the touchpad moves a cursor over the window in view and a tap clicks there.
+        /// (The press detector and the key decoder have their own tests without the Editor: tests/typing.)
         private static void KeyboardSection(MetaCodexShell shell, Transform head, SimulatedHands hands)
         {
             foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
             head.SetPositionAndRotation(new Vector3(0f, 1.4f, 0f), Quaternion.identity);
             var kb = shell.Keyboard;
-            Check(kb != null && kb.KeyCountForTest > 60 && UiKeyboard.Keyboard == kb, $"the keyboard is MetaCodex's own ({kb?.KeyCountForTest} keys, the one UiKeyboard uses)");
+            Check(kb != null && kb.KeyCountForTest == 82 && UiKeyboard.Keyboard == kb, $"the keyboard is MetaCodex's own ({kb?.KeyCountForTest} keys, the one UiKeyboard uses)");
             if (kb == null) return;
+            {
+                // a normal keyboard: 19.05 mm from key to key, the widths and the stagger of a real board, plain caps
+                Rect f = kb.KeyRectForTest("f"), j = kb.KeyRectForTest("j"), q = kb.KeyRectForTest("q"), a = kb.KeyRectForTest("a"), sp = kb.KeyRectForTest("space"), sh = kb.KeyRectForTest("lshift");
+                bool real = Mathf.Abs(f.width - 0.01905f) < 1e-5f && Mathf.Abs(f.height - 0.01905f) < 1e-5f && Mathf.Abs(j.center.x - f.center.x - 3f * 0.01905f) < 1e-5f
+                    && Mathf.Abs(a.x - q.x - 0.25f * 0.01905f) < 1e-5f && Mathf.Abs(sp.width - 6.25f * 0.01905f) < 1e-5f && Mathf.Abs(sh.width - 2.25f * 0.01905f) < 1e-5f;
+                bool plain = kb.Panel.Shapes.Get(0).Kind == UiShapeKind.Deck && kb.Decoder.Letters != null;
+                Check(real && plain, $"a normal keyboard at its real size: keys {f.width * 1000f:F2} mm apart, F to J {(j.center.x - f.center.x) * 1000f:F1} mm, space bar {sp.width * 1000f:F1} mm, plain deck and caps ({plain})");
+            }
             var keepProvider = UiKeyboard.EditorProvider;
             UiKeyboard.EditorProvider = null;
             hands.Frames[0].Tracked = false; hands.Frames[1].Tracked = false;
@@ -2065,23 +2077,24 @@ end)
             void Step(int n = 1) { for (int i = 0; i < n; i++) { now += 1f / 72f; kb.Tick(now); } }
             try
             {
-                // a field opens it in the air (no table yet): poke or pinch its keys; ⏎ ends the field and it goes
+                // a field opens it in the air (no table yet): poke or pinch its keys; Enter ends the field and it goes
                 string got = null;
                 UiKeyboard.Edit("ab", false, null, x => got = x, "TEST · NAME");
                 bool air = kb.Visible && kb.Mode == UiSurfaceKeyboard.KbMode.Air && shell.Router.Panels.Contains(kb.Panel);
                 string strip = kb.StripTextForTest;
                 kb.Panel.ForceRefresh();
                 RenderAt("ui-keyboard-air.png", head.position, Quaternion.LookRotation(kb.Panel.transform.position - head.position, Vector3.up), 50f, 1400, 900);
-                kb.PressForTest("c"); kb.PressForTest("⇧"); kb.PressForTest("d"); kb.PressForTest("⌫"); kb.PressForTest("e");
+                kb.PressForTest("c"); kb.PressForTest("lshift"); kb.PressForTest("d"); kb.PressForTest("backspace"); kb.PressForTest("e");
+                kb.PressForTest("caps"); kb.PressForTest("f"); kb.PressForTest("1"); kb.PressForTest("caps"); kb.PressForTest("rshift"); kb.PressForTest("1");
                 string mid = UiKeyboard.EditingTextForTest;
-                kb.PressForTest("⏎");
-                Check(air && strip.Contains("TEST · NAME") && mid == "abce" && got == "abce" && !kb.Visible,
-                    $"a field opens the keyboard in the air ({air}, “{strip}”): c ⇧ d ⌫ e -> {mid}, ⏎ gives “{got}” and the keyboard goes ({!kb.Visible})");
+                kb.PressForTest("enter");
+                Check(air && strip.Contains("TEST · NAME") && mid == "abceF1!" && got == "abceF1!" && !kb.Visible,
+                    $"a field opens the keyboard in the air ({air}, “{strip}”): c Shift d Backspace e, Caps f 1, Shift 1 -> {mid}, Enter gives “{got}” and the keyboard goes ({!kb.Visible})");
 
                 // both hands rest flat on a table: it lies down under them, F under the left index tip, J under the right
                 float tableY = 0.76f;
-                var lp = new Vector3(-0.0575f, tableY, 0.36f); // index tips 6.5 cm apart, as on F and J
-                var rp = new Vector3(0.0575f, tableY, 0.36f);
+                var lp = new Vector3(-0.053575f, tableY, 0.36f); // index tips 57.15 mm apart, as F and J are
+                var rp = new Vector3(0.053575f, tableY, 0.36f);
                 void Rest() { hands.SetOpen(Handedness.Left, lp, Vector3.forward, Vector3.down); hands.SetOpen(Handedness.Right, rp, Vector3.forward, Vector3.down); }
                 got = null;
                 UiKeyboard.Edit("", false, null, x => got = x, "TEST · TABLE");
@@ -2090,34 +2103,70 @@ end)
                 var li = hands.Frames[0].IndexTip; var ri = hands.Frames[1].IndexTip;
                 var fW = kb.KeyWorldForTest("f"); var jW = kb.KeyWorldForTest("j");
                 float fErr = new Vector2(fW.x - li.x, fW.z - li.z).magnitude, jErr = new Vector2(jW.x - ri.x, jW.z - ri.z).magnitude;
-                Check(surface && fErr < 0.006f && jErr < 0.006f && fW.y < li.y && li.y - fW.y < 0.012f,
+                Check(surface && fErr < 0.003f && jErr < 0.003f && fW.y < li.y && li.y - fW.y < 0.012f && kb.Panel.BaseScale == Vector3.one,
                     $"hands at rest on a table: the keyboard lies under them ({surface}, not in the router), F {fErr * 1000f:F1} mm and J {jErr * 1000f:F1} mm from the index tips, " +
-                    $"{(li.y - fW.y) * 1000f:F1} mm under the joints, keys scaled ×{kb.SurfaceScaleForTest:F2}");
+                    $"{(li.y - fW.y) * 1000f:F1} mm under the joints, at its real size");
                 foreach (var id2 in shell.PanelIds.ToList()) shell.ClosePanel(id2);
                 kb.Panel.ForceRefresh();
                 RenderAt("ui-keyboard-table.png", head.position, Quaternion.LookRotation(new Vector3(0f, tableY, 0.40f) - head.position, Vector3.up), 40f, 1400, 900);
 
-                // resting fingers type nothing; a lift and a tap types the key under the finger
+                // a hand over the keyboard does nothing else: the gesture engine does not see it (no ray, no pinch, no
+                // poke, no wrist menu), and it is free again a moment after it left
+                shell.Router.UpdateForTest();
+                bool muted = kb.HandInZone(0) && kb.HandInZone(1) && !shell.Gestures.Left.Tracked && !shell.Gestures.Right.Tracked;
+                hands.SetOpen(Handedness.Right, rp + new Vector3(0.1f, 0.35f, 0f), Vector3.forward, Vector3.down, pinch: 1f);
+                Step(2);
+                shell.Router.UpdateForTest();
+                bool lingers = !shell.Gestures.Right.Tracked && !shell.Gestures.Right.Pinching;
+                Step(30);
+                shell.Router.UpdateForTest();
+                bool free = !kb.HandInZone(1) && shell.Gestures.Right.Tracked && kb.HandInZone(0) && !shell.Gestures.Left.Tracked;
+                Rest(); Step(3);
+                shell.Router.UpdateForTest();
+                Check(muted && lingers && free && !shell.Gestures.Right.Tracked,
+                    $"a hand over the keyboard makes no gesture ({muted}); lifted away while pinching it clicks nothing for a moment ({lingers}), then it is free ({free}); back on the keys it is quiet again");
+
+                // resting fingers type nothing; a lift and a strike types the key under the finger, and lights it on the way
                 string typed = "";
                 Action<KbKind, string> onSent = (k, x) => typed += x ?? "<" + k + ">";
                 kb.Sent += onSent;
                 Step(40);
                 bool quiet = typed.Length == 0;
-                void Tap(int hand, int finger, Vector3 at)
+                bool litSeen = false;
+                void SetTipAt(int hand, int finger, Vector3 p2) { var f = hands.Frames[hand]; if (finger == 1) f.IndexTip = p2; else if (finger == 2) f.MiddleTip = p2; else if (finger == 3) f.RingTip = p2; else if (finger == 4) f.LittleTip = p2; else f.ThumbTip = p2; hands.Frames[hand] = f; }
+                void Tap(int hand, int finger, Vector3 at, string lit = null)
                 {
                     float rest = hand == 0 ? li.y : ri.y;
-                    void SetTip(float y) { var f = hands.Frames[hand]; var p2 = new Vector3(at.x, y, at.z); if (finger == 1) f.IndexTip = p2; else if (finger == 2) f.MiddleTip = p2; else if (finger == 3) f.RingTip = p2; else if (finger == 4) f.LittleTip = p2; else f.ThumbTip = p2; hands.Frames[hand] = f; }
-                    SetTip(rest + 0.024f); Step(5);
-                    SetTip(rest + 0.012f); Step(1);
-                    SetTip(rest + 0.002f); Step(1);
-                    SetTip(rest); Step(8);
+                    SetTipAt(hand, finger, new Vector3(at.x, rest + 0.020f, at.z)); Step(8);
+                    if (lit != null) litSeen = kb.LitForTest(lit);
+                    // faster and faster until the table stops it
+                    for (int k = 1; k <= 5; k++) { float u = k / 5f; SetTipAt(hand, finger, new Vector3(at.x, rest + 0.020f * (1f - u * u), at.z)); Step(1); }
+                    Step(8);
                 }
-                Tap(1, 1, kb.KeyWorldForTest("j"));
+                Tap(1, 1, kb.KeyWorldForTest("j"), "j");
                 Tap(1, 2, kb.KeyWorldForTest("k"));
                 string afterTaps = typed, field = UiKeyboard.EditingTextForTest;
                 Rest(); Step(30);
-                Check(quiet && afterTaps == "jk" && field == "jk",
-                    $"resting fingers type nothing ({quiet}); the right index taps J, the middle K: “{afterTaps}” into the field (“{field}”)");
+                Check(quiet && afterTaps == "jk" && field == "jk" && litSeen,
+                    $"resting fingers type nothing ({quiet}); the right index strikes J, the middle K: “{afterTaps}” into the field (“{field}”); the lifted finger lit J ({litSeen})");
+
+                // the ring finger dragged down while the middle finger presses types nothing
+                typed = "";
+                {
+                    float rest = ri.y;
+                    var kW = kb.KeyWorldForTest("k"); var lW = kb.KeyWorldForTest("l");
+                    SetTipAt(1, 2, new Vector3(kW.x, rest + 0.018f, kW.z)); SetTipAt(1, 3, new Vector3(lW.x, rest + 0.010f, lW.z)); Step(8);
+                    for (int k = 1; k <= 5; k++)
+                    {
+                        float u = k / 5f;
+                        SetTipAt(1, 2, new Vector3(kW.x, rest + 0.018f * (1f - u * u), kW.z));
+                        SetTipAt(1, 3, new Vector3(lW.x, rest + 0.010f - 0.008f * u * u, lW.z));
+                        Step(1);
+                    }
+                    Step(10);
+                    Rest(); Step(20);
+                }
+                Check(typed == "k", $"the middle finger presses K and drags the ring finger down to 2 mm over L: “{typed}”");
 
                 // a whole hand put down (four fingers landing together) is not typing
                 typed = "";
@@ -2126,8 +2175,8 @@ end)
                     Vector3 Up(Vector3 v) => v + Vector3.up * 0.024f;
                     var keep = f;
                     f.IndexTip = Up(f.IndexTip); f.MiddleTip = Up(f.MiddleTip); f.RingTip = Up(f.RingTip); f.LittleTip = Up(f.LittleTip);
-                    hands.Frames[0] = f; Step(6);
-                    hands.Frames[0] = keep; Step(12);
+                    hands.Frames[0] = f; Step(8);
+                    hands.Frames[0] = keep; Step(14);
                 }
                 Check(typed.Length == 0, $"a hand put down on the keys types nothing (“{typed}”)");
 
@@ -2143,35 +2192,38 @@ end)
                 {
                     var f = hands.Frames[1];
                     var keep = f;
-                    f.IndexTip = new Vector3(pad.x, ri.y + 0.02f, pad.z); hands.Frames[1] = f; Step(4);
-                    f.IndexTip = new Vector3(pad.x, ri.y, pad.z); hands.Frames[1] = f; Step(4);   // touch
-                    f.IndexTip = new Vector3(pad.x, ri.y + 0.02f, pad.z); hands.Frames[1] = f; Step(3); // lift: a tap
+                    typed = "";
+                    f.IndexTip = new Vector3(pad.x, ri.y + 0.02f, pad.z); hands.Frames[1] = f; Step(6);
+                    f.IndexTip = new Vector3(pad.x, ri.y, pad.z); hands.Frames[1] = f; Step(5);   // touch
+                    f.IndexTip = new Vector3(pad.x, ri.y + 0.02f, pad.z); hands.Frames[1] = f; Step(5); // lift: a tap
                     bool tapped = hits == 1;
                     // a slide moves the cursor
                     var c0 = kb.CursorPoint;
-                    f.IndexTip = new Vector3(pad.x, ri.y, pad.z); hands.Frames[1] = f; Step(3);
+                    f.IndexTip = new Vector3(pad.x, ri.y, pad.z); hands.Frames[1] = f; Step(5);
                     for (int i = 1; i <= 8; i++) { f.IndexTip = new Vector3(pad.x + i * 0.003f, ri.y, pad.z); hands.Frames[1] = f; Step(1); }
                     var c1 = kb.CursorPoint;
-                    f.IndexTip = new Vector3(pad.x + 0.024f, ri.y + 0.02f, pad.z); hands.Frames[1] = f; Step(3);
+                    f.IndexTip = new Vector3(pad.x + 0.024f, ri.y + 0.02f, pad.z); hands.Frames[1] = f; Step(5);
                     hands.Frames[1] = keep;
-                    Check(tapped && hits == 1 && c1.x - c0.x > 0.03f && kb.CursorPanel == tp,
-                        $"touchpad: a tap clicks the button under the cursor ({tapped}), a 2.4 cm slide moves the cursor {(c1.x - c0.x) * 100f:F1} cm across the window (no click: {hits == 1})");
+                    Check(tapped && hits == 1 && c1.x - c0.x > 0.03f && kb.CursorPanel == tp && typed.Length == 0,
+                        $"touchpad: a tap clicks the button under the cursor ({tapped}), a 2.4 cm slide moves the cursor {(c1.x - c0.x) * 100f:F1} cm across the window (no click: {hits == 1}), no key typed (“{typed}”)");
                 }
                 shell.Router.Unregister(tp);
                 UnityEngine.Object.DestroyImmediate(tp.gameObject);
                 kb.Sent -= onSent;
-                kb.PressForTest("⏎");
+                kb.PressForTest("enter");
                 bool backOnTable = false;
-                UiKeyboard.Edit("", false, null, _ => { }, "TEST · AGAIN");
+                // a masked field (a token, an API key) is typed by place alone, never by letter statistics
+                UiKeyboard.Edit("", true, null, _ => { }, "TEST · SECRET");
                 backOnTable = kb.Mode == UiSurfaceKeyboard.KbMode.Surface;
-                kb.PressForTest("ESC");
-                Check(got == "jk" && backOnTable && !kb.Visible, $"⏎ ends the field (“{got}”); the next field finds the keyboard where it was on the table ({backOnTable})");
+                bool secret = kb.Sink != null && kb.Sink.Context == KeyContext.Secret;
+                kb.PressForTest("esc");
+                Check(got == "jk" && backOnTable && !kb.Visible && secret, $"Enter ends the field (“{got}”); the next field finds the keyboard where it was on the table ({backOnTable}); a masked field is typed by place alone ({secret})");
 
                 // the terminal and the web page get their keys straight away (no field in between)
                 shell.ToggleTerminalKeyboard();
-                bool term = kb.Visible && kb.Sink == shell.TerminalSinkForTest && kb.Sink.KeepsKeyboard;
+                bool term = kb.Visible && kb.Sink == shell.TerminalSinkForTest && kb.Sink.KeepsKeyboard && kb.Sink.Context == KeyContext.Code;
                 shell.ToggleTerminalKeyboard();
-                Check(term && !kb.Visible, $"KEYS toggles the keyboard for the terminal ({term}), which keeps it open until ⌨↓ or KEYS again");
+                Check(term && !kb.Visible, $"KEYS toggles the keyboard for the terminal ({term}), which keeps it open until its hide key or KEYS again");
             }
             finally
             {
@@ -2179,6 +2231,7 @@ end)
                 kb.Hide();
                 kb.ForgetSurfaceForTest();
                 hands.Frames[0].Tracked = false; hands.Frames[1].Tracked = false;
+                shell.Router.UpdateForTest();
             }
         }
 

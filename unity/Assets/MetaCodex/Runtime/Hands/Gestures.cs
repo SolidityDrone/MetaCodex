@@ -154,6 +154,10 @@ namespace MetaCodex.Hands
         /// After the built-in gestures and poses of a frame: the script host runs Lua detectors here.
         public event Action<float, float> CustomTick;
         public IHandSource Source;
+        /// A hand that is busy with something that takes all of it (typing on the table keyboard): it is tracked and
+        /// drawn, but it points at nothing, pinches nothing and makes no gesture; what it was doing ends at once.
+        public Func<Handedness, bool> Muted;
+        public bool IsMuted(Handedness h) => Muted != null && Muted(h);
         /// The user's head (for "palm facing me", left/right and head-relative motion); null = origin looking +Z.
         public Func<Pose> HeadPose;
         public float LastClapTime { get; private set; } = -10f;
@@ -283,7 +287,7 @@ namespace MetaCodex.Hands
         private void UpdateHand(HandState s, float time, float dt)
         {
             string hn = s.Side;
-            bool tracked = Source != null && Source.TryGet(s.Hand, out s.Frame) && s.Frame.Tracked && !s.Frame.SystemGesture;
+            bool tracked = Source != null && Source.TryGet(s.Hand, out s.Frame) && s.Frame.Tracked && !s.Frame.SystemGesture && !IsMuted(s.Hand);
             if (!tracked)
             {
                 if (s.Tracked) EndAll(s, hn, time);
@@ -531,6 +535,20 @@ namespace MetaCodex.Hands
             _skeletons[1] = right != null ? right.GetComponent<OVRSkeleton>() : null;
         }
 
+        private Transform _trackingSpace;
+        private bool _lookedForRig;
+
+        private Transform TrackingSpace(OVRHand h)
+        {
+            if (!_lookedForRig)
+            {
+                _lookedForRig = true;
+                var rig = h.GetComponentInParent<OVRCameraRig>();
+                _trackingSpace = rig != null ? rig.trackingSpace : null;
+            }
+            return _trackingSpace;
+        }
+
         // our joint slots
         private const int Wrist = 0, Palm = 1, ThumbTip = 2, IndexTip = 3, IndexK = 4, MiddleTip = 5, MiddleK = 6, RingTip = 7, RingK = 8, LittleTip = 9, LittleK = 10, ThumbK = 11;
 
@@ -598,7 +616,14 @@ namespace MetaCodex.Hands
             f.Palm = map.ContainsKey(Palm) ? P(Palm) : Vector3.Lerp(f.Wrist, f.MiddleKnuckle, 0.55f);
             f.PinchStrength = h.GetFingerPinchStrength(OVRHand.HandFinger.Index);
             f.PointerValid = h.IsPointerPoseValid && h.PointerPose != null;
-            if (f.PointerValid) { f.PointerOrigin = h.PointerPose.position; f.PointerDirection = h.PointerPose.forward; }
+            if (f.PointerValid)
+            {
+                // OVRHand gives the pointer pose in tracking space (its object has no parent): through the rig's
+                // tracking space into the world, so a rig that is moved or turned still points where the hand does
+                var pp = h.PointerPose;
+                if (pp.parent == null && TrackingSpace(h) is Transform ts) { f.PointerOrigin = ts.TransformPoint(pp.localPosition); f.PointerDirection = ts.TransformDirection(pp.localRotation * Vector3.forward); }
+                else { f.PointerOrigin = pp.position; f.PointerDirection = pp.forward; }
+            }
             return true;
         }
     }

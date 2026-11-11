@@ -347,6 +347,17 @@ namespace MetaCodex.UI
 
         public void SetHighlight(float state) => Shapes.SetState(_body, state);
 
+        /// A plain rounded slab instead of the console frame (the keyboard: the deck of a normal keyboard).
+        public void SetPlainBody(float corner)
+        {
+            var s = Shapes.Get(_body);
+            s.Kind = UiShapeKind.Deck;
+            s.CutBig = corner;
+            s.CutSmall = 0f;
+            s.Margin = 0.008f;
+            Shapes.Set(_body, s);
+        }
+
         // ------------------------------------------------------------------ bending (GPU)
 
         // A bent panel curves around a vertical axis `radius` in front of it (towards the user). The vertex

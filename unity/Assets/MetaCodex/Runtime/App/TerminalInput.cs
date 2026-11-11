@@ -96,6 +96,9 @@ namespace MetaCodex.App
 
         private void Emit(byte[] b) => Send?.Invoke(b);
 
+        /// Scrolls back (+) or forward (-) through what was printed (the keyboard's Shift + Page Up / Page Down).
+        public void Scroll(int lines) => ScrollRequest?.Invoke(lines);
+
         private void Update()
         {
             Hook(Keyboard.current);
