@@ -417,3 +417,14 @@ The in-app browser, WEB (same version):
 - [ ] REMOVE a finished worktree: its threads are archived and the folder goes; the branch is still in `git branch`
 - [ ] Voice "open the worktrees"; "what is this thread doing?" on a held thread says why it has not started
 
+## 28. The orb's threads (owner 2026-11-11)
+
+- [ ] Touch the orb: under its billboard, up to five cards (PROJECT · title · state), the threads used last, turned to you with the billboard
+- [ ] A working thread's card pulses blue with its turn's clock; a finished one is green (`DONE · 4 MIN`); one that asks for an approval or an answer is orange; a failed one red
+- [ ] Long project names and titles end with … inside their card; nothing sticks out at any distance of the orb
+- [ ] Tap a card: its THREAD window opens and the card's title turns accent; tap it again: the window hides; the menu stays open and the rows do not move
+- [ ] A thread finishes while its window is closed: its card says `DONE · NEW`; after opening it, `DONE · n MIN`
+- [ ] Close and reopen the orb's menu: the thread you just used is first
+- [ ] Point at a card and ask "what is this thread doing?": the answer is about that thread
+- [ ] Frame rate with the menu open and two threads working: 72 fps
+

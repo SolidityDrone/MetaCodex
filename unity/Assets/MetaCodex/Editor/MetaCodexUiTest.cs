@@ -178,6 +178,7 @@ namespace MetaCodex.EditorTools
                 if (Want("chat")) ChatSection(shell, head); // MetaCodexUiTestChat.cs
                 if (Want("control")) ControlSection(shell, head, frame); // MetaCodexUiTestControl.cs
                 if (Want("workspaces")) WorkspacesSection(shell, head); // MetaCodexUiTestWorkspaces.cs
+                if (Want("orbthreads")) OrbThreadsSection(shell, head); // MetaCodexUiTestOrbThreads.cs
                 if (WantNamed("voiceexport")) VoiceExport(shell);
                 if (WantNamed("voicedecide")) VoiceDecideBench(shell);
             }

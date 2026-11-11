@@ -560,6 +560,7 @@ namespace MetaCodex.Shell
         public void OpenThread(string id)
         {
             if (string.IsNullOrEmpty(id)) return;
+            NoteThreadUsed(id); // first in the orb's quick list (ShellOrbThreads)
             if (id != _threadOpen) { _thExec = null; _thUsage = null; _tlRaw = new JArray(); CloseAttachModal(); SetAttachMenu(false); _threadOpen = id; ResetThreadChat(); }
             _threadOpen = id;
             RefreshAttachRow(); // each thread keeps its own attachments for its next message
@@ -1016,6 +1017,7 @@ namespace MetaCodex.Shell
             if ((string.IsNullOrWhiteSpace(text) && !hasAtt) || _threadOpen == null) return;
             string msg = string.IsNullOrWhiteSpace(text) ? AttachmentsOnlyText(att) : text.Trim();
             var sent = hasAtt ? att.ToList() : null;
+            NoteThreadUsed(_threadOpen);
             var o = Override(_threadOpen);
             var extra = new JObject();
             if (o.model != null) extra["model"] = o.model;

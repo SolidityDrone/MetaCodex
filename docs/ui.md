@@ -128,6 +128,20 @@ panels ... the source of the speech ... a billboard side notification system men
   larger gold spark (four at most) until MESSAGES is opened. A hand that is at the orb or points at it does not also click the window
   behind it (`UiInputRouter.HandBlocked`). The first time the app runs with the orb, one message says what it
   is (`orbTipShown`).
+- **Its threads** (owner 2026-11-11: "a quick menu with threads going on ... only the 5 most recently used").
+  Under the billboard, in its plane and turned to you with it, one small card per thread (24 × 3 cm), the five
+  used last: opened or written to here (kept in `recent-threads.txt` beside the settings, not in them: MQH's copy
+  of the settings would bring an old list back), or worked on by their agent (the row's `updatedAt`), whichever
+  is later. Each card is `PROJECT · title · state`, three columns, each cut with … at its edge (nothing leaves the
+  card). Colour by state, on the dot, the frame and the state word: **working** blue, the card pulses
+  (`WORKING 3:12`, the turn's clock; `STARTING`), **done** green (`DONE · 4 MIN`; `DONE · NEW` while an answer that
+  came with its window closed has not been seen), **needs you** orange (`NEEDS YOU`: a question or an approval;
+  `WAITING`: a turn MQH holds in the queue; `NO HOST`), **error** red (`ERROR`; `NOT SENT`: a queued message
+  failed); `STOPPED` (by you) grey. A tap shows that thread's window (THREAD on it), or hides it when it is the one
+  shown; the menu stays up and the rows keep their places while it is (nothing moves under the finger); the next
+  time it opens, the threads used last come first. MQH is asked when it opens and every 4 s while it is up.
+  Pointing at a card, "this thread" (voice questions) is its thread. `Shell/ShellOrbThreads.cs`,
+  `AI/QuickThreads.cs` (the order and the words, pure). Self-test section `orbthreads`.
 - Control port: `orb on | off | menu | place | status`.
 
 ## Code map (`unity/Assets/MetaCodex/Runtime`)
@@ -138,8 +152,8 @@ panels ... the source of the speech ... a billboard side notification system men
 | `Hands/` | `GestureEngine` (built-ins, pose templates, custom gestures with hold/cooldown, head-relative directions), `PoseSpec`, `OvrHandSource` (OVRHand/OVRSkeleton), `SimulatedHands` (any pose, for tests) |
 | `Scripting/` | `ScriptHost`: Lua (MoonSharp) scripts and plugin folders, hot reload, sandbox, instruction budget, detectors as persistent coroutines, persisted state; `PoseJson` |
 | `Security/` | `SecretVault` (Android Keystore sealer, Editor dev sealer, policies, access log) |
-| `AI/` | `QvacHost` (starts the local AI service process, token, restarts), `QvacClient` (HTTP), `VoiceRecorder` (microphone, end of speech), `VoiceCommands` (registry, phrase templates, tool specs), `ThreadPulse` (a thread's timeline and state, docs/thread-view.md), `WorkspaceMap` (checkouts and worktrees, docs/workspaces.md) |
-| `Shell/` | `MetaCodexShell` (wiring, panels by id and aliases, control-port commands), `ShellPanels` (dock, terminals, files, git logic, browser, scripts, settings, saved layouts), `ShellGestures` (Gestures studio, bindings, actions, recording, starter plugins), `ShellAgents` (agents, threads grouped by project, thread with composer chips and fork, new thread, terminal links), `ShellWorkspace` (the thread's linked workspace module, the picker), `ShellViews` + `ViewStage` (agent views, the physics stage), `ShellVault` (vault: secrets and GIT with the GitHub account; secret broker), `ShellVoice` (voice pipeline, shell commands, VOICE panel, HUD), `ShellAmbient` (Ambient Focus), `ShellSystem` (installed tools, storage), `ShellLayout` (fixed / float carousel, the thread + workspace pair), `ShellPlacement` (where a panel opens), `ShellOrb` (the orb: where it floats, hands, the voice, callouts, its menu), `Services` (system deep links, settings, MQH client, git, files) |
+| `AI/` | `QvacHost` (starts the local AI service process, token, restarts), `QvacClient` (HTTP), `VoiceRecorder` (microphone, end of speech), `VoiceCommands` (registry, phrase templates, tool specs), `ThreadPulse` (a thread's timeline and state, docs/thread-view.md), `WorkspaceMap` (checkouts and worktrees, docs/workspaces.md), `QuickThreads` (the orb's thread list) |
+| `Shell/` | `MetaCodexShell` (wiring, panels by id and aliases, control-port commands), `ShellPanels` (dock, terminals, files, git logic, browser, scripts, settings, saved layouts), `ShellGestures` (Gestures studio, bindings, actions, recording, starter plugins), `ShellAgents` (agents, threads grouped by project, thread with composer chips and fork, new thread, terminal links), `ShellWorkspace` (the thread's linked workspace module, the picker), `ShellViews` + `ViewStage` (agent views, the physics stage), `ShellVault` (vault: secrets and GIT with the GitHub account; secret broker), `ShellVoice` (voice pipeline, shell commands, VOICE panel, HUD), `ShellAmbient` (Ambient Focus), `ShellSystem` (installed tools, storage), `ShellLayout` (fixed / float carousel, the thread + workspace pair), `ShellPlacement` (where a panel opens), `ShellOrb` (the orb: where it floats, hands, the voice, callouts, its menu), `ShellOrbThreads` (the five thread cards under its menu), `Services` (system deep links, settings, MQH client, git, files) |
 | `../Resources/Shaders/` | `AmbientFocus` (the dome: depth, floor plane, blur), `FocusMesh` (hand cut-outs), `FocusDepthCopy` (floor readback), `TextBend` (TMP SDF + bend), `UiIcon` (logos + bend), `StageLit` (physics bodies), `ViewImage` (images in views), `Orb` (the orb), `WristArt` (the wrist menu and the cast's light): in Resources so they ship without material assets; `../Shaders/McxPanelFx.hlsl` (the cast's scan plane, shared by every shader that draws inside a window) |
 | `../Resources/ToolIcons/` | tool logos (Simple Icons, CC0 SVG data; each logo is its owner's trademark, shown only to name the tool), built by `tools/make-tool-icons.js` |
 | `../Plugins/Android/MetaCodexVault.java` | the Keystore bridge (AES-256-GCM, StrongBox or TEE) |
@@ -204,7 +218,9 @@ Skills for agents (bundled into the userland at `/root/.claude/skills` and into 
 
 `/mnt/quest/scripts/*.lua` (skill `quest-scripting`): same Lua API, one file per behaviour. Settings are JSON
 (mirrored to MQH as the UI preference `quest.settings`, which agents can edit through the MQH API; the MQH
-token is not synced).
+token is not synced). Note: at the first sync after a start the app takes MQH's copy when its revision is not 0, so a
+setting saved without `OnSettingsChanged` (which pushes) comes back old after a restart; state that changes on its
+own (the orb's recently used threads) lives in its own file instead.
 
 ## Agents and threads (MQH)
 

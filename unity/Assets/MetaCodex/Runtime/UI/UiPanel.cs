@@ -347,6 +347,12 @@ namespace MetaCodex.UI
 
         public void SetHighlight(float state) => Shapes.SetState(_body, state);
 
+        /// The frame's colour (Theme.Frame at rest): the orb's thread cards wear their thread's state.
+        public void SetFrameTint(Color tint) => Shapes.SetTint(_body, tint);
+        /// The frame's highlight and colour now (self-tests).
+        public float HighlightNow => Shapes.Get(_body).State;
+        public Color FrameTintNow => Shapes.Get(_body).Tint;
+
         /// A plain rounded slab instead of the console frame (the keyboard: the deck of a normal keyboard).
         public void SetPlainBody(float corner)
         {

@@ -101,6 +101,7 @@ namespace MetaCodex.Shell
             _pulses.TryGetValue(threadId, out var before);
             foreach (var e in ThreadPulse.Changes(before, p)) SessionMemory.Add("thread", threadId, e);
             _pulses[threadId] = p;
+            NoteThreadDone(threadId, before, p, threadId == _threadOpen && IsPanelOpen("thread")); // the orb's cards: DONE · NEW
             NotifyThreadChange(threadId, before, p); // the orb: answered / error / needs you (ShellThreadView)
         }
 
@@ -236,6 +237,7 @@ namespace MetaCodex.Shell
         private string SubjectThread(UiPanel focus)
         {
             if (focus != null && (focus.Id == "thread" || focus.Id == "thread-ws") && _threadOpen != null) return _threadOpen;
+            if (focus != null && focus.Id != null && focus.Id.StartsWith("orb-thread-") && OrbCardThread(focus) != null) return OrbCardThread(focus); // the orb's card
             if (focus != null && focus.Id == "threads" && _threadSel != null) return _threadSel;
             if (_threadOpen != null) return _threadOpen;
             return (string)_threads.OfType<JObject>().OrderByDescending(t => t["updatedAt"]?.Value<long>() ?? 0).FirstOrDefault()?["id"];

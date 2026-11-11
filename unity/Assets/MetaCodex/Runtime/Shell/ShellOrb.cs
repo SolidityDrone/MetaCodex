@@ -65,7 +65,7 @@ namespace MetaCodex.Shell
             UiPanelFx.Eye = () => Head != null ? Head.position : (Vector3?)null;
             _orbOnCast = (p, opening) =>
             {
-                if (Orb == null || !Orb.Visible || p == null || p == _orbMenu) return;
+                if (Orb == null || !Orb.Visible || p == null || p == _orbMenu || p.Id != null && p.Id.StartsWith("orb-")) return;
                 if (opening) Orb.Cast(p.transform.position);
             };
             _orbOnAbsorb = p => { if (Orb != null && Orb.Visible) Orb.Absorb(); };
@@ -176,7 +176,7 @@ namespace MetaCodex.Shell
                 var ray = new Ray(eye, (at + right * (r * probe.x) + up * (r * probe.y) - eye).normalized);
                 foreach (var p in Router.Panels)
                 {
-                    if (p == null || !p.IsOpen || p == _orbMenu || p.Id == "toast" || p.Id == "voice-hud") continue;
+                    if (p == null || !p.IsOpen || p == _orbMenu || p.Id == "toast" || p.Id == "voice-hud" || p.Id != null && p.Id.StartsWith("orb-")) continue;
                     if (p.Raycast(ray, out _, out _)) return true;
                 }
             }
@@ -466,6 +466,9 @@ namespace MetaCodex.Shell
             _orbMenu.Draggable = false;
             _orbMenu.LightTransition = true;
             Router.Register(_orbMenu);
+            // under it, the threads used last (ShellOrbThreads): they come and go with it
+            _orbMenu.Opened += _ => OpenOrbThreads();
+            _orbMenu.Closed += _ => CloseOrbThreads();
             const float pad = 0.007f, gap = 0.005f;
             float bw = (BillboardW - pad * 2f - gap * 3f) / 4f, bh = BillboardH - pad * 2f;
             UiButton B(int k, string text, Action act, UiButtonStyle style = UiButtonStyle.Normal) =>
@@ -579,7 +582,7 @@ namespace MetaCodex.Shell
             TickOrbPlace(dt);
             if (Gestures != null) TickOrbHands(dt);
             TickOrbVoice(dt);
-            if (_orbMenu != null && _orbMenu.gameObject.activeSelf) PlaceOrbMenu(false);
+            if (_orbMenu != null && _orbMenu.gameObject.activeSelf) { PlaceOrbMenu(false); TickOrbThreads(); }
         }
 
         /// Self-tests: one frame of the orb (the Editor has no frame loop).
