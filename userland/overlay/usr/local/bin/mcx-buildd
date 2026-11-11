@@ -1,0 +1,352 @@
+#!/usr/bin/python3 -I
+"""mcx-buildd: runs native app builds (mcx-build) away from MetaCodex's frame loop, one job at a time.
+
+  mcx-buildd ensure            start the daemon unless it runs (MQH's mqh-run does this at start)
+  mcx-buildd serve             the daemon itself (foreground)
+  mcx-buildd status            JSON: pid, CPU set, cores, the running job, the queue, the last result
+  mcx-buildd run [--] <mcx-build args>   hand a job to the daemon and print its output (exit = the job's exit)
+  mcx-buildd stop              stop the daemon
+
+Why: Horizon OS keeps MetaCodex and every process it starts (its terminals too) on cores 3-5, the frame loop's
+cores; only processes of the app's service process (":ai", where MQH runs) sit on cores 0-2. MQH starts this
+daemon, so jobs handed to it from any shell build on cores 0-2 (docs/native-build-and-install.md).
+Socket: /tmp/mcx-buildd/sock (a folder only root of this Linux can open; other Android apps cannot reach it).
+While a job runs /tmp/mcx-buildd/busy exists (MetaCodex's service holds a wake lock while it does).
+A client that goes away (Ctrl+C) cancels its job. Exit 100 from `run`: no daemon (mcx-app then builds itself).
+Shipped by MetaCodex (overlay); edits are overwritten.
+"""
+import json
+import os
+import shutil
+import signal
+import socket
+import subprocess
+import sys
+import threading
+import time
+
+D = os.environ.get("MCX_BUILDD_DIR", "/tmp/mcx-buildd")
+SOCK = os.path.join(D, "sock")
+BUSY = os.path.join(D, "busy")
+PIDF = os.path.join(D, "pid")
+LOG = os.environ.get("MCX_BUILDD_LOG", os.path.expanduser("~/.metacodex/buildd.log"))
+NICE = int(os.environ.get("MCX_BUILDD_NICE", "10"))
+MAX_QUEUE = 4
+HERE = os.path.dirname(os.path.realpath(__file__))
+
+
+def mcx_build():
+    for p in (os.path.join(HERE, "mcx-build"), "/usr/local/bin/mcx-build"):
+        if os.path.exists(p):
+            return p
+    return shutil.which("mcx-build") or "mcx-build"
+
+
+def read(path):
+    try:
+        with open(path) as f:
+            return f.read()
+    except OSError:
+        return ""
+
+
+def cpus():
+    for line in read("/proc/self/status").splitlines():
+        if line.startswith("Cpus_allowed_list:"):
+            return line.split(":", 1)[1].strip()
+    return "?"
+
+
+def log(msg):
+    try:
+        os.makedirs(os.path.dirname(LOG), exist_ok=True)
+        with open(LOG, "a") as f:
+            f.write(time.strftime("%F %T ") + msg + "\n")
+    except OSError:
+        pass
+
+
+class Daemon:
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.turn = threading.Condition(self.lock)
+        self.queue = []  # job ids waiting, in order
+        self.running = None  # {"id", "args", "started", "pid"}
+        self.last = None
+        self.next_id = 1
+        self.pin = []
+        try:  # cores 0-2 when this process may use them (it does under the app's service process)
+            if subprocess.run(["taskset", "-c", "0-2", "true"], capture_output=True).returncode == 0:
+                self.pin = ["taskset", "-c", "0-2"]
+        except OSError:
+            pass
+
+    def status(self):
+        with self.lock:
+            run = dict(self.running) if self.running else None
+            if run:
+                run["seconds"] = round(time.time() - run["started"], 1)
+            return {"pid": os.getpid(), "cpuset": read("/proc/self/cpuset").strip(), "cpus": cpus(),
+                    "pinned": bool(self.pin), "nice": NICE, "running": run, "queued": len(self.queue), "last": self.last}
+
+    def handle(self, conn):
+        f = conn.makefile("rwb", buffering=0)
+
+        def send(obj):
+            f.write((json.dumps(obj) + "\n").encode())
+
+        try:
+            req = json.loads(f.readline().decode() or "{}")
+        except (ValueError, OSError):
+            return
+        op = req.get("op", "run")
+        if op == "status":
+            send(self.status())
+            return
+        if op == "stop":
+            send({"ok": True})
+            os.kill(os.getpid(), signal.SIGTERM)
+            return
+        args = [str(a) for a in req.get("args", [])]
+        cwd = req.get("cwd") or "/root"
+        with self.lock:
+            if len(self.queue) >= MAX_QUEUE:
+                send({"line": f"mcx-buildd: {len(self.queue)} jobs are waiting already: try again later"})
+                send({"exit": 5})
+                return
+            jid = self.next_id
+            self.next_id += 1
+            self.queue.append(jid)
+            ahead = self.queue.index(jid) + (1 if self.running else 0)
+        if ahead:
+            send({"line": f"mcx-buildd: queued behind {ahead} job(s) (one build at a time keeps MetaCodex smooth)"})
+        gone = threading.Event()
+
+        def watch_client():  # the client closes the socket when it is stopped: cancel the job
+            try:
+                while conn.recv(64):
+                    pass
+            except OSError:
+                pass
+            gone.set()
+            with self.lock:
+                self.turn.notify_all()
+
+        threading.Thread(target=watch_client, daemon=True).start()
+        with self.lock:
+            while self.queue[0] != jid or self.running is not None:
+                if gone.is_set():
+                    self.queue.remove(jid)
+                    self.turn.notify_all()
+                    return
+                self.turn.wait(1.0)
+            self.queue.pop(0)
+            self.running = {"id": jid, "args": args, "started": time.time(), "pid": None}
+        code, summary = 1, None
+        try:
+            with open(BUSY, "w") as b:
+                b.write(json.dumps({"id": jid, "args": args, "started": time.time()}))
+            cmd = ["nice", "-n", str(NICE)] + self.pin + [mcx_build()] + args
+            if "--json" not in args:
+                cmd.append("--json")
+            send({"line": f"mcx-buildd: job {jid} on cores {'0-2' if self.pin else cpus()} at nice {NICE}"})
+            log(f"job {jid} start: {args} cwd {cwd}")
+            env = dict(os.environ)
+            env.setdefault("MCX_BUILD_JOBS", "2")
+            p = subprocess.Popen(cmd, cwd=cwd if os.path.isdir(cwd) else "/root", stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                 env=env, start_new_session=True)
+            with self.lock:
+                self.running["pid"] = p.pid
+
+            def killer():
+                gone.wait()
+                if p.poll() is None:
+                    log(f"job {jid}: client gone, stopping it")
+                    try:
+                        os.killpg(p.pid, signal.SIGTERM)
+                        time.sleep(2)
+                        os.killpg(p.pid, signal.SIGKILL)
+                    except OSError:
+                        pass
+
+            threading.Thread(target=killer, daemon=True).start()
+            want_json = "--json" in args
+            for raw in p.stdout:
+                line = raw.decode("utf-8", "replace").rstrip("\n")
+                if line.startswith("MCX-BUILD-JSON "):
+                    try:
+                        summary = json.loads(line[15:])
+                    except ValueError:
+                        pass
+                    if not want_json:
+                        continue
+                if not gone.is_set():
+                    try:
+                        send({"line": line})
+                    except OSError:
+                        gone.set()
+            code = p.wait()
+        except OSError as e:
+            try:
+                send({"line": f"mcx-buildd: {e}"})
+            except OSError:
+                pass
+        finally:
+            try:
+                os.remove(BUSY)
+            except OSError:
+                pass
+            with self.lock:
+                self.last = {"id": jid, "args": args, "exit": code, "seconds": round(time.time() - self.running["started"], 1),
+                             "stages": (summary or {}).get("stages"), "result": (summary or {}).get("result")}
+                self.running = None
+                self.turn.notify_all()
+            log(f"job {jid} end: exit {code} {self.last.get('result')}")
+            gone.set()
+        try:
+            send({"exit": code})
+        except OSError:
+            pass
+
+    def serve(self):
+        os.makedirs(D, mode=0o700, exist_ok=True)
+        os.chmod(D, 0o700)
+        if os.path.exists(SOCK):
+            if alive():
+                print("mcx-buildd: already running", file=sys.stderr)
+                return 0
+            os.remove(SOCK)
+        try:
+            os.remove(BUSY)
+        except OSError:
+            pass
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        s.bind(SOCK)
+        os.chmod(SOCK, 0o600)
+        s.listen(8)
+        with open(PIDF, "w") as f:
+            f.write(str(os.getpid()))
+
+        def bye(*_):
+            for p in (SOCK, PIDF, BUSY):
+                try:
+                    os.remove(p)
+                except OSError:
+                    pass
+            os._exit(0)
+
+        signal.signal(signal.SIGTERM, bye)
+        signal.signal(signal.SIGINT, bye)
+        signal.signal(signal.SIGHUP, signal.SIG_IGN)
+        def warm():  # glue object + precompiled headers, once per toolchain: the first build is warm too
+            try:
+                subprocess.run(["nice", "-n", "19"] + self.pin + [mcx_build(), "--warm"], stdout=subprocess.DEVNULL,
+                               stderr=subprocess.DEVNULL, timeout=600)
+            except (OSError, subprocess.SubprocessError):
+                pass
+
+        threading.Thread(target=warm, daemon=True).start()
+        log(f"serving on {SOCK}: pid {os.getpid()}, cpuset {read('/proc/self/cpuset').strip()}, cpus {cpus()}, pinned {bool(self.pin)}")
+        while True:
+            c, _ = s.accept()
+            threading.Thread(target=self._conn, args=(c,), daemon=True).start()
+
+    def _conn(self, c):
+        try:
+            self.handle(c)
+        except Exception as e:  # one bad client never ends the daemon
+            log(f"connection error: {e!r}")
+        finally:
+            try:
+                c.close()
+            except OSError:
+                pass
+
+
+def connect(timeout=3.0):
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    s.settimeout(timeout)
+    s.connect(SOCK)
+    s.settimeout(None)
+    return s
+
+
+def alive():
+    try:
+        s = connect(1.0)
+        s.sendall(b'{"op":"status"}\n')
+        ok = bool(s.makefile("rb").readline())
+        s.close()
+        return ok
+    except OSError:
+        return False
+
+
+def ensure():
+    if alive():
+        return 0
+    os.makedirs(os.path.dirname(LOG), exist_ok=True)
+    out = open(LOG, "a")
+    subprocess.Popen([sys.executable, "-I", os.path.realpath(__file__), "serve"], stdin=subprocess.DEVNULL, stdout=out,
+                     stderr=out, start_new_session=True, close_fds=True)
+    for _ in range(30):
+        time.sleep(0.1)
+        if alive():
+            return 0
+    print("mcx-buildd: did not start (see " + LOG + ")", file=sys.stderr)
+    return 1
+
+
+def client(op, args=None):
+    try:
+        s = connect()
+    except OSError:
+        if op == "status":
+            print(json.dumps({"running": False, "error": "no daemon (MQH starts it: mcx-buildd ensure)"}))
+        return 100
+    f = s.makefile("rb")
+    s.sendall((json.dumps({"op": op, "args": args or [], "cwd": os.getcwd()}) + "\n").encode())
+    code = 0
+    try:
+        for raw in f:
+            msg = json.loads(raw.decode())
+            if op == "status" or op == "stop":
+                print(json.dumps(msg, indent=1))
+                break
+            if "line" in msg:
+                print(msg["line"], flush=True)
+            if "exit" in msg:
+                code = msg["exit"]
+                break
+        else:
+            if op == "run":
+                print("mcx-buildd: the daemon closed the connection", file=sys.stderr)
+                code = 1
+    except KeyboardInterrupt:
+        code = 130
+    finally:
+        s.close()
+    return code
+
+
+def main(argv):
+    cmd = argv[0] if argv else ""
+    if cmd == "serve":
+        return Daemon().serve()
+    if cmd == "ensure":
+        return ensure()
+    if cmd in ("status", "stop"):
+        return client(cmd)
+    if cmd == "run":
+        rest = argv[1:]
+        if rest and rest[0] == "--":
+            rest = rest[1:]
+        # paths relative to the caller's folder: the daemon runs elsewhere
+        rest = [os.path.abspath(a) if not a.startswith("-") and os.path.exists(a) else a for a in rest]
+        return client("run", rest)
+    print(__doc__)
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

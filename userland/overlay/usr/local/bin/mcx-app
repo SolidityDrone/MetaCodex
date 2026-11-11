@@ -2,7 +2,8 @@
 # mcx-app: build native Quest apps in MetaCodex's Linux and install them on this headset (skill quest-native-apps).
 #   mcx-app doctor                            are the tools there? may MetaCodex install apps? (run it first)
 #   mcx-app new <dir> [--package <id>] [--label <name>]   a new app from the template (C++, OpenXR, OpenGL ES)
-#   mcx-app build [dir]                       -> <dir>/build/<dir name>.apk, at low priority (the headset keeps 72 fps)
+#   mcx-app check [dir]                       compile check only (seconds): errors as file:line:col: error: ...
+#   mcx-app build [dir]                       -> <dir>/build/<dir name>.apk, incremental, on cores 0-2 (the headset keeps 72 fps)
 #   mcx-app install [dir|apk]                 Android's installer; tells you what to ask the user; waits up to 5 min
 #   mcx-app launch [dir|package]              starts the app in the headset (MetaCodex goes to the background)
 #   mcx-app run [dir]                         build + install + launch
@@ -16,6 +17,8 @@ TEMPLATE=/opt/metacodex/quest-native/template
 LOGD=/opt/metacodex/quest-native/logd.py
 LOGPORT=47950
 LOGDIR=/tmp/mcx-app-logs
+MCX_BUILD=${MCX_BUILD:-mcx-build}
+MCX_BUILDD=${MCX_BUILDD:-mcx-buildd}
 die() { echo "mcx-app: $*" >&2; exit 1; }
 say() { printf '\033[1;36m==> %s\033[0m\n' "$*"; }
 ask() { printf '\033[1;33m>>> ASK THE USER: %s\033[0m\n' "$*"; }
@@ -46,7 +49,7 @@ doctor() {
     echo "WAIT the first-use setup is still running (log /root/.metacodex/first-use.log: $(tail -1 /root/.metacodex/first-use.log 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g'))"
     return 1
   fi
-  for t in aapt2 zipalign apksigner keytool python3; do
+  for t in mcx-build mcx-buildd aapt2 openssl python3; do
     if command -v "$t" >/dev/null; then echo "ok      $t"; else echo "MISSING $t"; bad=1; fi
   done
   for f in /opt/android-ndk/toolchains/llvm/prebuilt/linux-arm64/bin/clang++ /opt/android-sdk/platforms/android-34/android.jar \
@@ -55,6 +58,9 @@ doctor() {
   done
   if [ -f "$HOME/.android/metacodex-debug.keystore" ]; then echo "ok      signing key ~/.android/metacodex-debug.keystore (keep it)"
   else echo "note    no signing key yet: the first build makes ~/.android/metacodex-debug.keystore"; fi
+  if off_frame_loop; then echo "builds  here, on cores 0-2 ($(cat /proc/self/cpuset 2>/dev/null))"
+  elif "$MCX_BUILDD" status >/dev/null 2>&1; then echo "builds  through mcx-buildd (cores $("$MCX_BUILDD" status | sed -n 's/.*"cpus": "\([^"]*\)".*/\1/p'))"
+  else echo "warn    no builder daemon: builds from this shell would share MetaCodex's rendering cores (MQH starts mcx-buildd)"; fi
   echo "install MetaCodex may install apps (path B): $(ui system can-install)"
   if (( bad )); then echo "fix: mcx-setup quest   (installs everything above: about 400 MB download, 2.5 GB on disk)"; return 1; fi
   return 0
@@ -94,12 +100,32 @@ new_app() {
   echo "next:  mcx-app run $dir   (build + install + launch; the user confirms the install in the headset)"
 }
 
+# Builds run on cores 0-2, never next to the frame loop (cores 3-5, where MetaCodex and its own terminals live):
+# here when this shell may use those cores (MQH's agents run under the app's service process), else through the
+# builder daemon (mcx-buildd, started by MQH). Without a daemon: here, at the lowest priority, one job, with a warning.
+off_frame_loop() { [ "$(cat /proc/self/cpuset 2>/dev/null)" != /immersive ] && taskset -c 0-2 true 2>/dev/null; }
+builder() {
+  if off_frame_loop; then
+    nice -n 10 taskset -c 0-2 "$MCX_BUILD" "$@"; return
+  fi
+  local rc
+  if command -v "$MCX_BUILDD" >/dev/null; then
+    "$MCX_BUILDD" run -- "$@"; rc=$?
+    [ "$rc" -ne 100 ] && return "$rc"
+  fi
+  echo "mcx-app: warning: no builder daemon (MQH starts mcx-buildd): building in this shell, which shares MetaCodex's rendering cores, at the lowest priority" >&2
+  nice -n 19 "$MCX_BUILD" -j1 "$@"
+}
+
 build_app() {
   local d; d=$(dir_of "${1:-.}")
-  local low=(nice -n 10)
-  taskset -c 0-2 true 2>/dev/null && low+=(taskset -c 0-2) # cores 0-2 when the app's CPU set allows them
-  say "building $(pkg_of "$d") (${low[*]})"
-  "${low[@]}" "$d/build.sh" device
+  say "building $(pkg_of "$d")"
+  builder "$d"
+}
+
+check_app() {
+  local d; d=$(dir_of "${1:-.}")
+  builder --check "$d"
 }
 
 hint() {
@@ -178,11 +204,12 @@ cmd=${1:-}
 case "$cmd" in
   doctor) doctor ;;
   new) new_app "$@" ;;
+  check) check_app "${1:-.}" ;;
   build) build_app "${1:-.}" ;;
   install) install_app "${1:-.}" ;;
   launch) launch_app "${1:-}" ;;
   run) build_app "${1:-.}" && install_app "${1:-.}" && launch_app "${1:-.}" ;;
   logs) logs_app "$@" ;;
   info) echo "$(ui system app "$(pkg_arg "${1:-}")")" ;;
-  *) sed -n 2,13p "$0"; exit 2 ;;
+  *) sed -n 2,14p "$0"; exit 2 ;;
 esac

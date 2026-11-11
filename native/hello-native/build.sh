@@ -2,7 +2,8 @@
 # A native Quest app (OpenXR + OpenGL ES, no Java) -> build/<folder>.apk, without Gradle or Unity:
 # compile src/*.cpp src/*.c -> link lib<name>.so -> aapt2 link (manifest, optional res/ and assets/) ->
 # add lib/arm64-v8a -> zipalign -> sign. Package name, label and library name come from AndroidManifest.xml.
-#   ./build.sh device   inside MetaCodex's Linux (what `mcx-app build` runs; `mcx-setup quest` installs the tools)
+#   ./build.sh device   inside MetaCodex's Linux: hands over to mcx-build (incremental; what `mcx-app build` runs);
+#                       MCX_LEGACY_BUILD=1 keeps this full rebuild (`mcx-setup quest` installs the tools)
 #   ./build.sh pc       in WSL on the PC, with the Android tools of the Unity install on Windows (NDK r27,
 #                       build-tools 36, OpenJDK); needs OPENXR_INCLUDE and OPENXR_LOADER (Khronos OpenXR loader AAR)
 set -euo pipefail
@@ -30,6 +31,8 @@ if [[ "$MODE" == pc ]]; then
   KS="${KEYSTORE:-$HERE/../.debug.keystore}"
   w() { wslpath -w "$1"; } # the tools are Windows programs: Windows paths
 elif [[ "$MODE" == device ]]; then
+  # MetaCodex ships the incremental pipeline (objects, aapt2 and signing only when needed): use it
+  if [[ -z "${MCX_LEGACY_BUILD:-}" ]] && command -v mcx-build >/dev/null; then exec mcx-build "$HERE"; fi
   NDK="${ANDROID_NDK_HOME:-/opt/android-ndk}"
   SDK="${ANDROID_HOME:-/opt/android-sdk}"
   BIN="$NDK/toolchains/llvm/prebuilt/linux-arm64/bin"

@@ -1,0 +1,943 @@
+#!/usr/bin/python3 -I
+"""mcx-build: the incremental build of a native Quest app (C/C++, OpenXR, OpenGL ES / Vulkan) into a signed APK.
+
+  mcx-build [options] <app dir>       -> <dir>/build/<dir name>.apk
+  mcx-build --check [options] <dir>   syntax and type check only (no objects, no APK): the fast loop
+  mcx-build --warm                    fill the shared cache (glue object, precompiled headers): mcx-buildd does it at start
+Options: -j N parallel compiles (default 2) | --clean (drop build/ first) | --json (last line: MCX-BUILD-JSON {...})
+         --signer auto|python|apksigner (default auto: the built-in v2 signer, apksigner when it cannot run)
+
+What it skips (docs/native-build-and-install.md, "speed"):
+  * objects whose source, headers and flags did not change (clang depfiles); the NDK's native_app_glue object is
+    compiled once per toolchain into ~/.cache/mcx-build and shared by every app;
+  * aapt2 (manifest, res/, assets/) when none of them changed: the linked base is kept in build/.cache;
+  * zipalign and the JVM: the APK is written here, stored entries aligned, libraries deflated once per content;
+  * apksigner (a JVM start): APK Signature Scheme v2 is signed here with the same key
+    (~/.android/metacodex-debug.keystore, read once through openssl into a private cache next to it).
+Guards: it waits while MemAvailable is under MCX_BUILD_MIN_MB (default 900) and stops a tool when it falls under
+MCX_BUILD_KILL_MB (default 450); between stages it waits while the hottest thermal zone is over MCX_BUILD_MAX_C.
+Every stage reports wall time, CPU time and the peak RSS of its tools. Exit codes: 0 ok, 1 compile/link/package
+error, 2 usage, 3 missing tools (mcx-setup quest), 4 stopped by a guard.
+Shipped by MetaCodex (overlay); edits are overwritten.
+"""
+import hashlib
+import json
+import os
+import re
+import shutil
+import struct
+import subprocess
+import sys
+import threading
+import time
+import zipfile
+import zlib
+
+VERSION = 1
+HOME = os.path.expanduser("~")
+CACHE = os.environ.get("MCX_BUILD_CACHE", os.path.join(HOME, ".cache", "mcx-build"))
+KEYSTORE = os.environ.get("KEYSTORE", os.path.join(HOME, ".android", "metacodex-debug.keystore"))
+KS_PASS = "android"
+KS_ALIAS = "metacodex"
+MIN_MB = int(os.environ.get("MCX_BUILD_MIN_MB", "900"))
+KILL_MB = int(os.environ.get("MCX_BUILD_KILL_MB", "450"))
+MAX_C = float(os.environ.get("MCX_BUILD_MAX_C", "0"))  # 0 = no heat guard (set by mcx-buildd once measured)
+
+
+class Stop(Exception):
+    """A guard stopped the build (exit 4)."""
+
+
+class Fail(Exception):
+    """A tool failed (exit 1); the message is already printed."""
+
+
+def say(msg):
+    print(msg, flush=True)
+
+
+# ------------------------------------------------------------------------------------------------ guards
+
+def mem_available_mb():
+    try:
+        with open("/proc/meminfo") as f:
+            for line in f:
+                if line.startswith("MemAvailable:"):
+                    return int(line.split()[1]) // 1024
+    except OSError:
+        pass
+    return -1
+
+
+def hottest_c():
+    best = -1.0
+    base = "/sys/class/thermal"
+    try:
+        zones = [z for z in os.listdir(base) if z.startswith("thermal_zone")]
+    except OSError:
+        return best
+    for z in zones:
+        try:
+            with open(os.path.join(base, z, "temp")) as f:
+                v = int(f.read().strip())
+            c = v / 1000.0 if v > 1000 else float(v)
+            if 0 < c < 150:
+                best = max(best, c)
+        except (OSError, ValueError):
+            continue
+    return best
+
+
+def wait_for_room(stage):
+    """Before a stage: memory floor and heat limit. Waits up to 60 s each, then stops."""
+    t0 = time.time()
+    while True:
+        mb = mem_available_mb()
+        if mb < 0 or mb >= MIN_MB:
+            break
+        if time.time() - t0 > 60:
+            raise Stop(f"stopped before {stage}: MemAvailable {mb} MB < {MIN_MB} MB for 60 s (close something, or wait)")
+        if int(time.time() - t0) % 10 == 0:
+            say(f"   waiting: MemAvailable {mb} MB < {MIN_MB} MB")
+        time.sleep(1)
+    if MAX_C > 0:
+        t0 = time.time()
+        while True:
+            c = hottest_c()
+            if c < 0 or c <= MAX_C:
+                break
+            if time.time() - t0 > 120:
+                say(f"   still hot ({c:.0f} C > {MAX_C:.0f} C) after 120 s: going on")
+                break
+            say(f"   cooling: {c:.0f} C > {MAX_C:.0f} C")
+            time.sleep(5)
+
+
+class Stats:
+    def __init__(self):
+        self.stages = []
+        self.min_avail = 1 << 30
+        self.diags = []
+        self.lock = threading.Lock()
+
+    def note_mem(self, mb):
+        if mb >= 0:
+            with self.lock:
+                self.min_avail = min(self.min_avail, mb)
+
+
+STATS = Stats()
+
+
+def run(cmd, stage, capture=False, env=None):
+    """Runs a tool; returns (exit code, output, cpu seconds, peak RSS MB). A memory watcher stops it under KILL_MB."""
+    p = subprocess.Popen(cmd, stdout=subprocess.PIPE if capture else None, stderr=subprocess.STDOUT if capture else None, env=env)
+    killed = []
+    done = threading.Event()
+
+    def watch():
+        while not done.wait(0.25):
+            mb = mem_available_mb()
+            STATS.note_mem(mb)
+            if 0 <= mb < KILL_MB:
+                killed.append(mb)
+                try:
+                    p.kill()
+                except OSError:
+                    pass
+                return
+
+    w = threading.Thread(target=watch, daemon=True)
+    w.start()
+    out = p.stdout.read().decode("utf-8", "replace") if capture else ""
+    _, status, ru = os.wait4(p.pid, 0)
+    p.returncode = os.waitstatus_to_exitcode(status)
+    done.set()
+    if killed:
+        raise Stop(f"stopped {stage}: MemAvailable {killed[0]} MB < {KILL_MB} MB (the tool was killed to keep MetaCodex alive)")
+    return p.returncode, out, ru.ru_utime + ru.ru_stime, ru.ru_maxrss / 1024.0
+
+
+class Stage:
+    def __init__(self, name):
+        self.name, self.cpu, self.rss, self.note = name, 0.0, 0.0, ""
+
+    def __enter__(self):
+        wait_for_room(self.name)
+        STATS.note_mem(mem_available_mb())
+        self.t0 = time.time()
+        self.c0 = os.times()
+        return self
+
+    def add(self, cpu, rss):
+        self.cpu += cpu
+        self.rss = max(self.rss, rss)
+
+    def __exit__(self, et, ev, tb):
+        c1 = os.times()
+        own_cpu = (c1.user - self.c0.user) + (c1.system - self.c0.system)
+        wall = time.time() - self.t0
+        cpu = self.cpu + own_cpu
+        import resource
+        own_rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024.0
+        rec = {"stage": self.name, "wall_s": round(wall, 3), "cpu_s": round(cpu, 3),
+               "peak_rss_mb": round(max(self.rss, own_rss if self.rss == 0 else self.rss), 1), "note": self.note,
+               "ok": et is None}
+        STATS.stages.append(rec)
+        if et is None:
+            say(f"   {self.name}: {wall:.2f} s (cpu {cpu:.2f} s, peak {rec['peak_rss_mb']:.0f} MB){'  ' + self.note if self.note else ''}")
+        return False
+
+
+# ------------------------------------------------------------------------------------------------ toolchain
+
+class Toolchain:
+    def __init__(self):
+        ndk = os.environ.get("ANDROID_NDK_HOME") or "/opt/android-ndk"
+        self.ndk = ndk
+        pre = os.path.join(ndk, "toolchains", "llvm", "prebuilt")
+        host = next((h for h in ("linux-arm64", "linux-aarch64", "linux-x86_64") if os.path.isdir(os.path.join(pre, h))), "linux-arm64")
+        self.bin = os.path.join(pre, host, "bin")
+        self.cc = os.path.join(self.bin, "clang")
+        self.cxx = os.path.join(self.bin, "clang++")
+        sdk = os.environ.get("ANDROID_HOME") or "/opt/android-sdk"
+        self.android_jar = os.environ.get("ANDROID_JAR") or os.path.join(sdk, "platforms", "android-34", "android.jar")
+        self.xr_inc = os.environ.get("OPENXR_INCLUDE") or "/opt/openxr/include"
+        self.xr_loader = os.environ.get("OPENXR_LOADER") or "/opt/openxr/lib/arm64-v8a/libopenxr_loader.so"
+        self.glue = os.path.join(ndk, "sources", "android", "native_app_glue")
+        self.aapt2 = os.environ.get("AAPT2") or shutil.which("aapt2") or "aapt2"
+        self.apksigner = os.environ.get("APKSIGNER") or shutil.which("apksigner")
+        self.openssl = shutil.which("openssl")
+
+    def missing(self, need_package):
+        miss = [p for p in (self.cxx, self.cc, os.path.join(self.glue, "android_native_app_glue.c"),
+                            os.path.join(self.xr_inc, "openxr", "openxr.h")) if not os.path.exists(p)]
+        if need_package:
+            miss += [p for p in (self.android_jar, self.xr_loader) if not os.path.exists(p)]
+            if not shutil.which(self.aapt2) and not os.path.exists(self.aapt2):
+                miss.append("aapt2")
+        return miss
+
+    def ident(self):
+        """Changes when the compiler changes (cache keys)."""
+        try:
+            st = os.stat(os.path.realpath(self.cxx))
+            return f"{os.path.realpath(self.cxx)}:{st.st_size}:{int(st.st_mtime)}"
+        except OSError:
+            return self.cxx
+
+
+# ------------------------------------------------------------------------------------------------ the app
+
+class App:
+    def __init__(self, d):
+        self.dir = os.path.realpath(d)
+        self.manifest = os.path.join(self.dir, "AndroidManifest.xml")
+        if not os.path.isfile(self.manifest):
+            raise SystemExit(f"mcx-build: no AndroidManifest.xml in {self.dir} (an app folder made by mcx-app new)")
+        m = open(self.manifest, encoding="utf-8").read()
+        pk = re.search(r'package="([^"]+)"', m)
+        lib = re.search(r'android\.app\.lib_name"\s+android:value="([^"]+)"', m)
+        if not pk or not lib:
+            raise SystemExit("mcx-build: AndroidManifest.xml needs package=\"...\" and the android.app.lib_name meta-data")
+        msdk = re.search(r'minSdkVersion="(\d+)"', m)
+        self.pkg, self.lib = pk.group(1), lib.group(1)
+        self.api = int(msdk.group(1)) if msdk else 32
+        self.name = os.path.basename(self.dir)
+        self.out = os.path.join(self.dir, "build")
+        self.cache = os.path.join(self.out, ".cache")
+        self.conf = {}
+        cf = os.path.join(self.dir, "build.conf")
+        if os.path.isfile(cf):  # optional: CFLAGS=..., CXXFLAGS=..., LDLIBS=... (extra flags, shell-split)
+            for line in open(cf, encoding="utf-8"):
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    self.conf[k.strip()] = v.strip()
+
+    def sources(self):
+        out = []
+        for root, dirs, files in os.walk(os.path.join(self.dir, "src")):
+            dirs[:] = sorted(d for d in dirs if not d.startswith("."))
+            for f in sorted(files):
+                if f.endswith((".cpp", ".cc", ".cxx", ".c")):
+                    out.append(os.path.join(root, f))
+        return out
+
+
+def split_flags(s):
+    import shlex
+    return shlex.split(s) if s else []
+
+
+PCH_HEADERS = """// mcx-build: system headers precompiled once per toolchain and -O level, shared by every app
+#include <android/log.h>
+#include <android/asset_manager.h>
+#include <android_native_app_glue.h>
+#include <EGL/egl.h>
+#include <GLES3/gl3.h>
+#include <jni.h>
+#include <openxr/openxr.h>
+#include <algorithm>
+#include <cmath>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <string>
+#include <vector>
+"""
+# a source that defines one of these changes what the headers above declare: it compiles without the PCH
+PCH_UNSAFE = re.compile(r"^\s*#\s*define\s+(XR_NO_PROTOTYPES|XR_EXTENSION_PROTOTYPES|GL_|EGL_|GLES|_GNU_SOURCE|_LIBCPP_|"
+                        r"_FILE_OFFSET_BITS|__ANDROID|ANDROID|JNI|_POSIX|_XOPEN|_BSD|_DEFAULT_SOURCE)", re.M)
+
+
+def base_flags(tc, app, is_c):
+    f = [f"--target=aarch64-linux-android{app.api}", "-fPIC", "-I" + tc.xr_inc, "-I" + tc.glue, "-fno-color-diagnostics"]
+    return f if is_c else f + ["-std=c++17"]
+
+
+def pch_for(tc, app, src, opt):
+    """The shared precompiled header for this source and -O level, built on first use; None when it does not apply."""
+    return build_pch(tc, app, opt) if pch_applies(app, src) else None
+
+
+def pch_applies(app, src):
+    if src.endswith(".c") or app.conf.get("PCH", "1") == "0" or os.environ.get("MCX_BUILD_PCH", "1") == "0":
+        return False
+    try:
+        if PCH_UNSAFE.search(open(src, encoding="utf-8", errors="replace").read()):
+            return False
+    except OSError:
+        return False
+    return True
+
+
+_pch_lock = threading.Lock()
+
+
+def build_pch(tc, app, opt, stage=None):
+    flags = base_flags(tc, app, False) + opt
+    key = hashlib.sha256(("|".join(flags) + tc.ident() + PCH_HEADERS + str(VERSION)).encode()).hexdigest()[:16]
+    pch = os.path.join(CACHE, f"sys-{key}.pch")
+    with _pch_lock:
+        if os.path.exists(pch):
+            return pch
+        os.makedirs(CACHE, exist_ok=True)
+        h = os.path.join(CACHE, f"sys-{key}.h")
+        with open(h, "w") as f:
+            f.write(PCH_HEADERS)
+        tmp = pch + f".{os.getpid()}.tmp"
+        rc, out, cpu, rss = run([tc.cxx] + flags + ["-x", "c++-header", h, "-o", tmp], "pch", capture=True)
+        if stage is not None:
+            stage.add(cpu, rss)
+        PCH_BUILT.append((cpu, rss))
+        if rc != 0:  # never block a build on the cache: compile without it
+            say("   note: the precompiled header did not build; compiling without it")
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+            return None
+        os.replace(tmp, pch)
+        return pch
+
+
+PCH_BUILT = []
+
+
+def compile_cmd(tc, app, src, extra, pch=None):
+    is_c = src.endswith(".c")
+    base = [tc.cc if is_c else tc.cxx] + base_flags(tc, app, is_c) + [f"-DAPP_ID_RAW={app.pkg}", "-I" + os.path.join(app.dir, "src")]
+    base += split_flags(app.conf.get("CFLAGS" if is_c else "CXXFLAGS", ""))
+    if pch:
+        base += ["-include-pch", pch]
+    return base + extra + ["-c", src]
+
+
+def obj_name(app, src):
+    rel = os.path.relpath(src, os.path.join(app.dir, "src"))
+    return os.path.join(app.out, "obj", rel.replace(os.sep, "__") + ".o")
+
+
+def stale(obj, dep, flags_key):
+    """True when the object must be rebuilt: missing, other flags, or any file of its depfile is newer."""
+    stamp = obj + ".flags"
+    if not (os.path.exists(obj) and os.path.exists(dep) and os.path.exists(stamp)):
+        return True
+    if open(stamp).read() != flags_key:
+        return True
+    try:
+        t = os.stat(obj).st_mtime
+        text = open(dep, encoding="utf-8", errors="replace").read().replace("\\\n", " ")
+        files = text.split(":", 1)[1].split() if ":" in text else []
+        for f in files:
+            if os.stat(f).st_mtime > t:
+                return True
+    except OSError:
+        return True
+    return False
+
+
+ERR = re.compile(r"^(?P<file>[^:\n]+):(?P<line>\d+):(?P<col>\d+): (?P<kind>error|warning|fatal error): (?P<msg>.*)$", re.M)
+
+
+def diagnostics(text):
+    return [{"file": m["file"], "line": int(m["line"]), "col": int(m["col"]), "kind": m["kind"].replace("fatal ", ""),
+             "message": m["msg"]} for m in ERR.finditer(text)]
+
+
+def parallel(jobs, n, fn):
+    """Runs fn(job) for every job on up to n threads; returns the results in order. Stops early on Stop."""
+    results = [None] * len(jobs)
+    lock = threading.Lock()
+    nxt = [0]
+    errors = []
+
+    def worker():
+        while True:
+            with lock:
+                if nxt[0] >= len(jobs) or errors:
+                    return
+                i = nxt[0]
+                nxt[0] += 1
+            try:
+                results[i] = fn(jobs[i])
+            except Stop as e:
+                errors.append(e)
+                return
+
+    ts = [threading.Thread(target=worker) for _ in range(max(1, min(n, len(jobs))))]
+    for t in ts:
+        t.start()
+    for t in ts:
+        t.join()
+    if errors:
+        raise errors[0]
+    return results
+
+
+def glue_object(tc, app):
+    """native_app_glue compiled once per toolchain and target, shared by every app."""
+    key = hashlib.sha256(f"{tc.ident()}|{app.api}|O2|v{VERSION}".encode()).hexdigest()[:16]
+    o = os.path.join(CACHE, f"native_app_glue-{key}.o")
+    if os.path.exists(o):
+        return o, 0.0, 0.0, False
+    os.makedirs(CACHE, exist_ok=True)
+    tmp = o + f".{os.getpid()}.tmp"
+    cmd = [tc.cc, f"--target=aarch64-linux-android{app.api}", "-O2", "-fPIC", "-fno-color-diagnostics",
+           "-c", os.path.join(tc.glue, "android_native_app_glue.c"), "-o", tmp]
+    rc, out, cpu, rss = run(cmd, "compile", capture=True)
+    if rc != 0:
+        say(out)
+        raise Fail("native_app_glue did not compile")
+    os.replace(tmp, o)
+    return o, cpu, rss, True
+
+
+def do_compile(tc, app, jobs_n, check):
+    srcs = app.sources()
+    if not srcs:
+        say("mcx-build: no sources in src/ (.cpp .cc .c)")
+        raise Fail("no sources")
+    diags, failed = [], []
+    name = "check" if check else "compile"
+    with Stage(name) as st:
+        if check:
+            def one(src):
+                pch = pch_for(tc, app, src, ["-O0"])
+                return src, run(compile_cmd(tc, app, src, ["-O0"], pch)[:-2] + ["-fsyntax-only", src], "check", capture=True)
+            todo = srcs
+        else:
+            os.makedirs(os.path.join(app.out, "obj"), exist_ok=True)
+            opt = split_flags(app.conf.get("OPT", "-O2"))
+            todo = []
+            for s in srcs:
+                o = obj_name(app, s)
+                key = " ".join(compile_cmd(tc, app, s, opt, "pch" if pch_applies(app, s) else None)) + "|" + tc.ident()
+                if stale(o, o[:-2] + ".d", key):
+                    todo.append((s, o, key))
+
+            def one(job):
+                s, o, key = job
+                tmp = o + ".tmp"
+                cmd = compile_cmd(tc, app, s, opt, pch_for(tc, app, s, opt)) + ["-o", tmp, "-MMD", "-MF", o[:-2] + ".d"]
+                res = run(cmd, "compile", capture=True)
+                if res[0] == 0:
+                    os.replace(tmp, o)
+                    with open(o + ".flags", "w") as f:
+                        f.write(key)
+                return s, res
+        results = parallel(todo, jobs_n, one) if todo else []
+        for cpu, rss in PCH_BUILT:
+            st.add(cpu, rss)
+        pch_note = ", precompiled header built" if PCH_BUILT else ""
+        for src, (rc, out, cpu, rss) in results:
+            st.add(cpu, rss)
+            if out.strip():
+                sys.stdout.write(out if out.endswith("\n") else out + "\n")
+            diags += diagnostics(out)
+            if rc != 0:
+                failed.append(src)
+        if not check:
+            g, cpu, rss, built = glue_object(tc, app)
+            st.add(cpu, rss)
+            st.note = f"{len(todo)}/{len(srcs)} sources compiled" + (", glue compiled" if built else ", glue cached") + pch_note
+        else:
+            st.note = f"{len(srcs)} sources" + pch_note
+    STATS.diags = diags
+    errs = [d for d in diags if d["kind"] == "error"]
+    if failed:
+        say(f"RESULT: {len(errs) or len(failed)} error(s) in {len(failed)} file(s): fix them, then {name} again")
+        raise Fail("compile errors")
+    return diags
+
+
+def do_link(tc, app):
+    lib_dir = os.path.join(app.out, "lib", "arm64-v8a")
+    os.makedirs(lib_dir, exist_ok=True)
+    so = os.path.join(lib_dir, f"lib{app.lib}.so")
+    objs = [obj_name(app, s) for s in app.sources()]
+    glue, _, _, _ = glue_object(tc, app)
+    loader = os.path.join(lib_dir, "libopenxr_loader.so")
+    if not (os.path.exists(loader) and os.path.getsize(loader) == os.path.getsize(tc.xr_loader)):
+        shutil.copyfile(tc.xr_loader, loader)
+    libs = split_flags(app.conf.get("LDLIBS", ""))
+    # relink only when an object or the loader is newer than the library
+    if os.path.exists(so):
+        t = os.stat(so).st_mtime
+        stamp = so + ".flags"
+        key = " ".join(libs) + "|" + tc.ident()
+        if all(os.stat(o).st_mtime <= t for o in objs + [glue]) and os.path.exists(stamp) and open(stamp).read() == key:
+            STATS.stages.append({"stage": "link", "wall_s": 0.0, "cpu_s": 0.0, "peak_rss_mb": 0.0, "note": "up to date", "ok": True})
+            say("   link: up to date")
+            return so
+    with Stage("link") as st:
+        tmp = so + ".tmp"
+        cmd = [tc.cxx, f"--target=aarch64-linux-android{app.api}", "-shared", "-o", tmp] + objs + [glue, "-L" + lib_dir,
+               "-lopenxr_loader", "-Wl,--as-needed", "-landroid", "-llog", "-lEGL", "-lGLESv3"] + libs + \
+              ["-static-libstdc++", "-Wl,-u,ANativeActivity_onCreate", "-Wl,--no-undefined", "-Wl,-z,max-page-size=16384",
+               "-Wl,--build-id=sha1", "-fno-color-diagnostics"]
+        rc, out, cpu, rss = run(cmd, "link", capture=True)
+        st.add(cpu, rss)
+        if out.strip():
+            sys.stdout.write(out)
+        if rc != 0:
+            say("RESULT: link failed (undefined symbols: a missing function body, or a library to add in build.conf LDLIBS=)")
+            raise Fail("link")
+        os.replace(tmp, so)
+        with open(so + ".flags", "w") as f:
+            f.write(" ".join(libs) + "|" + tc.ident())
+    return so
+
+
+# ------------------------------------------------------------------------------------------------ package
+
+def tree_stamp(paths):
+    h = hashlib.sha256()
+    for p in paths:
+        if os.path.isfile(p):
+            st = os.stat(p)
+            h.update(f"{p}|{st.st_size}|{st.st_mtime_ns}\n".encode())
+        elif os.path.isdir(p):
+            for root, dirs, files in os.walk(p):
+                dirs.sort()
+                for f in sorted(files):
+                    q = os.path.join(root, f)
+                    st = os.stat(q)
+                    h.update(f"{q}|{st.st_size}|{st.st_mtime_ns}\n".encode())
+        else:
+            h.update(f"{p}|none\n".encode())
+    return h.hexdigest()
+
+
+def aapt2_base(tc, app, st):
+    """The resource part of the APK (manifest, resources.arsc, res/, assets/), linked again only when it changed."""
+    os.makedirs(app.cache, exist_ok=True)
+    base = os.path.join(app.cache, "base.apk")
+    res, assets = os.path.join(app.dir, "res"), os.path.join(app.dir, "assets")
+    key = tree_stamp([app.manifest, res, assets, tc.android_jar]) + f"|{VERSION}"
+    stamp = base + ".stamp"
+    if os.path.exists(base) and os.path.exists(stamp) and open(stamp).read() == key:
+        return base, False
+    cmd = [tc.aapt2, "link", "-o", base + ".tmp", "--manifest", app.manifest, "-I", tc.android_jar]
+    if os.path.isdir(res):
+        rz = os.path.join(app.cache, "res.zip")
+        rc, out, cpu, rss = run([tc.aapt2, "compile", "--dir", res, "-o", rz], "package", capture=True)
+        st.add(cpu, rss)
+        if rc != 0:
+            say(out)
+            raise Fail("aapt2 compile")
+        cmd += [rz, "--auto-add-overlay"]
+    if os.path.isdir(assets):
+        cmd += ["-A", assets]
+    rc, out, cpu, rss = run(cmd, "package", capture=True)
+    st.add(cpu, rss)
+    if rc != 0:
+        say(out)
+        say("RESULT: aapt2 rejected AndroidManifest.xml or res/ (see the lines above)")
+        raise Fail("aapt2 link")
+    os.replace(base + ".tmp", base)
+    with open(stamp, "w") as f:
+        f.write(key)
+    return base, True
+
+
+def raw_entries(apk):
+    """(name, method, crc, csize, usize, raw bytes) of every entry, compressed data copied as is."""
+    out = []
+    with open(apk, "rb") as f, zipfile.ZipFile(apk) as z:
+        for i in z.infolist():
+            f.seek(i.header_offset)
+            h = f.read(30)
+            n, m = struct.unpack("<HH", h[26:30])
+            f.seek(i.header_offset + 30 + n + m)
+            out.append((i.filename, i.compress_type, i.CRC, i.compress_size, i.file_size, f.read(i.compress_size)))
+    return out
+
+
+def deflated(path, cache_dir):
+    """Raw-deflated bytes of a file, cached by content (an unchanged loader is compressed once)."""
+    data = open(path, "rb").read()
+    digest = hashlib.sha256(data).hexdigest()[:24]
+    c = os.path.join(cache_dir, f"z-{digest}")
+    crc = zlib.crc32(data) & 0xFFFFFFFF
+    if os.path.exists(c):
+        return crc, len(data), open(c, "rb").read(), True
+    co = zlib.compressobj(6, zlib.DEFLATED, -15)
+    raw = co.compress(data) + co.flush()
+    for old in os.listdir(cache_dir):  # keep the cache small: one blob per library name is enough
+        if old.startswith("z-") and old != os.path.basename(c) and len(os.listdir(cache_dir)) > 24:
+            os.remove(os.path.join(cache_dir, old))
+            break
+    with open(c, "wb") as f:
+        f.write(raw)
+    return crc, len(data), raw, False
+
+
+DOS_DATE, DOS_TIME = 0x0021, 0x0000  # 1981-01-01, as aapt2 writes
+
+
+def write_zip(entries):
+    """A zip (list of (name, method, crc, csize, usize, raw)) with stored entries 4-aligned (16 KiB for .so).
+    Returns (bytes, central directory offset)."""
+    body = bytearray()
+    cd = bytearray()
+    for name, method, crc, csize, usize, raw in entries:
+        nb = name.encode("utf-8")
+        off = len(body)
+        extra = b""
+        if method == zipfile.ZIP_STORED:
+            align = 16384 if name.endswith(".so") else 4
+            pad = (-(off + 30 + len(nb))) % align
+            extra = b"\0" * pad
+        body += struct.pack("<IHHHHHIIIHH", 0x04034B50, 20, 0x0800, method, DOS_TIME, DOS_DATE, crc, csize, usize, len(nb), len(extra))
+        body += nb + extra + raw
+        cd += struct.pack("<IHHHHHHIIIHHHHHII", 0x02014B50, 20, 20, 0x0800, method, DOS_TIME, DOS_DATE, crc, csize, usize,
+                          len(nb), 0, 0, 0, 0, 0, off) + nb
+    cd_off = len(body)
+    eocd = struct.pack("<IHHHHIIH", 0x06054B50, 0, 0, len(entries), len(entries), len(cd), cd_off, 0)
+    return bytes(body + cd + eocd), cd_off
+
+
+def do_package(tc, app, so):
+    with Stage("package") as st:
+        base, linked = aapt2_base(tc, app, st)
+        entries = [e for e in raw_entries(base) if not e[0].startswith("lib/")]
+        lib_dir = os.path.join(app.out, "lib", "arm64-v8a")
+        zc = os.path.join(app.cache, "z")
+        os.makedirs(zc, exist_ok=True)
+        hits = 0
+        for f in sorted(os.listdir(lib_dir)):
+            if not f.endswith(".so"):
+                continue
+            crc, usize, raw, hit = deflated(os.path.join(lib_dir, f), zc)
+            hits += hit
+            entries.append((f"lib/arm64-v8a/{f}", zipfile.ZIP_DEFLATED, crc, len(raw), usize, raw))
+        # AndroidManifest.xml first (as aapt2 writes it)
+        entries.sort(key=lambda e: (e[0] != "AndroidManifest.xml",))
+        data, cd_off = write_zip(entries)
+        st.note = ("aapt2 linked" if linked else "aapt2 skipped (manifest, res, assets unchanged)") + f", {hits} lib(s) from cache"
+    return data, cd_off
+
+
+# ------------------------------------------------------------------------------------------------ signing (APK v2)
+
+def der_read(b, i):
+    """(tag, content start, content end) of the DER element at i."""
+    tag = b[i]
+    ln = b[i + 1]
+    j = i + 2
+    if ln & 0x80:
+        k = ln & 0x7F
+        ln = int.from_bytes(b[j:j + k], "big")
+        j += k
+    return tag, j, j + ln
+
+
+def der_children(b, start, end):
+    out = []
+    i = start
+    while i < end:
+        t, s, e = der_read(b, i)
+        out.append((t, s, e, i))
+        i = e
+    return out
+
+
+def pem_blocks(text, kind):
+    import base64
+    return [base64.b64decode("".join(m.group(1).split())) for m in
+            re.finditer(r"-----BEGIN " + kind + r"-----(.*?)-----END " + kind + r"-----", text, re.S)]
+
+
+class Key:
+    """The RSA key and certificate of the keystore, from the cache openssl made."""
+
+    def __init__(self, pem):
+        keys = pem_blocks(pem, "PRIVATE KEY")
+        certs = pem_blocks(pem, "CERTIFICATE")
+        if not keys or not certs:
+            raise ValueError("no key or certificate in the cache")
+        k = keys[0]
+        _, s, e = der_read(k, 0)
+        ch = der_children(k, s, e)  # version, algorithm, privateKey OCTET STRING
+        alg = k[ch[1][1]:ch[1][2]]
+        if b"\x2a\x86\x48\x86\xf7\x0d\x01\x01\x01" not in alg:
+            raise ValueError("not an RSA key")
+        rk = k[ch[2][1]:ch[2][2]]
+        _, s, e = der_read(rk, 0)
+        nums = [int.from_bytes(rk[c[1]:c[2]], "big") for c in der_children(rk, s, e)]
+        _, self.n, self.e, self.d, self.p, self.q, self.dp, self.dq, self.qinv = nums[:9]
+        self.cert = certs[0]
+        _, s, e = der_read(self.cert, 0)
+        tbs = der_children(self.cert, s, e)[0]
+        f = der_children(self.cert, tbs[1], tbs[2])
+        idx = 6 if f[0][0] == 0xA0 else 5  # [0] version present: serial, sigalg, issuer, validity, subject, spki
+        self.spki = self.cert[f[idx][3]:f[idx][2]]
+        self.k = (self.n.bit_length() + 7) // 8
+
+    def sign_sha256(self, msg):
+        h = hashlib.sha256(msg).digest()
+        t = bytes.fromhex("3031300d060960864801650304020105000420") + h
+        em = b"\x00\x01" + b"\xff" * (self.k - len(t) - 3) + b"\x00" + t
+        m = int.from_bytes(em, "big")
+        m1, m2 = pow(m, self.dp, self.p), pow(m, self.dq, self.q)
+        s = m2 + self.q * ((self.qinv * (m1 - m2)) % self.p)
+        if pow(s, self.e, self.n) != m:
+            raise ValueError("RSA self-check failed")
+        return s.to_bytes(self.k, "big")
+
+
+def keystore_key(tc):
+    """The signing key, cached (0600) next to the keystore; made from the keystore once with openssl.
+    Creates the keystore (PKCS12, alias metacodex, password android: what keytool and apksigner read) when absent."""
+    cache = KEYSTORE + ".signcache.pem"
+    if not tc.openssl:
+        return None
+    if not os.path.exists(KEYSTORE):
+        os.makedirs(os.path.dirname(KEYSTORE), exist_ok=True)
+        tmpd = KEYSTORE + ".new"
+        os.makedirs(tmpd, exist_ok=True)
+        k, c = os.path.join(tmpd, "k.pem"), os.path.join(tmpd, "c.pem")
+        r = subprocess.run([tc.openssl, "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", k, "-out", c,
+                            "-days", "10000", "-subj", "/CN=MetaCodex native debug"], capture_output=True)
+        if r.returncode == 0:
+            r = subprocess.run([tc.openssl, "pkcs12", "-export", "-inkey", k, "-in", c, "-name", KS_ALIAS,
+                                "-passout", "pass:" + KS_PASS, "-out", KEYSTORE + ".tmp"], capture_output=True)
+        shutil.rmtree(tmpd, ignore_errors=True)
+        if r.returncode != 0 or not os.path.exists(KEYSTORE + ".tmp"):
+            return None
+        os.chmod(KEYSTORE + ".tmp", 0o600)
+        os.replace(KEYSTORE + ".tmp", KEYSTORE)
+        say(f"new signing key: {KEYSTORE} (keep it: updates must be signed with it)")
+    ks_id = hashlib.sha256(open(KEYSTORE, "rb").read()).hexdigest()
+    if os.path.exists(cache):
+        text = open(cache).read()
+        if text.startswith(f"# keystore {ks_id}\n"):
+            try:
+                return Key(text)
+            except ValueError:
+                pass
+    r = subprocess.run([tc.openssl, "pkcs12", "-in", KEYSTORE, "-passin", "pass:" + KS_PASS, "-nodes"], capture_output=True)
+    if r.returncode != 0:  # older keystores (JKS) or legacy algorithms
+        r = subprocess.run([tc.openssl, "pkcs12", "-legacy", "-in", KEYSTORE, "-passin", "pass:" + KS_PASS, "-nodes"], capture_output=True)
+    if r.returncode != 0:
+        return None
+    text = r.stdout.decode("utf-8", "replace")
+    try:
+        key = Key(text)
+    except ValueError:
+        return None
+    fd = os.open(cache + ".tmp", os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
+        f.write(f"# keystore {ks_id}\n# derived from the keystore by mcx-build: private, never copy it\n" + text)
+    os.replace(cache + ".tmp", cache)
+    return key
+
+
+def lp(b):
+    return struct.pack("<I", len(b)) + b
+
+
+def chunk_digest(parts):
+    """APK v2 content digest (SHA-256, 1 MiB chunks) over the given byte sections."""
+    digests = []
+    for part in parts:
+        mv = memoryview(part)
+        for i in range(0, len(part), 1 << 20):
+            c = mv[i:i + (1 << 20)]
+            digests.append(hashlib.sha256(b"\xa5" + struct.pack("<I", len(c)) + c).digest())
+    return hashlib.sha256(b"\x5a" + struct.pack("<I", len(digests)) + b"".join(digests)).digest()
+
+
+def sign_v2(data, cd_off, key):
+    entries, cd_eocd = data[:cd_off], data[cd_off:]
+    eocd_at = len(cd_eocd) - 22
+    cd, eocd = cd_eocd[:eocd_at], bytearray(cd_eocd[eocd_at:])
+    digest = chunk_digest([entries, cd, bytes(eocd)])  # the EOCD's directory offset = where the block will start
+    alg = 0x0103  # RSASSA-PKCS1-v1_5 with SHA2-256
+    digests = lp(struct.pack("<I", alg) + lp(digest))
+    signed = lp(digests) + lp(lp(key.cert)) + lp(b"")
+    sig = key.sign_sha256(signed)
+    signer = lp(signed) + lp(lp(struct.pack("<I", alg) + lp(sig))) + lp(key.spki)
+    value = lp(lp(signer))
+    pair = struct.pack("<Q", 4 + len(value)) + struct.pack("<I", 0x7109871A) + value
+    size = len(pair) + 8 + 16
+    block = struct.pack("<Q", size) + pair + struct.pack("<Q", size) + b"APK Sig Block 42"
+    struct.pack_into("<I", eocd, 16, cd_off + len(block))
+    return entries + block + cd + bytes(eocd)
+
+
+def do_sign(tc, app, data, cd_off, signer):
+    final = os.path.join(app.out, f"{app.name}.apk")
+    with Stage("sign") as st:
+        key = None
+        if signer in ("auto", "python"):
+            key = keystore_key(tc)
+            if key is None and signer == "python":
+                raise Fail("the built-in signer needs openssl and a readable keystore")
+        if key is not None:
+            out = sign_v2(data, cd_off, key)
+            with open(final + ".tmp", "wb") as f:
+                f.write(out)
+            os.replace(final + ".tmp", final)
+            st.note = "APK v2, built-in signer"
+        else:
+            if not tc.apksigner:
+                raise Fail("no signer: openssl or apksigner needed (mcx-setup quest)")
+            unsigned = os.path.join(app.cache, "unsigned.apk")
+            with open(unsigned, "wb") as f:
+                f.write(data)
+            if not os.path.exists(KEYSTORE):
+                os.makedirs(os.path.dirname(KEYSTORE), exist_ok=True)
+                rc, out, cpu, rss = run(["keytool", "-genkeypair", "-keystore", KEYSTORE, "-storepass", KS_PASS, "-keypass", KS_PASS,
+                                         "-alias", KS_ALIAS, "-keyalg", "RSA", "-keysize", "2048", "-validity", "10000",
+                                         "-dname", "CN=MetaCodex native debug"], "sign", capture=True)
+                st.add(cpu, rss)
+            rc, out, cpu, rss = run([tc.apksigner, "sign", "--ks", KEYSTORE, "--ks-pass", "pass:" + KS_PASS, "--key-pass",
+                                     "pass:" + KS_PASS, "--out", final, unsigned], "sign", capture=True)
+            st.add(cpu, rss)
+            if rc != 0:
+                say(out)
+                raise Fail("apksigner")
+            try:
+                os.remove(final + ".idsig")
+            except OSError:
+                pass
+            st.note = "apksigner (JVM)"
+    return final
+
+
+# ------------------------------------------------------------------------------------------------ main
+
+def warm():
+    """Fills the shared cache (glue object, precompiled headers for check and build) so the first build is warm."""
+    tc = Toolchain()
+    if tc.missing(False):
+        say("mcx-build: tools missing (mcx-setup quest)")
+        return 3
+
+    class Fake:
+        api, pkg, dir, conf = 32, "warm", "/", {}
+    t0 = time.time()
+    glue_object(tc, Fake)
+    for opt in (["-O0"], ["-O2"]):
+        build_pch(tc, Fake, opt)
+    say(f"mcx-build: cache warm in {time.time() - t0:.1f} s ({CACHE})")
+    return 0
+
+
+def main(argv):
+    check = clean = as_json = False
+    jobs = int(os.environ.get("MCX_BUILD_JOBS", "2"))
+    signer = os.environ.get("MCX_SIGNER", "auto")
+    d = None
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a == "--check":
+            check = True
+        elif a == "--clean":
+            clean = True
+        elif a == "--json":
+            as_json = True
+        elif a == "--warm":
+            return warm()
+        elif a == "-j":
+            i += 1
+            jobs = int(argv[i])
+        elif a.startswith("-j") and a[2:].isdigit():
+            jobs = int(a[2:])
+        elif a == "--signer":
+            i += 1
+            signer = argv[i]
+        elif a in ("-h", "--help"):
+            print(__doc__)
+            return 0
+        elif a.startswith("-"):
+            print(f"mcx-build: unknown option {a}", file=sys.stderr)
+            return 2
+        else:
+            d = a
+        i += 1
+    app = App(d or ".")
+    tc = Toolchain()
+    miss = tc.missing(not check)
+    if miss:
+        say("mcx-build: missing " + ", ".join(miss) + " (run: mcx-setup quest)")
+        return 3
+    if clean:
+        shutil.rmtree(app.out, ignore_errors=True)
+    t0 = time.time()
+    code, result, apk = 0, "", None
+    say(f"== {'check' if check else 'build'} {app.pkg} (lib{app.lib}.so, API {app.api}, -j{jobs}, pid {os.getpid()})")
+    try:
+        do_compile(tc, app, jobs, check)
+        if check:
+            result = f"check ok ({len(app.sources())} file(s), {time.time() - t0:.1f} s)"
+        else:
+            so = do_link(tc, app)
+            data, cd_off = do_package(tc, app, so)
+            apk = do_sign(tc, app, data, cd_off, signer)
+            result = f"APK {apk} ({os.path.getsize(apk) // 1024} KB) package {app.pkg}, {time.time() - t0:.1f} s"
+    except Fail as e:
+        code, result = 1, f"failed: {e}"
+    except Stop as e:
+        code, result = 4, str(e)
+        say("RESULT: " + result)
+    if code == 0:
+        say("RESULT: " + result)
+    if as_json:
+        print("MCX-BUILD-JSON " + json.dumps({"ok": code == 0, "code": code, "mode": "check" if check else "build",
+                                              "package": app.pkg, "apk": apk, "total_s": round(time.time() - t0, 3),
+                                              "min_mem_available_mb": STATS.min_avail if STATS.min_avail < (1 << 30) else None,
+                                              "stages": STATS.stages, "diagnostics": STATS.diags[:50], "result": result}), flush=True)
+    return code
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main(sys.argv[1:]))
+    except KeyboardInterrupt:
+        sys.exit(130)
