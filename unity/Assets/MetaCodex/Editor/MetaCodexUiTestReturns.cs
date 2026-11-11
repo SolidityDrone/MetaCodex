@@ -1,6 +1,7 @@
 using System.IO;
 using System.Linq;
 using MetaCodex.Shell;
+using MetaCodex.UI;
 using Newtonsoft.Json.Linq;
 using UnityEngine;
 namespace MetaCodex.EditorTools
@@ -54,6 +55,24 @@ namespace MetaCodex.EditorTools
             shell.HandleReturn(Ret(id, "com.metacodex.user.t2", false, null).ToString());
             Check(shell.AttachmentsForTest.Count == att1 && shell.IsPanelOpen("thread"), "Back without a report: the thread is open, no new chips");
             foreach (var p in Directory.GetFiles(dir, "report-test-*")) File.Delete(p);
+            // a launch request (mcx-app launch): a dialog, "pending"; LATER keeps it; the tap launches it (dry run)
+            SystemBridge.DryRun = true;
+            int modals0 = UiModal.OpenCount;
+            string req = shell.RequestLaunch("launch", "com.metacodex.user.t2", "T2", "1.0", "thr_ret", null);
+            var dlg = UiModal.OpenPanels.LastOrDefault();
+            string st1 = shell.LaunchStatus("com.metacodex.user.t2");
+            bool asked = UiModal.OpenCount == modals0 + 1 && dlg != null && dlg.Elements.OfType<UiButton>().Any(b => b.Text == "LAUNCH");
+            if (dlg != null)
+            {
+                System.Threading.Thread.Sleep(Mathf.CeilToInt(UiModal.InputGrace * 1000f) + 80);
+                dlg.Elements.OfType<UiButton>().First(b => b.Text == "LATER").Click();
+            }
+            int pendingAfterLater = shell.PendingLaunchCountForTest;
+            string done = shell.LaunchPendingForTest();
+            string st2 = shell.LaunchStatus("com.metacodex.user.t2");
+            SystemBridge.DryRun = false;
+            Check(req.StartsWith("requested launch of com.metacodex.user.t2") && asked && st1.StartsWith("pending") && pendingAfterLater == 1 && done == "launched" && st2.StartsWith("launched") && shell.PendingLaunchCountForTest == 0,
+                $"launch request: \"{req}\", the LAUNCH / LATER dialog {asked}, {st1}; LATER keeps it ({pendingAfterLater} pending); the tap -> {done} ({st2})");
         }
     }
 }

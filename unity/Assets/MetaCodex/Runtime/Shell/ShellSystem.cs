@@ -327,6 +327,14 @@ namespace MetaCodex.Shell
             catch (Exception ex) { Log("tools inventory: " + ex.Message); }
         }
 
+        /// "key value" pairs after position `from` (system launch / install-apk options).
+        private static Dictionary<string, string> Pairs(string[] a, int from)
+        {
+            var d = new Dictionary<string, string>();
+            for (int i = from; i + 1 < a.Length; i += 2) d[a[i]] = a[i + 1];
+            return d;
+        }
+
         /// `system …` from Linux (mcx-ui system …).
         public string SystemCommand(string arg)
         {
@@ -343,9 +351,21 @@ namespace MetaCodex.Shell
                         $"linux {UiStorageBar.Size(_linuxBytes)}, free {UiStorageBar.Size(_devFree)} of {UiStorageBar.Size(_devTotal)}" + (Settings.linuxLimitGB > 0 ? $", limit {Settings.linuxLimitGB:0} GB" : "");
                 case "inventory": return ToolsInventoryPath;
                 // apps built in the Linux userland: Android's own installer, the user confirms (MetaCodexInstaller)
+                case "launch-status": return parts.Length > 1 ? LaunchStatus(parts[1].Trim()) : "error: system launch-status <package>";
                 case "install-apk":
                 {
-                    string linuxPath = parts.Length > 1 ? parts[1].Trim() : "";
+                    // install-apk <apk> [package <id>] [label <word>] [version <v>] [thread <id>]: a first install of a known
+                    // package waits for the user's INSTALL tap (Android's dialog would take them out of what they do)
+                    var ia = parts.Length > 1 ? parts[1].Trim().Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries) : new string[0];
+                    var ikv = Pairs(ia, 1);
+                    if (ia.Length > 0 && ikv.TryGetValue("package", out var ipkg) && !SystemBridge.AppInfo(ipkg).StartsWith("installed"))
+                    {
+                        string ap = AndroidPathOf(ia[0]);
+                        if (ap == null || !File.Exists(ap)) return "error: no file " + ia[0];
+                        return RequestLaunch("install", ipkg, ikv.TryGetValue("label", out var il) ? il.Replace('_', ' ') : null,
+                            ikv.TryGetValue("version", out var iv) ? iv : null, ikv.TryGetValue("thread", out var it) ? it : null, ap);
+                    }
+                    string linuxPath = ia.Length > 0 ? ia[0] : "";
                     if (!linuxPath.EndsWith(".apk")) return "error: system install-apk <path to an .apk in Linux>";
                     string androidPath = AndroidPathOf(linuxPath);
                     if (androidPath == null || !File.Exists(androidPath)) return "error: no file " + linuxPath + (androidPath != null ? " (" + androidPath + ")" : "");
@@ -359,12 +379,14 @@ namespace MetaCodex.Shell
                 {
                     // launch <package> [thread <id>]: the app gets a launch id; its menu's Back / Report come back to that thread
                     var a = parts.Length > 1 ? parts[1].Trim().Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries) : new string[0];
-                    if (a.Length == 0) return "error: system launch <package> [thread <id>]";
-                    string thread = a.Length >= 3 && a[1] == "thread" ? a[2] : null;
-                    return SystemBridge.LaunchApp(a[0], RegisterLaunch(a[0], thread));
+                    if (a.Length == 0) return "error: system launch <package> [thread <id>] [label <word>] [version <v>]";
+                    var kv = Pairs(a, 1);
+                    // a request: the user taps LAUNCH (ShellReturn), whatever the thread's approval mode
+                    return RequestLaunch("launch", a[0], kv.TryGetValue("label", out var lb) ? lb.Replace('_', ' ') : null,
+                        kv.TryGetValue("version", out var vv) ? vv : null, kv.TryGetValue("thread", out var th) ? th : null, null);
                 }
                 case "first-use": return FirstUseStatus;
-                default: return "error: system tools [json] | refresh | storage | inventory | install-apk <apk> | install-status | can-install | app <package> | launch <package> [thread <id>] | first-use";
+                default: return "error: system tools [json] | refresh | storage | inventory | install-apk <apk> | install-status | can-install | app <package> | launch <package> [thread <id>] [label <w>] [version <v>] | launch-status <package> | first-use";
             }
         }
 

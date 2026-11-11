@@ -9,8 +9,9 @@
 #   mcx-app verify [dir]                      static checks of the built APK: manifest entries the Meta APIs in use need,
 #                                             unresolved symbols, the OpenXR extensions asked for, icon, devices
 #   mcx-app install [dir|apk]                 Android's installer; tells you what to ask the user; waits up to 5 min
-#   mcx-app launch [dir|package]              starts the app in the headset (MetaCodex goes to the background)
-#   mcx-app run [dir]                         build + install + launch
+#   mcx-app launch [dir|package]              asks the user to open the app (LAUNCH in MetaCodex); returns at once
+#   mcx-app run [dir]                         build + install + launch request
+#   mcx-app status [dir|package]              the launch / install request: pending | launched | declined | ...
 #   mcx-app dev [dir]                         module apps: compile and run it in the Runner now (seconds, no APK)
 #   mcx-app runner                            build + install the Runner app (once; the user confirms the install)
 #   mcx-app logs [dir|package] [-f]           what the app logged (template apps send LOG lines to 127.0.0.1:47950)
@@ -40,6 +41,8 @@ dir_of() {
   readlink -f "$d"
 }
 pkg_of() { sed -n 's/.*package="\([^"]*\)".*/\1/p' "$1/AndroidManifest.xml" | head -1; }
+label_of() { sed -n 's/.*android:label="\([^"]*\)".*/\1/p' "$1/AndroidManifest.xml" | head -1 | tr ' ' '_'; }
+version_of() { sed -n 's/.*android:versionName="\([^"]*\)".*/\1/p' "$1/AndroidManifest.xml" | head -1 | tr ' ' '_'; }
 # a package name (has dots, is not a path) or an app folder
 pkg_arg() {
   if [ -n "${1:-}" ] && [ ! -e "$1" ] && [[ "$1" == *.* ]]; then echo "$1"; else pkg_of "$(dir_of "${1:-.}")"; fi
@@ -109,7 +112,9 @@ new_app() {
   sed -i -e "0,/package=\"[^\"]*\"/s|package=\"[^\"]*\"|package=\"$pkg\"|" -e "s|android:label=\"[^\"]*\"|android:label=\"$label\"|" \
     -e "s|android:name=\"android.app.lib_name\" android:value=\"hellonative\"|android:name=\"android.app.lib_name\" android:value=\"main\"|" "$dir/AndroidManifest.xml"
   [ -f "$dir/build.sh" ] && chmod +x "$dir/build.sh"
-  say "new app $pkg (\"$label\") in $(readlink -f "$dir")"
+  # the folder is a Native app project: the quest-native skills and the native AGENTS.md / CLAUDE.md block
+  command -v mcx-project >/dev/null && mcx-project set "$dir" native >/dev/null
+  say "new app $pkg (\"$label\") in $(readlink -f "$dir") (a Native app project: start its threads in this folder)"
   if [[ "$tpl" == "$EXAMPLES"/* ]]; then
     echo "files: AndroidManifest.xml (package, label, versionCode, permissions), src/ (the app on mcx_xr.h), res/ (icon)"
     echo "next:  mcx-app build $dir && mcx-app verify $dir   then  mcx-app install $dir && mcx-app launch $dir"
@@ -229,7 +234,15 @@ install_app() {
     *) echo "RESULT: cannot reach the app: $ci"; return 1 ;;
   esac
   start_logd
-  r=$(ui system install-apk "$apk")
+  local extra=()
+  if [ -n "${d:-}" ]; then extra=(package "$(pkg_of "$d")" label "$(label_of "$d")" version "$(version_of "$d")" ${MQH_THREAD_ID:+thread "$MQH_THREAD_ID"}); fi
+  r=$(ui system install-apk "$apk" "${extra[@]}")
+  if [[ "$r" == requested* ]]; then
+    echo "RESULT: $r"
+    ask "The app is ready: tap INSTALL in MetaCodex when you want it (Android asks once more), then LAUNCH."
+    echo "check later: mcx-app status ${d:-$apk}   (a first install waits for the user's tap; nothing else to do now)"
+    return 0
+  fi
   [[ "$r" == installing* ]] || { echo "RESULT: $r"; hint "$r"; return 1; }
   say "$r"
   for i in $(seq 1 150); do
@@ -248,10 +261,18 @@ install_app() {
 }
 
 launch_app() {
-  local pkg r; pkg=$(pkg_arg "${1:-}")
+  local pkg r d="" lab=() ; pkg=$(pkg_arg "${1:-}")
+  if [ -e "${1:-.}/AndroidManifest.xml" ]; then d=$(dir_of "${1:-.}"); lab=(label "$(label_of "$d")" version "$(version_of "$d")"); fi
   start_logd
-  # the launch remembers this thread (MQH_THREAD_ID in agent shells): the app's menu comes back to it
-  r=$(ui system launch "$pkg" ${MQH_THREAD_ID:+thread "$MQH_THREAD_ID"})
+  # a request: MetaCodex asks the user (LAUNCH / LATER), whatever this thread's approval mode; the launch remembers
+  # this thread (MQH_THREAD_ID in agent shells): the app's menu comes back to it
+  r=$(ui system launch "$pkg" ${MQH_THREAD_ID:+thread "$MQH_THREAD_ID"} "${lab[@]}")
+  if [[ "$r" == requested* ]]; then
+    echo "RESULT: $r"
+    ask "The app is ready: tap LAUNCH in MetaCodex (or say \"launch the app\") when you want to try it."
+    echo "check later: mcx-app status ${1:-.}   (do not wait here; never launch it any other way)"
+    return 0
+  fi
   if [[ "$r" == ok* ]]; then
     echo "RESULT: started $pkg"
     ask "The app is open in the headset. Its menu (left controller's menu button, or the left hand's menu gesture: look at your left palm and pinch) has Back to MetaCodex and Report to MetaCodex: a report brings a picture and the app's log back into this thread."
@@ -280,11 +301,17 @@ case "$cmd" in
   build) build_app "${1:-.}" ;;
   install) install_app "${1:-.}" ;;
   launch) launch_app "${1:-}" ;;
-  run) build_app "${1:-.}" && install_app "${1:-.}" && launch_app "${1:-.}" ;;
+  run)
+    build_app "${1:-.}" || exit 1
+    out=$(install_app "${1:-.}"); rc=$?; echo "$out"
+    [ $rc -ne 0 ] && exit $rc
+    [[ "$out" == *"RESULT: requested"* ]] && exit 0   # a first install: the user's INSTALL tap leads to the LAUNCH offer
+    launch_app "${1:-.}" ;;
+  status) echo "$(ui system launch-status "$(pkg_arg "${1:-}")")" ;;
   dev) dev_app "${1:-.}" ;;
   verify) "$MCX_BUILD" --verify "$(dir_of "${1:-.}")" ;;
   runner) runner_app ;;
   logs) logs_app "$@" ;;
   info) echo "$(ui system app "$(pkg_arg "${1:-}")")" ;;
-  *) sed -n 2,19p "$0"; exit 2 ;;
+  *) sed -n 2,20p "$0"; exit 2 ;;
 esac

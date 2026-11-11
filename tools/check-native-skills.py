@@ -18,7 +18,7 @@ args = sys.argv[1:]
 ndk = args[args.index("--ndk") + 1] if "--ndk" in args else "/usr/lib/android-sdk/ndk/27.1.12297006"
 xrinc = args[args.index("--openxr") + 1] if "--openxr" in args else os.environ.get("OPENXR_INCLUDE", os.path.expanduser("~/mcxwork/native/dl-sdk/OpenXR-SDK-release-1.1.65/include"))
 
-skills = sorted(glob.glob(os.path.join(root, "mqh/plugins/bb-guide/skills/quest-native-*")))
+skills = sorted(glob.glob(os.path.join(root, "native/skills/quest-native-*")))
 docs = {p: open(p, encoding="utf-8").read() for d in skills for p in glob.glob(d + "/**/*.md", recursive=True)}
 bin_ = os.path.join(root, "userland/overlay/usr/local/bin")
 mcx_app = open(os.path.join(bin_, "mcx-app")).read()
@@ -29,7 +29,8 @@ mod_h = open(os.path.join(root, "native/runner/mcx_module.h")).read()
 sources = "\n".join(open(p, encoding="utf-8", errors="replace").read() for p in
                     [os.path.join(root, "native/xr/mcx_xr.cpp"), os.path.join(root, "native/runner/host.cpp"),
                      os.path.join(root, "native/examples/nightvision/src/main.cpp"), os.path.join(bin_, "mcx-app"),
-                     os.path.join(bin_, "mcx-build"), os.path.join(bin_, "mcx-buildd"), os.path.join(bin_, "mcx-setup")])
+                     os.path.join(bin_, "mcx-build"), os.path.join(bin_, "mcx-buildd"), os.path.join(bin_, "mcx-setup"),
+                     os.path.join(root, "unity/Assets/MetaCodex/Runtime/Shell/ShellReturn.cs")])
 oxr = ""
 for f in ("openxr.h", "openxr_platform.h"):
     p = os.path.join(xrinc, "openxr", f)
@@ -44,7 +45,7 @@ def bad(doc, what):
 
 
 # ------------------------------------------------------------------ commands and flags
-app_subs = set(re.findall(r"^  ([a-z-]+)\) ", mcx_app, re.M))
+app_subs = set(re.findall(r"^  ([a-z-]+)\)(?: |$)", mcx_app, re.M))
 app_flags = set(re.findall(r"\s(--[a-z-]+)\)", mcx_app)) | {"-f"}
 build_flags = set(re.findall(r'a == "(--?[a-z-]+)"', mcx_build)) | {"-j"}
 buildd_subs = set(re.findall(r'cmd == "([a-z-]+)"', mcx_buildd)) | set(re.findall(r'cmd in \("([a-z-]+)", "([a-z-]+)"\)', mcx_buildd)[0])
@@ -122,7 +123,8 @@ prefixes = ("RESULT: ", "passthrough: ", "depth: ", "scene: ", "anchors: ", "ext
 # messages built from a format string: the quoted form -> the format text that must be in the sources
 FORMATTED = {"verify ok": "RESULT: verify {'ok' if not problems", "scene: 0 objects": 'Log("scene: %zu objects"',
              "extension X: not offered": 'Log("extension %s: not offered',
-             "paused: MetaCodex is in the background": 'MetaCodex is in the background (adj {adj})'}
+             "paused: MetaCodex is in the background": 'MetaCodex is in the background (adj {adj})',
+             "requested launch of": 'return $"requested {kind} of {pkg}', "requested install of": 'return $"requested {kind} of {pkg}'}
 for k, fmt in FORMATTED.items():
     if fmt not in sources:
         problems.append(f"check-native-skills.py: the format of `{k}` ({fmt}) is gone from the sources")

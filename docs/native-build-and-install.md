@@ -294,6 +294,27 @@ toggled; right pinch / trigger = mode, left pinch / A = passthrough, stick = gai
   bb-guide copies); the XR layer's cache key is its source hash, so the next build of any app recompiles it. An app
   gets the fix when it is rebuilt and installed again.
 
+## Launches by request and project types (owner 2026-11-11)
+
+- **Launch only on the user's tap, in every approval mode**: `system launch` (and `install-apk` for a package that is
+  not installed yet) is a request in MetaCodex (`ShellReturn.RequestLaunch`): a dialog APP READY with LAUNCH / INSTALL
+  and LATER, a toast kept in MESSAGES, voice commands `launch_pending_app` / `decline_pending_app` (EN + IT, enabled
+  only while one waits); `mcx-app launch|install|run` return at once with `RESULT: requested ...`, `mcx-app status`
+  reads pending / launched / declined / installing / failed. An allowed first install turns into a LAUNCH offer when
+  Android is done. Silent updates of installed apps still go ahead. Not done: an update while the app runs is not
+  asked (an app cannot see other apps' processes on Android 14), the orb has no Launch button of its own (the dialog,
+  MESSAGES and voice cover it), no chip in the thread.
+- **Project types**: MQH hands its built-in and data-dir skills to every thread as global skills
+  (`apps/server/src/services/skills/injected-skills.ts`: builtin + data-dir; the host daemon stages them as
+  `runtime/global-skills`), and `/root/.claude/skills` is global for Claude Code, so the quest-native skills left both:
+  they live in `native/skills` -> `/opt/metacodex/quest-native/skills`. `mcx-project set <dir> native` writes
+  `.metacodex/project.json`, links the five skills into the project's `.claude/skills` (Claude Code's project skills)
+  and puts a managed block into AGENTS.md (Codex, OpenCode) and CLAUDE.md (Claude Code) that points at them and states
+  the rules; `general` removes all of it and keeps the rest of those files. `mcx-app new` marks app folders native;
+  + PROJECT… asks NATIVE APP (QUEST) / GENERAL CODING; THREADS shows ◆ NATIVE. Existing projects: native when the
+  folder is an app (AndroidManifest.xml + src/), else general; `mcx-project set` changes it. `mqh-run` removes the old
+  global copies. metacodex-context (global) only says where native apps live.
+
 ## More decisions (evidence above)
 
 - **Build mode / BUILDING panel: not built.** Builds on cores 0-2 cost no measurable fps (E8: avg 72.5 / min 70 vs

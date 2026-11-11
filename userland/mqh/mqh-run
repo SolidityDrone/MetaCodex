@@ -28,6 +28,10 @@ for _ in $(seq 240); do
 done
 if [ "$up" != 1 ]; then echo "mqh-run: the server did not answer on $URL/health"; tail -n 30 "$LOGS/server.log"; kill "$S" 2>/dev/null; exit 1; fi
 echo "mqh-run: server up (pid $S)"
+# the native app skills are per project now (mcx-project): drop the global copies older MetaCodex builds laid
+for n in quest-native-apps quest-native-xr quest-native-recipes quest-native-dev-loop quest-native-debug; do
+  [ -d "$HOME/.claude/skills/$n" ] && [ ! -L "$HOME/.claude/skills/$n" ] && rm -rf "$HOME/.claude/skills/$n"
+done
 # the native app builder (mcx-app build/check) lives in this process tree: cores 0-2, off the frame loop
 if command -v mcx-buildd >/dev/null; then mcx-buildd ensure >/dev/null 2>&1 && echo "mqh-run: builder daemon up ($(mcx-buildd status 2>/dev/null | tr -d '\n ' | cut -c1-80))"; fi
 

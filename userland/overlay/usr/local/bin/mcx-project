@@ -1,0 +1,70 @@
+#!/bin/bash
+# mcx-project: the type of a project folder in MetaCodex: Native app (Quest) or General coding.
+#   mcx-project type <dir>                 native | general (stored in <dir>/.metacodex/project.json; without it: native
+#                                          when the folder is an app, AndroidManifest.xml + src/, else general)
+#   mcx-project set <dir> native|general   store it and lay / remove what the type brings
+# Native: the quest-native-* skills linked into <dir>/.claude/skills (Claude Code reads project skills there; the other
+# agents read the AGENTS.md block that points at them) and the native block in AGENTS.md and CLAUDE.md (between
+# <!-- metacodex:native-app --> markers; the rest of those files stays the user's). General: none of it.
+# Shipped by the app (overlay); edits are overwritten.
+set -uo pipefail
+S=/opt/metacodex/quest-native/skills
+T=/opt/metacodex/quest-native/project/AGENTS.md
+NAMES="quest-native-apps quest-native-xr quest-native-recipes quest-native-dev-loop quest-native-debug"
+die() { echo "mcx-project: $*" >&2; exit 1; }
+
+type_of() {
+  local f="$1/.metacodex/project.json"
+  if [ -f "$f" ]; then sed -n 's/.*"type": *"\([a-z]*\)".*/\1/p' "$f" | head -1
+  elif [ -f "$1/AndroidManifest.xml" ] && [ -d "$1/src" ]; then echo native
+  else echo general; fi
+}
+
+# block <file> in|out: put the native block in (replacing an older one) or take it out
+block() {
+  python3 -I - "$1" "$2" "$T" <<'PY'
+import os, re, sys
+path, mode, tpl = sys.argv[1], sys.argv[2], sys.argv[3]
+text = open(path, encoding="utf-8").read() if os.path.exists(path) else ""
+text = re.sub(r"\n*<!-- metacodex:native-app.*?<!-- /metacodex:native-app -->\n?", "\n", text, flags=re.S).strip("\n")
+if mode == "in":
+    block = open(tpl, encoding="utf-8").read().strip("\n")
+    text = (text + "\n\n" + block if text else block) + "\n"
+elif text:
+    text += "\n"
+if text.strip():
+    open(path, "w", encoding="utf-8").write(text)
+elif os.path.exists(path):
+    os.remove(path)
+PY
+}
+
+set_type() {
+  local dir t n
+  [ -d "${1:-}" ] || die "no folder ${1:-}"
+  dir=$(readlink -f "$1"); t=${2:-}
+  [[ "$t" == native || "$t" == general ]] || die "type: native or general"
+  mkdir -p "$dir/.metacodex"
+  printf '{\n  "type": "%s"\n}\n' "$t" > "$dir/.metacodex/project.json"
+  if [ "$t" = native ]; then
+    [ -d "$S/quest-native-apps" ] || die "no native skills in $S (update MetaCodex)"
+    mkdir -p "$dir/.claude/skills"
+    for n in $NAMES; do ln -sfn "$S/$n" "$dir/.claude/skills/$n"; done
+    block "$dir/AGENTS.md" in; block "$dir/CLAUDE.md" in
+    # the links are this headset's: keep them out of the project's git history
+    if [ -d "$dir/.git" ] && ! grep -qs "quest-native-" "$dir/.git/info/exclude"; then
+      mkdir -p "$dir/.git/info"; echo ".claude/skills/quest-native-*" >> "$dir/.git/info/exclude"
+    fi
+  else
+    for n in $NAMES; do [ -L "$dir/.claude/skills/$n" ] && rm -f "$dir/.claude/skills/$n"; done
+    rmdir "$dir/.claude/skills" "$dir/.claude" 2>/dev/null || true
+    block "$dir/AGENTS.md" out; block "$dir/CLAUDE.md" out
+  fi
+  echo "RESULT: $dir is a $( [ "$t" = native ] && echo 'Native app (Quest)' || echo 'General coding') project"
+}
+
+case "${1:-}" in
+  type) [ -d "${2:-}" ] || die "no folder ${2:-}"; type_of "$(readlink -f "$2")" ;;
+  set) set_type "${2:-}" "${3:-}" ;;
+  *) sed -n 2,9p "$0"; exit 2 ;;
+esac

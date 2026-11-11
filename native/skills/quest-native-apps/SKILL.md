@@ -12,6 +12,12 @@ description: Make a native Meta Quest app (Quest 3 / 3S, Horizon OS) on this hea
 > `xrRequestExitSession`, `exit`) or your own OpenXR loop; add your items with `app.menuItems`. Why: an app that only
 > went to the background with its own loop froze, and the headset showed "<App> isn't responding" (0.7.15).
 > `mcx-app verify` fails apps that break this.
+>
+> **Always ask before taking the user out of MetaCodex.** Check, build and verify freely. To launch the app, or for a
+> first install, use only `mcx-app launch` / `mcx-app install` / `mcx-app run`: MetaCodex shows the user LAUNCH /
+> INSTALL / LATER and the command returns at once with `RESULT: requested ...`. Then say one short sentence ("it's
+> ready: tap LAUNCH in MetaCodex") and continue or wait; `mcx-app status <dir>` tells you pending / launched / declined.
+> This holds in every approval mode (MetaCodex enforces it). Never adb, `am start`, `pm` or any other route.
 
 The user says what the app should do; you do everything else. Their only jobs: tap **Install** once per new app
 (Android's dialog), answer permission dialogs inside the app, and tell you what they see. Every step is one
@@ -48,10 +54,11 @@ example and short recipes), **quest-native-dev-loop** (the Runner: seconds per e
 7. **`mcx-app build /root/apps/<name>`** (about 2 s after the first build): `RESULT: APK ...`.
 8. **`mcx-app verify /root/apps/<name>`**: every `PROBLEM:` is a missing manifest entry, an unresolved symbol, a
    missing icon or a wrong device list: fix and build again until `RESULT: verify ok`.
-9. **Tell the user in one sentence what the app will do**, then `mcx-app install /root/apps/<name>`. It asks the user
-   to tap Install (new app) or goes through silently (an update of an app MetaCodex installed). Wait for `RESULT:`.
-10. **`mcx-app launch /root/apps/<name>`**: the app opens, MetaCodex goes to the background. Tell the user exactly what
-    to look at and try (controls, what should appear), and how to come back: **"the left menu button (or look at
+9. **Tell the user in one sentence what the app will do**, then `mcx-app install /root/apps/<name>`. A new app:
+   `RESULT: requested install of ...`: MetaCodex offers INSTALL to the user, then Android's dialog, then LAUNCH; nothing
+   more for you to run. An update of an app MetaCodex installed goes through silently (`RESULT: installed`).
+10. **`mcx-app launch /root/apps/<name>`**: `RESULT: requested launch of ...`: MetaCodex offers LAUNCH / LATER. Say "ready:
+    tap LAUNCH in MetaCodex", what to look at and try (controls, what should appear), and how to come back: **"the left menu button (or look at
     your left palm and pinch) opens the app's menu: Back to MetaCodex closes it and brings you here, Report to
     MetaCodex also sends me a picture and its log"**. Every app on `mcx::App` has that menu built in. Opened from the
     Library (or reopened from there), the menu has only the app's items and Quit: Quit closes it, the headset goes Home.
@@ -89,8 +96,9 @@ example and short recipes), **quest-native-dev-loop** (the Runner: seconds per e
 | `mcx-app build [dir]` | incremental build -> `<dir>/build/<dir name>.apk` |
 | `mcx-app verify [dir]` | static checks of the APK (manifest vs the Meta APIs used, symbols, icon, devices) |
 | `mcx-app install [dir\|apk]` | Android's installer, waits up to 5 min for the user |
-| `mcx-app launch [dir\|package]` | starts the app |
-| `mcx-app run [dir]` | build + install + launch |
+| `mcx-app launch [dir\|package]` | asks the user to open the app (LAUNCH in MetaCodex); returns at once |
+| `mcx-app run [dir]` | build + install (+ launch request) |
+| `mcx-app status [dir\|package]` | the request: pending / launched / declined / installing / failed |
 | `mcx-app dev [dir]` / `mcx-app runner` | module apps in the Runner (quest-native-dev-loop) |
 | `mcx-app logs [dir\|package] [-f]` | what the app logged (`LOG(...)` / `mcx::Log(...)`) |
 | `mcx-app info [dir\|package]` | installed version, installer of record |

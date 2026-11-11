@@ -43,7 +43,6 @@ with tarfile.open(fileobj=raw, mode="w", format=tarfile.PAX_FORMAT) as tf:
     trees = {}
     mqh_skills = os.path.join(root, "mqh", "plugins", "bb-guide", "skills")
     own = ["quest-scripting", "quest-gesture-plugins", "metacodex-context", "quest-views"]
-    own += sorted(n for n in os.listdir(mqh_skills) if n.startswith("quest-native-"))  # the native app suite
     for name in own:
         trees[f"{skills_dst}/{name}"] = os.path.join(mqh_skills, name)
     # the template of `mcx-app new` is Hello Native itself (sources only: its build/ folder stays out)
@@ -66,6 +65,17 @@ with tarfile.open(fileobj=raw, mode="w", format=tarfile.PAX_FORMAT) as tf:
         extra[f"opt/metacodex/quest-native/runner/{f}"] = os.path.join(native, "runner", f)
     for f in ("AndroidManifest.xml", "build.conf", "src/app.cpp"):
         extra[f"opt/metacodex/quest-native/module-template/{f}"] = os.path.join(native, "module-template", f)
+    # the native app skills: NOT global (a website thread must not see native rules); `mcx-project set <dir> native`
+    # links them into a Native project's .claude/skills and writes its AGENTS.md / CLAUDE.md block
+    nskills = os.path.join(native, "skills")
+    for name in sorted(os.listdir(nskills)):
+        for dp, dn, fn in os.walk(os.path.join(nskills, name)):
+            dn[:] = sorted(d for d in dn if not junk(d))
+            for f in sorted(fn):
+                if not junk(f):
+                    full = os.path.join(dp, f)
+                    extra["opt/metacodex/quest-native/skills/" + name + "/" + os.path.relpath(full, os.path.join(nskills, name)).replace(os.sep, "/")] = full
+    extra["opt/metacodex/quest-native/project/AGENTS.md"] = os.path.join(native, "project", "AGENTS.md")
     # the native XR layer (mcx-build compiles it once per toolchain) and its worked example
     for f in ("mcx_xr.h", "mcx_xr.cpp", "mcx_font.h"):
         extra[f"opt/metacodex/quest-native/xr/{f}"] = os.path.join(native, "xr", f)

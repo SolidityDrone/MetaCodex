@@ -140,6 +140,7 @@ namespace MetaCodex.Shell
             Recorder.Finished += OnRecorderFinished;
             RegisterShellVoiceCommands();
             RegisterSessionVoiceCommand(); // questions about the session (ShellContext)
+            RegisterLaunchVoiceCommands(); // the app an agent asked to launch (ShellReturn)
             Decider = new VoiceDecider(Voice, (texts, done) =>
             {
                 if (Qvac == null || !Qvac.IsRunning) { done(null, "the AI service is not running"); return; }

@@ -27,7 +27,7 @@ description: Where you are when you run inside MetaCodex - a Meta Quest headset 
 | `/mnt/quest/qvac.token` | token for the local AI service (new at every start of the service) |
 | `~/.mqh` | MQH data (database, logs, plugin data) |
 | `~/.claude/skills` | skills for agents (this one, quest-*, Unity and Meta skills) |
-| `/root/apps/<name>` | native Quest apps you build (skills `quest-native-*`, `mcx-app`) |
+| `/root/apps/<name>` | native Quest apps (Native app projects: `mcx-app`, `mcx-project`, their own skills) |
 | `/opt/android-ndk`, `/opt/android-sdk`, `/opt/openxr` | native app tools (NDK r27d, android.jar 34, OpenXR 1.1.65) |
 | `/root/.metacodex/first-use.log` | what MetaCodex installed by itself at first use (`mcx-setup quest`) |
 | `/root/.metacodex/captures/` | the user's captures (image clipboard): PNGs of windows, newest 20 by default |
@@ -57,12 +57,13 @@ description: Where you are when you run inside MetaCodex - a Meta Quest headset 
   (theirs, removable; the ones that came with MetaCodex or MQH, read-only), PLUGINS has MQH's plugins and the gesture /
   behaviour plugins, then SCRIPTS, GESTURES, DAEMON. New skills go to `~/.mqh/skills/<name>/` (skill `skill-creator`);
   never edit the shipped ones.
-- Native apps: when the user wants a native / standalone Quest app (VR or mixed reality, its own Library icon), read
-  skill `quest-native-apps` first and follow its flow: `mcx-app new|check|build|verify|install|launch|logs` builds a
-  separate Quest app (C++, OpenXR + Meta's extensions through `mcx_xr.h`) here and installs it with Android's
-  installer; the user only taps Install. Feature reference `quest-native-xr`, worked examples `quest-native-recipes`,
-  the 2-second loop `quest-native-dev-loop`, problems `quest-native-debug`. `mcx-ui system can-install` says whether
-  this MetaCodex may install apps.
+- Native apps (a separate Quest app with its own Library icon) live in **Native app projects**: their folder has
+  `.metacodex/project.json` with `"type": "native"`, the quest-native-* skills in `.claude/skills` and a native block
+  in AGENTS.md / CLAUDE.md; follow those there. In any other project, none of the native rules apply. When the user
+  asks for a native app here, make the project: `mcx-app new /root/apps/<name> --label "<Label>"` (it marks the
+  folder native; skills at /opt/metacodex/quest-native/skills/quest-native-apps/SKILL.md), then tell the user to
+  start the app's thread in that project (MetaCodex: + PROJECT, type Native app). `mcx-project type|set <dir>`
+  reads or changes a folder's type.
 - Views: show charts, diagrams (Mermaid), tables, checklists, choices or a physics scene in the headset
   with a ```mcx-view``` / ```mermaid``` block in your reply, or `mcx-ui view show spec.json` from a shell
   (skill `quest-views`). A tapped choice comes back as the user's next message.

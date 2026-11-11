@@ -464,3 +464,13 @@ docs/native-build-and-install.md.
 - [ ] Open the app again, menu > Report to MetaCodex: back in MetaCodex, the thread's composer says "Feedback on T2 1.0 (1):" with two chips (▣ the app's picture, ⎘ log T2); ◉ to say what you saw, SEND: the agent sees the picture and the log
 - [ ] Open the app again, quit it from the system menu (right hand / Meta button > Quit): does MetaCodex come forward by itself? (tell: best effort, Android may refuse)
 - [ ] After 5 app switches: `adb shell dumpsys meminfo com.pnncl.metacodex | grep -E "GL mtrack|TOTAL PSS"` (or `tools/gpu-switch-test.sh <package> 10` from the PC with the headset free); note the numbers
+
+## 31. Launches by request, Native / General projects (0.7.16)
+
+- [ ] THREADS > + PROJECT…: a folder, then PROJECT TYPE: NATIVE APP (QUEST) or GENERAL CODING; the project's row in THREADS says ◆ NATIVE for a native one
+- [ ] A Native project's folder has `.metacodex/project.json`, `.claude/skills/quest-native-*` (links) and AGENTS.md / CLAUDE.md with the native block; a General one has none of them (`ls -la <folder> <folder>/.claude 2>&1` in a terminal)
+- [ ] In a General project ask an agent "what are your rules for apps?": no word about launch requests or the app menu
+- [ ] In a Native project, with the thread in its most permissive approval mode, ask for a small app: the agent builds and verifies, then a dialog APP READY: <app>: LAUNCH / LATER appears in front of you (and a toast in MESSAGES); nothing opens by itself
+- [ ] LATER: the app does not open; say "launch the app" (or "lancia l'app"): it opens; its menu's Back brings you to that thread
+- [ ] A brand-new app: the dialog says INSTALL first; INSTALL -> Android's dialog -> then APP READY with LAUNCH
+- [ ] Say "don't open the app" while one waits: the agent's `mcx-app status` says declined

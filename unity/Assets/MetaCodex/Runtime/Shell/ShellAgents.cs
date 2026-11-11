@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
 using MetaCodex.AI;
@@ -375,7 +376,7 @@ namespace MetaCodex.Shell
                 {
                     Icon = folded ? "▸" : "▾",
                     IconColor = t.TextDim,
-                    Title = ((string)pr["name"] ?? "project").ToUpperInvariant(),
+                    Title = ((string)pr["name"] ?? "project").ToUpperInvariant() + (IsNativeProject((string)pr["sources"]?.FirstOrDefault()?["path"]) ? "  ◆ NATIVE" : ""),
                     TitleColor = pid == _projectSel ? t.TextAccent : t.TextDim,
                     Sub = Cut((string)pr["sources"]?.FirstOrDefault()?["path"] ?? "", 34),
                     Badge = asks > 0 ? asks + " NEED YOU" : running > 0 ? running + " RUNNING" : list.Count.ToString(),
@@ -442,6 +443,29 @@ namespace MetaCodex.Shell
             return d.TotalMinutes < 1 ? "now" : d.TotalHours < 1 ? $"{(int)d.TotalMinutes} min" : d.TotalDays < 1 ? $"{(int)d.TotalHours} h" : $"{(int)d.TotalDays} d";
         }
 
+        // a project's type (mcx-project): .metacodex/project.json, else an app folder (AndroidManifest.xml + src/) is native
+        private readonly Dictionary<string, (bool native, float at)> _projectTypes = new Dictionary<string, (bool, float)>();
+
+        private bool IsNativeProject(string linuxPath)
+        {
+            if (string.IsNullOrEmpty(linuxPath)) return false;
+            if (_projectTypes.TryGetValue(linuxPath, out var c) && Time.unscaledTime - c.at < 30f) return c.native;
+            bool native = false;
+            try
+            {
+                string host = AndroidPathOf(linuxPath);
+                if (host != null)
+                {
+                    string j = Path.Combine(host, ".metacodex", "project.json");
+                    native = File.Exists(j) ? File.ReadAllText(j).Contains("\"native\"")
+                        : File.Exists(Path.Combine(host, "AndroidManifest.xml")) && Directory.Exists(Path.Combine(host, "src"));
+                }
+            }
+            catch (Exception) { }
+            _projectTypes[linuxPath] = (native, Time.unscaledTime);
+            return native;
+        }
+
         private void NewProjectPrompt()
         {
             string start = !string.IsNullOrEmpty(_filesPath) && _filesPath != "/" ? _filesPath : "/root/";
@@ -449,15 +473,28 @@ namespace MetaCodex.Shell
             {
                 path = (path ?? "").Trim().TrimEnd('/');
                 if (path.Length < 2) return;
-                EnsureHost(() => Mqh.CreateProject(path.Split('/').Last(), _hostId, path, r =>
+                // the type decides what the project's agents get: a Native app project carries the quest-native skills and
+                // rules (mcx-project), a General one none of them (a website must not get native app rules)
+                Modal("PROJECT TYPE", path + "\nWhat will this project be?", new[] { "NATIVE APP (QUEST)", "GENERAL CODING" }, choice =>
                 {
-                    if (r == null) { Toast("Project not added: " + Mqh.LastError, "error"); return; }
-                    _projectSel = (string)r["id"];
-                    Settings.lastProject = _projectSel;
-                    _collapsedProjects.Remove(_projectSel);
-                    Toast("Project " + r["name"] + " added", "ok");
-                    RefreshThreads();
-                }));
+                    string type = choice == 0 ? "native" : "general";
+                    void Create() => EnsureHost(() => Mqh.CreateProject(path.Split('/').Last(), _hostId, path, r =>
+                    {
+                        if (r == null) { Toast("Project not added: " + Mqh.LastError, "error"); return; }
+                        _projectSel = (string)r["id"];
+                        Settings.lastProject = _projectSel;
+                        _collapsedProjects.Remove(_projectSel);
+                        _projectTypes.Remove(path);
+                        Toast("Project " + r["name"] + " added (" + (type == "native" ? "Native app" : "General coding") + ")", "ok");
+                        RefreshThreads();
+                    }));
+                    if (Git == null || !Git.InUserland) { Create(); return; }
+                    System.Threading.Tasks.Task.Run(async () =>
+                    {
+                        var res = await Git.Shell("mkdir -p " + GitService.Quote(path) + " && mcx-project set " + GitService.Quote(path) + " " + type, 20000);
+                        _main.Enqueue(() => { if (res.code != 0) Toast("Project type not set: " + Cut(res.output ?? "", 80), "warn"); Create(); });
+                    });
+                });
             });
         }
 

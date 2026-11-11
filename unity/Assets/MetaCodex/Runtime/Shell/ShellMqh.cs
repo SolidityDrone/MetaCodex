@@ -57,7 +57,7 @@ namespace MetaCodex.Shell
         // ------------------------------------------------------------------ SKILLS
 
         /// MetaCodex's own skills (mqh/plugins/bb-guide/skills, also laid into /root/.claude/skills): always read-only.
-        public static readonly string[] OwnSkills = { "metacodex-context", "quest-scripting", "quest-gesture-plugins", "quest-views", "quest-native-apps", "quest-native-xr", "quest-native-recipes", "quest-native-dev-loop", "quest-native-debug", "skill-creator", "bb-plugin-authoring", "bb-cli", "submit-a-plugin" };
+        public static readonly string[] OwnSkills = { "metacodex-context", "quest-scripting", "quest-gesture-plugins", "quest-views", "skill-creator", "bb-plugin-authoring", "bb-cli", "submit-a-plugin" };
 
         private sealed class SkillRow
         {

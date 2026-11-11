@@ -45,6 +45,12 @@ The `RESULT:` and `hint:` lines say what happened; the full table of codes is in
 `references/install.md`. Most common: `failure (3)` the user cancelled (ask before trying again); `failure (5)`
 another signing key or installer (the user uninstalls the old copy); `VERSION_DOWNGRADE` (raise `android:versionCode`).
 
+## Launch and install requests
+
+- `RESULT: requested launch of ...` / `requested install of ...`: normal: MetaCodex waits for the user's tap. Do not repeat
+  the command and never try another route; `mcx-app status <dir>`: `pending` (not tapped yet: remind the user once),
+  `launched`, `declined` (the user said no: ask what to change), `installing`, `failed: ...` (the reason follows).
+
 ## The app runs but ...
 
 | Symptom (from the user) | Look for in `mcx-app logs` | Usual cause / fix |
