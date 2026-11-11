@@ -174,6 +174,7 @@ namespace MetaCodex.EditorTools
                 if (Want("agentget")) AgentGetSection(shell);
                 if (Want("mqh")) MqhPanel(shell);
                 if (Want("captures")) Captures(shell, tmp);
+                if (Want("returns")) ReturnsSection(shell); // MetaCodexUiTestReturns.cs
                 if (Want("context")) SessionContextSection(shell, tmp);
                 if (Want("chat")) ChatSection(shell, head); // MetaCodexUiTestChat.cs
                 if (Want("control")) ControlSection(shell, head, frame); // MetaCodexUiTestControl.cs
