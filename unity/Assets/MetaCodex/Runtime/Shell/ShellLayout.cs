@@ -36,7 +36,7 @@ namespace MetaCodex.Shell
 
         private IEnumerable<UiPanel> LayoutPanels()
         {
-            foreach (var kv in _panels) if (kv.Key != "dock" && kv.Key != "picker") yield return kv.Value;
+            foreach (var kv in _panels) if (kv.Key != "dock" && kv.Key != "picker" && kv.Key != ControlId) yield return kv.Value; // CONTROL's rail rides with its window
             foreach (var f in _frames.Values) yield return f;
         }
 
@@ -46,7 +46,14 @@ namespace MetaCodex.Shell
 
         /// Half the arc a panel takes on the ring, including its workspace when it is the thread.
         private float GroupHalfArc(UiPanel p, float r) =>
-            p != null && p.Id == "thread" && WsLinked ? HalfArc(p, r) + WsRingGap * 0.5f + HalfArc(_ws, r) : HalfArc(p, r);
+            p != null && p.Id == "thread" && WsLinked ? HalfArc(p, r) + WsRingGap * 0.5f + HalfArc(_ws, r)
+            : RailBeside(p) ? HalfArc(p, r) + RailShift(r) // CONTROL: the rail on the window's left
+            : HalfArc(p, r);
+
+        /// A panel's own centre for a group centred at `groupAngle`: the thread left of its workspace, a CONTROL window
+        /// right of its rail.
+        private float PanelAngleInGroup(UiPanel p, float groupAngle, float r) =>
+            p != null && p.Id == "thread" ? ThreadAngleInGroup(groupAngle, r) : RailBeside(p) ? groupAngle + RailShift(r) : groupAngle;
 
         /// The thread's own centre for a group centred at `groupAngle` (the workspace sits to its right).
         private float ThreadAngleInGroup(float groupAngle, float r) => WsLinked ? groupAngle - WsRingGap * 0.5f - HalfArc(_ws, r) : groupAngle;
@@ -81,7 +88,7 @@ namespace MetaCodex.Shell
             float r = Mathf.Clamp(Settings.carouselRadius, 0.5f, 2f);
             var open = LayoutPanels().Where(p => p != null && p.IsOpen).ToList();
             if (open.Count == 0) return r;
-            float width = open.Sum(p => p.Width * p.RestLossyScale.x);
+            float width = open.Sum(p => p.Width * p.RestLossyScale.x) + (_rail != null && _rail.IsOpen ? (RailW + RailGap) * _rail.RestLossyScale.x : 0f);
             float room = 2f * Mathf.PI * 0.94f - open.Count * RingGap * Mathf.Deg2Rad; // radians left for the panels themselves
             return room <= 0.2f ? 2.5f : Mathf.Clamp(Mathf.Max(r, width / room), r, 2.5f);
         }
@@ -102,6 +109,7 @@ namespace MetaCodex.Shell
                 if (q == null || q == p || !q.IsOpen) continue;
                 if (p != null && p.Id == "thread" && q == _ws) continue; // the thread's own workspace
                 if (!SameRow(p, height, q, kv.Value.height)) continue;
+                if (RailBeside(q)) { occ.Add((kv.Value.angle - RailShift(r), GroupHalfArc(q, r))); continue; } // with its rail
                 occ.Add((kv.Value.angle, HalfArc(q, r)));
             }
             return occ;
@@ -128,7 +136,7 @@ namespace MetaCodex.Shell
                 else { angle = left - RingGap - half; left = angle - half; }
                 if (!first) toRight = !toRight;
                 first = false;
-                _slots[p.transform] = (p.Id == "thread" ? ThreadAngleInGroup(angle, r) : angle, RowHeight);
+                _slots[p.transform] = (PanelAngleInGroup(p, angle, r), RowHeight);
             }
             SlotWorkspaceBesideThread(r);
             _ringRadius = r;
@@ -161,7 +169,7 @@ namespace MetaCodex.Shell
             float gaze = Mathf.DeltaAngle(_baseYaw + _spin, gazeWorld);
             float a = FindFreeYaw(gaze, GroupHalfArc(p, r), Occupied(p, RowHeight, r), 180f, RingGap);
             if (float.IsNaN(a)) { ArrangeRing(); return; }
-            _slots[p.transform] = (p.Id == "thread" ? ThreadAngleInGroup(a, r) : a, RowHeight);
+            _slots[p.transform] = (PanelAngleInGroup(p, a, r), RowHeight);
             if (p.Id == "thread") SlotWorkspaceBesideThread(r);
         }
 
@@ -211,10 +219,11 @@ namespace MetaCodex.Shell
             {
                 float r = Mathf.Max(_ringRadius, FloatRadius());
                 bool group = p.Id == "thread" && WsLinked;
-                // a dropped thread: its group (thread + workspace) is centred a little to the right of the thread
-                float groupAngle = group ? angle + WsRingGap * 0.5f + HalfArc(_ws, r) : angle;
+                // a dropped thread: its group (thread + workspace) is centred a little to the right of the thread; a
+                // CONTROL window's group (rail + window) a little to its left
+                float groupAngle = group ? angle + WsRingGap * 0.5f + HalfArc(_ws, r) : RailBeside(p) ? angle - RailShift(r) : angle;
                 float free = FindFreeYaw(groupAngle, GroupHalfArc(p, r), Occupied(p, height, r), 180f, RingGap);
-                if (!float.IsNaN(free)) angle = group ? ThreadAngleInGroup(free, r) : free;
+                if (!float.IsNaN(free)) angle = group ? ThreadAngleInGroup(free, r) : RailBeside(p) ? free + RailShift(r) : free;
             }
             _slots[t] = (angle, height);
             if (p != null && p.Id == "thread") SlotWorkspaceBesideThread(Mathf.Max(_ringRadius, FloatRadius()));
@@ -233,6 +242,7 @@ namespace MetaCodex.Shell
         {
             if (Settings == null) return;
             UpdateWorkspaceLink();
+            UpdateControlRail();
             if (!Floating)
             {
                 // fixed: follow the distance every frame (panels are dragged, the user walks): only a uniform changes
@@ -262,7 +272,7 @@ namespace MetaCodex.Shell
             {
                 if (p == null || !p.IsOpen) continue;
                 var t = p.transform;
-                if (Router.IsDragging(p)) { _slots.Remove(t); continue; } // re-slotted where it is dropped
+                if (Router.IsDragging(p) || RailCarries(p)) { _slots.Remove(t); continue; } // re-slotted where it is dropped
                 if (p == _ws && WsLinked) SlotWorkspaceBesideThread(r); // follows its thread (snaps back after a drag)
                 if (!_slots.TryGetValue(t, out var slot)) { Slot(t); slot = _slots[t]; }
                 float a = (_baseYaw + _spin + slot.angle) * Mathf.Deg2Rad;
@@ -271,6 +281,7 @@ namespace MetaCodex.Shell
                 t.SetPositionAndRotation(Vector3.Lerp(t.position, pos, 1f - Mathf.Exp(-dt * 12f)), Quaternion.LookRotation(dir, Vector3.up));
                 p.SetBend(Settings.bendPanels && !StaysFlat(p) ? r : 0f);
             }
+            UpdateControlRail(); // after the ring moved its window
 
             // the dock: lower and closer, turns lazily to stay in front of you (it does not spin with the carousel)
             if (_panels.TryGetValue("dock", out var dock) && dock.IsOpen && head != null && !Router.IsDragging(dock))

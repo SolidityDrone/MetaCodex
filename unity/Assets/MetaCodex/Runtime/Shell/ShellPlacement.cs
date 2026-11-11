@@ -150,6 +150,9 @@ namespace MetaCodex.Shell
             float halfW = p.Width * 0.5f * p.RestLossyScale.x, halfH = p.Height * 0.5f * p.RestLossyScale.y;
             float halfYaw = Mathf.Atan2(halfW, dist) * Mathf.Rad2Deg;
             float halfPitch = Mathf.Atan2(halfH, dist) * Mathf.Rad2Deg;
+            // a CONTROL window brings its rail on its left: that room is kept free too, and the pair is what is centred
+            float reserveM = IsControlPage(id) ? (RailW + RailGap * 2f) * p.RestLossyScale.x : 0f;
+            float reserveYaw = Mathf.Atan2(reserveM, dist) * Mathf.Rad2Deg;
             var room = RoomClearance(eye, gaze, out int yawBins, out int pitchBins);
             float level = Mathf.Asin(Mathf.Clamp(-0.06f / dist, -1f, 1f)) * Mathf.Rad2Deg; // centres just below the eyes, as before
             var taken = new List<ViewRect>();
@@ -174,7 +177,7 @@ namespace MetaCodex.Shell
                         foreach (float ys in yawOff == 0f ? new[] { 1f } : new[] { 1f, -1f })
                         {
                             float yaw = yawOff * ys;
-                            var c = new ViewRect { Yaw0 = yaw - halfYaw, Yaw1 = yaw + halfYaw, Pitch0 = pitch - halfPitch, Pitch1 = pitch + halfPitch };
+                            var c = new ViewRect { Yaw0 = yaw - halfYaw - reserveYaw, Yaw1 = yaw + halfYaw, Pitch0 = pitch - halfPitch, Pitch1 = pitch + halfPitch };
                             // something real there (a wall, a monitor): the panel comes 8 cm in front of it, and is larger in
                             // the view for it; nearer than half a metre is a poor place
                             float d = dist, wall = 0f;
@@ -184,19 +187,20 @@ namespace MetaCodex.Shell
                                 d = Mathf.Max(0.42f, clear - 0.08f);
                                 wall = d < 0.5f ? 40f + (0.5f - (clear - 0.08f)) * 200f : (dist - d) * 20f;
                                 float hy = Mathf.Atan2(halfW, d) * Mathf.Rad2Deg, hp = Mathf.Atan2(halfH, d) * Mathf.Rad2Deg;
-                                c = new ViewRect { Yaw0 = yaw - hy, Yaw1 = yaw + hy, Pitch0 = pitch - hp, Pitch1 = pitch + hp };
+                                c = new ViewRect { Yaw0 = yaw - hy - Mathf.Atan2(reserveM, d) * Mathf.Rad2Deg, Yaw1 = yaw + hy, Pitch0 = pitch - hp, Pitch1 = pitch + hp };
                             }
                             bool free = true;
                             foreach (var t in taken) if (c.Overlaps(t, margin)) { free = false; break; }
                             if (!free) continue;
                             // turning the head sideways is easier than nodding: a degree up or down costs more
                             // (and above a window rather than below it: below is where the hands and the dock are)
-                            float cost = Mathf.Abs(yaw) + Mathf.Abs(pitch - level) * (pitch >= level ? 1.6f : 3.0f) + wall;
+                            float groupYaw = yaw - reserveYaw * 0.5f;
+                            float cost = Mathf.Abs(groupYaw) + Mathf.Abs(pitch - level) * (pitch >= level ? 1.6f : 3.0f) + wall;
                             if (hasOpener)
                             {
                                 // beside the window it was opened from: the gap to it counts most, its right side is preferred
                                 var gap = c.Gap(openerRect);
-                                cost = Mathf.Abs(yaw) * 0.25f + Mathf.Abs(pitch - level) * 0.5f + (gap.yaw + gap.pitch * 1.5f) * 1.6f + (c.YawMid < openerRect.YawMid ? 5f : 0f) + wall;
+                                cost = Mathf.Abs(groupYaw) * 0.25f + Mathf.Abs(pitch - level) * 0.5f + (gap.yaw + gap.pitch * 1.5f) * 1.6f + (c.YawMid < openerRect.YawMid ? 5f : 0f) + wall;
                             }
                             if (cost < best) { best = cost; bestYaw = yaw; bestPitch = pitch; bestDist = d; }
                         }

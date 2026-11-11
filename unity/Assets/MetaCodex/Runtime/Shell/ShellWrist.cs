@@ -30,29 +30,23 @@ namespace MetaCodex.Shell
             // each with a line icon of UiIconAtlas (the glyph is the dock's)
             void I(List<UiWristMenu.Item> list, string glyph, string icon, string label, Action act, Func<bool> lit = null, Color? tint = null) =>
                 list.Add(new UiWristMenu.Item { Glyph = glyph, Icon = icon, Label = label, Act = act, Lit = lit, LitTint = tint ?? t.Ok });
-            // inner ring: what is used most
+            // inner ring: what is used most (owner 2026-11-11: 19 tiles were too many; setup is in CONTROL now)
             I(Wrist.Inner, "◉", "mic", "TALK", () => VoiceToggle(), () => VoiceState == "listening" || VoiceState == "transcribing", t.Danger);
             I(Wrist.Inner, "▶", "terminal", "TERM", () => ShowOrNewTerminal());
             I(Wrist.Inner, "◫", "folder", "FILES", () => TogglePanel("files"), () => IsPanelOpen("files"));
             I(Wrist.Inner, "☰", "threads", "THREADS", () => TogglePanel("threads"), () => IsPanelOpen("threads"));
-            I(Wrist.Inner, "◆", "spark", "AGENTS", () => TogglePanel("agents"), () => IsPanelOpen("agents"));
-            I(Wrist.Inner, "◐", "aperture", "FOCUS", () => SetFocus(!Settings.focusEnabled), () => Settings.focusEnabled);
-            // outer ring: everything else the dock has
-            I(Wrist.Outer, "◎", "globe", "WEB", () => TogglePanel("web"), () => IsPanelOpen("web"));
-            // skills, plugins, scripts, gestures and the daemon link: one MQH panel (was SCRIPTS and GESTURE here)
-            I(Wrist.Outer, "⬡", "cube", "MQH", () => TogglePanel("mqh"), () => IsPanelOpen("mqh"));
+            I(Wrist.Inner, "◎", "globe", "WEB", () => TogglePanel("web"), () => IsPanelOpen("web"));
+            // settings, voice, agents, MQH (skills, plugins, scripts, gestures, daemon), vault and git, system: one place
+            I(Wrist.Inner, "⚙", "gear", "CONTROL", () => ToggleControl(), () => ControlRailPage != null);
+            // outer ring: quick actions and the smaller windows
+            I(Wrist.Outer, "▤", "windows", "TERMS", () => TogglePanel("terminals"), () => IsPanelOpen("terminals"));
             I(Wrist.Outer, "▣", "photos", "CLIP", () => TogglePanel("clipboard"), () => IsPanelOpen("clipboard"));
-            I(Wrist.Outer, "⬢", "chip", "SYSTEM", () => TogglePanel("system"), () => IsPanelOpen("system"));
-            I(Wrist.Outer, "♫", "wave", "VOICE", () => TogglePanel("voice"), () => IsPanelOpen("voice"));
-            I(Wrist.Outer, "⚿", "lock", "VAULT", () => TogglePanel("vault"), () => IsPanelOpen("vault"));
-            I(Wrist.Outer, "⎇", "branch", "GIT", () => TogglePanel("git"), () => IsPanelOpen("git"));
+            I(Wrist.Outer, "◐", "aperture", "FOCUS", () => SetFocus(!Settings.focusEnabled), () => Settings.focusEnabled);
             I(Wrist.Outer, "⌖", "select", "SELECT", () => SetSelectionMode(!Router.SelectionMode), () => Router.SelectionMode, t.Warn);
             I(Wrist.Outer, "⌨", "keyboard", "KEYS", () => OpenKeyboard());
             // the system's keyboard on a table (Surface Keyboard and Touchpad): bring it now, or turn it on (owner 2026-11-10)
             I(Wrist.Outer, "⌨", "tablekeys", "TABLE", () => OpenTableKeyboard());
             I(Wrist.Outer, "⟲", "recenter", "CENTER", () => app?.Recenter());
-            I(Wrist.Outer, "⚙", "gear", "SETUP", () => TogglePanel("settings"), () => IsPanelOpen("settings"));
-            I(Wrist.Outer, "▤", "windows", "TERMS", () => TogglePanel("terminals"), () => IsPanelOpen("terminals"));
             Wrist.Build();
             _wristModeApplied = !Settings.wristMenu; // applied below
             ApplyMainMenuMode();

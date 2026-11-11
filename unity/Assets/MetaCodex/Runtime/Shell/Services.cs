@@ -408,6 +408,25 @@ namespace MetaCodex.Shell
             });
         }
 
+        /// Like Call, but `work` runs on the request's pool thread (merging, parsing): only its result reaches the main
+        /// thread (the THREAD chat: no frame pays for a timeline's JSON).
+        public void CallThen<T>(HttpMethod m, string path, JToken body, Func<JToken, T> work, Action<T> onMain)
+        {
+            System.Threading.Interlocked.Increment(ref _inFlight);
+            Task.Run(async () =>
+            {
+                JToken r = null;
+                try { r = await Send(m, path, body).ConfigureAwait(false); } catch (Exception) { }
+                T result = default;
+                try { result = work(r); } catch (Exception ex) { LastError = "parsing " + path.Split('?')[0] + ": " + ex.Message; }
+                _main.Enqueue(() => onMain?.Invoke(result));
+                System.Threading.Interlocked.Decrement(ref _inFlight);
+            });
+        }
+
+        public static string TimelinePath(string id, string afterTag, int segments) =>
+            $"/api/v1/threads/{E(id)}/timeline?includeNestedRows=true" + (segments > 0 ? "&segmentLimit=" + segments : "") + (string.IsNullOrEmpty(afterTag) ? "" : "&afterTag=" + E(afterTag));
+
         public void Version(Action<JToken> cb) => Call(HttpMethod.Get, "/api/v1/system/version", null, cb);
         public void Plugins(Action<JToken> cb) => Call(HttpMethod.Get, "/api/v1/plugins", null, cb);
         /// Skills MQH gives the agents (its own, plugins', each provider's), seen from a project.
@@ -447,6 +466,12 @@ namespace MetaCodex.Shell
         public void Thread(string id, Action<JToken> cb) => Call(HttpMethod.Get, $"/api/v1/threads/{E(id)}", null, cb);
         public void CreateThread(JObject body, Action<JToken> cb) => Call(HttpMethod.Post, "/api/v1/threads", body, cb);
         public void Timeline(string id, Action<JToken> cb) => Call(HttpMethod.Get, $"/api/v1/threads/{E(id)}/timeline", null, cb);
+        /// The timeline with every turn's steps (thinking, commands, edits); with afterTag (the last answer's `tag`)
+        /// MQH answers with a delta (changed rows only) while it still knows that answer.
+        public void Timeline(string id, string afterTag, int segments, Action<JToken> cb) => Call(HttpMethod.Get, TimelinePath(id, afterTag, segments), null, cb);
+        /// The provider's plan and usage windows (5 hour, weekly, ...), as MQH's provider plugin reports them.
+        public void UsageLimits(string providerId, string hostId, Action<JToken> cb) =>
+            Call(HttpMethod.Get, "/api/v1/system/usage-limits?providerId=" + E(providerId) + (string.IsNullOrEmpty(hostId) ? "" : "&hostId=" + E(hostId)), null, cb);
         public void SendMessage(string id, string text, Action<JToken> cb) => SendMessage(id, text, null, cb);
         /// extra: the composer's choices for this and the next turns (model, reasoningLevel, permissionMode).
         public void SendMessage(string id, string text, JObject extra, Action<JToken> cb) => SendMessage(id, text, extra, null, cb);
@@ -465,6 +490,17 @@ namespace MetaCodex.Shell
             return body;
         }
         /// The model, effort and access the thread's next turn uses (its last ones, or the defaults).
+        // workspaces (docs/workspaces.md): the environments (checkouts, worktrees) and what waits in a thread's queue
+        public void Environments(string projectId, Action<JToken> cb) =>
+            Call(HttpMethod.Get, "/api/v1/environments?limit=200" + (string.IsNullOrEmpty(projectId) ? "" : "&projectId=" + E(projectId)), null, cb);
+        public void ArchiveEnvironmentThreads(string environmentId, Action<JToken> cb) => Call(HttpMethod.Post, $"/api/v1/environments/{E(environmentId)}/archive-threads", null, cb);
+        public void DeleteEnvironment(string environmentId, Action<JToken> cb) => Call(HttpMethod.Delete, $"/api/v1/environments/{E(environmentId)}", null, cb);
+        public void QueuedMessages(string threadId, Action<JToken> cb) => Call(HttpMethod.Get, $"/api/v1/threads/{E(threadId)}/queued-messages", null, cb);
+        /// The user's Send now on a queued row: it skips the plugins' holds (MQH's workspace guard, the limits).
+        public void SendQueuedNow(string threadId, string queuedId, Action<JToken> cb) =>
+            Call(HttpMethod.Post, $"/api/v1/threads/{E(threadId)}/queued-messages/{E(queuedId)}/send", new JObject { ["mode"] = "auto" }, cb);
+        public void DeleteQueuedMessage(string threadId, string queuedId, Action<JToken> cb) =>
+            Call(HttpMethod.Delete, $"/api/v1/threads/{E(threadId)}/queued-messages/{E(queuedId)}", null, cb);
         public void ExecOptions(string id, Action<JToken> cb) => Call(HttpMethod.Get, $"/api/v1/threads/{E(id)}/default-execution-options", null, cb);
         public void ForkThread(JObject body, Action<JToken> cb) => Call(HttpMethod.Post, "/api/v1/threads/fork", body, cb);
         public void UpdateThread(string id, JObject patch, Action<JToken> cb) => Call(new HttpMethod("PATCH"), $"/api/v1/threads/{E(id)}", patch, cb);

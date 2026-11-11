@@ -344,6 +344,9 @@ namespace MetaCodex.AI
             return sb.ToString().TrimEnd();
         }
 
+        private static readonly Regex StateWords = new Regex(@"\b(stuck|still|progress|doing|working|busy|finish(ed)?|done yet|how long|waiting|status|hang(ing)?|frozen|alive|bloccat[oa]|fermo|sta facendo|lavorando|lavora|finit[oa]|quanto manca|aspett\w*|a che punto|va avanti|procede)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        private static readonly Regex RecapWords = new Regex(@"achiev|so far|summar|recap|riassun|what did|what has it done|what have|cosa ha fatto|finora|\bwhy\b|perch|explain|spiega", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
         /// The question answered from the facts alone, or null when it needs the model (recaps, explanations).
         public static string ExactAnswer(JObject snapshot, SessionQuestion q)
         {
@@ -374,6 +377,11 @@ namespace MetaCodex.AI
                 string risks = flags.Count == 0 ? "The scan found nothing risky in it" : "It " + string.Join(", ", flags.Take(4));
                 return $"In “{(string)ap["thread"]}” the agent asks to {((string)ap["kind"] == "command" ? "run" : "use")}: {ProcessVitals.Short(what, 120)}. {risks}. It's your call: ALLOW or DENY in the thread.";
             }
+            // "what is it doing?", "is it stuck?", "is the agent still working?": the thread's pulse says it in two
+            // sentences, no model (a build / install question stays with the process vitals below)
+            if (data["pulse"] is JObject pulse && (q.Topics.Contains("thread") || q.Deictic) && StateWords.IsMatch(q.Text) && !RecapWords.IsMatch(q.Text)
+                && !(q.Topics.Contains("processes") && Regex.IsMatch(q.Text, @"build|compil|install|download|scaric", RegexOptions.IgnoreCase)))
+                return (string)pulse["speak"];
             if (q.Topics.Contains("processes") && !q.Topics.Contains("thread") && data["processes"] is JArray procs)
             {
                 string t = q.Text.ToLowerInvariant();

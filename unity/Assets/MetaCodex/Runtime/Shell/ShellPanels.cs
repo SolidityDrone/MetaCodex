@@ -34,11 +34,13 @@ namespace MetaCodex.Shell
             BuildThread();
             BuildWorkspace();
             BuildNewThread();
+            BuildWorkspaces(); // checkouts and worktrees (ShellWorkspaces)
             BuildPicker();
             BuildVault();
             BuildVoice();
             BuildSystem();
             BuildMessagesPanel(); // the orb's messages (ShellOrb)
+            BuildControl(); // CONTROL's rail beside the setup windows (ShellControl)
             foreach (var p in _panels.Values) p.BaseScale = Vector3.one * Mathf.Clamp(Settings.uiScale, 0.6f, 1.8f);
         }
 
@@ -71,6 +73,7 @@ namespace MetaCodex.Shell
                 case "clipboard": Clipboard.Reload(); RefreshClipboardPanel(); break;
                 case "agents": RefreshAgents(); ProbeAgents(); break;
                 case "threads": RefreshThreads(); break;
+                case "workspaces": RefreshWorkspaces(); break;
                 case "vault": RefreshVaultPanel(); if (_vTabs != null && _vTabs.Selected == 1) { GitRefreshRepos(); RefreshGitHubStatus(); } break;
                 case "voice": EnsureVoiceService(); PollVoiceStatus(); break;
                 case "system": if (_sysTabs != null && _sysTabs.Selected == 1) RefreshStorage(false); else RefreshTools(false); break;
@@ -82,28 +85,24 @@ namespace MetaCodex.Shell
         private void BuildDock()
         {
             var t = UiTheme.Current;
+            // the same as the wrist menu (owner 2026-11-11: 19 was too many): work windows and quick actions; setup
+            // (agents, MQH, vault, voice, system, settings) is in CONTROL
             var items = new (string label, Action act)[]
             {
+                ("◉\nTALK", () => VoiceToggle()),
                 ("▶\nTERM", () => ShowOrNewTerminal()),
-                ("▤\nTERMS", () => TogglePanel("terminals")),
                 ("◫\nFILES", () => TogglePanel("files")),
                 ("☰\nTHREADS", () => TogglePanel("threads")),
-                ("◆\nAGENTS", () => TogglePanel("agents")),
                 ("◎\nWEB", () => TogglePanel("web")),
-                ("⬡\nMQH", () => TogglePanel("mqh")),
+                ("⚙\nCONTROL", () => ToggleControl()),
+                ("▤\nTERMS", () => TogglePanel("terminals")),
                 ("▣\nCLIP", () => TogglePanel("clipboard")),
-                ("⬢\nSYSTEM", () => TogglePanel("system")),
-                ("◉\nTALK", () => VoiceToggle()),
-                ("♫\nVOICE", () => TogglePanel("voice")),
-                ("⚿\nVAULT", () => TogglePanel("vault")),
-                ("⎇\nGIT", () => TogglePanel("git")),
                 ("◐\nFOCUS", () => SetFocus(!Settings.focusEnabled)),
                 ("⌖\nSELECT", () => SetSelectionMode(!Router.SelectionMode)),
                 ("⌨\nKEYS", () => OpenKeyboard()),
                 ("⟲\nCENTER", () => app?.Recenter()),
-                ("⚙\nSETUP", () => TogglePanel("settings")),
             };
-            const int perRow = 9;
+            const int perRow = 6;
             float bw = 0.070f, gap = 0.006f, pad = 0.012f, bh = 0.058f, handle = 0.016f;
             float w = perRow * bw + (perRow - 1) * gap + 2 * pad, h = 2 * bh + gap + 2 * pad + handle;
             var dock = UiPanel.Create<UiPanel>("dock", "", w, h, _root, header: false);
@@ -622,7 +621,7 @@ end)
             var lay = new SavedLayout { name = name, mode = Settings.layout };
             foreach (var kv in _panels)
             {
-                if (!kv.Value.IsOpen || kv.Key == "dock") continue;
+                if (!kv.Value.IsOpen || kv.Key == "dock" || kv.Key == ControlId) continue; // the rail comes back with its window
                 var d = kv.Value.transform.position - head.position;
                 var fw = kv.Value.transform.forward;
                 lay.panels.Add(new SavedPanel

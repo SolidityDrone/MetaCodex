@@ -32,7 +32,13 @@ namespace MetaCodex.UI
         public int Count => _toasts.Count;
         public IEnumerable<UiPanel> Panels { get { foreach (var t in _toasts) if (t.Panel != null) yield return t.Panel; } }
 
-        public void Show(string text, string kind = "info", float seconds = 3.2f)
+        /// Pointer input for callouts that do something when tapped (the shell gives its router).
+        public Action<UiPanel> Register, Unregister;
+
+        public void Show(string text, string kind = "info", float seconds = 3.2f) => Show(text, kind, seconds, null);
+
+        /// A callout; with onTap the whole card is a button (a thread that answered: tap opens it).
+        public void Show(string text, string kind, float seconds, Action onTap)
         {
             Last = text;
             var note = new Note { At = DateTime.Now, Kind = kind ?? "info", Text = text ?? "" };
@@ -47,9 +53,14 @@ namespace MetaCodex.UI
             var tint = kind == "error" ? t.Danger : kind == "warn" ? t.Warn : kind == "ok" ? t.Ok : t.Accent;
             panel.Add(new UiLabel((kind == "error" ? "⚠ " : kind == "ok" ? "✓ " : "◆ ") + text, t.BodySize)
                 { Rect = new Rect(0.016f, 0.006f, 0.39f, panel.Height - 0.012f), Color = Color.Lerp(tint, Color.white, 0.5f), Wrap = two });
+            if (onTap != null && Register != null)
+            {
+                panel.Add(new UiButton("", onTap, UiButtonStyle.Ghost) { Rect = new Rect(0.004f, 0.004f, panel.Width - 0.008f, panel.Height - 0.008f) });
+                Register(panel);
+            }
             panel.SetHighlight(0.6f);
             _toasts.Insert(0, new Toast { Panel = panel, Until = Time.unscaledTime + seconds + (two ? 1.2f : 0f) + (kind == "error" ? 1.5f : 0f) });
-            while (_toasts.Count > 4) { _toasts[_toasts.Count - 1].Panel.CloseAndDestroy(); _toasts.RemoveAt(_toasts.Count - 1); }
+            while (_toasts.Count > 4) { Unregister?.Invoke(_toasts[_toasts.Count - 1].Panel); _toasts[_toasts.Count - 1].Panel.CloseAndDestroy(); _toasts.RemoveAt(_toasts.Count - 1); }
             Layout(true);
             panel.PlayOpen(); // cast by the orb from where it is (after it has its place: the scan line leaves from the orb's side)
             UiSounds.Fire(kind == "error" ? "error" : "toast");
@@ -64,7 +75,7 @@ namespace MetaCodex.UI
             for (int i = _toasts.Count - 1; i >= 0; i--)
             {
                 if (now < _toasts[i].Until) continue;
-                if (_toasts[i].Panel != null) _toasts[i].Panel.CloseAndDestroy(); // and goes with it
+                if (_toasts[i].Panel != null) { Unregister?.Invoke(_toasts[i].Panel); _toasts[i].Panel.CloseAndDestroy(); } // and goes with it
                 _toasts.RemoveAt(i);
             }
             Layout(false);

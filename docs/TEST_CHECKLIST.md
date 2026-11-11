@@ -377,3 +377,43 @@ The in-app browser, WEB (same version):
 - [ ] KEYS on the dock or TABLE on the wrist: the keyboard types into the terminal (`ls` ⏎, CTRL then c, the arrows)
 - [ ] Touchpad: look at a window, slide a finger on the pad: the cursor moves over that window; a tap clicks; two fingers scroll a list
 - [ ] Frame rate while typing on the table and with MQH running: 72 fps
+
+## 25. THREAD as a chat, the agent's state, voice into the composer (owner 2026-11-11)
+
+- [ ] Open an OpenCode thread and send a task: your message in a bubble on the right; under it `◐ Working` with the steps appearing one by one (thoughts, `$ commands`, `✎ files`)
+- [ ] While it thinks: "Thinking…" with its newest sentence under it; a tap on a thought opens its text
+- [ ] The status line under the chat says what it does now and for how long (`Running npm test · 0:45   turn 3:12 · live`)
+- [ ] The answer appears in full under the work and grows while it is written (a caret at its end); the work header closes to `⚙ Worked 4:31 · …` when it is done, a tap opens it again
+- [ ] Ask for something long (several commands): when the steps push your prompt off the top, it stays pinned there; a tap on it scrolls back to it
+- [ ] Scroll up while it works: the view holds still, `↓ NEW` shows; a tap goes back to the end
+- [ ] The meta row shows the plan and the usage windows (OpenCode Go: 5h · week · month); the CONTEXT ring's picker lists them with their resets
+- [ ] ◉ beside SEND: say a message, pause: the words are typed into the composer (not sent); SEND sends them. The same ◉ in NEW THREAD
+- [ ] TALK: "what is this thread doing?" / "is it stuck?" / "cosa sta facendo?": a short spoken answer at once (no waiting for the model)
+- [ ] Stop a thread's provider mid-turn or wait on a silent step: after ~2 min the status line turns amber ("may be stuck")
+- [ ] A thread finishes while its window is open: the frame pulses three times and the answer glows; the orb casts “✓ … answered: …”
+- [ ] A thread finishes while you do something else (its window closed): within a few seconds the orb casts “✓ … answered”; a tap on the callout opens the thread
+- [ ] A thread asks for an approval in the background: the orb casts “… needs you” (amber)
+- [ ] Frame rate with a working thread open: 72 fps
+
+## 26. CONTROL and the calmer main menu (owner 2026-11-11)
+
+- [ ] The wrist menu: 6 inner tiles (TALK, TERM, FILES, THREADS, WEB, CONTROL) and 7 outer (TERMS, CLIP, FOCUS, SELECT, KEYS, TABLE, CENTER); easier to hit, nothing missing you use daily
+- [ ] CONTROL: one window with the rail on its left (ten categories, each with its status: fixed, sound, on / off, ready, running, keys)
+- [ ] Tap AGENTS, MQH, VAULT, VOICE, SYSTEM in the rail: each takes the same place, the rail stays still; DISPLAY / LOOK & SOUND / FOCUS / HANDS / ABOUT only change SETTINGS' page
+- [ ] Drag the window by its header: the rail comes along; pinch the rail's bar and move it: the window comes along
+- [ ] ✕ on the window closes the rail too; CONTROL on the menu brings back the last category; pressed again it closes
+- [ ] Voice: "open the control panel", "open agents", "open git", "apri le impostazioni" open the right page with the rail
+- [ ] THREADS > ◆ AGENTS opens CONTROL on AGENTS
+- [ ] With a terminal open, TERMS from the menu opens right beside it; with a thread open, CLIP opens beside the thread
+- [ ] FLOAT: CONTROL and its rail take one place on the ring, nothing overlaps them
+
+## 27. Workspaces: several threads in one project (owner 2026-11-11)
+
+- [ ] Start a thread in a project's CHECKOUT; while it works, open NEW THREAD on the same project: WORKTREE is chosen, the summary says who works in the checkout
+- [ ] Start that one in a WORKTREE: both work at once; THREADS shows the project's folders (▣ checkout, ⎇ the worktree's branch) with each thread under its own
+- [ ] Send a message to a second CHECKOUT thread while the first works: it does not start; THREAD says "⏸ Not started: “…” is working in this checkout" with ▶ SEND NOW; when the first is done it starts by itself
+- [ ] SEND NOW: asks first, then both work (THREADS shows 2 WORKING ⚠ on the checkout)
+- [ ] ⎇ WORKSPACES: the worktree shows its branch, base, ahead/behind and changes; MERGE INTO MAIN on a clean branch merges (the checkout on main and clean); on a conflicting one it lists the files and ASK ITS AGENT sends the rebase request
+- [ ] REMOVE a finished worktree: its threads are archived and the folder goes; the branch is still in `git branch`
+- [ ] Voice "open the worktrees"; "what is this thread doing?" on a held thread says why it has not started
+

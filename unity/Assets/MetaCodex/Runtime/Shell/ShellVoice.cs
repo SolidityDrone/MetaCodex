@@ -118,7 +118,7 @@ namespace MetaCodex.Shell
         private JArray _voicePrefix;
         private int _voicePrefixRev = -1;
         private string _voiceGrammar;
-        public static readonly string[] VoicePanels = { "terminals", "files", "git", "agents", "threads", "web", "links", "clipboard", "mqh", "skills", "plugins", "scripts", "gestures", "vault", "settings", "voice", "system", "focus", "storage", "tools", "messages" };
+        public static readonly string[] VoicePanels = { "terminals", "files", "git", "agents", "threads", "web", "links", "clipboard", "mqh", "skills", "plugins", "scripts", "gestures", "vault", "settings", "voice", "system", "focus", "storage", "tools", "messages", "workspaces" };
 
         private AudioSource _voiceAudio;
         private UiPanel _vHud;
@@ -354,6 +354,7 @@ namespace MetaCodex.Shell
         public void VoiceStop()
         {
             if (!Recorder.Recording) return;
+            if (Dictating) { StopDictation(); return; } // ◉ dictation into a text field (ShellThreadView)
             bool heard = Recorder.HeardSpeech;
             var wav = Recorder.Stop();
             if (wav == null) { VoiceDone(new VoiceResult { Error = heard ? "too short" : "nothing recorded" }, null); return; }
@@ -363,12 +364,14 @@ namespace MetaCodex.Shell
         public void VoiceCancel()
         {
             Recorder.Cancel();
+            if (Dictating) { _dictateTo = null; _dictField = null; RestoreRecorder(); }
             SetVoiceState("idle", "", "");
             if (_vHud != null && _vHud.IsOpen) _vHud.Close();
         }
 
         private void OnRecorderFinished(byte[] wav)
         {
+            if (Dictating) { DictationWav(wav); return; }
             if (wav == null) { VoiceDone(new VoiceResult { Error = "no speech heard" }, null); return; }
             VoiceProcessWav(wav, null);
         }
@@ -595,10 +598,11 @@ namespace MetaCodex.Shell
             var panelSyn = new Dictionary<string, string>
             {
                 ["provider"] = "agents", ["providers"] = "agents", ["agent"] = "agents", ["ai"] = "agents", ["models"] = "agents", ["sign in"] = "agents", ["login"] = "agents",
-                ["thread"] = "threads", ["conversations"] = "threads", ["chats"] = "threads", ["sessions"] = "threads", ["projects"] = "threads", ["workspaces"] = "threads",
+                ["thread"] = "threads", ["conversations"] = "threads", ["chats"] = "threads", ["sessions"] = "threads", ["projects"] = "threads", ["workspaces"] = "workspaces", ["worktrees"] = "workspaces", ["worktree"] = "workspaces", ["checkouts"] = "workspaces",
                 ["browser"] = "web", ["internet"] = "web", ["website"] = "web", ["web browser"] = "web", ["web page"] = "web", ["page"] = "web", ["site"] = "web",
                 ["bookmarks"] = "links", ["local servers"] = "links", ["dev servers"] = "links", ["bookmark"] = "links",
                 ["setup"] = "settings", ["preferences"] = "settings", ["options"] = "settings", ["config"] = "settings", ["configuration"] = "settings",
+                ["control panel"] = "settings", ["control center"] = "settings", ["control centre"] = "settings", ["pannello di controllo"] = "settings", ["centro di controllo"] = "settings",
                 ["gesture"] = "gestures", ["hands"] = "gestures", ["gesture studio"] = "gestures",
                 ["captures"] = "clipboard", ["capture"] = "clipboard", ["screenshots"] = "clipboard", ["screenshot"] = "clipboard", ["screen captures"] = "clipboard",
                 ["image clipboard"] = "clipboard", ["snapshots"] = "clipboard", ["clips"] = "clipboard",
@@ -660,7 +664,7 @@ namespace MetaCodex.Shell
                 Description = "Open a panel to see or manage something: terminals (open terminals), files (folders), git (repositories, branches, commits), " +
                     "agents (AI providers: which are signed in, logins, accounts, models), threads (agent conversations, workspaces, projects), web (the browser: web pages, localhost), links (bookmarks and local dev servers), " +
                     "clipboard (captures, screenshots of windows), mqh (skills, plugins, scripts, gestures, the harness), skills (the agents' skills), plugins (MQH and gesture plugins), scripts (Lua scripts), " +
-                    "gestures (hand gestures), vault (secrets, API keys), settings (look, layout, hands), voice (voice control, AI models)",
+                    "gestures (hand gestures), vault (secrets, API keys), settings (look, layout, hands), voice (voice control, AI models), workspaces (the folders threads work in: checkout, worktrees, merging)",
                 Parameters = VoiceCommands.Schema(("panel", "string", VoicePanels, "the panel to open", true)),
                 Synonyms = new Dictionary<string, Dictionary<string, string>> { ["panel"] = panelSyn },
                 Phrases = new[]

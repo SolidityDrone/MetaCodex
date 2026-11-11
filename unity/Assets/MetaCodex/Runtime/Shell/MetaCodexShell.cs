@@ -293,6 +293,7 @@ namespace MetaCodex.Shell
 
         public bool OpenPanel(string id)
         {
+            if (id == ControlId) return OpenControl(null); // the rail alone is not a window: CONTROL on its last category
             if (Alias(ref id, out int tab))
             {
                 bool ok = OpenPanel(id);
@@ -300,16 +301,20 @@ namespace MetaCodex.Shell
                 return ok;
             }
             if (!_panels.TryGetValue(id ?? "", out var p)) return false;
+            // CONTROL shows one category at a time: another one takes the shown window's place (ShellControl)
+            var swapFrom = IsControlPage(id) ? ShownControlPage(id) : null;
             if (!p.IsOpen)
             {
                 // back where the user left it when that place is still free and in view, else the best free place:
-                // beside the window it is opened from, or in front (ShellPlacement)
-                if (!_placed.Contains(id) || !OldPlaceStillGood(p)) PlaceSmart(id, p, OpenerNow());
+                // beside the window it is opened from (or the one it belongs to), or in front (ShellPlacement)
+                if (swapFrom != null) TakePlaceOf(p, swapFrom);
+                else if (!_placed.Contains(id) || !OldPlaceStillGood(p)) PlaceSmart(id, p, OpenerNow() ?? ContextOpener(id));
                 p.Open();
                 _placed.Add(id);
             }
             else p.Open(); // re-plays the open glow so it is easy to spot
-            OnOpenedFloating(p);
+            if (IsControlPage(id)) { CloseOtherControlPages(id); AttachRail(id); }
+            if (swapFrom == null || !Floating) OnOpenedFloating(p);
             OnPanelOpened(id);
             return true;
         }
@@ -383,6 +388,7 @@ namespace MetaCodex.Shell
                     if (!kv.Value.IsOpen) kv.Value.Open();
                     continue;
                 }
+                if (kv.Key == ControlId) continue; // the rail follows its window
                 if (kv.Value.IsOpen) { PlaceSmart(kv.Key, kv.Value, null, settled.ToList()); settled.Add(kv.Value); } // one by one, clear of those already placed
             }
             if (Orb != null && Settings.orb) { FrameOrb(true); Orb.Teleport(OrbHome()); } // the orb comes along

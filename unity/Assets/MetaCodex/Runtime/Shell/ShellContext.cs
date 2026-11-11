@@ -26,6 +26,12 @@ namespace MetaCodex.Shell
         private readonly HashSet<string> _ctxPending = new HashSet<string>();
         private readonly HashSet<string> _ctxToolsSeen = new HashSet<string>();
         private readonly HashSet<int> _ctxProcsSeen = new HashSet<int>();
+        // each thread's pulse (ThreadPulse: what it does now, since when, the pattern); the open thread's comes from
+        // its panel's polls, the other working threads' from a small timeline read every 15 s
+        private readonly Dictionary<string, ThreadPulse> _pulses = new Dictionary<string, ThreadPulse>();
+        private JArray _ctxThreadRows;
+        private float _ctxNextPulses;
+        public IReadOnlyDictionary<string, ThreadPulse> Pulses => _pulses;
 
         private void InitSessionContext()
         {
@@ -48,6 +54,13 @@ namespace MetaCodex.Shell
                 if (p != null && p.Id != "dock") { _ctxPointed = p; _ctxPointedAt = Time.unscaledTime; }
             }
             if (Time.unscaledTime >= _ctxNextSample) { _ctxNextSample = Time.unscaledTime + 20f; SampleProcesses(); }
+            if (Time.unscaledTime >= _ctxNextPulses)
+            {
+                // every 5 s while another thread works (its "answered" callout comes soon), else every 15 s
+                bool otherWorking = _pulses.Any(kv => (kv.Key != _threadOpen || !IsPanelOpen("thread")) && kv.Value.Working);
+                _ctxNextPulses = Time.unscaledTime + (otherWorking ? 5f : 15f);
+                CtxPollPulses();
+            }
             if (Time.unscaledTime >= _ctxNextSave) { _ctxNextSave = Time.unscaledTime + 30f; if (SessionMemory.Dirty) SessionMemory.Save(SessionLogPath); }
         }
 
@@ -76,6 +89,62 @@ namespace MetaCodex.Shell
             foreach (var kv in before)
                 if (!after.Any(p => p.Pid == kv.Key) && _ctxProcsSeen.Remove(kv.Key))
                     SessionMemory.Add("process", kv.Key.ToString(), $"ended after {ProcessVitals.Duration(kv.Value.Elapsed)}: {Cut(kv.Value.Args, 80)}", now);
+        }
+
+        // ------------------------------------------------------------------ thread pulses
+
+        /// A thread's new pulse: what changed (started, a failure, fixing, quiet, answered, an error) goes into the
+        /// mid-term memory; the pulse stays for questions.
+        private void CtxPulse(string threadId, ThreadPulse p)
+        {
+            if (threadId == null || p == null) return;
+            _pulses.TryGetValue(threadId, out var before);
+            foreach (var e in ThreadPulse.Changes(before, p)) SessionMemory.Add("thread", threadId, e);
+            _pulses[threadId] = p;
+            NotifyThreadChange(threadId, before, p); // the orb: answered / error / needs you (ShellThreadView)
+        }
+
+        /// The other threads that work (or worked at the last look): their last two exchanges, parsed into a pulse.
+        /// Small reads on loopback, only while MQH is up and the app runs.
+        private void CtxPollPulses()
+        {
+            if (!Application.isPlaying || Mqh == null || !Mqh.Online) return;
+            Mqh.Threads(null, th =>
+            {
+                if (!(th is JArray rows)) return;
+                _ctxThreadRows = rows;
+                foreach (var t in rows.OfType<JObject>())
+                {
+                    string id = (string)t["id"];
+                    if (id == null || id == _threadOpen && IsPanelOpen("thread")) continue; // the open window polls its own
+                    bool active = ThreadTimeline.IsWorking(ThreadStatus(t)) || t["hasPendingInteraction"]?.Value<bool>() == true;
+                    bool wasActive = _pulses.TryGetValue(id, out var pp) && pp.Working;
+                    if (!active && !wasActive) continue;
+                    var row = t;
+                    // parsed on the pool thread; only the pulse comes back to the main thread
+                    Mqh.CallThen(System.Net.Http.HttpMethod.Get, MqhClient.TimelinePath(id, null, 2), null,
+                        r => r?["rows"] is JArray tlRows ? ThreadPulse.From(ThreadTimeline.Parse(tlRows, r, ThreadStatus(row)), row, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()) : null,
+                        p => { if (p != null) CtxPulse(id, p); });
+                }
+            });
+        }
+
+        /// The pulse of a thread now: the open one fresh from its timeline, the others from the last background read.
+        private ThreadPulse PulseOf(string threadId)
+        {
+            if (threadId == null) return null;
+            if (threadId == _threadOpen && IsPanelOpen("thread") && _tlModel != null && _tlModel.Exchanges.Count > 0) return ThreadPulse.From(_tlModel, _threadInfo, NowMs);
+            return _pulses.TryGetValue(threadId, out var p) ? p : null;
+        }
+
+        /// The process behind the command the agent runs now (the ps sampler's view: is its CPU still moving?).
+        private ProcessVitals.Proc ProcessOf(ThreadPulse p)
+        {
+            if (p?.CurrentCommand == null) return null;
+            string key = ThreadPulse.CommandKey(p.CurrentCommand).Split(' ')[0];
+            if (key.Length < 2) return null;
+            return Vitals.Notable.FirstOrDefault(x => x.Comm == key || (x.Args ?? "").Contains(p.CurrentCommand.Length > 40 ? p.CurrentCommand.Substring(0, 40) : p.CurrentCommand))
+                   ?? Vitals.Notable.FirstOrDefault(x => (x.Args ?? "").Split(' ').FirstOrDefault()?.EndsWith(key) == true);
         }
 
         // ------------------------------------------------------------------ taps (called where the app already learns things)
@@ -191,7 +260,25 @@ namespace MetaCodex.Shell
             {
                 var row = _threads.OfType<JObject>().FirstOrDefault(x => (string)x["id"] == subject) ?? (subject == _threadOpen ? _threadInfo : null);
                 if (row != null) Line("thread", $"“{ThreadTitle(subject)}” · agent {(string)row["providerId"]} · status {ThreadStatus(row)}" + ((string)row["environmentPath"] != null ? " · in " + (string)row["environmentPath"] : ""));
-                if (subject == _threadOpen && _tlRaw != null) foreach (var l in TimelineDigest(_tlRaw)) Line("thread", l);
+                var pulse = PulseOf(subject);
+                // which folder it works in and who shares it (docs/workspaces.md)
+                var where = WorkspaceMap.Describe(WorkspaceMap.GroupOf(WorkspaceMap.Build(_ctxThreadRows != null && _ctxThreadRows.Count >= _threads.Count ? _ctxThreadRows : _threads, _environments), subject), subject);
+                if (where.Length > 0) Line("thread", "workspace: " + where);
+                if (pulse != null)
+                {
+                    // the compact state (owner 2026-11-11: "running a task since 3 min", "re-running the test after
+                    // edits": the local model reads this, not the conversation)
+                    foreach (var l in pulse.Lines()) Line("thread", l);
+                    var proc = pulse.Phase == "running" ? ProcessOf(pulse) : null;
+                    string cpu = proc != null ? ProcessVitals.Verdict(proc, now) : null;
+                    if (cpu != null) Line("thread", $"its process {proc.Comm} (pid {proc.Pid}): {cpu}");
+                    data["pulse"] = new JObject
+                    {
+                        ["speak"] = pulse.Speak() + (cpu != null ? $" Its process {proc.Comm} is {cpu}." : ""),
+                        ["state"] = pulse.State, ["phase"] = pulse.Phase, ["stuck"] = pulse.MayBeStuck, ["pattern"] = pulse.Pattern,
+                    };
+                }
+                else if (subject == _threadOpen && _tlRaw != null) foreach (var l in TimelineDigest(_tlRaw)) Line("thread", l);
             }
             // approvals and questions waiting (the open thread's are known)
             if (_threadOpen != null)
@@ -206,8 +293,12 @@ namespace MetaCodex.Shell
                         data["approval"] = new JObject { ["thread"] = ThreadTitle(_threadOpen), ["kind"] = kind == "approval" && (string)ia["payload"]?["subject"]?["command"] != null ? "command" : kind, ["what"] = what, ["risks"] = new JArray(risks) };
                 }
             // the other threads
-            foreach (var t in _threads.OfType<JObject>().OrderByDescending(t => t["updatedAt"]?.Value<long>() ?? 0).Take(6))
-                Line("threads", $"“{Cut((string)t["title"] ?? (string)t["id"], 50)}” {ThreadStatus(t)} ({(string)t["providerId"]})");
+            var allThreads = _ctxThreadRows != null && _ctxThreadRows.Count >= _threads.Count ? _ctxThreadRows : _threads;
+            foreach (var t in allThreads.OfType<JObject>().OrderByDescending(t => t["updatedAt"]?.Value<long>() ?? 0).Take(6))
+            {
+                var tp = PulseOf((string)t["id"]);
+                Line("threads", $"“{Cut((string)t["title"] ?? (string)t["titleFallback"] ?? (string)t["id"], 50)}” ({(string)t["providerId"]}): " + (tp != null ? tp.OneLine() : ThreadStatus(t)));
+            }
             // processes
             var procs = new JArray();
             foreach (var p in Vitals.Notable.Take(5))
@@ -255,7 +346,7 @@ namespace MetaCodex.Shell
                 Line("system", $"{clips.Count} captures in the clipboard (it keeps the newest {Clipboard.Max})" + (newest != null ? ", the newest from " + newest : ""));
             }
             counts["threads"] = _threads.Count;
-            counts["threadsRunning"] = _threads.OfType<JObject>().Count(x => ThreadStatus(x) == "running" || ThreadStatus(x) == "starting");
+            counts["threadsRunning"] = _threads.OfType<JObject>().Count(x => ThreadTimeline.IsWorking(ThreadStatus(x)));
             counts["threadsWaiting"] = _threads.OfType<JObject>().Count(x => x["hasPendingInteraction"]?.Value<bool>() == true);
             counts["terminals"] = _frames.Values.Count(f => f.IsOpen);
             counts["panels"] = _panels.Values.Count(x => x.IsOpen && x.Id != "dock" && x.Id != "voice-hud") + _frames.Values.Count(f => f.IsOpen);
@@ -279,6 +370,10 @@ namespace MetaCodex.Shell
         private static List<string> TimelineDigest(JArray rows)
         {
             var lines = new List<string>();
+            var flat = new List<JObject>();
+            void Walk(JToken r) { if (!(r is JObject o)) return; if ((string)o["kind"] == "turn") { foreach (var c in o["children"] as JArray ?? new JArray()) Walk(c); return; } flat.Add(o); }
+            foreach (var r in rows) Walk(r);
+            rows = new JArray(flat.Select(o => (JToken)o.DeepClone()));
             var conv = rows.OfType<JObject>().Where(r => (string)r["kind"] == "conversation").ToList();
             var asks = conv.Where(r => (string)r["role"] == "user").Select(r => (string)r["text"]).Where(s => !string.IsNullOrWhiteSpace(s)).ToList();
             var replies = conv.Where(r => (string)r["role"] == "assistant").Select(r => (string)r["text"]).Where(s => !string.IsNullOrWhiteSpace(s)).ToList();

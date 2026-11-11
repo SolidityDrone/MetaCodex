@@ -23,7 +23,7 @@ can **ask** about it ("is this build stuck?", "what did this thread achieve?", "
 | Section | From | Example |
 |---|---|---|
 | focus | the panel under a hand ray (last 15 s), else the panel nearest the gaze; the open thread; the selected thread | pointing at THREAD "Fix the build" |
-| threads | MQH thread list (title, provider, status, updated) and the open thread's timeline (asks, replies, commands, file changes, errors) | 2 running, 1 waiting for approval |
+| threads | MQH thread list (title, provider, status, updated) and each working thread's pulse (docs/thread-view.md: what it does now and since when, quiet / may be stuck, this turn's counts, the pattern, its last thought / answer) | working 3 min, running `npm test`; re-ran it 3 times (2 failed) with edits between: fixing before it answers |
 | approvals | pending interactions of the open thread (approval: command / tool / path, reason; questions) | `rm -rf build && cargo build` |
 | processes | `ps` samples: notable processes (compilers, package managers, build tools, node, python, ...), elapsed, CPU seconds and when CPU last grew | cargo: no CPU for 4 min |
 | tools | SYSTEM > TOOLS inventory | rustc 1.91.0, node 24.11 |
@@ -40,6 +40,10 @@ can **ask** about it ("is this build stuck?", "what did this thread achieve?", "
    else the open thread, else the newest pending approval) and answers: exact facts when the question is about tools
    or processes or an approval's risks; otherwise the LLM from the context. The answer is spoken (VOICE setting
    "Speak answers to questions", on) and shown on the HUD.
+
+Thread state questions ("what is it doing?", "is it stuck?", "cosa sta facendo?") are answered from the pulse without
+the model; recaps get the pulse lines (a few hundred characters) instead of the conversation (owner 2026-11-11: fast,
+short, accurate).
 
 ## Not yet
 

@@ -25,7 +25,7 @@ namespace MetaCodex.EditorTools
     /// claps trigger it, an edit to the file changes the behaviour live, a runaway script is stopped, state
     /// survives a restart. Also checks git (through WSL), the Linux files view, the float carousel with bent
     /// panels, and MQH when it runs on 127.0.0.1:38990. Report and pictures: Bench/selftest/ui-*.
-    public static class MetaCodexUiTest
+    public static partial class MetaCodexUiTest
     {
         private static StringBuilder _report;
         private static bool _ok;
@@ -175,6 +175,9 @@ namespace MetaCodex.EditorTools
                 if (Want("mqh")) MqhPanel(shell);
                 if (Want("captures")) Captures(shell, tmp);
                 if (Want("context")) SessionContextSection(shell, tmp);
+                if (Want("chat")) ChatSection(shell, head); // MetaCodexUiTestChat.cs
+                if (Want("control")) ControlSection(shell, head, frame); // MetaCodexUiTestControl.cs
+                if (Want("workspaces")) WorkspacesSection(shell, head); // MetaCodexUiTestWorkspaces.cs
                 if (WantNamed("voiceexport")) VoiceExport(shell);
                 if (WantNamed("voicedecide")) VoiceDecideBench(shell);
             }
@@ -219,7 +222,10 @@ namespace MetaCodex.EditorTools
             Check(stacked == 0, $"{open.Count} open panels: none placed on top of another ({stacked} pairs within 3 cm)");
             Render(shell, "ui-overview.png", head.position, Quaternion.identity, 100f, 1920, 1080);
             foreach (var id in new[] { "settings", "files", "browser", "mqh", "terminals", "dock", "vault" })
+            {
+                if (MetaCodexShell.IsControlPage(id)) shell.OpenPanel(id); // CONTROL shows one category at a time
                 RenderPanel(shell.PanelsById[id], "ui-" + id + ".png");
+            }
             RenderPanel(frame, "ui-terminal.png");
         }
 
@@ -337,17 +343,17 @@ namespace MetaCodex.EditorTools
         {
             var r = shell.Router;
             // only the panels under test, so no other panel sits between the test ray and its target
-            foreach (var id in shell.PanelIds.ToList()) if (id != "settings" && id != "files") shell.ClosePanel(id);
+            foreach (var id in shell.PanelIds.ToList()) if (id != "settings" && id != "files" && id != MetaCodexShell.ControlId) shell.ClosePanel(id);
+            shell.OpenPanel("settings"); // with CONTROL's rail on its left (its own tab bar is gone)
             var settings = shell.PanelsById["settings"];
+            var rail = shell.ControlRail;
             var tabs = settings.Elements.OfType<UiTabs>().First();
-            var displayTab = settings.Elements.OfType<UiButton>().First(b => b.Text == "DISPLAY");
-            Click(r, settings, displayTab.Rect.center);
-            Check(tabs.Selected == 1, "tab click switches to DISPLAY");
+            Click(r, rail, shell.RailButtonForTest("display").Rect.center);
+            Check(tabs.Selected == 1, "a tap on the rail's DISPLAY switches SETTINGS to DISPLAY");
             settings.ForceRefresh();
             RenderPanel(settings, "ui-settings-display.png");
-            var lookTab = settings.Elements.OfType<UiButton>().First(b => b.Text == "LOOK");
-            Click(r, settings, lookTab.Rect.center);
-            Check(tabs.Names[tabs.Selected] == "LOOK", "tab click switches to LOOK");
+            Click(r, rail, shell.RailButtonForTest("look").Rect.center);
+            Check(tabs.Names[tabs.Selected] == "LOOK", "the rail's LOOK & SOUND switches to LOOK");
             var fov = settings.Elements.OfType<UiToggle>().First(t => t.Text.StartsWith("Foveated"));
             bool before = fov.Value;
             Click(r, settings, fov.Rect.center);
@@ -356,8 +362,7 @@ namespace MetaCodex.EditorTools
             RenderPanel(settings, "ui-settings-look.png");
             Click(r, settings, fov.Rect.center); // back off
 
-            var gestTab = settings.Elements.OfType<UiButton>().First(b => b.Text == "GESTURES");
-            Click(r, settings, gestTab.Rect.center);
+            Click(r, rail, shell.RailButtonForTest("hands").Rect.center);
             var click = settings.Elements.OfType<UiSegmented>().First(sg => sg.Text == "CLICK");
             var w = click.Rect;
             float segW = (w.xMax - (w.x + click.LabelWidth)) / 3f;
@@ -1694,10 +1699,10 @@ end)
             w.Pressed += k => pressed = k;
             Poke(w.WorldOf(2));
             Check(pressed == 2 && shell.IsPanelOpen("files"), $"touching the FILES tile opens FILES (pressed {pressed})");
-            shell.ClosePanel("settings");
+            shell.ClosePanel("clipboard");
             Step(8); // past the 0.3 s between two presses (a double tap is not two commands)
-            Poke(w.WorldOf(w.Inner.Count + w.Outer.FindIndex(x => x.Label == "SETUP")));
-            Check(shell.IsPanelOpen("settings"), "the outer ring works too: SETUP opens Settings");
+            Poke(w.WorldOf(w.Inner.Count + w.Outer.FindIndex(x => x.Label == "CLIP")));
+            Check(shell.IsPanelOpen("clipboard"), "the outer ring works too: CLIP opens CLIPBOARD");
             // a fingertip that goes into the surface and stays there presses once, not again and again
             Step(8);
             int presses = 0;
@@ -1848,28 +1853,46 @@ end)
                 Check(Mathf.Abs(f.YawMid) < 1.5f && Mathf.Abs(f.PitchMid + 4.5f) < 3f && Mathf.Abs(Dist("files") - want) < 0.02f,
                     $"the first panel opens in front of the user: {f.YawMid:F0} deg, {f.PitchMid:F0} deg, {Dist("files"):F2} m");
                 // more panels: each takes the nearest free place, none over another, all within reach of a turn of the head
-                var ids = new[] { "files", "settings", "threads", "terminals", "agents" };
+                // (SETTINGS brings CONTROL's rail on its left: the pair takes the place, the rail counts as a window)
+                var ids = new[] { "files", "settings", "threads", "terminals", "clipboard" };
                 foreach (var id in ids.Skip(1)) shell.OpenPanel(id);
+                shell.UpdateControlRailForTest();
+                var all = ids.Concat(new[] { MetaCodexShell.ControlId }).ToArray();
                 int over = 0;
-                for (int i = 0; i < ids.Length; i++) for (int j = i + 1; j < ids.Length; j++) if (R(ids[i]).Overlaps(R(ids[j]), 0f)) over++;
+                for (int i = 0; i < all.Length; i++) for (int j = i + 1; j < all.Length; j++) if (R(all[i]).Overlaps(R(all[j]), 0f)) over++;
                 bool reach = ids.All(id => Mathf.Abs(R(id).YawMid) <= MetaCodexShell.PlaceYawLimit + 1f);
                 var second = R("settings");
-                Check(over == 0 && reach && second.Gap(f).yaw < 4f && Mathf.Abs(second.PitchMid - f.PitchMid) < 2f,
-                    $"five panels: none over another ({over} pairs), the second right beside the first ({second.Gap(f).yaw:F1} deg apart, same height): " + string.Join(", ", ids.Select(id => $"{id} {R(id).YawMid:F0}")));
+                var railR = R(MetaCodexShell.ControlId);
+                bool pair = railR.YawMid < second.YawMid && railR.Gap(second).yaw < 2f;
+                bool besideFirst = Mathf.Min(railR.Gap(f).yaw, second.Gap(f).yaw) < 4f;
+                Check(over == 0 && reach && pair && besideFirst && Mathf.Abs(second.PitchMid - f.PitchMid) < 2f,
+                    $"five panels and the rail: none over another ({over} pairs), the second (with its rail on its left: {pair}) right beside the first ({Mathf.Min(railR.Gap(f).yaw, second.Gap(f).yaw):F1} deg apart, same height): " + string.Join(", ", all.Select(id => $"{id} {R(id).YawMid:F0}")));
                 Render(shell, "ui-placement.png", head.position - Vector3.forward * 0.1f, Quaternion.identity, 110f, 1800, 1000);
 
                 // opened from a window's button: right beside that window, not in front of the nose
                 CloseAll();
-                shell.OpenPanel("storage"); // SYSTEM, the STORAGE tab: its AI MODELS button opens VOICE
+                shell.OpenPanel("threads"); // its + NEW THREAD… opens NEW THREAD
+                var thp = shell.PanelsById["threads"];
+                thp.ForceRefresh();
+                head.rotation = Quaternion.Euler(0f, 100f, 0f); // the user has turned away from it
+                var newBtn = thp.Elements.OfType<UiButton>().FirstOrDefault(b => b.Visible && b.Text != null && b.Text.Contains("NEW THREAD"));
+                if (newBtn != null) Click(shell.Router, thp, newBtn.Rect.center);
+                var tr = R("threads"); var nr = R("thread-new");
+                bool beside = shell.IsPanelOpen("thread-new") && !nr.Overlaps(tr, 0f) && nr.Gap(tr).yaw < 4f && Mathf.Abs(nr.YawMid - 100f) > 30f;
+                Check(newBtn != null && beside, $"NEW THREAD opened from THREADS' button opens right beside THREADS ({nr.Gap(tr).yaw:F1} deg apart; THREADS at {tr.YawMid:F0}, NEW THREAD at {nr.YawMid:F0}), not in front of the user who looks at 100");
+                head.rotation = Quaternion.identity;
+                // in CONTROL a category opened from another one's button takes its place (SYSTEM > STORAGE > AI MODELS)
+                CloseAll();
+                shell.OpenPanel("storage");
                 var sys = shell.PanelsById["system"];
                 sys.ForceRefresh();
-                head.rotation = Quaternion.Euler(0f, 100f, 0f); // the user has turned away from it
+                var sysCorner = sys.transform.TransformPoint(new Vector3(-sys.Width * 0.5f, sys.Height * 0.5f, 0f));
                 var models = sys.Elements.OfType<UiButton>().FirstOrDefault(b => b.Visible && b.Text != null && b.Text.Contains("AI MODELS"));
                 if (models != null) Click(shell.Router, sys, models.Rect.center);
-                var sr = R("system"); var vr = R("voice");
-                bool beside = shell.IsPanelOpen("voice") && !vr.Overlaps(sr, 0f) && vr.Gap(sr).yaw < 4f && vr.YawMid > sr.YawMid && Mathf.Abs(vr.YawMid - 100f) > 30f;
-                Check(models != null && beside, $"VOICE opened from SYSTEM's button opens right beside SYSTEM, to its right ({vr.Gap(sr).yaw:F1} deg apart; SYSTEM at {sr.YawMid:F0}, VOICE at {vr.YawMid:F0}), not in front of the user who looks at 100");
-                head.rotation = Quaternion.identity;
+                var vp = shell.PanelsById["voice"];
+                var voiceCorner = vp.transform.TransformPoint(new Vector3(-vp.Width * 0.5f, vp.Height * 0.5f, 0f));
+                Check(models != null && vp.IsOpen && !sys.IsOpen && Vector3.Distance(sysCorner, voiceCorner) < 0.002f && shell.ControlRailPage == "voice",
+                    $"in CONTROL, SYSTEM's AI MODELS opens VOICE in SYSTEM's place (top-left corners {Vector3.Distance(sysCorner, voiceCorner) * 1000f:F1} mm apart), the rail stays beside it ({shell.ControlRailPage})");
 
                 // a panel that was open comes back where it was: when that place is free and in view
                 CloseAll();
@@ -1899,25 +1922,30 @@ end)
                 for (int k = 0; k < 30; k++) shell.TickOrbForTest(0.05f);
                 head.rotation = Quaternion.Euler(32f, -20f, 0f); // down and to the left wrist
                 shell.OpenPanel("agents");
+                shell.UpdateControlRailForTest();
                 var ag = R("agents");
+                float agPair = (R(MetaCodexShell.ControlId).Yaw0 + ag.Yaw1) * 0.5f; // AGENTS comes with CONTROL's rail: the pair is centred
                 head.rotation = Quaternion.Euler(0f, -20f, 0f); // looking that way on purpose: there it opens
                 shell.PanelsById["threads"].transform.position = Vector3.up * 50f;
                 shell.OpenPanel("threads");
                 var th = R("threads");
-                Check(Mathf.Abs(ag.YawMid) < 2f && !th.Overlaps(ag, 0f), $"the user looks down at the wrist menu (20 deg to the left) and presses: the panel opens in front of the body ({ag.YawMid:F0} deg), not at the wrist's side");
+                Check(Mathf.Abs(agPair) < 3f && !th.Overlaps(ag, 0f), $"the user looks down at the wrist menu (20 deg to the left) and presses: the window (with its rail) opens in front of the body ({agPair:F0} deg), not at the wrist's side");
                 head.rotation = Quaternion.identity;
 
                 // smaller windows further away: above a window is nearer than a far turn of the head, and tilted to the user
                 CloseAll();
                 shell.Settings.uiScale = 0.8f; shell.Settings.panelDistance = 1.3f;
                 shell.OnSettingsChanged();
-                var many = new[] { "files", "settings", "threads", "terminals", "agents", "browser" };
+                // (one CONTROL window at a time: SETTINGS, with its rail; the others are work windows)
+                var many = new[] { "files", "settings", "threads", "terminals", "clipboard", "browser" };
                 foreach (var id in many) shell.OpenPanel(id);
+                shell.UpdateControlRailForTest();
+                var many2 = many.Concat(new[] { MetaCodexShell.ControlId }).ToArray();
                 int over2 = 0;
-                for (int i = 0; i < many.Length; i++) for (int j = i + 1; j < many.Length; j++) if (R(many[i]).Overlaps(R(many[j]), 0f)) over2++;
+                for (int i = 0; i < many2.Length; i++) for (int j = i + 1; j < many2.Length; j++) if (R(many2[i]).Overlaps(R(many2[j]), 0f)) over2++;
                 // the fifth does not fit beside the others within an easy turn of the head: it goes above the row
-                var last = R("agents");
-                var lastP = shell.PanelsById["agents"];
+                var last = R("clipboard");
+                var lastP = shell.PanelsById["clipboard"];
                 bool above = last.PitchMid - R("files").PitchMid > 12f && Mathf.Abs(last.YawMid) < 50f && last.Pitch1 <= MetaCodexShell.PlaceTop + 1f;
                 bool tilted = Vector3.Angle(lastP.transform.forward, lastP.transform.position - head.position) < 3f && Mathf.Abs(lastP.transform.forward.y) > 0.1f;
                 bool notBelow = many.All(id => R(id).PitchMid > R("files").PitchMid - 6f); // below is where the hands and the dock are
@@ -2263,7 +2291,7 @@ end)
             dockWeb?.Click();
             bool byDock = shell.IsPanelOpen("web") && !shell.IsPanelOpen("browser");
             shell.ClosePanel("web");
-            shell.Wrist.Outer.FirstOrDefault(x => x.Label == "WEB")?.Act?.Invoke();
+            shell.Wrist.Inner.Concat(shell.Wrist.Outer).FirstOrDefault(x => x.Label == "WEB")?.Act?.Invoke();
             bool byWrist = shell.IsPanelOpen("web");
             shell.ClosePanel("web");
             var vb = shell.Voice.FastMatch("open the browser");
@@ -2997,9 +3025,9 @@ end)
             var settingsTabs = shell.PanelsById["settings"].Elements.OfType<UiTabs>().First();
             var dock = shell.PanelsById["dock"].Elements.OfType<UiButton>().Select(b => b.Text).ToList();
             var outer = shell.Wrist.Outer.Select(x => x.Label).ToList();
-            Check(!settingsTabs.Names.Contains("DAEMON") && dock.Any(x => x.EndsWith("MQH")) && !dock.Any(x => x.EndsWith("SCRIPTS") || x.EndsWith("GESTURE"))
-                && outer.Contains("MQH") && !outer.Contains("SCRIPTS") && !outer.Contains("GESTURE"),
-                $"Settings without DAEMON; the dock and the wrist menu have one MQH entry instead of SCRIPTS and GESTURE ({dock.Count} dock buttons, {outer.Count} outer blades)");
+            Check(!settingsTabs.Names.Contains("DAEMON") && dock.Any(x => x.EndsWith("CONTROL")) && !dock.Any(x => x.EndsWith("MQH") || x.EndsWith("SCRIPTS") || x.EndsWith("GESTURE"))
+                && !outer.Contains("MQH") && !outer.Contains("SCRIPTS") && !outer.Contains("GESTURE") && shell.ControlCategories.Any(c => c.Key == "mqh" && c.Panel == "mqh"),
+                $"Settings without DAEMON; MQH is a CONTROL category (not on the dock or the wrist menu: {dock.Count} dock buttons, {outer.Count} outer blades)");
 
             // SKILLS: what MQH lists (canned), seen through the app's rules
             shell.SetShippedSkillsForTest(new[] { "metacodex-context", "quest-native-apps", "unity-cli" });
@@ -3272,7 +3300,7 @@ end)
             Check(busy.Contains("cargo build") && busy.Contains("node server.js") && busy.Contains("no CPU for 3 min"), "“is anything still running?”: " + busy);
             string ctx = shell.SessionContextFor("What this thread achieved so far?");
             string recap = Ask("What this thread achieved so far?");
-            Check(ctx.Length <= 1800 && ctx.Contains("FOCUS: pointing at") && ctx.Contains("first request: the release build fails") && ctx.Contains("1 commands run (1 failed), 1 files changed (+12 -3)")
+            Check(ctx.Length <= 1800 && ctx.Contains("FOCUS: pointing at") && ctx.Contains("asked: the release build fails") && ctx.Contains("1 command (1 failed), 1 file changed (+12 -3)")
                 && ctx.Contains("APPROVAL: approval asked") && recap.Contains("the release build fails"),
                 $"the recap's context ({ctx.Length} chars, for the local model) knows the thread pointed at; without the AI service: “{Trim(recap, 120)}”");
             // routed from voice / typed text, answered and marked as an answer
@@ -3696,8 +3724,10 @@ end)
             shell.SetThreadsForTest(projects, threads);
             var list = shell.ThreadListForTest;
             var tags = list.Items.Select(i => i.Tag as string).ToList();
-            Check(tags.SequenceEqual(new[] { "p:p1", "t:t2", "t:t1", "p:p2", "t:t3", "p:p3", "p:p3" }) && list.Items[1].Indent == 1 && list.Items[0].Badge == "1 RUNNING" && list.Items[3].Badge == "1 NEED YOU",
-                "THREADS grouped by project, newest first, with running / needs-you badges: " + string.Join(" ", tags));
+            // p1 has a worktree: its folders are rows (the checkout first), the threads under them; p2 only its checkout
+            Check(tags.SequenceEqual(new[] { "p:p1", "w:p1|checkout", "t:t1", "w:p1|wt:feat/x", "t:t2", "p:p2", "t:t3", "p:p3", "p:p3" }) && list.Items[1].Indent == 1 && list.Items[2].Indent == 2
+                  && list.Items[0].Badge == "1 RUNNING" && list.Items[5].Badge == "1 NEED YOU" && list.Items[6].Indent == 1 && list.Items[3].Title == "feat/x",
+                "THREADS grouped by project, then by folder (checkout, worktrees) when a project has a worktree, newest first, with running / needs-you badges: " + string.Join(" ", tags));
             shell.PickThreadRowForTest(0);
             Check(shell.ThreadListForTest.Items.Count == 5 && shell.ThreadListForTest.Items[0].Icon == "▸", "tapping a project folds it");
             shell.PickThreadRowForTest(0);

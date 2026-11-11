@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
+using MetaCodex.AI;
 using MetaCodex.App;
 using MetaCodex.Terminal;
 using MetaCodex.UI;
@@ -23,15 +24,13 @@ namespace MetaCodex.Shell
         private string _agentSel, _projectSel, _threadSel, _threadOpen;
         private JObject _threadInfo;
         private JArray _interactions = new JArray();
-        private readonly List<string> _tlLines = new List<string>();
-        private int _tlScroll;
         private long _tlMaxSeq = -1;
         private float _nextThreadPoll;
         private string _ntProvider, _ntModel;
         private JArray _ntModels = new JArray();
 
         private UiList _agentList, _projectList, _threadList, _ntProviders, _ntModelList;
-        private UiLabel _agentDetail, _agentHint, _threadsStatus, _thTitle, _thMeta, _thTimeline, _thAsk, _ntSummary;
+        private UiLabel _agentDetail, _agentHint, _threadsStatus, _thTitle, _thMeta, _thAsk, _ntSummary;
         private UiTextField _thComposer, _ntPrompt;
         private readonly List<UiButton> _thAskButtons = new List<UiButton>();
         private UiSegmented _ntPerm, _ntWork;
@@ -304,7 +303,8 @@ namespace MetaCodex.Shell
             {
                 ("+ NEW THREAD…", () => OpenNewThread(null)),
                 ("+ PROJECT…", NewProjectPrompt),
-                ("FOLD ALL", () => { foreach (var x in _projects) _collapsedProjects.Add((string)x["id"]); RenderThreadGroups(); }),
+                ("⎇ WORKSPACES", () => TogglePanel("workspaces")), // checkouts and worktrees (owner 2026-11-11)
+                ("◆ AGENTS", () => OpenControl("agents")), // providers: in CONTROL now (owner 2026-11-11)
                 ("⟳", RefreshThreads),
             }, primary: 0);
         }
@@ -322,6 +322,7 @@ namespace MetaCodex.Shell
                 return;
             }
             if (tag.StartsWith("t:")) { _threadSel = tag.Substring(2); OpenThread(_threadSel); }
+            if (tag.StartsWith("w:")) OpenWorkspacesOn(tag.Substring(2)); // a workspace row: the WORKSPACES window on it
         }
 
         public void RefreshThreads()
@@ -346,6 +347,7 @@ namespace MetaCodex.Shell
                 if (th == null) { _threadsStatus.Set("⚠ " + (Mqh.LastError ?? "MQH not reachable"), UiTheme.Current.Danger); return; }
                 _threads = th as JArray ?? new JArray();
                 CtxThreadsUpdated();
+                RebuildWorkspaceMap(); // THREADS' rows, the WORKSPACES window, THREAD's chip
                 RenderThreadGroups();
             });
         }
@@ -358,6 +360,7 @@ namespace MetaCodex.Shell
             var t = UiTheme.Current;
             if (_projects.Count == 0) { _threadsStatus.Set("No project yet: + PROJECT… adds a folder of the Linux userland (e.g. /root/myapp).", t.TextDim); _threadList.SetItems(new UiListItem[0]); return; }
             var byProject = _threads.GroupBy(x => (string)x["projectId"] ?? "").ToDictionary(g => g.Key, g => g.OrderByDescending(x => x["updatedAt"]?.Value<long>() ?? 0).ToList());
+            var spaces = WorkspaceMap.Build(_threads, _environments);
             long Latest(JToken pr) => byProject.TryGetValue((string)pr["id"], out var l) && l.Count > 0 ? l[0]["updatedAt"]?.Value<long>() ?? 0 : 0;
             var items = new List<UiListItem>();
             foreach (var pr in _projects.OrderByDescending(Latest))
@@ -365,7 +368,7 @@ namespace MetaCodex.Shell
                 string pid = (string)pr["id"];
                 byProject.TryGetValue(pid, out var list);
                 list = list ?? new List<JToken>();
-                int running = list.Count(x => ThreadStatus(x) == "running" || ThreadStatus(x) == "starting");
+                int running = list.Count(x => ThreadTimeline.IsWorking(ThreadStatus(x)));
                 int asks = list.Count(x => x["hasPendingInteraction"]?.Value<bool>() == true);
                 bool folded = _collapsedProjects.Contains(pid);
                 items.Add(new UiListItem
@@ -380,27 +383,52 @@ namespace MetaCodex.Shell
                     Tag = "p:" + pid,
                 });
                 if (folded) continue;
-                foreach (var x in list)
+                // the folders its threads work in: when there is more than the checkout (a worktree), each is a row
+                // with its threads under it, so who shares what (and two agents in one folder) is plain
+                spaces.TryGetValue(pid, out var groups);
+                groups = groups ?? new List<WorkspaceGroup>();
+                bool showSpaces = groups.Count > 1 || groups.Any(g => g.IsWorktree);
+                void ThreadRow(JToken x, int indent)
                 {
                     string st = ThreadStatus(x);
+                    bool working = ThreadTimeline.IsWorking(st);
                     bool pending = x["hasPendingInteraction"]?.Value<bool>() == true;
+                    bool held = (string)x["queuedWork"] == "waiting" && !working;
                     string id = (string)x["id"];
                     items.Add(new UiListItem
                     {
-                        Indent = 1,
-                        Icon = pending ? "?" : st == "running" || st == "starting" ? "▶" : st == "error" ? "⚠" : "◆",
-                        IconColor = pending ? t.Warn : st == "running" || st == "starting" ? t.Ok : st == "error" ? t.Danger : t.Accent,
+                        Indent = indent,
+                        Icon = pending ? "?" : working ? "▶" : held ? "⏸" : st == "error" ? "⚠" : "◆",
+                        IconColor = pending || held ? t.Warn : working ? t.Ok : st == "error" ? t.Danger : t.Accent,
                         Title = (string)x["title"] ?? (string)x["titleFallback"] ?? id,
                         TitleColor = id == _threadOpen ? t.TextAccent : (Color?)null,
-                        Sub = $"{x["providerId"]} · {(x["environmentIsWorktree"]?.Value<bool>() == true ? "⎇ " + x["environmentBranchName"] : "checkout")} · {Ago(x["updatedAt"]?.Value<long>() ?? 0)}",
-                        Badge = pending ? "NEEDS YOU" : st == "running" ? "RUNNING" : st == "error" ? "ERROR" : "",
-                        BadgeColor = pending ? t.Warn : st == "error" ? t.Danger : t.Ok,
+                        Sub = showSpaces ? $"{x["providerId"]} · {Ago(x["updatedAt"]?.Value<long>() ?? 0)}" : $"{x["providerId"]} · {(x["environmentIsWorktree"]?.Value<bool>() == true ? "⎇ " + x["environmentBranchName"] : "checkout")} · {Ago(x["updatedAt"]?.Value<long>() ?? 0)}",
+                        Badge = pending ? "NEEDS YOU" : working ? "RUNNING" : held ? "WAITING" : st == "error" ? "ERROR" : "",
+                        BadgeColor = pending || held ? t.Warn : st == "error" ? t.Danger : t.Ok,
                         Tag = "t:" + id,
                     });
                 }
+                if (!showSpaces) foreach (var x in list) ThreadRow(x, 1);
+                else
+                    foreach (var g in groups)
+                    {
+                        items.Add(new UiListItem
+                        {
+                            Indent = 1,
+                            Icon = g.Starting ? "◌" : g.IsWorktree ? "⎇" : "▣",
+                            IconColor = g.Clash ? t.Danger : t.TextDim,
+                            Title = g.Starting ? "setting up" : g.IsWorktree ? (g.Branch.Length > 0 ? g.Branch : "worktree") : "checkout" + (g.Branch.Length > 0 ? " · " + g.Branch : ""),
+                            TitleColor = t.TextDim,
+                            Sub = g.IsWorktree ? (g.Base.Length > 0 ? "from " + g.Base : "worktree") : g.Threads.Count > 1 ? "shared folder" : "",
+                            Badge = g.Clash ? g.Working + " WORKING ⚠" : g.Waiting > 0 ? g.Waiting + " WAITING" : "",
+                            BadgeColor = g.Clash ? t.Danger : t.Warn,
+                            Tag = "w:" + pid + "|" + g.Key,
+                        });
+                        foreach (var x in g.Threads) ThreadRow(x, 2);
+                    }
                 if (list.Count == 0) items.Add(new UiListItem { Indent = 1, Icon = "·", IconColor = t.TextDim, Title = "no threads yet: + NEW THREAD…", TitleColor = t.TextDim, Tag = "p:" + pid });
             }
-            int total = _threads.Count, run = _threads.Count(x => ThreadStatus(x) == "running"), need = _threads.Count(x => x["hasPendingInteraction"]?.Value<bool>() == true);
+            int total = _threads.Count, run = _threads.Count(x => ThreadTimeline.IsWorking(ThreadStatus(x))), need = _threads.Count(x => x["hasPendingInteraction"]?.Value<bool>() == true);
             _threadsStatus.Set($"{_projects.Count} projects · {total} threads" + (run > 0 ? $" · <color=#{UiViz.Hex(t.Ok)}>{run} running</color>" : "") + (need > 0 ? $" · <color=#{UiViz.Hex(t.Warn)}>{need} need you</color>" : "") + " · tap a project to fold it", t.TextDim);
             _threadList.SetItems(items, keepScroll: true);
             int sel = items.FindIndex(i => i.Tag as string == "t:" + _threadOpen);
@@ -458,14 +486,16 @@ namespace MetaCodex.Shell
             _thTitle = p.Add(new UiLabel("", t.BodySize * 1.1f) { Rect = new Rect(top.x, top.y, top.width - bw * 3 - t.Gap * 3, top.height) });
             p.Add(new UiButton("⑂ FORK…", ForkPrompt) { Rect = new Rect(top.xMax - bw * 3 - t.Gap * 2, top.y, bw, top.height), TextSize = t.SmallSize * 1.05f });
             _thWsButton = p.Add(new UiButton("◧ WORKSPACE", ToggleWorkspace) { Rect = new Rect(top.xMax - bw * 2 - t.Gap, top.y, bw, top.height), TextSize = t.SmallSize * 1.05f });
-            p.Add(new UiButton("⟳", () => { _tlMaxSeq = -1; PollThread(); }) { Rect = new Rect(top.xMax - bw, top.y, bw, top.height), TextSize = t.SmallSize * 1.05f });
-            _thMeta = p.Add(new UiLabel("", t.SmallSize) { Rect = st.Next(0.02f), Color = t.TextDim, UseMono = true });
-            float chipH = 0.032f;
+            p.Add(new UiButton("⟳", () => { _tlMaxSeq = -1; _tlTag = null; _tlInFlight = false; _nextThreadMeta = 0f; PollThread(); }) { Rect = new Rect(top.xMax - bw, top.y, bw, top.height), TextSize = t.SmallSize * 1.05f });
+            // the meta row: where it works (left), the provider's plan and usage limits (right)
+            var metaRow = st.Next(0.02f);
+            _thMeta = p.Add(new UiLabel("", t.SmallSize) { Rect = new Rect(metaRow.x, metaRow.y, metaRow.width * 0.56f, metaRow.height), Color = t.TextDim, UseMono = true });
+            _thLimits = p.Add(new UiLabel("", t.SmallSize) { Rect = new Rect(metaRow.x + metaRow.width * 0.56f, metaRow.y, metaRow.width * 0.44f, metaRow.height), Color = t.TextDim, Align = TextAlignmentOptions.MidlineRight });
+            float chipH = 0.032f, statusH = 0.022f;
             float bottom = chipH + t.ButtonHeight + t.Gap * 2 + chipH + t.Gap; // + the attachments row
-            _tlArea = new Rect(c.x, st.Y, c.width, c.yMax - st.Y - bottom - t.Gap);
-            _thTimeline = p.Add(new UiLabel("", t.SmallSize * 1.05f) { Rect = TimelineRect(false), Wrap = true, Align = TextAlignmentOptions.BottomLeft });
-            _tlUp = p.Add(new UiButton("▲", () => { _tlScroll = Mathf.Min(_tlScroll + 4, Math.Max(0, _tlLines.Count - 1)); RenderTimeline(); }, UiButtonStyle.Ghost));
-            _tlDown = p.Add(new UiButton("▼", () => { _tlScroll = Mathf.Max(0, _tlScroll - 4); RenderTimeline(); }, UiButtonStyle.Ghost));
+            _tlArea = new Rect(c.x, st.Y, c.width, c.yMax - st.Y - bottom - t.Gap - statusH - t.Gap);
+            // the chat (UiChatView), and under it the status line: what the agent does now, timers, quiet / stuck
+            BuildThreadChat(p, new Rect(c.x + 0.004f, _tlArea.yMax + t.Gap * 0.5f, c.width - 0.008f, statusH));
             LayoutTimelineButtons(false);
             // approvals: at the bottom of the timeline area, only while one is pending
             var askRow = new Rect(c.x, _tlArea.yMax - t.ButtonHeight, c.width, t.ButtonHeight);
@@ -480,10 +510,12 @@ namespace MetaCodex.Shell
             // attachments (captures, Linux files) for the next message, then the composer with its + (owner 2026-11-09),
             // then the bb-like chips: model, access, workspace, context, stop
             float cy = c.yMax - chipH - t.Gap - t.ButtonHeight;
-            float sendW = 0.11f, plusW = t.ButtonHeight * 1.2f;
+            float sendW = 0.11f, plusW = t.ButtonHeight * 1.2f, micW = t.ButtonHeight * 1.25f;
             BuildAttachRow(p, new Rect(c.x, cy - t.Gap - chipH, c.width, chipH));
             _thPlus = p.Add(new UiButton("+", ToggleAttachMenu, UiButtonStyle.Primary) { Rect = new Rect(c.x, cy, plusW, t.ButtonHeight), TextSize = t.BodySize * 1.3f });
-            _thComposer = p.Add(new UiTextField("", "", s => SendToThread(s), "message the agent…") { Rect = new Rect(c.x + plusW + t.Gap, cy, c.width - sendW - plusW - t.Gap * 2, t.ButtonHeight), CaptionWidth = 0f });
+            _thComposer = p.Add(new UiTextField("", "", s => SendToThread(s), "message the agent… (or ◉ to say it)") { Rect = new Rect(c.x + plusW + t.Gap, cy, c.width - sendW - plusW - micW - t.Gap * 3, t.ButtonHeight), CaptionWidth = 0f });
+            // ◉: say the message (speech to text into the composer; SEND stays yours)
+            _thMic = p.Add(new UiButton("◉", () => DictateInto(_thComposer)) { Rect = new Rect(c.xMax - sendW - t.Gap - micW, cy, micW, t.ButtonHeight), TextSize = t.BodySize * 1.15f });
             p.Add(new UiButton("SEND ▶", () => SendToThread(_thComposer.Text), UiButtonStyle.Primary) { Rect = new Rect(c.xMax - sendW, cy, sendW, t.ButtonHeight) });
             float y = c.yMax - chipH;
             float[] w = { 0.17f, 0.13f, 0.165f, 0.135f };
@@ -515,6 +547,7 @@ namespace MetaCodex.Shell
             var t = UiTheme.Current;
             _tlUp?.SetRect(new Rect(_tlArea.xMax - 0.042f, r.y, 0.042f, r.height * 0.5f - t.Gap));
             _tlDown?.SetRect(new Rect(_tlArea.xMax - 0.042f, r.y + r.height * 0.5f, 0.042f, r.height * 0.5f));
+            LayoutChatExtras(r);
         }
 
         private string ThreadPath()
@@ -527,66 +560,67 @@ namespace MetaCodex.Shell
         public void OpenThread(string id)
         {
             if (string.IsNullOrEmpty(id)) return;
-            if (id != _threadOpen) { _thExec = null; _thUsage = null; _tlRaw = new JArray(); CloseAttachModal(); SetAttachMenu(false); }
+            if (id != _threadOpen) { _thExec = null; _thUsage = null; _tlRaw = new JArray(); CloseAttachModal(); SetAttachMenu(false); _threadOpen = id; ResetThreadChat(); }
             _threadOpen = id;
             RefreshAttachRow(); // each thread keeps its own attachments for its next message
             var row = _threads.FirstOrDefault(x => (string)x["id"] == id) as JObject;
             if (row != null) { _threadInfo = row; _threadOpenProject = (string)row["projectId"]; }
             else _threadOpenProject = null;
-            _tlLines.Clear();
-            _tlScroll = 0;
             _tlMaxSeq = -1;
             _tlOpenSeq = -1;
+            _tlTag = null; // a full timeline first
             _thTitle?.Set("loading …");
-            _thTimeline?.Set("");
             _thContext?.Set(-1f, "context —");
             OpenPanel("thread");
             WsSetThread(id, (string)row?["environmentPath"]);
             if (Settings.threadWorkspace) OpenWorkspace();
             UpdateChips();
             Mqh.ExecOptions(id, r => { if (id != _threadOpen || !(r is JObject jo)) return; _thExec = jo; UpdateChips(); });
+            _nextThreadMeta = 0f;
             PollThread();
+            RefreshUsageLimits(true);
             RenderThreadGroups();
         }
 
-        /// Refreshes the open thread: its row, the timeline (when it grew) and pending approvals.
+        /// Refreshes the open thread: the timeline (a delta; every 0.8 s while the agent works, so text streams in),
+        /// and every 2-3 s its row and pending approvals.
         public void PollThread()
         {
             if (_threadOpen == null || _thTitle == null) return;
             string id = _threadOpen;
-            _nextThreadPoll = Time.unscaledTime + 1.5f;
-            Mqh.Threads(_threadOpenProject, th =>
+            bool live = _thPulse != null && _thPulse.Working || ThreadTimeline.IsWorking(StatusOfRow(_threadInfo));
+            _nextThreadPoll = Time.unscaledTime + (live ? 0.8f : 2.5f);
+            if (Time.unscaledTime >= _nextThreadMeta)
             {
-                var row = (th as JArray)?.FirstOrDefault(x => (string)x["id"] == id) as JObject;
-                if (row == null || id != _threadOpen) return;
-                _threadInfo = row;
-                _threadOpenProject = (string)row["projectId"];
-                ShowThreadHeader();
-            });
-            Mqh.Timeline(id, tl =>
-            {
-                if (tl == null || id != _threadOpen) return;
-                long max = tl["maxSeq"]?.Value<long>() ?? 0;
-                _thUsage = tl["contextWindowUsage"];
-                ShowContextUsage();
-                if (max == _tlMaxSeq) return;
-                bool first = _tlMaxSeq < 0;
-                _tlMaxSeq = max;
-                if (_tlOpenSeq < 0) _tlOpenSeq = max;
-                _tlRaw = tl["rows"] as JArray ?? new JArray();
-                _tlLines.Clear();
-                foreach (var r in _tlRaw) AddTimelineRow(r, 0);
-                RenderTimeline();
-                WsTrackRows(_tlRaw);
-                ScanViews(_tlRaw, id, first);
-            });
-            Mqh.Interactions(id, ia =>
-            {
-                if (id != _threadOpen) return;
-                _interactions = ia as JArray ?? new JArray();
-                ShowAsk();
-                CtxInteractionsUpdated(id);
-            });
+                _nextThreadMeta = Time.unscaledTime + (live ? 2f : 3f);
+                Mqh.Threads(_threadOpenProject, th =>
+                {
+                    var row = (th as JArray)?.FirstOrDefault(x => (string)x["id"] == id) as JObject;
+                    if (row == null || id != _threadOpen) return;
+                    bool statusChanged = StatusOfRow(row) != StatusOfRow(_threadInfo);
+                    _threadInfo = row;
+                    _threadOpenProject = (string)row["projectId"];
+                    // the project's rows update the workspace map (who else works in this folder)
+                    foreach (var pr in (th as JArray).OfType<JObject>())
+                    {
+                        int at = -1;
+                        for (int k = 0; k < _threads.Count; k++) if ((string)_threads[k]["id"] == (string)pr["id"]) { at = k; break; }
+                        if (at >= 0) _threads[at] = pr.DeepClone(); else _threads.Add(pr.DeepClone());
+                    }
+                    _spaces = WorkspaceMap.Build(_threads, _environments);
+                    ShowThreadHeader();
+                    PollThreadQueue(id); // a turn MQH holds (the workspace guard): its reason, SEND NOW
+                    if (statusChanged) RebuildChat(); // working <-> idle changes what is live
+                });
+                Mqh.Interactions(id, ia =>
+                {
+                    if (id != _threadOpen) return;
+                    _interactions = ia as JArray ?? new JArray();
+                    ShowAsk();
+                    CtxInteractionsUpdated(id);
+                });
+            }
+            RequestTimeline(id);
         }
 
         /// Agent views in the thread's messages: registered; the ones that arrive while it is open also open.
@@ -612,7 +646,9 @@ namespace MetaCodex.Shell
             var t = UiTheme.Current;
             if (x == null) { _thTitle.Set(_threadOpen ?? ""); return; }
             string st = (string)x["runtime"]?["displayStatus"] ?? (string)x["status"] ?? "";
-            _thTitle.Set($"<b>{Esc((string)x["title"] ?? (string)x["titleFallback"] ?? "thread")}</b>  <color=#{ColorUtility.ToHtmlStringRGB(st == "error" ? t.Danger : st == "running" ? t.Ok : t.TextDim)}>{st.ToUpperInvariant()}</color>");
+            bool working = ThreadTimeline.IsWorking(st);
+            string word = working && st != "waiting-for-host" ? "WORKING" : st == "waiting-for-host" ? "NO HOST" : st.ToUpperInvariant();
+            _thTitle.Set($"<b>{Esc((string)x["title"] ?? (string)x["titleFallback"] ?? "thread")}</b>  <color=#{ColorUtility.ToHtmlStringRGB(st == "error" ? t.Danger : working ? t.Ok : t.TextDim)}>{word}</color>");
             string proj = (string)_projects.FirstOrDefault(p => (string)p["id"] == (string)x["projectId"])?["name"];
             _thMeta.Set($"{x["providerId"]} · {(proj != null ? proj + " · " : "")}{x["environmentPath"] ?? "no workspace yet"} · ⎇ {x["environmentBranchName"] ?? "-"}");
             bool wt = x["environmentIsWorktree"]?.Value<bool>() == true;
@@ -620,6 +656,8 @@ namespace MetaCodex.Shell
             WsSetThread(_threadOpen, (string)x["environmentPath"]);
             _thWsButton?.SetSelected(_ws != null && _ws.IsOpen);
             UpdateChips();
+            ShowLimits();
+            UpdateWorkspaceChip();
         }
 
         private void ShowContextUsage()
@@ -742,6 +780,8 @@ namespace MetaCodex.Shell
             var u = _thUsage;
             string what = u == null ? "MQH has not reported the context use of this thread yet." :
                 $"{u["usedTokens"]} of {u["modelContextWindow"]} tokens{(u["estimated"]?.Type == JTokenType.Boolean && (bool)u["estimated"] ? " (estimated)" : "")}.";
+            string provider = (string)_threadInfo?["providerId"];
+            if (provider != null && _usage.TryGetValue(provider, out var lim)) { string l = LimitsText(lim, true); if (l.Length > 0) what += "\nUsage: " + l.Replace("\n", " · "); }
             ShowPicker("Context", what, new[]
             {
                 new UiListItem { Icon = "⇣", Title = "Compact now", Sub = "summarise older turns to free context", Tag = "compact" },
@@ -890,9 +930,8 @@ namespace MetaCodex.Shell
             _thUsage = usage;
             ShowContextUsage();
             _tlRaw = rows;
-            _tlLines.Clear();
-            foreach (var r in rows) AddTimelineRow(r, 0);
-            RenderTimeline();
+            _tlFields = new JObject();
+            RebuildChat();
             _tlMaxSeq = rows.Max(r => r["sourceSeqEnd"]?.Value<long>() ?? 0);
             _tlOpenSeq = openViews ? 0 : _tlMaxSeq;
             WsTrackRows(rows);
@@ -903,9 +942,7 @@ namespace MetaCodex.Shell
         public void AppendTimelineForTest(JArray more)
         {
             foreach (var r in more) _tlRaw.Add(r);
-            _tlLines.Clear();
-            foreach (var r in _tlRaw) AddTimelineRow(r, 0);
-            RenderTimeline();
+            RebuildChat();
             _tlMaxSeq = _tlRaw.Max(r => r["sourceSeqEnd"]?.Value<long>() ?? 0);
             WsTrackRows(_tlRaw);
             ScanViews(_tlRaw, _threadOpen, false);
@@ -914,7 +951,8 @@ namespace MetaCodex.Shell
         public void SetThreadsForTest(JArray projects, JArray threads) { _projects = projects; _threads = threads; RenderThreadGroups(); }
         public UiList ThreadListForTest => _threadList;
         public void PickThreadRowForTest(int index) => ThreadRowPicked(_threadList.Items[index]);
-        public string TimelineTextForTest => _thTimeline?.Text ?? "";
+        public string TimelineTextForTest => _thTimeline?.PlainText ?? "";
+        public string TimelineTagForTest { get => _tlTag; set => _tlTag = value; }
         public string ChipsForTest => $"{_thModelChip?.Text} | {_thPermChip?.Text} | {_thWsChip?.Text} | {_thContext?.Caption}";
         public void PickChangedFileForTest(string path) => WsPick(path);
         public string DiffHeadForTest => _wsDiffHead?.Text ?? "";
@@ -924,68 +962,8 @@ namespace MetaCodex.Shell
         private static string Esc(string s) => s == null ? "" : "<noparse>" + s.Replace("</noparse>", "") + "</noparse>";
         private static string Cut(string s, int n) { s = (s ?? "").Trim(); return s.Length > n ? s.Substring(0, n) + "…" : s; }
 
-        private void AddTimelineRow(JToken r, int depth)
-        {
-            string kind = (string)r["kind"];
-            string pad = depth > 0 ? "   " : "";
-            switch (kind)
-            {
-                case "conversation":
-                {
-                    bool user = (string)r["role"] == "user";
-                    string text = user ? (string)r["text"] : StripViewBlocks((string)r["text"]);
-                    _tlLines.Add(pad + (user ? "<color=#8FEBFF><b>▶ YOU</b></color>  " : "<color=#4DFFA6><b>◆ AGENT</b></color>  ") + Esc(Cut(text, 900)));
-                    break;
-                }
-                case "system":
-                {
-                    bool err = (string)r["status"] == "error" || (string)r["systemKind"] == "error";
-                    _tlLines.Add(pad + (err ? "<color=#FF5468>⚠ " : "<color=#7FA9BF>· ") + Esc(Cut((string)r["title"], 200)) + "</color>");
-                    break;
-                }
-                case "work":
-                {
-                    string wk = (string)r["workKind"];
-                    string status = (string)r["status"] ?? "";
-                    string tail = status == "running" || status == "pending" ? " <color=#FFB547>…</color>" : status == "error" || status == "failed" ? " <color=#FF5468>✕</color>" : "";
-                    if (wk == "command") _tlLines.Add(pad + "<color=#FFB547>$</color> " + Esc(Cut((string)r["command"], 160)) + (r["exitCode"]?.Type == JTokenType.Integer ? $" <color=#7FA9BF>→ {r["exitCode"]}</color>" : "") + tail);
-                    else if (wk == "tool") _tlLines.Add(pad + "<color=#B28CFF>⚙ " + Esc(Cut((string)r["toolName"], 60)) + "</color>" + tail);
-                    else if (wk == "file-change")
-                    {
-                        var ds = r["change"]?["diffStats"];
-                        string stats = ds != null ? $" <color=#4DFFA6>+{ds["added"]}</color> <color=#FF5468>−{ds["removed"]}</color>" : "";
-                        _tlLines.Add(pad + "<color=#FFB547>✎ " + Esc(Cut(WsRel((string)r["change"]?["path"] ?? "file"), 120)) + "</color>" + stats + tail);
-                    }
-                    else _tlLines.Add(pad + "<color=#7FA9BF>· " + Esc(wk ?? "work") + "</color>" + tail);
-                    break;
-                }
-                case "turn":
-                {
-                    var children = r["children"] as JArray;
-                    if (children != null && children.Count > 0) { foreach (var ch in children) AddTimelineRow(ch, depth + 1); }
-                    else _tlLines.Add(pad + $"<color=#7FA9BF>· {r["summaryCount"]} steps ({r["status"]})</color>");
-                    break;
-                }
-            }
-        }
-
-        /// Shows the newest lines that fit (or older ones after ▲), measured with TextMeshPro.
-        private void RenderTimeline()
-        {
-            if (_thTimeline?.Label == null) return;
-            if (_tlLines.Count == 0) { _thTimeline.Set("<color=#7FA9BF>(empty)</color>"); return; }
-            var tmp = _thTimeline.Label.Tmp;
-            float w = _thTimeline.Rect.width, h = _thTimeline.Rect.height;
-            int end = Mathf.Clamp(_tlLines.Count - _tlScroll, 1, _tlLines.Count);
-            var shown = new List<string>();
-            for (int i = end - 1; i >= 0; i--)
-            {
-                shown.Insert(0, _tlLines[i]);
-                if (shown.Count > 1 && tmp.GetPreferredValues(string.Join("\n", shown), w, 0f).y > h) { shown.RemoveAt(0); break; }
-            }
-            string more = end - shown.Count > 0 ? $"<color=#7FA9BF>▲ {end - shown.Count} earlier</color>\n" : "";
-            _thTimeline.Set(more + string.Join("\n", shown));
-        }
+        /// Redraws the chat (the attach modal closed over it, the ask row came or went).
+        private void RenderTimeline() { _thTimeline?.Redraw(); RefreshNewButton(); }
 
         private void ShowAsk()
         {
@@ -1049,7 +1027,8 @@ namespace MetaCodex.Shell
                 _thComposer.Set("");
                 if (sent != null) { foreach (var a in sent) att.Remove(a); RefreshAttachRow(); }
                 Toast((string)r["delivery"] == "queued" ? "Queued (the agent is busy)" : "Sent", "ok");
-                _tlScroll = 0;
+                _thTimeline?.ScrollToBottom(); // your message: the view follows the answer
+                _nextThreadMeta = 0f;
                 PollThread();
             });
         }
@@ -1072,9 +1051,13 @@ namespace MetaCodex.Shell
             _ntSummary = p.Add(new UiLabel("", t.SmallSize) { Rect = r.Next(0.07f), Wrap = true, Align = TextAlignmentOptions.TopLeft });
             int perm = Math.Max(0, Array.IndexOf(new[] { "accept-edits", "auto", "full" }, Settings.permissionMode));
             _ntPerm = p.Add(new UiSegmented("PERMISSIONS", new[] { "EDITS", "AUTO", "FULL" }, perm, i => { Settings.permissionMode = new[] { "accept-edits", "auto", "full" }[i]; ShowNewThreadSummary(); }) { Rect = r.Next(0.032f), LabelWidth = 0.1f });
-            _ntWork = p.Add(new UiSegmented("WORKSPACE", new[] { "CHECKOUT", "WORKTREE" }, Settings.workspaceMode == "worktree" ? 1 : 0, i => { Settings.workspaceMode = i == 1 ? "worktree" : "local"; ShowNewThreadSummary(); }) { Rect = r.Next(0.032f), LabelWidth = 0.1f });
+            _ntWork = p.Add(new UiSegmented("WORKSPACE", new[] { "CHECKOUT", "WORKTREE" }, Settings.workspaceMode == "worktree" ? 1 : 0, i => { Settings.workspaceMode = i == 1 ? "worktree" : "local"; _ntForcedWorktree = false; _ntReuseEnv = default; ShowNewThreadSummary(); }) { Rect = r.Next(0.032f), LabelWidth = 0.1f });
             p.Add(new UiLabel("FIRST MESSAGE", t.SmallSize) { Rect = r.Next(0.018f), UseDisplay = true, Color = t.TextDim });
-            _ntPrompt = p.Add(new UiTextField("", "", null, "what should the agent do?") { Rect = r.Next(0.034f), CaptionWidth = 0f });
+            var pr = r.Next(0.034f);
+            _ntPrompt = p.Add(new UiTextField("", "", null, "what should the agent do? (◉ to say it)") { Rect = new Rect(pr.x, pr.y, pr.width - 0.05f, pr.height), CaptionWidth = 0f });
+            _ntMic = p.Add(new UiButton("◉", () => DictateInto(_ntPrompt)) { Rect = new Rect(pr.xMax - 0.045f, pr.y, 0.045f, pr.height), TextSize = t.BodySize * 1.1f });
+            p.Tick += _ => { if (_thTimeline == null || !IsPanelOpen("thread")) TickThreadView(); };
+            p.Closed += _ => { _ntReuseEnv = default; _ntForcedWorktree = false; };
             p.Add(new UiLabel("CHECKOUT works in the project folder itself; WORKTREE gives the thread its own git worktree and branch. EDITS asks before commands; FULL never asks.", t.SmallSize) { Rect = r.Next(0.06f), Wrap = true, Color = t.TextDim, Align = TextAlignmentOptions.TopLeft });
             var go = r.Next(t.ButtonHeight);
             p.Add(new UiButton("START ▶", StartThread, UiButtonStyle.Primary) { Rect = go });
@@ -1084,6 +1067,11 @@ namespace MetaCodex.Shell
         {
             _ntProvider = providerId ?? (string.IsNullOrEmpty(Settings.defaultProvider) ? _ntProvider : Settings.defaultProvider);
             OpenPanel("thread-new");
+            // a checkout another thread works in: WORKTREE for this one (said in the summary; CHECKOUT stays possible)
+            _ntWork?.Set(Settings.workspaceMode == "worktree" ? 1 : 0);
+            _spaces = WorkspaceMap.Build(_threads, _environments);
+            ApplyNewThreadWorkspaceDefault();
+            ShowNewThreadSummary();
             Mqh.ProvidersState(st =>
             {
                 if (st == null) { _ntSummary?.Set("⚠ " + (Mqh.LastError ?? "MQH not reachable"), UiTheme.Current.Danger); return; }
@@ -1147,13 +1135,15 @@ namespace MetaCodex.Shell
         private void ShowNewThreadSummary()
         {
             var proj = _projects.FirstOrDefault(x => (string)x["id"] == _projectSel);
-            _ntSummary?.Set($"<color=#7FA9BF>PROJECT</color> <b>{(string)proj?["name"] ?? "— pick one in THREADS"}</b>\n<color=#7FA9BF>AGENT</color> {_ntProvider ?? "—"} · {_ntModel ?? "default model"}\n<color=#7FA9BF>MODE</color> {Settings.permissionMode} · {(Settings.workspaceMode == "worktree" ? "new worktree" : "project checkout")}");
+            bool wt = Settings.workspaceMode == "worktree" || _ntForcedWorktree;
+            string where = _ntReuseEnv.id != null ? "in " + _ntReuseEnv.label : wt ? "new worktree" : "project checkout";
+            _ntSummary?.Set($"<color=#7FA9BF>PROJECT</color> <b>{(string)proj?["name"] ?? "— pick one in THREADS"}</b>\n<color=#7FA9BF>AGENT</color> {_ntProvider ?? "—"} · {_ntModel ?? "default model"}\n<color=#7FA9BF>MODE</color> {Settings.permissionMode} · {UiChatView.Esc(where)}" + NewThreadWorkspaceNote());
         }
 
         /// The create-thread request MQH expects (also used by tests).
         public JObject NewThreadBody(string projectId, string providerId, string model, string prompt)
         {
-            var workspace = Settings.workspaceMode == "worktree"
+            var workspace = Settings.workspaceMode == "worktree" || _ntForcedWorktree
                 ? new JObject { ["type"] = "managed-worktree", ["baseBranch"] = new JObject { ["kind"] = "default" } }
                 : new JObject { ["type"] = "unmanaged", ["path"] = null };
             var body = new JObject
@@ -1163,7 +1153,9 @@ namespace MetaCodex.Shell
                 ["origin"] = "app",
                 ["input"] = new JArray { MqhClient.TextInput(prompt) },
                 ["permissionMode"] = Settings.permissionMode,
-                ["environment"] = new JObject { ["type"] = "host", ["hostId"] = _hostId, ["workspace"] = workspace },
+                // NEW THREAD HERE (WORKSPACES): that workspace again; else the checkout or a new worktree on this host
+                ["environment"] = _ntReuseEnv.id != null ? new JObject { ["type"] = "reuse", ["environmentId"] = _ntReuseEnv.id }
+                    : new JObject { ["type"] = "host", ["hostId"] = _hostId, ["workspace"] = workspace },
             };
             if (!string.IsNullOrEmpty(model)) body["model"] = model;
             return body;
@@ -1182,6 +1174,8 @@ namespace MetaCodex.Shell
                 Settings.defaultModel = _ntModel ?? "";
                 OnSettingsChanged();
                 _ntPrompt.Set("");
+                _ntReuseEnv = default;
+                _ntForcedWorktree = false;
                 ClosePanel("thread-new");
                 RefreshThreadList();
                 OpenThread((string)r["id"]);
