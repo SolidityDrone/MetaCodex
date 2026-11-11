@@ -17,7 +17,9 @@ While a job runs /tmp/mcx-buildd/busy exists (MetaCodex's service holds a wake l
 The dev server: the Runner app (another Android app, so TCP on 127.0.0.1) asks for the current module with a nonce;
 the answer carries an RSA signature (the APK signing key) over "MCXR1|<nonce>|<sha256>", which the Runner checks
 with the public key in its assets: an app that takes the port first cannot feed it code, old modules cannot be
-replayed. A client that goes away (Ctrl+C) cancels its job. Exit 100 from `run`: no daemon (mcx-app then builds itself).
+replayed. While MetaCodex is in the background (its :ai process at oom_score_adj >= 600, i.e. no foreground service) a job is
+paused whenever the builder's CPU over the last 5 minutes would pass 15 %: Android kills the whole :ai process
+(MQH, agents, local AI) when its children pass 25 %. A client that goes away (Ctrl+C) cancels its job. Exit 100 from `run`: no daemon (mcx-app then builds itself).
 Shipped by MetaCodex (overlay); edits are overwritten.
 """
 import json
@@ -72,6 +74,130 @@ def log(msg):
 
 
 DEV_PORT = int(os.environ.get("MCX_DEV_PORT", "47951"))
+# Android kills a background app process whose child processes used more than 25 % CPU over 5 minutes
+# ("Killing ...:ai (adj 700): Caused by child process: excessive cpu 78510 during 300014 ... limit=25", seen on the
+# Quest 3S with the headset asleep). A foreground service is exempt. While MetaCodex is in the background the
+# builder keeps its own share under BG_SHARE of any BG_WINDOW seconds (MQH and the local AI count too).
+BG_WINDOW = 300.0
+BG_SHARE = float(os.environ.get("MCX_BUILDD_BG_SHARE", "0.15"))
+BG_ADJ = 600  # oom_score_adj at or above it: the app is in the background without a foreground service
+CLK = os.sysconf("SC_CLK_TCK")
+
+
+def app_process():
+    """The Android process this Linux runs under (MetaCodex's :ai service): walk up the parents."""
+    if os.environ.get("MCX_BUILDD_APP_PID"):  # tests
+        return int(os.environ["MCX_BUILDD_APP_PID"])
+    pid = os.getpid()
+    for _ in range(40):
+        try:
+            with open(f"/proc/{pid}/stat") as f:
+                st = f.read()
+            ppid = int(st[st.rindex(")") + 2:].split()[1])
+            with open(f"/proc/{pid}/cmdline", "rb") as f:
+                cmd = f.read().split(b"\0")[0].decode("utf-8", "replace")
+        except (OSError, ValueError):
+            return None
+        if cmd.startswith("com.pnncl.metacodex"):
+            return pid
+        if ppid <= 1:
+            return None
+        pid = ppid
+    return None
+
+
+def app_adj(pid):
+    if os.environ.get("MCX_BUILDD_FORCE_BG"):
+        return 900
+    try:
+        with open(f"/proc/{pid}/oom_score_adj") as f:
+            return int(f.read().strip())
+    except (OSError, ValueError, TypeError):
+        return None
+
+
+def group_cpu(pgid):
+    """CPU seconds of a job: every live process of its group, plus what its leader reaped."""
+    total = 0
+    try:
+        names = os.listdir("/proc")
+    except OSError:
+        return 0.0
+    for n in names:
+        if not n.isdigit():
+            continue
+        try:
+            with open(f"/proc/{n}/stat") as f:
+                st = f.read()
+            f_ = st[st.rindex(")") + 2:].split()
+            if int(f_[2]) != pgid:
+                continue
+            total += int(f_[11]) + int(f_[12])
+            if int(n) == pgid:
+                total += int(f_[13]) + int(f_[14])
+        except (OSError, ValueError, IndexError):
+            continue
+    return total / CLK
+
+
+PAUSE = os.path.join(D, "pause")
+
+
+class CpuBudget:
+    """Samples the running job's CPU each second; pauses it while the app is in the background and the builder's
+    CPU over the last BG_WINDOW s would pass BG_SHARE; resumes it when the window allows. The pause is cooperative
+    (the pause file, which mcx-build waits on before each stage and each compile): SIGSTOP does not stop processes
+    traced by proot (measured: the job ran on)."""
+
+    def __init__(self):
+        self.app = app_process()
+        self.samples = []  # (time, cumulative builder cpu seconds)
+        self.base = 0.0    # cpu of finished jobs
+        self.paused_s = 0.0
+        self.state = "idle"
+
+    def used(self, now, cur):
+        while len(self.samples) > 1 and self.samples[1][0] < now - BG_WINDOW:
+            self.samples.pop(0)
+        if not self.samples:
+            return 0.0
+        return cur - self.samples[0][1]
+
+    def watch(self, pgid, done):
+        stopped = False
+        last_cpu = 0.0
+        while not done.is_set():
+            now = time.time()
+            cpu = group_cpu(pgid)
+            last_cpu = max(last_cpu, cpu)
+            cur = self.base + last_cpu
+            self.samples.append((now, cur))
+            adj = app_adj(self.app) if self.app else None
+            bg = adj is not None and adj >= BG_ADJ
+            over = self.used(now, cur) > BG_SHARE * BG_WINDOW
+            try:
+                if bg and over and not stopped:
+                    with open(PAUSE, "w") as f:
+                        f.write(f"MetaCodex is in the background (adj {adj}): builder CPU over {BG_SHARE:.0%} of 5 min\n")
+                    stopped = True
+                    log(f"cpu budget: MetaCodex in the background (adj {adj}): job paused to stay under {BG_SHARE:.1%} CPU")
+                elif stopped and (not bg or not over):
+                    os.remove(PAUSE)
+                    stopped = False
+                    log(f"cpu budget: job resumed (adj {adj})")
+            except OSError:
+                pass
+            if stopped:
+                self.paused_s += 1.0
+            self.state = "paused (background budget)" if stopped else ("background" if bg else "foreground")
+            done.wait(1.0)
+        if stopped:
+            try:
+                os.remove(PAUSE)
+            except OSError:
+                pass
+        self.base += last_cpu
+        self.state = "idle"
 
 
 def signing_key():
@@ -176,6 +302,7 @@ class DevServer:
 class Daemon:
     def __init__(self):
         self.dev = DevServer()
+        self.budget = CpuBudget()
         self.lock = threading.Lock()
         self.turn = threading.Condition(self.lock)
         self.queue = []  # job ids waiting, in order
@@ -194,7 +321,10 @@ class Daemon:
             run = dict(self.running) if self.running else None
             if run:
                 run["seconds"] = round(time.time() - run["started"], 1)
+            adj = app_adj(self.budget.app) if self.budget.app else None
             return {"pid": os.getpid(), "cpuset": read("/proc/self/cpuset").strip(), "cpus": cpus(),
+                    "app_pid": self.budget.app, "app_adj": adj, "budget": self.budget.state,
+                    "budget_paused_s": round(self.budget.paused_s), "cpu_last_5min_s": round(self.budget.used(time.time(), self.budget.samples[-1][1]) if self.budget.samples else 0.0, 1),
                     "pinned": bool(self.pin), "nice": NICE, "running": run, "queued": len(self.queue), "last": self.last}
 
     def handle(self, conn):
@@ -265,6 +395,7 @@ class Daemon:
             self.queue.pop(0)
             self.running = {"id": jid, "args": args, "started": time.time(), "pid": None}
         code, summary = 1, None
+        budget_done = threading.Event()
         try:
             with open(BUSY, "w") as b:
                 b.write(json.dumps({"id": jid, "args": args, "started": time.time()}))
@@ -275,10 +406,12 @@ class Daemon:
             log(f"job {jid} start: {args} cwd {cwd}")
             env = dict(os.environ)
             env.setdefault("MCX_BUILD_JOBS", "2")
+            env["MCX_BUILD_PAUSE_FILE"] = PAUSE
             p = subprocess.Popen(cmd, cwd=cwd if os.path.isdir(cwd) else "/root", stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                  env=env, start_new_session=True)
             with self.lock:
                 self.running["pid"] = p.pid
+            threading.Thread(target=self.budget.watch, args=(p.pid, budget_done), daemon=True).start()
 
             def killer():
                 gone.wait()
@@ -308,12 +441,14 @@ class Daemon:
                     except OSError:
                         gone.set()
             code = p.wait()
+            budget_done.set()
         except OSError as e:
             try:
                 send({"line": f"mcx-buildd: {e}"})
             except OSError:
                 pass
         finally:
+            budget_done.set()
             try:
                 os.remove(BUSY)
             except OSError:

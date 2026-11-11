@@ -7,6 +7,8 @@
                                       `mcx-app dev` (the Runner loads it without an APK)
 App types (build.conf TYPE=): app (default: NativeActivity sources) | module (src/ -> libapp.so, packed with the
 native host libmcxhost.so) | runner (the host alone + assets/mcx-dev.pub: the Runner app of `mcx-app dev`).
+  mcx-build --verify <dir>            static checks of the built APK: manifest, symbols, OpenXR extensions and the
+                                      permissions / features the Meta APIs in use need
   mcx-build --warm                    fill the shared cache (glue object, precompiled headers): mcx-buildd does it at start
 Options: -j N parallel compiles (default 2) | --clean (drop build/ first) | --json (last line: MCX-BUILD-JSON {...})
          --signer auto|python|apksigner (default auto: the built-in v2 signer, apksigner when it cannot run)
@@ -92,8 +94,30 @@ def hottest_c():
     return best
 
 
+PAUSE_FILE = os.environ.get("MCX_BUILD_PAUSE_FILE")
+
+
+def wait_paused():
+    """mcx-buildd's CPU budget (MetaCodex in the background): wait while its pause file exists."""
+    if not PAUSE_FILE:
+        return
+    told = False
+    while os.path.exists(PAUSE_FILE):
+        if not told:
+            try:
+                why = open(PAUSE_FILE).read().strip()
+            except OSError:
+                why = ""
+            say(f"   paused: {why or 'CPU budget'}; going on when MetaCodex is back in front or the budget allows")
+            told = True
+        time.sleep(0.5)
+    if told:
+        say("   resumed")
+
+
 def wait_for_room(stage):
-    """Before a stage: memory floor and heat limit. Waits up to 60 s each, then stops."""
+    """Before a stage: the builder's CPU budget, the memory floor and the heat limit."""
+    wait_paused()
     t0 = time.time()
     while True:
         mb = mem_available_mb()
@@ -135,6 +159,7 @@ STATS = Stats()
 
 def run(cmd, stage, capture=False, env=None):
     """Runs a tool; returns (exit code, output, cpu seconds, peak RSS MB). A memory watcher stops it under KILL_MB."""
+    wait_paused()
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE if capture else None, stderr=subprocess.STDOUT if capture else None, env=env)
     killed = []
     done = threading.Event()
@@ -214,6 +239,9 @@ class Toolchain:
         self.openssl = shutil.which("openssl")
         # the native host of module apps and of the Runner (host.cpp, mcx_module.h)
         self.runner = os.environ.get("MCX_RUNNER_SRC") or "/opt/metacodex/quest-native/runner"
+        # the native XR layer (mcx_xr.h: passthrough, depth, hands, controllers, scene, anchors, text, ...)
+        self.xr = os.environ.get("MCX_XR_SRC") or "/opt/metacodex/quest-native/xr"
+        self.ar = os.path.join(self.bin, "llvm-ar")
 
     def missing(self, need_package):
         miss = [p for p in (self.cxx, self.cc, os.path.join(self.glue, "android_native_app_glue.c"),
@@ -303,7 +331,7 @@ PCH_UNSAFE = re.compile(r"^\s*#\s*define\s+(XR_NO_PROTOTYPES|XR_EXTENSION_PROTOT
 
 
 def base_flags(tc, app, is_c):
-    f = [f"--target=aarch64-linux-android{app.api}", "-fPIC", "-I" + tc.xr_inc, "-I" + tc.glue, "-I" + tc.runner, "-fno-color-diagnostics"]
+    f = [f"--target=aarch64-linux-android{app.api}", "-fPIC", "-I" + tc.xr_inc, "-I" + tc.glue, "-I" + tc.runner, "-I" + tc.xr, "-fno-color-diagnostics"]
     return f if is_c else f + ["-std=c++17"]
 
 
@@ -543,6 +571,39 @@ def host_lib(tc, app):
     return so, True
 
 
+def xr_lib(tc, app):
+    """libmcxxr.a (mcx_xr.cpp), built once per toolchain and layer source; linked as an archive, so an app that
+    does not use it carries nothing of it. None when the layer is not installed."""
+    src = os.path.join(tc.xr, "mcx_xr.cpp")
+    if not os.path.exists(src):
+        return None
+    h = hashlib.sha256((tc.ident() + f"|{app.api}|{VERSION}").encode())
+    for f in ("mcx_xr.cpp", "mcx_xr.h", "mcx_font.h"):
+        p = os.path.join(tc.xr, f)
+        if os.path.exists(p):
+            h.update(open(p, "rb").read())
+    lib = os.path.join(CACHE, f"libmcxxr-{h.hexdigest()[:16]}.a")
+    if os.path.exists(lib):
+        return lib
+    os.makedirs(CACHE, exist_ok=True)
+    with Stage("xr layer") as st:
+        obj = lib[:-2] + f".{os.getpid()}.o"
+        rc, out, cpu, rss = run([tc.cxx] + base_flags(tc, app, False) + ["-O2", "-c", src, "-o", obj], "xr layer", capture=True)
+        st.add(cpu, rss)
+        if rc != 0:
+            say(out)
+            raise Fail("the XR layer did not compile")
+        tmp = lib + f".{os.getpid()}.tmp"
+        rc, out, cpu, rss = run([tc.ar, "rcs", tmp, obj], "xr layer", capture=True)
+        os.remove(obj)
+        if rc != 0:
+            say(out)
+            raise Fail("llvm-ar")
+        os.replace(tmp, lib)
+        st.note = "XR layer built (once per toolchain)"
+    return lib
+
+
 def copy_if_changed(src, dst):
     if not (os.path.exists(dst) and os.path.getsize(dst) == os.path.getsize(src) and os.stat(dst).st_mtime >= os.stat(src).st_mtime):
         shutil.copyfile(src, dst + ".tmp")
@@ -573,7 +634,8 @@ def link_one(tc, app, so, module):
     lib_dir = os.path.dirname(so)
     objs = [obj_name(app, s) for s in app.sources()]
     glue = None if module else glue_object(tc, app)[0]
-    libs = split_flags(app.conf.get("LDLIBS", ""))
+    xr = xr_lib(tc, app)
+    libs = ([xr] if xr else []) + split_flags(app.conf.get("LDLIBS", ""))
     # relink only when an object or the loader is newer than the library
     if os.path.exists(so):
         t = os.stat(so).st_mtime
@@ -942,6 +1004,109 @@ def do_sign(tc, app, data, cd_off, signer):
 
 # ------------------------------------------------------------------------------------------------ main
 
+# what an API needs in the manifest (Meta's native docs: passthrough, depth, hand tracking, spatial data, anchors)
+NEEDS = [
+    ("xrCreatePassthroughFB", "feature", "com.oculus.feature.PASSTHROUGH", "passthrough"),
+    ("xrCreateEnvironmentDepthProviderMETA", "permission", "com.oculus.permission.USE_SCENE", "environment depth"),
+    ("xrQuerySpacesFB", "permission", "com.oculus.permission.USE_SCENE", "scene / spatial entity queries"),
+    ("xrGetSpaceSemanticLabelsFB", "permission", "com.oculus.permission.USE_SCENE", "scene labels"),
+    ("xrCreateSpatialAnchorFB", "permission", "com.oculus.permission.USE_ANCHOR_API", "spatial anchors"),
+    ("xrCreateHandTrackerEXT", "permission", "com.oculus.permission.HAND_TRACKING", "hand tracking"),
+    ("xrCreateHandTrackerEXT", "feature", "oculus.software.handtracking", "hand tracking"),
+    ("xrCreateBodyTrackerFB", "permission", "com.oculus.permission.BODY_TRACKING", "body tracking"),
+    ("xrCreateFaceTracker2FB", "permission", "com.oculus.permission.FACE_TRACKING", "face tracking"),
+    ("xrCreateEyeTrackerFB", "permission", "com.oculus.permission.EYE_TRACKING", "eye tracking"),
+]
+SYSTEM_LIBS = {"libandroid.so", "liblog.so", "libEGL.so", "libGLESv1_CM.so", "libGLESv2.so", "libGLESv3.so", "libvulkan.so",
+               "libc.so", "libm.so", "libdl.so", "libmediandk.so", "libcamera2ndk.so", "libaaudio.so", "libOpenSLES.so",
+               "libjnigraphics.so", "libnativewindow.so", "libsync.so", "libz.so", "libbinder_ndk.so", "libamidi.so"}
+
+
+def verify(d):
+    """Static checks of a built app: manifest (aapt2 dump badging), libraries (every undefined symbol resolves in a
+    system library of the target API or a packed one), the OpenXR extensions and functions the code asks for, and
+    the manifest entries those Meta APIs need. Exit 0 when nothing is missing."""
+    app = App(d)
+    tc = Toolchain()
+    apk = os.path.join(app.out, f"{app.name}.apk")
+    if not os.path.exists(apk):
+        say(f"mcx-build: no {apk}: build first")
+        return 1
+    problems = []
+    r = subprocess.run([tc.aapt2, "dump", "badging", apk], capture_output=True, text=True)
+    badging = r.stdout
+    perms = sorted(set(re.findall(r"uses-permission: name='([^']+)'", badging)))
+    feats = sorted(set(re.findall(r"uses-feature(?:-not-required)?: name='([^']+)'", badging)))
+    label = re.search(r"application-label:'([^']*)'", badging)
+    icon = re.search(r"application: label='[^']*' icon='([^']*)'", badging)
+    sdk = re.search(r"sdkVersion:'(\d+)'", badging)
+    say(f"== verify {app.pkg}: {apk} ({os.path.getsize(apk) // 1024} KB)")
+    say(f"   label {label.group(1) if label else '-'}, icon {icon.group(1) if icon and icon.group(1) else 'NONE'}, minSdk {sdk.group(1) if sdk else '?'}")
+    say("   permissions: " + ", ".join(perms))
+    say("   features: " + ", ".join(feats))
+    if not icon or not icon.group(1):
+        problems.append("no android:icon: the Library shows a generic tile (add res/drawable/icon.png + android:icon=\"@drawable/icon\")")
+    with zipfile.ZipFile(apk) as z:
+        libs = {os.path.basename(n): z.read(n) for n in z.namelist() if n.startswith("lib/arm64-v8a/") and n.endswith(".so")}
+        manifest_dev = re.search(r"com\.oculus\.supportedDevices.*?:value\([^)]*\)='([^']*)'", subprocess.run(
+            [tc.aapt2, "dump", "xmltree", apk, "--file", "AndroidManifest.xml"], capture_output=True, text=True).stdout.replace('"', "'"), re.S)
+    tmpd = os.path.join(app.cache, "verify")
+    os.makedirs(tmpd, exist_ok=True)
+    for n, b in libs.items():
+        with open(os.path.join(tmpd, n), "wb") as f:
+            f.write(b)
+    nm = os.path.join(tc.bin, "llvm-nm")
+    readelf = os.path.join(tc.bin, "llvm-readelf")
+    sysroot = os.path.join(os.path.dirname(tc.bin), "sysroot", "usr", "lib", "aarch64-linux-android", str(app.api))
+
+    def defined(path):
+        out = subprocess.run([nm, "-D", "--defined-only", "--format=just-symbols", path], capture_output=True, text=True).stdout
+        return set(x.split("@")[0] for x in out.split())
+
+    cache_defs = {}
+    xr_exts, xr_funcs = set(), set()
+    for n in sorted(libs):
+        if n == "libopenxr_loader.so":
+            continue
+        p = os.path.join(tmpd, n)
+        needed = re.findall(r"\(NEEDED\)\s+Shared library: \[([^\]]+)\]", subprocess.run([readelf, "-d", p], capture_output=True, text=True).stdout)
+        undef = set(x.split("@")[0] for x in subprocess.run([nm, "-D", "--undefined-only", "--format=just-symbols", p], capture_output=True, text=True).stdout.split())
+        have = set()
+        for lib in needed:
+            src = os.path.join(tmpd, lib) if lib in libs else os.path.join(sysroot, lib)
+            if lib not in libs and lib not in SYSTEM_LIBS:
+                problems.append(f"{n} needs {lib}: not packed and not a system library")
+            if not os.path.exists(src):
+                problems.append(f"{n} needs {lib}: not found for API {app.api}")
+                continue
+            if src not in cache_defs:
+                cache_defs[src] = defined(src)
+            have |= cache_defs[src]
+        missing = sorted(u for u in undef if u not in have and not u.startswith("__") and u not in ("_ITM_deregisterTMCloneTable", "_ITM_registerTMCloneTable"))
+        say(f"   {n}: needs {', '.join(needed)}; {len(undef)} imported symbols, {len(missing)} unresolved")
+        if missing:
+            problems.append(f"{n}: unresolved {', '.join(missing[:12])}")
+        text = libs[n]
+        xr_exts |= set(x.decode() for x in re.findall(rb"\b(XR_(?:KHR|EXT|FB|META|OCULUS|HTC|MSFT|ML|VARJO|ANDROID)_[a-z0-9_]+)\b", text))
+        xr_funcs |= set(x.decode() for x in re.findall(rb"\b(xr[A-Z][A-Za-z0-9]+(?:FB|META|EXT|KHR|OCULUS))\b", text))
+    say("   OpenXR extensions asked for: " + (", ".join(sorted(xr_exts)) or "none"))
+    say("   OpenXR extension functions looked up: " + (", ".join(sorted(xr_funcs)) or "none"))
+    for fn, kind, name, what in NEEDS:
+        if fn in xr_funcs and name not in (perms if kind == "permission" else feats):
+            problems.append(f"{what} ({fn}) needs <uses-{kind} android:name=\"{name}\"> in AndroidManifest.xml")
+    if manifest_dev:
+        say(f"   supportedDevices: {manifest_dev.group(1)}")
+        if "xrCreateEnvironmentDepthProviderMETA" in xr_funcs and re.search(r"quest2|questpro", manifest_dev.group(1)):
+            problems.append("environment depth runs on Quest 3 / 3S only: supportedDevices lists quest2/questpro (the app must work without depth there)")
+    else:
+        problems.append("no com.oculus.supportedDevices meta-data (Meta's manifest page: quest2|questpro|quest3|quest3s|vrglasses)")
+    shutil.rmtree(tmpd, ignore_errors=True)
+    for p_ in problems:
+        say("   PROBLEM: " + p_)
+    say(f"RESULT: verify {'ok' if not problems else 'found %d problem(s)' % len(problems)}")
+    return 0 if not problems else 1
+
+
 def warm():
     """Fills the shared cache (glue object, precompiled headers for check and build) so the first build is warm."""
     tc = Toolchain()
@@ -977,6 +1142,8 @@ def main(argv):
             module_only = True
         elif a == "--warm":
             return warm()
+        elif a == "--verify":
+            return verify(argv[i + 1] if i + 1 < len(argv) else ".")
         elif a == "-j":
             i += 1
             jobs = int(argv[i])

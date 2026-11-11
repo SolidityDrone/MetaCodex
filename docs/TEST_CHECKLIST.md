@@ -428,3 +428,27 @@ The in-app browser, WEB (same version):
 - [ ] Point at a card and ask "what is this thread doing?": the answer is about that thread
 - [ ] Frame rate with the menu open and two threads working: 72 fps
 
+
+## 29. Native apps: builds off the frame loop, `mcx-app check`, the Runner (branch feat/native-horizon-building-and-install)
+
+Needs a MetaCodex build with this branch (overlay, MQH bundle, `MetaCodexAiService`). Plan and numbers:
+docs/native-build-and-install.md.
+
+- [ ] A terminal: `mcx-app doctor` → `ok` for mcx-build, mcx-buildd, aapt2, openssl, python3; `builds  through mcx-buildd (cores 0-2)`
+- [ ] `mcx-app new /root/apps/t1 --module --label "T1"`, then `mcx-app check /root/apps/t1` → `RESULT: check ok` in about 1 s
+- [ ] Break a line in `src/app.cpp` (remove a `;`), `mcx-app check` → `app.cpp:<line>:<col>: error: ...` and `RESULT: 1 error(s)`; fix it
+- [ ] `mcx-app runner` → Android asks to install "Runner" once: tap Install → `RESULT: installed`; "Runner" is in the Library
+- [ ] `mcx-app dev /root/apps/t1` → the Runner opens with three turning cubes (`RESULT: running in the Runner`, about 3 s)
+- [ ] Back in MetaCodex, change a cube colour in `src/app.cpp`, `mcx-app dev` again → in the Runner the colour changes without the app restarting (about 2 s)
+- [ ] `mcx-app run /root/apps/t1` → Install once; "T1" opens by itself (its own Library icon) with the same cubes; Meta button > Quit; force-stop MetaCodex (Settings > Apps); open T1 from the Library: it still runs
+- [ ] Wear the headset, open the Perf menu, and in a terminal: `for i in 1 2 3 4 5; do touch /root/apps/t1/src/app.cpp; mcx-app build /root/apps/t1; done` → 72 fps the whole time (a build ~2 s), voice commands still answer
+- [ ] During those builds say "what is this build doing?" or use a thread: MQH answers normally
+- [ ] Settings > Apps > MetaCodex shows a running service / notification "Local services running" (the AI service is now a foreground service)
+- [ ] Open T1 (MetaCodex in the background) and stay in it 10 minutes; come back: MQH threads, the agents and voice still work without a restart (DAEMON says running, not "starting again")
+- [ ] Start `mcx-app build /root/apps/t1` from a thread and take the headset off for 2 minutes; back on: the build finished (log `RESULT: APK ...`)
+- [ ] Night Vision: `cp -r /opt/metacodex/quest-native/examples/nightvision /root/apps/nv`, `mcx-app build /root/apps/nv`, `mcx-app verify /root/apps/nv` → `RESULT: verify ok`; `mcx-app install` + `launch` → Android asks for spatial data once: Allow
+- [ ] Night Vision: the room in green; near things bright, far ones dark, outlines glowing; grain and scanlines; the HUD says `depth ... LIVE`, `room N objects`, `72 Hz`
+- [ ] Right pinch (or right trigger) cycles PHOSPHOR / EDGES / RANGE; left pinch (or A) turns the camera off (depth image alone) and on; stick up/down changes the gain; open the system menu: nothing reacts until you close it
+- [ ] Night Vision has its own icon (green goggles) and label in the Library; it runs with MetaCodex force-stopped
+- [ ] Switch between MetaCodex and an app built here 5 times; then Perf menu / `adb shell dumpsys meminfo com.pnncl.metacodex | grep "GL mtrack"`: MetaCodex's GPU memory does not climb by hundreds of MB per switch (11-11: 4.87 GB after ~6 switches + a sleep, lmkd then killed the AI process)
+- [ ] With MetaCodex in the background (an app built here in front) start a long build from a thread: `mcx-buildd status` shows `"budget": "paused (background budget)"` once it passes 15 % CPU over 5 min, and MetaCodex's AI process is not killed (no `excessive cpu` line in logcat)

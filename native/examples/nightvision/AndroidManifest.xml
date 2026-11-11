@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Night Vision: a mixed-reality example built in MetaCodex with the native XR layer (mcx_xr.h): environment depth
+     shaded as night vision over a green passthrough, hands and controllers, the room, anchors. Every entry below is
+     from Meta's native docs (manifest, passthrough, depth, hand tracking, spatial data): see
+     docs/native-build-and-install.md, "Feature matrix". -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.metacodex.nightvision"
+    android:versionCode="1"
+    android:versionName="1.0"
+    android:installLocation="auto">
+
+    <uses-sdk android:minSdkVersion="32" android:targetSdkVersion="32" />
+    <uses-feature android:name="android.hardware.vr.headtracking" android:required="true" android:version="1" />
+    <uses-feature android:glEsVersion="0x00030001" android:required="true" />
+    <!-- passthrough: without this flag the passthrough extensions do not enable (Meta, "Implement Passthrough") -->
+    <uses-feature android:name="com.oculus.feature.PASSTHROUGH" android:required="true" />
+    <!-- environment depth and the room: spatial data, a runtime permission the app asks for at start -->
+    <uses-permission android:name="com.oculus.permission.USE_SCENE" />
+    <!-- spatial anchors (create and persist) -->
+    <uses-permission android:name="com.oculus.permission.USE_ANCHOR_API" />
+    <!-- hand tracking -->
+    <uses-permission android:name="com.oculus.permission.HAND_TRACKING" />
+    <uses-feature android:name="oculus.software.handtracking" android:required="false" />
+    <!-- the Khronos OpenXR loader finds the runtime through its broker -->
+    <uses-permission android:name="org.khronos.openxr.permission.OPENXR" />
+    <uses-permission android:name="org.khronos.openxr.permission.OPENXR_SYSTEM" />
+    <!-- only for the log lines sent to `mcx-app logs` on 127.0.0.1 -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <queries>
+        <provider android:authorities="org.khronos.openxr.runtime_broker;org.khronos.openxr.system_runtime_broker" />
+        <intent>
+            <action android:name="org.khronos.openxr.OpenXRRuntimeService" />
+        </intent>
+        <intent>
+            <action android:name="org.khronos.openxr.OpenXRApiLayerService" />
+        </intent>
+    </queries>
+
+    <application
+        android:label="Night Vision"
+        android:icon="@drawable/icon"
+        android:hasCode="false"
+        android:allowBackup="false">
+        <!-- environment depth needs Quest 3-class depth sensing: Quest 3 and 3S only -->
+        <meta-data android:name="com.oculus.supportedDevices" android:value="quest3|quest3s" />
+        <activity
+            android:name="android.app.NativeActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:screenOrientation="landscape"
+            android:resizeableActivity="false"
+            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen"
+            android:configChanges="density|keyboard|keyboardHidden|navigation|orientation|screenLayout|screenSize|uiMode">
+            <meta-data android:name="android.app.lib_name" android:value="nightvision" />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="com.oculus.intent.category.VR" />
+                <category android:name="org.khronos.openxr.intent.category.IMMERSIVE_HMD" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

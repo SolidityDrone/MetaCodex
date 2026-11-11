@@ -64,6 +64,11 @@ with tarfile.open(fileobj=raw, mode="w", format=tarfile.PAX_FORMAT) as tf:
         extra[f"opt/metacodex/quest-native/runner/{f}"] = os.path.join(native, "runner", f)
     for f in ("AndroidManifest.xml", "build.conf", "src/app.cpp"):
         extra[f"opt/metacodex/quest-native/module-template/{f}"] = os.path.join(native, "module-template", f)
+    # the native XR layer (mcx-build compiles it once per toolchain) and its worked example
+    for f in ("mcx_xr.h", "mcx_xr.cpp", "mcx_font.h"):
+        extra[f"opt/metacodex/quest-native/xr/{f}"] = os.path.join(native, "xr", f)
+    for f in ("AndroidManifest.xml", "src/main.cpp", "res/drawable/icon.png"):
+        extra[f"opt/metacodex/quest-native/examples/nightvision/{f}"] = os.path.join(native, "examples", "nightvision", f)
     for dst, srcdir in trees.items():
         for dp, dn, fn in os.walk(srcdir):
             dn[:] = sorted(d for d in dn if not junk(d))
@@ -94,7 +99,9 @@ with tarfile.open(fileobj=raw, mode="w", format=tarfile.PAX_FORMAT) as tf:
             ti.type, ti.mode = tarfile.DIRTYPE, mode_for(rel, True)
             tf.addfile(ti)
         else:
-            data = open(full, "rb").read().replace(b"\r\n", b"\n")
+            data = open(full, "rb").read()
+            if not full.endswith((".png", ".jpg", ".webp", ".so", ".jar")):  # binaries stay as they are
+                data = data.replace(b"\r\n", b"\n")
             ti.size, ti.mode = len(data), mode_for(rel, False)
             tf.addfile(ti, io.BytesIO(data))
 

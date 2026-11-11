@@ -11,6 +11,10 @@ decisions as it measures.
 | Builder off the frame loop (`mcx-buildd`, started by `mqh-run`) | **done, device-proven with dev copies** | a build typed into a MetaCodex terminal (`/immersive`) ran as job 7 on cores 0-2; fps 72 held |
 | Incremental pipeline `mcx-build` + `mcx-app check` | **done, device-proven** | one-file change 9.0 s -> 1.9 s, check 2.9 s -> 0.7 s (table below) |
 | Built-in APK v2 signer (no JVM) | **done** | `apksigner verify` passes on PC and headset; same certificate as the keytool keystore |
+| `:ai` foreground service + build wake lock | **committed, compile-checked; required** (R3, R9) | E4: service stopped ~65 s after another app came in front; R9: `:ai` killed for child CPU while in the background |
+| Background CPU budget in `mcx-buildd` | done (device test: see R9) | keeps the builder under 15 % CPU per 5 min while MetaCodex is in the background, the guard that works without the APK change |
+| Runner / module apps / `mcx-app dev` (JIT) | **parked (works, E6 passed)** | 2.2 s edit -> running, signed channel; parked by the owner's priority change (Quest SDK completeness first) |
+| Native XR layer `mcx_xr` + Night Vision | see "Feature matrix" | |
 | Shipping it | needs a MetaCodex APK build (overlay + `mqh-run` in the MQH bundle) | until then the dev copies live in `/root/.metacodex/dev/bin` on the headset |
 
 ## Goal
@@ -152,6 +156,11 @@ cores 0-5). Off-face with `prox_close` MetaCodex rendered **72/72 fps** this tim
 | E3 | MemAvailable with MetaCodex + MQH + QVAC idle: 2.0-2.1 GB (MemTotal 7.9 GB). Lowest during any build: **1868 MB** (a build costs ~100 MB). lmkd: PSI-based (`use_psi` true, `use_minfree_levels` false). oom_score_adj: main 0 (`/immersive`), `:ai` 100 (`/foreground`, kept up by QvacHost's binding). |
 | E7 | apksigner on the headset (ai): default 1.80 s / 84 MB; tuned JVM (`-XX:TieredStopAtLevel=1 -XX:+UseSerialGC -Xmx96m`) 1.20 s / 58 MB; **built-in Python v2 signer 0.03 s / 23 MB**. |
 | E8 | 5 builds in a row (one-file change each): 4.1 s every time (no slowdown), `scaling_max_freq` unchanged (cpu0 1.92 GHz, cpu2 1.38 GHz: the CPU level, not heat), VrApi `Temp` 28 C. fps during builds: avg 72.5, min 70; before 72.5 / min 71; after 72.6 / min 69: **no measurable fps cost from builds on cores 0-2**. |
+| E4 | adb-installed probe (built on the headset by `mcx-build`) in front for 8.5 min, MetaCodex behind. 10 s: main adj 700, `:ai` 500 (started service). **67-93 s: both at adj 900 = cached**; logcat `Stopping service due to app idle: u0a165 ... MetaCodexAiService` (~65 s after the switch). Not frozen (Horizon OS: `use_freezer=false`); MQH answered 19/19; builds through the daemon still ran (2.4 s at 38, 148, 498 s). Cached = lmkd's first victims: R3 confirmed. |
+| E5 | MetaCodex in front, headset forced asleep (`input keyevent KEYCODE_SLEEP`, `mWakefulness=Asleep`, USB connected): a detached loop in the ai context ran **139 builds in 240 s, CPU suspended 0.0 s** (CLOCK_BOOTTIME - CLOCK_MONOTONIC). Builds were faster asleep (1.2-1.5 s vs 2.0-2.1 s awake: Unity stops rendering). Off-face without `prox_close` the headset did not sleep by itself in 3 min (`mProximityPositive=false`, no sleep timeout). Without USB the CPU may suspend: the build wake lock covers it (needs the APK). |
+| **R9** (new) | **Android kills `:ai` for its children's CPU while MetaCodex is in the background**: `Killing 8993:com.pnncl.metacodex:ai (adj 700): Caused by child process: excessive cpu 78510 during 300014 dur=31032 limit=25` one minute after E5 (78.5 s CPU in 5 min > 25 %). MQH, QVAC and the builder died; the service restarted empty and MQH stayed down until Unity ran again. Foreground services are exempt (ActivityManager checks only background process states): the `:ai` foreground service is required. Without the APK: `mcx-buildd` pauses (SIGSTOP) a job while `:ai`'s `oom_score_adj` >= 600 and the builder's CPU over the last 5 min would pass 15 %. |
+| **GPU memory** (MetaCodex, not the builder) | after ~6 pause/resume cycles in 45 min (probe apps in front, sleep/wake) **the Unity process held 5.4 GB PSS, `GL mtrack` 4.87 GB** (limit 5.75 GiB on Quest 3S), MemAvailable 326 MB, and lmkd killed the restarted `:ai` twice (`oom_reaper ... cl.metacodex:ai`). Every `mcx-app launch` pauses MetaCodex, so this decides how many app tries a session survives: per-switch numbers below. |
+| E6 | Runner probe (targetSdk 32, adb-installed): `dlopen` of a module received over 127.0.0.1 and written to its files dir works, no denial; first load 22 ms, reload 2.4 ms with the OpenXR session kept; forged and replayed modules refused. |
 | PCH | clang on the headset spends most of a compile in headers (preprocess alone 1.18 s, 71k lines). A shared precompiled header (12.6 MB, 3.2 s to make once per toolchain and -O level): syntax check 2.75 -> 0.68 s, -O2 compile 3.67 -> ~1.2 s. Extra `-D` flags are allowed; the `-O` level must match (`__OPTIMIZE__`), so there is one PCH for check (-O0) and one for builds (-O2). |
 
 ### Decisions
@@ -173,6 +182,51 @@ cores 0-5). Off-face with `prox_close` MetaCodex rendered **72/72 fps** this tim
   floor is ~2 GB); heat guard only through `MCX_BUILD_MAX_C` (thermal zones are unreadable in the app's domain; VrApi
   reports 28 C and the CPU caps did not move in E8, so it stays off by default).
 
+## Feature matrix: Quest SDK features in apps built here (native XR layer `mcx_xr.h`)
+
+Layer: `native/xr/mcx_xr.{h,cpp}` (shipped to `/opt/metacodex/quest-native/xr`), compiled once per toolchain by
+`mcx-build` into `~/.cache/mcx-build/libmcxxr-*.a` (6.1 s on the headset, once) and linked as an archive (apps that do
+not use it carry nothing). Khronos OpenXR 1.1.65 headers only (Meta's extensions are registered there): no Meta SDK
+headers, no new third-party code (the text font is rasterized from DejaVu Sans Mono, which MetaCodex already ships).
+Worked example: `native/examples/nightvision` (`/opt/metacodex/quest-native/examples/nightvision`).
+
+Evidence levels: **compiles** (PC, NDK r27.1) < **builds on headset** (`mcx-build` on the Quest 3S, `mcx-build --verify`
+ok: manifest entries, 0 unresolved symbols, APK signed) < **offered on headset** (the runtime offered the extension to a
+probe app with these manifest entries: Runner log) < **ran on headset** (observed working at runtime).
+
+| Feature | API (in `mcx_xr`) | Manifest / permission (Meta's native docs) | Status |
+|---|---|---|---|
+| App lifecycle | `App::Pump/BeginFrame/EndFrame`: session READY -> begin, STOPPING -> end, EXITING / LOSS_PENDING -> exit; `Frame::focused` false while a system menu has focus (input off); Android pause/resume/destroy | NativeActivity, `singleTask`, `configChanges`, categories VR + LAUNCHER (native manifest page) | **ran on headset** (the same loop in hello-native and the Runner: session running, 72 fps) |
+| Passthrough | `Passthrough`: start/pause, opacity, edges, `SetMonoToRgba` (256-entry map), brightness/contrast/saturation; layer submitted under the projection, projection with `BLEND_TEXTURE_SOURCE_ALPHA` | `<uses-feature android:name="com.oculus.feature.PASSTHROUGH">` (without it the extension does not enable) | builds on headset; **offered on headset** (Runner: `passthrough yes`); running pending (worn test) |
+| Environment depth | `Depth`: provider + swapchain (GL texture array, 2 layers), `Acquire` per frame with near/far (far may be inf) and per-eye view-projection, hand removal | `com.oculus.permission.USE_SCENE` (runtime: `App` asks at start, polls the grant; `pm grant` works over adb); Quest 3 / 3S | builds on headset; **offered on headset** once USE_SCENE is declared (Runner); depth frames pending (worn test) |
+| Hand tracking | `Hands`: 26 joints per hand, `XR_FB_hand_tracking_aim` pinch strengths, aim ray, `pinchStarted` edge, menu/system gesture | `com.oculus.permission.HAND_TRACKING` (install-time on Horizon OS: granted at install, seen in dumpsys) + `oculus.software.handtracking` | builds on headset; **offered on headset** (Runner: `hands yes`) |
+| Controllers | `Controllers`: one action set; trigger, grip, A/X, B/Y, stick (+click), menu, aim/grip poses, haptics; Touch, Touch Plus (`XR_META_touch_controller_plus`), Touch Pro, simple profiles | none | builds on headset; runtime pending |
+| Scene / room | `Spatial::QueryScene`: walls, floor, ceiling, furniture with semantic labels, 2D planes, 3D boxes, located each frame | `USE_SCENE` (runtime); a room from Space Setup | builds on headset; **offered on headset** (`XR_FB_scene`, `XR_FB_spatial_entity*` after the manifest entry); room mesh (`XR_META_spatial_entity_mesh`) not implemented |
+| Spatial anchors | `Spatial::CreateAnchor` (+ storable + save, local, indefinite), `LoadAnchors`, `EraseAnchor` | `com.oculus.permission.USE_ANCHOR_API` (install-time on Horizon OS) | builds on headset; offered on headset (`XR_FB_spatial_entity_storage`); runtime pending |
+| Display / performance | `refreshRates`, `SetRefreshRate` (`XR_FB_display_refresh_rate`), `SetFoveation` 0-3 (`XR_FB_foveation(_configuration)`, `swapchain_update_state`), `SetPerformance` CPU/GPU (`XR_EXT_performance_settings`) | none | builds on headset; refresh-rate query **ran on headset** (Runner: 72 Hz); foveation/perf offered |
+| Runtime permissions | `Permissions::Granted/Request` (JNI `checkSelfPermission` / `requestPermissions` on the NativeActivity; polled once a second) | the permission in the manifest | builds on headset; dialog pending (worn test) |
+| Text / UI | `Text::Draw` (DejaVu Sans Mono atlas, 3D), `Text::Rect` (panels) | none | builds on headset; runtime pending |
+| Library icon + label | `android:icon="@drawable/icon"` + `res/drawable/icon.png`, `android:label` | aapt2 compiles `res/` on the headset | **builds on headset** (`--verify`: label Night Vision, icon res/drawable/icon.png) |
+| Devices | `com.oculus.supportedDevices` | canonical ids: `quest2|questpro|quest3|quest3s|vrglasses` (Meta 2026-10-07); depth apps: `quest3|quest3s` (`--verify` flags quest2/questpro with depth) | verified against the docs |
+| Static assertion | `mcx-app verify <dir>` (`mcx-build --verify`) | maps each Meta API in use to its permission / feature and reports what is missing | **ran on headset** (Night Vision ok; a manifest without the passthrough feature and USE_SCENE gave 4 problems) |
+
+### Night Vision (the demo)
+
+`native/examples/nightvision`: environment depth -> per-eye full-screen pass that reprojects the depth map through the
+depth camera's view-projection, green phosphor brightness from distance, edges from depth discontinuities, grain,
+scanlines; three modes (PHOSPHOR, EDGES, RANGE); passthrough underneath, turned green by a mono -> RGBA colour map,
+toggled; right pinch / trigger = mode, left pinch / A = passthrough, stick = gain, left grip = drop an anchor; HUD panel
+(text) following the head lazily; scene query and anchor count in the HUD; foveation 2, CPU/GPU sustained high.
+
+| Step on the Quest 3S | Result |
+|---|---|
+| build, cold (XR layer once + PCH + app), adb context pinned to cores 0-2 | 11.2 s (XR layer 6.1 s once), 710 KB |
+| build, one file changed | 1.5 s |
+| `mcx-app verify` on the headset | ok: 6 permissions (INTERNET, HAND_TRACKING, USE_ANCHOR_API, USE_SCENE, OPENXR, OPENXR_SYSTEM), features PASSTHROUGH + handtracking + headtracking, 226 imports / 0 unresolved, 21 extensions asked for, 42 extension functions, devices quest3\|quest3s |
+| `apksigner verify --min-sdk-version 32` (on the headset) | ok |
+| adb install as `com.metacodex.probe.nightvision`, `pm grant ... USE_SCENE` | installed; USE_SCENE (runtime) granted, HAND_TRACKING / USE_ANCHOR_API install-time granted |
+| launch | **blocked**: the headset was on the sensor lock screen (after a forced sleep for E5); launched apps do not start there and the lock is not to be bypassed. Runtime proof (session, passthrough, depth frames, screenshot) is in the owner's checklist |
+
 ## Metrics (ai context unless noted; MetaCodex at 72 fps)
 
 | Stage | Cold | Warm | Peak RSS | Cores | Notes |
@@ -186,4 +240,5 @@ cores 0-5). Off-face with `prox_close` MetaCodex rendered **72/72 fps** this tim
 | through the daemon from `/immersive` | | +0.35-0.5 s (client start + socket) | | 0-2 | job 7 |
 | install (path B) | owner-proven ~2 s update | | | | not re-measured (owner's order) |
 | launch | | | | | |
-| Runner reload | | | | | |
+| Runner reload (`mcx-app dev`, parked) | 2.6 s | **2.2 s** edit -> running (compile 1.15 + link 0.10 + deliver + load 2.4 ms) | 71 MB | 0-2 | adb context |
+| Night Vision build (XR layer) | 11.2 s (layer once 6.1 s) | 1.5 s | 129 MB | 0-2 (taskset) | adb context |
