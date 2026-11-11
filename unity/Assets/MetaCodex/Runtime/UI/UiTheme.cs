@@ -153,6 +153,6 @@ namespace MetaCodex.UI
         public bool Visible;
     }
 
-    public enum UiShapeKind { Panel = 0, Button = 1, Header = 2, Selection = 3, Bar = 4, Line = 5, Dot = 6, Keycap = 7, Deck = 8 }
+    public enum UiShapeKind { Panel = 0, Button = 1, Header = 2, Selection = 3, Bar = 4, Line = 5, Dot = 6, Keycap = 7, Deck = 8, Flat = 9 }
 
 }

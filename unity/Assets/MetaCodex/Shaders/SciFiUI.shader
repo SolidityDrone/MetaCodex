@@ -6,7 +6,8 @@
 //   TEXCOORD2  x = chamfer (corner cut), y = small cut (panels) or fill style (buttons: 0 normal, 1 filled, 2 ghost,
 //              3 list row), z = border width, w = state 0..1
 // Kinds: 0 panel body, 1 button, 2 header bar, 3 selection frame, 4 bar (state = fill), 5 line, 6 dot,
-//        7 keycap and 8 deck (the keyboard: plain rounded shapes like a real one's, x of TEXCOORD2 = corner radius).
+//        7 keycap and 8 deck (the keyboard: plain rounded shapes like a real one's, x of TEXCOORD2 = corner radius),
+//        9 flat (a plain fill of its tint and alpha, no edge or glow: code editors' backgrounds and line marks).
 // The look: a sci-fi command console in the spirit of RTS game interfaces (an original design, no game assets):
 // angular chamfered frames of steel lit from above, holographic glass with a hexagon lattice and a grid of points
 // printed on its surface (flat: 0.7.9 drew them behind the surface with parallax and the owner did not want windows to
@@ -490,6 +491,14 @@ Shader "MetaCodex/SciFiUI"
                     edgeA = 0.85;
                     glowA = 0.10 * state;
                     shadeA = 0.30;
+                }
+                else if (kind == 9) // flat: the tint as it is (the sidebar's code and diff views)
+                {
+                    fill = tint;
+                    fillA = i.color.a;
+                    edgeA = 0.0;
+                    glowA = 0.0;
+                    shadeA = 0.0;
                 }
                 else // kind 4: bar (state = how full); energy bars are segmented
                 {
