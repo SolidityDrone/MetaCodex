@@ -427,10 +427,12 @@ namespace MetaCodex.Shell
         private UiToasts.Anchor? OrbCalloutAnchor()
         {
             if (!OrbActive) return null;
-            // the side does not flip while cards are up, unless the user really turned
-            var side = OrbSide(out bool left);
-            if (left != _orbSideLeft && (Toasts.Count == 0 || _orbClock - _orbSideHold > 1.5f)) { _orbSideLeft = left; _orbSideHold = _orbClock; }
-            if (left != _orbSideLeft) side = -side;
+            // owner 2026-11-11: the menu always on the orb's left, the callouts always on its right, never swapped
+            OrbSide(out _);
+            var head = Head;
+            var to = Orb.Position - (head != null ? head.position : _orbAnchor); to.y = 0f;
+            if (to.sqrMagnitude < 1e-6f) to = Vector3.forward;
+            var side = Vector3.Cross(Vector3.up, to.normalized); // the user's right, seen from the eye
             float dist = Head != null ? Vector3.Distance(Head.position, Orb.Position) : OrbDistance;
             return new UiToasts.Anchor { Orb = Orb.Position, Side = side, Radius = Orb.Radius, Scale = Mathf.Clamp(dist / 0.75f, 0.45f, 1.2f) * Mathf.Clamp(Settings.uiScale, 0.6f, 1.8f) / 1.2f };
         }
@@ -532,7 +534,8 @@ namespace MetaCodex.Shell
             var a = OrbCalloutAnchor();
             if (!a.HasValue) return;
             float s = _orbMenu.BaseScale.x;
-            var target = a.Value.Orb + a.Value.Side * (Orb.Radius * 2.15f + _orbMenu.Width * s * 0.5f + 0.012f) + Vector3.down * (Orb.Radius * 0.9f + _orbMenu.Height * s * 0.5f);
+            // always on the orb's left (the callouts take its right), level with it: wrapped round its left side
+            var target = a.Value.Orb - a.Value.Side * (Orb.Radius * 1.6f + _orbMenu.Width * s * 0.5f + 0.012f) + Vector3.down * (Orb.Radius * 0.25f);
             var tr = _orbMenu.transform;
             tr.position = snap ? target : Vector3.Lerp(tr.position, target, 0.16f);
             Vector3 eye = Head != null ? Head.position : target - Vector3.forward;

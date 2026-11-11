@@ -17,7 +17,9 @@ namespace MetaCodex.Shell
     /// cut to its column. docs/ui.md (the orb), QuickThreads (the pure part).
     public sealed partial class MetaCodexShell
     {
-        public const float OrbCardH = 0.030f, OrbCardGap = 0.004f;
+        // two lines (owner 2026-11-11: "very small text"): the title 13.5 mm, project and state 9.5 mm under it, ~1 degree at
+        // the menu's half a metre (Meta's VR text guidance), in a 50 mm card
+        public const float OrbCardH = 0.050f, OrbCardGap = 0.005f;
         private const float OrbCardPulseHz = 0.8f;
 
         private sealed class OrbCard
@@ -59,13 +61,13 @@ namespace MetaCodex.Shell
                 var c = new OrbCard { Panel = p };
                 // the whole card is the button; the texts lie on it (they take no touches)
                 c.Hit = p.Add(new UiButton("", () => OrbCardTapped(idx), UiButtonStyle.Ghost) { Rect = new Rect(0.002f, 0.002f, w - 0.004f, h - 0.004f) });
-                var dot = p.Shape(UiShapeKind.Dot, new Rect(pad, h * 0.5f - 0.0045f, 0.009f, 0.009f), t.Accent, 0f, 0f, 0.003f, 0.6f);
-                dot.Center = p.PanelToLocal(new Vector2(pad + 0.0045f, h * 0.5f), -0.0004f);
+                var dot = p.Shape(UiShapeKind.Dot, new Rect(pad, h * 0.5f - 0.0055f, 0.011f, 0.011f), t.Accent, 0f, 0f, 0.003f, 0.6f);
+                dot.Center = p.PanelToLocal(new Vector2(pad + 0.0055f, h * 0.5f), -0.0004f);
                 c.Dot = p.Shapes.Add(dot);
-                // three columns, each cut with … at its edge: PROJECT | title | STATE
-                c.Project = p.Add(new UiLabel("", 0.0084f) { Rect = new Rect(0.022f, 0f, 0.050f, h), UseDisplay = true, Color = t.TextDim });
-                c.Title = p.Add(new UiLabel("", 0.0102f) { Rect = new Rect(0.075f, 0f, 0.098f, h), Color = t.Text });
-                c.Status = p.Add(new UiLabel("", 0.0084f) { Rect = new Rect(0.176f, 0f, w - 0.176f - pad, h), UseDisplay = true, Align = TextAlignmentOptions.MidlineRight, Color = t.TextDim });
+                // the title on top, PROJECT and STATE under it, each cut with … at its edge
+                c.Title = p.Add(new UiLabel("", 0.0135f) { Rect = new Rect(0.026f, 0.004f, w - 0.026f - pad, 0.024f), Color = t.Text });
+                c.Project = p.Add(new UiLabel("", 0.0095f) { Rect = new Rect(0.026f, 0.027f, 0.110f, 0.019f), UseDisplay = true, Color = t.TextDim });
+                c.Status = p.Add(new UiLabel("", 0.0095f) { Rect = new Rect(0.140f, 0.027f, w - 0.140f - pad, 0.019f), UseDisplay = true, Align = TextAlignmentOptions.MidlineRight, Color = t.TextDim });
                 p.gameObject.SetActive(false);
                 _orbCards.Add(c);
             }
