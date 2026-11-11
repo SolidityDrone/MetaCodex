@@ -474,3 +474,11 @@ docs/native-build-and-install.md.
 - [ ] LATER: the app does not open; say "launch the app" (or "lancia l'app"): it opens; its menu's Back brings you to that thread
 - [ ] A brand-new app: the dialog says INSTALL first; INSTALL -> Android's dialog -> then APP READY with LAUNCH
 - [ ] Say "don't open the app" while one waits: the agent's `mcx-app status` says declined
+
+## 32. Thread state after app switches, the orb's sides (branch fix/thread-sidebar-and-orb, next build)
+
+- [ ] A thread working; launch a built app, wait until the agent is done, Back: the thread says idle / done at once (no "WORKING", no "writing the answer")
+- [ ] A thread working: STOP: within 2 s the header leaves WORKING and the chat stops "writing"
+- [ ] The orb: messages always rise on its right; its menu (TALK, SPEAK, PLACE, LOG) always sits on its left, level with it, whichever way you look; never swapped
+- [ ] The threads under the orb's menu: title readable at arm's length, project and state under it
+- [ ] Idle, not looked at, no message: the orb is a little smaller; look at it or bring a hand close: it brightens and grows back; touching it still opens the menu
