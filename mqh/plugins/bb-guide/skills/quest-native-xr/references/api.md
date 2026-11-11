@@ -43,12 +43,15 @@ All in `namespace mcx`, header `/opt/metacodex/quest-native/xr/mcx_xr.h`. Each c
 - Opens with the left controller's menu button or the non-dominant hand's menu gesture (palm facing you, pinch);
   a panel 0.9 m ahead; point with the right controller or hand and pull the trigger / pinch, or move with the stick
   and press A. While it is open `Frame::focused` is false and `app.MenuOpen()` is true.
-- Items: `app.menuItems` (yours, `MenuItem{label, action}`) then **Back to MetaCodex** (or **Open MetaCodex** when the
-  app was started from the Library), **Report to MetaCodex**, **Restart**, **Quit**, **Close menu**.
-- `app.ReturnToCaller(false)`: starts MetaCodex again (warm, nothing reloads) and ends this app. `app.ReturnToCaller(true)`:
+- Items, opened from MetaCodex (`app.FromMetaCodex()`: launched by MetaCodex with a launch id): **Back to MetaCodex**,
+  **Report to MetaCodex**, `app.menuItems` (yours, `MenuItem{label, action}`), **Quit**, **Close menu**. Opened from
+  the Library or anything else, or reopened after a pause: `app.menuItems`, **Quit**, **Close menu**. The title line
+  says which ("opened from MetaCodex" / "opened outside MetaCodex").
+- `app.ReturnToCaller(false)`: starts MetaCodex again (warm, nothing reloads) and closes this app (session ended,
+  activity finished, no frame after that). `app.ReturnToCaller(true)`:
   the same with a report: the next clean frame of the left eye (the app's own pixels, not the room) as a PNG under
   ~450 KB, the last 60 log lines (`mcx::RecentLog`), `app.label`, `app.versionName`, `app.versionCode`.
-  `app.Restart()`, `app.Quit()`, `app.OpenMenu(bool)`.
+  `app.Quit()` (closes the app), `app.Restart()`, `app.OpenMenu(bool)`.
 - `app.caller` (the package that launched it, "" from the Library), `app.launchId`, `app.packageName`.
 - Quitting from the system menu tries the way back too (best effort: Android may refuse a start from the background).
 

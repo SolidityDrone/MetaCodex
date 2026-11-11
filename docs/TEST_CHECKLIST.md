@@ -456,8 +456,11 @@ docs/native-build-and-install.md.
 ## 30. The way back from built apps (2 minutes; needs the MetaCodex build after 0.7.14)
 
 - [ ] In a thread ask for any small native app (or `mcx-app new /root/apps/t2 --label "T2"` + `mcx-app run /root/apps/t2`): it opens
-- [ ] Left controller's menu button (or look at the left palm and pinch): a menu with Back to MetaCodex, Report to MetaCodex, Restart, Quit, Close menu; point and pull the trigger (or pinch) to pick
-- [ ] Back to MetaCodex: MetaCodex is there at once (no loading screen, windows where they were), a toast "Back from T2", the launching thread in front
+- [ ] Left controller's menu button (or look at the left palm and pinch): the title says "opened from MetaCodex"; Back to MetaCodex, Report to MetaCodex, Quit, Close menu; point and pull the trigger (or pinch) to pick
+- [ ] Back to MetaCodex: MetaCodex is there at once (no loading screen, windows where they were), a toast "Back from T2", the launching thread in front; wait 60 s: no "T2 isn't responding" dialog; T2 is not in the recent apps (it closed)
+- [ ] Open T2 from the Library: the menu says "opened outside MetaCodex", only Quit (no MetaCodex items); Quit closes it, Home
+- [ ] Launch T2 from MetaCodex, press the Meta button > Home, reopen T2 from the Library: the menu has no MetaCodex items
+- [ ] Launch T2 from MetaCodex, open MetaCodex from the dock (no Back): wait 60 s: no "isn't responding" dialog; T2 still in the recent apps, opens again fine
 - [ ] Open the app again, menu > Report to MetaCodex: back in MetaCodex, the thread's composer says "Feedback on T2 1.0 (1):" with two chips (▣ the app's picture, ⎘ log T2); ◉ to say what you saw, SEND: the agent sees the picture and the log
 - [ ] Open the app again, quit it from the system menu (right hand / Meta button > Quit): does MetaCodex come forward by itself? (tell: best effort, Android may refuse)
 - [ ] After 5 app switches: `adb shell dumpsys meminfo com.pnncl.metacodex | grep -E "GL mtrack|TOTAL PSS"` (or `tools/gpu-switch-test.sh <package> 10` from the PC with the headset free); note the numbers

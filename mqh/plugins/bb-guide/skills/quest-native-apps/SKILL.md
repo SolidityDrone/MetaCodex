@@ -5,6 +5,14 @@ description: Make a native Meta Quest app (Quest 3 / 3S, Horizon OS) on this hea
 
 # Native Quest apps: from "I want an app that ..." to an app in the Library
 
+> **Always.** Every app runs on `mcx::App` (`#include <mcx_xr.h>`, the template's loop) and keeps its built-in app
+> menu (left controller's menu button / left palm pinch). Opened from MetaCodex, the menu has **Back to MetaCodex**
+> and **Report to MetaCodex**, and Back **always closes the app** (MetaCodex starts, the app finishes); **Quit** closes
+> it too. Never remove, disable or take over the menu input, never write your own exit path (`ANativeActivity_finish`,
+> `xrRequestExitSession`, `exit`) or your own OpenXR loop; add your items with `app.menuItems`. Why: an app that only
+> went to the background with its own loop froze, and the headset showed "<App> isn't responding" (0.7.15).
+> `mcx-app verify` fails apps that break this.
+
 The user says what the app should do; you do everything else. Their only jobs: tap **Install** once per new app
 (Android's dialog), answer permission dialogs inside the app, and tell you what they see. Every step is one
 `mcx-app` command; lines starting `>>> ASK THE USER` are for the user (say them short, then let the command wait);
@@ -44,8 +52,9 @@ example and short recipes), **quest-native-dev-loop** (the Runner: seconds per e
    to tap Install (new app) or goes through silently (an update of an app MetaCodex installed). Wait for `RESULT:`.
 10. **`mcx-app launch /root/apps/<name>`**: the app opens, MetaCodex goes to the background. Tell the user exactly what
     to look at and try (controls, what should appear), and how to come back: **"the left menu button (or look at
-    your left palm and pinch) opens the app's menu: Back to MetaCodex, or Report to MetaCodex to send me a picture
-    and its log"**. Every app on `mcx::App` has that menu built in (the template and the examples do).
+    your left palm and pinch) opens the app's menu: Back to MetaCodex closes it and brings you here, Report to
+    MetaCodex also sends me a picture and its log"**. Every app on `mcx::App` has that menu built in. Opened from the
+    Library (or reopened from there), the menu has only the app's items and Quit: Quit closes it, the headset goes Home.
 11. **When they are back**: MetaCodex brings this thread forward. A **report** arrives as a draft in this thread's
     composer, "Feedback on <Label> <version>:", with two attachments (a picture of the app, `log <Label>`): the user
     adds what they saw and sends it; read the picture and the log file, then fix. Without a report:
@@ -63,8 +72,6 @@ example and short recipes), **quest-native-dev-loop** (the Runner: seconds per e
 
 ## Rules
 
-- Never remove or replace the app menu (Back / Report / Restart / Quit): it is the user's way back. Add items with
-  `app.menuItems`; build every app on `mcx::App` (quest-native-xr), never on a bare OpenXR loop.
 - Run builds only through `mcx-app check|build|dev` (they go to cores 0-2, off MetaCodex's frame loop), never `clang`,
   `aapt2`, `apksigner` or `build.sh` by hand in a terminal.
 - Show the user what you will install before `mcx-app install`; one app change per install; ask after each launch.

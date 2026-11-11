@@ -267,6 +267,33 @@ toggled; right pinch / trigger = mode, left pinch / A = passthrough, stick = gai
   Play on resume, `_texture` reused), so the Unity-side blur code does not re-allocate per switch; the native camera
   restart and the XR swapchains are the open suspects. No fix without the per-switch numbers (measured, not guessed).
 
+### The ANR after Back (0.7.15, the owner's "Passthrough" app) and the fix
+
+- **Evidence** (`~/mcxwork/native-build/evidence/passthrough-anr-153901.log`): 15:37:49.790 the app starts MetaCodex;
+  49.795 `wm_on_top_resumed_lost_called` for the app, but no `wm_on_pause_called` after it; 50.299 `Activity pause
+  timeout`; 54.836 `ANR ... Input dispatching timed out ... Waited 5001ms for FocusEvent(hasFocus=false)`; no
+  `wm_finish_activity`.
+- **Root cause**: Back started MetaCodex and asked the session to exit, but the frame loop went on and called
+  `xrWaitFrame` again. With the display handed to MetaCodex the runtime gave the app no frame, so `xrWaitFrame` did
+  not return; the app thread stopped pumping its looper; NativeActivity's `onPause` (which in native_app_glue waits
+  for the app thread to take APP_CMD_PAUSE) blocked the main thread; the focus event stayed unconsumed: ANR, and the
+  session never reached EXITING, so the activity never finished.
+- **Fix (mcx_xr)**: Back / Report / Quit / Restart = start MetaCodex (Back, Report), then `xrRequestExitSession` +
+  `ANativeActivity_finish` at once and a leaving state: no `xrWaitFrame` / `xrBeginFrame` from then on, the looper
+  pumped every 16 ms, out of the loop when Android destroys the activity or after 3 s; no frame while the activity is
+  paused (dock, Home), so a pause never meets a blocked `xrWaitFrame`; `Shutdown` ends a stopping session and keeps
+  pumping until the activity is destroyed.
+- **Launch source** (owner): the menu offers Back / Report only when MetaCodex launched the app (CALLER + a launch
+  id); from the Library, or reopened after a pause (NativeActivity does not pass a new intent to native code; Back
+  always closes the app, so MetaCodex's launches are fresh starts), only the app's items + Quit. The title says which.
+- **Rule** (owner): the skills' "Always" (keep the menu; Back closes the app; no own exit or OpenXR loop) and
+  `mcx-app verify` fails apps not on `mcx::App` or with an own exit / OpenXR path (tested: the old template's
+  main.cpp gives both problems; the new template, Night Vision, the clock: verify ok).
+- **Shipped without an APK**: the fixed layer, mcx-build and the five skills were laid into the headset's rootfs
+  (`/opt/metacodex/quest-native/xr`, `/usr/local/bin/mcx-build`, `/root/.claude/skills`, MQH's builtin-skills and
+  bb-guide copies); the XR layer's cache key is its source hash, so the next build of any app recompiles it. An app
+  gets the fix when it is rebuilt and installed again.
+
 ## More decisions (evidence above)
 
 - **Build mode / BUILDING panel: not built.** Builds on cores 0-2 cost no measurable fps (E8: avg 72.5 / min 70 vs

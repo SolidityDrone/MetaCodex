@@ -1113,6 +1113,16 @@ def verify(d):
         if cls in src:
             used.add(fn)
     say("   Meta features the app uses: " + (", ".join(sorted(used)) or "none"))
+    # the hard rule (skill quest-native-apps, "Always"): every app runs on mcx::App, whose menu is the user's way back
+    # (Back to MetaCodex closes the app); an own loop or exit path once left apps paused and frozen ("isn't responding")
+    if app.type == "app":
+        if "mcx::App" not in src:
+            problems.append("the app does not run on mcx::App (#include <mcx_xr.h>): it has no app menu, so no way back to "
+                            "MetaCodex and no clean close. Rebuild it on the template's loop (quest-native-apps, Always)")
+        own = sorted(set(m.group(1) for m in re.finditer(r"\b(ANativeActivity_finish|xrRequestExitSession|xrCreateInstance|xrCreateSession|_?exit|abort)\s*\(", src)))
+        if own:
+            problems.append("own exit / OpenXR path in src/ (" + ", ".join(own) + "): mcx::App owns the session and the way out "
+                            "(app.Quit(), the menu's Back / Quit); remove it (quest-native-apps, Always)")
     xr_funcs = used
     for fn, kind, name, what in NEEDS:
         if fn in xr_funcs and name not in (perms if kind == "permission" else feats):

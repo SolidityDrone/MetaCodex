@@ -991,8 +991,14 @@ static const char* kWanted[] = {
 void App::OnCmd(android_app* a, int32_t cmd)
 {
     auto* app = (App*)a->userData;
-    if (cmd == APP_CMD_RESUME) app->resumed_ = true;
-    else if (cmd == APP_CMD_PAUSE) app->resumed_ = false;
+    if (cmd == APP_CMD_RESUME)
+    {
+        app->resumed_ = true;
+        // reopened after a pause (Library, Home, the dock): NativeActivity does not pass the new intent to native code,
+        // and MetaCodex's own launches always start a fresh activity (Back closes the app): so it is not MetaCodex's
+        if (app->pausedOnce_ && app->fromMetaCodex_ && !app->leaving_) { app->fromMetaCodex_ = false; Log("reopened from outside MetaCodex: menu without MetaCodex"); }
+    }
+    else if (cmd == APP_CMD_PAUSE) { app->resumed_ = false; app->pausedOnce_ = true; }
     else if (cmd == APP_CMD_DESTROY) app->exit_ = true;
 }
 
@@ -1234,8 +1240,9 @@ void App::ReadLaunch()
     jobject mc = LaunchIntentFor(env, act->clazz, kMetaCodex);
     metacodexInstalled_ = mc != nullptr;
     if (mc) env->DeleteLocalRef(mc);
-    Log("launched %s: %s %s (%lld)%s", caller.empty() ? "from the Library" : ("by " + caller).c_str(), label.c_str(), versionName.c_str(),
-        versionCode, metacodexInstalled_ ? "; menu: left menu button / left-hand menu gesture" : "");
+    fromMetaCodex_ = metacodexInstalled_ && caller == kMetaCodex && !launchId.empty();
+    Log("launched %s: %s %s (%lld); menu: left menu button / left-hand menu gesture", fromMetaCodex_ ? "from MetaCodex" : "from outside MetaCodex",
+        label.c_str(), versionName.c_str(), versionCode);
 }
 
 // starts the caller (MetaCodex) while this app is still in front (Android allows it then), with the launch id and,
@@ -1299,12 +1306,28 @@ bool App::StartCaller(const std::vector<unsigned char>* png)
     return !failed;
 }
 
+// Leaving (Back, Report, Quit, Restart): end the session and finish the activity at once, and from now on never call
+// xrWaitFrame again. Otherwise, once the runtime gives the display to the app just started, xrWaitFrame does not
+// return, the app thread stops pumping its looper, the activity's onPause (which waits for that thread in
+// native_app_glue) times out and Android reports "isn't responding" (0.7.15, owner's Passthrough app, 11-11).
+void App::Leave(const char* why)
+{
+    if (leaving_) return;
+    leaving_ = true;
+    leavingSince_ = Now();
+    menuOpen_ = false;
+    if (session && running_) xrRequestExitSession(session);
+    ANativeActivity_finish(android_->activity);
+    Log("leaving (%s): no more frames, the activity finishes", why);
+}
+
 bool App::ReturnToCaller(bool report)
 {
+    if (leaving_ || !fromMetaCodex_) return false;
     if (report) { menuOpen_ = false; reportFrames_ = 2; return true; } // a clean frame without the menu, then the picture
     if (!StartCaller(nullptr)) return false;
     returned_ = true;
-    Quit();
+    Leave("back");
     return true;
 }
 
@@ -1323,12 +1346,13 @@ void App::Restart()
     env->DeleteLocalRef(ic);
     env->DeleteLocalRef(it);
     Log("restart");
+    leaving_ = true; // CLEAR_TASK ends this activity: no more frames
+    leavingSince_ = Now();
 }
 
 void App::Quit()
 {
-    if (session) xrRequestExitSession(session);
-    else exit_ = true;
+    Leave("quit");
 }
 
 void App::OpenMenu(bool open)
@@ -1350,14 +1374,13 @@ void App::OpenMenu(bool open)
     float yaw = atan2f(-fwd.x, -fwd.z);
     menuPose_.position = {head.position.x + fwd.x * 0.9f, head.position.y - 0.05f, head.position.z + fwd.z * 0.9f};
     menuPose_.orientation = {0.f, sinf(yaw * 0.5f), 0.f, cosf(yaw * 0.5f)};
-    menuShown_ = menuItems;
-    bool canBack = !caller.empty() || metacodexInstalled_;
-    if (canBack)
+    menuShown_.clear();
+    if (fromMetaCodex_)
     {
-        menuShown_.push_back({caller.empty() ? "Open MetaCodex" : "Back to MetaCodex", [this] { ReturnToCaller(false); }});
+        menuShown_.push_back({"Back to MetaCodex", [this] { ReturnToCaller(false); }});
         menuShown_.push_back({"Report to MetaCodex", [this] { ReturnToCaller(true); }});
     }
-    menuShown_.push_back({"Restart", [this] { Restart(); }});
+    for (auto& it : menuItems) menuShown_.push_back(it);
     menuShown_.push_back({"Quit", [this] { Quit(); }});
     menuShown_.push_back({"Close menu", [this] { OpenMenu(false); }});
     Log("menu opened");
@@ -1435,6 +1458,7 @@ void App::DrawMenu(int e)
     text.Rect(eyeViewProj_[e], model, -kMenuW * 0.5f - 0.02f, top + 0.01f, kMenuW + 0.04f, rows * kRowH + 0.09f, XrColor4f{0.03f, 0.04f, 0.06f, 0.92f});
     std::string title = label.empty() ? "App" : label;
     if (!versionName.empty()) title += "  " + versionName;
+    title += fromMetaCodex_ ? "  - opened from MetaCodex" : "  - opened outside MetaCodex";
     text.Draw(eyeViewProj_[e], model, title.c_str(), -kMenuW * 0.5f + 0.01f, top, 0.03f, XrColor4f{0.6f, 0.7f, 0.8f, 1.f});
     for (int i = 0; i < rows; i++)
     {
@@ -1610,7 +1634,7 @@ void App::HandleEvent(const XrEventDataBuffer& ev)
         else if (state_ == XR_SESSION_STATE_EXITING || state_ == XR_SESSION_STATE_LOSS_PENDING)
         {
             // quit from the system menu: try to bring the launching app back (Android may refuse a start now)
-            if (!returned_ && !caller.empty()) { returned_ = true; Log("quit: trying to return to %s", caller.c_str()); StartCaller(nullptr); }
+            if (!returned_ && !leaving_ && fromMetaCodex_) { returned_ = true; Log("quit: trying to return to %s", caller.c_str()); StartCaller(nullptr); }
             exit_ = true;
         }
     }
@@ -1627,12 +1651,16 @@ bool App::Pump()
     android_app* a = android_;
     int events = 0;
     android_poll_source* source = nullptr;
-    while (ALooper_pollOnce((running_ || resumed_) ? 0 : 100, nullptr, &events, (void**)&source) >= 0)
+    // always drain the looper (lifecycle commands and input, focus events included: an unconsumed one is an ANR);
+    // wait a little only when no frame will be rendered
+    bool frames = running_ && resumed_ && !leaving_;
+    while (ALooper_pollOnce(frames ? 0 : 16, nullptr, &events, (void**)&source) >= 0)
     {
         if (source) source->process(a, source);
         if (a->destroyRequested) return false;
     }
     if (a->destroyRequested || exit_) return false;
+    if (leaving_ && Now() - leavingSince_ > 3.0) { Log("leaving: the activity did not end in 3 s: closing"); return false; }
     XrEventDataBuffer ev{XR_TYPE_EVENT_DATA_BUFFER};
     while (xrPollEvent(instance, &ev) == XR_SUCCESS)
     {
@@ -1648,7 +1676,9 @@ bool App::Pump()
 bool App::BeginFrame(Frame& f)
 {
     frameBegun_ = false;
-    if (!running_) return false;
+    // no frame while leaving or while the activity is paused (dock, Home): xrWaitFrame may then not return, and a
+    // blocked app thread blocks onPause/onStop on the main thread (native_app_glue waits for it)
+    if (!running_ || leaving_ || !resumed_) return false;
     XrFrameState fs{XR_TYPE_FRAME_STATE};
     if (XR_FAILED(xrWaitFrame(session, nullptr, &fs))) return false;
     xrBeginFrame(session, nullptr);
@@ -1720,7 +1750,7 @@ void App::EndEye(int e)
         double t0 = Now();
         bool ok = CaptureEye(0, png, w, h);
         Log("report: picture %dx%d, %zu KB in %.0f ms", w, h, png.size() / 1024, (Now() - t0) * 1000.0);
-        if (StartCaller(ok ? &png : nullptr)) { returned_ = true; Quit(); }
+        if (StartCaller(ok ? &png : nullptr)) { returned_ = true; Leave("report"); }
     }
     else if (e == 1 && reportFrames_ > 0) reportFrames_--;
     glBindFramebuffer(GL_FRAMEBUFFER, fbo_);
@@ -1761,11 +1791,19 @@ void App::Shutdown()
     passthrough.Destroy();
     hands.Destroy();
     text.Destroy();
+    if (session && running_ && state_ == XR_SESSION_STATE_STOPPING) xrEndSession(session);
     if (session) xrDestroySession(session);
     if (instance) xrDestroyInstance(instance);
     session = XR_NULL_HANDLE;
     instance = XR_NULL_HANDLE;
-    ANativeActivity_finish(android_->activity);
+    if (!leaving_) ANativeActivity_finish(android_->activity);
+    // stay in the loop until Android destroys the activity (returning from android_main earlier leaves the glue's
+    // main-thread callbacks waiting on a thread that is gone)
+    double t0 = Now();
+    int events = 0;
+    android_poll_source* source = nullptr;
+    while (!android_->destroyRequested && Now() - t0 < 3.0)
+        if (ALooper_pollOnce(16, nullptr, &events, (void**)&source) >= 0 && source) source->process(android_, source);
 }
 
 } // namespace mcx

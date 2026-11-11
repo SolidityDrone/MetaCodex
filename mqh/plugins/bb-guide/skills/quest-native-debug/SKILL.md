@@ -33,6 +33,7 @@ log state changes in the app (the layer already logs: session states, `passthrou
 | environment depth / scene ... needs `com.oculus.permission.USE_SCENE` | `<uses-permission android:name="com.oculus.permission.USE_SCENE" />` |
 | spatial anchors ... needs `USE_ANCHOR_API` | `<uses-permission android:name="com.oculus.permission.USE_ANCHOR_API" />` |
 | hand tracking ... needs `HAND_TRACKING` / `oculus.software.handtracking` | both entries (quest-native-xr) |
+| the app does not run on mcx::App ... / own exit / OpenXR path in src/ | rebuild it on the template's loop (`#include <mcx_xr.h>`, `mcx::App`); close with `app.Quit()` |
 | `<lib>: unresolved ...` | the code calls something no packed or system library has: link it or remove the call |
 | no android:icon | `res/drawable/icon.png` + `android:icon="@drawable/icon"` |
 | environment depth runs on Quest 3 / 3S only | supportedDevices `quest3\|quest3s` |
@@ -55,8 +56,10 @@ another signing key or installer (the user uninstalls the old copy); `VERSION_DO
 | hands or controllers do nothing | `session state 5` never reached (FOCUSED) | input works only with focus: the system menu is open, or the app reads input outside `f.focused` |
 | jerky, hot | | frame budget: quest-native-recipes recipe 5 |
 | a line `extension X: not offered` | | the manifest lacks its entry, or the device has no such hardware (face/eye tracking on a 3S) |
+| "<App> isn't responding" (Close app / Wait) after Back or in the background | | the app was built with mcx_xr before the fix (it kept waiting for frames after Back): rebuild it (`mcx-app build` + `install`); an app with its own OpenXR loop: rebuild it on `mcx::App` (`mcx-app verify` says so) |
 | "the menu does not open" | no `menu opened` | the app is not on `mcx::App`, or it opens with the right hand's gesture (that one is the system menu): left menu button / left hand |
-| "Back did nothing" / landed in Home | `back: ... could not be started` or no `back:` line | MetaCodex not installed or the app was in the background; the user opens MetaCodex from the dock (an app cannot bring MetaCodex forward after a crash: the overlay permission that allows it is prohibited by Meta) |
+| "there is no Back to MetaCodex" | `launched from outside MetaCodex` / `reopened from outside MetaCodex` | opened from the Library (or reopened from there): only Quit is offered by design; start it with `mcx-app launch` |
+| "Back did nothing" / landed in Home | `back: ... could not be started` | MetaCodex not installed; the user opens MetaCodex from the dock (an app cannot bring MetaCodex forward after a crash: the overlay permission that allows it is prohibited by Meta) |
 | a report with no picture | `report: the picture could not be read` | the attachment list has only the log; ask for a description |
 
 Session states in the log: 1 idle, 2 ready, 3 synchronized, 4 visible, 5 focused, 6 stopping, 8 exiting.

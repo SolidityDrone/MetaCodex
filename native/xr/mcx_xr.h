@@ -358,14 +358,15 @@ public:
     float clearAlpha() const { return passthrough.Running() ? 0.f : 1.f; }
 
     // ---- the app menu and the way back (always there; apps add items, never remove the standard ones)
-    std::vector<MenuItem> menuItems;                     // yours, listed above Back / Report / Restart / Quit
+    std::vector<MenuItem> menuItems;                     // yours: after Back / Report (opened from MetaCodex), before Quit
     bool MenuOpen() const { return menuOpen_; }
     void OpenMenu(bool open);
-    // back to the app that launched this one (MetaCodex) or, started from the Library, open MetaCodex; then this app
-    // ends. report = also send a picture of this app, its last log lines, label and version (taken next frame).
+    // back to MetaCodex (only when MetaCodex launched this app), then this app closes. report = also send a picture of
+    // this app, its last log lines, label and version (taken next frame).
     bool ReturnToCaller(bool report = false);
     void Restart();                                      // start this app again (a fresh activity)
-    void Quit();                                         // end the session: the app closes
+    void Quit();                                         // the app closes (session ended, activity finished)
+    bool FromMetaCodex() const { return fromMetaCodex_; } // the menu offers Back / Report only then
     std::string caller;                                  // package that launched this app ("" from the Library)
     std::string launchId;                                // the launch's id (MetaCodex matches reports with it)
     std::string packageName, label, versionName;
@@ -406,6 +407,11 @@ private:
     bool menuOpen_ = false, menuPrevL_ = false, menuPrevH_ = false, returned_ = false, metacodexInstalled_ = false;
     int menuHover_ = -1, reportFrames_ = -1;
     double testReturnAt_ = -1.0;
+    bool fromMetaCodex_ = false; // launched by MetaCodex (CALLER + a launch id); false after a resume from outside
+    bool pausedOnce_ = false;
+    bool leaving_ = false;      // Back / Report / Quit / Restart: no more frames, pump until Android ends the activity
+    double leavingSince_ = 0.0;
+    void Leave(const char* why);
     bool testReport_ = false;
     XrPosef menuPose_{{0, 0, 0, 1}, {0, 0, -0.9f}};
     bool menuRayHit_ = false;
