@@ -6,13 +6,18 @@
   mcx-buildd status            JSON: pid, CPU set, cores, the running job, the queue, the last result
   mcx-buildd run [--] <mcx-build args>   hand a job to the daemon and print its output (exit = the job's exit)
   mcx-buildd stop              stop the daemon
+  mcx-buildd dev <libapp.so> <package>   serve this module to the Runner (127.0.0.1:47951); `mcx-app dev` calls it
+  mcx-buildd dev-status        JSON: the module served and the Runner's last fetches
 
 Why: Horizon OS keeps MetaCodex and every process it starts (its terminals too) on cores 3-5, the frame loop's
 cores; only processes of the app's service process (":ai", where MQH runs) sit on cores 0-2. MQH starts this
 daemon, so jobs handed to it from any shell build on cores 0-2 (docs/native-build-and-install.md).
 Socket: /tmp/mcx-buildd/sock (a folder only root of this Linux can open; other Android apps cannot reach it).
 While a job runs /tmp/mcx-buildd/busy exists (MetaCodex's service holds a wake lock while it does).
-A client that goes away (Ctrl+C) cancels its job. Exit 100 from `run`: no daemon (mcx-app then builds itself).
+The dev server: the Runner app (another Android app, so TCP on 127.0.0.1) asks for the current module with a nonce;
+the answer carries an RSA signature (the APK signing key) over "MCXR1|<nonce>|<sha256>", which the Runner checks
+with the public key in its assets: an app that takes the port first cannot feed it code, old modules cannot be
+replayed. A client that goes away (Ctrl+C) cancels its job. Exit 100 from `run`: no daemon (mcx-app then builds itself).
 Shipped by MetaCodex (overlay); edits are overwritten.
 """
 import json
@@ -66,8 +71,111 @@ def log(msg):
         pass
 
 
+DEV_PORT = int(os.environ.get("MCX_DEV_PORT", "47951"))
+
+
+def signing_key():
+    """The APK signing key, through mcx-build's own loader (one implementation of the keystore handling)."""
+    import importlib.machinery
+    import importlib.util
+    loader = importlib.machinery.SourceFileLoader("mcx_build", mcx_build())
+    spec = importlib.util.spec_from_loader("mcx_build", loader)
+    mod = importlib.util.module_from_spec(spec)
+    loader.exec_module(mod)
+    return mod.keystore_key(mod.Toolchain())
+
+
+class DevServer:
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.module = None  # {"path", "package", "sha", "bytes", "set"}
+        self.fetches = []   # [{"t", "sha", "package", "sent"}], newest last
+        self.key = None
+        self.error = None
+        self.started = False
+
+    def start(self):
+        if self.started:
+            return self.error is None
+        self.started = True
+        try:
+            self.key = signing_key()
+            if self.key is None:
+                raise OSError("no signing key (openssl + ~/.android/metacodex-debug.keystore)")
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            for i in range(20):  # a listener that just closed (a restarted daemon) holds the port for a moment
+                try:
+                    s.bind(("127.0.0.1", DEV_PORT))
+                    break
+                except OSError as e:
+                    if e.errno != 98 or i == 19:
+                        raise
+                    time.sleep(0.5)
+            s.listen(4)
+        except OSError as e:
+            self.error = f"dev server: {e}" + (" (another app holds the port: the Runner would refuse its modules anyway)"
+                                                if getattr(e, "errno", 0) == 98 else "")
+            log(self.error)
+            return False
+        threading.Thread(target=self.serve, args=(s,), daemon=True).start()
+        log(f"dev server on 127.0.0.1:{DEV_PORT}")
+        return True
+
+    def set(self, path, package):
+        data = open(path, "rb").read()
+        import hashlib
+        with self.lock:
+            self.module = {"path": path, "package": package, "sha": hashlib.sha256(data).hexdigest(), "bytes": len(data), "set": time.time()}
+            return dict(self.module)
+
+    def serve(self, s):
+        while True:
+            c, _ = s.accept()
+            threading.Thread(target=self.one, args=(c,), daemon=True).start()
+
+    def one(self, c):
+        import hashlib
+        try:
+            c.settimeout(5)
+            f = c.makefile("rwb", buffering=0)
+            parts = f.readline(512).decode("ascii", "replace").split()
+            if len(parts) < 3 or parts[0] != "MCXR1" or len(parts[1]) != 32:
+                return
+            nonce, cur = parts[1], parts[2]
+            who = parts[3] if len(parts) > 3 else "?"
+            with self.lock:
+                m = dict(self.module) if self.module else None
+            if not m:
+                f.write(b"NONE\n")
+                return
+            data = open(m["path"], "rb").read()
+            sha = hashlib.sha256(data).hexdigest()
+            sent = sha != cur
+            with self.lock:
+                self.fetches = (self.fetches + [{"t": time.time(), "sha": sha, "runner": who, "sent": sent}])[-20:]
+            if not sent:
+                f.write(b"SAME\n")
+                return
+            sig = self.key.sign_sha256(f"MCXR1|{nonce}|{sha}".encode()).hex()
+            f.write(f"MOD {len(data)} {sha} {sig}\n".encode() + data)
+            log(f"dev: sent {m['package']} module {sha[:12]} ({len(data)} bytes) to {who}")
+        except OSError:
+            pass
+        finally:
+            try:
+                c.close()
+            except OSError:
+                pass
+
+    def status(self):
+        with self.lock:
+            return {"port": DEV_PORT, "error": self.error, "module": self.module, "fetches": self.fetches[-5:]}
+
+
 class Daemon:
     def __init__(self):
+        self.dev = DevServer()
         self.lock = threading.Lock()
         self.turn = threading.Condition(self.lock)
         self.queue = []  # job ids waiting, in order
@@ -102,6 +210,20 @@ class Daemon:
         op = req.get("op", "run")
         if op == "status":
             send(self.status())
+            return
+        if op == "dev":
+            if not self.dev.start():
+                send({"ok": False, "error": self.dev.error})
+                return
+            try:
+                m = self.dev.set(req["module"], req.get("package", "?"))
+            except (OSError, KeyError) as e:
+                send({"ok": False, "error": f"cannot read the module: {e}"})
+                return
+            send({"ok": True, "module": m})
+            return
+        if op == "dev-status":
+            send(self.dev.status())
             return
         if op == "stop":
             send({"ok": True})
@@ -297,6 +419,22 @@ def ensure():
     return 1
 
 
+def client_json(req):
+    try:
+        s = connect()
+    except OSError:
+        print(json.dumps({"ok": False, "error": "no daemon (MQH starts it: mcx-buildd ensure)"}))
+        return 100
+    s.sendall((json.dumps(req) + "\n").encode())
+    line = s.makefile("rb").readline()
+    s.close()
+    print(line.decode().strip())
+    try:
+        return 0 if json.loads(line).get("ok", True) else 1
+    except ValueError:
+        return 1
+
+
 def client(op, args=None):
     try:
         s = connect()
@@ -337,6 +475,10 @@ def main(argv):
         return ensure()
     if cmd in ("status", "stop"):
         return client(cmd)
+    if cmd == "dev" and len(argv) >= 2:
+        return client_json({"op": "dev", "module": os.path.abspath(argv[1]), "package": argv[2] if len(argv) > 2 else "?"})
+    if cmd == "dev-status":
+        return client_json({"op": "dev-status"})
     if cmd == "run":
         rest = argv[1:]
         if rest and rest[0] == "--":

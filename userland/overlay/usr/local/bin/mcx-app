@@ -1,12 +1,15 @@
 #!/bin/bash
 # mcx-app: build native Quest apps in MetaCodex's Linux and install them on this headset (skill quest-native-apps).
 #   mcx-app doctor                            are the tools there? may MetaCodex install apps? (run it first)
-#   mcx-app new <dir> [--package <id>] [--label <name>]   a new app from the template (C++, OpenXR, OpenGL ES)
+#   mcx-app new <dir> [--module] [--package <id>] [--label <name>]   a new app from the template (C++, OpenXR, GLES);
+#                                             --module: the app as a module (runs in the Runner with mcx-app dev)
 #   mcx-app check [dir]                       compile check only (seconds): errors as file:line:col: error: ...
 #   mcx-app build [dir]                       -> <dir>/build/<dir name>.apk, incremental, on cores 0-2 (the headset keeps 72 fps)
 #   mcx-app install [dir|apk]                 Android's installer; tells you what to ask the user; waits up to 5 min
 #   mcx-app launch [dir|package]              starts the app in the headset (MetaCodex goes to the background)
 #   mcx-app run [dir]                         build + install + launch
+#   mcx-app dev [dir]                         module apps: compile and run it in the Runner now (seconds, no APK)
+#   mcx-app runner                            build + install the Runner app (once; the user confirms the install)
 #   mcx-app logs [dir|package] [-f]           what the app logged (template apps send LOG lines to 127.0.0.1:47950)
 #   mcx-app info [dir|package]                installed? version, installer of record
 # Lines starting with ">>> ASK THE USER" are for the user: say them (short) and wait. "RESULT:" lines are outcomes.
@@ -14,6 +17,9 @@
 # Shipped by the app (overlay); edits are overwritten.
 set -uo pipefail
 TEMPLATE=/opt/metacodex/quest-native/template
+MODULE_TEMPLATE=/opt/metacodex/quest-native/module-template
+RUNNER_SRC=/opt/metacodex/quest-native/runner
+RUNNER_PKG=${MCX_RUNNER_PKG:-com.metacodex.runner}
 LOGD=/opt/metacodex/quest-native/logd.py
 LOGPORT=47950
 LOGDIR=/tmp/mcx-app-logs
@@ -67,9 +73,10 @@ doctor() {
 }
 
 new_app() {
-  local dir="" pkg="" label=""
+  local dir="" pkg="" label="" tpl=$TEMPLATE
   while [ $# -gt 0 ]; do
     case "$1" in
+      --module) tpl=$MODULE_TEMPLATE; shift ;;
       --package) pkg=${2:-}; shift 2 ;;
       --label) label=${2:-}; shift 2 ;;
       -*) die "unknown option $1" ;;
@@ -78,7 +85,7 @@ new_app() {
   done
   [ -n "$dir" ] || die "usage: mcx-app new <dir> [--package com.metacodex.user.<name>] [--label \"Name\"]"
   [ -e "$dir" ] && die "$dir exists already"
-  [ -f "$TEMPLATE/build.sh" ] || die "no template in $TEMPLATE (update MetaCodex)"
+  [ -f "$tpl/AndroidManifest.xml" ] || die "no template in $tpl (update MetaCodex)"
   local base id
   base=$(basename "$dir")
   id=$(printf '%s' "$base" | tr 'A-Z' 'a-z' | tr -c 'a-z0-9' '_' | sed 's/^[^a-z]*//; s/_*$//')
@@ -90,14 +97,21 @@ new_app() {
   label=${label:-$base}
   [[ "$label" =~ ^[A-Za-z0-9\ _.,:!?()+-]+$ ]] || die "the label may use letters, digits, spaces and _ . , : ! ? ( ) + -"
   mkdir -p "$(dirname "$dir")"
-  cp -r "$TEMPLATE" "$dir" || die "copy failed"
+  cp -r "$tpl" "$dir" || die "copy failed"
   rm -rf "$dir/build"
-  sed -i -e "s|package=\"com.metacodex.hellonative\"|package=\"$pkg\"|" -e "s|android:label=\"Hello Native\"|android:label=\"$label\"|" \
+  sed -i -e "s|package=\"com.metacodex.hellonative\"|package=\"$pkg\"|" -e "s|package=\"com.metacodex.hellomodule\"|package=\"$pkg\"|" \
+    -e "s|android:label=\"Hello Native\"|android:label=\"$label\"|" -e "s|android:label=\"Hello Module\"|android:label=\"$label\"|" \
     -e "s|android:name=\"android.app.lib_name\" android:value=\"hellonative\"|android:name=\"android.app.lib_name\" android:value=\"main\"|" "$dir/AndroidManifest.xml"
-  chmod +x "$dir/build.sh"
+  [ -f "$dir/build.sh" ] && chmod +x "$dir/build.sh"
   say "new app $pkg (\"$label\") in $(readlink -f "$dir")"
-  echo "files: AndroidManifest.xml (package, label, versionCode), src/main.cpp (the app), build.sh; optional res/ and assets/"
-  echo "next:  mcx-app run $dir   (build + install + launch; the user confirms the install in the headset)"
+  if [ "$tpl" = "$MODULE_TEMPLATE" ]; then
+    echo "files: AndroidManifest.xml (package, label, versionCode), src/app.cpp (the module: mcx_app_init/frame/draw/shutdown,"
+    echo "       header $RUNNER_SRC/mcx_module.h), build.conf (TYPE=module); optional res/ and assets/"
+    echo "next:  mcx-app dev $dir   (runs it in the Runner in seconds; once: mcx-app runner)  then  mcx-app run $dir  (its own APK)"
+  else
+    echo "files: AndroidManifest.xml (package, label, versionCode), src/main.cpp (the app), build.sh; optional res/ and assets/"
+    echo "next:  mcx-app run $dir   (build + install + launch; the user confirms the install in the headset)"
+  fi
 }
 
 # Builds run on cores 0-2, never next to the frame loop (cores 3-5, where MetaCodex and its own terminals live):
@@ -126,6 +140,54 @@ build_app() {
 check_app() {
   local d; d=$(dir_of "${1:-.}")
   builder --check "$d"
+}
+
+# the Runner: MetaCodex's native host without a module, built here once (same signing key as every app)
+runner_dir() { echo "$HOME/.cache/mcx-build/runner-app/runner"; }
+runner_app() {
+  local d; d=$(runner_dir)
+  [ -f "$RUNNER_SRC/AndroidManifest.xml" ] || die "no Runner in $RUNNER_SRC (update MetaCodex)"
+  mkdir -p "$d"
+  cmp -s "$RUNNER_SRC/AndroidManifest.xml" "$d/AndroidManifest.xml" || cp "$RUNNER_SRC/AndroidManifest.xml" "$d/AndroidManifest.xml"
+  cmp -s "$RUNNER_SRC/build.conf" "$d/build.conf" || cp "$RUNNER_SRC/build.conf" "$d/build.conf"
+  [ "$RUNNER_PKG" = com.metacodex.runner ] || sed -i "s|package=\"com.metacodex.runner\"|package=\"$RUNNER_PKG\"|" "$d/AndroidManifest.xml"
+  say "building the Runner ($RUNNER_PKG)"
+  builder "$d" || return 1
+  install_app "$d/build/runner.apk"
+}
+
+dev_app() {
+  local d mod pkg r sha i st t0 info
+  d=$(dir_of "${1:-.}")
+  grep -q '^TYPE=module' "$d/build.conf" 2>/dev/null || die "$d is not a module app (build.conf TYPE=module; make one with mcx-app new <dir> --module)"
+  pkg=$(pkg_of "$d")
+  t0=$(date +%s.%N)
+  builder --module-only "$d" || return 1
+  mod="$d/build/lib/arm64-v8a/libapp.so"
+  sha=$(sha256sum "$mod" | cut -c1-64)
+  r=$("$MCX_BUILDD" dev "$mod" "$pkg") || { echo "RESULT: the dev server is not available: $r"; return 1; }
+  start_logd
+  # the Runner asks every ~0.4 s while it is in front; if nobody asked lately, start it
+  st=$("$MCX_BUILDD" dev-status)
+  if ! python3 -I -c 'import json,sys,time; j=json.loads(sys.argv[1]); f=j.get("fetches") or []; sys.exit(0 if f and time.time()-f[-1]["t"] < 3 else 1)' "$st"; then
+    info=$(ui system app "$RUNNER_PKG")
+    if [[ "$info" != installed* ]]; then
+      echo "RESULT: the Runner is not installed: mcx-app runner (once), then mcx-app dev again"; return 2
+    fi
+    r=$(ui system launch "$RUNNER_PKG"); [[ "$r" == ok* ]] || { echo "RESULT: cannot start the Runner: $r"; return 1; }
+    say "starting the Runner"
+  fi
+  for i in $(seq 1 100); do
+    st=$("$MCX_BUILDD" dev-status)
+    if python3 -I -c 'import json,sys; j=json.loads(sys.argv[1]); sys.exit(0 if any(f["sha"]==sys.argv[2] for f in j.get("fetches") or []) else 1)' "$st" "$sha"; then
+      echo "RESULT: running in the Runner: module ${sha:0:12} delivered $(python3 -I -c "import time; print(round(time.time()-$t0,1))") s after the command started"
+      echo "its log: mcx-app logs $RUNNER_PKG   (\"module loaded\" lines; a crash ends the log)"
+      return 0
+    fi
+    sleep 0.2
+  done
+  echo "RESULT: the Runner did not fetch the module in 20 s: is it in front? (mcx-app logs $RUNNER_PKG)"
+  return 2
 }
 
 hint() {
@@ -209,7 +271,9 @@ case "$cmd" in
   install) install_app "${1:-.}" ;;
   launch) launch_app "${1:-}" ;;
   run) build_app "${1:-.}" && install_app "${1:-.}" && launch_app "${1:-.}" ;;
+  dev) dev_app "${1:-.}" ;;
+  runner) runner_app ;;
   logs) logs_app "$@" ;;
   info) echo "$(ui system app "$(pkg_arg "${1:-}")")" ;;
-  *) sed -n 2,14p "$0"; exit 2 ;;
+  *) sed -n 2,17p "$0"; exit 2 ;;
 esac

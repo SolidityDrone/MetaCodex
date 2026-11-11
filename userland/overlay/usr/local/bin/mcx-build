@@ -3,6 +3,10 @@
 
   mcx-build [options] <app dir>       -> <dir>/build/<dir name>.apk
   mcx-build --check [options] <dir>   syntax and type check only (no objects, no APK): the fast loop
+  mcx-build --module-only <dir>       a module app (build.conf TYPE=module): only build/lib/arm64-v8a/libapp.so, for
+                                      `mcx-app dev` (the Runner loads it without an APK)
+App types (build.conf TYPE=): app (default: NativeActivity sources) | module (src/ -> libapp.so, packed with the
+native host libmcxhost.so) | runner (the host alone + assets/mcx-dev.pub: the Runner app of `mcx-app dev`).
   mcx-build --warm                    fill the shared cache (glue object, precompiled headers): mcx-buildd does it at start
 Options: -j N parallel compiles (default 2) | --clean (drop build/ first) | --json (last line: MCX-BUILD-JSON {...})
          --signer auto|python|apksigner (default auto: the built-in v2 signer, apksigner when it cannot run)
@@ -208,6 +212,8 @@ class Toolchain:
         self.aapt2 = os.environ.get("AAPT2") or shutil.which("aapt2") or "aapt2"
         self.apksigner = os.environ.get("APKSIGNER") or shutil.which("apksigner")
         self.openssl = shutil.which("openssl")
+        # the native host of module apps and of the Runner (host.cpp, mcx_module.h)
+        self.runner = os.environ.get("MCX_RUNNER_SRC") or "/opt/metacodex/quest-native/runner"
 
     def missing(self, need_package):
         miss = [p for p in (self.cxx, self.cc, os.path.join(self.glue, "android_native_app_glue.c"),
@@ -244,6 +250,7 @@ class App:
         self.pkg, self.lib = pk.group(1), lib.group(1)
         self.api = int(msdk.group(1)) if msdk else 32
         self.name = os.path.basename(self.dir)
+        self.type = "app"  # app: classic NativeActivity sources | module: src/ -> libapp.so + the host | runner: the host alone
         self.out = os.path.join(self.dir, "build")
         self.cache = os.path.join(self.out, ".cache")
         self.conf = {}
@@ -254,6 +261,9 @@ class App:
                 if line and not line.startswith("#") and "=" in line:
                     k, v = line.split("=", 1)
                     self.conf[k.strip()] = v.strip()
+        self.type = self.conf.get("TYPE", "app")
+        if self.type not in ("app", "module", "runner"):
+            raise SystemExit(f"mcx-build: build.conf TYPE={self.type}: use app, module or runner")
 
     def sources(self):
         out = []
@@ -293,7 +303,7 @@ PCH_UNSAFE = re.compile(r"^\s*#\s*define\s+(XR_NO_PROTOTYPES|XR_EXTENSION_PROTOT
 
 
 def base_flags(tc, app, is_c):
-    f = [f"--target=aarch64-linux-android{app.api}", "-fPIC", "-I" + tc.xr_inc, "-I" + tc.glue, "-fno-color-diagnostics"]
+    f = [f"--target=aarch64-linux-android{app.api}", "-fPIC", "-I" + tc.xr_inc, "-I" + tc.glue, "-I" + tc.runner, "-fno-color-diagnostics"]
     return f if is_c else f + ["-std=c++17"]
 
 
@@ -493,31 +503,92 @@ def do_compile(tc, app, jobs_n, check):
     return diags
 
 
-def do_link(tc, app):
+def host_lib(tc, app):
+    """libmcxhost.so (the native host: activity, EGL, OpenXR, module loading), built once per toolchain and host
+    source, shared by every module app and the Runner."""
+    srcs = [os.path.join(tc.runner, "host.cpp"), os.path.join(tc.runner, "mcx_module.h")]
+    for f in srcs:
+        if not os.path.exists(f):
+            say(f"mcx-build: missing {f} (update MetaCodex)")
+            raise Fail("no native host source")
+    h = hashlib.sha256((tc.ident() + f"|{app.api}|{VERSION}").encode())
+    for f in srcs:
+        h.update(open(f, "rb").read())
+    key = h.hexdigest()[:16]
+    so = os.path.join(CACHE, f"libmcxhost-{key}.so")
+    if os.path.exists(so):
+        return so, False
+    os.makedirs(CACHE, exist_ok=True)
+    with Stage("host") as st:
+        obj = so[:-3] + f".{os.getpid()}.o"
+        glue, cpu, rss, _ = glue_object(tc, app)
+        st.add(cpu, rss)
+        rc, out, cpu, rss = run([tc.cxx] + base_flags(tc, app, False) + ["-O2", "-c", srcs[0], "-o", obj], "host", capture=True)
+        st.add(cpu, rss)
+        if rc != 0:
+            say(out)
+            raise Fail("the native host did not compile")
+        tmp = so + f".{os.getpid()}.tmp"
+        rc, out, cpu, rss = run([tc.cxx, f"--target=aarch64-linux-android{app.api}", "-shared", "-o", tmp, obj, glue,
+                                 "-L" + os.path.dirname(tc.xr_loader), "-lopenxr_loader", "-landroid", "-llog", "-lEGL", "-lGLESv3",
+                                 "-static-libstdc++", "-Wl,-u,ANativeActivity_onCreate", "-Wl,--no-undefined",
+                                 "-Wl,-z,max-page-size=16384", "-Wl,--build-id=sha1"], "host", capture=True)
+        st.add(cpu, rss)
+        os.remove(obj)
+        if rc != 0:
+            say(out)
+            raise Fail("the native host did not link")
+        os.replace(tmp, so)
+        st.note = "native host built (once per toolchain)"
+    return so, True
+
+
+def copy_if_changed(src, dst):
+    if not (os.path.exists(dst) and os.path.getsize(dst) == os.path.getsize(src) and os.stat(dst).st_mtime >= os.stat(src).st_mtime):
+        shutil.copyfile(src, dst + ".tmp")
+        os.replace(dst + ".tmp", dst)
+
+
+def do_link(tc, app, module_only=False):
+    """Links what the APK carries; returns the list of libraries to pack."""
     lib_dir = os.path.join(app.out, "lib", "arm64-v8a")
     os.makedirs(lib_dir, exist_ok=True)
-    so = os.path.join(lib_dir, f"lib{app.lib}.so")
-    objs = [obj_name(app, s) for s in app.sources()]
-    glue, _, _, _ = glue_object(tc, app)
     loader = os.path.join(lib_dir, "libopenxr_loader.so")
-    if not (os.path.exists(loader) and os.path.getsize(loader) == os.path.getsize(tc.xr_loader)):
-        shutil.copyfile(tc.xr_loader, loader)
+    copy_if_changed(tc.xr_loader, loader)
+    libs = [loader]
+    if app.type in ("module", "runner") and not module_only:
+        host, _ = host_lib(tc, app)
+        dst = os.path.join(lib_dir, f"lib{app.lib}.so")  # the manifest's android.app.lib_name (mcxhost)
+        copy_if_changed(host, dst)
+        libs.append(dst)
+    if app.type == "runner":
+        return libs
+    so = os.path.join(lib_dir, "libapp.so" if app.type == "module" else f"lib{app.lib}.so")
+    libs.append(so)
+    link_one(tc, app, so, app.type == "module")
+    return libs
+
+
+def link_one(tc, app, so, module):
+    lib_dir = os.path.dirname(so)
+    objs = [obj_name(app, s) for s in app.sources()]
+    glue = None if module else glue_object(tc, app)[0]
     libs = split_flags(app.conf.get("LDLIBS", ""))
     # relink only when an object or the loader is newer than the library
     if os.path.exists(so):
         t = os.stat(so).st_mtime
         stamp = so + ".flags"
         key = " ".join(libs) + "|" + tc.ident()
-        if all(os.stat(o).st_mtime <= t for o in objs + [glue]) and os.path.exists(stamp) and open(stamp).read() == key:
+        if all(os.stat(o).st_mtime <= t for o in objs + ([glue] if glue else [])) and os.path.exists(stamp) and open(stamp).read() == key:
             STATS.stages.append({"stage": "link", "wall_s": 0.0, "cpu_s": 0.0, "peak_rss_mb": 0.0, "note": "up to date", "ok": True})
             say("   link: up to date")
             return so
     with Stage("link") as st:
         tmp = so + ".tmp"
-        cmd = [tc.cxx, f"--target=aarch64-linux-android{app.api}", "-shared", "-o", tmp] + objs + [glue, "-L" + lib_dir,
-               "-lopenxr_loader", "-Wl,--as-needed", "-landroid", "-llog", "-lEGL", "-lGLESv3"] + libs + \
-              ["-static-libstdc++", "-Wl,-u,ANativeActivity_onCreate", "-Wl,--no-undefined", "-Wl,-z,max-page-size=16384",
-               "-Wl,--build-id=sha1", "-fno-color-diagnostics"]
+        cmd = [tc.cxx, f"--target=aarch64-linux-android{app.api}", "-shared", "-o", tmp] + objs + ([glue] if glue else []) + \
+              ["-L" + lib_dir, "-lopenxr_loader", "-Wl,--as-needed", "-landroid", "-llog", "-lEGL", "-lGLESv3"] + libs + \
+              ["-static-libstdc++", "-Wl,--no-undefined", "-Wl,-z,max-page-size=16384", "-Wl,--build-id=sha1", "-fno-color-diagnostics"] + \
+              ([] if module else ["-Wl,-u,ANativeActivity_onCreate"])
         rc, out, cpu, rss = run(cmd, "link", capture=True)
         st.add(cpu, rss)
         if out.strip():
@@ -551,12 +622,12 @@ def tree_stamp(paths):
     return h.hexdigest()
 
 
-def aapt2_base(tc, app, st):
+def aapt2_base(tc, app, st, gen_assets=None):
     """The resource part of the APK (manifest, resources.arsc, res/, assets/), linked again only when it changed."""
     os.makedirs(app.cache, exist_ok=True)
     base = os.path.join(app.cache, "base.apk")
     res, assets = os.path.join(app.dir, "res"), os.path.join(app.dir, "assets")
-    key = tree_stamp([app.manifest, res, assets, tc.android_jar]) + f"|{VERSION}"
+    key = tree_stamp([app.manifest, res, assets, tc.android_jar] + ([gen_assets] if gen_assets else [])) + f"|{VERSION}"
     stamp = base + ".stamp"
     if os.path.exists(base) and os.path.exists(stamp) and open(stamp).read() == key:
         return base, False
@@ -571,6 +642,8 @@ def aapt2_base(tc, app, st):
         cmd += [rz, "--auto-add-overlay"]
     if os.path.isdir(assets):
         cmd += ["-A", assets]
+    if gen_assets:
+        cmd += ["-A", gen_assets]
     rc, out, cpu, rss = run(cmd, "package", capture=True)
     st.add(cpu, rss)
     if rc != 0:
@@ -640,18 +713,36 @@ def write_zip(entries):
     return bytes(body + cd + eocd), cd_off
 
 
-def do_package(tc, app, so):
+def runner_assets(tc, app):
+    """assets/mcx-dev.pub for the Runner: the signing key's public half, in the form host.cpp checks modules with."""
+    key = keystore_key(tc)
+    if key is None:
+        say("mcx-build: the Runner needs openssl and the signing key (mcx-setup quest)")
+        raise Fail("no key for the Runner")
+    limbs = (key.n.bit_length() + 63) // 64
+    n0 = (-pow(key.n, -1, 1 << 64)) % (1 << 64)
+    r2 = pow(2, 2 * 64 * limbs, key.n)
+    d = os.path.join(app.cache, "gen-assets")
+    os.makedirs(d, exist_ok=True)
+    text = f"# MetaCodex Runner: modules must be signed with this key\nn={key.n:0{key.k * 2}x}\nn0={n0:016x}\nr2={r2:0{key.k * 2}x}\n"
+    p = os.path.join(d, "mcx-dev.pub")
+    if not os.path.exists(p) or open(p).read() != text:
+        with open(p, "w") as f:
+            f.write(text)
+    return d
+
+
+def do_package(tc, app, libs):
     with Stage("package") as st:
-        base, linked = aapt2_base(tc, app, st)
+        gen = runner_assets(tc, app) if app.type == "runner" else None
+        base, linked = aapt2_base(tc, app, st, gen)
         entries = [e for e in raw_entries(base) if not e[0].startswith("lib/")]
-        lib_dir = os.path.join(app.out, "lib", "arm64-v8a")
         zc = os.path.join(app.cache, "z")
         os.makedirs(zc, exist_ok=True)
         hits = 0
-        for f in sorted(os.listdir(lib_dir)):
-            if not f.endswith(".so"):
-                continue
-            crc, usize, raw, hit = deflated(os.path.join(lib_dir, f), zc)
+        for path in sorted(libs, key=os.path.basename):
+            f = os.path.basename(path)
+            crc, usize, raw, hit = deflated(path, zc)
             hits += hit
             entries.append((f"lib/arm64-v8a/{f}", zipfile.ZIP_DEFLATED, crc, len(raw), usize, raw))
         # AndroidManifest.xml first (as aapt2 writes it)
@@ -869,7 +960,7 @@ def warm():
 
 
 def main(argv):
-    check = clean = as_json = False
+    check = clean = as_json = module_only = False
     jobs = int(os.environ.get("MCX_BUILD_JOBS", "2"))
     signer = os.environ.get("MCX_SIGNER", "auto")
     d = None
@@ -882,6 +973,8 @@ def main(argv):
             clean = True
         elif a == "--json":
             as_json = True
+        elif a == "--module-only":
+            module_only = True
         elif a == "--warm":
             return warm()
         elif a == "-j":
@@ -913,12 +1006,20 @@ def main(argv):
     code, result, apk = 0, "", None
     say(f"== {'check' if check else 'build'} {app.pkg} (lib{app.lib}.so, API {app.api}, -j{jobs}, pid {os.getpid()})")
     try:
-        do_compile(tc, app, jobs, check)
+        if module_only and app.type != "module":
+            raise Fail("--module-only is for module apps (build.conf TYPE=module)")
+        if app.type != "runner":
+            do_compile(tc, app, jobs, check)
         if check:
             result = f"check ok ({len(app.sources())} file(s), {time.time() - t0:.1f} s)"
+        elif module_only:
+            libs = do_link(tc, app, module_only=True)
+            mod = libs[-1]
+            apk = None
+            result = f"MODULE {mod} ({os.path.getsize(mod) // 1024} KB) sha256 {hashlib.sha256(open(mod, 'rb').read()).hexdigest()}, {time.time() - t0:.1f} s"
         else:
-            so = do_link(tc, app)
-            data, cd_off = do_package(tc, app, so)
+            libs = do_link(tc, app)
+            data, cd_off = do_package(tc, app, libs)
             apk = do_sign(tc, app, data, cd_off, signer)
             result = f"APK {apk} ({os.path.getsize(apk) // 1024} KB) package {app.pkg}, {time.time() - t0:.1f} s"
     except Fail as e:
@@ -930,7 +1031,7 @@ def main(argv):
         say("RESULT: " + result)
     if as_json:
         print("MCX-BUILD-JSON " + json.dumps({"ok": code == 0, "code": code, "mode": "check" if check else "build",
-                                              "package": app.pkg, "apk": apk, "total_s": round(time.time() - t0, 3),
+                                              "package": app.pkg, "type": app.type, "apk": apk, "total_s": round(time.time() - t0, 3),
                                               "min_mem_available_mb": STATS.min_avail if STATS.min_avail < (1 << 30) else None,
                                               "stages": STATS.stages, "diagnostics": STATS.diags[:50], "result": result}), flush=True)
     return code

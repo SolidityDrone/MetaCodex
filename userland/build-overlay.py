@@ -58,6 +58,12 @@ with tarfile.open(fileobj=raw, mode="w", format=tarfile.PAX_FORMAT) as tf:
         extra[f"{template_dst}/{f}"] = os.path.join(template, f)
     for f in sorted(os.listdir(os.path.join(template, "src"))):
         extra[f"{template_dst}/src/{f}"] = os.path.join(template, "src", f)
+    # module apps (`mcx-app new --module`, `mcx-app dev`): the native host + the Runner app, and the module template
+    native = os.path.join(root, "native")
+    for f in ("host.cpp", "mcx_module.h", "AndroidManifest.xml", "build.conf"):
+        extra[f"opt/metacodex/quest-native/runner/{f}"] = os.path.join(native, "runner", f)
+    for f in ("AndroidManifest.xml", "build.conf", "src/app.cpp"):
+        extra[f"opt/metacodex/quest-native/module-template/{f}"] = os.path.join(native, "module-template", f)
     for dst, srcdir in trees.items():
         for dp, dn, fn in os.walk(srcdir):
             dn[:] = sorted(d for d in dn if not junk(d))
