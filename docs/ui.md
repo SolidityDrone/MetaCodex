@@ -154,7 +154,7 @@ panels ... the source of the speech ... a billboard side notification system men
   while it is up takes the next place under the others); the next
   time it opens, the threads used last come first. MQH is asked when it opens and every 4 s while it is up.
   Pointing at a card, "this thread" (voice questions) is its thread. `Shell/ShellOrbThreads.cs`,
-  `AI/QuickThreads.cs` (the order and the words, pure). Self-test sections `orbthreads` (the cards) and `orbplace` (keeping off the watched window).
+  `AI/QuickThreads.cs` (the order and the words, pure). Self-test sections `orbthreads` (the cards) and `orbplace` (keeping off the watched window, the thread + sidebar pair in FIXED).
 - Control port: `orb on | off | menu | place | status`.
 
 ## Code map (`unity/Assets/MetaCodex/Runtime`)
@@ -334,7 +334,10 @@ windows and your hands. No Space Setup scan is needed (branch `feat/spatial-dome
   reading (the 48 x 48 points the floor is found from, every 0.3 s) says how far the real things are in each
   direction; a panel opens at least 8 cm in front of them, and a direction where something real is nearer than
   half a metre is a poor place (a hand in front of the eyes is not the room: nothing nearer than 0.55 m counts).
-  When nothing is free panels cascade in front, each a little closer, higher and to the side. Named layouts (Settings > DISPLAY) store the open panels relative to the head and put
+  When nothing is free panels cascade in front, each a little closer, higher and to the side. THREAD's sidebar
+  opens at the thread's right edge, so the pair spans about 95 degrees: when it opens, the pair glides round you
+  (0.45 s) until it is centred where you face, as far as the other windows (2 degrees apart) and the room's walls
+  (8 cm) let it; when it folds and you have not moved the thread meanwhile, the thread glides back. Named layouts (Settings > DISPLAY) store the open panels relative to the head and put
   them back around wherever the user is.
 - **Float**: panels sit on an invisible cylinder around you that follows you horizontally (x/z), never
   your head's pitch or roll, 4° apart; when the open panels do not fit around it the cylinder grows, so

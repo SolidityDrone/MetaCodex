@@ -221,6 +221,7 @@ namespace MetaCodex.Shell
         private void UpdateLayout(float dt)
         {
             if (Settings == null) return;
+            TickGlide(dt);
             UpdateSidebarLink();
             UpdateControlRail();
             if (!Floating)
@@ -276,6 +277,133 @@ namespace MetaCodex.Shell
                 dock.transform.rotation = Quaternion.LookRotation((dock.transform.position - head.position).normalized, Vector3.up);
             }
         }
+
+        // ---- THREAD + its sidebar in FIXED (owner 2026-11-11): the sidebar opens at the thread's right edge, so the pair
+        // spans about 95 degrees and the sidebar sits far to the right. When it opens, the pair glides round the user
+        // until it is centred where they face, as far as the other windows and the room's walls let it (ShellPlacement's
+        // view rectangles and depth); when it folds and the thread is still where the glide left it, it glides back.
+
+        private string _pairThread;
+        private float _pairShift;
+        private Vector3 _pairPos;
+        private Quaternion _pairRot;
+        private UiPanel _glide;
+        private float _glideT = -1f;
+        private Vector3 _glideFromPos, _glideToPos;
+        private Quaternion _glideFromRot, _glideToRot;
+        private const float GlideTime = 0.45f, PairMinShift = 3f;
+
+        private static ViewRect Union(ViewRect a, ViewRect b) => new ViewRect
+            { Yaw0 = Mathf.Min(a.Yaw0, b.Yaw0), Yaw1 = Mathf.Max(a.Yaw1, b.Yaw1), Pitch0 = Mathf.Min(a.Pitch0, b.Pitch0), Pitch1 = Mathf.Max(a.Pitch1, b.Pitch1) };
+
+        private static ViewRect Shifted(ViewRect r, float yaw) => new ViewRect { Yaw0 = r.Yaw0 + yaw, Yaw1 = r.Yaw1 + yaw, Pitch0 = r.Pitch0, Pitch1 = r.Pitch1 };
+
+        /// The largest shift (degrees, from `want` towards 0) that puts `group` on no other window (2 degree gap) and keeps
+        /// it 8 cm in front of the room's walls; 0 when none.
+        private float FreePairShift(ViewRect group, float want, float dist, Vector3 eye, float front, params UiPanel[] skip)
+        {
+            var taken = new List<ViewRect>();
+            foreach (var q in PlacementObstacles(null))
+            {
+                if (q == null || q.Id == "dock" || System.Array.IndexOf(skip, q) >= 0) continue;
+                if (ViewRectOf(q, eye, front, out var r)) taken.Add(r);
+            }
+            var room = RoomClearance(eye, front, out int yb, out int pb);
+            int steps = Mathf.Max(1, Mathf.CeilToInt(Mathf.Abs(want) / 1.5f));
+            for (int i = steps; i >= 1; i--)
+            {
+                float s = want * i / steps;
+                if (Mathf.Abs(s) < PairMinShift) break;
+                var c = Shifted(group, s);
+                bool free = ClearanceIn(room, yb, pb, c) - 0.08f >= dist - 0.02f;
+                for (int k = 0; k < taken.Count && free; k++) if (c.Overlaps(taken[k], 2f)) free = false;
+                if (free) return s;
+            }
+            return 0f;
+        }
+
+        /// The sidebar just opened (FIXED): the pair is centred where the user faces when there is room.
+        private void CentreThreadPair()
+        {
+            _pairThread = null;
+            var head = Head;
+            if (Floating || head == null || _sb == null || !_sb.IsOpen || !_panels.TryGetValue("thread", out var th) || !th.IsOpen) return;
+            if (Router != null && (Router.IsDragging(th) || Router.IsDragging(_sb))) return;
+            Vector3 eye = head.position;
+            float front = FrontYaw();
+            if (!ViewRectOf(th, eye, front, out var a) || !ViewRectOf(_sb, eye, front, out var b)) return;
+            var group = Union(a, b);
+            float want = -group.YawMid;
+            if (Mathf.Abs(want) < PairMinShift) return; // centred already
+            var d = th.transform.position - eye;
+            float shift = FreePairShift(group, want, new Vector2(d.x, d.z).magnitude, eye, front, th, _sb);
+            if (shift == 0f) return;
+            GlideRound(th, eye, shift, th.TransitionPhase != UiPanel.Phase.Open);
+            _pairThread = _threadOpen;
+            _pairShift = shift;
+            _pairPos = _glideToPos;
+            _pairRot = _glideToRot;
+        }
+
+        /// The sidebar folded (FIXED): the thread goes back where it was before the pair was centred, when the user has
+        /// not moved it since and that place is still free.
+        private void UncentreThreadPair()
+        {
+            string was = _pairThread;
+            _pairThread = null;
+            var head = Head;
+            if (was == null || was != _threadOpen || Floating || head == null || !_panels.TryGetValue("thread", out var th) || !th.IsOpen) return;
+            bool gliding = _glide == th && _glideT >= 0f;
+            var pos = gliding ? _glideToPos : th.transform.position;
+            var rot = gliding ? _glideToRot : th.transform.rotation;
+            if (Vector3.Distance(pos, _pairPos) > 0.01f || Quaternion.Angle(rot, _pairRot) > 1f) return; // moved by the user: it stays
+            if (gliding) { th.transform.SetPositionAndRotation(_glideToPos, _glideToRot); _glideT = -1f; }
+            Vector3 eye = head.position;
+            float front = FrontYaw();
+            if (!ViewRectOf(th, eye, front, out var a)) return;
+            var d = th.transform.position - eye;
+            float back = FreePairShift(a, -_pairShift, new Vector2(d.x, d.z).magnitude, eye, front, th, _sb);
+            if (Mathf.Abs(back - -_pairShift) > 0.01f) return; // its old place is taken now: it stays
+            GlideRound(th, eye, back, false);
+        }
+
+        /// Turns a panel round the user's vertical axis through `eye` by `yaw` degrees (eased over 0.45 s, or at once).
+        private void GlideRound(UiPanel p, Vector3 eye, float yaw, bool now)
+        {
+            var q = Quaternion.Euler(0f, yaw, 0f);
+            var e = new Vector3(eye.x, 0f, eye.z);
+            var pos = p.transform.position;
+            var flatFrom = new Vector3(pos.x, 0f, pos.z) - e;
+            _glideFromPos = pos;
+            _glideFromRot = p.transform.rotation;
+            _glideToPos = e + q * flatFrom + Vector3.up * pos.y;
+            _glideToRot = q * p.transform.rotation;
+            _glide = p;
+            _glideT = 0f;
+            if (now) TickGlide(GlideTime);
+        }
+
+        private void TickGlide(float dt)
+        {
+            if (_glide == null || _glideT < 0f) return;
+            if (!_glide.IsOpen || Floating || Router != null && (Router.IsDragging(_glide) || _sb != null && Router.IsDragging(_sb))) { _glideT = -1f; return; } // the user took it
+            _glideT = Mathf.Min(1f, _glideT + dt / GlideTime);
+            float k = _glideT * _glideT * (3f - 2f * _glideT);
+            // round the user, not through them: the angle is eased, the distance kept
+            var q = Quaternion.Slerp(_glideFromRot, _glideToRot, k);
+            var e = Head != null ? Head.position : Vector3.zero;
+            var from = _glideFromPos; var to = _glideToPos;
+            float yawFrom = Mathf.Atan2(from.x - e.x, from.z - e.z) * Mathf.Rad2Deg, yawTo = Mathf.Atan2(to.x - e.x, to.z - e.z) * Mathf.Rad2Deg;
+            float r0 = new Vector2(from.x - e.x, from.z - e.z).magnitude, r1 = new Vector2(to.x - e.x, to.z - e.z).magnitude;
+            float yw = Mathf.LerpAngle(yawFrom, yawTo, k) * Mathf.Deg2Rad, rr = Mathf.Lerp(r0, r1, k);
+            var pos = k >= 1f ? to : new Vector3(e.x + Mathf.Sin(yw) * rr, Mathf.Lerp(from.y, to.y, k), e.z + Mathf.Cos(yw) * rr);
+            _glide.transform.SetPositionAndRotation(pos, q);
+            if (_glideT >= 1f) _glideT = -1f;
+        }
+
+        /// Self-tests: the pair's last centring shift (degrees; 0: none) and whether it is still gliding.
+        public float PairShiftForTest => _pairThread != null ? _pairShift : 0f;
+        public bool PairGlidingForTest => _glideT >= 0f;
 
         /// Spin: a closed hand that started in empty space (its ray on no panel) and moves sideways.
         private void SpinInput(float dt)

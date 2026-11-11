@@ -236,11 +236,13 @@ namespace MetaCodex.Shell
                 UpdateSidebarLink(true);
                 _sb.Open();
                 if (Floating && _carousel != null && _panels.TryGetValue("thread", out var t2)) Slot(t2.transform); // the pair needs more room on the ring
+                else if (!Floating) CentreThreadPair(); // FIXED: the pair centred where the user faces, when there is room
             }
             else if (!open && _sb.IsOpen)
             {
                 _sb.Close();
                 if (Floating && _carousel != null && _panels.TryGetValue("thread", out var t3) && t3.IsOpen) Slot(t3.transform);
+                else if (!Floating) UncentreThreadPair(); // back where it was, unless the user moved it
             }
             if (remember && _sbThread != null) { _sbMem[_sbThread] = (open, _sbTabs.Selected); SaveSidebarMemory(); }
             UpdateSidebarHandle();

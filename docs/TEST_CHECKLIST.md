@@ -475,7 +475,7 @@ docs/native-build-and-install.md.
 - [ ] A brand-new app: the dialog says INSTALL first; INSTALL -> Android's dialog -> then APP READY with LAUNCH
 - [ ] Say "don't open the app" while one waits: the agent's `mcx-app status` says declined
 
-## 32. Thread state after app switches, the orb's arcs, the orb off the watched window (branch fix/thread-sidebar-and-orb, next build)
+## 32. Thread state after app switches, the orb's arcs, the orb off the watched window, the centred thread + sidebar (branch fix/thread-sidebar-and-orb, next build)
 
 - [ ] A thread working; launch a built app, wait until the agent is done, Back: the thread says idle / done at once (no "WORKING", no "writing the answer")
 - [ ] A thread working: STOP: within 2 s the header leaves WORKING and the chat stops "writing"
@@ -486,6 +486,7 @@ docs/native-build-and-install.md.
 - [ ] Two or three messages in a row: they stack on an arc round the orb's right side, the newest lowest, the line of light runs along the arc; never on its left
 - [ ] Read a window straight ahead, the orb up to its right, and touch the orb: the orb and its menu glide (no jump) to a place where nothing of them covers that window, still in view and reachable; close the menu: a moment later the orb goes back to its own place
 - [ ] While the menu is up, reach for a card: nothing moves under the finger; look at the menu itself: the orb does not run away from it
+- [ ] FIXED layout, a thread in front: tap the sidebar handle: the thread and its sidebar glide together until the pair is centred in front of you; fold it: the thread glides back. With another window just to its left: the pair moves only up to that window, never over it. Move the thread, then fold: it stays where you put it
 
 ## 33. THREAD's sidebar (branch fix/thread-sidebar-and-orb, next build; docs/thread-sidebar.md)
 

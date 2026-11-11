@@ -13,7 +13,10 @@ It replaces the separate WORKSPACE module (the old `ShellWorkspace.cs`, now `Run
   changed). A tap opens the sidebar; `‹` (on the handle or in the sidebar's header) folds it.
 - The sidebar (`thread-side`, 0.62 × 0.66 m, THREAD is 0.73 m wide now) sits at the thread's right edge, tops level. Bent
   panels: on the thread's own cylinder (the pair reads as one curved screen); flat: turned 14° towards you round the
-  thread's right edge. It moves, turns and bends with the thread every frame; pinch its header to carry both. In FLOAT the
+  thread's right edge. It moves, turns and bends with the thread every frame; pinch its header to carry both. FIXED: the
+  pair then spans about 95 degrees with the sidebar far to the right, so when it opens the pair glides round you until
+  it is centred where you face (only as far as the other windows and the room's walls let it); folded, the thread
+  glides back, unless you moved it meanwhile (`ShellLayout.CentreThreadPair`). In FLOAT the
   pair takes one slot on the ring. It closes with the thread; saved layouts leave it out (it comes back with its thread).
 - Each thread remembers open / folded and its tab (`Settings.threadSidebar`, the newest 80 threads). A thread seen for
   the first time starts folded, on CHANGES. Opening another thread drops everything shown before (a generation counter

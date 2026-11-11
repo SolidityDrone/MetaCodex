@@ -13,7 +13,9 @@ namespace MetaCodex.EditorTools
     /// my view on the panels i'm watching. have the orb to be less invasive but always available"):
     /// - the window the user looks at is the watched one; the orb, its open menu and its callouts keep off it (they glide
     ///   aside or below, smoothly, and stay in view), and the orb goes back to its own place once that is free;
-    /// Pictures: ui-orb-watched.png, ui-orb-watched-menu.png.
+    /// - FIXED layout: THREAD's sidebar opens and the pair is centred where the user faces when there is room (never over
+    ///   another window), and goes back when it folds; not when the user moved the thread meanwhile.
+    /// Pictures: ui-orb-watched.png, ui-orb-watched-menu.png, ui-sidebar-pair-fixed.png, ui-sidebar-pair-limited.png.
     public static partial class MetaCodexUiTest
     {
         private static void OrbPlaceSection(MetaCodexShell shell, Transform head, SimulatedHands hands)
@@ -133,6 +135,85 @@ namespace MetaCodex.EditorTools
                 shell.ClosePanel("files");
                 Step(10);
 
+                // ---- THREAD + sidebar, FIXED: centred where the user faces when the sidebar opens
+                shell.Settings.bendPanels = true;
+                shell.ForgetSidebarMemoryForTest();
+                var row = new JObject
+                {
+                    ["id"] = "thr_pair", ["projectId"] = "p1", ["providerId"] = "codex", ["title"] = "Centre the pair", ["status"] = "idle",
+                    ["runtime"] = new JObject { ["displayStatus"] = "idle" }, ["environmentPath"] = null, ["updatedAt"] = now,
+                };
+                shell.LoadThreadForTest(row, new JArray(Row("conversation", 1, new JObject { ["role"] = "user", ["text"] = "Keep the pair in front of me" })),
+                    new JObject { ["usedTokens"] = 1000, ["modelContextWindow"] = 200000, ["estimated"] = false }, new JObject { ["model"] = "gpt-5", ["reasoningLevel"] = "medium", ["permissionMode"] = "accept-edits" }, projects, false);
+                var th = shell.PanelsById["thread"];
+                var sb = shell.PanelsById[MetaCodexShell.SidebarId];
+                var place = head.position + new Vector3(0f, -0.05f, 0.85f);
+                th.transform.SetPositionAndRotation(place, Quaternion.identity);
+                Step(20); // bent round the user
+                float alone = RectOf(th).YawMid;
+                shell.SetSidebar(true);
+                Step(1);
+                var opened = MetaCodexShell.ViewRectOf(th, head.position, 0f, out var ta) && MetaCodexShell.ViewRectOf(sb, head.position, 0f, out var sa) ? (ta, sa) : default;
+                Step(20);
+                var a1 = RectOf(th); var s1 = RectOf(sb);
+                float mid = (Mathf.Min(a1.Yaw0, s1.Yaw0) + Mathf.Max(a1.Yaw1, s1.Yaw1)) * 0.5f;
+                float span = Mathf.Max(a1.Yaw1, s1.Yaw1) - Mathf.Min(a1.Yaw0, s1.Yaw0);
+                float before = (Mathf.Min(opened.ta.Yaw0, opened.sa.Yaw0) + Mathf.Max(opened.ta.Yaw1, opened.sa.Yaw1)) * 0.5f;
+                bool attached = Vector3.Distance(sb.transform.position, th.transform.position) < th.Width * th.RestLossyScale.x + 0.05f;
+                Check(sb.IsOpen && Mathf.Abs(alone) < 1f && before > 8f && Mathf.Abs(mid) < 2f && !shell.PairGlidingForTest && attached,
+                    $"FIXED: THREAD alone in front ({alone:F1} deg); its sidebar opens at its right edge (the pair's middle at {before:F0} deg, {span:F0} deg wide), and the pair glides round the user until it is centred ({mid:F1} deg; shift {shell.PairShiftForTest:F0} deg), the sidebar still at the thread's edge ({attached})");
+                th.ForceRefresh(); sb.ForceRefresh();
+                RenderAt("ui-sidebar-pair-fixed.png", head.position - Vector3.forward * 0.08f, Quaternion.identity, 110f, 1920, 1080);
+                shell.SetSidebar(false);
+                Step(20);
+                Check(!sb.IsOpen && Vector3.Distance(th.transform.position, place) < 0.01f, $"folded: THREAD goes back where it was ({Vector3.Distance(th.transform.position, place) * 100f:F1} cm off)");
+
+                // a window on the left: the pair moves only as far as that window lets it, never over it
+                shell.OpenPanel("files");
+                var left = shell.PanelsById["files"];
+                float lw = left.Width * left.RestLossyScale.x * 0.5f;
+                float ly = -50f - Mathf.Atan2(lw, 0.9f) * Mathf.Rad2Deg; // its right edge at about 50 degrees left
+                var ldir = Quaternion.Euler(0f, ly, 0f) * Vector3.forward;
+                left.transform.SetPositionAndRotation(head.position + ldir * 0.9f + Vector3.down * 0.05f, Quaternion.LookRotation(ldir));
+                left.ForceRefresh();
+                Step(4);
+                var lr = RectOf(left);
+                shell.SetSidebar(true);
+                Step(20);
+                var a2 = RectOf(th); var s2 = RectOf(sb);
+                float mid2 = (Mathf.Min(a2.Yaw0, s2.Yaw0) + Mathf.Max(a2.Yaw1, s2.Yaw1)) * 0.5f;
+                bool clear = !a2.Overlaps(lr, 1.5f) && !s2.Overlaps(lr, 1.5f);
+                float shift2 = shell.PairShiftForTest;
+                Check(clear && shift2 < -2.9f && mid2 > 2f, $"a window on the left ({lr.Yaw0:F0}..{lr.Yaw1:F0} deg): the pair moves {shift2:F0} deg, as far as it lets it (its middle at {mid2:F0} deg), and covers nothing of it ({clear}; the thread from {a2.Yaw0:F0} deg)");
+                th.ForceRefresh(); sb.ForceRefresh(); left.ForceRefresh();
+                RenderAt("ui-sidebar-pair-limited.png", head.position - Vector3.forward * 0.08f, Quaternion.Euler(0f, -22f, 0f), 104f, 1920, 1080);
+                shell.SetSidebar(false);
+                Step(20);
+                bool back2 = Vector3.Distance(th.transform.position, place) < 0.01f;
+                shell.ClosePanel("files");
+                Step(4);
+
+                // the user moves the thread after the pair was centred: folding leaves it where they put it
+                shell.SetSidebar(true);
+                Step(20);
+                var put = th.transform.position + Vector3.up * 0.10f;
+                th.transform.position = put;
+                Step(2);
+                shell.SetSidebar(false);
+                Step(20);
+                bool stays = Vector3.Distance(th.transform.position, put) < 0.005f;
+                Check(back2 && stays, $"folded again it goes back ({back2}); moved by the user after it was centred, folding leaves it where it was put ({stays})");
+
+                // FLOAT is the ring's business: nothing glides there
+                shell.SetLayout("float");
+                Step(10);
+                shell.SetSidebar(true);
+                Step(10);
+                bool noGlide = shell.PairShiftForTest == 0f && !shell.PairGlidingForTest;
+                shell.SetSidebar(false);
+                shell.SetLayout("fixed");
+                Step(4);
+                Check(noGlide, "FLOAT: the ring places the pair; no centring glide");
             }
             finally
             {
