@@ -500,7 +500,9 @@ namespace MetaCodex.Shell
 
         // ------------------------------------------------------------------ THREAD
 
-        private UiButton _thModelChip, _thPermChip, _thWsChip, _thWsButton;
+        private UiButton _thModelChip, _thPermChip, _thWsChip;
+        /// THREAD's width: the conversation plus the strip on its right edge for the sidebar's expand handle.
+        public const float ThreadW = 0.73f, ThreadHandleW = 0.03f;
         private UiRing _thContext;
         private UiButton _tlUp, _tlDown;
         private Rect _tlArea;
@@ -515,14 +517,16 @@ namespace MetaCodex.Shell
         {
             _thAskButtons.Clear(); // RebuildPanels builds the panel again
             var t = UiTheme.Current;
-            var p = Panel<UiPanel>("thread", "Thread", 0.70f, 0.66f);
-            var c = p.Content;
+            var p = Panel<UiPanel>("thread", "Thread", ThreadW, 0.66f);
+            var c0 = p.Content;
+            var c = new Rect(c0.x, c0.y, c0.width - ThreadHandleW, c0.height); // the conversation; its right edge holds the handle
+            // the expand handle on the right edge: the sidebar (changes, files, git, status, views) opens beside it
+            _thHandle = p.Add(new UiEdgeHandle { Rect = new Rect(c.xMax + t.Gap * 0.6f, c.y + 0.06f, ThreadW - c.xMax - t.Gap * 0.6f - 0.004f, c.height - 0.06f - 0.12f), OnClickAction = ToggleSidebar });
             var st = new UiStack(c, t.Gap);
             var top = st.Next(0.03f);
             float bw = 0.082f;
-            _thTitle = p.Add(new UiLabel("", t.BodySize * 1.1f) { Rect = new Rect(top.x, top.y, top.width - bw * 3 - t.Gap * 3, top.height) });
-            p.Add(new UiButton("⑂ FORK…", ForkPrompt) { Rect = new Rect(top.xMax - bw * 3 - t.Gap * 2, top.y, bw, top.height), TextSize = t.SmallSize * 1.05f });
-            _thWsButton = p.Add(new UiButton("◧ WORKSPACE", ToggleWorkspace) { Rect = new Rect(top.xMax - bw * 2 - t.Gap, top.y, bw, top.height), TextSize = t.SmallSize * 1.05f });
+            _thTitle = p.Add(new UiLabel("", t.BodySize * 1.1f) { Rect = new Rect(top.x, top.y, top.width - bw * 2 - t.Gap * 2, top.height) });
+            p.Add(new UiButton("⑂ FORK…", ForkPrompt) { Rect = new Rect(top.xMax - bw * 2 - t.Gap, top.y, bw, top.height), TextSize = t.SmallSize * 1.05f });
             p.Add(new UiButton("⟳", () => { _tlMaxSeq = -1; _tlTag = null; _tlInFlight = false; _nextThreadMeta = 0f; PollThread(); }) { Rect = new Rect(top.xMax - bw, top.y, bw, top.height), TextSize = t.SmallSize * 1.05f });
             // the meta row: where it works (left), the provider's plan and usage limits (right)
             var metaRow = st.Next(0.02f);
@@ -560,7 +564,7 @@ namespace MetaCodex.Shell
             float ts = t.SmallSize * 1.02f;
             _thModelChip = p.Add(new UiButton("◇ model ▾", ModelPrompt) { Rect = new Rect(x, y, w[0], chipH), TextSize = ts }); x += w[0] + t.Gap;
             _thPermChip = p.Add(new UiButton("✎ Edits ▾", PermissionPrompt) { Rect = new Rect(x, y, w[1], chipH), TextSize = ts }); x += w[1] + t.Gap;
-            _thWsChip = p.Add(new UiButton("▣ checkout", () => { OpenWorkspace(); _wsTabs?.Select(2); }) { Rect = new Rect(x, y, w[2], chipH), TextSize = ts }); x += w[2] + t.Gap;
+            _thWsChip = p.Add(new UiButton("▣ checkout", () => SetSidebar(true, TabFiles)) { Rect = new Rect(x, y, w[2], chipH), TextSize = ts }); x += w[2] + t.Gap;
             _thContext = p.Add(new UiRing { Rect = new Rect(x, y, w[3], chipH), OnClickAction = ContextPrompt }); x += w[3] + t.Gap;
             p.Add(new UiButton("■ STOP", () => { if (_threadOpen != null) Mqh.StopThread(_threadOpen, r => { Toast(r != null ? "Stopping the turn" : "MQH: " + Mqh.LastError); if (r != null) ResyncThread(1.5f); }); }, UiButtonStyle.Danger) { Rect = new Rect(x, y, c.xMax - x, chipH), TextSize = ts });
             // the attach modal: drawn over the timeline area, inside this panel (not a panel of its own)
@@ -570,7 +574,8 @@ namespace MetaCodex.Shell
                 if (_resyncAt > 0f && Time.unscaledTime >= _resyncAt) { _resyncAt = -1f; ResyncThread(); return; }
                 if (_threadOpen != null && Time.unscaledTime >= _nextThreadPoll) PollThread();
             };
-            p.Closed += _ => { if (_ws != null && _ws.IsOpen) _ws.Close(); CloseAttachModal(); SetAttachMenu(false); };
+            p.Closed += _ => { if (_sb != null && _sb.IsOpen) _sb.Close(); CloseAttachModal(); SetAttachMenu(false); UpdateSidebarVoice(); };
+            p.Opened += _ => UpdateSidebarVoice();
             SetAskVisible(false);
             RefreshAttachRow();
         }
@@ -614,8 +619,8 @@ namespace MetaCodex.Shell
             _thTitle?.Set("loading …");
             _thContext?.Set(-1f, "context —");
             OpenPanel("thread");
-            WsSetThread(id, (string)row?["environmentPath"]);
-            if (Settings.threadWorkspace) OpenWorkspace();
+            SbSetThread(id, (string)row?["environmentPath"]);
+            SetSidebar(SidebarMemory(id).open, SidebarMemory(id).tab, remember: false); // as this thread had it
             UpdateChips();
             Mqh.ExecOptions(id, r => { if (id != _threadOpen || !(r is JObject jo)) return; _thExec = jo; UpdateChips(); });
             _nextThreadMeta = 0f;
@@ -711,8 +716,8 @@ namespace MetaCodex.Shell
             _thMeta.Set($"{x["providerId"]} · {(proj != null ? proj + " · " : "")}{x["environmentPath"] ?? "no workspace yet"} · ⎇ {x["environmentBranchName"] ?? "-"}");
             bool wt = x["environmentIsWorktree"]?.Value<bool>() == true;
             _thWsChip?.SetText("▣ " + Cut(proj ?? ((string)x["environmentPath"] ?? "workspace").Split('/').Last(), 12) + " · " + (wt ? "worktree" : "checkout"));
-            WsSetThread(_threadOpen, (string)x["environmentPath"]);
-            _thWsButton?.SetSelected(_ws != null && _ws.IsOpen);
+            SbSetThread(_threadOpen, (string)x["environmentPath"]);
+            UpdateSidebarHandle();
             UpdateChips();
             ShowLimits();
             UpdateWorkspaceChip();
@@ -1012,9 +1017,9 @@ namespace MetaCodex.Shell
         public string TimelineTextForTest => _thTimeline?.PlainText ?? "";
         public string TimelineTagForTest { get => _tlTag; set => _tlTag = value; }
         public string ChipsForTest => $"{_thModelChip?.Text} | {_thPermChip?.Text} | {_thWsChip?.Text} | {_thContext?.Caption}";
-        public void PickChangedFileForTest(string path) => WsPick(path);
-        public string DiffHeadForTest => _wsDiffHead?.Text ?? "";
-        public UiCodeView DiffViewForTest => _wsDiff;
+        public void PickChangedFileForTest(string path) { var f = _sbFiles.FirstOrDefault(x => x.Path == path); if (f != null) SbOpenDiff(f); }
+        public string DiffHeadForTest => _sbDiffLabel?.Text ?? "";
+        public UiSourceView DiffViewForTest => _sbDiff;
         public void ShowPermissionPickerForTest() => PermissionPrompt();
 
         private static string Esc(string s) => s == null ? "" : "<noparse>" + s.Replace("</noparse>", "") + "</noparse>";

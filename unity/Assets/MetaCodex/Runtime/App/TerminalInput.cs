@@ -20,6 +20,9 @@ namespace MetaCodex.App
         public Func<bool> KeyboardShown = () => false;
         public bool SystemKeyboardOpen => KeyboardShown();
 
+        /// A panel that takes the navigation keys while it has the focus (THREAD's sidebar): true = used, not typed.
+        public static Func<TermKey, bool> Intercept;
+
         private Keyboard _kb;
         private char _pendingHigh;
         /// No system keyboard any more (it delivered its text twice: "ls" arrived as "lsls"): nothing to filter.
@@ -118,6 +121,7 @@ namespace MetaCodex.App
             foreach (var (key, term) in Specials)
             {
                 if (!_kb[key].wasPressedThisFrame) continue;
+                if (Intercept != null && mods == KeyMods.None && Intercept(term)) continue;
                 if (Shift && (term == TermKey.PageUp || term == TermKey.PageDown)) { ScrollRequest?.Invoke(term == TermKey.PageUp ? 10 : -10); continue; }
                 PressKey(term, mods);
             }

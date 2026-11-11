@@ -141,6 +141,7 @@ namespace MetaCodex.Shell
             RegisterShellVoiceCommands();
             RegisterSessionVoiceCommand(); // questions about the session (ShellContext)
             RegisterLaunchVoiceCommands(); // the app an agent asked to launch (ShellReturn)
+            RegisterSidebarVoiceCommands(); // THREAD's sidebar and INIT GIT (ShellThreadSidebar)
             Decider = new VoiceDecider(Voice, (texts, done) =>
             {
                 if (Qvac == null || !Qvac.IsRunning) { done(null, "the AI service is not running"); return; }
@@ -1052,7 +1053,6 @@ namespace MetaCodex.Shell
             ["hand_rays"] = new[] { "raggi delle mani", "raggi", "puntatori", "laser" },
             ["foveation"] = new[] { "rendering foveato", "foveazione" },
             ["views_auto_open"] = new[] { "apertura automatica delle viste" },
-            ["workspace_module"] = new[] { "modulo workspace", "pannello workspace" },
             ["wrist_menu"] = new[] { "menu da polso", "menu sul polso", "menu al polso", "menu radiale" },
         };
 
@@ -1084,7 +1084,6 @@ namespace MetaCodex.Shell
             new VoiceSetting { Id = "hand_rays", Key = "gestures.rayVisible", Kind = "bool", Label = "Hand rays", Names = new[] { "hand rays", "rays", "pointer rays", "lasers" } },
             new VoiceSetting { Id = "foveation", Key = "foveation", Kind = "bool", Label = "Foveated rendering", Names = new[] { "foveation", "foveated rendering" } },
             new VoiceSetting { Id = "views_auto_open", Key = "viewsAutoOpen", Kind = "bool", Label = "Agent views open by themselves", Names = new[] { "auto open views", "agent views auto open", "views auto open" } },
-            new VoiceSetting { Id = "workspace_module", Key = "threadWorkspace", Kind = "bool", Label = "Thread workspace", Names = new[] { "workspace module", "thread workspace", "workspace panel" } },
             new VoiceSetting { Id = "wrist_menu", Key = "wristMenu", Kind = "bool", Label = "Main menu on the wrist", Names = new[] { "wrist menu", "menu on the wrist", "radial menu", "watch menu" } },
             new VoiceSetting { Id = "orb", Key = "orb", Kind = "bool", Label = "Orb", Names = new[] { "orb", "the orb", "energy sphere", "sphere", "companion" } },
         };

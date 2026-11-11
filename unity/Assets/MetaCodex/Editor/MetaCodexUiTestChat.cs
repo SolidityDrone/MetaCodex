@@ -25,8 +25,7 @@ namespace MetaCodex.EditorTools
         {
             foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
             shell.SetLayout("fixed");
-            bool ws0 = shell.Settings.threadWorkspace;
-            shell.Settings.threadWorkspace = false;
+            shell.ForgetSidebarMemoryForTest(); // THREAD alone (its sidebar folded)
             // the glyphs the chat draws
             string glyphs = "◌◐◓◑◒✦⌕↗☰◆⚙✎✓✕▸▾▌⚠↓◉▶▲│─•";
             UiTheme.Current.Body.HasCharacters(glyphs, out uint[] missing, true, true);
@@ -169,7 +168,6 @@ namespace MetaCodex.EditorTools
             shell.SetClockForTest(t0 + 125000);
             Check(shell.Toasts.History.Count == notes1, "nothing more on the next pulses (one callout per change)");
             shell.SetClockForTest(0);
-            shell.Settings.threadWorkspace = ws0;
             shell.ClosePanel("thread");
             foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
         }

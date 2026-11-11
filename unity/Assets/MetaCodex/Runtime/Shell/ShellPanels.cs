@@ -32,7 +32,7 @@ namespace MetaCodex.Shell
             BuildAgents();
             BuildThreads();
             BuildThread();
-            BuildWorkspace();
+            BuildSidebar(); // THREAD's sidebar (ShellThreadSidebar)
             BuildNewThread();
             BuildWorkspaces(); // checkouts and worktrees (ShellWorkspaces)
             BuildPicker();
@@ -621,7 +621,7 @@ end)
             var lay = new SavedLayout { name = name, mode = Settings.layout };
             foreach (var kv in _panels)
             {
-                if (!kv.Value.IsOpen || kv.Key == "dock" || kv.Key == ControlId) continue; // the rail comes back with its window
+                if (!kv.Value.IsOpen || kv.Key == "dock" || kv.Key == ControlId || kv.Key == SidebarId) continue; // the rail and the sidebar come back with their window
                 var d = kv.Value.transform.position - head.position;
                 var fw = kv.Value.transform.forward;
                 lay.panels.Add(new SavedPanel
@@ -647,7 +647,7 @@ end)
             var head = Gestures.Head;
             Gestures.HeadFrame(out var r, out var u, out var f);
             float headYaw = Mathf.Atan2(f.x, f.z) * Mathf.Rad2Deg;
-            foreach (var kv in _panels) if (kv.Key != "dock" && kv.Value.IsOpen && lay.panels.All(x => x.id != kv.Key)) kv.Value.Close();
+            foreach (var kv in _panels) if (kv.Key != "dock" && kv.Key != SidebarId && kv.Value.IsOpen && lay.panels.All(x => x.id != kv.Key)) kv.Value.Close();
             foreach (var sp in lay.panels)
             {
                 if (!_panels.TryGetValue(sp.id, out var p)) continue;

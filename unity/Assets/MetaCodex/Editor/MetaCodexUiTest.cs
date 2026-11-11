@@ -180,6 +180,7 @@ namespace MetaCodex.EditorTools
                 if (Want("control")) ControlSection(shell, head, frame); // MetaCodexUiTestControl.cs
                 if (Want("workspaces")) WorkspacesSection(shell, head); // MetaCodexUiTestWorkspaces.cs
                 if (Want("orbthreads")) OrbThreadsSection(shell, head); // MetaCodexUiTestOrbThreads.cs
+                if (Want("sidebar")) SidebarSection(shell, head, hands); // MetaCodexUiTestSidebar.cs
                 if (WantNamed("voiceexport")) VoiceExport(shell);
                 if (WantNamed("voicedecide")) VoiceDecideBench(shell);
             }
@@ -3627,7 +3628,7 @@ end)
         {
             foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
             shell.SetLayout("fixed");
-            shell.Settings.threadWorkspace = true;
+            shell.ForgetSidebarMemoryForTest();
             string root = GitService.ToLinuxPath(Path.GetFullPath(".."));
             long now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             var projects = new JArray { new JObject { ["id"] = "prj_t", ["name"] = "metacodex", ["sources"] = new JArray { new JObject { ["path"] = root } } } };
@@ -3651,47 +3652,39 @@ end)
             shell.LoadThreadForTest(row, rows, usage, exec, projects, true);
             shell.PumpForTest(1f);
             var th = shell.PanelsById["thread"];
-            var ws = shell.PanelsById["thread-ws"];
+            var ws = shell.PanelsById[MetaCodexShell.SidebarId];
+            Check(!ws.IsOpen, "a thread seen for the first time opens with its sidebar folded");
+            shell.SetSidebar(true, MetaCodexShell.TabChanges);
             shell.TickLayoutForTest(0.05f, 3);
             var rel = th.transform.InverseTransformPoint(ws.transform.position);
-            Check(th.IsOpen && ws.IsOpen && rel.x > th.Width * 0.5f && Mathf.Abs(rel.y) < 0.01f, $"the workspace opens beside the thread, to its right ({rel.x * 100f:F0} cm from its centre)");
+            Check(th.IsOpen && ws.IsOpen && rel.x > th.Width * 0.5f && Mathf.Abs(rel.y) < 0.01f, $"the sidebar opens at the thread's right edge ({rel.x * 100f:F0} cm from its centre)");
             var touched = shell.Touched.Values.Where(f => f.ByThread).ToList();
             Check(touched.Count == 2 && touched.Any(f => f.Path == "unity/Assets/MetaCodex/Runtime/Shell/ShellWorkspace.cs" && f.Kind == "add" && f.Added == 120) && touched.Any(f => f.Path.EndsWith("UiViz.cs") && f.Kind == "modify" && f.Removed == 12),
-                "CHANGES: the thread's file changes, paths relative to the workspace: " + string.Join(", ", touched.Select(f => $"{f.Path} {f.Kind} +{f.Added}/-{f.Removed}")));
-            Check(shell.ChangeMapForTest.Items.Count >= 2, "the change map has a tile per file: " + shell.ChangeMapForTest.Items.Count);
+                "CHANGES: the thread's file changes, paths relative to the project folder: " + string.Join(", ", touched.Select(f => $"{f.Path} {f.Kind} +{f.Added}/-{f.Removed}")));
             string tl = shell.TimelineTextForTest;
             Check(tl.Contains("[▣ Diagram]") && !tl.Contains("```") && tl.Contains("+120"), "THREAD timeline: view block as a marker, file changes with their line counts");
             Check(shell.Views.Count(x => x.ThreadId == "thr_selftest") == 1 && shell.PanelsById.Keys.Any(k => k.StartsWith("view-") && shell.PanelsById[k].IsOpen), "the agent's diagram became a view and opened");
             string chips = shell.ChipsForTest;
             Check(chips.Contains("claude-opus") && chips.Contains("High") && chips.Contains("Full access") && chips.Contains("checkout") && chips.Contains("42%"), "composer chips: model + effort, access, workspace, context: " + chips);
+            shell.PumpForTest(4f); // git status of the repo (WSL) and the merged list
             shell.PickChangedFileForTest("unity/Assets/MetaCodex/Runtime/Shell/ShellWorkspace.cs");
-            Check(shell.DiffViewForTest.LineCount >= 8 && shell.DiffHeadForTest.Contains("+120"), $"picking a file shows its diff ({shell.DiffViewForTest.LineCount} lines)");
+            shell.PumpForTest(3f);
+            Check(shell.SidebarOpenDiffForTest == "unity/Assets/MetaCodex/Runtime/Shell/ShellWorkspace.cs" && shell.DiffHeadForTest.Contains("ShellWorkspace.cs"), $"picking a file opens its diff ({shell.DiffViewForTest.Doc?.RowCount ?? 0} rows)");
             // the thread moves: the workspace follows; dragged elsewhere it keeps its new place relative to the thread
             th.transform.position += new Vector3(0.2f, 0.1f, 0f);
             shell.TickLayoutForTest(0.05f, 2);
-            var rel2 = th.transform.InverseTransformPoint(ws.transform.position);
-            Check((rel2 - rel).magnitude < 0.001f, "the workspace follows the thread panel");
+            var want = shell.SidebarPoseForTest();
+            Check(Vector3.Distance(ws.transform.position, want.pos) < 0.001f && Quaternion.Angle(ws.transform.rotation, want.rot) < 0.1f, "the sidebar follows the thread panel (at its right edge after the move)");
             // more work arrives: a new file lights up
             shell.AppendTimelineForTest(new JArray { Row("work", 9, new JObject { ["workKind"] = "file-change", ["status"] = "completed", ["change"] = new JObject { ["path"] = root + "/docs/ui.md", ["kind"] = "update", ["movePath"] = null, ["diff"] = null, ["diffStats"] = new JObject { ["added"] = 8, ["removed"] = 2 } } }) });
             var fresh = shell.Touched.TryGetValue("docs/ui.md", out var fr) ? fr : null;
-            Check(fresh != null && Time.unscaledTime - fresh.Time < 1f && shell.ChangeMapForTest.Items.First(i => i.Path == "docs/ui.md").Heat > 0.9f, "a file the agent just edited lights up on the map");
+            Check(fresh != null && fresh.Added == 8 && fresh.Seq == 9, "a file the agent just edited joins the thread's changes");
             string handover = shell.HandoverContext();
             Check(handover.Contains("USER: Show me the workspace") && handover.Contains("Files touched") && handover.Contains("ShellWorkspace.cs") && !handover.Contains("```"), "fork to another agent: the conversation and touched files are handed over (" + handover.Length + " chars)");
             shell.ShowPermissionPickerForTest();
             Check(shell.PanelsById["picker"].IsOpen && shell.PickerListForTest.Items.Count == 3, "ACCESS chip: a picker with Edits / Auto / Full access");
             shell.ClosePanel("picker");
-            shell.PumpForTest(2f); // git status of the repo (WSL) feeds CHANGES and GIT
-            foreach (var p in new[] { th, ws }) p.ForceRefresh();
-            var mid = (th.transform.position + ws.transform.position) * 0.5f;
-            Render(shell, "ui-thread-workspace.png", mid - th.transform.forward * 0.95f, th.transform.rotation * Quaternion.Euler(0f, 6f, 0f), 76f, 1920, 1080);
-            shell.WorkspaceTabsForTest.Select(1);
-            ws.ForceRefresh();
-            RenderPanel(ws, "ui-workspace-git.png");
-            shell.WorkspaceTabsForTest.Select(2);
-            ws.ForceRefresh();
-            RenderPanel(ws, "ui-workspace-files.png");
-            shell.WorkspaceTabsForTest.Select(0);
-            // float: the workspace rides beside its thread on the ring, nothing overlaps
+            // float: the sidebar rides at its thread's right edge on the ring, nothing overlaps
             shell.OpenPanel("files");
             shell.SetLayout("float");
             shell.TickLayoutForTest(0.05f, 100);
@@ -3700,14 +3693,14 @@ end)
             float gap = Mathf.DeltaAngle(Ang(th), Ang(ws));
             float r = new Vector2(th.transform.position.x - c.x, th.transform.position.z - c.z).magnitude;
             float expect = (th.Width * th.transform.lossyScale.x + ws.Width * ws.transform.lossyScale.x) * 0.5f / r * Mathf.Rad2Deg;
-            Check(gap > 0f && Mathf.Abs(gap - expect) < 4f, $"float: the workspace sits right of its thread on the ring ({gap:F1}° apart, {expect:F1}° + gap expected)");
+            Check(gap > 0f && Mathf.Abs(gap - expect) < 2f, $"float: the sidebar sits right of its thread on the ring ({gap:F1}° apart, {expect:F1}° + gap expected)");
             var files = shell.PanelsById["files"];
             float df = Mathf.Abs(Mathf.DeltaAngle(Ang(files), Ang(ws))), dt = Mathf.Abs(Mathf.DeltaAngle(Ang(files), Ang(th)));
             float halfF = files.Width * files.transform.lossyScale.x * 0.5f / r * Mathf.Rad2Deg;
-            Check(df > halfF + ws.Width * ws.transform.lossyScale.x * 0.5f / r * Mathf.Rad2Deg && dt > halfF + th.Width * th.transform.lossyScale.x * 0.5f / r * Mathf.Rad2Deg, "float: no other panel overlaps the thread + workspace pair");
+            Check(df > halfF + ws.Width * ws.transform.lossyScale.x * 0.5f / r * Mathf.Rad2Deg && dt > halfF + th.Width * th.transform.lossyScale.x * 0.5f / r * Mathf.Rad2Deg, "float: no other panel overlaps the thread + sidebar pair");
             shell.SetLayout("fixed");
             shell.ClosePanel("thread");
-            Check(!ws.IsOpen, "closing the thread closes its workspace");
+            Check(!ws.IsOpen, "closing the thread closes its sidebar");
         }
 
         private static void ThreadGroups(MetaCodexShell shell)

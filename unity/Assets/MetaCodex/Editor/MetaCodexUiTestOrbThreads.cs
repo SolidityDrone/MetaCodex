@@ -21,8 +21,8 @@ namespace MetaCodex.EditorTools
             foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
             var keepPos = head.position; var keepRot = head.rotation;
             head.SetPositionAndRotation(new Vector3(0f, 1.4f, 0f), Quaternion.identity);
-            bool ws0 = shell.Settings.threadWorkspace, orb0 = shell.Settings.orb;
-            shell.Settings.threadWorkspace = false; // THREAD alone (no workspace module beside it)
+            bool orb0 = shell.Settings.orb;
+            shell.ForgetSidebarMemoryForTest(); // THREAD alone (its sidebar folded)
             var t = UiTheme.Current;
             void Step(int n, float dt = 0.05f) { for (int i = 0; i < n; i++) shell.TickOrbForTest(dt); }
             try
@@ -165,7 +165,6 @@ namespace MetaCodex.EditorTools
                 foreach (var old in shell.Toasts.Panels.ToList()) old.CloseAndDestroy();
                 shell.Toasts.Tick(float.MaxValue);
                 shell.ClearThreadUseForTest();
-                shell.Settings.threadWorkspace = ws0;
                 if (shell.Settings.orb != orb0) shell.SetOrb(orb0);
                 foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
                 head.SetPositionAndRotation(keepPos, keepRot);

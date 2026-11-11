@@ -163,7 +163,7 @@ namespace MetaCodex.Shell
         private UiTabs _vTabs;
         public UiTabs VaultTabsForTest => _vTabs;
         public UiTabs SystemTabsForTest => _sysTabs;
-        public UiTabs WorkspaceTabsForTest => _wsTabs;
+        public UiTabs WorkspaceTabsForTest => _sbTabs;
         public string GitHubStatusForTest => _ghStatus?.Text ?? "";
         private UiLabel _ghStatus;
         private string _ghLogin, _ghName, _ghScopes, _gitUser, _gitEmail, _gitHelper;

@@ -255,8 +255,8 @@ namespace MetaCodex.Shell
         public bool terminalAtStart = false;
         /// Agent views (charts, diagrams) open by themselves when a thread message brings one.
         public bool viewsAutoOpen = true;
-        /// THREAD: the workspace module (changes, git, files, views) beside the conversation.
-        public bool threadWorkspace = true;
+        /// THREAD's sidebar, per thread: "threadId|open (1/0)|tab" (ShellThreadSidebar; the newest 80 threads).
+        public List<string> threadSidebar = new List<string>();
         /// Ambient Focus: darken the room beyond a radius (Settings > FOCUS, FOCUS on the dock).
         public bool focusEnabled = false;
         public float focusRadius = 1.2f;

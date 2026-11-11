@@ -241,7 +241,7 @@ namespace MetaCodex.Shell
         /// The thread a question is about: the one in the window pointed at, else the open one, else the latest active.
         private string SubjectThread(UiPanel focus)
         {
-            if (focus != null && (focus.Id == "thread" || focus.Id == "thread-ws") && _threadOpen != null) return _threadOpen;
+            if (focus != null && (focus.Id == "thread" || focus.Id == SidebarId) && _threadOpen != null) return _threadOpen;
             if (focus != null && focus.Id != null && focus.Id.StartsWith("orb-thread-") && OrbCardThread(focus) != null) return OrbCardThread(focus); // the orb's card
             if (focus != null && focus.Id == "threads" && _threadSel != null) return _threadSel;
             if (_threadOpen != null) return _threadOpen;

@@ -281,7 +281,7 @@ namespace MetaCodex.Shell
             return true;
         }
 
-        private UiTabs PanelTabs(string id) => id == "vault" ? _vTabs : id == "thread-ws" ? _wsTabs : id == "system" ? _sysTabs : id == "settings" ? _settingsTabs : id == "mqh" ? _mqhTabs : null;
+        private UiTabs PanelTabs(string id) => id == "vault" ? _vTabs : id == SidebarId ? _sbTabs : id == "system" ? _sysTabs : id == "settings" ? _settingsTabs : id == "mqh" ? _mqhTabs : null;
 
         /// Open (an alias counts when its tab is the one shown).
         public bool IsPanelOpen(string id)
@@ -294,6 +294,7 @@ namespace MetaCodex.Shell
         public bool OpenPanel(string id)
         {
             if (id == ControlId) return OpenControl(null); // the rail alone is not a window: CONTROL on its last category
+            if (id == SidebarId) return SetSidebar(true); // it opens beside the open thread, never alone
             if (Alias(ref id, out int tab))
             {
                 bool ok = OpenPanel(id);

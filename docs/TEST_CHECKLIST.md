@@ -482,3 +482,19 @@ docs/native-build-and-install.md.
 - [ ] The orb: messages always rise on its right; its menu (TALK, SPEAK, PLACE, LOG) always sits on its left, level with it, whichever way you look; never swapped
 - [ ] The threads under the orb's menu: title readable at arm's length, project and state under it
 - [ ] Idle, not looked at, no message: the orb is a little smaller; look at it or bring a hand close: it brightens and grows back; touching it still opens the menu
+
+## 33. THREAD's sidebar (branch fix/thread-sidebar-and-orb, next build; docs/thread-sidebar.md)
+
+- [ ] Open a thread: a handle `›` with PROJECT and the number of changed files on THREAD's right edge; tap it: the sidebar opens at the thread's right edge, tops level, bent with it (one curved screen); `‹` folds it
+- [ ] Drag THREAD: the sidebar comes along; pinch the sidebar's header: both move; FLOAT: the pair keeps one slot, nothing overlaps it
+- [ ] Open the sidebar on GIT in thread A, keep it folded in thread B: switching between them brings back each one's state; B never shows A's files
+- [ ] CHANGES in a repo: every file the agent changed, also through commands (sed, npm), untracked new files included; the folder's other changes under ALSO CHANGED IN THIS FOLDER; the summary says against HEAD (or since the base branch in a worktree)
+- [ ] Tap a file: the diff reads like VS Code: old / new numbers, + / − gutter, green / red lines, coloured code, `⋯ N unchanged lines` (tap: they open); readable at arm's length without leaning in
+- [ ] A long line: drag sideways to read it; WRAP breaks it over rows instead; ▲ PREV / ▼ NEXT walk the files; `@ ASK` puts the path in the composer
+- [ ] While the agent edits the open file: the list and the diff update by themselves within a few seconds, the view keeps its place
+- [ ] A big file (a lock file, a generated JSON) and an image: the big one shows only its changed part and says so, the image says binary; nothing stalls
+- [ ] FILES: the project's own folder (not /), breadcrumb `project › src`, a tap on a part goes back up, never above the project; changed files coloured; a file opens with line numbers and colours
+- [ ] GIT in a repo: branch, ahead / behind, status, recent commits; in a folder with no repo only NOT A GIT REPOSITORY + INIT GIT; INIT GIT works and the tab becomes a repo
+- [ ] STATUS: model, access, context %, what runs now and for how long, approvals waiting, usage, folder, MQH
+- [ ] A Bluetooth keyboard after touching the sidebar: ↑ ↓ / Page / Enter / Esc move and open in it; touch the terminal and the keys go there again
+- [ ] Voice: "open the sidebar on the git tab", "chiudi la barra laterale", "show the status tab of this thread", and in a folder with no repo "make this folder a git repository"

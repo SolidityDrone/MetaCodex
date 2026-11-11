@@ -411,12 +411,12 @@ namespace MetaCodex.Shell
                     break;
                 }
                 case StepKind.Edit:
-                    b.Head = "<color=#FFB547>✎</color> " + E(WsRel(s.Title)) + (s.Added + s.Removed > 0 ? $"  <color=#4DFFA6>+{s.Added}</color> <color=#FF5468>−{s.Removed}</color>" : "")
+                    b.Head = "<color=#FFB547>✎</color> " + E(SbRel(s.Title)) + (s.Added + s.Removed > 0 ? $"  <color=#4DFFA6>+{s.Added}</color> <color=#FF5468>−{s.Removed}</color>" : "")
                              + (s.Sub == "add" ? "  " + Dim + "new" + Endc : s.Sub == "delete" ? "  <color=#FF5468>deleted</color>" : s.Sub == "move" ? "  " + Dim + "moved" + Endc : "");
                     b.Right = s.Live ? StepRight(s) : "";
                     if (!string.IsNullOrEmpty(s.Text)) { b.Body = s.Text; b.MonoBody = true; b.Collapsible = true; b.BodyMaxChars = 3000; }
                     break;
-                case StepKind.Read: b.Head = "<color=#7FA9BF>⌕</color> Read " + E(ThreadPulse.Clip(WsRel(s.Title), 160)); b.Right = s.Live ? StepRight(s) : ""; break;
+                case StepKind.Read: b.Head = "<color=#7FA9BF>⌕</color> Read " + E(ThreadPulse.Clip(SbRel(s.Title), 160)); b.Right = s.Live ? StepRight(s) : ""; break;
                 case StepKind.Search: b.Head = "<color=#7FA9BF>⌕</color> Searched " + E(ThreadPulse.Clip(s.Title, 160)); b.Right = s.Live ? StepRight(s) : ""; break;
                 case StepKind.Web: b.Head = "<color=#8FEBFF>↗</color> " + E(ThreadPulse.Clip(s.Title, 160)); b.Right = StepRight(s); break;
                 case StepKind.Plan:
@@ -470,7 +470,7 @@ namespace MetaCodex.Shell
             {
                 Key = steps[0].Id + ":reads", Kind = ChatKind.Step, Parent = parent, Indent = 1, Exchange = exKey, Collapsible = true,
                 Head = "<color=#7FA9BF>⌕</color> " + what + (names.Count > 0 ? "  " + Dim + UiChatView.Esc(string.Join(", ", names) + (reads > names.Count ? ", …" : "")) + Endc : ""),
-                Body = string.Join("\n", steps.Select(s => (s.Kind == StepKind.Read ? "• " + WsRel(s.Title) : "• search " + s.Title))),
+                Body = string.Join("\n", steps.Select(s => (s.Kind == StepKind.Read ? "• " + SbRel(s.Title) : "• search " + s.Title))),
             };
         }
 
