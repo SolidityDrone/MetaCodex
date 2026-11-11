@@ -14,7 +14,8 @@ namespace MetaCodex.EditorTools
         private static void ReturnsSection(MetaCodexShell shell)
         {
             var row = new JObject { ["id"] = "thr_ret", ["projectId"] = "prj_ret", ["providerId"] = "claude-code", ["title"] = "Native app", ["status"] = "idle", ["runtime"] = new JObject { ["displayStatus"] = "idle" }, ["environmentPath"] = "/userland", ["updatedAt"] = 0 };
-            shell.LoadThreadForTest(row, new JArray(), null, null, new JArray { new JObject { ["id"] = "prj_ret", ["name"] = "ret", ["sources"] = new JArray() } }, false);
+            var rows = new JArray { Row("conversation", 1, new JObject { ["role"] = "user", ["text"] = "Make me an app" }) };
+            shell.LoadThreadForTest(row, rows, null, null, new JArray { new JObject { ["id"] = "prj_ret", ["name"] = "ret", ["sources"] = new JArray() } }, false);
             shell.OpenPanel("thread");
             string id = shell.RegisterLaunch("com.metacodex.user.t2", "thr_ret");
             string dir = shell.Clipboard.Dir;
