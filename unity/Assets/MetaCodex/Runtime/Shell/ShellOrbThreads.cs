@@ -10,16 +10,17 @@ using UnityEngine;
 
 namespace MetaCodex.Shell
 {
-    /// The orb's quick list (owner 2026-11-11): under its billboard (TALK, SPEAK, PLACE, LOG), the five threads used last,
-    /// one small card each, turned to the user with the billboard: PROJECT · thread title · state. Working: blue, it
+    /// The orb's quick list (owner 2026-11-11): on the outer arc of its menu, round its left side (TALK, SPEAK, PLACE, LOG
+    /// on the inner one), the five threads used last, one small card each, turned to the user: thread title, PROJECT and state. Working: blue, it
     /// pulses; done: green; needs you or waiting: orange; error: red. A tap shows that thread's window, or hides it when it
     /// is the one shown. The rows keep their places while the menu is up (nothing moves under the finger); every text is
     /// cut to its column. docs/ui.md (the orb), QuickThreads (the pure part).
     public sealed partial class MetaCodexShell
     {
-        // two lines (owner 2026-11-11: "very small text"): the title 13.5 mm, project and state 9.5 mm under it, ~1 degree at
-        // the menu's half a metre (Meta's VR text guidance), in a 50 mm card
-        public const float OrbCardH = 0.050f, OrbCardGap = 0.005f;
+        // two lines (owner 2026-11-11: "very small text"): the title 14.5 mm, project and state 12.5 mm under it: at the
+        // menu's scale (~0.9) and half a metre, an em of about 1.0 and 0.95 degrees (Meta's VR text guidance: about 1 or
+        // more), in a 54 mm card
+        public const float OrbCardW = 0.236f, OrbCardH = 0.054f, OrbCardGap = 0.005f;
         private const float OrbCardPulseHz = 0.8f;
 
         private sealed class OrbCard
@@ -42,6 +43,7 @@ namespace MetaCodex.Shell
         private bool _threadUseLoaded;
         private float _orbCardsTextAt, _orbCardsPollAt;
         private bool _orbCardsPolled;
+        private int _orbCardsShown; // how many cards the arc was centred for when the menu opened (kept while they fade out)
 
         private static string ThreadUsePath => Path.Combine(Application.persistentDataPath, "recent-threads.txt");
 
@@ -49,7 +51,7 @@ namespace MetaCodex.Shell
         {
             if (_orbCards.Count > 0) return;
             var t = UiTheme.Current;
-            const float w = BillboardW, h = OrbCardH, pad = 0.008f;
+            const float w = OrbCardW, h = OrbCardH, pad = 0.008f;
             for (int k = 0; k < QuickThreads.Max; k++)
             {
                 var p = UiPanel.Create<UiPanel>("orb-thread-" + k, "Orb thread card", w, h, _root, header: false);
@@ -65,15 +67,15 @@ namespace MetaCodex.Shell
                 dot.Center = p.PanelToLocal(new Vector2(pad + 0.0055f, h * 0.5f), -0.0004f);
                 c.Dot = p.Shapes.Add(dot);
                 // the title on top, PROJECT and STATE under it, each cut with … at its edge
-                c.Title = p.Add(new UiLabel("", 0.0135f) { Rect = new Rect(0.026f, 0.004f, w - 0.026f - pad, 0.023f), Color = t.Text });
-                c.Project = p.Add(new UiLabel("", 0.0095f) { Rect = new Rect(0.026f, 0.027f, 0.110f, 0.019f), UseDisplay = true, Color = t.TextDim });
-                c.Status = p.Add(new UiLabel("", 0.0095f) { Rect = new Rect(0.140f, 0.027f, w - 0.140f - pad, 0.019f), UseDisplay = true, Align = TextAlignmentOptions.MidlineRight, Color = t.TextDim });
+                c.Title = p.Add(new UiLabel("", 0.0145f) { Rect = new Rect(0.026f, 0.004f, w - 0.026f - pad, 0.025f), Color = t.Text });
+                c.Project = p.Add(new UiLabel("", 0.0125f) { Rect = new Rect(0.026f, 0.029f, 0.100f, 0.021f), UseDisplay = true, Color = t.TextDim });
+                c.Status = p.Add(new UiLabel("", 0.0125f) { Rect = new Rect(0.130f, 0.029f, w - 0.130f - pad, 0.021f), UseDisplay = true, Align = TextAlignmentOptions.MidlineRight, Color = t.TextDim });
                 p.gameObject.SetActive(false);
                 _orbCards.Add(c);
             }
         }
 
-        /// The billboard opened: the list as it is now (the order is kept until it opens again).
+        /// The menu opened: the list as it is now (the order is kept until it opens again).
         private void OpenOrbThreads()
         {
             EnsureOrbCards();
@@ -81,6 +83,7 @@ namespace MetaCodex.Shell
             _orbOrder.Clear();
             _orbOrder.AddRange(QuickThreads.Order(_threads, _threadUsedAt));
             _orbCardsPolled = false;
+            _orbCardsShown = 0;
             _orbCardsPollAt = _orbClock; // ask MQH now: the rows may be old
             _orbCardsTextAt = _orbClock + 1f;
             RenderOrbCards();
@@ -111,7 +114,7 @@ namespace MetaCodex.Shell
         {
             if (_orbCards.Count == 0) return;
             var t = UiTheme.Current;
-            bool up = _orbMenu != null && _orbMenu.IsOpen;
+            bool up = OrbMenuOpen;
             long now = NowMs;
             var rows = new List<JObject>();
             foreach (var id in _orbOrder)
@@ -119,6 +122,8 @@ namespace MetaCodex.Shell
                 var r = _threads.OfType<JObject>().FirstOrDefault(x => (string)x["id"] == id);
                 if (r != null) rows.Add(r);
             }
+            // the stack is centred for the cards there when it opened; one that joins later goes under them (nothing moves)
+            if (up && _orbCardsShown == 0) _orbCardsShown = Mathf.Min(rows.Count, _orbCards.Count);
             for (int k = 0; k < _orbCards.Count; k++)
             {
                 var c = _orbCards[k];
@@ -137,17 +142,17 @@ namespace MetaCodex.Shell
                 c.Panel.SetFrameTint(Color.Lerp(t.Frame, col, q.State == QuickState.Stopped ? 0f : q.State == QuickState.Done && !q.Fresh ? 0.45f : 0.8f));
                 c.Panel.Shapes.SetTint(c.Dot, col);
                 if (!q.Pulses) { c.Panel.SetHighlight(OrbCardRest(q, open)); c.Panel.Shapes.SetState(c.Dot, 0.6f); }
-                if (!c.Panel.IsOpen) { PlaceOrbCard(k); c.Panel.Open(); }
+                if (!c.Panel.IsOpen) { PlaceOrbCard(k, true); c.Panel.Open(); }
             }
         }
 
-        /// Every frame while the billboard is drawn: the cards stay under it; while it is up, the working ones pulse,
+        /// Every frame while the menu is drawn: the cards stay on their arc; while it is up, the working ones pulse,
         /// the texts follow each second and MQH is asked every 4 s.
         private void TickOrbThreads()
         {
-            if (_orbCards.Count == 0 || _orbMenu == null) return;
+            if (_orbCards.Count == 0 || _orbActs.Count == 0) return;
             for (int k = 0; k < _orbCards.Count; k++) if (_orbCards[k].Panel.gameObject.activeSelf) PlaceOrbCard(k);
-            if (!_orbMenu.IsOpen) return;
+            if (!OrbMenuOpen) return;
             if (_orbClock >= _orbCardsTextAt) { _orbCardsTextAt = _orbClock + 1f; RenderOrbCards(); }
             if (_orbClock >= _orbCardsPollAt) { _orbCardsPollAt = _orbClock + 4f; PollOrbThreads(); }
             float wave = 0.5f - 0.5f * Mathf.Cos(_orbClock * Mathf.PI * 2f * OrbCardPulseHz);
@@ -159,14 +164,25 @@ namespace MetaCodex.Shell
             }
         }
 
-        /// Card k under the billboard, in its plane and scale (it turns to the user with it).
-        private void PlaceOrbCard(int k)
+        /// Card k on the menu's outer arc: the stack is centred on the orb's level, each card's corner nearest the orb on
+        /// one circle round it (so the column bows round the orb's left side), turned to the user; the menu's scale.
+        private void PlaceOrbCard(int k, bool snap = false)
         {
             var p = _orbCards[k].Panel;
-            var tr = _orbMenu.transform;
-            if (p.BaseScale != _orbMenu.BaseScale) p.BaseScale = _orbMenu.BaseScale;
-            float y = BillboardH * 0.5f + OrbCardGap + OrbCardH * 0.5f + k * (OrbCardH + OrbCardGap);
-            p.transform.SetPositionAndRotation(tr.TransformPoint(new Vector3(0f, -y, 0f)), tr.rotation);
+            float s = OrbMenuScaleNow;
+            if (Mathf.Abs(p.BaseScale.x - s) > 1e-5f) p.BaseScale = Vector3.one * s;
+            PutOnOrbPlane(p, OrbCardSpot(k, Mathf.Max(1, _orbCardsShown), s), snap);
+        }
+
+        /// Where card k of n sits in the orb's plane (its centre, metres; x to the user's right, y up), at scale `s`.
+        private Vector2 OrbCardSpot(int k, int n, float s)
+        {
+            var (_, ro) = OrbMenuRadii(s);
+            float w = OrbCardW * s, h = OrbCardH * s, pitch = (OrbCardH + OrbCardGap) * s;
+            float y = ((n - 1) * 0.5f - k) * pitch;
+            float yNear = Mathf.Sign(y) * Mathf.Max(0f, Mathf.Abs(y) - h * 0.5f); // the corner nearest the orb
+            float xNear = Mathf.Sqrt(Mathf.Max(ro * ro - yNear * yNear, ro * ro * 0.25f));
+            return new Vector2(-xNear - w * 0.5f, y);
         }
 
         /// MQH's thread rows now (the first ask when the menu opens, then while MQH answers): the states are fresh, an
@@ -249,7 +265,7 @@ namespace MetaCodex.Shell
             if (id == null || now == null) return;
             if (now.Working) _threadsDoneUnseen.Remove(id);
             else if (before != null && before.Working && now.State == "idle" && !open) _threadsDoneUnseen.Add(id);
-            if (_orbMenu != null && _orbMenu.IsOpen) RenderOrbCards();
+            if (OrbMenuOpen) RenderOrbCards();
         }
 
         /// The thread a card shows (the session context: "this thread" while pointing at its card).

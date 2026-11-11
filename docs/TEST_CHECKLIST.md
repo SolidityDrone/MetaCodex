@@ -475,13 +475,17 @@ docs/native-build-and-install.md.
 - [ ] A brand-new app: the dialog says INSTALL first; INSTALL -> Android's dialog -> then APP READY with LAUNCH
 - [ ] Say "don't open the app" while one waits: the agent's `mcx-app status` says declined
 
-## 32. Thread state after app switches, the orb's sides (branch fix/thread-sidebar-and-orb, next build)
+## 32. Thread state after app switches, the orb's arcs, the orb off the watched window (branch fix/thread-sidebar-and-orb, next build)
 
 - [ ] A thread working; launch a built app, wait until the agent is done, Back: the thread says idle / done at once (no "WORKING", no "writing the answer")
 - [ ] A thread working: STOP: within 2 s the header leaves WORKING and the chat stops "writing"
 - [ ] The orb: messages always rise on its right; its menu (TALK, SPEAK, PLACE, LOG) always sits on its left, level with it, whichever way you look; never swapped
 - [ ] The threads under the orb's menu: title readable at arm's length, project and state under it
 - [ ] Idle, not looked at, no message: the orb is a little smaller; look at it or bring a hand close: it brightens and grows back; touching it still opens the menu
+- [ ] Touch the orb: TALK, SPEAK, PLACE, LOG sit on a small arc hugging its left side, the five thread cards on a wider arc outside them (the top and bottom cards curve in towards the orb); every tile and card faces you; labels and card titles readable at arm's length without leaning in
+- [ ] Two or three messages in a row: they stack on an arc round the orb's right side, the newest lowest, the line of light runs along the arc; never on its left
+- [ ] Read a window straight ahead, the orb up to its right, and touch the orb: the orb and its menu glide (no jump) to a place where nothing of them covers that window, still in view and reachable; close the menu: a moment later the orb goes back to its own place
+- [ ] While the menu is up, reach for a card: nothing moves under the finger; look at the menu itself: the orb does not run away from it
 
 ## 33. THREAD's sidebar (branch fix/thread-sidebar-and-orb, next build; docs/thread-sidebar.md)
 

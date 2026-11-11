@@ -116,32 +116,45 @@ panels ... the source of the speech ... a billboard side notification system men
   it takes the next free one (ten candidates, both sides, higher up) and goes back three seconds after its place
   is free again (it looks at one candidate a frame, and stays put while it casts). Pinch it and put it anywhere:
   it keeps that place by you (`orbPinned`, `orbYaw`, `orbPitch`, `orbDist`); its menu's PLACE lets it choose again.
-- **What it says.** Every message of the app (`Toast`) is a callout: a card cast by the orb in a column that
-  rises beside it, towards the middle of your view, from its own level; the newest lowest, up to four, joined to
-  the orb by a rail of light; the voice HUD is the first card of that column while it is shown. Touch the orb
-  with a fingertip, or point at it and pinch: a small billboard opens next to it (owner 2026-11-10: "that small
-  menu kinda a billboard next to the orb"): a strip of glass 24 × 6 cm at arm's length (scaled with the distance),
-  on the side its callouts grow to and just below its level, always turned to you, cast with the quick variant,
-  with four buttons: TALK, SPEAK (spoken answers on or off), PLACE, and LOG ("n NEW" while there are unread
-  messages), which opens MESSAGES, a window like the others (placed where there is room; also "open messages"):
-  the last 40 messages (kind, text, how long ago) and ✕ CLEAR. A message not read yet rides round the orb as a
-  larger gold spark (four at most) until MESSAGES is opened. A hand that is at the orb or points at it does not also click the window
-  behind it (`UiInputRouter.HandBlocked`). The first time the app runs with the orb, one message says what it
-  is (`orbTipShown`).
+- **What it says.** Every message of the app (`Toast`) is a callout: a card cast by the orb on an arc round its
+  **right** side (owner 2026-11-11: "always on its left and notification on right", never swapped), concentric with
+  it: the stack is centred on the orb's level, the newest lowest, up to four, each card's corner nearest the orb on
+  one circle round it (so the ends bow round it), every card turned to you, joined to the orb by a rail of light that
+  runs out of its rings and along the arc; the voice HUD is the first card while it is shown. Touch the orb with a
+  fingertip, or point at it and pinch: its menu opens round its **left** side (owner 2026-11-11: "more like wrapped
+  around the circle of the orb"): four small tiles on an inner arc that hugs the orb (from half past ten to half past
+  seven on a clock, clear of its rings), each turned to you, cast with the quick variant: TALK, SPEAK (spoken answers
+  on or off), PLACE, and LOG ("n NEW" while there are unread messages), which opens MESSAGES, a window like the others
+  (placed where there is room; also "open messages"): the last 40 messages (kind, text, how long ago) and ✕ CLEAR.
+  Labels 12.5 mm: about a degree at the menu's half a metre (Meta's VR text guidance). A message not read yet rides
+  round the orb as a larger gold spark (four at most) until MESSAGES is opened. A hand that is at the orb or points at
+  it does not also click the window behind it (`UiInputRouter.HandBlocked`). The first time the app runs with the
+  orb, one message says what it is (`orbTipShown`).
+- **It keeps off the window you watch** (owner 2026-11-11: "avoid any weird position ... cover my view on the panels
+  i'm watching ... less invasive but always available"; `Shell/ShellOrbAvoid.cs`). The watched window is the first
+  one your gaze meets (looking at the orb, its menu or a callout keeps the one before), for 2 s after your gaze
+  leaves it. What the orb takes of your view (its disc, its open menu's arc on the left, its callouts' arc on the
+  right, as ShellPlacement's view rectangles) must not cover it: when it would, the orb glides aside or below (above
+  costs a little more) to the nearest place where nothing of it covers that window, its disc in front of no other
+  window, within 60 degrees of where you look; slowly (0.4 s), never while a hand is at it or at its items (nothing
+  moves under a finger), and back to its own place 1.5 s after that is free again. Idle and not looked at it is
+  80 % of its size and dimmer; a look or a hand brings it back.
 - **Its threads** (owner 2026-11-11: "a quick menu with threads going on ... only the 5 most recently used").
-  Under the billboard, in its plane and turned to you with it, one small card per thread (24 × 3 cm), the five
-  used last: opened or written to here (kept in `recent-threads.txt` beside the settings, not in them: MQH's copy
+  On the menu's outer arc, outside the four tiles and concentric with the orb (each card's corner nearest it on one
+  circle, the stack centred on its level), each turned to you, one small card per thread (24 × 5 cm, at the menu's
+  scale), the five used last: opened or written to here (kept in `recent-threads.txt` beside the settings, not in them: MQH's copy
   of the settings would bring an old list back), or worked on by their agent (the row's `updatedAt`), whichever
-  is later. Each card is `PROJECT · title · state`, three columns, each cut with … at its edge (nothing leaves the
-  card). Colour by state, on the dot, the frame and the state word: **working** blue, the card pulses
+  is later. Each card has two rows: the title on top (13.5 mm, 1.1 degrees), PROJECT and the state under it (11.5 mm, 0.9
+  degrees), each cut with … at its edge (nothing leaves the card). Colour by state, on the dot, the frame and the state word: **working** blue, the card pulses
   (`WORKING 3:12`, the turn's clock; `STARTING`), **done** green (`DONE · 4 MIN`; `DONE · NEW` while an answer that
   came with its window closed has not been seen), **needs you** orange (`NEEDS YOU`: a question or an approval;
   `WAITING`: a turn MQH holds in the queue; `NO HOST`), **error** red (`ERROR`; `NOT SENT`: a queued message
   failed); `STOPPED` (by you) grey. A tap shows that thread's window (THREAD on it), or hides it when it is the one
-  shown; the menu stays up and the rows keep their places while it is (nothing moves under the finger); the next
+  shown; the menu stays up and the rows keep their places while it is (nothing moves under the finger; a thread that joins
+  while it is up takes the next place under the others); the next
   time it opens, the threads used last come first. MQH is asked when it opens and every 4 s while it is up.
   Pointing at a card, "this thread" (voice questions) is its thread. `Shell/ShellOrbThreads.cs`,
-  `AI/QuickThreads.cs` (the order and the words, pure). Self-test section `orbthreads`.
+  `AI/QuickThreads.cs` (the order and the words, pure). Self-test sections `orbthreads` (the cards) and `orbplace` (keeping off the watched window).
 - Control port: `orb on | off | menu | place | status`.
 
 ## Code map (`unity/Assets/MetaCodex/Runtime`)

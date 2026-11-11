@@ -45,7 +45,6 @@ namespace MetaCodex.Shell
         private readonly bool[] _orbWasPinch = new bool[2], _orbWasInside = new bool[2];
         private float[] _speechEnv;
         private float _speechT = -1f, _speechLen;
-        private UiPanel _orbMenu;
         private UiList _orbList;
         private UiLabel _orbStatus;
         private UiButton _orbSpeakBtn;
@@ -65,7 +64,7 @@ namespace MetaCodex.Shell
             UiPanelFx.Eye = () => Head != null ? Head.position : (Vector3?)null;
             _orbOnCast = (p, opening) =>
             {
-                if (Orb == null || !Orb.Visible || p == null || p == _orbMenu || p.Id != null && p.Id.StartsWith("orb-")) return;
+                if (Orb == null || !Orb.Visible || p == null || p.Id != null && p.Id.StartsWith("orb-")) return;
                 if (opening) Orb.Cast(p.transform.position);
             };
             _orbOnAbsorb = p => { if (Orb != null && Orb.Visible) Orb.Absorb(); };
@@ -113,7 +112,7 @@ namespace MetaCodex.Shell
                 FrameOrb(true);
                 Orb.Teleport(OrbHome());
             }
-            else if (_orbMenu != null && _orbMenu.IsOpen) _orbMenu.Close();
+            else if (OrbMenuOpen) CloseOrbMenu();
             Orb.Show(Settings.orb);
             Sounds?.Play(Settings.orb ? "orb-on" : "orb-off");
         }
@@ -150,11 +149,20 @@ namespace MetaCodex.Shell
             _orbAnchor = hp;
             _orbFramed = true;
             _orbTurnSince = -1f;
+            _avoidCheckAt = 0f;
             PickOrbSpot(true);
             if (snap) { var s = OrbTarget(); _orbCurYaw = s.yaw; _orbCurPitch = s.pitch; _orbCurDist = s.dist; _orbYawVel = _orbPitchVel = _orbDistVel = 0f; }
         }
 
+        /// Its place in the frame now: its own place, moved aside while it would cover the window being watched
+        /// (ShellOrbAvoid).
         private (float yaw, float pitch, float dist) OrbTarget()
+        {
+            var t = OrbTargetBase();
+            return (t.yaw + _avoidYaw, t.pitch + _avoidPitch, t.dist);
+        }
+
+        private (float yaw, float pitch, float dist) OrbTargetBase()
         {
             if (Settings.orbPinned) return (Settings.orbYaw, Settings.orbPitch, Mathf.Clamp(Settings.orbDist, 0.25f, 1.2f));
             var s = OrbSpots[Mathf.Clamp(_orbSpot, 0, OrbSpots.Length - 1)];
@@ -176,7 +184,7 @@ namespace MetaCodex.Shell
                 var ray = new Ray(eye, (at + right * (r * probe.x) + up * (r * probe.y) - eye).normalized);
                 foreach (var p in Router.Panels)
                 {
-                    if (p == null || !p.IsOpen || p == _orbMenu || p.Id == "toast" || p.Id == "voice-hud" || p.Id != null && p.Id.StartsWith("orb-")) continue;
+                    if (p == null || !p.IsOpen || p.Id == "toast" || p.Id == "voice-hud" || p.Id != null && p.Id.StartsWith("orb-")) continue;
                     if (p.Raycast(ray, out _, out _)) return true;
                 }
             }
@@ -219,17 +227,23 @@ namespace MetaCodex.Shell
             float headYaw = Mathf.Atan2(f.x, f.z) * Mathf.Rad2Deg;
             var d = head.position - _orbAnchor;
             bool moved = new Vector2(d.x, d.z).magnitude > 0.25f || Mathf.Abs(d.y) > 0.18f;
-            bool busy = Orb.State != UiOrb.Mood.Idle || Toasts.Count > 0 || (_orbMenu != null && _orbMenu.IsOpen);
+            bool busy = Orb.State != UiOrb.Mood.Idle || Toasts.Count > 0 || OrbMenuOpen;
             bool turned = Mathf.Abs(Mathf.DeltaAngle(_orbYaw, headYaw)) > (busy ? 26f : 34f);
             if (turned) { if (_orbTurnSince < 0f) _orbTurnSince = _orbClock; } else _orbTurnSince = -1f;
             if (_orbGrabHand < 0 && (moved || turned && _orbClock - _orbTurnSince > (busy ? 0.15f : 0.7f))) FrameOrb(false);
+            int spot = _orbSpot;
             PickOrbSpot(false);
+            if (spot != _orbSpot) _avoidCheckAt = 0f; // a new place: is the watched window clear from there?
+            TickWatched();
+            TickOrbAvoid();
             if (_orbGrabHand >= 0) return; // in the user's fingers
-            // ease round the user (never straight through their head) to its place in the frame
+            // ease round the user (never straight through their head) to its place in the frame; gliding aside from the
+            // window being watched, a little slower (it never jumps)
             var t = OrbTarget();
-            _orbCurYaw = Mathf.SmoothDampAngle(_orbCurYaw, t.yaw, ref _orbYawVel, 0.30f, 400f, dt);
-            _orbCurPitch = Mathf.SmoothDamp(_orbCurPitch, t.pitch, ref _orbPitchVel, 0.30f, 300f, dt);
-            _orbCurDist = Mathf.SmoothDamp(_orbCurDist, t.dist, ref _orbDistVel, 0.30f, 3f, dt);
+            float ease = _avoidYaw != 0f || _avoidPitch != 0f ? 0.42f : 0.30f;
+            _orbCurYaw = Mathf.SmoothDampAngle(_orbCurYaw, t.yaw, ref _orbYawVel, ease, 400f, dt);
+            _orbCurPitch = Mathf.SmoothDamp(_orbCurPitch, t.pitch, ref _orbPitchVel, ease, 300f, dt);
+            _orbCurDist = Mathf.SmoothDamp(_orbCurDist, t.dist, ref _orbDistVel, ease, 3f, dt);
             Orb.Home = OrbHome();
         }
 
@@ -305,7 +319,7 @@ namespace MetaCodex.Shell
             Orb.Attention = Mathf.Lerp(Orb.Attention, attention, 1f - Mathf.Exp(-dt * 10f));
             if (attention > 0.01f) Orb.AttendTo = attendTo;
             // idle (no hand, no gaze, no message, menu closed): 80 % of its size; it grows back as a hand comes near
-            bool idle = Orb.Attention < 0.15f && Toasts.Count == 0 && (_orbMenu == null || !_orbMenu.IsOpen) && Orb.State == UiOrb.Mood.Idle;
+            bool idle = Orb.Attention < 0.15f && Toasts.Count == 0 && !OrbMenuOpen && Orb.State == UiOrb.Mood.Idle;
             if (_orbBaseRadius <= 0f) _orbBaseRadius = Orb.Radius;
             Orb.Radius = Mathf.Lerp(Orb.Radius, _orbBaseRadius * (idle ? 0.8f : 1f), 1f - Mathf.Exp(-dt * 4f));
         }
@@ -327,6 +341,7 @@ namespace MetaCodex.Shell
             var rel = Orb.Position - _orbAnchor;
             float dist = Mathf.Clamp(rel.magnitude, 0.25f, 1.2f);
             Settings.orbPinned = true;
+            _avoidYaw = _avoidPitch = 0f; // where it is let go is its place now
             Settings.orbYaw = Mathf.DeltaAngle(_orbYaw, Mathf.Atan2(rel.x, rel.z) * Mathf.Rad2Deg);
             Settings.orbPitch = Mathf.Asin(Mathf.Clamp(rel.y / Mathf.Max(rel.magnitude, 1e-3f), -1f, 1f)) * Mathf.Rad2Deg;
             Settings.orbDist = dist;
@@ -420,40 +435,23 @@ namespace MetaCodex.Shell
 
         // ------------------------------------------------------------------ what it has to say
 
-        /// The side its callouts and its menu grow to: towards the middle of the user's view.
-        private Vector3 OrbSide(out bool left)
-        {
-            var head = Head;
-            Vector3 eye = head != null ? head.position : _orbAnchor;
-            var to = Orb.Position - eye; to.y = 0f;
-            if (to.sqrMagnitude < 1e-6f) to = Vector3.forward;
-            var right = Vector3.Cross(Vector3.up, to.normalized);
-            var f = head != null ? head.forward : Vector3.forward; f.y = 0f;
-            // the orb is to the right of where the user looks: its cards go left, and the other way round
-            left = Vector3.Dot(to.normalized, Vector3.Cross(Vector3.up, f.sqrMagnitude < 1e-6f ? Vector3.forward : f.normalized)) >= 0f;
-            return left ? -right : right;
-        }
-
-        private bool _orbSideLeft = true;
-        private float _orbSideHold;
-
         private UiToasts.Anchor? OrbCalloutAnchor()
         {
             if (!OrbActive) return null;
-            // owner 2026-11-11: the menu always on the orb's left, the callouts always on its right, never swapped
-            OrbSide(out _);
+            // owner 2026-11-11: the menu always on the orb's left, the callouts always on its right, never swapped: an
+            // arc round its right side, concentric with it (UiToasts lays it out)
             var head = Head;
             var to = Orb.Position - (head != null ? head.position : _orbAnchor); to.y = 0f;
             if (to.sqrMagnitude < 1e-6f) to = Vector3.forward;
             var side = Vector3.Cross(Vector3.up, to.normalized); // the user's right, seen from the eye
             float dist = Head != null ? Vector3.Distance(Head.position, Orb.Position) : OrbDistance;
-            return new UiToasts.Anchor { Orb = Orb.Position, Side = side, Radius = Orb.Radius, Scale = Mathf.Clamp(dist / 0.75f, 0.45f, 1.2f) * Mathf.Clamp(Settings.uiScale, 0.6f, 1.8f) / 1.2f };
+            return new UiToasts.Anchor { Orb = Orb.Position, Side = side, Radius = OrbOuterRadius / 1.75f, Scale = Mathf.Clamp(dist / 0.75f, 0.45f, 1.2f) * Mathf.Clamp(Settings.uiScale, 0.6f, 1.8f) / 1.2f * 1.12f }; // their text about a degree
         }
 
         private void OnNoteShown(UiToasts.Note n)
         {
             // not read until the user opens the orb's menu: it rides round the orb as a gold spark (four at most)
-            if (_orbMenu == null || !_orbMenu.IsOpen) _orbUnread = Mathf.Min(_orbUnread + 1, 99);
+            if (!OrbMenuOpen) _orbUnread = Mathf.Min(_orbUnread + 1, 99);
             if (Orb != null) Orb.Unread = Mathf.Min(_orbUnread, 4);
             if (Orb != null && Orb.Visible)
             {
@@ -463,43 +461,118 @@ namespace MetaCodex.Shell
                 else if (n.Kind == "ok") Orb.Flash(t.Ok, 1.0f);
                 else Orb.Flash(Color.Lerp(t.Accent, Color.white, 0.4f), 0.7f);
             }
-            if ((_orbMenu != null && _orbMenu.IsOpen) || (_messages != null && _messages.IsOpen)) RefreshOrbMenu();
+            if (OrbMenuOpen || (_messages != null && _messages.IsOpen)) RefreshOrbMenu();
         }
 
-        // ------------------------------------------------------------------ its menu
+        // ------------------------------------------------------------------ its menu: an arc round its left side
 
-        // the billboard: four small buttons on a strip of glass beside the orb, always turned to the user (owner
-        // 2026-11-10: "that small menu kinda a billboard next to the orb", not a window with the messages in it)
-        public const float BillboardW = 0.236f, BillboardH = 0.060f;
+        // owner 2026-11-11: "more like wrapped around the circle of the orb ... always on its left and notification on
+        // right". In the plane through the orb that faces the user: TALK, SPEAK, PLACE, LOG on an inner arc that hugs
+        // the orb's left side (from 10:30 to 7:30 on a clock), the threads used last on an outer arc, concentric with
+        // the orb (each card's corner nearest the orb on one circle), every item turned to the user. Text about a degree
+        // at the menu's half a metre (Meta's VR text guidance): labels 13.5 mm, card titles 14.5 mm, at a scale of ~0.9.
+        public const float OrbActW = 0.060f, OrbActH = 0.054f, OrbActText = 0.0135f;
+        private static readonly float[] OrbActAngles = { 135f, 165f, 195f, 225f };
+        private readonly List<UiPanel> _orbActs = new List<UiPanel>();
+
+        /// The orb's menu is up (its four actions; the thread cards come and go with it).
+        public bool OrbMenuOpen => _orbActs.Count > 0 && _orbActs[0].IsOpen;
+        private bool OrbMenuDrawn => _orbActs.Count > 0 && _orbActs.Any(a => a.gameObject.activeSelf);
+
+        /// The orb's outer edge: its rings (1.75 radii), at its full size (it is smaller when idle).
+        private float OrbOuterRadius => (_orbBaseRadius > 0f ? _orbBaseRadius : Orb != null ? Orb.Radius : 0.032f) * 1.75f;
+
+        /// The arc menu's two radii at scale `s` (metres in the orb's plane): the actions' centres, and the circle the
+        /// thread cards' nearest corners sit on. The actions clear the orb's rings and each other.
+        public (float inner, float outer) OrbMenuRadii(float s)
+        {
+            float w = OrbActW * s, h = OrbActH * s, ring = OrbOuterRadius + 0.008f * s;
+            float ri = ring + Mathf.Min(w, h) * 0.5f;
+            for (int it = 0; it < 80; it++, ri += 0.002f)
+            {
+                bool ok = true;
+                for (int k = 0; k < OrbActAngles.Length && ok; k++)
+                {
+                    float a = OrbActAngles[k] * Mathf.Deg2Rad;
+                    var c = new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * ri;
+                    // the corner nearest the orb stays off its rings
+                    var near = new Vector2(c.x - Mathf.Sign(c.x) * Mathf.Min(Mathf.Abs(c.x), w * 0.5f), c.y - Mathf.Sign(c.y) * Mathf.Min(Mathf.Abs(c.y), h * 0.5f));
+                    if (near.magnitude < ring) ok = false;
+                    if (k > 0)
+                    {
+                        float b = OrbActAngles[k - 1] * Mathf.Deg2Rad;
+                        var d = c - new Vector2(Mathf.Cos(b), Mathf.Sin(b)) * ri;
+                        if (Mathf.Abs(d.x) < w + 0.003f * s && Mathf.Abs(d.y) < h + 0.003f * s) ok = false; // neighbours apart
+                    }
+                }
+                if (ok) break;
+            }
+            float outer = ri + w * 0.5f + 0.010f * s;
+            return (ri, outer);
+        }
+
+        /// What the open menu covers in the orb's plane (metres, x to the user's right, y up), at scale `s`.
+        private Rect OrbMenuExtent(float s)
+        {
+            var (ri, ro) = OrbMenuRadii(s);
+            int n = Mathf.Max(1, _orbCardsShown);
+            float pitch = (OrbCardH + OrbCardGap) * s;
+            float half = Mathf.Max((n - 1) * 0.5f * pitch + OrbCardH * s * 0.5f, ri * 0.71f + OrbActH * s * 0.5f);
+            float left = _orbCardsShown > 0 ? ro + OrbCardW * s : ri + OrbActW * s * 0.5f;
+            return new Rect(-left, -half, left - OrbOuterRadius, half * 2f);
+        }
+
+        /// The orb's plane: through it, facing the eye; `right` is the user's right (level), `up` across it.
+        private void OrbPlane(Vector3 at, out Vector3 right, out Vector3 up)
+        {
+            Vector3 eye = Head != null ? Head.position : at - Vector3.forward;
+            var fwd = at - eye;
+            if (fwd.sqrMagnitude < 1e-6f) fwd = Vector3.forward;
+            fwd.Normalize();
+            right = Vector3.Cross(Vector3.up, fwd);
+            if (right.sqrMagnitude < 1e-6f) right = Vector3.right;
+            right.Normalize();
+            up = Vector3.Cross(fwd, right);
+        }
+
+        /// Puts an orb item at (x, y) of the orb's plane, turned to the user (eased unless `snap`).
+        private void PutOnOrbPlane(UiPanel p, Vector2 at, bool snap)
+        {
+            OrbPlane(Orb.Position, out var right, out var up);
+            var target = Orb.Position + right * at.x + up * at.y;
+            var tr = p.transform;
+            var pos = snap ? target : Vector3.Lerp(tr.position, target, 0.16f);
+            Vector3 eye = Head != null ? Head.position : pos - Vector3.forward;
+            var look = pos - eye;
+            tr.SetPositionAndRotation(pos, look.sqrMagnitude > 1e-6f ? Quaternion.LookRotation(look.normalized, Vector3.up) : tr.rotation);
+        }
 
         private void EnsureOrbMenu()
         {
-            if (_orbMenu != null) return;
-            var t = UiTheme.Current;
-            _orbMenu = UiPanel.Create<UiPanel>("orb-menu", "", BillboardW, BillboardH, _root, header: false);
-            _orbMenu.Closable = false;
-            _orbMenu.Draggable = false;
-            _orbMenu.LightTransition = true;
-            Router.Register(_orbMenu);
-            // under it, the threads used last (ShellOrbThreads): they come and go with it
-            _orbMenu.Opened += _ => OpenOrbThreads();
-            _orbMenu.Closed += _ => CloseOrbThreads();
-            const float pad = 0.007f, gap = 0.005f;
-            float bw = (BillboardW - pad * 2f - gap * 3f) / 4f, bh = BillboardH - pad * 2f;
-            UiButton B(int k, string text, Action act, UiButtonStyle style = UiButtonStyle.Normal) =>
-                _orbMenu.Add(new UiButton(text, act, style) { Rect = new Rect(pad + k * (bw + gap), pad, bw, bh), TextSize = 0.0092f });
+            if (_orbActs.Count > 0) return;
+            const float pad = 0.004f;
+            UiButton B(int k, string text, Action act, UiButtonStyle style = UiButtonStyle.Normal)
+            {
+                var p = UiPanel.Create<UiPanel>("orb-act-" + k, "", OrbActW, OrbActH, _root, header: false);
+                p.Closable = false;
+                p.Draggable = false;
+                p.LightTransition = true;
+                Router.Register(p);
+                p.gameObject.SetActive(false);
+                _orbActs.Add(p);
+                return p.Add(new UiButton(text, act, style) { Rect = new Rect(pad, pad, OrbActW - pad * 2f, OrbActH - pad * 2f), TextSize = OrbActText });
+            }
             B(0, "◉\nTALK", () => VoiceToggle(), UiButtonStyle.Primary);
             _orbSpeakBtn = B(1, "♫\nSPEAK", () => { Settings.voice.speak = !Settings.voice.speak; OnSettingsChanged(); SyncSettingsControls(); RefreshOrbMenu(); });
             B(2, "⌖\nPLACE", () => { ResetOrbPlace(); Toast("The orb chooses its own place again · pinch it to put it anywhere", "info"); });
-            _orbLogBtn = B(3, "☰\nLOG", () => { if (_orbMenu.IsOpen) _orbMenu.Close(); OpenPanel("messages"); });
-            _orbMenu.gameObject.SetActive(false);
+            _orbLogBtn = B(3, "☰\nLOG", () => { if (OrbMenuOpen) CloseOrbMenu(); OpenPanel("messages"); });
         }
 
         private UiButton _orbLogBtn;
         private UiPanel _messages;
 
         /// MESSAGES: everything the app has said (the orb's callouts), newest first, with their age; CLEAR. A window like
-        /// the others (placed where there is room), opened from the orb's billboard (LOG) or by voice ("open messages").
+        /// the others (placed where there is room), opened from the orb's menu (LOG) or by voice ("open messages").
         private void BuildMessagesPanel()
         {
             var t = UiTheme.Current;
@@ -517,43 +590,54 @@ namespace MetaCodex.Shell
             };
         }
 
-        public UiPanel OrbMenu => _orbMenu;
+        /// The menu's four action tiles (TALK, SPEAK, PLACE, LOG), top to bottom on the inner arc.
+        public IReadOnlyList<UiPanel> OrbActionsForTest => _orbActs;
 
-        /// A touch on the orb: its menu opens beside it (the messages so far, a few actions), or closes.
+        /// A touch on the orb: its menu opens round its left side, or closes.
         public void ToggleOrbMenu()
         {
             if (!OrbActive || _orbClock - _orbTapAt < 0.5f) return;
             _orbTapAt = _orbClock;
             EnsureOrbMenu();
             Sounds?.Play("click");
-            if (_orbMenu.IsOpen) { _orbMenu.Close(); return; }
-            _orbMenu.BaseScale = Vector3.one * OrbMenuScale();
+            if (OrbMenuOpen) { CloseOrbMenu(); return; }
+            float s = OrbMenuScale();
+            foreach (var a in _orbActs) a.BaseScale = Vector3.one * s;
             RefreshOrbMenu();
             PlaceOrbMenu(true);
-            _orbMenu.Open();
+            foreach (var a in _orbActs) a.Open();
+            OpenOrbThreads(); // the threads used last, on the outer arc
+            _avoidCheckAt = 0f; // look again at once: the menu may cover the window being watched
+        }
+
+        private void CloseOrbMenu()
+        {
+            foreach (var a in _orbActs) if (a.IsOpen) a.Close();
+            CloseOrbThreads();
+            _avoidCheckAt = 0f;
         }
 
         private float OrbMenuScale()
         {
             float dist = Head != null ? Vector3.Distance(Head.position, Orb.Position) : OrbDistance;
-            return Mathf.Clamp(dist / 0.75f, 0.45f, 1.2f) * Mathf.Clamp(Settings.uiScale, 0.6f, 1.8f) / 1.2f * 1.05f;
+            // ~0.95 at half a metre: the labels' em is then about a degree (TMP's em is 0.72 of the line size)
+            return Mathf.Clamp(dist / 0.75f, 0.45f, 1.2f) * Mathf.Clamp(Settings.uiScale, 0.6f, 1.8f) / 1.2f * 1.30f;
         }
 
-        /// Next to the orb, on the side its callouts grow to, just below its level (the callouts rise above it), turned to
-        /// the user.
+        private float OrbMenuScaleNow => _orbActs.Count > 0 ? _orbActs[0].BaseScale.x : OrbMenuScale();
+
+        /// The actions on the inner arc round the orb's left side (TALK at the top), every one turned to the user.
         private void PlaceOrbMenu(bool snap)
         {
-            if (_orbMenu == null || Orb == null) return;
-            var a = OrbCalloutAnchor();
-            if (!a.HasValue) return;
-            float s = _orbMenu.BaseScale.x;
-            // always on the orb's left (the callouts take its right), level with it: wrapped round its left side
-            var target = a.Value.Orb - a.Value.Side * (Orb.Radius * 1.6f + _orbMenu.Width * s * 0.5f + 0.012f) + Vector3.down * (Orb.Radius * 0.25f);
-            var tr = _orbMenu.transform;
-            tr.position = snap ? target : Vector3.Lerp(tr.position, target, 0.16f);
-            Vector3 eye = Head != null ? Head.position : target - Vector3.forward;
-            var look = tr.position - eye;
-            if (look.sqrMagnitude > 1e-6f) tr.rotation = Quaternion.LookRotation(look.normalized, Vector3.up);
+            if (_orbActs.Count == 0 || Orb == null) return;
+            float s = OrbMenuScaleNow;
+            var (ri, _) = OrbMenuRadii(s);
+            for (int k = 0; k < _orbActs.Count; k++)
+            {
+                if (!snap && !_orbActs[k].gameObject.activeSelf) continue;
+                float a = OrbActAngles[k] * Mathf.Deg2Rad;
+                PutOnOrbPlane(_orbActs[k], new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * ri, snap);
+            }
         }
 
         private static string Ago(DateTime at)
@@ -569,7 +653,7 @@ namespace MetaCodex.Shell
         {
             var t = UiTheme.Current;
             int n = Toasts.History.Count, fresh = Mathf.Min(_orbUnread, n);
-            if (_orbMenu != null)
+            if (_orbActs.Count > 0)
             {
                 _orbSpeakBtn.SetSelected(Settings.voice.speak);
                 _orbLogBtn.SetText(fresh > 0 ? "☰\n" + fresh + " NEW" : "☰\nLOG");
@@ -598,7 +682,7 @@ namespace MetaCodex.Shell
             TickOrbPlace(dt);
             if (Gestures != null) TickOrbHands(dt);
             TickOrbVoice(dt);
-            if (_orbMenu != null && _orbMenu.gameObject.activeSelf) { PlaceOrbMenu(false); TickOrbThreads(); }
+            if (OrbMenuDrawn) { PlaceOrbMenu(false); TickOrbThreads(); }
         }
 
         /// Self-tests: one frame of the orb (the Editor has no frame loop).

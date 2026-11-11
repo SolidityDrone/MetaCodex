@@ -684,7 +684,7 @@ namespace MetaCodex.Shell
                     {
                         case "on": SetOrb(true); return "ok";
                         case "off": SetOrb(false); return "ok";
-                        case "menu": ToggleOrbMenu(); return "ok, menu " + (OrbMenu != null && OrbMenu.IsOpen ? "open" : "closed");
+                        case "menu": ToggleOrbMenu(); return "ok, menu " + (OrbMenuOpen ? "open" : "closed");
                         case "place": ResetOrbPlace(); return "ok";
                         case "": case "status":
                             return $"orb {(Settings.orb ? "on" : "off")} mood={Orb.State} at={Orb.Position.x:F2},{Orb.Position.y:F2},{Orb.Position.z:F2} pinned={Settings.orbPinned} messages={Toasts.History.Count}";

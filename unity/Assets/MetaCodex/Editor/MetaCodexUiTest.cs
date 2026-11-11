@@ -181,6 +181,7 @@ namespace MetaCodex.EditorTools
                 if (Want("workspaces")) WorkspacesSection(shell, head); // MetaCodexUiTestWorkspaces.cs
                 if (Want("orbthreads")) OrbThreadsSection(shell, head); // MetaCodexUiTestOrbThreads.cs
                 if (Want("sidebar")) SidebarSection(shell, head, hands); // MetaCodexUiTestSidebar.cs
+                if (Want("orbplace")) OrbPlaceSection(shell, head, hands); // MetaCodexUiTestOrbPlace.cs
                 if (WantNamed("voiceexport")) VoiceExport(shell);
                 if (WantNamed("voicedecide")) VoiceDecideBench(shell);
             }
@@ -2596,47 +2597,65 @@ end)
                 Check(beside && stacked && shell.Toasts.RailShown && shell.Toasts.History.Count == 2 && shell.Toasts.History[0].Kind == "warn",
                     $"a message is a callout beside the orb, on its right, level with it and turned to the user ({beside}: {toCard.magnitude:F2} m from it, {toCard.y * 100f:F1} cm higher, {cardTurn:F1} deg off); the next one takes that place and the first moves up ({stacked}); a rail joins them to the orb; both are kept");
                 Check(green, "the orb flashes in the colour of the message (green for ok)");
+                // four of them: an arc round the orb's right side, concentric with it, centred on its level, each turned to the user
+                shell.Toast("Thread “Fix the build” answered: tap to open it", "info");
+                shell.Toast("Layout DESK saved", "ok");
+                Step(40);
+                cards = shell.Toasts.Panels.ToList();
+                var arc = cards.Select(c => OrbPlaneNear(c, orb.Position, head.position)).ToList();
+                float rMin = arc.Min(x => x.near), rMax = arc.Max(x => x.near);
+                bool arcRight = arc.All(x => x.centre.x > 0.05f), arcFacing = cards.All(c => Vector3.Angle(c.transform.forward, c.transform.position - head.position) < 3f);
+                float stackMid = (arc.Max(x => x.centre.y) + arc.Min(x => x.centre.y)) * 0.5f;
+                bool bows = arc[0].centre.x < arc[1].centre.x - 0.004f && arc[3].centre.x < arc[2].centre.x - 0.004f; // the ends come round the orb
+                bool newestLow = Enumerable.Range(1, cards.Count - 1).All(i => arc[i].centre.y > arc[i - 1].centre.y + 0.02f);
+                Check(cards.Count == 4 && rMax - rMin < 0.003f && arcRight && arcFacing && Mathf.Abs(stackMid) < 0.005f && bows && newestLow,
+                    $"four callouts sit on an arc round the orb's right side: every card's corner nearest the orb {rMin * 100f:F1}-{rMax * 100f:F1} cm from its centre (one circle), all on its right ({arcRight}), the stack centred on its level ({stackMid * 100f:F1} cm), its ends bowed round it ({bows}), the newest lowest ({newestLow}), each turned to the user ({arcFacing})");
                 foreach (var cd in cards) cd.ForceRefresh();
-                RenderAt("ui-orb-callouts.png", head.position, Quaternion.LookRotation(orb.Position - head.right * 0.16f - head.position, Vector3.up), 40f, 1400, 900);
+                RenderAt("ui-orb-callouts.png", head.position, Quaternion.LookRotation(orb.Position + head.right * 0.14f - head.position, Vector3.up), 46f, 1400, 900);
 
-                // a touch: its menu, a small billboard on its left (the callouts take its right), level with it, turned to the user
+                // a touch: its menu, an arc of four tiles round its left side (the callouts take its right), each turned to the user
                 var rest = head.position + head.forward * 0.3f + head.right * 0.25f - head.up * 0.3f;
                 void TipAt(Vector3 at, float pinch = 0f) => hands.SetOpen(Handedness.Right, at - head.forward * 0.12f, head.forward, -head.up, 0f, pinch);
                 void TipTo(Vector3 tip, float pinch = 0f) { TipAt(tip, pinch); hands.Frames[1].IndexTip = tip; if (pinch > 0.5f) hands.Frames[1].ThumbTip = tip; }
                 TipTo(orb.Position - head.forward * 0.12f); Step(3);
                 TipTo(orb.Position); Step(2);
-                var menu = shell.OrbMenu;
-                bool opened = menu != null && menu.IsOpen;
+                var acts = shell.OrbActionsForTest;
+                bool opened = shell.OrbMenuOpen;
                 TipTo(rest); Step(14);
-                var toMenu = menu != null ? menu.transform.position - orb.Position : Vector3.zero;
-                bool small = menu != null && menu.Width <= MetaCodexShell.BillboardW + 1e-4f && menu.Height <= MetaCodexShell.BillboardH + 1e-4f && !menu.Elements.OfType<UiList>().Any();
-                bool menuPlace = menu != null && Mathf.Abs(toMenu.y) < 0.03f && Vector3.Dot(toMenu, head.right) < -0.05f && toMenu.magnitude < 0.30f
-                    && Vector3.Angle(menu.transform.forward, menu.transform.position - head.position) < 8f;
-                var log = menu?.Elements.OfType<UiButton>().FirstOrDefault(b => b.Text.Contains("☰"));
-                bool counted = log != null && log.Text.Contains("2 NEW") && shell.OrbUnread == 2;
-                if (menu != null) menu.ForceRefresh();
+                var ri = shell.OrbMenuRadiiForTest.inner;
+                var onArc = acts.Select(a => OrbPlaneNear(a, orb.Position, head.position)).ToList();
+                bool small = acts.Count == 4 && acts.All(a => a.Width <= MetaCodexShell.OrbActW + 1e-4f && a.Elements.OfType<UiButton>().Count() == 1 && !a.Elements.OfType<UiList>().Any());
+                bool concentric = onArc.All(x => Mathf.Abs(x.centre.magnitude - ri) < 0.002f);
+                bool leftSide = onArc.All(x => x.centre.x < -0.03f) && Enumerable.Range(1, 3).All(k => onArc[k].centre.y < onArc[k - 1].centre.y - 0.01f);
+                bool menuFacing = acts.All(a => Vector3.Angle(a.transform.forward, a.transform.position - head.position) < 3f);
+                bool clearOfOrb = onArc.All(x => x.near > shell.OrbOuterRadiusForTest);
+                var log = acts.Count == 4 ? acts[3].Elements.OfType<UiButton>().FirstOrDefault(b => b.Text.Contains("☰")) : null;
+                bool counted = log != null && log.Text.Contains("4 NEW") && shell.OrbUnread == 4;
+                float labelDeg = Mathf.Atan(UiTheme.Current.FontSizeFor(MetaCodexShell.OrbActText) * 0.1f * acts[0].transform.lossyScale.y / Vector3.Distance(head.position, acts[0].transform.position)) * Mathf.Rad2Deg;
+                foreach (var a in acts) a.ForceRefresh();
                 foreach (var cd in shell.Toasts.Panels) cd.ForceRefresh();
-                RenderAt("ui-orb-menu.png", head.position, Quaternion.LookRotation(orb.Position - head.right * 0.12f - head.up * 0.03f - head.position, Vector3.up), 34f, 1400, 1000);
-                Check(opened && small && menuPlace && counted, $"a fingertip in the orb opens its billboard ({opened}): small, four buttons, no list ({small}), on its left, level with it, turned to the user ({menuPlace}: {toMenu.y * 100f:F1} cm higher, {toMenu.magnitude:F2} m off); LOG says 2 NEW ({counted})");
+                RenderAt("ui-orb-menu.png", head.position, Quaternion.LookRotation(orb.Position - head.right * 0.03f - head.position, Vector3.up), 46f, 1400, 1000);
+                Check(opened && small && concentric && leftSide && menuFacing && clearOfOrb && counted && labelDeg >= 0.88f,
+                    $"a fingertip in the orb opens its menu ({opened}): four tiles, one button each ({small}), on an arc round its left side, TALK at the top ({leftSide}), every centre {ri * 100f:F1} cm from the orb's ({concentric}), clear of its rings ({clearOfOrb}), each turned to the user ({menuFacing}); labels {labelDeg:F2} deg high; LOG says 4 NEW ({counted})");
                 log?.Click();
                 Step(2);
                 var msgs = shell.PanelsById.TryGetValue("messages", out var mp) ? mp : null;
                 var mlist = msgs != null ? msgs.Elements.OfType<UiList>().FirstOrDefault() : null;
-                bool listed = msgs != null && msgs.IsOpen && mlist != null && mlist.Items.Count == 2 && mlist.Items[0].Title.Contains("battery") && shell.OrbUnread == 0 && orb.Unread == 0;
-                bool billboardAway = menu != null && !menu.IsOpen;
+                bool listed = msgs != null && msgs.IsOpen && mlist != null && mlist.Items.Count == 4 && mlist.Items[0].Title.Contains("DESK") && shell.OrbUnread == 0 && orb.Unread == 0;
+                bool billboardAway = !shell.OrbMenuOpen;
                 if (msgs != null) { msgs.ForceRefresh(); RenderPanel(msgs, "ui-orb-messages.png"); }
                 shell.ClosePanel("messages");
                 Step(14);
-                Check(listed && billboardAway, $"LOG opens MESSAGES, newest first, and they are read now ({listed}); the billboard goes ({billboardAway})");
+                Check(listed && billboardAway, $"LOG opens MESSAGES, newest first, and they are read now ({listed}); the menu goes ({billboardAway})");
                 TipTo(orb.Position - head.forward * 0.12f); Step(12);
                 TipTo(orb.Position); Step(2);
-                bool reopened = menu != null && menu.IsOpen;
+                bool reopened = shell.OrbMenuOpen;
                 TipTo(rest); Step(14);
                 TipTo(orb.Position - head.forward * 0.12f); Step(12);
                 TipTo(orb.Position); Step(2);
-                bool closed = menu != null && !menu.IsOpen;
+                bool closed = !shell.OrbMenuOpen;
                 TipTo(rest); Step(14);
-                Check(reopened && closed, $"a touch opens the billboard again ({reopened}), the next one closes it ({closed})");
+                Check(reopened && closed, $"a touch opens the menu again ({reopened}), the next one closes it ({closed})");
 
                 // pointing at it from afar and pinching does the same, and does not click the window behind it
                 var palm = head.position + head.right * 0.15f - head.up * 0.25f + head.forward * 0.15f;
@@ -2656,10 +2675,10 @@ end)
                 bool holds = shell.OrbHoldsHandForTest(1), behind = files.Raycast(hands.Frames[1].Ray(), out _, out _);
                 bool blocked = rayFree && shell.Router.HandBlocked != null && holds && behind;
                 PointAt(orb.Position, 1f); Step(3);
-                bool farOpened = menu != null && menu.IsOpen;
+                bool farOpened = shell.OrbMenuOpen;
                 PointAt(orb.Position, 0f); Step(14);
                 PointAt(orb.Position, 1f); Step(3);
-                bool farClosed = menu != null && !menu.IsOpen;
+                bool farClosed = !shell.OrbMenuOpen;
                 PointAt(orb.Position, 0f); Step(3);
                 TipTo(rest); Step(8);
                 shell.ClosePanel("files");
@@ -2712,7 +2731,8 @@ end)
                 foreach (var old in shell.Toasts.Panels.ToList()) old.CloseAndDestroy();
                 shell.Toasts.Tick(float.MaxValue);
                 foreach (var pp in shell.GetComponentsInChildren<UiPanel>(true)) if (pp != null && pp.Transitioning) pp.ForceRefresh();
-                if (shell.OrbMenu != null && shell.OrbMenu.IsOpen) { shell.OrbMenu.Close(); shell.OrbMenu.ForceRefresh(); }
+                shell.CloseOrbMenuForTest();
+                foreach (var a in shell.OrbActionsForTest) a.ForceRefresh();
                 shell.Settings.orbPinned = false;
                 foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
                 foreach (var tm in terms) if (tm != null) tm.gameObject.SetActive(true);
@@ -4175,6 +4195,21 @@ end)
         }
 
         // ------------------------------------------------------------------ pictures
+
+        /// A panel in the orb's plane (through the orb, facing the eye; x to the user's right, y up): its centre, and how
+        /// far the nearest point of its rectangle (its scaled size, laid in that plane) is from the orb's centre (metres).
+        /// Items are turned to the eye one by one; their centres lie in the plane, which is where the arc is laid out.
+        private static (Vector2 centre, float near) OrbPlaneNear(UiPanel p, Vector3 orb, Vector3 eye)
+        {
+            var fwd = (orb - eye).normalized;
+            var right = Vector3.Cross(Vector3.up, fwd).normalized;
+            var up = Vector3.Cross(fwd, right);
+            var w = p.transform.position - orb;
+            var c = new Vector2(Vector3.Dot(w, right), Vector3.Dot(w, up));
+            float hx = p.Width * p.transform.lossyScale.x * 0.5f, hy = p.Height * p.transform.lossyScale.y * 0.5f;
+            var d = new Vector2(Mathf.Max(0f, Mathf.Abs(c.x) - hx), Mathf.Max(0f, Mathf.Abs(c.y) - hy));
+            return (c, d.magnitude);
+        }
 
         private static void RenderPanel(UiPanel p, string file)
         {

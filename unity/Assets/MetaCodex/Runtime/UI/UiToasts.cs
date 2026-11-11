@@ -5,9 +5,9 @@ using UnityEngine;
 
 namespace MetaCodex.UI
 {
-    /// Short messages. With the orb they are its callouts: cards in a column that rises beside it from its own level
-    /// (a pinned panel first, the voice HUD; then the newest message), one flat sheet turned to the user, joined to
-    /// the orb by a rail of light; the orb casts each card (UiPanelFx, the light variant). Without the orb they float
+    /// Short messages. With the orb they are its callouts: cards on an arc round its right side, concentric with it,
+    /// centred on its level (a pinned panel lowest, the voice HUD; then the newest message), each turned to the user,
+    /// joined to the orb by a rail of light along the arc; the orb casts each card (UiPanelFx, the light variant). Without the orb they float
     /// in the upper field of view. Every message is also kept in `History` (the orb's menu lists them).
     public sealed class UiToasts : MonoBehaviour
     {
@@ -93,53 +93,76 @@ namespace MetaCodex.UI
         /// Puts every card (and the pinned panel) at its place now, without easing (before the pinned panel opens).
         public void LayoutNow() => Layout(true, true);
 
+        /// What the callouts cover now in the orb's plane (metres; x to the user's right, y up; zero when none): the
+        /// shell keeps it off the window the user is watching.
+        public Rect Extent { get; private set; }
+
+        private const int ArcSegments = 10;
+        private readonly List<UiPanel> _items = new List<UiPanel>();
+
         private void Layout(bool snapNew, bool snapAll = false)
         {
             var a = Where?.Invoke();
-            if (!a.HasValue) { LayoutFree(snapNew); Rail(false, default, default, 0f, 0f, 0f); return; }
+            if (!a.HasValue) { LayoutFree(snapNew); Rail(false, default, default, 0f, 0f, 0f, 0f); Extent = default; return; }
             var w = a.Value;
             Vector3 eye = Head != null ? Head.position : w.Orb - Vector3.forward;
-            // the column: one flat sheet turned to the user (every card parallel to the next), its near edge two orb
-            // radii off the orb, the first card level with the orb, the others above it
-            var edge = w.Orb + w.Side * (w.Radius * 2.15f);
-            var rot = Quaternion.LookRotation((edge + w.Side * (0.21f * w.Scale) - eye).normalized, Vector3.up);
-            Vector3 up = rot * Vector3.up, across = rot * Vector3.right;
-            float grows = Vector3.Dot(across, w.Side) >= 0f ? 1f : -1f; // +1: the column grows to the sheet's right
-            across *= grows;                                             // along the sheet, away from the orb
-            float y = 0f, bottom = 0f, top = 0f;
-            bool first = true;
-            void Place(UiPanel p, bool isToast, bool snap)
-            {
-                float sx = isToast ? w.Scale : p.RestLossyScale.x, sy = isToast ? w.Scale : p.RestLossyScale.y;
-                float h = p.Height * sy, wd = p.Width * sx;
-                if (first) { y = -h * 0.5f; bottom = y; first = false; }
-                var target = edge + across * (wd * 0.5f + 0.014f) + up * (y + h * 0.5f);
-                y += h + Gap;
-                top = y - Gap;
-                if (isToast) p.BaseScale = Vector3.one * w.Scale;
-                var tr = p.transform;
-                tr.position = snap ? target : Vector3.Lerp(tr.position, target, 0.16f);
-                tr.rotation = rot;
-            }
+            // owner 2026-11-11: "wrapped around the circle of the orb": the column is an arc round the orb's right side,
+            // in the plane through the orb that faces the user; the stack is centred on the orb's level (the newest lowest),
+            // each card's corner nearest the orb on one circle round it, every card turned to the user
+            var fwd = w.Orb - eye;
+            if (fwd.sqrMagnitude < 1e-6f) fwd = Vector3.forward;
+            fwd.Normalize();
+            var right = w.Side.sqrMagnitude > 1e-6f ? w.Side.normalized : Vector3.right;
+            var up = Vector3.Cross(fwd, right).normalized;
+            var plane = Quaternion.LookRotation(fwd, up);
+            _items.Clear();
             bool pinned = Pinned != null && Pinned.gameObject.activeSelf;
-            if (pinned) Place(Pinned, false, snapAll);
-            int placed = 0;
-            for (int i = 0; i < _toasts.Count; i++)
+            if (pinned) _items.Add(Pinned);
+            foreach (var t in _toasts) if (t.Panel != null) _items.Add(t.Panel);
+            if (_items.Count == 0) { Rail(false, default, default, 0f, 0f, 0f, 0f); Extent = default; return; }
+            float H(UiPanel p) => p.Height * (p == Pinned ? p.RestLossyScale.y : w.Scale);
+            float Wd(UiPanel p) => p.Width * (p == Pinned ? p.RestLossyScale.x : w.Scale);
+            float total = -Gap;
+            foreach (var p in _items) total += H(p) + Gap;
+            float ring = w.Radius * 1.75f;
+            // the circle: clear of the orb's rings by a little more than the old straight column, wide enough that the
+            // top and bottom cards still bow round it
+            float y = -total * 0.5f, maxNear = 0f;
+            foreach (var p in _items) { float h = H(p); maxNear = Mathf.Max(maxNear, Mathf.Max(0f, Mathf.Abs(y + h * 0.5f) - h * 0.5f)); y += h + Gap; }
+            float rc = Mathf.Max(w.Radius * 2.15f + 0.014f, maxNear * 1.2f);
+            y = -total * 0.5f;
+            float xMax = 0f, aLow = 0f, aHigh = 0f;
+            for (int i = 0; i < _items.Count; i++)
             {
-                if (_toasts[i].Panel == null) continue;
-                // a new card takes its place at once; the others slide up to make room
-                Place(_toasts[i].Panel, true, snapAll || (snapNew && i == 0));
-                placed++;
+                var p = _items[i];
+                float h = H(p), wd = Wd(p), cy = y + h * 0.5f;
+                float yNear = Mathf.Sign(cy) * Mathf.Max(0f, Mathf.Abs(cy) - h * 0.5f);
+                float xNear = Mathf.Sqrt(Mathf.Max(rc * rc - yNear * yNear, rc * rc * 0.25f));
+                float ang = Mathf.Atan2(yNear, xNear);
+                if (i == 0) { aLow = ang; aHigh = ang; } else { aLow = Mathf.Min(aLow, ang); aHigh = Mathf.Max(aHigh, ang); }
+                xMax = Mathf.Max(xMax, xNear + wd);
+                var target = w.Orb + right * (xNear + wd * 0.5f) + up * cy;
+                bool isToast = p != Pinned;
+                if (isToast) p.BaseScale = Vector3.one * w.Scale;
+                // a new card takes its place at once; the others slide to make room
+                bool snap = snapAll || (snapNew && isToast && _toasts.Count > 0 && p == _toasts[0].Panel);
+                var tr = p.transform;
+                var pos = snap ? target : Vector3.Lerp(tr.position, target, 0.16f);
+                var look = pos - eye;
+                tr.SetPositionAndRotation(pos, look.sqrMagnitude > 1e-6f ? Quaternion.LookRotation(look.normalized, Vector3.up) : plane);
+                y += h + Gap;
             }
-            // the link starts at the orb's outer ring: that far back from the edge, along the sheet
-            float link = Vector3.Dot(edge - (w.Orb + w.Side * (w.Radius * 1.72f)), across);
-            Rail(placed > 0 || pinned, edge, rot, link * grows, bottom, top);
+            Extent = new Rect(ring, -total * 0.5f, xMax - ring, total);
+            // the rail: out of the orb's rings to the arc, then along the arc past the cards' near corners
+            float rr = rc - 0.005f;
+            float pad = Mathf.Max(0.12f, (_items.Count == 1 ? H(_items[0]) * 0.5f / rr : 0f));
+            Rail(true, w.Orb, plane, ring, rr, aLow - pad, aHigh + pad);
         }
 
-        /// The rail of light that joins the cards to the orb, in the column's sheet: a link out of the orb's rings to
-        /// the column's edge (`link` metres long; negative: the orb is to the sheet's right), a line up along that
-        /// edge, a node of light where they meet. Panel shapes: two lines and a dot.
-        private void Rail(bool on, Vector3 edge, Quaternion rot, float link, float bottom, float top)
+        /// The rail of light that joins the cards to the orb, in the orb's plane: a link out of its rings to the arc
+        /// (`from` to `radius` along the user's right), an arc of `radius` from angle `a0` to `a1` (radians, 0 = the
+        /// user's right, up positive), a node of light where they meet. Panel shapes: lines and a dot.
+        private void Rail(bool on, Vector3 orb, Quaternion rot, float from, float radius, float a0, float a1)
         {
             if (!on) { if (_rail != null && _rail.gameObject.activeSelf) _rail.gameObject.SetActive(false); return; }
             var t = UiTheme.Current;
@@ -151,15 +174,25 @@ namespace MetaCodex.UI
                 _rail = go.AddComponent<UiShapeMesh>();
                 _rail.Init(t.ShapeMaterial);
                 var faint = t.Accent; faint.a = 0.55f;
-                for (int i = 0; i < 2; i++) _rail.Add(new UiShape { Kind = UiShapeKind.Line, Tint = faint, Margin = 0.002f, State = 0.3f, Visible = true });
+                for (int i = 0; i < 1 + ArcSegments; i++) _rail.Add(new UiShape { Kind = UiShapeKind.Line, Tint = faint, Margin = 0.002f, State = 0.3f, Visible = true });
                 _rail.Add(new UiShape { Kind = UiShapeKind.Dot, Size = new Vector2(0.006f, 0.006f), Margin = 0.003f, Tint = t.Accent, State = 0.6f, Visible = true });
             }
             if (!_rail.gameObject.activeSelf) _rail.gameObject.SetActive(true);
-            _rail.transform.SetPositionAndRotation(edge, rot);
-            // in the sheet's own axes (x to its right, y up): the link lies on the orb's side of the edge
-            _rail.SetRect(0, new Vector3(-link * 0.5f, 0f, 0f), new Vector2(Mathf.Abs(link), 0.0020f));
-            _rail.SetRect(1, new Vector3(0f, (bottom + top) * 0.5f, 0f), new Vector2(0.0020f, Mathf.Max(0.004f, top - bottom)));
-            _rail.SetRect(2, Vector3.zero, new Vector2(0.006f, 0.006f));
+            _rail.transform.SetPositionAndRotation(orb, rot);
+            // in the plane's own axes (x the user's right, y up)
+            float link = Mathf.Max(0.002f, radius - from);
+            _rail.SetRect(0, new Vector3(from + link * 0.5f, 0f, 0f), new Vector2(link, 0.0020f));
+            float lo = Mathf.Min(a0, 0f), hi = Mathf.Max(a1, 0f), step = (hi - lo) / ArcSegments;
+            for (int i = 0; i < ArcSegments; i++)
+            {
+                float m = lo + step * (i + 0.5f);
+                var s = _rail.Get(1 + i);
+                s.Center = new Vector3(Mathf.Cos(m) * radius, Mathf.Sin(m) * radius, 0f);
+                s.Size = new Vector2(2f * radius * Mathf.Sin(step * 0.5f) + 0.0012f, 0.0020f);
+                s.Rotation = m + Mathf.PI * 0.5f; // along the arc
+                _rail.Set(1 + i, s);
+            }
+            _rail.SetRect(1 + ArcSegments, new Vector3(radius, 0f, 0f), new Vector2(0.006f, 0.006f));
             if (!Application.isPlaying) _rail.Flush();
         }
 
