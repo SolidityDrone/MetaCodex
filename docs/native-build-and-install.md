@@ -227,6 +227,43 @@ toggled; right pinch / trigger = mode, left pinch / A = passthrough, stick = gai
 | adb install as `com.metacodex.probe.nightvision`, `pm grant ... USE_SCENE` | installed; USE_SCENE (runtime) granted, HAND_TRACKING / USE_ANCHOR_API install-time granted |
 | launch | **blocked**: the headset was on the sensor lock screen (after a forced sleep for E5); launched apps do not start there and the lock is not to be bypassed. Runtime proof (session, passthrough, depth frames, screenshot) is in the owner's checklist |
 
+## More decisions (evidence above)
+
+- **Build mode / BUILDING panel: not built.** Builds on cores 0-2 cost no measurable fps (E8: avg 72.5 / min 70 vs
+  72.5 / min 71) and ~100 MB (floor 1.87 GB), and a one-file build takes ~2 s: there is nothing to hide behind a panel.
+  The real risks were background survival (R3, R9) and memory (the GPU-memory finding), fixed by the foreground service
+  and the CPU budget. No new app action, so no command-registry change (AGENTS.md rules 1-3 not triggered).
+- **R4 (headset off)**: the CPU did not suspend in E5 (USB connected); the build wake lock covers the no-USB case once
+  the APK ships. The dangerous effect of "headset off" is R9 (MetaCodex goes to the background), not suspend.
+- **Runner / JIT: parked** at a working state (owner's priority change, 11-11): edit -> running 2.2 s, signed channel.
+  Classic apps on `mcx::App` are the default; the skill says so.
+- **Licences**: no new third-party component ships in the MetaCodex APK (host.cpp, mcx_xr, the SHA-256/RSA code and the
+  font atlas are ours; the atlas is rendered from DejaVu Sans Mono, already shipped and credited). Apps built on the
+  headset contain the Khronos OpenXR loader and the NDK's native_app_glue (Apache-2.0) and static libc++ (Apache-2.0
+  with LLVM exception): the "downloaded at first use" row of docs/LICENSES.md (branch chore/tools-list-and-licenses)
+  covers that toolchain; nothing to add there.
+
+## Done means: status
+
+| Criterion | Status |
+|---|---|
+| template code -> check -> build on the headset from an agent context | **done** (ai context: check 0.7 s, build 1.9 s); install/launch through path B: owner-proven earlier, not re-run (owner's order) |
+| 10 builds in a row, MetaCodex never killed | builds: 5 + 139 in a row fine; **MetaCodex's `:ai` was killed once by R9** -> foreground service (APK) + CPU budget (userland, tested) |
+| MQH alive after 10 min with the built app in front | 8.5 min: alive (19/19) but cached; the foreground service makes it robust (APK) |
+| timing table | done (Metrics) |
+| off-face fps | done (72/72 with prox_close; builds cost nothing measurable) |
+| a native MR app with Meta extensions builds on the headset | **done**: Night Vision, verify ok; runtime proof pending (lock screen) |
+
+## Remaining risks
+
+1. **MetaCodex GPU memory** across pause/resume (5.4 GB after ~6 switches): every app launch pauses MetaCodex. Not a
+   builder issue; needs a look in Unity (render textures / passthrough-camera resources on resume) and the checklist
+   measurement.
+2. R9 until the APK with the foreground service ships: the CPU budget is the only guard (it slows long background builds).
+3. Night Vision at runtime (passthrough + depth together, the HUD, input) is unproven on the device.
+4. The signing key (R8): `mcx-build` adds `~/.android/metacodex-debug.keystore.signcache.pem` (private, 0600): keep both
+   out of backups that leave the headset.
+
 ## Metrics (ai context unless noted; MetaCodex at 72 fps)
 
 | Stage | Cold | Warm | Peak RSS | Cores | Notes |
