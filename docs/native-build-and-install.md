@@ -15,6 +15,7 @@ decisions as it measures.
 | Background CPU budget in `mcx-buildd` | done (device test: see R9) | keeps the builder under 15 % CPU per 5 min while MetaCodex is in the background, the guard that works without the APK change |
 | Runner / module apps / `mcx-app dev` (JIT) | **parked (works, E6 passed)** | 2.2 s edit -> running, signed channel; parked by the owner's priority change (Quest SDK completeness first) |
 | Native XR layer `mcx_xr` + Night Vision | see "Feature matrix" | |
+| Agent skill suite `quest-native-*` (apps, xr, recipes, dev-loop, debug) | done; accuracy gate `tools/check-native-skills.py`: ok | every command, flag, path, API name and quoted message exists; all C++ blocks compile; the clock recipe builds as an app and `verify`s ok |
 | Shipping it | needs a MetaCodex APK build (overlay + `mqh-run` in the MQH bundle) | until then the dev copies live in `/root/.metacodex/dev/bin` on the headset |
 
 ## Goal

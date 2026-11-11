@@ -27,7 +27,7 @@ description: Where you are when you run inside MetaCodex - a Meta Quest headset 
 | `/mnt/quest/qvac.token` | token for the local AI service (new at every start of the service) |
 | `~/.mqh` | MQH data (database, logs, plugin data) |
 | `~/.claude/skills` | skills for agents (this one, quest-*, Unity and Meta skills) |
-| `/root/apps/<name>` | native Quest apps you build (skill `quest-native-apps`, `mcx-app`) |
+| `/root/apps/<name>` | native Quest apps you build (skills `quest-native-*`, `mcx-app`) |
 | `/opt/android-ndk`, `/opt/android-sdk`, `/opt/openxr` | native app tools (NDK r27d, android.jar 34, OpenXR 1.1.65) |
 | `/root/.metacodex/first-use.log` | what MetaCodex installed by itself at first use (`mcx-setup quest`) |
 | `/root/.metacodex/captures/` | the user's captures (image clipboard): PNGs of windows, newest 20 by default |
@@ -57,9 +57,12 @@ description: Where you are when you run inside MetaCodex - a Meta Quest headset 
   (theirs, removable; the ones that came with MetaCodex or MQH, read-only), PLUGINS has MQH's plugins and the gesture /
   behaviour plugins, then SCRIPTS, GESTURES, DAEMON. New skills go to `~/.mqh/skills/<name>/` (skill `skill-creator`);
   never edit the shipped ones.
-- Native apps: `mcx-app new|build|install|launch|logs` builds a separate Quest app (C++, OpenXR) here and installs
-  it with Android's installer; the user confirms in the headset (skill `quest-native-apps`). `mcx-ui system
-  can-install` says whether this MetaCodex may install apps.
+- Native apps: when the user wants a native / standalone Quest app (VR or mixed reality, its own Library icon), read
+  skill `quest-native-apps` first and follow its flow: `mcx-app new|check|build|verify|install|launch|logs` builds a
+  separate Quest app (C++, OpenXR + Meta's extensions through `mcx_xr.h`) here and installs it with Android's
+  installer; the user only taps Install. Feature reference `quest-native-xr`, worked examples `quest-native-recipes`,
+  the 2-second loop `quest-native-dev-loop`, problems `quest-native-debug`. `mcx-ui system can-install` says whether
+  this MetaCodex may install apps.
 - Views: show charts, diagrams (Mermaid), tables, checklists, choices or a physics scene in the headset
   with a ```mcx-view``` / ```mermaid``` block in your reply, or `mcx-ui view show spec.json` from a shell
   (skill `quest-views`). A tapped choice comes back as the user's next message.

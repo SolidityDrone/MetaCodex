@@ -1,8 +1,9 @@
 #!/bin/bash
 # mcx-app: build native Quest apps in MetaCodex's Linux and install them on this headset (skill quest-native-apps).
 #   mcx-app doctor                            are the tools there? may MetaCodex install apps? (run it first)
-#   mcx-app new <dir> [--module] [--package <id>] [--label <name>]   a new app from the template (C++, OpenXR, GLES);
-#                                             --module: the app as a module (runs in the Runner with mcx-app dev)
+#   mcx-app new <dir> [--module | --example <name>] [--package <id>] [--label <name>]   a new app (C++, OpenXR, GLES):
+#                                             the template; --module: a module (Runner, mcx-app dev); --example
+#                                             nightvision: a bundled example (/opt/metacodex/quest-native/examples)
 #   mcx-app check [dir]                       compile check only (seconds): errors as file:line:col: error: ...
 #   mcx-app build [dir]                       -> <dir>/build/<dir name>.apk, incremental, on cores 0-2 (the headset keeps 72 fps)
 #   mcx-app verify [dir]                      static checks of the built APK: manifest entries the Meta APIs in use need,
@@ -20,6 +21,7 @@
 set -uo pipefail
 TEMPLATE=/opt/metacodex/quest-native/template
 MODULE_TEMPLATE=/opt/metacodex/quest-native/module-template
+EXAMPLES=/opt/metacodex/quest-native/examples
 RUNNER_SRC=/opt/metacodex/quest-native/runner
 RUNNER_PKG=${MCX_RUNNER_PKG:-com.metacodex.runner}
 LOGD=/opt/metacodex/quest-native/logd.py
@@ -79,6 +81,9 @@ new_app() {
   while [ $# -gt 0 ]; do
     case "$1" in
       --module) tpl=$MODULE_TEMPLATE; shift ;;
+      --example)
+        [ -n "${2:-}" ] && [ -f "$EXAMPLES/$2/AndroidManifest.xml" ] || die "no example '${2:-}' (examples: $(ls "$EXAMPLES" 2>/dev/null | tr '\n' ' '))"
+        tpl=$EXAMPLES/$2; shift 2 ;;
       --package) pkg=${2:-}; shift 2 ;;
       --label) label=${2:-}; shift 2 ;;
       -*) die "unknown option $1" ;;
@@ -101,12 +106,14 @@ new_app() {
   mkdir -p "$(dirname "$dir")"
   cp -r "$tpl" "$dir" || die "copy failed"
   rm -rf "$dir/build"
-  sed -i -e "s|package=\"com.metacodex.hellonative\"|package=\"$pkg\"|" -e "s|package=\"com.metacodex.hellomodule\"|package=\"$pkg\"|" \
-    -e "s|android:label=\"Hello Native\"|android:label=\"$label\"|" -e "s|android:label=\"Hello Module\"|android:label=\"$label\"|" \
+  sed -i -e "0,/package=\"[^\"]*\"/s|package=\"[^\"]*\"|package=\"$pkg\"|" -e "s|android:label=\"[^\"]*\"|android:label=\"$label\"|" \
     -e "s|android:name=\"android.app.lib_name\" android:value=\"hellonative\"|android:name=\"android.app.lib_name\" android:value=\"main\"|" "$dir/AndroidManifest.xml"
   [ -f "$dir/build.sh" ] && chmod +x "$dir/build.sh"
   say "new app $pkg (\"$label\") in $(readlink -f "$dir")"
-  if [ "$tpl" = "$MODULE_TEMPLATE" ]; then
+  if [[ "$tpl" == "$EXAMPLES"/* ]]; then
+    echo "files: AndroidManifest.xml (package, label, versionCode, permissions), src/ (the app on mcx_xr.h), res/ (icon)"
+    echo "next:  mcx-app build $dir && mcx-app verify $dir   then  mcx-app install $dir && mcx-app launch $dir"
+  elif [ "$tpl" = "$MODULE_TEMPLATE" ]; then
     echo "files: AndroidManifest.xml (package, label, versionCode), src/app.cpp (the module: mcx_app_init/frame/draw/shutdown,"
     echo "       header $RUNNER_SRC/mcx_module.h), build.conf (TYPE=module); optional res/ and assets/"
     echo "next:  mcx-app dev $dir   (runs it in the Runner in seconds; once: mcx-app runner)  then  mcx-app run $dir  (its own APK)"

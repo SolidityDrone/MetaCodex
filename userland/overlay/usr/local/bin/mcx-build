@@ -26,6 +26,7 @@ Every stage reports wall time, CPU time and the peak RSS of its tools. Exit code
 error, 2 usage, 3 missing tools (mcx-setup quest), 4 stopped by a guard.
 Shipped by MetaCodex (overlay); edits are overwritten.
 """
+import glob
 import hashlib
 import json
 import os
@@ -1089,8 +1090,30 @@ def verify(d):
         text = libs[n]
         xr_exts |= set(x.decode() for x in re.findall(rb"\b(XR_(?:KHR|EXT|FB|META|OCULUS|HTC|MSFT|ML|VARJO|ANDROID)_[a-z0-9_]+)\b", text))
         xr_funcs |= set(x.decode() for x in re.findall(rb"\b(xr[A-Z][A-Za-z0-9]+(?:FB|META|EXT|KHR|OCULUS))\b", text))
-    say("   OpenXR extensions asked for: " + (", ".join(sorted(xr_exts)) or "none"))
-    say("   OpenXR extension functions looked up: " + (", ".join(sorted(xr_funcs)) or "none"))
+    say("   OpenXR extensions the APK can ask for: " + (", ".join(sorted(xr_exts)) or "none"))
+    # what the app itself uses: its own objects (direct OpenXR calls) and, through the XR layer (whose library
+    # carries every feature), the features its source turns on
+    used = set()
+    for o in glob.glob(os.path.join(app.out, "obj", "*.o")):
+        used |= set(x.decode() for x in re.findall(rb"\b(xr[A-Z][A-Za-z0-9]+(?:FB|META|EXT|KHR|OCULUS))\b", open(o, "rb").read()))
+    src = "".join(open(f, encoding="utf-8", errors="replace").read() for f in app.sources())
+    on = lambda field: re.search(r"\." + field + r"\s*=\s*(?:\w+(?:\.\w+)?\s*=\s*)*true\b", src) is not None
+    if "mcx::App" in src or "mcx::Config" in src:
+        feat_fn = {"passthrough": "xrCreatePassthroughFB", "depth": "xrCreateEnvironmentDepthProviderMETA",
+                   "scene": "xrQuerySpacesFB", "anchors": "xrCreateSpatialAnchorFB"}
+        for field, fn in feat_fn.items():
+            if on(field):
+                used.add(fn)
+        if not re.search(r"\.hands\s*=\s*false\b", src):  # hands are on by default
+            used.add("xrCreateHandTrackerEXT")
+        if on("scene"):
+            used.add("xrGetSpaceSemanticLabelsFB")
+    for cls, fn in (("mcx::Passthrough", "xrCreatePassthroughFB"), ("mcx::Depth", "xrCreateEnvironmentDepthProviderMETA"),
+                    ("mcx::Hands", "xrCreateHandTrackerEXT"), ("QueryScene", "xrQuerySpacesFB"), ("CreateAnchor", "xrCreateSpatialAnchorFB")):
+        if cls in src:
+            used.add(fn)
+    say("   Meta features the app uses: " + (", ".join(sorted(used)) or "none"))
+    xr_funcs = used
     for fn, kind, name, what in NEEDS:
         if fn in xr_funcs and name not in (perms if kind == "permission" else feats):
             problems.append(f"{what} ({fn}) needs <uses-{kind} android:name=\"{name}\"> in AndroidManifest.xml")
