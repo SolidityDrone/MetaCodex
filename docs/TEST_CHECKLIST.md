@@ -452,3 +452,12 @@ docs/native-build-and-install.md.
 - [ ] Night Vision has its own icon (green goggles) and label in the Library; it runs with MetaCodex force-stopped
 - [ ] Switch between MetaCodex and an app built here 5 times; then Perf menu / `adb shell dumpsys meminfo com.pnncl.metacodex | grep "GL mtrack"`: MetaCodex's GPU memory does not climb by hundreds of MB per switch (11-11: 4.87 GB after ~6 switches + a sleep, lmkd then killed the AI process)
 - [ ] With MetaCodex in the background (an app built here in front) start a long build from a thread: `mcx-buildd status` shows `"budget": "paused (background budget)"` once it passes 15 % CPU over 5 min, and MetaCodex's AI process is not killed (no `excessive cpu` line in logcat)
+
+## 30. The way back from built apps (2 minutes; needs the MetaCodex build after 0.7.14)
+
+- [ ] In a thread ask for any small native app (or `mcx-app new /root/apps/t2 --label "T2"` + `mcx-app run /root/apps/t2`): it opens
+- [ ] Left controller's menu button (or look at the left palm and pinch): a menu with Back to MetaCodex, Report to MetaCodex, Restart, Quit, Close menu; point and pull the trigger (or pinch) to pick
+- [ ] Back to MetaCodex: MetaCodex is there at once (no loading screen, windows where they were), a toast "Back from T2", the launching thread in front
+- [ ] Open the app again, menu > Report to MetaCodex: back in MetaCodex, the thread's composer says "Feedback on T2 1.0 (1):" with two chips (▣ the app's picture, ⎘ log T2); ◉ to say what you saw, SEND: the agent sees the picture and the log
+- [ ] Open the app again, quit it from the system menu (right hand / Meta button > Quit): does MetaCodex come forward by itself? (tell: best effort, Android may refuse)
+- [ ] After 5 app switches: `adb shell dumpsys meminfo com.pnncl.metacodex | grep -E "GL mtrack|TOTAL PSS"` (or `tools/gpu-switch-test.sh <package> 10` from the PC with the headset free); note the numbers

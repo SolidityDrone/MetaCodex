@@ -228,6 +228,45 @@ toggled; right pinch / trigger = mode, left pinch / A = passthrough, stick = gai
 | adb install as `com.metacodex.probe.nightvision`, `pm grant ... USE_SCENE` | installed; USE_SCENE (runtime) granted, HAND_TRACKING / USE_ANCHOR_API install-time granted |
 | launch | **blocked**: the headset was on the sensor lock screen (after a forced sleep for E5); launched apps do not start there and the lock is not to be bypassed. Runtime proof (session, passthrough, depth frames, screenshot) is in the owner's checklist |
 
+## Back and report: the way from a built app to MetaCodex (owner 2026-11-11)
+
+**Approach (chosen, with the evidence):**
+- Every app on `mcx::App` (the template now too) has a built-in app menu on the left controller's menu button and the
+  non-dominant hand's menu gesture. Meta's design table: "Open/Close app menu: Menu button / System gesture left
+  hand"; the native hand-tracking page: the non-dominant hand's system gesture sets MenuPressed for one frame.
+- **Back** = JNI `startActivity` of the caller's launch intent (`NEW_TASK | REORDER_TO_FRONT`) **while the app is still
+  in front** (Android lets a foreground app start activities; a background start is refused), then `xrRequestExitSession`.
+  MetaCodex's activity is `singleTask`: an existing instance resumes (`onNewIntent`; Unity's `UnityPlayerActivity`
+  calls `setIntent`, read in its source), nothing reloads.
+- **Report** travels in the same intent: a PNG of the app's left-eye image (`glReadPixels`, box-downscaled until under
+  ~450 KB: the Binder limit is ~1 MB; zlib from the NDK, PNG written in mcx_xr: no new third-party code), the last
+  60 log lines, label and version. No socket and no file drop: nothing else on the device can reach it.
+- **Authentication**: MetaCodex gives each launch a random 128-bit id (`system launch <pkg> [thread <id>]`, kept a day
+  in `launches.json`), only in that app's launch intent; a return counts only with an id MetaCodex gave out for that
+  package, and on Android 14+ `getLaunchedFromPackage()` must match when the app shares its identity
+  (`ActivityOptions.setShareIdentityEnabled`, set by mcx_xr). Other apps cannot put pictures or text into a thread.
+- In MetaCodex (`ShellReturn.cs`): Back -> toast "Back from <app>" + the launching thread (`MQH_THREAD_ID` of the agent
+  that ran `mcx-app launch`, else the open / last used thread) in front. Report -> the picture into CLIPBOARD and
+  both files attached to that thread, composer draft "Feedback on <app> <version>:", a hint to speak (◉) and send.
+  The microphone is not started by itself.
+- **Quit from the system menu**: mcx_xr tries the same start on EXITING (best effort; Android may refuse a start from
+  an app leaving the foreground): owner checklist section 30.
+- **After a crash** MetaCodex cannot come forward by itself: `SYSTEM_ALERT_WINDOW` (the background-start exemption) is on
+  Meta's prohibited-permissions list. The user opens MetaCodex from the dock.
+
+**Measured (Quest 3S, 2026-11-11 afternoon, headset free, MetaCodex 0.7.14 = without the receiving side):**
+- The new mcx_xr (menu, return, report) builds on the headset: template 12.4 s cold (XR layer 9.9 s once), Night
+  Vision 3.6 s; `verify ok` for both; libz.so is the only new system library.
+- **MetaCodex's memory, after the owner's ~1 h session with Night Vision tests: 4.35 GB PSS before any switch of
+  mine.** Three probe switches later `oom_reaper` killed MetaCodex, the probe, the Library and Guidebook, and the
+  headset's sensors service aborted (`CameraFrame_t00`, SIGABRT); a Guardian dialog then blocked every immersive start,
+  so the per-switch GPU numbers and the Back/Report timings could not be taken (they need the owner once to clear
+  the dialog). Scripts ready: `tools/gpu-switch-test.sh <pkg> 10` (GL / EGL mtrack and PSS per switch),
+  `tools/return-test.sh <pkg> [report] [cold]` (back -> MetaCodex resumed -> first frame).
+- Static look at the GPU growth: MRUK's `PassthroughCameraAccess` keeps its texture across pause/resume (Stop on pause,
+  Play on resume, `_texture` reused), so the Unity-side blur code does not re-allocate per switch; the native camera
+  restart and the XR swapchains are the open suspects. No fix without the per-switch numbers (measured, not guessed).
+
 ## More decisions (evidence above)
 
 - **Build mode / BUILDING panel: not built.** Builds on cores 0-2 cost no measurable fps (E8: avg 72.5 / min 70 vs

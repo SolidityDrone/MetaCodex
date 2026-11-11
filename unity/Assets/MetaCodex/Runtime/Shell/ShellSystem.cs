@@ -355,9 +355,16 @@ namespace MetaCodex.Shell
                 case "install-status": return SystemBridge.InstallStatus();
                 case "can-install": return SystemBridge.CanInstall();
                 case "app": return parts.Length > 1 ? SystemBridge.AppInfo(parts[1].Trim()) : "error: system app <package>";
-                case "launch": return parts.Length > 1 ? SystemBridge.LaunchApp(parts[1].Trim()) : "error: system launch <package>";
+                case "launch":
+                {
+                    // launch <package> [thread <id>]: the app gets a launch id; its menu's Back / Report come back to that thread
+                    var a = parts.Length > 1 ? parts[1].Trim().Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries) : new string[0];
+                    if (a.Length == 0) return "error: system launch <package> [thread <id>]";
+                    string thread = a.Length >= 3 && a[1] == "thread" ? a[2] : null;
+                    return SystemBridge.LaunchApp(a[0], RegisterLaunch(a[0], thread));
+                }
                 case "first-use": return FirstUseStatus;
-                default: return "error: system tools [json] | refresh | storage | inventory | install-apk <apk> | install-status | can-install | app <package> | launch <package> | first-use";
+                default: return "error: system tools [json] | refresh | storage | inventory | install-apk <apk> | install-status | can-install | app <package> | launch <package> [thread <id>] | first-use";
             }
         }
 

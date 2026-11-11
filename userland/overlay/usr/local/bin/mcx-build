@@ -649,7 +649,7 @@ def link_one(tc, app, so, module):
     with Stage("link") as st:
         tmp = so + ".tmp"
         cmd = [tc.cxx, f"--target=aarch64-linux-android{app.api}", "-shared", "-o", tmp] + objs + ([glue] if glue else []) + \
-              ["-L" + lib_dir, "-lopenxr_loader", "-Wl,--as-needed", "-landroid", "-llog", "-lEGL", "-lGLESv3"] + libs + \
+              ["-L" + lib_dir, "-lopenxr_loader", "-Wl,--as-needed", "-landroid", "-llog", "-lEGL", "-lGLESv3"] + libs + ["-lz"] + \
               ["-static-libstdc++", "-Wl,--no-undefined", "-Wl,-z,max-page-size=16384", "-Wl,--build-id=sha1", "-fno-color-diagnostics"] + \
               ([] if module else ["-Wl,-u,ANativeActivity_onCreate"])
         rc, out, cpu, rss = run(cmd, "link", capture=True)

@@ -54,6 +54,7 @@ namespace MetaCodex.Shell
                 if (p != null && p.Id != "dock") { _ctxPointed = p; _ctxPointedAt = Time.unscaledTime; }
             }
             if (Time.unscaledTime >= _ctxNextSample) { _ctxNextSample = Time.unscaledTime + 20f; SampleProcesses(); }
+            TickReturn(); // back from an app MetaCodex launched (ShellReturn)
             if (Time.unscaledTime >= _ctxNextPulses)
             {
                 // every 5 s while another thread works (its "answered" callout comes soon), else every 15 s
@@ -64,7 +65,11 @@ namespace MetaCodex.Shell
             if (Time.unscaledTime >= _ctxNextSave) { _ctxNextSave = Time.unscaledTime + 30f; if (SessionMemory.Dirty) SessionMemory.Save(SessionLogPath); }
         }
 
-        private void OnApplicationPause(bool paused) { if (paused && SessionMemory.Dirty) SessionMemory.Save(SessionLogPath); }
+        private void OnApplicationPause(bool paused)
+        {
+            if (paused && SessionMemory.Dirty) SessionMemory.Save(SessionLogPath);
+            if (!paused) _returnCheckAt = 0f; // look for a return from a launched app at once
+        }
         private void OnApplicationQuit() { if (SessionMemory.Dirty) SessionMemory.Save(SessionLogPath); }
 
         /// One `ps` in the Linux at low priority (only while it is up; never in edit-mode tests).

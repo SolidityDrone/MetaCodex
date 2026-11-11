@@ -38,6 +38,20 @@ All in `namespace mcx`, header `/opt/metacodex/quest-native/xr/mcx_xr.h`. Each c
 - Lifecycle handled inside: session READY -> begin, STOPPING -> end, EXITING / LOSS_PENDING -> Pump() returns false;
   Android pause/resume/destroy. When `Pump()` returns false, call `app.Shutdown()` and return from `android_main`.
 
+## The app menu and the way back (built into `App`)
+
+- Opens with the left controller's menu button or the non-dominant hand's menu gesture (palm facing you, pinch);
+  a panel 0.9 m ahead; point with the right controller or hand and pull the trigger / pinch, or move with the stick
+  and press A. While it is open `Frame::focused` is false and `app.MenuOpen()` is true.
+- Items: `app.menuItems` (yours, `MenuItem{label, action}`) then **Back to MetaCodex** (or **Open MetaCodex** when the
+  app was started from the Library), **Report to MetaCodex**, **Restart**, **Quit**, **Close menu**.
+- `app.ReturnToCaller(false)`: starts MetaCodex again (warm, nothing reloads) and ends this app. `app.ReturnToCaller(true)`:
+  the same with a report: the next clean frame of the left eye (the app's own pixels, not the room) as a PNG under
+  ~450 KB, the last 60 log lines (`mcx::RecentLog`), `app.label`, `app.versionName`, `app.versionCode`.
+  `app.Restart()`, `app.Quit()`, `app.OpenMenu(bool)`.
+- `app.caller` (the package that launched it, "" from the Library), `app.launchId`, `app.packageName`.
+- Quitting from the system menu tries the way back too (best effort: Android may refuse a start from the background).
+
 ## Passthrough (`app.passthrough`, XR_FB_passthrough)
 
 - `Start()`, `Pause()`, `Running()`, `Available()` (false: the feature flag is missing or no passthrough).

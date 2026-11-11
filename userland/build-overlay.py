@@ -56,7 +56,7 @@ with tarfile.open(fileobj=raw, mode="w", format=tarfile.PAX_FORMAT) as tf:
             if os.path.isdir(os.path.join(gdir, name)):
                 trees[f"{skills_dst}/{name}"] = os.path.join(gdir, name)
     extra = {}
-    for f in ("AndroidManifest.xml", "build.sh"):
+    for f in ("AndroidManifest.xml", "build.sh", "res/drawable/icon.png"):
         extra[f"{template_dst}/{f}"] = os.path.join(template, f)
     for f in sorted(os.listdir(os.path.join(template, "src"))):
         extra[f"{template_dst}/src/{f}"] = os.path.join(template, "src", f)

@@ -123,21 +123,39 @@ namespace MetaCodex.Shell
 #endif
         }
 
-        /// Starts an installed app by its package name.
-        public static string LaunchApp(string package)
+        /// Starts an installed app by its package name; `launchId` goes to the app (its way back: MetaCodexReturn).
+        public static string LaunchApp(string package, string launchId = null)
         {
-            if (DryRun) { LastResult = "launch " + package; return "ok (dry run)"; }
+            if (DryRun) { LastResult = "launch " + package + (launchId != null ? " id " + launchId : ""); return "ok (dry run)"; }
 #if UNITY_ANDROID && !UNITY_EDITOR
             try
             {
                 using (var player = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
                 using (var activity = player.GetStatic<AndroidJavaObject>("currentActivity"))
                 using (var c = new AndroidJavaClass(InstallerClass))
-                    return c.CallStatic<string>("launch", activity, package);
+                    return c.CallStatic<string>("launch", activity, package, launchId ?? "");
             }
             catch (Exception ex) { return "failure: " + ex.Message; }
 #else
             return "not on the headset";
+#endif
+        }
+        /// A return from an app MetaCodex launched (its menu's Back / Report), read once from the activity's intent:
+        /// "" or the JSON of MetaCodexReturn.take (the report's picture and log written into `dir`).
+        public static string TakeReturn(string dir)
+        {
+            if (DryRun) return "";
+#if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var player = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+                using (var activity = player.GetStatic<AndroidJavaObject>("currentActivity"))
+                using (var c = new AndroidJavaClass("com.pnncl.metacodex.install.MetaCodexReturn"))
+                    return c.CallStatic<string>("take", activity, dir ?? "");
+            }
+            catch (Exception) { return ""; }
+#else
+            return "";
 #endif
         }
         public static bool OpenAppSettings() => DeepLink("systemux://settings", "/applications?package=" + Application.identifier);

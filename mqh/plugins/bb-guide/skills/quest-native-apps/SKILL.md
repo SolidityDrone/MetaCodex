@@ -43,9 +43,14 @@ example and short recipes), **quest-native-dev-loop** (the Runner: seconds per e
 9. **Tell the user in one sentence what the app will do**, then `mcx-app install /root/apps/<name>`. It asks the user
    to tap Install (new app) or goes through silently (an update of an app MetaCodex installed). Wait for `RESULT:`.
 10. **`mcx-app launch /root/apps/<name>`**: the app opens, MetaCodex goes to the background. Tell the user exactly what
-    to look at and try (controls, what should appear), and that they come back with the Meta button > MetaCodex.
-11. **When they are back**: `mcx-app logs /root/apps/<name>` and ask what they saw. Fix, then 6-10 again
-    (`mcx-app run <dir>` = build + install + launch).
+    to look at and try (controls, what should appear), and how to come back: **"the left menu button (or look at
+    your left palm and pinch) opens the app's menu: Back to MetaCodex, or Report to MetaCodex to send me a picture
+    and its log"**. Every app on `mcx::App` has that menu built in (the template and the examples do).
+11. **When they are back**: MetaCodex brings this thread forward. A **report** arrives as a draft in this thread's
+    composer, "Feedback on <Label> <version>:", with two attachments (a picture of the app, `log <Label>`): the user
+    adds what they saw and sends it; read the picture and the log file, then fix. Without a report:
+    `mcx-app logs /root/apps/<name>` and ask what they saw. Then 6-10 again (`mcx-app run <dir>` = build + install +
+    launch).
 
 **Done** = `verify ok`, installed, launched, the user saw it work, and you told them the app's name in the Library.
 
@@ -58,6 +63,8 @@ example and short recipes), **quest-native-dev-loop** (the Runner: seconds per e
 
 ## Rules
 
+- Never remove or replace the app menu (Back / Report / Restart / Quit): it is the user's way back. Add items with
+  `app.menuItems`; build every app on `mcx::App` (quest-native-xr), never on a bare OpenXR loop.
 - Run builds only through `mcx-app check|build|dev` (they go to cores 0-2, off MetaCodex's frame loop), never `clang`,
   `aapt2`, `apksigner` or `build.sh` by hand in a terminal.
 - Show the user what you will install before `mcx-app install`; one app change per install; ask after each launch.

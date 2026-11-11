@@ -10,9 +10,12 @@
 #include <cmath>
 #include <cstdarg>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <ctime>
+#include <deque>
 #include <mutex>
+#include <zlib.h>
 
 namespace mcx {
 
@@ -21,7 +24,18 @@ static char g_tag[128] = "mcx";
 static std::mutex g_logMutex;
 static int g_logFd = -2;
 
+static std::deque<std::string> g_ring; // the last lines, for reports
+
 void SetLogTag(const char* tag) { snprintf(g_tag, sizeof g_tag, "%s", tag); }
+
+std::string RecentLog(int maxLines)
+{
+    std::lock_guard<std::mutex> lock(g_logMutex);
+    std::string out;
+    int start = (int)g_ring.size() > maxLines ? (int)g_ring.size() - maxLines : 0;
+    for (int i = start; i < (int)g_ring.size(); i++) out += g_ring[i] + "\n";
+    return out;
+}
 
 void Log(const char* fmt, ...)
 {
@@ -34,6 +48,15 @@ void Log(const char* fmt, ...)
     if (n > (int)sizeof line - 2) n = (int)sizeof line - 2;
     __android_log_print(ANDROID_LOG_INFO, g_tag, "%s", line);
     std::lock_guard<std::mutex> lock(g_logMutex);
+    {
+        char stamp[16];
+        time_t now = time(nullptr);
+        tm lt{};
+        localtime_r(&now, &lt);
+        strftime(stamp, sizeof stamp, "%H:%M:%S ", &lt);
+        g_ring.push_back(std::string(stamp) + line);
+        if (g_ring.size() > 200) g_ring.pop_front();
+    }
     if (g_logFd == -2)
     {
         g_logFd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
@@ -1011,6 +1034,7 @@ bool App::Init(android_app* android, const Config& cfg)
         env->DeleteLocalRef(cls);
     }
     Log("starting %s", cfg.name);
+    ReadLaunch();
     // runtime permissions first: the dialog shows while the app starts; depth and scene start once granted
     std::vector<const char*> ask;
     if (cfg.askPermissions)
@@ -1107,6 +1131,373 @@ bool App::Init(android_app* android, const Config& cfg)
     Log("OpenXR ready: %dx%d per eye, %zu extensions, refresh %.0f Hz (offered: %s)", eyes_[0].w, eyes_[0].h, ext.enabled.size(), refreshRate, rates.c_str());
     t0_ = Now();
     return true;
+}
+
+// ================================================================ launch info, the way back, the menu, reports
+static const char* kMetaCodex = "com.pnncl.metacodex";
+static const char* kExCaller = "com.metacodex.extra.CALLER";
+static const char* kExLaunch = "com.metacodex.extra.LAUNCH_ID";
+
+static std::string JStr(JNIEnv* env, jstring s)
+{
+    if (!s) return "";
+    const char* c = env->GetStringUTFChars(s, nullptr);
+    std::string r = c ? c : "";
+    env->ReleaseStringUTFChars(s, c);
+    env->DeleteLocalRef(s);
+    return r;
+}
+
+static bool Clear(JNIEnv* env)
+{
+    if (!env->ExceptionCheck()) return false;
+    env->ExceptionClear();
+    return true;
+}
+
+static jobject LaunchIntentFor(JNIEnv* env, jobject act, const char* pkg)
+{
+    jclass ac = env->GetObjectClass(act);
+    jobject pm = env->CallObjectMethod(act, env->GetMethodID(ac, "getPackageManager", "()Landroid/content/pm/PackageManager;"));
+    env->DeleteLocalRef(ac);
+    if (Clear(env) || !pm) return nullptr;
+    jclass pmc = env->GetObjectClass(pm);
+    jstring jp = env->NewStringUTF(pkg);
+    jobject it = env->CallObjectMethod(pm, env->GetMethodID(pmc, "getLaunchIntentForPackage", "(Ljava/lang/String;)Landroid/content/Intent;"), jp);
+    if (Clear(env)) it = nullptr;
+    env->DeleteLocalRef(jp);
+    env->DeleteLocalRef(pmc);
+    env->DeleteLocalRef(pm);
+    return it;
+}
+
+void App::ReadLaunch()
+{
+    ANativeActivity* act = android_->activity;
+    JNIEnv* env = Env(act);
+    jclass ac = env->GetObjectClass(act->clazz);
+    packageName = JStr(env, (jstring)env->CallObjectMethod(act->clazz, env->GetMethodID(ac, "getPackageName", "()Ljava/lang/String;")));
+    Clear(env);
+    jobject intent = env->CallObjectMethod(act->clazz, env->GetMethodID(ac, "getIntent", "()Landroid/content/Intent;"));
+    if (!Clear(env) && intent)
+    {
+        jclass ic = env->GetObjectClass(intent);
+        jmethodID get = env->GetMethodID(ic, "getStringExtra", "(Ljava/lang/String;)Ljava/lang/String;");
+        jstring k1 = env->NewStringUTF(kExCaller), k2 = env->NewStringUTF(kExLaunch);
+        caller = JStr(env, (jstring)env->CallObjectMethod(intent, get, k1));
+        launchId = JStr(env, (jstring)env->CallObjectMethod(intent, get, k2));
+        // tests (tools/return-test.sh): take the Back (or Report) path by itself after N seconds
+        jstring k3 = env->NewStringUTF("com.metacodex.extra.TEST_RETURN_AFTER"), k4 = env->NewStringUTF("com.metacodex.extra.TEST_REPORT");
+        std::string after = JStr(env, (jstring)env->CallObjectMethod(intent, get, k3));
+        testReport_ = JStr(env, (jstring)env->CallObjectMethod(intent, get, k4)) == "1";
+        testReturnAt_ = after.empty() ? -1.0 : atof(after.c_str());
+        env->DeleteLocalRef(k3);
+        env->DeleteLocalRef(k4);
+        Clear(env);
+        env->DeleteLocalRef(k1);
+        env->DeleteLocalRef(k2);
+        env->DeleteLocalRef(ic);
+        env->DeleteLocalRef(intent);
+    }
+    // label and version (for reports and the menu)
+    jobject pm = env->CallObjectMethod(act->clazz, env->GetMethodID(ac, "getPackageManager", "()Landroid/content/pm/PackageManager;"));
+    jobject info = env->CallObjectMethod(act->clazz, env->GetMethodID(ac, "getApplicationInfo", "()Landroid/content/pm/ApplicationInfo;"));
+    if (!Clear(env) && pm && info)
+    {
+        jclass pmc = env->GetObjectClass(pm);
+        jobject lab = env->CallObjectMethod(pm, env->GetMethodID(pmc, "getApplicationLabel", "(Landroid/content/pm/ApplicationInfo;)Ljava/lang/CharSequence;"), info);
+        if (!Clear(env) && lab)
+        {
+            jclass cs = env->GetObjectClass(lab);
+            label = JStr(env, (jstring)env->CallObjectMethod(lab, env->GetMethodID(cs, "toString", "()Ljava/lang/String;")));
+            env->DeleteLocalRef(cs);
+            env->DeleteLocalRef(lab);
+        }
+        jstring jp = env->NewStringUTF(packageName.c_str());
+        jobject pi = env->CallObjectMethod(pm, env->GetMethodID(pmc, "getPackageInfo", "(Ljava/lang/String;I)Landroid/content/pm/PackageInfo;"), jp, 0);
+        if (!Clear(env) && pi)
+        {
+            jclass pic = env->GetObjectClass(pi);
+            versionName = JStr(env, (jstring)env->GetObjectField(pi, env->GetFieldID(pic, "versionName", "Ljava/lang/String;")));
+            versionCode = env->GetIntField(pi, env->GetFieldID(pic, "versionCode", "I"));
+            Clear(env);
+            env->DeleteLocalRef(pic);
+            env->DeleteLocalRef(pi);
+        }
+        env->DeleteLocalRef(jp);
+        env->DeleteLocalRef(pmc);
+    }
+    Clear(env);
+    if (pm) env->DeleteLocalRef(pm);
+    if (info) env->DeleteLocalRef(info);
+    env->DeleteLocalRef(ac);
+    jobject mc = LaunchIntentFor(env, act->clazz, kMetaCodex);
+    metacodexInstalled_ = mc != nullptr;
+    if (mc) env->DeleteLocalRef(mc);
+    Log("launched %s: %s %s (%lld)%s", caller.empty() ? "from the Library" : ("by " + caller).c_str(), label.c_str(), versionName.c_str(),
+        versionCode, metacodexInstalled_ ? "; menu: left menu button / left-hand menu gesture" : "");
+}
+
+// starts the caller (MetaCodex) while this app is still in front (Android allows it then), with the launch id and,
+// for a report, the picture and the log; Android 14+: shares this app's identity so the receiver can check it
+bool App::StartCaller(const std::vector<unsigned char>* png)
+{
+    ANativeActivity* act = android_->activity;
+    JNIEnv* env = Env(act);
+    std::string target = caller.empty() ? kMetaCodex : caller;
+    jobject it = LaunchIntentFor(env, act->clazz, target.c_str());
+    if (!it) { Log("back: %s is not installed", target.c_str()); return false; }
+    jclass ic = env->GetObjectClass(it);
+    env->CallObjectMethod(it, env->GetMethodID(ic, "addFlags", "(I)Landroid/content/Intent;"), 0x10000000 | 0x00020000); // NEW_TASK | REORDER_TO_FRONT
+    jmethodID putS = env->GetMethodID(ic, "putExtra", "(Ljava/lang/String;Ljava/lang/String;)Landroid/content/Intent;");
+    auto put = [&](const char* k, const std::string& v) {
+        jstring jk = env->NewStringUTF(k), jv = env->NewStringUTF(v.c_str());
+        env->CallObjectMethod(it, putS, jk, jv);
+        env->DeleteLocalRef(jk);
+        env->DeleteLocalRef(jv);
+    };
+    put("com.metacodex.extra.RETURN_FROM", packageName);
+    put(kExLaunch, launchId);
+    put("com.metacodex.extra.APP_LABEL", label);
+    put("com.metacodex.extra.APP_VERSION", versionName + " (" + std::to_string(versionCode) + ")");
+    if (png)
+    {
+        put("com.metacodex.extra.REPORT", "1");
+        put("com.metacodex.extra.REPORT_LOG", RecentLog(60));
+        jbyteArray arr = env->NewByteArray((jsize)png->size());
+        env->SetByteArrayRegion(arr, 0, (jsize)png->size(), (const jbyte*)png->data());
+        jstring jk = env->NewStringUTF("com.metacodex.extra.REPORT_PNG");
+        env->CallObjectMethod(it, env->GetMethodID(ic, "putExtra", "(Ljava/lang/String;[B)Landroid/content/Intent;"), jk, arr);
+        env->DeleteLocalRef(jk);
+        env->DeleteLocalRef(arr);
+    }
+    Clear(env);
+    jobject bundle = nullptr;
+    jclass ver = env->FindClass("android/os/Build$VERSION");
+    int sdk = ver ? env->GetStaticIntField(ver, env->GetStaticFieldID(ver, "SDK_INT", "I")) : 0;
+    Clear(env);
+    if (sdk >= 34)
+    {
+        jclass ao = env->FindClass("android/app/ActivityOptions");
+        jobject opts = ao ? env->CallStaticObjectMethod(ao, env->GetStaticMethodID(ao, "makeBasic", "()Landroid/app/ActivityOptions;")) : nullptr;
+        if (!Clear(env) && opts)
+        {
+            jmethodID share = env->GetMethodID(ao, "setShareIdentityEnabled", "(Z)Landroid/app/ActivityOptions;");
+            if (!Clear(env) && share) env->CallObjectMethod(opts, share, JNI_TRUE);
+            bundle = env->CallObjectMethod(opts, env->GetMethodID(ao, "toBundle", "()Landroid/os/Bundle;"));
+            Clear(env);
+        }
+    }
+    jclass ac = env->GetObjectClass(act->clazz);
+    if (bundle) env->CallVoidMethod(act->clazz, env->GetMethodID(ac, "startActivity", "(Landroid/content/Intent;Landroid/os/Bundle;)V"), it, bundle);
+    else env->CallVoidMethod(act->clazz, env->GetMethodID(ac, "startActivity", "(Landroid/content/Intent;)V"), it);
+    bool failed = Clear(env);
+    env->DeleteLocalRef(ac);
+    env->DeleteLocalRef(ic);
+    env->DeleteLocalRef(it);
+    Log("back: %s %s%s", target.c_str(), failed ? "could not be started" : "started", png ? (" with a report (" + std::to_string(png->size() / 1024) + " KB picture)").c_str() : "");
+    return !failed;
+}
+
+bool App::ReturnToCaller(bool report)
+{
+    if (report) { menuOpen_ = false; reportFrames_ = 2; return true; } // a clean frame without the menu, then the picture
+    if (!StartCaller(nullptr)) return false;
+    returned_ = true;
+    Quit();
+    return true;
+}
+
+void App::Restart()
+{
+    ANativeActivity* act = android_->activity;
+    JNIEnv* env = Env(act);
+    jobject it = LaunchIntentFor(env, act->clazz, packageName.c_str());
+    if (!it) return;
+    jclass ic = env->GetObjectClass(it);
+    env->CallObjectMethod(it, env->GetMethodID(ic, "addFlags", "(I)Landroid/content/Intent;"), 0x10000000 | 0x00008000); // NEW_TASK | CLEAR_TASK
+    jclass ac = env->GetObjectClass(act->clazz);
+    env->CallVoidMethod(act->clazz, env->GetMethodID(ac, "startActivity", "(Landroid/content/Intent;)V"), it);
+    Clear(env);
+    env->DeleteLocalRef(ac);
+    env->DeleteLocalRef(ic);
+    env->DeleteLocalRef(it);
+    Log("restart");
+}
+
+void App::Quit()
+{
+    if (session) xrRequestExitSession(session);
+    else exit_ = true;
+}
+
+void App::OpenMenu(bool open)
+{
+    if (open == menuOpen_) return;
+    menuOpen_ = open;
+    menuHover_ = -1;
+    if (!open) return;
+    // the menu stays where it opened: 0.9 m ahead of the head, at its height, turned to it
+    XrPosef head = views_[0].pose;
+    head.position.x = (views_[0].pose.position.x + views_[1].pose.position.x) * 0.5f;
+    head.position.y = (views_[0].pose.position.y + views_[1].pose.position.y) * 0.5f;
+    head.position.z = (views_[0].pose.position.z + views_[1].pose.position.z) * 0.5f;
+    XrVector3f fwd = Forward(head);
+    float len = sqrtf(fwd.x * fwd.x + fwd.z * fwd.z);
+    if (len < 1e-3f) { fwd = {0, 0, -1}; len = 1; }
+    fwd.x /= len;
+    fwd.z /= len;
+    float yaw = atan2f(-fwd.x, -fwd.z);
+    menuPose_.position = {head.position.x + fwd.x * 0.9f, head.position.y - 0.05f, head.position.z + fwd.z * 0.9f};
+    menuPose_.orientation = {0.f, sinf(yaw * 0.5f), 0.f, cosf(yaw * 0.5f)};
+    menuShown_ = menuItems;
+    bool canBack = !caller.empty() || metacodexInstalled_;
+    if (canBack)
+    {
+        menuShown_.push_back({caller.empty() ? "Open MetaCodex" : "Back to MetaCodex", [this] { ReturnToCaller(false); }});
+        menuShown_.push_back({"Report to MetaCodex", [this] { ReturnToCaller(true); }});
+    }
+    menuShown_.push_back({"Restart", [this] { Restart(); }});
+    menuShown_.push_back({"Quit", [this] { Quit(); }});
+    menuShown_.push_back({"Close menu", [this] { OpenMenu(false); }});
+    Log("menu opened");
+}
+
+static const float kRowH = 0.075f, kMenuW = 0.56f;
+
+void App::MenuInput(const Frame& f)
+{
+    // the left controller's menu button or the menu gesture of the non-dominant hand (Meta: "Open/Close app menu:
+    // Menu button / System gesture left hand"; the dominant hand's gesture is the system menu)
+    bool l = controllers.ctl[0].menu, h = hands.hand[0].menuGesture || hands.hand[1].menuGesture; // the non-dominant hand sends it
+    bool press = (l && !menuPrevL_) || (h && !menuPrevH_);
+    menuPrevL_ = l;
+    menuPrevH_ = h;
+    if (press && Focused()) OpenMenu(!menuOpen_);
+    if (!menuOpen_ || !Focused()) return;
+    // pointer: the right controller, else the right hand's aim, else the left's
+    XrPosef ray;
+    bool have = true;
+    if (controllers.ctl[1].active) ray = controllers.ctl[1].aim;
+    else if (hands.hand[1].aimValid) ray = hands.hand[1].aim;
+    else if (controllers.ctl[0].active) ray = controllers.ctl[0].aim;
+    else if (hands.hand[0].aimValid) ray = hands.hand[0].aim;
+    else have = false;
+    menuRayHit_ = false;
+    int rows = (int)menuShown_.size();
+    float top = rows * kRowH * 0.5f + 0.05f;
+    if (have)
+    {
+        XrVector3f n = Rotate(menuPose_.orientation, {0, 0, 1}), d = Forward(ray);
+        float den = n.x * d.x + n.y * d.y + n.z * d.z;
+        XrVector3f o{menuPose_.position.x - ray.position.x, menuPose_.position.y - ray.position.y, menuPose_.position.z - ray.position.z};
+        float t = fabsf(den) > 1e-4f ? (n.x * o.x + n.y * o.y + n.z * o.z) / den : -1.f;
+        if (t > 0)
+        {
+            XrVector3f p{ray.position.x + d.x * t, ray.position.y + d.y * t, ray.position.z + d.z * t};
+            XrVector3f rel{p.x - menuPose_.position.x, p.y - menuPose_.position.y, p.z - menuPose_.position.z};
+            XrQuaternionf inv{-menuPose_.orientation.x, -menuPose_.orientation.y, -menuPose_.orientation.z, menuPose_.orientation.w};
+            XrVector3f lp = Rotate(inv, rel);
+            menuRayHit_ = true;
+            menuRayPoint_ = lp;
+            int row = (int)floorf((top - 0.06f - lp.y) / kRowH);
+            menuHover_ = (fabsf(lp.x) <= kMenuW * 0.5f && row >= 0 && row < rows) ? row : -1;
+        }
+    }
+    // controllers without pointing: the stick moves, A selects
+    const Controller& cr = controllers.ctl[1];
+    static float stickHold = 0.f;
+    if (fabsf(cr.stick.y) > 0.6f)
+    {
+        if (stickHold <= 0.f) { menuHover_ = (menuHover_ < 0 ? 0 : menuHover_ + (cr.stick.y < 0 ? 1 : -1) + rows) % rows; stickHold = 0.25f; }
+        stickHold -= f.dt;
+    }
+    else stickHold = 0.f;
+    bool select = cr.triggerPressed || cr.primaryPressed || controllers.ctl[0].triggerPressed || (hands.hand[1].pinchStarted && !hands.hand[1].systemGesture) ||
+                  (!hands.hand[1].tracked && hands.hand[0].pinchStarted);
+    if (select && menuHover_ >= 0 && menuHover_ < rows)
+    {
+        auto action = menuShown_[menuHover_].action;
+        Log("menu: %s", menuShown_[menuHover_].label.c_str());
+        if (cr.active) controllers.Haptic(1, 0.3f, 0.03f);
+        OpenMenu(false);
+        if (action) action();
+    }
+}
+
+void App::DrawMenu(int e)
+{
+    if (!menuOpen_) return;
+    Mat4 model = Mat4::FromPose(menuPose_);
+    int rows = (int)menuShown_.size();
+    float top = rows * kRowH * 0.5f + 0.05f;
+    glDisable(GL_DEPTH_TEST);
+    text.Rect(eyeViewProj_[e], model, -kMenuW * 0.5f - 0.02f, top + 0.01f, kMenuW + 0.04f, rows * kRowH + 0.09f, XrColor4f{0.03f, 0.04f, 0.06f, 0.92f});
+    std::string title = label.empty() ? "App" : label;
+    if (!versionName.empty()) title += "  " + versionName;
+    text.Draw(eyeViewProj_[e], model, title.c_str(), -kMenuW * 0.5f + 0.01f, top, 0.03f, XrColor4f{0.6f, 0.7f, 0.8f, 1.f});
+    for (int i = 0; i < rows; i++)
+    {
+        float y = top - 0.06f - i * kRowH;
+        bool hov = i == menuHover_;
+        text.Rect(eyeViewProj_[e], model, -kMenuW * 0.5f, y, kMenuW, kRowH - 0.01f, hov ? XrColor4f{0.18f, 0.42f, 0.75f, 0.95f} : XrColor4f{0.1f, 0.12f, 0.16f, 0.9f});
+        text.Draw(eyeViewProj_[e], model, menuShown_[i].label.c_str(), -kMenuW * 0.5f + 0.025f, y - 0.018f, 0.036f, XrColor4f{0.95f, 0.97f, 1.f, 1.f});
+    }
+    if (menuRayHit_) text.Rect(eyeViewProj_[e], model, menuRayPoint_.x - 0.006f, menuRayPoint_.y + 0.006f, 0.012f, 0.012f, XrColor4f{1.f, 1.f, 1.f, 1.f});
+}
+
+// the eye image as a PNG (RGB, downscaled until it is under ~450 KB: it travels inside an Intent)
+bool App::CaptureEye(int e, std::vector<unsigned char>& png, int& ow, int& oh)
+{
+    const Swap& s = eyes_[e];
+    std::vector<unsigned char> rgba((size_t)s.w * s.h * 4);
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo_);
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glReadPixels(0, 0, s.w, s.h, GL_RGBA, GL_UNSIGNED_BYTE, rgba.data());
+    if (glGetError() != GL_NO_ERROR) { Log("report: the picture could not be read"); return false; }
+    for (int scale = 3; scale <= 8; scale++)
+    {
+        int w = s.w / scale, h = s.h / scale;
+        std::vector<unsigned char> raw;
+        raw.reserve((size_t)(w * 3 + 1) * h);
+        for (int y = 0; y < h; y++)
+        {
+            raw.push_back(0); // filter: none
+            int sy = (h - 1 - y) * scale; // GL rows go up
+            for (int x = 0; x < w; x++)
+                for (int c = 0; c < 3; c++)
+                {
+                    unsigned sum = 0;
+                    for (int dy = 0; dy < scale; dy++)
+                        for (int dx = 0; dx < scale; dx++) sum += rgba[((size_t)(sy + dy) * s.w + (x * scale + dx)) * 4 + c];
+                    raw.push_back((unsigned char)(sum / (scale * scale)));
+                }
+        }
+        uLongf zlen = compressBound((uLong)raw.size());
+        std::vector<unsigned char> z(zlen);
+        if (compress2(z.data(), &zlen, raw.data(), (uLong)raw.size(), 6) != Z_OK) return false;
+        z.resize(zlen);
+        png.clear();
+        auto u32 = [&](uint32_t v) { for (int i = 3; i >= 0; i--) png.push_back((unsigned char)(v >> (i * 8))); };
+        auto chunk = [&](const char* type, const unsigned char* d, size_t n) {
+            u32((uint32_t)n);
+            size_t at = png.size();
+            png.insert(png.end(), type, type + 4);
+            png.insert(png.end(), d, d + n);
+            u32((uint32_t)crc32(0, png.data() + at, (uInt)(n + 4)));
+        };
+        static const unsigned char sig[8] = {0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a};
+        png.insert(png.end(), sig, sig + 8);
+        unsigned char ihdr[13] = {(unsigned char)(w >> 24), (unsigned char)(w >> 16), (unsigned char)(w >> 8), (unsigned char)w,
+                                  (unsigned char)(h >> 24), (unsigned char)(h >> 16), (unsigned char)(h >> 8), (unsigned char)h, 8, 2, 0, 0, 0};
+        chunk("IHDR", ihdr, 13);
+        chunk("IDAT", z.data(), z.size());
+        chunk("IEND", nullptr, 0);
+        ow = w;
+        oh = h;
+        if (png.size() <= 450 * 1024) return true;
+    }
+    return png.size() <= 900 * 1024;
 }
 
 void App::TryStartDepth()
@@ -1216,7 +1607,12 @@ void App::HandleEvent(const XrEventDataBuffer& ev)
             Log("session running");
         }
         else if (state_ == XR_SESSION_STATE_STOPPING) { xrEndSession(session); running_ = false; }
-        else if (state_ == XR_SESSION_STATE_EXITING || state_ == XR_SESSION_STATE_LOSS_PENDING) exit_ = true;
+        else if (state_ == XR_SESSION_STATE_EXITING || state_ == XR_SESSION_STATE_LOSS_PENDING)
+        {
+            // quit from the system menu: try to bring the launching app back (Android may refuse a start now)
+            if (!returned_ && !caller.empty()) { returned_ = true; Log("quit: trying to return to %s", caller.c_str()); StartCaller(nullptr); }
+            exit_ = true;
+        }
     }
     else if (ev.type == XR_TYPE_EVENT_DATA_INSTANCE_LOSS_PENDING) exit_ = true;
     else if (ev.type == XR_TYPE_EVENT_DATA_INTERACTION_PROFILE_CHANGED) controllers.profilesDirty_ = true;
@@ -1264,9 +1660,11 @@ bool App::BeginFrame(Frame& f)
     f.seconds = now - t0_;
     f.dt = last_ > 0 ? (float)(now - last_) : 0.f;
     last_ = now;
-    f.focused = Focused();
-    controllers.Sync(local, time_, f.focused);
+    controllers.Sync(local, time_, Focused());
     if (hands.Available()) hands.Update(local, time_);
+    if (testReturnAt_ > 0 && f.seconds > testReturnAt_ && Focused()) { testReturnAt_ = -1; Log("test: return%s", testReport_ ? " with a report" : ""); ReturnToCaller(testReport_); }
+    MenuInput(f);
+    f.focused = Focused() && !menuOpen_; // while the menu is open the app gets no input
     spatial.Locate(local, time_);
     if (depth.Running()) depth.Acquire(local, time_, f.depth);
     XrViewLocateInfo li{XR_TYPE_VIEW_LOCATE_INFO};
@@ -1303,6 +1701,7 @@ void App::BeginEye(int e, Eye& eye)
     eye.projection = Mat4::Projection(views_[e].fov, 0.05f, 100.f);
     eye.view = Mat4::ViewFromPose(views_[e].pose);
     eye.viewProj = eye.projection * eye.view;
+    eyeViewProj_[e] = eye.viewProj;
     eye.framebuffer = fbo_;
     pv_[e] = {XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW};
     pv_[e].pose = views_[e].pose;
@@ -1313,6 +1712,19 @@ void App::BeginEye(int e, Eye& eye)
 
 void App::EndEye(int e)
 {
+    if (e == 0 && reportFrames_ == 0)
+    {
+        reportFrames_ = -1;
+        std::vector<unsigned char> png;
+        int w = 0, h = 0;
+        double t0 = Now();
+        bool ok = CaptureEye(0, png, w, h);
+        Log("report: picture %dx%d, %zu KB in %.0f ms", w, h, png.size() / 1024, (Now() - t0) * 1000.0);
+        if (StartCaller(ok ? &png : nullptr)) { returned_ = true; Quit(); }
+    }
+    else if (e == 1 && reportFrames_ > 0) reportFrames_--;
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo_);
+    DrawMenu(e);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     XrSwapchainImageReleaseInfo ri{XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
     xrReleaseSwapchainImage(eyes_[e].chain, &ri);

@@ -55,5 +55,8 @@ another signing key or installer (the user uninstalls the old copy); `VERSION_DO
 | hands or controllers do nothing | `session state 5` never reached (FOCUSED) | input works only with focus: the system menu is open, or the app reads input outside `f.focused` |
 | jerky, hot | | frame budget: quest-native-recipes recipe 5 |
 | a line `extension X: not offered` | | the manifest lacks its entry, or the device has no such hardware (face/eye tracking on a 3S) |
+| "the menu does not open" | no `menu opened` | the app is not on `mcx::App`, or it opens with the right hand's gesture (that one is the system menu): left menu button / left hand |
+| "Back did nothing" / landed in Home | `back: ... could not be started` or no `back:` line | MetaCodex not installed or the app was in the background; the user opens MetaCodex from the dock (an app cannot bring MetaCodex forward after a crash: the overlay permission that allows it is prohibited by Meta) |
+| a report with no picture | `report: the picture could not be read` | the attachment list has only the log; ask for a description |
 
 Session states in the log: 1 idle, 2 ready, 3 synchronized, 4 visible, 5 focused, 6 stopping, 8 exiting.

@@ -28,6 +28,7 @@ if [[ "$MODE" == pc ]]; then
   APKSIGNER=("$JAVA" -jar "$(wslpath -w "$BT/lib/apksigner.jar")")
   ANDROID_JAR="${ANDROID_JAR:-$A/SDK/platforms/android-34/android.jar}"
   GLUE="$A/NDK/sources/android/native_app_glue"
+  XRL="${MCX_XR_SRC:-$HERE/../xr}"   # the native XR layer (native/xr in the repo)
   KS="${KEYSTORE:-$HERE/../.debug.keystore}"
   w() { wslpath -w "$1"; } # the tools are Windows programs: Windows paths
 elif [[ "$MODE" == device ]]; then
@@ -42,6 +43,7 @@ elif [[ "$MODE" == device ]]; then
   OPENXR_INCLUDE="${OPENXR_INCLUDE:-/opt/openxr/include}"
   OPENXR_LOADER="${OPENXR_LOADER:-/opt/openxr/lib/arm64-v8a/libopenxr_loader.so}"
   GLUE="$NDK/sources/android/native_app_glue"
+  XRL="${MCX_XR_SRC:-/opt/metacodex/quest-native/xr}"
   # one key for every app built here: an update must be signed like the installed app (never delete it)
   KS="${KEYSTORE:-$HOME/.android/metacodex-debug.keystore}"
   w() { printf '%s' "$1"; }
@@ -58,11 +60,11 @@ fi
 rm -rf "$OUT"
 mkdir -p "$OUT/obj" "$OUT/lib/arm64-v8a"
 T=(--target=aarch64-linux-android32 -O2 -fPIC -DAPP_ID_RAW="$PKG")
-INC=(-I"$(w "$OPENXR_INCLUDE")" -I"$(w "$GLUE")" -I"$(w "$HERE/src")")
+INC=(-I"$(w "$OPENXR_INCLUDE")" -I"$(w "$GLUE")" -I"$(w "$HERE/src")" -I"$(w "$XRL")")
 echo "== compile $PKG (lib$LIB.so)"
 objs=()
 shopt -s nullglob
-for src in "$HERE"/src/*.cpp "$HERE"/src/*.c "$GLUE/android_native_app_glue.c"; do
+for src in "$HERE"/src/*.cpp "$HERE"/src/*.c "$GLUE/android_native_app_glue.c" "$XRL/mcx_xr.cpp"; do
   o="$OUT/obj/$(basename "$src").o"
   case "$src" in
     *.cpp) "${CXX[@]}" "${T[@]}" -std=c++17 "${INC[@]}" -c "$(w "$src")" -o "$(w "$o")" ;;
@@ -74,7 +76,7 @@ cp "$OPENXR_LOADER" "$OUT/lib/arm64-v8a/libopenxr_loader.so"
 echo "== link"
 # the glue's entry point must stay (NativeActivity calls it); libc++ linked in, so no libc++_shared.so to ship
 "${CXX[@]}" --target=aarch64-linux-android32 -shared -o "$(w "$OUT/lib/arm64-v8a/lib$LIB.so")" "${objs[@]}" \
-  -L"$(w "$OUT/lib/arm64-v8a")" -lopenxr_loader -landroid -llog -lEGL -lGLESv3 -static-libstdc++ \
+  -L"$(w "$OUT/lib/arm64-v8a")" -lopenxr_loader -landroid -llog -lEGL -lGLESv3 -lz -static-libstdc++ \
   -Wl,-u,ANativeActivity_onCreate -Wl,--no-undefined -Wl,-z,max-page-size=16384
 echo "== package"
 LINK=(link -o "$(w "$OUT/base.apk")" --manifest "$(w "$MANIFEST")" -I "$(w "$ANDROID_JAR")")

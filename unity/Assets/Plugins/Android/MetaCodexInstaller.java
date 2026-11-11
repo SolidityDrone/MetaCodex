@@ -184,10 +184,21 @@ public final class MetaCodexInstaller {
 
     /** Starts an installed app by package name (its launcher activity). */
     public static String launch(Activity a, String pkg) {
+        return launch(a, pkg, null);
+    }
+
+    /**
+     * Starts an installed app and tells it who started it: apps built on the native XR layer (mcx_xr) read
+     * com.metacodex.extra.CALLER and .LAUNCH_ID and offer "Back to MetaCodex" / "Report to MetaCodex" in their menu,
+     * which start MetaCodex again with the same launch id (MetaCodexReturn checks it). The id goes only to this app.
+     */
+    public static String launch(Activity a, String pkg, String launchId) {
         try {
             Intent i = a.getPackageManager().getLaunchIntentForPackage(pkg);
             if (i == null) return "failure: no launcher activity for " + pkg + " (not installed?)";
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            i.putExtra("com.metacodex.extra.CALLER", a.getPackageName());
+            if (launchId != null && !launchId.isEmpty()) i.putExtra("com.metacodex.extra.LAUNCH_ID", launchId);
             a.startActivity(i);
             return "ok";
         } catch (Exception e) {

@@ -22,6 +22,11 @@
 //   Display/perf XR_FB_display_refresh_rate, XR_FB_foveation(_configuration), XR_EXT_performance_settings
 //   Permissions  Activity.checkSelfPermission / requestPermissions through JNI (polled: NativeActivity gets no result)
 //   Text         mcx::Text: a monospaced font (DejaVu Sans Mono) and filled rectangles drawn in 3D
+//   App menu     built in, always there: the left controller's menu button or the left hand's menu gesture opens
+//                Back to MetaCodex / Report to MetaCodex / Restart / Quit (+ your items: App::menuItems).
+//                "Back" starts MetaCodex again (warm: nothing reloads) and ends this app; "Report" sends MetaCodex
+//                a picture of this app, its last log lines, name and version, which open as a draft in the thread
+//                that launched it.
 #pragma once
 #include <android_native_app_glue.h>
 #include <EGL/egl.h>
@@ -59,6 +64,7 @@ XrVector3f Forward(const XrPosef& p);                    // -Z of the pose
 // logging: logcat (tag = package) and, when MetaCodex listens (mcx-app logs), 127.0.0.1:47950
 void Log(const char* fmt, ...) __attribute__((format(printf, 1, 2)));
 void SetLogTag(const char* tag);
+std::string RecentLog(int maxLines = 40);               // the last lines Log() wrote (for reports)
 
 // ---------------------------------------------------------------- permissions (JNI on the NativeActivity)
 struct Permissions
@@ -313,6 +319,12 @@ struct Frame
     DepthFrame depth;             // valid when depth runs and a map was acquired
 };
 
+struct MenuItem
+{
+    std::string label;
+    std::function<void()> action;
+};
+
 struct Eye
 {
     int index = 0, width = 0, height = 0;
@@ -345,6 +357,20 @@ public:
     XrCompositionLayerFlags projectionFlags = 0;
     float clearAlpha() const { return passthrough.Running() ? 0.f : 1.f; }
 
+    // ---- the app menu and the way back (always there; apps add items, never remove the standard ones)
+    std::vector<MenuItem> menuItems;                     // yours, listed above Back / Report / Restart / Quit
+    bool MenuOpen() const { return menuOpen_; }
+    void OpenMenu(bool open);
+    // back to the app that launched this one (MetaCodex) or, started from the Library, open MetaCodex; then this app
+    // ends. report = also send a picture of this app, its last log lines, label and version (taken next frame).
+    bool ReturnToCaller(bool report = false);
+    void Restart();                                      // start this app again (a fresh activity)
+    void Quit();                                         // end the session: the app closes
+    std::string caller;                                  // package that launched this app ("" from the Library)
+    std::string launchId;                                // the launch's id (MetaCodex matches reports with it)
+    std::string packageName, label, versionName;
+    long long versionCode = 0;
+
     // display / performance
     std::vector<float> refreshRates;                     // offered by the display
     float refreshRate = 72.f;
@@ -371,7 +397,21 @@ private:
     bool InitSwapchains();
     void HandleEvent(const XrEventDataBuffer& ev);
     void TryStartDepth();
+    void ReadLaunch();
+    void MenuInput(const Frame& f);
+    void DrawMenu(int eye);
+    bool CaptureEye(int eye, std::vector<unsigned char>& png, int& w, int& h);
+    bool StartCaller(const std::vector<unsigned char>* png);
     Config cfg_;
+    bool menuOpen_ = false, menuPrevL_ = false, menuPrevH_ = false, returned_ = false, metacodexInstalled_ = false;
+    int menuHover_ = -1, reportFrames_ = -1;
+    double testReturnAt_ = -1.0;
+    bool testReport_ = false;
+    XrPosef menuPose_{{0, 0, 0, 1}, {0, 0, -0.9f}};
+    bool menuRayHit_ = false;
+    XrVector3f menuRayPoint_{0, 0, 0};
+    std::vector<MenuItem> menuShown_;
+    Mat4 eyeViewProj_[2];
     EGLDisplay display_ = EGL_NO_DISPLAY;
     EGLContext context_ = EGL_NO_CONTEXT;
     EGLSurface surface_ = EGL_NO_SURFACE;

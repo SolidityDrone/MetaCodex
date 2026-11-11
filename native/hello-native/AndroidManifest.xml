@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Hello Native: a pure native OpenXR app for Quest (no Java code: hasCode="false", NativeActivity).
+<!-- Hello Native: a native OpenXR app for Quest on mcx_xr (no Java code: hasCode="false", NativeActivity).
      The template of `mcx-app new`, which sets package, android:label and the library name (android.app.lib_name).
      build.sh reads all three from this file. Settings from Meta's native manifest page: landscape, the black
      fullscreen theme, these configChanges, the VR category, vr.headtracking, com.oculus.supportedDevices. -->
@@ -15,6 +15,9 @@
     <uses-feature android:name="android.hardware.vr.headtracking" android:required="true" android:version="1" />
     <uses-feature android:glEsVersion="0x00030001" android:required="true" />
 
+    <!-- hand tracking (mcx_xr turns it on by default; the app menu also opens with the left hand's menu gesture) -->
+    <uses-permission android:name="com.oculus.permission.HAND_TRACKING" />
+    <uses-feature android:name="oculus.software.handtracking" android:required="false" />
     <!-- the Khronos OpenXR loader finds the runtime through its broker (from the loader's own manifest) -->
     <uses-permission android:name="org.khronos.openxr.permission.OPENXR" />
     <uses-permission android:name="org.khronos.openxr.permission.OPENXR_SYSTEM" />
@@ -32,6 +35,7 @@
 
     <application
         android:label="Hello Native"
+        android:icon="@drawable/icon"
         android:hasCode="false"
         android:allowBackup="false">
         <meta-data android:name="com.oculus.supportedDevices" android:value="quest3|quest3s|quest2|questpro" />

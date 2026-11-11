@@ -45,6 +45,7 @@ are the eyes; the head = their midpoint. `mcx::Mat4::FromPose(pose)` places thin
 
 | Feature | Turn on / use | AndroidManifest.xml needs | Status |
 |---|---|---|---|
+| App menu, way back, report | built in, always on: the left controller's menu button or the non-dominant hand's menu gesture opens Back to MetaCodex / Report to MetaCodex / Restart / Quit; add yours with `app.menuItems.push_back({"Label", [&] { ... }})`; `app.ReturnToCaller(report)`, `app.MenuOpen()` | nothing | builds on headset (template, Night Vision); return pending the MetaCodex build that receives it |
 | Lifecycle, system menu | `app.Pump()`, `f.focused` (false while a system menu has focus: pause, take no input), `app.Visible()`, `app.Resumed()` | NativeActivity block as in the template | ran on headset |
 | Passthrough (mixed reality) | `cfg.passthrough = true`; `app.passthrough.Start()/Pause()`, styles; clear alpha 0 | `<uses-feature android:name="com.oculus.feature.PASSTHROUGH" android:required="true" />` | builds on headset; extension offered |
 | Environment depth | `cfg.depth = true`; `f.depth` each frame (`valid`, `texture`, `viewProj[eye]`, `Linear(d)`) | `<uses-permission android:name="com.oculus.permission.USE_SCENE" />`; supportedDevices `quest3\|quest3s` | builds on headset; extension offered; runtime permission |
@@ -74,6 +75,9 @@ symbols, a missing icon, and depth apps listing Quest 2 / Pro. Fix every `PROBLE
   "allow spatial data: Settings > Apps > <Label> > Permissions" on a text panel and tell the user the same.
 
 ## Pitfalls
+
+- Never take the left controller's menu button or the non-dominant hand's menu gesture for your own controls: they
+  open the app menu (Meta: the app menu's buttons). While it is open `f.focused` is false: your app gets no input.
 
 - Output colour is premultiplied when passthrough is on: write `vec4(rgb * a, a)`; where nothing is drawn, alpha 0.
 - Never put text or panels on the head (head-locked): place them in the room, 1-1.5 m away, following lazily

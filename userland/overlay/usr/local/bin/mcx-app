@@ -250,10 +250,11 @@ install_app() {
 launch_app() {
   local pkg r; pkg=$(pkg_arg "${1:-}")
   start_logd
-  r=$(ui system launch "$pkg")
+  # the launch remembers this thread (MQH_THREAD_ID in agent shells): the app's menu comes back to it
+  r=$(ui system launch "$pkg" ${MQH_THREAD_ID:+thread "$MQH_THREAD_ID"})
   if [[ "$r" == ok* ]]; then
     echo "RESULT: started $pkg"
-    ask "The app is open in the headset (MetaCodex is in the background). Try it, then open MetaCodex again from the Library and tell me what you saw."
+    ask "The app is open in the headset. Its menu (left controller's menu button, or the left hand's menu gesture: look at your left palm and pinch) has Back to MetaCodex and Report to MetaCodex: a report brings a picture and the app's log back into this thread."
     echo "its log: mcx-app logs $pkg"
   else
     echo "RESULT: $r"; return 1
