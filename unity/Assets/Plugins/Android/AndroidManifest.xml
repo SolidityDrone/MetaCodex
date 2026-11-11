@@ -20,7 +20,11 @@
     </activity>
     <!-- the local AI service runs in its own process: Android places it on cores 0-2, away from the immersive
          app's cores 3-5 (docs/voice.md) -->
-    <service android:name="com.pnncl.metacodex.ai.MetaCodexAiService" android:process=":ai" android:exported="false" />
+    <!-- a foreground service while it runs MQH, the agents and the local AI, so they go on while another app (one the
+         user just built) is in front; a partial wake lock only while a native app build runs -->
+    <service android:name="com.pnncl.metacodex.ai.MetaCodexAiService" android:process=":ai" android:exported="false" android:foregroundServiceType="specialUse">
+      <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="Local agent runtime: the user's coding agents, a local speech and language model service and native app builds keep running while the user tries an app they built" />
+    </service>
     <meta-data android:name="unityplayer.SkipPermissionsDialog" android:value="false" />
     <meta-data android:name="com.oculus.handtracking.frequency" android:value="LOW" />
     <meta-data android:name="com.oculus.ossplash.background" android:value="black" />
@@ -45,4 +49,9 @@
   <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
   <!-- updates of apps MetaCodex installed itself go through without a new confirmation when Android allows it -->
   <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" />
+  <!-- the AI service process stays in the foreground while it runs MQH / the local AI (MetaCodexAiService.java) -->
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+  <!-- held only while a native app build runs, so it completes with the headset off -->
+  <uses-permission android:name="android.permission.WAKE_LOCK" />
 </manifest>
