@@ -263,10 +263,12 @@ namespace MetaCodex.Shell
         public IEnumerable<string> PanelIds => _panels.Keys;
 
         /// Panels that moved inside another one: GIT is the vault's GIT tab now (ui.open("git") still works), and SCRIPTS,
-        /// GESTURES and the daemon link are tabs of MQH with the new SKILLS and PLUGINS.
+        /// GESTURES and the daemon link (MQH > STATUS) are tabs of MQH with the new SKILLS and PLUGINS. CONTROL's SETTINGS
+        /// pages have their category's id: display, look, focus, hands, about (SETTINGS' tabs 1, 3, 2, 0, 4).
         public static readonly Dictionary<string, (string panel, int tab)> PanelAliases = new Dictionary<string, (string, int)>
         {
-            { "git", ("vault", 1) }, { "focus", ("settings", 2) }, { "storage", ("system", 1) }, { "tools", ("system", 0) },
+            { "display", ("settings", 1) }, { "look", ("settings", 3) }, { "focus", ("settings", 2) }, { "hands", ("settings", 0) }, { "about", ("settings", 4) },
+            { "git", ("vault", 1) }, { "storage", ("system", 1) }, { "tools", ("system", 0) },
             { "skills", ("mqh", MqhSkillsTab) }, { "plugins", ("mqh", MqhPluginsTab) }, { "scripts", ("mqh", MqhScriptsTab) },
             { "gestures", ("mqh", MqhGesturesTab) }, { "daemon", ("mqh", MqhDaemonTab) },
             { "links", ("browser", -1) }, // WEB's bookmarks and local servers (the panel kept its old id: saved layouts name it)
@@ -322,6 +324,13 @@ namespace MetaCodex.Shell
 
         public bool ClosePanel(string id)
         {
+            if (id == ControlId)
+            {
+                // CONTROL is its window and the rail: both go
+                ShownControlPage(null)?.Close();
+                if (_rail != null && _rail.IsOpen) _rail.Close();
+                return _rail != null;
+            }
             Alias(ref id, out _);
             if (!_panels.TryGetValue(id ?? "", out var p)) return false;
             p.Close();
@@ -330,6 +339,7 @@ namespace MetaCodex.Shell
 
         public bool TogglePanel(string id)
         {
+            if (id == ControlId) { ToggleControl(); return true; } // CONTROL is its window and the rail, never the rail alone
             if (Alias(ref id, out int tab))
             {
                 if (!_panels.TryGetValue(id, out var ap)) return false;
@@ -458,11 +468,11 @@ namespace MetaCodex.Shell
         /// ✕ on a terminal: ends it, except the last one, which keeps running hidden.
         private void CloseOrHideTerminal(TerminalInstance inst)
         {
-            if (app == null || app.Terminals.Count <= 1) { HideTerminal(inst); Toast("The last terminal keeps running hidden · TERM on the dock shows it", "info"); return; }
+            if (app == null || app.Terminals.Count <= 1) { HideTerminal(inst); Toast("The last terminal keeps running hidden · TERM on the menu shows it", "info"); return; }
             app.CloseTerminal(inst);
         }
 
-        /// TERM on the dock: a hidden terminal comes back; when all are shown, a new one opens.
+        /// TERM on the main menu (dock or wrist): a hidden terminal comes back; when all are shown, a new one opens.
         public void ShowOrNewTerminal()
         {
             if (app == null) return;

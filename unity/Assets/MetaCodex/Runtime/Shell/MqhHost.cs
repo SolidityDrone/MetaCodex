@@ -11,7 +11,7 @@ namespace MetaCodex.Shell
     /// once the Linux is ready and the MQH bundle is laid (/opt/mqh, LinuxHost), it starts /opt/mqh/bin/mqh-run
     /// through the app's AI service process (Android places that one on cores 0-2, away from the frame loop's 3-5;
     /// the same reason the local AI runs there), with the vault's API token, watches /health and starts it again if
-    /// it stops (a few tries, then it says so). A developer URL other than the local one (Settings > DAEMON, e.g. a
+    /// it stops (a few tries, then it says so). A developer URL other than the local one (MQH > STATUS, e.g. a
     /// PC's MQH through adb reverse) turns this off. In the Editor there is no Linux: it stays Off.
     public sealed class MqhHost
     {
@@ -80,7 +80,7 @@ namespace MetaCodex.Shell
             Check(now);
         }
 
-        /// The user asked (DAEMON > RESTART): try again, also after it gave up.
+        /// The user asked (MQH > STATUS > RESTART): try again, also after it gave up.
         public void Restart()
         {
             _restarts = 0;
@@ -148,7 +148,7 @@ namespace MetaCodex.Shell
             if (now - _restartWindow > 600f) { _restartWindow = now; _restarts = 0; }
             if (++_restarts > 4)
             {
-                Set(HostState.Failed, "MQH stopped 5 times in 10 min: ~/.mqh/logs and mqh-run.log say why; DAEMON > RESTART tries again");
+                Set(HostState.Failed, "MQH stopped 5 times in 10 min: ~/.mqh/logs and mqh-run.log say why; MQH > STATUS > RESTART tries again");
                 return;
             }
             float wait = 3f * _restarts * _restarts;

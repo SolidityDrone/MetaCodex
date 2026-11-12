@@ -9,9 +9,10 @@ using UnityEngine;
 namespace MetaCodex.Shell
 {
     /// CONTROL (owner 2026-11-11, docs/control-center.md): one place for everything that sets the workbench up. Each
-    /// category keeps its own window (SETTINGS' pages, VOICE, AGENTS, MQH, VAULT, SYSTEM: their size, tabs and tests);
+    /// category keeps its own window (SETTINGS' pages, VOICE, AGENTS, MQH, VAULT, SYSTEM: their tabs and tests);
     /// a sidebar rides on the left of the one shown, with the ten categories in three groups and a live status each.
-    /// One category at a time: another one takes the shown window's place (same left and top edges), the rail stays.
+    /// One category at a time: another one takes the shown window's place (same left and top edges, and since all six
+    /// windows have one size, ControlPageW x ControlPageH, the same rectangle), the rail stays.
     /// Work windows (terminals, files, threads, web, clipboard) stay windows of their own.
     public sealed partial class MetaCodexShell
     {
@@ -26,6 +27,8 @@ namespace MetaCodex.Shell
         public const float RailW = 0.17f, RailGap = 0.010f, RailYaw = 12f;
         public static readonly string[] ControlPages = { "settings", "voice", "agents", "mqh", "vault", "system" };
         public static bool IsControlPage(string id) => id != null && Array.IndexOf(ControlPages, id) >= 0;
+        /// The one size of CONTROL's six windows: a category taking another's place never grows over a neighbour.
+        public const float ControlPageW = 0.76f, ControlPageH = 0.66f;
 
         private UiPanel _rail;
         private string _railPage;               // the window the rail is beside
@@ -51,27 +54,27 @@ namespace MetaCodex.Shell
                 new ControlCategory { Key = "display", Label = "DISPLAY", Glyph = "◧", Group = "THIS HEADSET", Panel = "settings", Tab = SetDisplay,
                     Blurb = "Where windows go and how big they are: fixed or floating layout, distance, scale, bending, the main menu, saved layouts.",
                     Status = () => Settings.layout == "float" ? "float" : "fixed" },
-                new ControlCategory { Key = "look", Label = "LOOK & SOUND", Glyph = "◐", Group = "THIS HEADSET", Panel = "settings", Tab = SetLook,
+                new ControlCategory { Key = "look", Label = "LOOK & SOUND", Glyph = "◈", Group = "THIS HEADSET", Panel = "settings", Tab = SetLook,
                     Blurb = "How the glass looks and sounds: opacity, shadows, foveation, sounds and volume, the orb.",
                     Status = () => Settings.sounds ? "sound" : "muted" },
-                new ControlCategory { Key = "focus", Label = "FOCUS", Glyph = "◎", Group = "THIS HEADSET", Panel = "settings", Tab = SetFocusTab,
+                new ControlCategory { Key = "focus", Label = "FOCUS", Glyph = "◐", Group = "THIS HEADSET", Panel = "settings", Tab = SetFocusTab,
                     Blurb = "Ambient focus: the room fades beyond a dome around you; real things in front of windows.",
                     Status = () => On(Settings.focusEnabled) },
                 new ControlCategory { Key = "hands", Label = "HANDS", Glyph = "✋", Group = "THIS HEADSET", Panel = "settings", Tab = SetHands,
-                    Blurb = "How your hands drive it: pinch or poke, moving windows, the ray, the clap; the gesture studio is in MQH.",
+                    Blurb = "How your hands drive it: pinch or poke, moving windows, the ray, the clap; GESTURE STUDIO: your own gestures.",
                     Status = () => Settings.gestures.clickMode == 1 ? "poke" : Settings.gestures.clickMode == 2 ? "both" : "pinch" },
-                new ControlCategory { Key = "voice", Label = "VOICE", Glyph = "♫", Group = "THIS HEADSET", Panel = "voice",
+                new ControlCategory { Key = "voice", Label = "VOICE", Glyph = "♫", Group = "AI", Panel = "voice",
                     Status = () => Qvac == null ? "off" : Qvac.IsRunning ? "ready" : Qvac.State.ToString().ToLowerInvariant() },
-                new ControlCategory { Key = "agents", Label = "AGENTS", Glyph = "◆", Group = "AGENTS", Panel = "agents",
-                    Status = () => { int n = _providerStates.Count(x => (string)x["status"] == "ready" || (string)x["status"] == "authenticated"); return n > 0 ? n + " ready" : "set up"; } },
-                new ControlCategory { Key = "mqh", Label = "MQH", Glyph = "⬡", Group = "AGENTS", Panel = "mqh",
+                new ControlCategory { Key = "agents", Label = "AGENTS", Glyph = "◆", Group = "AI", Panel = "agents",
+                    Status = () => { int n = _providerStates.Count(x => (string)x["status"] == "ready" || (string)x["status"] == "authenticated"); return n > 0 ? n + " ready" : "sign in"; } },
+                new ControlCategory { Key = "mqh", Label = "MQH", Glyph = "⬡", Group = "AI", Panel = "mqh",
                     Status = () => MqhHost != null ? MqhHost.State.ToString().ToLowerInvariant() : Mqh != null && Mqh.Online ? "online" : "offline" },
-                new ControlCategory { Key = "vault", Label = "VAULT", Glyph = "⚿", Group = "AGENTS", Panel = "vault",
+                new ControlCategory { Key = "vault", Label = "VAULT", Glyph = "⚿", Group = "AI", Panel = "vault",
                     Status = () => Vault != null ? AI.ThreadPulse.Plural(Vault.Entries.Count, "key") : "locked" },
                 new ControlCategory { Key = "system", Label = "SYSTEM", Glyph = "⬢", Group = "LINUX & APP", Panel = "system",
                     Status = () => FirstUseStatus.StartsWith("done") ? "ready" : FirstUseStatus.StartsWith("running") ? "setting up" : FirstUseStatus.StartsWith("failed") ? "setup failed" : "—" },
                 new ControlCategory { Key = "about", Label = "ABOUT", Glyph = "✦", Group = "LINUX & APP", Panel = "settings", Tab = SetAbout,
-                    Blurb = "MetaCodex, the licences of what it carries, the last log lines.",
+                    Blurb = "MetaCodex, the licences of what it carries, the app's permissions.",
                     Status = () => Application.version },
             };
         }
@@ -106,7 +109,8 @@ namespace MetaCodex.Shell
                 var c = cat;
                 var r = new Rect(pad, y, RailW - pad * 2f, rowH);
                 var b = rail.Add(new UiButton("", () => OpenControl(c.Key), UiButtonStyle.Tab) { Rect = r });
-                var name = rail.Add(new UiLabel(c.Glyph + "  " + c.Label, 0.0118f) { Rect = new Rect(r.x + 0.008f, r.y, r.width * 0.66f, r.height), Color = t.Text });
+                // the console voice (Rajdhani capitals, as the title and the group captions): "◈  LOOK & SOUND", the longest, is ~7 cm of 10
+                var name = rail.Add(new UiLabel(c.Glyph + "  " + c.Label, 0.0118f) { Rect = new Rect(r.x + 0.008f, r.y, r.width * 0.66f, r.height), UseDisplay = true, Color = t.Text });
                 var st = rail.Add(new UiLabel("", 0.0092f) { Rect = new Rect(r.x + r.width * 0.60f, r.y, r.width * 0.40f - 0.006f, r.height), Color = t.TextDim, Align = TextAlignmentOptions.MidlineRight });
                 _railRows.Add((c, b, name, st));
                 y += rowH + rowGap;
@@ -126,7 +130,15 @@ namespace MetaCodex.Shell
             var c = sp.Content;
             _settingsBlurb = sp.Add(new UiLabel("", t.SmallSize) { Rect = new Rect(c.x, c.y, c.width, t.ButtonHeight), Color = t.TextDim, Wrap = true, Align = TextAlignmentOptions.MidlineLeft });
             var before = _settingsTabs.OnChanged;
-            _settingsTabs.OnChanged = i => { before?.Invoke(i); ShowSettingsBlurb(i); RefreshRail(); };
+            _settingsTabs.OnChanged = i =>
+            {
+                before?.Invoke(i);
+                ShowSettingsBlurb(i);
+                // a page chosen any way (rail, ui.open("display"), voice, a button) is the one CONTROL comes back to
+                var page = _categories.FirstOrDefault(k => k.Panel == "settings" && k.Tab == i);
+                if (page != null && ControlRailPage == "settings") _controlLast = page.Key;
+                RefreshRail();
+            };
             ShowSettingsBlurb(_settingsTabs.Selected);
         }
 
@@ -232,6 +244,7 @@ namespace MetaCodex.Shell
             if (cat != null) _controlLast = cat.Key;
             // the first time SETTINGS shows, it shows DISPLAY (its first tab, HANDS, is not where people look first)
             if (pageId == "settings" && !_settingsShown) { _settingsShown = true; if (cat == null && _settingsTabs != null && _settingsTabs.Selected == SetHands) _settingsTabs.Select(SetDisplay); }
+            if (pageId == "settings") { var page0 = _categories.FirstOrDefault(c => c.Panel == "settings" && c.Tab == (_settingsTabs?.Selected ?? -1)); if (page0 != null) _controlLast = page0.Key; }
             if (_panels.TryGetValue(pageId, out var page)) { var (pos, rot) = RailPose(page); _rail.transform.SetPositionAndRotation(pos, rot); }
             if (!_rail.IsOpen) _rail.Open();
             RefreshRail();

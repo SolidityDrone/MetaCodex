@@ -11,9 +11,10 @@ using UnityEngine;
 namespace MetaCodex.Shell
 {
     /// MQH: one panel for what extends the agents and the app (owner 2026-11-09: "a compact area, not so many panels"):
-    /// SKILLS (the skill layer MQH puts over every ACP provider: Claude Code, Codex, opencode, as bb does), PLUGINS (MQH's
-    /// plugins and the app's gesture / behaviour plugins), SCRIPTS (Lua behaviours), GESTURES (the studio) and DAEMON
-    /// (the link to MQH, from Settings). The old ids open their tab: skills, plugins, scripts, gestures, daemon.
+    /// SKILLS (the skill layer MQH puts over every ACP provider: Claude Code, Codex, opencode), PLUGINS (MQH's
+    /// plugins and the app's gesture / behaviour plugins), SCRIPTS (Lua behaviours), GESTURES (the studio) and STATUS
+    /// (the link to MQH, from Settings; its id is still daemon). The old ids open their tab: skills, plugins, scripts,
+    /// gestures, daemon.
     /// Skills that came with MetaCodex or MQH (how to write skills, plugins, scripts, native apps, the context) are
     /// read-only: skills are only added (NEW SKILL: an agent writes one; FIND / INSTALL: from the registry), and only
     /// those can be removed. Skills are for the ACP agents only: none of this goes to the local AI model.
@@ -27,9 +28,9 @@ namespace MetaCodex.Shell
         private void BuildMqh()
         {
             var t = UiTheme.Current;
-            var p = Panel<UiPanel>("mqh", "MQH · SKILLS · PLUGINS · GESTURES", 0.80f, 0.68f);
+            var p = Panel<UiPanel>("mqh", "MQH · SKILLS · PLUGINS · SCRIPTS · GESTURES", ControlPageW, ControlPageH); // CONTROL's one size
             var c = p.Content;
-            _mqhTabs = p.Add(new UiTabs("SKILLS", "PLUGINS", "SCRIPTS", "GESTURES", "DAEMON") { Rect = new Rect(c.x, c.y, c.width, t.ButtonHeight) });
+            _mqhTabs = p.Add(new UiTabs("SKILLS", "PLUGINS", "SCRIPTS", "GESTURES", "STATUS") { Rect = new Rect(c.x, c.y, c.width, t.ButtonHeight) });
             var area = new Rect(c.x, c.y + t.ButtonHeight + t.Gap * 2, c.width, c.height - t.ButtonHeight - t.Gap * 2);
             BuildSkillsTab(area);
             BuildPluginsTab(area);
@@ -115,7 +116,7 @@ namespace MetaCodex.Shell
         {
             var t = UiTheme.Current;
             const int page = MqhSkillsTab;
-            float leftW = 0.40f;
+            float leftW = 0.36f; // the buttons on the right keep their width in CONTROL's one size
             var left = new UiStack(new Rect(area.x, area.y, leftW, area.height), t.Gap);
             _skillStatus = _mqhTabs.AddTo(page, new UiLabel("", t.SmallSize) { Rect = left.Next(0.022f), Color = t.TextDim });
             _skillList = _mqhTabs.AddTo(page, new UiList(0.032f, (item, idx) => ShowSkillDetail()) { Rect = left.Rest() });
@@ -159,7 +160,7 @@ namespace MetaCodex.Shell
                 if (gen != _skillsGen) return;
                 if (pid == null)
                 {
-                    _skillStatus.Set(Mqh.Online ? "No project yet: add one in THREADS (+ PROJECT…)" : "⚠ " + (Mqh.LastError ?? "MQH not reachable: see DAEMON"), Mqh.Online ? t.TextDim : t.Danger);
+                    _skillStatus.Set(Mqh.Online ? "No project yet: add one in THREADS (+ PROJECT…)" : "⚠ " + (Mqh.LastError ?? "MQH not reachable: see MQH > STATUS"), Mqh.Online ? t.TextDim : t.Danger);
                     _skillRows.Clear();
                     ShowSkillRows();
                     return;
@@ -167,7 +168,7 @@ namespace MetaCodex.Shell
                 Mqh.Skills(pid, r =>
                 {
                     if (gen != _skillsGen) return;
-                    if (r == null) { _skillStatus.Set("⚠ " + (Mqh.LastError ?? "MQH not reachable: see DAEMON"), t.Danger); return; }
+                    if (r == null) { _skillStatus.Set("⚠ " + (Mqh.LastError ?? "MQH not reachable: see MQH > STATUS"), t.Danger); return; }
                     ApplySkills(r);
                 });
             });
@@ -294,7 +295,7 @@ namespace MetaCodex.Shell
                 _skillDetail.Set($"<b>{(string)s["name"]}</b>  from {(string)s["source"]}\n{s["installs"]?.Value<int>() ?? 0:N0} installs" +
                                  (s["stars"]?.Type == JTokenType.Integer ? $" · {s["stars"]} stars" : "") + $"\n\n{(string)s["summary"]}\n\n<color=#7FA9BF>{(string)s["url"]}</color>\n\n⇣ INSTALL adds it for every agent.", t.Text);
             else
-                _skillDetail.Set("Skills teach the agents (Claude Code, Codex, opencode) how to do something here. MQH gives every agent the same layer of skills on top of its own, as bb does.\n\n" +
+                _skillDetail.Set("Skills teach the agents (Claude Code, Codex, opencode) how to do something here. MQH gives every agent the same layer of skills on top of its own.\n\n" +
                                  "+ NEW SKILL: an agent writes one with you (skill-creator).\n⌕ FIND: search the public registry (skills.sh), then ⇣ INSTALL.\n\n" +
                                  "The skills that came with MetaCodex and MQH (writing skills, plugins, scripts, native apps, this headset) are read-only.", t.TextDim);
         }
@@ -395,15 +396,16 @@ namespace MetaCodex.Shell
         {
             var t = UiTheme.Current;
             const int page = MqhPluginsTab;
-            float leftW = 0.40f;
+            float leftW = 0.36f;
             _gPlugins = _mqhTabs.AddTo(page, new UiList(0.032f, (item, idx) => ShowPluginDetail()) { Rect = new Rect(area.x, area.y, leftW, area.height) });
             var pr = new UiStack(new Rect(area.x + leftW + t.Gap * 2, area.y, area.width - leftW - t.Gap * 2, area.height), t.Gap);
             _gPluginDetail = _mqhTabs.AddTo(page, new UiLabel("", t.SmallSize) { Rect = pr.Next(area.height - t.ButtonHeight * 3 - t.Gap * 4), Wrap = true, UseMono = true, Align = TextAlignmentOptions.TopLeft, Color = t.TextDim });
-            AddRow(_mqhTabs, page, pr.Next(t.ButtonHeight), new (string, Action)[]
-            {
-                ("ENABLE / DISABLE", TogglePickedPlugin),
-                ("⟳ RELOAD", () => { Scripts.ReloadAll(); RefreshMqhPlugins(); }),
-            });
+            // ENABLE or DISABLE: the one that applies to the picked plugin (ShowPluginDetail)
+            var pt = pr.Next(t.ButtonHeight);
+            float ptw = (pt.width - t.Gap) / 2f;
+            _pluginToggle = _mqhTabs.AddTo(page, new UiButton("ENABLE", TogglePickedPlugin) { Rect = new Rect(pt.x, pt.y, ptw, pt.height) });
+            _mqhTabs.AddTo(page, new UiButton("⟳ RELOAD", () => { Scripts.ReloadAll(); RefreshMqhPlugins(); }) { Rect = new Rect(pt.x + ptw + t.Gap, pt.y, ptw, pt.height) });
+            _pluginToggle.SetEnabled(false);
             AddRow(_mqhTabs, page, pr.Next(t.ButtonHeight), new (string, Action)[]
             {
                 ("+ NEW PLUGIN…", () => UiKeyboard.Edit("my-gestures", false, null, id => { if (string.IsNullOrWhiteSpace(id)) return; var e = NewPlugin(id); Toast($"Plugin {e.Name} created in /mnt/quest/plugins/{e.Name}", "ok"); RefreshPluginList(); })),
@@ -480,11 +482,16 @@ namespace MetaCodex.Shell
             ShowPluginDetail();
         }
 
+        private UiButton _pluginToggle;
+
         private void ShowPluginDetail()
         {
             if (_gPluginDetail == null) return;
             var t = UiTheme.Current;
             var tag = SelectedPluginTag();
+            bool? on = tag is ScriptHost.Entry pe ? pe.Enabled : tag is JObject pm ? (pm["enabled"]?.Value<bool>() ?? (string)pm["status"] != "disabled") : (bool?)null;
+            _pluginToggle?.SetText(on == true ? "DISABLE" : "ENABLE");
+            _pluginToggle?.SetEnabled(on != null);
             if (tag is JObject m)
             {
                 bool builtin = (string)m["provenance"] == "builtin";
@@ -532,7 +539,7 @@ namespace MetaCodex.Shell
             Modal("DELETE PLUGIN", $"Delete the folder of plugin {e.Name}?", new[] { "DELETE", "CANCEL" }, i => { if (i == 0) { Scripts.Delete(e.Key); RefreshPluginList(); } });
         }
 
-        // ------------------------------------------------------------------ DAEMON
+        // ------------------------------------------------------------------ STATUS (the tab's id: daemon)
 
         private UiLabel _daemonStatus;
 
@@ -577,7 +584,7 @@ namespace MetaCodex.Shell
 
         private bool _mqhOnlineToastShown;
 
-        /// What MqhHost is doing, in a line (DAEMON, AGENTS when MQH does not answer).
+        /// What MqhHost is doing, in a line (STATUS, AGENTS when MQH does not answer).
         private string MqhHostLine() => MqhHost == null || MqhHost.State == MqhHost.HostState.Off ? "" : MqhHost.Status;
 
         public void RefreshDaemon()

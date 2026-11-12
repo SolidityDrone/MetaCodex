@@ -373,6 +373,10 @@ namespace MetaCodex.UI
         public string Format = "0.00";
         public Action<float> OnChanged;
         public float LabelWidth = 0.17f;
+        /// A short word under the label while the slider is dimmed (e.g. "FLOAT only": it does nothing in this layout).
+        public string Note;
+        /// Dimmed: drawn quietly (it still works, so it can be set ahead); see SetDimmed.
+        public bool Dimmed { get; private set; }
         public override bool Interactive => true;
         private int _track, _thumb;
         private UiText _label, _value;
@@ -389,6 +393,26 @@ namespace MetaCodex.UI
             _track = Panel.Shapes.Add(Panel.Shape(UiShapeKind.Bar, TrackRect, Theme.Accent, 0.003f, 0.003f, 0.004f));
             _thumb = Panel.Shapes.Add(Panel.Shape(UiShapeKind.Button, ThumbRect(), Theme.Text, 0.05f, 1f, 0.005f));
             Refresh();
+            if (Dimmed) ApplyDim();
+        }
+
+        /// Dims the slider (label, track, thumb, value; the Note under the label) or brings it back: colours only, no
+        /// rebuild of the panel's mesh.
+        public void SetDimmed(bool dim)
+        {
+            if (Dimmed == dim) return;
+            Dimmed = dim;
+            ApplyDim();
+        }
+
+        private void ApplyDim()
+        {
+            if (Panel == null || _label == null) return;
+            _label.Text = UiTheme.Pretty(Text) + (Dimmed && !string.IsNullOrEmpty(Note) ? "\n<size=62%>" + Note + "</size>" : "");
+            _label.Color = Dimmed ? Theme.TextDim * 0.8f : Theme.Text;
+            _value.Color = Dimmed ? Theme.TextDim * 0.8f : Theme.TextAccent;
+            Panel.Shapes.SetTint(_track, Dimmed ? Theme.Frame : Theme.Accent);
+            Panel.Shapes.SetTint(_thumb, Dimmed ? Theme.TextDim : Theme.Text);
         }
 
         private float Norm => Max > Min ? Mathf.Clamp01((Value - Min) / (Max - Min)) : 0f;

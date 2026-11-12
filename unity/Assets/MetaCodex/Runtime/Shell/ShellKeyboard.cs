@@ -39,6 +39,16 @@ namespace MetaCodex.Shell
             Keyboard.Show(_terminalSink);
         }
 
+        /// "Show the keyboard" (voice, scripts): the keyboard for the focused terminal; it stays when it is already up
+        /// (never a toggle: said twice, it must not go away).
+        public void ShowTerminalKeyboard()
+        {
+            if (Keyboard == null) return;
+            if (app?.Input != null) app.Input.KeyboardShown = () => Keyboard != null && Keyboard.Visible && Keyboard.Sink == _terminalSink;
+            if (Keyboard.Visible && Keyboard.Sink == _terminalSink) return;
+            Keyboard.Show(_terminalSink);
+        }
+
         /// The wrist menu's TABLE (and "open the table keyboard"): the keyboard for the terminal, with how to lay it down.
         public void OpenTableKeyboard()
         {

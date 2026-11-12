@@ -203,7 +203,7 @@ namespace MetaCodex.EditorTools
 
         private static void Glyphs(MetaCodexShell shell)
         {
-            string needed = "▶▤◫⎇◎ƒ⚙⌨⌖⟲✕↑⌂▸·↪●◆◇◎▣⚠✓▌•↓−⟳✋⚿☰⇗⎘◈✎⇢⇣○■▲▼→⑂◧◐☑☐▾❚λ⚒⛁⇅⬢✦‹›";
+            string needed = "▶▤◫⎇◎ƒ⚙⌨⌖⟲✕↑⌂▸·↪●◆◇◎▣⚠✓▌•↓−⟳✋⚿☰⇗⎘◈✎⇢⇣○■▲▼→⑂◧◐☑☐▾❚λ⚒⛁⇅⬢✦‹›✥✉";
             foreach (var (name, font) in new[] { ("display", UiTheme.Current.Display), ("body", UiTheme.Current.Body) })
             {
                 font.HasCharacters(needed, out uint[] missing, true, true);
@@ -378,7 +378,7 @@ namespace MetaCodex.EditorTools
             Click(r, settings, new Vector2(track.x + track.width * 0.9f, pinch.Rect.center.y), new Vector2(track.x + track.width * 0.25f, pinch.Rect.center.y));
             Check(Mathf.Abs(pinch.Value - Mathf.Lerp(0.6f, 0.98f, 0.25f)) < 0.03f, $"slider drag sets pinch threshold ({pinch.Value:F2})");
 
-            // the link to MQH is MQH > DAEMON now (it was a Settings tab)
+            // the link to MQH is MQH > STATUS now (it was a Settings tab; its id is still daemon)
             shell.ClosePanel("settings");
             shell.OpenPanel("daemon");
             var mqhPanel = shell.PanelsById["mqh"];
@@ -386,7 +386,7 @@ namespace MetaCodex.EditorTools
             UiKeyboard.EditorProvider = old => "http://127.0.0.1:38990";
             var url = mqhPanel.Elements.OfType<UiTextField>().First(f => f.Caption == "MQH URL");
             Click(r, mqhPanel, url.Rect.center);
-            Check(shell.Settings.mqhUrl == "http://127.0.0.1:38990", "text field edit (keyboard) updates the MQH URL (MQH > DAEMON)");
+            Check(shell.Settings.mqhUrl == "http://127.0.0.1:38990", "text field edit (keyboard) updates the MQH URL (MQH > STATUS)");
             shell.ClosePanel("mqh");
             shell.OpenPanel("settings"); // the steps below move it by its header
             Check(File.Exists(Path.Combine("Temp", "mcx-uitest", "settings.json")) && File.ReadAllText(Path.Combine("Temp", "mcx-uitest", "settings.json")).Contains("38990"), "settings persisted to disk");
@@ -2582,7 +2582,7 @@ end)
                 // what the app has to say: callouts in a column beside it, always on its right (owner 2026-11-11: never swapped)
                 foreach (var old in shell.Toasts.Panels.ToList()) old.CloseAndDestroy();
                 shell.Toasts.Tick(float.MaxValue);
-                shell.PanelsById["messages"].Elements.OfType<UiButton>().First(b => b.Text == "✕ CLEAR").Click(); // earlier sections' messages: not new here
+                shell.ClearMessages(); // earlier sections' messages: not new here (LOG's CLEAR ALL asks first; the control section tests it)
                 shell.Toast("Build finished: 0 errors", "ok");
                 Step(8);
                 var card = shell.Toasts.Panels.FirstOrDefault();
@@ -2629,7 +2629,7 @@ end)
                 bool leftSide = onArc.All(x => x.centre.x < -0.03f) && Enumerable.Range(1, 3).All(k => onArc[k].centre.y < onArc[k - 1].centre.y - 0.01f);
                 bool menuFacing = acts.All(a => Vector3.Angle(a.transform.forward, a.transform.position - head.position) < 3f);
                 bool clearOfOrb = onArc.All(x => x.near > shell.OrbOuterRadiusForTest);
-                var log = acts.Count == 4 ? acts[3].Elements.OfType<UiButton>().FirstOrDefault(b => b.Text.Contains("☰")) : null;
+                var log = acts.Count == 4 ? acts[3].Elements.OfType<UiButton>().FirstOrDefault(b => b.Text.Contains("✉")) : null;
                 bool counted = log != null && log.Text.Contains("4 NEW") && shell.OrbUnread == 4;
                 float labelDeg = Mathf.Atan(UiTheme.Current.FontSizeFor(MetaCodexShell.OrbActText) * 0.1f * acts[0].transform.lossyScale.y / Vector3.Distance(head.position, acts[0].transform.position)) * Mathf.Rad2Deg;
                 foreach (var a in acts) a.ForceRefresh();
@@ -3034,8 +3034,8 @@ end)
             foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
             var mp = shell.PanelsById["mqh"];
             var tabs = shell.MqhTabsForTest;
-            Check(string.Join(",", tabs.Names) == "SKILLS,PLUGINS,SCRIPTS,GESTURES,DAEMON" && !shell.PanelIds.Contains("scripts") && !shell.PanelIds.Contains("gestures"),
-                "MQH: one panel with SKILLS, PLUGINS, SCRIPTS, GESTURES, DAEMON (no separate SCRIPTS or GESTURES panel)");
+            Check(string.Join(",", tabs.Names) == "SKILLS,PLUGINS,SCRIPTS,GESTURES,STATUS" && !shell.PanelIds.Contains("scripts") && !shell.PanelIds.Contains("gestures"),
+                "MQH: one panel with SKILLS, PLUGINS, SCRIPTS, GESTURES, STATUS (the old DAEMON; no separate SCRIPTS or GESTURES panel)");
             var tabOf = new (string id, int tab)[] { ("skills", 0), ("plugins", 1), ("scripts", 2), ("gestures", 3), ("daemon", 4) };
             var bad = new List<string>();
             foreach (var (id, tab) in tabOf)

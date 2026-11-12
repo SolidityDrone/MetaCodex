@@ -8,7 +8,8 @@ namespace MetaCodex.EditorTools
     /// Self-test section `control` (owner 2026-11-11, docs/control-center.md): the calmer main menu (13 entries, setup
     /// in CONTROL), CONTROL's rail beside its window (top edges level, its own gap), one category at a time taking the
     /// shown window's place, old ids, SETTINGS' pages without their tab bar, the statuses, following a moved window,
-    /// closing together, the FLOAT ring's room, voice, and work windows opening beside the window they belong to.
+    /// closing together, the FLOAT ring's room, voice, and work windows opening beside the window they belong to; then
+    /// the menus-and-layout polish (ControlPolish).
     public static partial class MetaCodexUiTest
     {
         private static Vector3 TopLeftOf(UiPanel p) => p.transform.TransformPoint(new Vector3(-p.Width * 0.5f, p.Height * 0.5f, 0f));
@@ -29,9 +30,17 @@ namespace MetaCodex.EditorTools
             Check(inner.SequenceEqual(new[] { "TALK", "TERM", "FILES", "THREADS", "WEB", "CONTROL" }) && outer.Count == 7 && !inner.Concat(outer).Any(setup.Contains),
                 $"the wrist menu: 6 + {outer.Count} tiles (was 6 + 13): {string.Join(" ", inner)} | {string.Join(" ", outer)}");
             Check(dock.Count == 12 && dock.Contains("CONTROL") && !dock.Any(setup.Contains), $"the dock: the same {dock.Count}: {string.Join(" ", dock)}");
+            // one table builds both (MainMenuItems): the dock is the wrist in the same order, without the wrist-only TABLE
+            var wristOrder = inner.Concat(outer).Where(x => x != "TABLE").ToList();
+            Check(dock.SequenceEqual(wristOrder) && outer.Contains("TABLE") && shell.MainMenuItems().Count == inner.Count + outer.Count,
+                $"dock and wrist from one table: dock {string.Join(" ", dock)} = wrist {string.Join(" ", wristOrder)} (TABLE stays on the wrist)");
             var cats = shell.ControlCategories;
             Check(cats.Count == 10 && cats.Select(c => c.Group).Distinct().Count() == 3 && new[] { "agents", "mqh", "vault", "voice", "system", "display", "focus", "hands", "look", "about" }.All(k => cats.Any(c => c.Key == k)),
                 "CONTROL has ten categories in three groups: " + string.Join(", ", cats.Select(c => c.Group + "/" + c.Label)));
+            string groups = string.Join(" / ", cats.GroupBy(c => c.Group).Select(g => g.Key + ": " + string.Join(", ", g.Select(c => c.Key))));
+            Check(groups == "THIS HEADSET: display, look, focus, hands / AI: voice, agents, mqh, vault / LINUX & APP: system, about"
+                && cats.First(c => c.Key == "focus").Glyph == "◐" && cats.First(c => c.Key == "look").Glyph == "◈",
+                $"the rail's groups and glyphs (FOCUS ◐ as on the menu, LOOK & SOUND ◈): {groups}");
 
             // CONTROL from the menu: its last category (DISPLAY here), the rail on the window's left, top edges level, its gap
             shell.OpenControl("display");
@@ -140,6 +149,134 @@ namespace MetaCodex.EditorTools
             }
             shell.Settings.bendPanels = bend0;
             shell.OnSettingsChanged();
+            ControlPolish(shell);
+        }
+
+        /// The menus-and-layout polish (branch feat/polish): page ids, one size, entry points in their place, buttons that
+        /// say one thing, dimmed controls, LOG's CLEAR ALL, the dock's lit tiles.
+        private static void ControlPolish(MetaCodexShell shell)
+        {
+            foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
+            shell.SetLayout("fixed");
+            shell.TickLayoutForTest(0.02f, 1);
+            var st = shell.PanelsById["settings"];
+            var tabs = st.Elements.OfType<UiTabs>().First();
+
+            // CONTROL's SETTINGS pages by their category's id (ui.open, bindings); CONTROL comes back to the last one
+            var bad = new System.Collections.Generic.List<string>();
+            foreach (var (id, tab) in new[] { ("display", 1), ("look", 3), ("focus", 2), ("hands", 0), ("about", 4) })
+            {
+                shell.OpenPanel(id);
+                shell.UpdateControlRailForTest();
+                if (!st.IsOpen || tabs.Selected != tab || shell.ControlCategoryNow() != id || !shell.IsPanelOpen(id) || shell.ControlRailPage != "settings") bad.Add(id + "=" + tabs.Selected);
+            }
+            shell.ClosePanel("settings");
+            shell.TickLayoutForTest(0.02f, 1);
+            shell.OpenPanel("control");
+            shell.UpdateControlRailForTest();
+            bool backOnAbout = st.IsOpen && tabs.Selected == 4;
+            Check(bad.Count == 0 && backOnAbout, $"ids display, look, focus, hands, about open their CONTROL page ({(bad.Count == 0 ? "all" : "wrong: " + string.Join(", ", bad))}); “control” brings back the last one, ABOUT ({backOnAbout})");
+            // "control" is the window and the rail together: toggled or closed, both go
+            shell.TogglePanel("control");
+            shell.TickLayoutForTest(0.02f, 1);
+            bool toggledAway = !st.IsOpen && !shell.ControlRail.IsOpen;
+            shell.TogglePanel("control");
+            shell.UpdateControlRailForTest();
+            bool toggledBack = st.IsOpen && shell.ControlRail.IsOpen;
+            shell.ClosePanel("control");
+            Check(toggledAway && toggledBack && !st.IsOpen && !shell.ControlRail.IsOpen, $"toggle_panel / close_panel “control”: the window and the rail go and come together (away {toggledAway}, back {toggledBack})");
+
+            // one size for the six CONTROL windows: a category taking another's place covers the same rectangle
+            var sizes = MetaCodexShell.ControlPages.Where(shell.PanelsById.ContainsKey).Select(id => (id, w: shell.PanelsById[id].Width, h: shell.PanelsById[id].Height)).ToList();
+            bool oneSize = sizes.Count == 6 && sizes.All(x => Mathf.Abs(x.w - MetaCodexShell.ControlPageW) < 1e-4f && Mathf.Abs(x.h - MetaCodexShell.ControlPageH) < 1e-4f);
+            Check(oneSize, "CONTROL's six windows have one size: " + string.Join(", ", sizes.Select(x => $"{x.id} {x.w:F2}x{x.h:F2}")) + (oneSize ? "" : " (VOICE: ShellVoice's BuildVoice must use ControlPageW, ControlPageH)"));
+
+            // HANDS: SELECT AREA, GESTURE STUDIO (MQH's studio, in HANDS' place), HORIZON HANDS
+            shell.OpenControl("hands");
+            var handsRow = st.Elements.OfType<UiButton>().Where(b => b.Visible && b.Style != UiButtonStyle.Tab).Select(b => b.Text).Where(x => x.StartsWith("SELECT AREA") || x.StartsWith("GESTURE STUDIO") || x.StartsWith("HORIZON")).ToList();
+            var studio = st.Elements.OfType<UiButton>().FirstOrDefault(b => b.Visible && b.Text.StartsWith("GESTURE STUDIO"));
+            studio?.Click();
+            shell.UpdateControlRailForTest();
+            bool studioOpen = shell.PanelsById["mqh"].IsOpen && shell.MqhTabsForTest.Selected == MetaCodexShell.MqhGesturesTab && shell.ControlRailPage == "mqh" && !st.IsOpen;
+            Check(handsRow.SequenceEqual(new[] { "SELECT AREA ⌖", "GESTURE STUDIO ▸", "HORIZON HANDS ⚙" }) && studioOpen,
+                $"HANDS: {string.Join(" | ", handsRow)}; GESTURE STUDIO opens MQH on GESTURES in its place ({studioOpen})");
+            // MQH: the title names every tab; DAEMON is STATUS now (id daemon still opens it)
+            var mqh = shell.PanelsById["mqh"];
+            shell.OpenPanel("daemon");
+            Check(mqh.Title == "MQH · SKILLS · PLUGINS · SCRIPTS · GESTURES" && shell.MqhTabsForTest.Names[shell.MqhTabsForTest.Selected] == "STATUS",
+                $"MQH's title “{mqh.Title}”, the id daemon opens tab {shell.MqhTabsForTest.Names[shell.MqhTabsForTest.Selected]}");
+
+            // DISPLAY: no CLIPBOARD SIZE (it is CLIPBOARD's KEEP); DISTANCE dimmed in FLOAT, FLOAT RADIUS in FIXED
+            shell.OpenControl("display");
+            var dist = st.Elements.OfType<UiSlider>().First(x => x.Text == "DISTANCE");
+            var radius = st.Elements.OfType<UiSlider>().FirstOrDefault(x => x.Text == "FLOAT RADIUS");
+            bool fixedDims = radius != null && radius.Dimmed && !dist.Dimmed;
+            shell.SetLayout("float");
+            st.ForceRefresh(); // its Tick follows the layout
+            bool floatDims = radius != null && !radius.Dimmed && dist.Dimmed;
+            shell.SetLayout("fixed");
+            st.ForceRefresh();
+            bool noClipSize = !st.Elements.OfType<UiSlider>().Any(x => x.Text == "CLIPBOARD SIZE" || x.Text == "CAROUSEL RADIUS");
+            bool keep = shell.PanelsById["clipboard"].Elements.OfType<UiSlider>().Any(x => x.Text == "KEEP");
+            Check(fixedDims && floatDims && noClipSize && keep, $"DISPLAY: FLOAT RADIUS dimmed in FIXED ({fixedDims}), DISTANCE in FLOAT ({floatDims}); CLIPBOARD SIZE is CLIPBOARD's KEEP ({noClipSize}, {keep})");
+            st.ForceRefresh();
+            RenderPanel(st, "ui-display-dims.png");
+
+            // ABOUT: LICENCES opens FILES on the licences, APP PERMISSIONS; no raw log lines
+            shell.OpenControl("about");
+            var aboutBtns = st.Elements.OfType<UiButton>().Where(b => b.Visible && b.Style != UiButtonStyle.Tab).Select(b => b.Text).ToList();
+            bool noLog = !st.Elements.OfType<UiLabel>().Any(l => l.Visible && (l.Text ?? "").Contains("shell up:"));
+            st.Elements.OfType<UiButton>().FirstOrDefault(b => b.Visible && b.Text == "LICENCES ▸")?.Click();
+            bool licences = shell.PanelsById["files"].IsOpen && shell.FilesPathForTest == MetaCodexShell.LicencesDir;
+            Check(aboutBtns.Contains("LICENCES ▸") && aboutBtns.Contains("APP PERMISSIONS ⚙") && noLog && licences,
+                $"ABOUT: {string.Join(" | ", aboutBtns)}; no log lines ({noLog}); LICENCES opens FILES at {shell.FilesPathForTest} ({licences})");
+            shell.ClosePanel("files");
+            // LINKS keeps ⟳ SCAN only; FILES APP is on FILES' row; SYSTEM has no TERMINAL probe
+            var links = shell.PanelsById["browser"];
+            var linkBtns = links.Elements.OfType<UiButton>().Select(b => b.Text).ToList();
+            bool filesApp = shell.PanelsById["files"].Elements.OfType<UiButton>().Any(b => b.Text == "FILES APP");
+            bool noProbe = !shell.PanelsById["system"].Elements.OfType<UiButton>().Any(b => b.Text == "TERMINAL");
+            Check(links.Title == "LINKS" && linkBtns.Contains("⟳ SCAN") && !linkBtns.Any(x => x == "HANDS ⚙" || x == "APP ⚙" || x == "FILES APP") && filesApp && noProbe,
+                $"LINKS (“{links.Title}”): {string.Join(" | ", linkBtns)}; FILES APP on FILES ({filesApp}); SYSTEM without TERMINAL ({noProbe})");
+            // AGENTS: one action per button, no OPEN LINK; the rail says “sign in” until an agent is ready
+            var agBtns = shell.PanelsById["agents"].Elements.OfType<UiButton>().Select(b => b.Text).ToList();
+            string agStatus = shell.RailStatusForTest("agents");
+            Check(!agBtns.Any(x => x.Contains(" / ") || x.Contains("OPEN LINK")) && agBtns.Any(x => x == "ENABLE" || x == "DISABLE") && agBtns.Contains("UPDATE") && (agStatus == "sign in" || agStatus.EndsWith("ready")),
+                $"AGENTS: {string.Join(" | ", agBtns.Where(x => !x.Contains("\n")))}; the rail: {agStatus}");
+            shell.ClosePanel("control");
+
+            // LOG · MESSAGES: CLEAR ALL asks first (as CLIPBOARD's), then clears
+            shell.Toast("polish: one message", "info");
+            shell.OpenPanel("messages");
+            var msgs = shell.PanelsById["messages"];
+            var clear = msgs.Elements.OfType<UiButton>().FirstOrDefault(b => b.Text == "CLEAR ALL");
+            int before = shell.Toasts.History.Count, dlg0 = UiModal.OpenCount;
+            clear?.Click();
+            bool asked = UiModal.OpenCount == dlg0 + 1 && shell.Toasts.History.Count == before;
+            foreach (var d in UiModal.OpenPanels.ToList()) d.Close();
+            shell.ClearMessages();
+            Check(msgs.Title == "LOG · MESSAGES" && clear != null && clear.Style == UiButtonStyle.Danger && asked && shell.Toasts.History.Count == 0,
+                $"LOG · MESSAGES (“{msgs.Title}”): CLEAR ALL in red asks first ({asked}), then clears");
+            shell.ClosePanel("messages");
+
+            // the dock shows what is on, as the wrist does (FILES open: its tile selected)
+            shell.OpenPanel("dock");
+            var dockFiles = shell.PanelsById["dock"].Elements.OfType<UiButton>().First(b => b.Text.EndsWith("FILES"));
+            shell.OpenPanel("files");
+            shell.RefreshDockForTest();
+            bool litOn = dockFiles.Selected;
+            shell.ClosePanel("files");
+            shell.RefreshDockForTest();
+            Check(litOn && !dockFiles.Selected, $"the dock's FILES is selected while FILES is open ({litOn}) and not after ({!dockFiles.Selected})");
+
+            // "show the keyboard" never hides it: twice, it is still there
+            shell.ShowTerminalKeyboard();
+            shell.ShowTerminalKeyboard();
+            bool kbUp = shell.Keyboard != null && shell.Keyboard.Visible && shell.Keyboard.Sink == shell.TerminalSinkForTest;
+            shell.Keyboard?.Hide();
+            Check(kbUp, $"ShowTerminalKeyboard twice: the keyboard stays for the terminal ({kbUp})");
+            foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
+            shell.TickLayoutForTest(0.02f, 1);
         }
     }
 }

@@ -325,8 +325,11 @@ namespace MetaCodex.Shell
             _clipStatus = p.Add(new UiLabel("", t.SmallSize) { Rect = left.Next(0.022f), Color = t.TextDim });
             _clipList = p.Add(new UiList(0.034f, (item, idx) => ShowClipPreview()) { Rect = left.Rest() });
             var rs = new UiStack(new Rect(c.x + leftW + t.Gap * 2, c.y, c.width - leftW - t.Gap * 2, c.height), t.Gap);
-            _clipPreviewArea = rs.Next(c.height - 0.022f - t.ButtonHeight - t.Gap * 3);
+            const float keepH = 0.032f;
+            _clipPreviewArea = rs.Next(c.height - 0.022f - keepH - t.ButtonHeight - t.Gap * 4);
             _clipInfo = p.Add(new UiLabel("", t.SmallSize) { Rect = rs.Next(0.022f), Color = t.TextDim });
+            // how many captures it keeps (was DISPLAY's CLIPBOARD SIZE): one more deletes the oldest
+            p.Add(new UiSlider("KEEP", 5f, 100f, Settings.clipboardMax, v => { Settings.clipboardMax = Mathf.RoundToInt(v); OnSettingsChanged(); Clipboard?.Trim(); if (Clipboard != null) _clipStatus.Set($"{Clipboard.Items.Count} of {Clipboard.Max} · newest first", t.TextDim); }) { Rect = rs.Next(keepH), Format = "0", LabelWidth = 0.07f });
             AddButtons(p, rs.Next(t.ButtonHeight), new (string, Action)[]
             {
                 ("⎘ TO THE THREAD", () =>

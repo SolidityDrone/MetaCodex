@@ -27,29 +27,50 @@ namespace MetaCodex.Shell
                 // a hand over the table keyboard types: it neither carries the menu nor presses it
                 return st != null && st.Frame.Tracked && !Gestures.IsMuted(h) ? (true, st.Frame) : (false, default(HandFrame));
             };
-            // each with a line icon of UiIconAtlas (the glyph is the dock's)
-            void I(List<UiWristMenu.Item> list, string glyph, string icon, string label, Action act, Func<bool> lit = null, Color? tint = null) =>
-                list.Add(new UiWristMenu.Item { Glyph = glyph, Icon = icon, Label = label, Act = act, Lit = lit, LitTint = tint ?? t.Ok });
-            // inner ring: what is used most (owner 2026-11-11: 19 tiles were too many; setup is in CONTROL now)
-            I(Wrist.Inner, "◉", "mic", "TALK", () => VoiceToggle(), () => VoiceState == "listening" || VoiceState == "transcribing", t.Danger);
-            I(Wrist.Inner, "▶", "terminal", "TERM", () => ShowOrNewTerminal());
-            I(Wrist.Inner, "◫", "folder", "FILES", () => TogglePanel("files"), () => IsPanelOpen("files"));
-            I(Wrist.Inner, "☰", "threads", "THREADS", () => TogglePanel("threads"), () => IsPanelOpen("threads"));
-            I(Wrist.Inner, "◎", "globe", "WEB", () => TogglePanel("web"), () => IsPanelOpen("web"));
-            // settings, voice, agents, MQH (skills, plugins, scripts, gestures, daemon), vault and git, system: one place
-            I(Wrist.Inner, "⚙", "gear", "CONTROL", () => ToggleControl(), () => ControlRailPage != null);
-            // outer ring: quick actions and the smaller windows
-            I(Wrist.Outer, "▤", "windows", "TERMS", () => TogglePanel("terminals"), () => IsPanelOpen("terminals"));
-            I(Wrist.Outer, "▣", "photos", "CLIP", () => TogglePanel("clipboard"), () => IsPanelOpen("clipboard"));
-            I(Wrist.Outer, "◐", "aperture", "FOCUS", () => SetFocus(!Settings.focusEnabled), () => Settings.focusEnabled);
-            I(Wrist.Outer, "⌖", "select", "SELECT", () => SetSelectionMode(!Router.SelectionMode), () => Router.SelectionMode, t.Warn);
-            I(Wrist.Outer, "⌨", "keyboard", "KEYS", () => OpenKeyboard());
-            // the system's keyboard on a table (Surface Keyboard and Touchpad): bring it now, or turn it on (owner 2026-11-10)
-            I(Wrist.Outer, "⌨", "tablekeys", "TABLE", () => OpenTableKeyboard());
-            I(Wrist.Outer, "⟲", "recenter", "CENTER", () => app?.Recenter());
+            // one table for the dock and the wrist menu (MainMenuItems): the same labels, order and lit states
+            foreach (var m in MainMenuItems())
+                (m.Outer ? Wrist.Outer : Wrist.Inner).Add(new UiWristMenu.Item { Glyph = m.Glyph, Icon = m.Icon, Label = m.Label, Act = m.Act, Lit = m.Lit, LitTint = m.Tint ?? t.Ok });
             Wrist.Build();
             _wristModeApplied = !Settings.wristMenu; // applied below
             ApplyMainMenuMode();
+        }
+
+        /// One entry of the main menu. The dock and the wrist menu are built from the same table (MainMenuItems), so they
+        /// keep the same labels, order and lit states; `WristOnly` entries are not on the dock.
+        public sealed class MainMenuItem
+        {
+            public string Glyph, Icon, Label;   // the dock shows the glyph, the wrist a line icon of UiIconAtlas
+            public Action Act;
+            public Func<bool> Lit;              // lit (wrist) / selected (dock) while this is true
+            public Color? Tint;                 // the wrist's lit colour (default: ok green)
+            public bool Outer, WristOnly;
+        }
+
+        /// The main menu: inner ring = what is used most (owner 2026-11-11: 19 tiles were too many; setup is in CONTROL),
+        /// outer ring = quick actions and the smaller windows. The dock shows them in this order, without the wrist-only ones.
+        public List<MainMenuItem> MainMenuItems()
+        {
+            var t = UiTheme.Current;
+            var list = new List<MainMenuItem>();
+            void I(bool outer, string glyph, string icon, string label, Action act, Func<bool> lit = null, Color? tint = null, bool wristOnly = false) =>
+                list.Add(new MainMenuItem { Outer = outer, Glyph = glyph, Icon = icon, Label = label, Act = act, Lit = lit, Tint = tint, WristOnly = wristOnly });
+            I(false, "◉", "mic", "TALK", () => VoiceToggle(), () => VoiceState == "listening" || VoiceState == "transcribing", t.Danger);
+            I(false, "▶", "terminal", "TERM", () => ShowOrNewTerminal());
+            I(false, "◫", "folder", "FILES", () => TogglePanel("files"), () => IsPanelOpen("files"));
+            I(false, "☰", "threads", "THREADS", () => TogglePanel("threads"), () => IsPanelOpen("threads"));
+            I(false, "◎", "globe", "WEB", () => TogglePanel("web"), () => IsPanelOpen("web"));
+            // settings, voice, agents, MQH (skills, plugins, scripts, gestures, status), vault and git, system: one place
+            I(false, "⚙", "gear", "CONTROL", () => ToggleControl(), () => ControlRailPage != null);
+            I(true, "▤", "windows", "TERMS", () => TogglePanel("terminals"), () => IsPanelOpen("terminals"));
+            I(true, "▣", "photos", "CLIP", () => TogglePanel("clipboard"), () => IsPanelOpen("clipboard"));
+            I(true, "◐", "aperture", "FOCUS", () => SetFocus(!Settings.focusEnabled), () => Settings.focusEnabled);
+            I(true, "⌖", "select", "SELECT", () => SetSelectionMode(!Router.SelectionMode), () => Router.SelectionMode, t.Warn);
+            I(true, "⌨", "keyboard", "KEYS", () => OpenKeyboard(), () => Keyboard != null && Keyboard.Visible && Keyboard.Sink == _terminalSink);
+            // MetaCodex's own keyboard laid on a table (OpenTableKeyboard: it says how when it is not on one); the wrist
+            // keeps it (owner 2026-11-10), the dock does not
+            I(true, "⌨", "tablekeys", "TABLE", () => OpenTableKeyboard(), wristOnly: true);
+            I(true, "⟲", "recenter", "CENTER", () => app?.Recenter());
+            return list;
         }
 
         /// DOCK (false) or WRIST (true).

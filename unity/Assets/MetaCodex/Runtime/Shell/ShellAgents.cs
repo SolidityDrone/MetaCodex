@@ -44,7 +44,7 @@ namespace MetaCodex.Shell
         private void BuildAgents()
         {
             var t = UiTheme.Current;
-            var p = Panel<UiPanel>("agents", "AGENTS · PROVIDERS", 0.70f, 0.62f);
+            var p = Panel<UiPanel>("agents", "AGENTS · PROVIDERS", ControlPageW, ControlPageH); // CONTROL's one size
             var c0 = p.Content;
             const float getH = 0.058f;
             BuildAgentGetRow(p, new Rect(c0.x, c0.y, c0.width, getH)); // GET: OpenCode, Claude Code, Codex, more soon
@@ -57,16 +57,17 @@ namespace MetaCodex.Shell
             {
                 ("SIGN IN ▶", () => SignIn(_agentSel)),
                 ("⚿ API KEY", () => OpenAgentKey(AgentIdFor(_agentSel))),
-                ("INSTALL / UPDATE", () => InstallAgent(_agentSel)),
                 ("⟳", () => { RefreshAgents(); ProbeAgents(); }),
             }, primary: 0);
-            AddButtons(p, rs.Next(t.ButtonHeight), new (string, Action)[]
-            {
-                ("ENABLE / DISABLE", ToggleAgentEnabled),
-                ("NEW THREAD →", () => OpenNewThread(_agentSel)),
-                ("⇗ OPEN LINK", () => { if (LastLink != null) OpenBrowser(LastLink); else Toast("No link seen in a terminal yet", "warn"); }),
-            });
-            _agentHint = p.Add(new UiLabel("GET installs an agent here. API KEY: paste your provider's key once (sealed in the vault, given to the agents MQH starts). SIGN IN runs the provider's own login in a terminal (a link opens in Horizon's browser with ⇗; codes go back with ⎘ PASTE); those logins stay in the CLI's own files, MetaCodex never reads them.", t.SmallSize) { Rect = rs.Rest(), Wrap = true, Color = t.TextDim, Align = TextAlignmentOptions.TopLeft });
+            // each button says the one thing it does now (ShowAgent): ENABLE or DISABLE; UPDATE only for an installed agent
+            // (GET above is how one is installed)
+            var r2 = rs.Next(t.ButtonHeight);
+            float bw2 = (r2.width - t.Gap * 2) / 3f;
+            _agentToggle = p.Add(new UiButton("DISABLE", ToggleAgentEnabled) { Rect = new Rect(r2.x, r2.y, bw2, r2.height) });
+            p.Add(new UiButton("NEW THREAD →", () => OpenNewThread(_agentSel)) { Rect = new Rect(r2.x + bw2 + t.Gap, r2.y, bw2, r2.height) });
+            _agentUpdate = p.Add(new UiButton("UPDATE", () => InstallAgent(_agentSel)) { Rect = new Rect(r2.x + (bw2 + t.Gap) * 2, r2.y, bw2, r2.height) });
+            _agentUpdate.SetVisible(false);
+            _agentHint = p.Add(new UiLabel("GET installs an agent here. API KEY: paste your provider's key once (sealed in the vault, given to the agents MQH starts). SIGN IN runs the provider's own login in a new terminal: ⇗ on that terminal opens its link in Horizon's browser, codes go back with ⎘ PASTE; those logins stay in the CLI's own files, MetaCodex never reads them.", t.SmallSize) { Rect = rs.Rest(), Wrap = true, Color = t.TextDim, Align = TextAlignmentOptions.TopLeft });
         }
 
         /// MQH's provider id (acp-opencode, codex, claude-code) -> the GET agent it is (opencode, codex, claude).
@@ -96,7 +97,7 @@ namespace MetaCodex.Shell
                 {
                     bool starting = MqhHost != null && (MqhHost.State == MqhHost.HostState.Starting || MqhHost.State == MqhHost.HostState.Waiting);
                     _agentDetail.Set(starting ? "◌ " + MqhHost.Status + "\nThe list fills in by itself when MQH answers."
-                        : "⚠ " + (MqhHostLine().Length > 0 ? MqhHostLine() : Mqh.LastError ?? "MQH not reachable") + "\nMQH > DAEMON > RESTART tries again.",
+                        : "⚠ " + (MqhHostLine().Length > 0 ? MqhHostLine() : Mqh.LastError ?? "MQH not reachable") + "\nMQH > STATUS > RESTART tries again.",
                         starting ? UiTheme.Current.TextDim : UiTheme.Current.Danger);
                     _agentList.SetItems(new UiListItem[0]);
                     return;
@@ -216,12 +217,24 @@ namespace MetaCodex.Shell
         private JToken AgentState(string id) => _providerStates.FirstOrDefault(x => (string)x["providerId"] == id);
         private JToken AgentCatalog(string id) => _providerCatalog.FirstOrDefault(x => (string)x["id"] == id);
 
+        private UiButton _agentToggle, _agentUpdate;
+
+        /// AGENTS' buttons show the one action that applies to the picked agent.
+        private void ShowAgentButtons(JToken st, JToken cat)
+        {
+            bool enabled = cat?["available"]?.Value<bool>() ?? true;
+            _agentToggle?.SetText(enabled ? "DISABLE" : "ENABLE");
+            _agentToggle?.SetEnabled(cat != null);
+            _agentUpdate?.SetVisible(st != null && (string)st["status"] != "not_installed");
+        }
+
         private void ShowAgent()
         {
             var t = UiTheme.Current;
             var st = AgentState(_agentSel);
-            if (st == null) { _agentDetail.Set("Select a provider."); return; }
             var cat = AgentCatalog(_agentSel);
+            ShowAgentButtons(st, cat);
+            if (st == null) { _agentDetail.Set("Select a provider."); return; }
             string status = (string)st["status"] ?? "?";
             var sb = new StringBuilder();
             sb.Append($"<size=125%><b>{st["displayName"]}</b></size>  <color=#{ColorUtility.ToHtmlStringRGB(StatusColor(status))}>{StatusBadge(status)}</color>\n");
@@ -710,7 +723,7 @@ namespace MetaCodex.Shell
             if (x == null) { _thTitle.Set(_threadOpen ?? ""); return; }
             string st = (string)x["runtime"]?["displayStatus"] ?? (string)x["status"] ?? "";
             bool working = ThreadTimeline.IsWorking(st);
-            string word = working && st != "waiting-for-host" ? "WORKING" : st == "waiting-for-host" ? "NO HOST" : st.ToUpperInvariant();
+            string word = working && st != "waiting-for-host" ? "WORKING" : st == "waiting-for-host" ? "OFFLINE" : st.ToUpperInvariant();
             _thTitle.Set($"<b>{Esc((string)x["title"] ?? (string)x["titleFallback"] ?? "thread")}</b>  <color=#{ColorUtility.ToHtmlStringRGB(st == "error" ? t.Danger : working ? t.Ok : t.TextDim)}>{word}</color>");
             string proj = (string)_projects.FirstOrDefault(p => (string)p["id"] == (string)x["projectId"])?["name"];
             _thMeta.Set($"{x["providerId"]} · {(proj != null ? proj + " · " : "")}{x["environmentPath"] ?? "no workspace yet"} · ⎇ {x["environmentBranchName"] ?? "-"}");

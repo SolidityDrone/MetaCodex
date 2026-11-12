@@ -27,7 +27,7 @@ namespace MetaCodex.Shell
             BuildBrowser();
             BuildWeb(); // the in-app browser window (ShellWeb)
             BuildSettings();
-            BuildMqh(); // SKILLS · PLUGINS · SCRIPTS · GESTURES · DAEMON
+            BuildMqh(); // SKILLS · PLUGINS · SCRIPTS · GESTURES · STATUS
             BuildClipboard();
             BuildAgents();
             BuildThreads();
@@ -84,45 +84,54 @@ namespace MetaCodex.Shell
 
         private void BuildDock()
         {
-            var t = UiTheme.Current;
-            // the same as the wrist menu (owner 2026-11-11: 19 was too many): work windows and quick actions; setup
-            // (agents, MQH, vault, voice, system, settings) is in CONTROL
-            var items = new (string label, Action act)[]
-            {
-                ("◉\nTALK", () => VoiceToggle()),
-                ("▶\nTERM", () => ShowOrNewTerminal()),
-                ("◫\nFILES", () => TogglePanel("files")),
-                ("☰\nTHREADS", () => TogglePanel("threads")),
-                ("◎\nWEB", () => TogglePanel("web")),
-                ("⚙\nCONTROL", () => ToggleControl()),
-                ("▤\nTERMS", () => TogglePanel("terminals")),
-                ("▣\nCLIP", () => TogglePanel("clipboard")),
-                ("◐\nFOCUS", () => SetFocus(!Settings.focusEnabled)),
-                ("⌖\nSELECT", () => SetSelectionMode(!Router.SelectionMode)),
-                ("⌨\nKEYS", () => OpenKeyboard()),
-                ("⟲\nCENTER", () => app?.Recenter()),
-            };
+            // the same table as the wrist menu (MainMenuItems, owner 2026-11-11: 19 was too many): work windows and quick
+            // actions, without the wrist-only TABLE; setup (agents, MQH, vault, voice, system, settings) is in CONTROL
+            var items = MainMenuItems().Where(m => !m.WristOnly).ToList();
             const int perRow = 6;
+            int rows = (items.Count + perRow - 1) / perRow;
             float bw = 0.070f, gap = 0.006f, pad = 0.012f, bh = 0.058f, handle = 0.016f;
-            float w = perRow * bw + (perRow - 1) * gap + 2 * pad, h = 2 * bh + gap + 2 * pad + handle;
+            float w = perRow * bw + (perRow - 1) * gap + 2 * pad, h = rows * bh + (rows - 1) * gap + 2 * pad + handle;
             var dock = UiPanel.Create<UiPanel>("dock", "", w, h, _root, header: false);
             dock.Closable = false;
             dock.AddGrabHandle(handle); // pinch the bar at the top to move the dock
             _panels["dock"] = dock;
             Router.Register(dock);
-            for (int i = 0; i < items.Length; i++)
+            _dockLit.Clear();
+            for (int i = 0; i < items.Count; i++)
             {
                 int row = i / perRow, col = i % perRow;
-                var b = dock.Add(new UiButton(items[i].label, items[i].act, i == 0 || items[i].label.EndsWith("TALK") ? UiButtonStyle.Primary : UiButtonStyle.Normal)
+                var m = items[i];
+                var b = dock.Add(new UiButton(m.Glyph + "\n" + m.Label, m.Act, m.Label == "TALK" ? UiButtonStyle.Primary : UiButtonStyle.Normal)
                 {
                     Rect = new Rect(pad + col * (bw + gap), handle + pad * 0.6f + row * (bh + gap), bw, bh),
                     TextSize = 0.0135f,
                 });
-                if (items[i].label.EndsWith("SELECT")) _selectButton = b;
-                if (items[i].label.EndsWith("FOCUS")) { _focusButton = b; b.SetSelected(Settings.focusEnabled); }
+                if (m.Label == "SELECT") _selectButton = b;
+                if (m.Label == "FOCUS") _focusButton = b;
+                if (m.Lit != null) _dockLit.Add((b, m.Lit));
             }
+            RefreshDockLit();
+            // what is on shows on the dock as on the wrist (a tile stays selected): a state-only change, 4 times a second
+            float next = 0f;
+            dock.Tick += _ => { if (Time.unscaledTime >= next) { next = Time.unscaledTime + 0.25f; RefreshDockLit(); } };
             dock.gameObject.SetActive(false);
         }
+
+        private readonly List<(UiButton button, Func<bool> lit)> _dockLit = new List<(UiButton, Func<bool>)>();
+
+        /// The dock's tiles selected while what they open or switch is on (SetSelected changes only when it differs).
+        private void RefreshDockLit()
+        {
+            foreach (var (b, f) in _dockLit)
+            {
+                bool on;
+                try { on = f(); } catch (Exception) { on = false; }
+                b.SetSelected(on);
+            }
+        }
+
+        /// Self-tests: the dock's lit states now (its Tick does this 4 times a second).
+        public void RefreshDockForTest() => RefreshDockLit();
 
         // ------------------------------------------------------------------ terminals
 
@@ -189,6 +198,7 @@ namespace MetaCodex.Shell
                 ("QUEST", () => FilesNavigate("/mnt/quest")),
                 ("/", () => FilesNavigate("/")),
                 ("⟳", () => FilesNavigate(_filesPath)),
+                ("FILES APP", () => Toast(SystemBridge.OpenFilesApp() ? "Opening Files" : SystemBridge.LastResult)), // Horizon's own Files app
             };
             float bw = (bar.width - t.Gap * (nav.Length - 1)) / nav.Length;
             for (int i = 0; i < nav.Length; i++) p.Add(new UiButton(nav[i].Item1, nav[i].Item2) { Rect = new Rect(bar.x + i * (bw + t.Gap), bar.y, bw, bar.height) });
@@ -207,6 +217,9 @@ namespace MetaCodex.Shell
             bw = (acts.width - t.Gap * (actions.Length - 1)) / actions.Length;
             for (int i = 0; i < actions.Length; i++) p.Add(new UiButton(actions[i].Item1, actions[i].Item2) { Rect = new Rect(acts.x + i * (bw + t.Gap), acts.y, bw, acts.height) });
         }
+
+        /// Self-tests: the folder FILES shows (or will show when it opens).
+        public string FilesPathForTest => _filesPath;
 
         public void FilesNavigate(string path)
         {
@@ -358,7 +371,7 @@ namespace MetaCodex.Shell
         private void BuildBrowser()
         {
             var t = UiTheme.Current;
-            var p = Panel<UiPanel>("browser", "WEB · LINKS", 0.56f, 0.50f);
+            var p = Panel<UiPanel>("browser", "LINKS", 0.56f, 0.50f); // the id stays browser: saved layouts name it
             var st = new UiStack(p.Content, t.Gap);
             var row = st.NextSplit(t.ButtonHeight, 0.80f, out var go);
             _url = p.Add(new UiTextField("", "https://", u => OpenBrowser(u), "type a URL…") { Rect = row });
@@ -384,16 +397,10 @@ namespace MetaCodex.Shell
             }) { Rect = new Rect(bm.x + half + t.Gap, bm.y, half, bm.height) });
             p.Add(new UiLabel("LOCAL SERVERS (127.0.0.1)", t.SmallSize) { Rect = st.Next(0.018f), UseDisplay = true, Color = t.TextDim });
             _localServers = p.Add(new UiList(0.028f, (item, idx) => OpenBrowser(item.Tag as string)) { Rect = st.Next(0.084f) });
+            // only what belongs to links; the system pages moved: HORIZON HANDS to HANDS, APP PERMISSIONS to ABOUT,
+            // FILES APP to FILES
             var sys = st.Next(t.ButtonHeight);
-            var sysActs = new (string, Action)[]
-            {
-                ("⟳ SCAN", ProbeLocalServers),
-                ("HANDS ⚙", () => Toast(SystemBridge.OpenHandSettings() ? "Opening hand settings" : SystemBridge.LastResult)),
-                ("APP ⚙", () => Toast(SystemBridge.OpenAppSettings() ? "Opening app settings" : SystemBridge.LastResult)),
-                ("FILES APP", () => Toast(SystemBridge.OpenFilesApp() ? "Opening Files" : SystemBridge.LastResult)),
-            };
-            float bw = (sys.width - t.Gap * 3) / 4f;
-            for (int i = 0; i < 4; i++) p.Add(new UiButton(sysActs[i].Item1, sysActs[i].Item2) { Rect = new Rect(sys.x + i * (bw + t.Gap), sys.y, bw, sys.height) });
+            p.Add(new UiButton("⟳ SCAN", ProbeLocalServers) { Rect = new Rect(sys.x, sys.y, (sys.width - t.Gap * 3) / 4f, sys.height) });
             RefreshBrowser();
         }
 
@@ -527,11 +534,11 @@ end)
         {
             var t = UiTheme.Current;
             var s = Settings;
-            var p = Panel<UiPanel>("settings", "SETTINGS", 0.62f, 0.58f);
+            var p = Panel<UiPanel>("settings", "SETTINGS", ControlPageW, ControlPageH); // CONTROL's pages share one size (ShellControl)
             var c = p.Content;
             var tabs = p.Add(new UiTabs("GESTURES", "DISPLAY", "FOCUS", "LOOK", "ABOUT") { Rect = new Rect(c.x, c.y, c.width, t.ButtonHeight) });
             _settingsTabs = tabs;
-            const int TabDisplay = 1, TabFocus = 2, TabLook = 3, TabAbout = 4; // the link to MQH: MQH > DAEMON
+            const int TabDisplay = 1, TabFocus = 2, TabLook = 3, TabAbout = 4; // = ShellControl's SetDisplay ... SetAbout; the link to MQH: MQH > STATUS
             var area = new Rect(c.x, c.y + t.ButtonHeight + t.Gap * 2, c.width, c.height - t.ButtonHeight - t.Gap * 2);
             float rowH = 0.034f;
 
@@ -545,27 +552,34 @@ end)
             tabs.AddTo(0, new UiToggle("Clap gesture (two hands)", s.gestures.clapEnabled, v => { s.gestures.clapEnabled = v; OnSettingsChanged(); }) { Rect = g.Next(rowH) });
             tabs.AddTo(0, new UiSlider("CLAP DISTANCE", 0.04f, 0.14f, s.gestures.clapDistance, v => { s.gestures.clapDistance = v; OnSettingsChanged(); }) { Rect = g.Next(rowH), Format = "0.000" });
             tabs.AddTo(0, new UiToggle("Custom gestures from plugins (poses, Lua detectors)", s.gestures.customEnabled, v => { s.gestures.customEnabled = v; OnSettingsChanged(); }) { Rect = g.Next(rowH) });
-            var gb = g.NextSplit(t.ButtonHeight, 0.5f, out var gb2);
-            tabs.AddTo(0, new UiButton("SELECT AREA ⌖", () => SetSelectionMode(!Router.SelectionMode)) { Rect = gb });
-            tabs.AddTo(0, new UiButton("HORIZON HAND SETTINGS", () => Toast(SystemBridge.OpenHandSettings() ? "Opening hand settings" : SystemBridge.LastResult)) { Rect = gb2 });
+            // the select tool (always a way to turn it off), your own gestures (MQH's studio), the system's hand settings
+            var gb = g.Next(t.ButtonHeight);
+            float gbw = (gb.width - t.Gap * 2) / 3f;
+            tabs.AddTo(0, new UiButton("SELECT AREA ⌖", () => SetSelectionMode(!Router.SelectionMode)) { Rect = new Rect(gb.x, gb.y, gbw, gb.height) });
+            tabs.AddTo(0, new UiButton("GESTURE STUDIO ▸", () => OpenPanel("gestures")) { Rect = new Rect(gb.x + gbw + t.Gap, gb.y, gbw, gb.height) });
+            tabs.AddTo(0, new UiButton("HORIZON HANDS ⚙", () => Toast(SystemBridge.OpenHandSettings() ? "Opening hand settings" : SystemBridge.LastResult)) { Rect = new Rect(gb.x + (gbw + t.Gap) * 2, gb.y, gbw, gb.height) });
             _gestureLive = tabs.AddTo(0, new UiLabel("", t.SmallSize) { Rect = g.Rest(), UseMono = true, Color = t.TextAccent, Wrap = true, Align = TextAlignmentOptions.TopLeft });
             p.Tick += _ => { if (_gestureLive != null && _gestureLive.Visible && Gestures != null) _gestureLive.Set(HandLine(Gestures.Left, "L") + "\n" + HandLine(Gestures.Right, "R")); };
 
             // DISPLAY: where panels go
             var d = new UiStack(area, t.Gap);
             tabs.AddTo(TabDisplay, new UiSegmented("LAYOUT", new[] { "FIXED", "FLOAT" }, s.layout == "float" ? 1 : 0, i => SetLayout(i == 1 ? "float" : "fixed")) { Rect = d.Next(rowH) });
-            tabs.AddTo(TabDisplay, new UiSlider("DISTANCE", 0.5f, 1.4f, s.panelDistance, v => { s.panelDistance = v; OnSettingsChanged(); }) { Rect = d.Next(rowH), Format = "0.00 m" });
-            tabs.AddTo(TabDisplay, new UiSlider("CAROUSEL RADIUS", 0.6f, 1.6f, s.carouselRadius, v => { s.carouselRadius = v; OnSettingsChanged(); }) { Rect = d.Next(rowH), Format = "0.00 m" });
+            // DISTANCE places windows in FIXED, FLOAT RADIUS is the ring of FLOAT: the one that does nothing now is dimmed,
+            // with a word saying when it applies (bending works in both)
+            _fixedDistance = tabs.AddTo(TabDisplay, new UiSlider("DISTANCE", 0.5f, 1.4f, s.panelDistance, v => { s.panelDistance = v; OnSettingsChanged(); }) { Rect = d.Next(rowH), Format = "0.00 m", Note = "FIXED only" });
+            _floatRadius = tabs.AddTo(TabDisplay, new UiSlider("FLOAT RADIUS", 0.6f, 1.6f, s.carouselRadius, v => { s.carouselRadius = v; OnSettingsChanged(); }) { Rect = d.Next(rowH), Format = "0.00 m", Note = "FLOAT only" });
             tabs.AddTo(TabDisplay, new UiSlider("UI SCALE", 0.8f, 1.8f, s.uiScale, v => { s.uiScale = v; OnSettingsChanged(); }) { Rect = d.Next(rowH), Format = "0.00" });
             tabs.AddTo(TabDisplay, new UiToggle("Bend panels around you", s.bendPanels, v => { s.bendPanels = v; OnSettingsChanged(); UpdateFixedBend(); }) { Rect = d.Next(rowH) });
             tabs.AddTo(TabDisplay, new UiToggle("Main menu on the wrist (look at your left wrist, touch the core)", s.wristMenu, v => SetWristMenu(v)) { Rect = d.Next(rowH) });
-            tabs.AddTo(TabDisplay, new UiSlider("CLIPBOARD SIZE", 5f, 100f, s.clipboardMax, v => { s.clipboardMax = Mathf.RoundToInt(v); OnSettingsChanged(); Clipboard?.Trim(); }) { Rect = d.Next(rowH), Format = "0" });
             var lr = d.NextSplit(t.ButtonHeight, 0.5f, out var lr2);
             tabs.AddTo(TabDisplay, new UiButton("SAVE LAYOUT…", () => UiKeyboard.Edit("desk", false, null, n => { if (!string.IsNullOrWhiteSpace(n)) { SaveNamedLayout(n.Trim()); Toast($"Layout '{n.Trim()}' saved", "ok"); } })) { Rect = lr });
             tabs.AddTo(TabDisplay, new UiButton("LOAD NEXT LAYOUT", LoadNextLayout) { Rect = lr2 });
             _layoutsLabel = tabs.AddTo(TabDisplay, new UiLabel("", t.SmallSize) { Rect = d.Next(0.024f), Color = t.TextDim });
             tabs.AddTo(TabDisplay, new UiButton("⟲ RECENTER EVERYTHING", () => app?.Recenter(), UiButtonStyle.Primary) { Rect = d.Next(t.ButtonHeight) });
             RefreshLayoutsLabel();
+            _dimsFor = null;
+            DimLayoutControls();
+            p.Tick += _ => DimLayoutControls(); // the layout also changes by voice, a script or MQH
 
             // FOCUS: Ambient Focus, the room fades out beyond a radius around you
             var fo = new UiStack(area, t.Gap);
@@ -606,8 +620,27 @@ end)
             tabs.AddTo(TabAbout, new UiLabel($"<b>MetaCodex</b> {Application.version} · {SystemInfo.deviceModel}", t.BodySize) { Rect = a2.Next(0.026f) });
             tabs.AddTo(TabAbout, new UiLabel("Agents and a real Linux userland in VR. Panels, gestures and behaviours are data, Lua and plugins: agents change them live.", t.SmallSize) { Rect = a2.Next(0.04f), Wrap = true, Color = t.TextDim });
             // docs/LICENSES.md (shipped by the overlay): every third-party part, its licence and our duties
-            tabs.AddTo(TabAbout, new UiLabel("Third-party software, fonts and models with their licences (BSD, GPL, LGPL, Apache, MIT, OFL, OpenRAIL-M): /usr/share/doc/metacodex/LICENSES.md, open it from FILES or a terminal. The voice model's licence (Supertonic 3, OpenRAIL-M) forbids some uses of its speech; they are listed there.", t.SmallSize) { Rect = a2.Next(0.05f), Wrap = true, Color = t.TextDim });
-            tabs.AddTo(TabAbout, new UiLabel("", t.SmallSize) { Rect = a2.Rest(), UseMono = true, Wrap = true, Color = t.TextDim, Align = TextAlignmentOptions.TopLeft }).Set(string.Join("\n", LogLines.Skip(Math.Max(0, LogLines.Count - 8))));
+            tabs.AddTo(TabAbout, new UiLabel("Third-party software, fonts and models with their licences (BSD, GPL, LGPL, Apache, MIT, OFL, OpenRAIL-M): LICENCES opens them in FILES (" + LicencesDir + "). The voice model's licence (Supertonic 3, OpenRAIL-M) forbids some uses of its speech; they are listed there.", t.SmallSize) { Rect = a2.Next(0.05f), Wrap = true, Color = t.TextDim });
+            var ab = a2.NextSplit(t.ButtonHeight, 0.5f, out var ab2);
+            tabs.AddTo(TabAbout, new UiButton("LICENCES ▸", () => { _filesPath = LicencesDir; OpenPanel("files"); }) { Rect = ab });
+            tabs.AddTo(TabAbout, new UiButton("APP PERMISSIONS ⚙", () => Toast(SystemBridge.OpenAppSettings() ? "Opening app settings" : SystemBridge.LastResult)) { Rect = ab2 });
+        }
+
+        /// Where docs/LICENSES.md and the licence texts are in the Linux (the overlay ships them).
+        public const string LicencesDir = "/usr/share/doc/metacodex";
+
+        private UiSlider _floatRadius;
+        private UiSlider _fixedDistance;
+        private string _dimsFor;
+
+        /// DISPLAY: the control that does nothing in the current layout is dimmed (FLOAT RADIUS in FIXED, DISTANCE in FLOAT).
+        private void DimLayoutControls()
+        {
+            if (_dimsFor == Settings.layout) return;
+            _dimsFor = Settings.layout;
+            bool floating = Settings.layout == "float";
+            _floatRadius?.SetDimmed(!floating);
+            _fixedDistance?.SetDimmed(floating);
         }
 
         private UiLabel _layoutsLabel;

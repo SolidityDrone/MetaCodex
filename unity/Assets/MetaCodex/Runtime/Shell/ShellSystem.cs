@@ -177,7 +177,7 @@ namespace MetaCodex.Shell
         private void BuildSystem()
         {
             var t = UiTheme.Current;
-            var p = Panel<UiPanel>("system", "System · Linux", 0.66f, 0.60f);
+            var p = Panel<UiPanel>("system", "System · Linux", ControlPageW, ControlPageH); // CONTROL's one size
             var c = p.Content;
             _sysTabs = p.Add(new UiTabs("TOOLS", "STORAGE") { Rect = new Rect(c.x, c.y, Mathf.Min(c.width, 0.3f), t.ButtonHeight) });
             var area = new Rect(c.x, c.y + t.ButtonHeight + t.Gap * 2, c.width, c.height - t.ButtonHeight - t.Gap * 2);
@@ -189,7 +189,6 @@ namespace MetaCodex.Shell
             {
                 ("⟳ CHECK", () => RefreshTools(true)),
                 ("PACKAGES…", ShowPackages),
-                ("TERMINAL", () => RunInNewTerminal("apt list --installed 2>/dev/null | wc -l; ls ~/.bun/bin ~/.cargo/bin ~/.local/bin 2>/dev/null")),
             }, primary: 0);
 
             var s = new UiStack(area, t.Gap);

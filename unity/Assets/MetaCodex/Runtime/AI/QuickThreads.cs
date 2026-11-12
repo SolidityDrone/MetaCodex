@@ -75,7 +75,7 @@ namespace MetaCodex.AI
             else if (asks) Set(q, QuickState.NeedsYou, "NEEDS YOU");
             else if (queued == "failed") Set(q, QuickState.Error, "NOT SENT");
             else if (held) Set(q, QuickState.Waiting, "WAITING");
-            else if (st == "waiting-for-host") Set(q, QuickState.Waiting, "NO HOST");
+            else if (st == "waiting-for-host") Set(q, QuickState.Waiting, "OFFLINE"); // MQH waits for a host to run it
             else if (working)
             {
                 bool starting = st == "pending" || st == "provisioning" || st == "starting";

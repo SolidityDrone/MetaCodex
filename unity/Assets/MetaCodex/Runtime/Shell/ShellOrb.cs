@@ -347,7 +347,7 @@ namespace MetaCodex.Shell
             Settings.orbDist = dist;
             _orbCurYaw = Settings.orbYaw; _orbCurPitch = Settings.orbPitch; _orbCurDist = dist;
             _orbYawVel = _orbPitchVel = _orbDistVel = 0f;
-            Settings.Save(_settingsPath);
+            OnSettingsChanged(); // once, on release (saved, and pushed to MQH when quiet: its copy must not bring an old place back)
             Sounds?.Play("click");
         }
 
@@ -355,7 +355,7 @@ namespace MetaCodex.Shell
         public void ResetOrbPlace()
         {
             Settings.orbPinned = false;
-            Settings.Save(_settingsPath);
+            OnSettingsChanged();
             _orbSpot = 0;
             FrameOrb(false);
         }
@@ -564,23 +564,30 @@ namespace MetaCodex.Shell
             }
             B(0, "◉\nTALK", () => VoiceToggle(), UiButtonStyle.Primary);
             _orbSpeakBtn = B(1, "♫\nSPEAK", () => { Settings.voice.speak = !Settings.voice.speak; OnSettingsChanged(); SyncSettingsControls(); RefreshOrbMenu(); });
-            B(2, "⌖\nPLACE", () => { ResetOrbPlace(); Toast("The orb chooses its own place again · pinch it to put it anywhere", "info"); });
-            _orbLogBtn = B(3, "☰\nLOG", () => { if (OrbMenuOpen) CloseOrbMenu(); OpenPanel("messages"); });
+            B(2, "✥\nPLACE", () => { ResetOrbPlace(); Toast("The orb chooses its own place again · pinch it to put it anywhere", "info"); });
+            _orbLogBtn = B(3, "✉\nLOG", () => { if (OrbMenuOpen) CloseOrbMenu(); OpenPanel("messages"); });
         }
 
         private UiButton _orbLogBtn;
         private UiPanel _messages;
 
-        /// MESSAGES: everything the app has said (the orb's callouts), newest first, with their age; CLEAR. A window like
-        /// the others (placed where there is room), opened from the orb's menu (LOG) or by voice ("open messages").
+        /// LOG · MESSAGES: everything the app has said (the orb's callouts), newest first, with their age; CLEAR ALL (asks
+        /// first, as CLIPBOARD's). A window like the others (placed where there is room), opened from the orb's menu (LOG)
+        /// or by voice ("open messages").
         private void BuildMessagesPanel()
         {
             var t = UiTheme.Current;
-            _messages = Panel<UiPanel>("messages", "MESSAGES", 0.50f, 0.42f);
+            _messages = Panel<UiPanel>("messages", "LOG · MESSAGES", 0.50f, 0.42f);
             var c = _messages.Content;
-            _orbStatus = _messages.Add(new UiLabel("", t.SmallSize) { Rect = new Rect(c.x, c.y, c.width - 0.11f, 0.024f), UseDisplay = true, Color = t.TextAccent });
-            _messages.Add(new UiButton("✕ CLEAR", () => { Toasts.History.Clear(); _orbUnread = 0; if (Orb != null) Orb.Unread = 0; RefreshOrbMenu(); }) { Rect = new Rect(c.xMax - 0.10f, c.y, 0.10f, 0.026f), TextSize = 0.010f });
-            float ly = c.y + 0.034f;
+            const float clearW = 0.13f;
+            _orbStatus = _messages.Add(new UiLabel("", t.SmallSize) { Rect = new Rect(c.x, c.y, c.width - clearW - t.Gap, t.ButtonHeight), UseDisplay = true, Color = t.TextAccent });
+            _messages.Add(new UiButton("CLEAR ALL", () =>
+            {
+                int n = Toasts.History.Count;
+                if (n == 0) return;
+                Modal("CLEAR THE LOG", n == 1 ? "Clear the one message?" : $"Clear all {n} messages?", new[] { "CLEAR ALL", "CANCEL" }, i => { if (i == 0) ClearMessages(); });
+            }, UiButtonStyle.Danger) { Rect = new Rect(c.xMax - clearW, c.y, clearW, t.ButtonHeight) });
+            float ly = c.y + t.ButtonHeight + t.Gap;
             _orbList = _messages.Add(new UiList(0.028f) { Rect = new Rect(c.x, ly, c.width, c.yMax - ly) });
             _messages.Opened += _ =>
             {
@@ -588,6 +595,15 @@ namespace MetaCodex.Shell
                 if (Orb != null) Orb.Unread = 0;
                 RefreshOrbMenu();
             };
+        }
+
+        /// Empties the LOG (its CLEAR ALL, once confirmed): the messages and the unread count.
+        public void ClearMessages()
+        {
+            Toasts.History.Clear();
+            _orbUnread = 0;
+            if (Orb != null) Orb.Unread = 0;
+            RefreshOrbMenu();
         }
 
         /// The menu's four action tiles (TALK, SPEAK, PLACE, LOG), top to bottom on the inner arc.
@@ -656,7 +672,7 @@ namespace MetaCodex.Shell
             if (_orbActs.Count > 0)
             {
                 _orbSpeakBtn.SetSelected(Settings.voice.speak);
-                _orbLogBtn.SetText(fresh > 0 ? "☰\n" + fresh + " NEW" : "☰\nLOG");
+                _orbLogBtn.SetText(fresh > 0 ? "✉\n" + fresh + " NEW" : "✉\nLOG");
                 _orbLogBtn.SetSelected(fresh > 0);
             }
             if (_messages == null) return;

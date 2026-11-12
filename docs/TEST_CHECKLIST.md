@@ -70,7 +70,7 @@ Helpers on the PC: `tools/qterm` (control port), `adb logcat -s Unity`, `files/s
 - [ ] GIT: branch, ahead/behind, changes, branches, metro history; FETCH, PULL, COMMIT… (keyboard), CHECKOUT (tap a branch)
 - [ ] WEB: the in-app browser window (section 23); ☰ LINKS: bookmarks add/remove; LOCAL SERVERS lists running ports
 - [ ] WEB: start `python3 -m http.server 8000` in a terminal → LINKS > SCAN shows :8000 → opens in the WEB window
-- [ ] LINKS: HANDS ⚙ / APP ⚙ / FILES APP open the Horizon system pages
+- [ ] Horizon system pages: HANDS > HORIZON HANDS ⚙, ABOUT > APP PERMISSIONS ⚙, FILES > FILES APP open them (section 35)
 
 ## 6. Lua scripts
 
@@ -100,11 +100,11 @@ Helpers on the PC: `tools/qterm` (control port), `adb logcat -s Unity`, `files/s
 
 - [ ] AGENTS lists providers (Claude Code, Codex, Pi, Cursor, opencode if installed) with READY / SIGN IN / INSTALL
 - [ ] Select Claude Code → SIGN IN ▶ → a new terminal runs `claude auth login`
-- [ ] The terminal prints a link → toast "Link in …" → `⇗` on that terminal (or OPEN LINK) opens it in the Horizon browser
+- [ ] The terminal prints a link → toast "Link in …" → `⇗` on that terminal opens it in the Horizon browser
 - [ ] Sign in in the browser; the redirect back to localhost completes the login (or paste the code with ⎘) → AGENTS ⟳ shows READY + account
 - [ ] Same for opencode (`opencode auth login`) and Codex (`codex login --device-auth`: device code flow)
-- [ ] INSTALL / UPDATE on a missing provider → MQH installs it (or run `mcx-setup` in a terminal)
-- [ ] ENABLE / DISABLE toggles a provider in MQH
+- [ ] GET installs a missing agent; UPDATE (installed agents only) updates it through MQH (or run `mcx-setup` in a terminal)
+- [ ] DISABLE (or ENABLE: the button says the one that applies) switches a provider in MQH
 
 ## 9. Threads (MQH)
 
@@ -272,7 +272,7 @@ Voice:
 - [ ] Dock / wrist: one MQH entry (no SCRIPTS / GESTURE); MQH opens on SKILLS; the tabs PLUGINS, SCRIPTS, GESTURES, DAEMON work; Settings has no DAEMON tab
 - [ ] MQH > SKILLS: the shipped skills say READ-ONLY and REMOVE refuses them; + NEW SKILL opens NEW THREAD with the brief; ⌕ FIND finds skills, ⇣ INSTALL adds one under YOURS, REMOVE removes it
 - [ ] SELECT, then pinch-drag over a window at low PANEL OPACITY: CLIPBOARD has the capture, opaque, nothing of the room or the hands; no hitch at the moment of the capture (72 fps)
-- [ ] CLIPBOARD from the wrist (CLIP), the dock and by voice ("open the clipboard", "apri gli appunti"); 21 captures with CLIPBOARD SIZE 20 → the oldest is gone
+- [ ] CLIPBOARD from the wrist (CLIP), the dock and by voice ("open the clipboard", "apri gli appunti"); 21 captures with CLIPBOARD's KEEP at 20 → the oldest is gone
 - [ ] A thread: + → REFERENCE CAPTURE → the list inside the thread panel; pick two → two chips; + → ATTACH FILES → a Linux file; SEND: the agent sees the images and the file
 - [ ] Ask by voice, with a thread waiting for an approval: "what is this command I'm asked to accept, is it safe?" → spoken answer naming the thread, the command and its risks, never "it's safe"
 - [ ] Ask by voice: "do we have the rust toolchain?", "is this build stuck?" (during a long `cargo build`), "what has this thread done so far?" (pointing at THREAD) → short spoken answers; "open settings" still opens Settings
@@ -351,7 +351,7 @@ Section 19's transition lines (the spark, the collapse into a line) are replaced
 
 The orb's billboard and the table keyboard (same version):
 
-- [ ] The orb: touch it → a small billboard next to it (TALK, SPEAK, PLACE, LOG); LOG shows "n NEW" when messages came; it opens MESSAGES (the list, ✕ CLEAR)
+- [ ] The orb: touch it → a small billboard next to it (TALK, SPEAK, PLACE, LOG); LOG shows "n NEW" when messages came; it opens LOG · MESSAGES (the list, CLEAR ALL asks first)
 - [ ] Wrist menu > TABLE: OPEN KEYBOARD shows the keyboard; TURN ON opens Settings (Experimental > Surface Keyboard and Touchpad)
 
 The in-app browser, WEB (same version):
@@ -359,7 +359,7 @@ The in-app browser, WEB (same version):
 - [ ] WEB on the dock or the wrist: a window opens beside the others on a start page (bookmarks, local servers); the app stays on, everything else stays visible
 - [ ] Type `localhost:8000` (with `python3 -m http.server 8000` running in a terminal) → GO: the page shows in the window; tap a link with a pinch and with a fingertip; drag the page to scroll; ◀ ▶ ⟳ work; the title and "loading %" show under the toolbar
 - [ ] Tap a text field on a page, ⌨, type, done: the text is in the field; ⏎ submits, ⌫ deletes
-- [ ] A Vite / dev server link printed in a terminal (`⇗` or OPEN LINK) opens in the WEB window; a sign-in link (`claude auth login`) opens in Horizon's browser instead, as before
+- [ ] A Vite / dev server link printed in a terminal (`⇗` on it) opens in the WEB window; a sign-in link (`claude auth login`) opens in Horizon's browser instead, as before
 - [ ] ⇗ in WEB opens the page in Horizon's browser; on a PC with USB adb, `chrome://inspect` lists the page (console, DOM)
 - [ ] Moving the WEB window, closing and reopening it: the page is still there; with "Bend panels" on it stays flat
 - [ ] Frame rate with WEB open on a scrolling page: 72 fps; closed: no cost
@@ -503,3 +503,37 @@ docs/native-build-and-install.md.
 - [ ] STATUS: model, access, context %, what runs now and for how long, approvals waiting, usage, folder, MQH
 - [ ] A Bluetooth keyboard after touching the sidebar: ↑ ↓ / Page / Enter / Esc move and open in it; touch the terminal and the keys go there again
 - [ ] Voice: "open the sidebar on the git tab", "chiudi la barra laterale", "show the status tab of this thread", and in a folder with no repo "make this folder a git repository"
+
+## 35. Menus and layout polish (branch feat/polish)
+
+Main menu (dock: Settings > DISPLAY, main menu on the wrist off; wrist: on):
+
+- [ ] Dock: TALK TERM FILES THREADS WEB CONTROL / TERMS CLIP FOCUS SELECT KEYS CENTER, the wrist's order without TABLE; the wrist still has TABLE on the outer ring
+- [ ] Dock: open FILES, THREADS, WEB, TERMS, CLIP from it: each tile stays selected (lit) while its window is open and goes dark when it closes (within a quarter second); CONTROL lit while CONTROL shows; FOCUS and SELECT lit while on; KEYS lit while the terminal keyboard is up (also on the wrist); TALK lit while listening
+- [ ] Watch the fps overlay with the dock open for a minute: 72 fps, no hitch every quarter second
+- [ ] ✕ on the last terminal: the toast says "TERM on the menu shows it"
+
+CONTROL:
+
+- [ ] The rail reads THIS HEADSET: ◧ DISPLAY, ◈ LOOK & SOUND, ◐ FOCUS, ✋ HANDS / AI: ♫ VOICE, ◆ AGENTS, ⬡ MQH, ⚿ VAULT / LINUX & APP: ⬢ SYSTEM, ✦ ABOUT; row names in the same narrow capitals as CONTROL and the group captions; nothing cut off ("LOOK & SOUND" whole)
+- [ ] With no agent signed in, AGENTS' status on the rail says "sign in" (not "set up")
+- [ ] Click every category on the rail one after another: every window has the same size, the top-left corner and the rail never move, no window grows over a neighbour
+- [ ] Voice or a binding with `ui.open("display")`, "look", "hands", "about" (e.g. `mcx-ui action open:about` from a terminal): CONTROL opens on that page; close it; CONTROL on the menu brings that page back
+- [ ] HANDS: the button row reads SELECT AREA ⌖ | GESTURE STUDIO ▸ | HORIZON HANDS ⚙; the line at the top ends "GESTURE STUDIO: your own gestures."; GESTURE STUDIO opens MQH on GESTURES in HANDS' place; HORIZON HANDS opens Horizon's hand settings
+- [ ] DISPLAY in FIXED: FLOAT RADIUS dimmed with "FLOAT only" under its name; switch LAYOUT to FLOAT: FLOAT RADIUS bright, DISTANCE dimmed with "FIXED only"; no CLIPBOARD SIZE row any more
+- [ ] ABOUT: no raw log lines; LICENCES ▸ opens FILES at /usr/share/doc/metacodex (LICENSES.md there); APP PERMISSIONS ⚙ opens Horizon's settings for MetaCodex
+- [ ] MQH: the title reads MQH · SKILLS · PLUGINS · SCRIPTS · GESTURES; the last tab is STATUS (URL, token, sync, ⟳ RESTART); SKILLS' right side has no ", as bb does"; its three buttons are not cut off
+- [ ] MQH > PLUGINS: pick a plugin: the first button says DISABLE when it is on, ENABLE when it is off; with nothing picked it is dim
+- [ ] Stop MQH (or wait for a failure): AGENTS says "MQH > STATUS > RESTART tries again"
+- [ ] AGENTS: pick an installed agent: the second row reads DISABLE (or ENABLE) | NEW THREAD → | UPDATE; pick one that is not installed: no UPDATE; no OPEN LINK button; the hint says ⇗ on the sign-in terminal opens the link
+- [ ] SYSTEM > TOOLS: the bottom row is ⟳ CHECK | PACKAGES… (no TERMINAL)
+
+Work windows:
+
+- [ ] LINKS (WEB's ☰): the title is LINKS; the bottom row has only ⟳ SCAN
+- [ ] FILES: FILES APP at the end of the top row opens Horizon's Files app
+- [ ] CLIPBOARD: a KEEP slider above its buttons; set 5 with more captures: the oldest go, the line says "n of 5"; the preview still shows whole
+- [ ] Orb menu: ✥ PLACE and ✉ LOG (no more ⌖ / ☰ there); with unread messages ✉ n NEW
+- [ ] LOG: the window is titled LOG · MESSAGES; CLEAR ALL (red, as big as other buttons) asks "Clear all n messages?"; CANCEL keeps them, CLEAR ALL empties the list
+- [ ] Pinch the orb to a new place, let go; quit the app (with MQH sync on) and start it again: the orb is where you left it; menu > PLACE, restart: it chooses its own place
+- [ ] A thread whose host is not connected: its orb card and THREAD's header say OFFLINE (not NO HOST)
