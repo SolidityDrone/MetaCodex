@@ -598,3 +598,10 @@ Work windows:
 - [ ] Text at the edges of the view: sharp while nothing heavy runs; under load it may soften a little (dynamic foveation), never flickers
 - [ ] Ambient Focus, real things in front of windows (occlusion) and bent windows look as before (symmetric projection)
 - [ ] Move the head and hands fast: windows stay still in the room, the hand ray stays on the fingers (late latching)
+
+## 40. Stone-metal frames and buttons (branch feat/stone-ui)
+
+- [ ] Every window (not the small cards) has carved stone-metal corner pieces with a blue groove and a light node on each cut, slim rails between them, a carved plate with a blue gem over the top centre; the blue only spills inward onto the glass
+- [ ] Buttons are dark blue slate plates with an engraved channel: dim blue at rest, bright when a finger or the ray is on them, full for the primary (CD HERE) and red for a danger button; list rows and ghost buttons look as before; text stays easy to read
+- [ ] A window opening: the cast's brackets hand over to the stone corners without a jump; bent windows: the pieces bend with them
+- [ ] 72 fps with many windows open (the look is computed in the existing UI shader, no textures)
