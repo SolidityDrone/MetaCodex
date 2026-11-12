@@ -1,3 +1,5 @@
+<p align="center"><img alt="MetaCodex: metacoding in XR. A faceted silver M with blue light over the name." src="docs/assets/brand/metacodex-logo.webp" width="720"></p>
+
 # MetaCodex
 
 **A coding-agent workstation inside a standalone mixed-reality headset.**
