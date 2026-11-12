@@ -22,8 +22,12 @@ and its `knowledge/LEARNINGS.md` (search it for your topic). Plan of record:
   (`adb tcpip 5555`, `adb connect <ip>:5555`, ip from `adb shell ip -f inet addr show wlan0`).
 - While an Editor has the project open, change scenes/assets through `unity command eval`, not YAML.
 - Never touch Claude subscription credentials; never bundle the Claude Code binary (plan D3/D4).
-- No brand names or logos in the app UI or video (contest rules). One exception the owner approved: the
-  installable tools' own icons in SYSTEM > TOOLS (node, npm, bun, rust, ...), which identify the software.
+- No logos or brand marks anywhere in the app UI or video (owner, 2026-11-10; contest rules §4: no advertising,
+  no third-party trademark use): SYSTEM > TOOLS is a plain grouped list, no icons. Software is named in plain
+  text only where the name is the function (a tool's command, the agent CLI to sign in to), never as advertising,
+  endorsement or "powered by"; where the function is generic, use the generic word (git, not a hosting company).
+- Every third-party thing that ships in the APK, is downloaded by the app or `mcx-setup`, or is bundled into the
+  userland goes into `docs/LICENSES.md` in the same change (licence, version, source, how it ships, duties).
 
 ## The command registry (the app's MCP-like surface): strict rules
 

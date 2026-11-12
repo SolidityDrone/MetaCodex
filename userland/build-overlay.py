@@ -92,6 +92,24 @@ with tarfile.open(fileobj=raw, mode="w", format=tarfile.PAX_FORMAT) as tf:
     for f in ("SOURCES.md", "LICENSE-unity-skills.md", "LICENSE-meta-agentic-tools"):
         if os.path.isfile(os.path.join(bundled, f)):
             extra[f"{skills_dst}/THIRD-PARTY/{f}"] = os.path.join(bundled, f)
+    # the licence notices the app owes its users (docs/LICENSES.md and the texts it points to that are not already in
+    # the Debian image's /usr/share/common-licenses), from where they live in the repo: /usr/share/doc/metacodex/
+    doc_dst = "usr/share/doc/metacodex"
+    extra[f"{doc_dst}/LICENSES.md"] = os.path.join(root, "docs", "LICENSES.md")
+    lic_dir = os.path.join(root, "docs", "licenses")
+    for f in sorted(os.listdir(lic_dir)) if os.path.isdir(lic_dir) else []:
+        if not junk(f) and os.path.isfile(os.path.join(lic_dir, f)):
+            extra[f"{doc_dst}/licenses/{f}"] = os.path.join(lic_dir, f)
+    assets = os.path.join(root, "unity", "Assets")
+    fonts = os.path.join(assets, "MetaCodex", "Fonts")
+    for f in sorted(os.listdir(fonts)) if os.path.isdir(fonts) else []:
+        if f.endswith(".txt"):
+            extra[f"{doc_dst}/licenses/fonts/{f}"] = os.path.join(fonts, f)
+    for dst, rel in (("licenses/fonts/LiberationSans-OFL.txt", ("TextMesh Pro", "Fonts", "LiberationSans - OFL.txt")),
+                     ("licenses/MoonSharp-LICENSE.txt", ("Plugins", "MoonSharp", "LICENSE.txt")),
+                     ("licenses/proot-talloc-shmem.md", ("Plugins", "Android", "libs", "arm64-v8a", "THIRD_PARTY_PROOT.md"))):
+        if os.path.isfile(os.path.join(assets, *rel)):
+            extra[f"{doc_dst}/{dst}"] = os.path.join(assets, *rel)
     # the skills this overlay lays: read-only in the app's MQH > SKILLS (each update lays them again)
     shipped = sorted(k.split("/")[-1] for k in trees if k.startswith(skills_dst + "/"))
     generated = {"opt/metacodex/shipped-skills.txt": ("# skills shipped by MetaCodex in /root/.claude/skills (read-only in MQH > SKILLS)\n"

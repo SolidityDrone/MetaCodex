@@ -13,8 +13,9 @@ using UnityEngine;
 namespace MetaCodex.Shell
 {
     /// SYSTEM: what is installed in the Linux userland and where the storage goes.
-    ///   TOOLS    a tile per known tool (runtimes, package managers, compilers, git, editors, agent CLIs) with its
-    ///            version; missing ones install from a tap (in a terminal, so you see what happens)
+    ///   TOOLS    a plain list in groups, one row per known tool (runtimes, package managers, compilers, git, editors,
+    ///            agent CLIs): what it does and its version, no logos; missing ones install from a tap (in a
+    ///            terminal, so you see what happens)
     ///   STORAGE  the headset's space (Linux, AI models, shared folder, free), the Linux folders by size with
     ///            one-tap cleanups, and a soft limit for Linux (Android cannot reserve or cap an app's space:
     ///            the app warns when Linux grows past it)
@@ -45,7 +46,7 @@ namespace MetaCodex.Shell
             ("python", "PYTHON", "scripts, data and AI tools", 0),
             ("native", "NATIVE CODE", "compilers and build tools for C, C++, Rust and Go", 1),
             ("android", "ANDROID · QUEST", "build native apps for this headset (NDK, android.jar, OpenXR, APK tools, adb, Vulkan shaders)", 3),
-            ("git", "GIT", "version control: history, branches, GitHub", 4),
+            ("git", "GIT", "version control: history, branches, remotes on any git server", 4),
             ("terminal", "TERMINAL UTILITIES", "download, connect, search, sessions, data", 7),
             ("editors", "EDITORS", "edit files right in the terminal", 5),
         };
@@ -91,8 +92,8 @@ namespace MetaCodex.Shell
             new ToolDef("build-tools", "android", "aapt2 version", "apt:aapt apksigner zipalign", "apt:aapt apksigner zipalign", "apt:aapt apksigner zipalign", check: "aapt2"),
             new ToolDef("glslc", "android", "glslc --version", "apt:glslc", "apt:glslc", "apt:glslc"),
 
+            // git only: it works with any git server; host-specific CLIs (one company's) stay out of the list
             new ToolDef("git", "git", "git --version", "apt:git", "apt:git", "apt:git"),
-            new ToolDef("gh", "git", "gh --version", "apt:gh", "apt:gh", "apt:gh"),
 
             new ToolDef("curl", "terminal", "curl --version", "apt:curl"),
             new ToolDef("wget", "terminal", "wget --version", "apt:wget", "apt:wget", "apt:wget"),
@@ -109,12 +110,57 @@ namespace MetaCodex.Shell
             new ToolDef("nvim", "editors", "nvim --version", "apt:neovim", "apt:neovim", "apt:neovim"),
         };
 
-        private static int GroupSeries(string group) { foreach (var g in ToolGroups) if (g.id == group) return g.series; return 2; }
+        /// What each tool does, in a few plain words: the list row and agents' tools.json show it (no logos, so the
+        /// words carry it). Every catalog tool has one (self-test `system`).
+        public static readonly Dictionary<string, string> ToolAbout = new Dictionary<string, string>
+        {
+            ["claude"] = "coding agent in the terminal · sign in from AGENTS",
+            ["codex"] = "coding agent in the terminal · sign in from AGENTS",
+            ["opencode"] = "open-source coding agent · sign in from AGENTS",
+            ["mqh"] = "the harness: threads, plugins and skills",
+            ["node"] = "JavaScript runtime",
+            ["npm"] = "installs JavaScript packages",
+            ["pnpm"] = "fast package manager that saves disk space",
+            ["bun"] = "JavaScript runtime, package manager and bundler in one",
+            ["python3"] = "Python interpreter",
+            ["pip"] = "installs Python packages",
+            ["uv"] = "fast Python package and project manager",
+            ["gcc"] = "C and C++ compiler (GNU)",
+            ["clang"] = "C and C++ compiler (LLVM)",
+            ["make"] = "runs build recipes (Makefiles)",
+            ["cmake"] = "sets up builds for C and C++ projects",
+            ["ninja"] = "small, fast build runner",
+            ["rustc"] = "Rust compiler",
+            ["cargo"] = "Rust build tool and package manager",
+            ["go"] = "Go compiler and tools",
+            ["ndk"] = "native toolchain: C and C++ for this headset",
+            ["android-sdk"] = "android.jar: the Android API apps compile against",
+            ["openxr"] = "OpenXR headers and loader for VR apps",
+            ["java"] = "Java compiler and runtime (JDK)",
+            ["adb"] = "talks to Android devices, installs apps",
+            ["build-tools"] = "packs, aligns and signs APKs",
+            ["glslc"] = "compiles shaders to SPIR-V for Vulkan",
+            ["git"] = "version control: history, branches, remotes",
+            ["curl"] = "downloads files and calls web APIs",
+            ["wget"] = "downloads files",
+            ["ssh"] = "secure shell to other machines",
+            ["jq"] = "reads and edits JSON",
+            ["rg"] = "searches text in files, fast",
+            ["fd"] = "finds files by name, fast",
+            ["fzf"] = "fuzzy finder for any list",
+            ["tmux"] = "keeps terminal sessions alive, splits windows",
+            ["sqlite3"] = "small SQL database in one file",
+            ["nano"] = "simple text editor",
+            ["vim"] = "modal text editor",
+            ["nvim"] = "Neovim: a modern vim",
+        };
+
+        public static string AboutOf(string tool) => tool != null && ToolAbout.TryGetValue(tool, out var a) ? a : null;
 
         private readonly List<ToolInfo> _tools = new List<ToolInfo>();
         private readonly Dictionary<string, string> _sysCounts = new Dictionary<string, string>();
         private UiTabs _sysTabs;
-        private UiToolGrid _toolGrid;
+        private UiToolList _toolList;
         private UiLabel _sysToolsInfo, _sysStoreInfo;
         private UiStorageBar _storeDevice, _storeLinux;
         private UiList _storeList;
@@ -138,7 +184,7 @@ namespace MetaCodex.Shell
 
             var a = new UiStack(area, t.Gap);
             _sysToolsInfo = _sysTabs.AddTo(0, new UiLabel("", t.SmallSize) { Rect = a.Next(0.034f), Wrap = true, Color = t.TextDim, Align = TextAlignmentOptions.TopLeft });
-            _toolGrid = _sysTabs.AddTo(0, new UiToolGrid { Rect = a.Next(area.yMax - a.Y - t.ButtonHeight - t.Gap), OnPick = ToolPicked });
+            _toolList = _sysTabs.AddTo(0, new UiToolList { Rect = a.Next(area.yMax - a.Y - t.ButtonHeight - t.Gap), OnPick = ToolPicked });
             TabButtons(_sysTabs, 0, a.Next(t.ButtonHeight), new (string, Action)[]
             {
                 ("⟳ CHECK", () => RefreshTools(true)),
@@ -201,7 +247,7 @@ namespace MetaCodex.Shell
         /// One shell run checks every known tool (path + version) and counts packages.
         public void RefreshTools(bool force)
         {
-            if (_toolsBusy || _toolGrid == null) return;
+            if (_toolsBusy || _toolList == null) return;
             if (!force && _tools.Count > 0 && (DateTime.Now - _toolsAt).TotalMinutes < 10) { ShowTools(); return; }
             _toolsBusy = true;
             ShowTools();
@@ -265,18 +311,18 @@ namespace MetaCodex.Shell
 
         private void ShowTools()
         {
-            if (_toolGrid == null) return;
+            if (_toolList == null) return;
             var t = UiTheme.Current;
-            _toolGrid.Tiles.Clear();
-            if (_toolGrid.Groups.Count == 0)
-                foreach (var g in ToolGroups) _toolGrid.Groups.Add(new UiToolGrid.Group { Id = g.id, Title = g.title, Blurb = g.blurb, Tint = UiViz.Series(g.series) });
+            _toolList.Rows.Clear();
+            if (_toolList.Groups.Count == 0)
+                foreach (var g in ToolGroups) _toolList.Groups.Add(new UiToolList.Group { Id = g.id, Title = g.title, Blurb = g.blurb, Tint = UiViz.Series(g.series) });
             // the catalog's order inside each group: a tool keeps its place whether installed or not
             foreach (var tool in _tools.OrderBy(x => Array.FindIndex(ToolCatalog, c => c.Name == x.Name)))
             {
                 string group = tool.Group ?? ToolCatalog.FirstOrDefault(c => c.Name == tool.Name)?.Group;
-                _toolGrid.Tiles.Add(new UiToolGrid.Tile { Name = tool.Name, Version = tool.Version, Category = group, Group = group, Glyph = "✦", Tint = UiViz.Series(GroupSeries(group)), Found = tool.Found, Tag = tool, Hint = tool.Install == null ? "not found" : tool.Install == "agents" ? "+ in AGENTS" : "+ install" });
+                _toolList.Rows.Add(new UiToolList.Row { Name = tool.Name, About = AboutOf(tool.Name), Version = tool.Version, Group = group, Found = tool.Found, Tag = tool, Hint = tool.Install == null ? "not found" : tool.Install == "agents" ? "+ in AGENTS" : "+ install" });
             }
-            _toolGrid.Redraw();
+            _toolList.Redraw();
             int n = _tools.Count(x => x.Found);
             string counts = string.Join(" · ", new[]
             {
@@ -286,7 +332,7 @@ namespace MetaCodex.Shell
             }.Where(x => !string.IsNullOrEmpty(x)));
             _sysToolsInfo.Set(_toolsBusy ? "checking the Linux userland … (versions of " + ToolCatalog.Length + " tools)" :
                 _tools.Count == 0 ? "Not checked yet: ⟳ CHECK." :
-                $"<b>{n}</b> of {_tools.Count} known tools installed · {counts}\nchecked {(_toolsAt == DateTime.MinValue ? "?" : _toolsAt.ToString("HH:mm"))} · tap a tile to install, update or remove it", t.TextDim);
+                $"<b>{n}</b> of {_tools.Count} known tools installed · {counts}\nchecked {(_toolsAt == DateTime.MinValue ? "?" : _toolsAt.ToString("HH:mm"))} · tap a row to install, update or remove it", t.TextDim);
         }
 
         /// What agents read instead of probing with commands: /mnt/quest/system/tools.json (the app's shared
@@ -311,7 +357,7 @@ namespace MetaCodex.Shell
             ["note"] = "Kept current by MetaCodex (SYSTEM > TOOLS). Install missing tools there or with the command in `install`.",
             ["tools"] = new JArray(_tools.Select(x => new JObject
             {
-                ["name"] = x.Name, ["installed"] = x.Found, ["version"] = x.Version, ["path"] = x.Path, ["group"] = x.Group ?? x.Category,
+                ["name"] = x.Name, ["about"] = AboutOf(x.Name), ["installed"] = x.Found, ["version"] = x.Version, ["path"] = x.Path, ["group"] = x.Group ?? x.Category,
                 ["install"] = x.Found ? null : Cmd(x.Install, "install"),
             })),
         };
@@ -482,7 +528,7 @@ namespace MetaCodex.Shell
                  : $"apt-get remove -y {pkgs}";
         }
 
-        private void ToolPicked(UiToolGrid.Tile tile)
+        private void ToolPicked(UiToolList.Row tile)
         {
             if (!(tile?.Tag is ToolInfo tool)) return;
             var items = new List<UiListItem>();

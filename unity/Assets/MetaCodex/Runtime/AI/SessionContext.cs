@@ -267,7 +267,6 @@ namespace MetaCodex.AI
             (new[] { "android sdk", "android.jar" }, new[] { "android-sdk" }),
             (new[] { "openxr" }, new[] { "openxr" }),
             (new[] { "git " , "git?" }, new[] { "git" }),
-            (new[] { "github cli", " gh " }, new[] { "gh" }),
             (new[] { "golang", " go " , " go?" }, new[] { "go" }),
             (new[] { "gcc", "c compiler", "c++" }, new[] { "gcc" }),
             (new[] { "clang" }, new[] { "clang" }),
