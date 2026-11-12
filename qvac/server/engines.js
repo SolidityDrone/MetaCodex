@@ -80,6 +80,8 @@ class Engines {
 
   /** Text from 16 kHz mono Int16 PCM. */
   transcribe (pcm, opts = {}) {
+    // speech-to-text goes first: a speculative prefill still running would share the 3 cores with it
+    if (this.cfg.prefillYieldsToAsr !== false && this.cancelSpeculative()) this.prefillsYielded = (this.prefillsYielded || 0) + 1
     return this.job('asr', 'asr', async () => {
       const seconds = pcm.length / 16000
       // whisper encodes a fixed 30 s window; commands are short, so encode ~10 s (4x faster, measured)
@@ -103,9 +105,16 @@ class Engines {
     })
   }
 
-  /** OpenAI-style chat with optional tools -> { content, tool_calls, ms, firstMs, stats }. */
+  /**
+   * OpenAI-style chat with optional tools -> { content, tool_calls, ms, firstMs, stats, cancelled }.
+   *   opts.onToken(text): streamed answer text (no <think> block, no <tool_call> text), called per decoded token.
+   *   opts.abort: { aborted, onabort } from the HTTP layer (the client went away): a job still queued is skipped,
+   *   a running one is cancelled (QVAC response.cancel(); the loop ends with what was made so far).
+   */
   chat (messages, tools, opts = {}) {
-    return this.job('llm', 'llm', async () => {
+    const abort = opts.abort || null
+    return this.job('llm', opts.onToken ? 'llm-stream' : 'llm', async () => {
+      if (abort && abort.aborted) return { content: '', tool_calls: [], raw: '', ms: 0, firstMs: 0, stats: null, cancelled: true, skipped: true }
       const llm = await this._ensure('llm')
       const prompt = [...(tools || []).map(toQvacTool), ...(messages || []).map(toQvacMessage)]
       const gen = { temp: opts.temperature != null ? Number(opts.temperature) : 0, predict: opts.max_tokens != null ? Number(opts.max_tokens) : 256 }
@@ -117,12 +126,54 @@ class Engines {
       let first = 0
       let out = ''
       const r = await llm.run(prompt, runOpts)
-      for await (const tok of r.iterate()) {
-        if (!first) first = Date.now() - t0
-        out += tok
-      }
-      return Object.assign(parseAssistant(out), { ms: Date.now() - t0, firstMs: first, stats: r.stats || null })
+      if (abort) abort.onabort = () => { r.cancel().catch(() => {}) }
+      if (abort && abort.aborted) abort.onabort()
+      const strip = opts.onToken ? thinkStripper(opts.onToken) : null
+      try {
+        for await (const tok of r.iterate()) {
+          if (!first) first = Date.now() - t0
+          out += tok
+          if (strip && !(abort && abort.aborted)) strip(tok)
+        }
+      } finally { if (abort) abort.onabort = null }
+      return Object.assign(parseAssistant(out), { ms: Date.now() - t0, firstMs: first, stats: r.stats || null, cancelled: !!(abort && abort.aborted) })
     })
+  }
+
+  /**
+   * Speculative prefill (POST /v1/prefill): the session question's system prompt + context, without the question,
+   * evaluated while the user still speaks, keyless (the addon keeps it in memory), so the real request decodes only
+   * the question's ~17 tokens. Speech-to-text has priority: a transcription that arrives while it runs cancels it
+   * (`cancelSpeculative`), the real request then prefills what is missing.
+   */
+  prefill (messages) {
+    const abort = { aborted: false, onabort: null }
+    this._spec = abort
+    return this.job('llm', 'prefill', async () => {
+      if (abort.aborted) return { ms: 0, cancelled: true, skipped: true }
+      const llm = await this._ensure('llm')
+      if (abort.aborted) return { ms: 0, cancelled: true, skipped: true }
+      const t0 = Date.now()
+      const r = await llm.run((messages || []).map(toQvacMessage), { prefill: true })
+      abort.onabort = () => { r.cancel().catch(() => {}) }
+      try {
+        for await (const _ of r.iterate()) {} // eslint-disable-line no-unused-vars
+      } finally {
+        abort.onabort = null
+        if (this._spec === abort) this._spec = null
+      }
+      return { ms: Date.now() - t0, cancelled: abort.aborted, stats: r.stats || null }
+    })
+  }
+
+  /** Cancels a speculative prefill that is queued or running (speech-to-text needs the cores now). */
+  cancelSpeculative () {
+    const a = this._spec
+    if (!a || a.aborted) return false
+    a.aborted = true
+    this._spec = null
+    if (a.onabort) a.onabort()
+    return true
   }
 
   /**
@@ -212,11 +263,26 @@ class Engines {
     })
   }
 
+  /**
+   * Threads for one engine: llmThreads / ttsThreads / asrThreads / embedThreads when set (1-6), else `threads`.
+   * The LLM's prompt evaluation has its own count, llmBatchThreads (llama.cpp threads-batch), else the LLM's.
+   * docs/voice.md "Streaming answers": 3 threads on the 3 cores keep LLM and TTS at solo speed while they overlap.
+   */
+  threadsFor (kind) {
+    const v = Number(this.cfg[kind + 'Threads'])
+    return v >= 1 ? Math.min(6, Math.floor(v)) : this.cfg.threads
+  }
+
+  batchThreads () {
+    const v = Number(this.cfg.llmBatchThreads)
+    return v >= 1 ? Math.min(6, Math.floor(v)) : this.threadsFor('llm')
+  }
+
   _key (kind) {
-    const c = this.cfg
+    const c = Object.assign({}, this.cfg, { threads: this.threadsFor(kind) })
     if (kind === 'embed') return JSON.stringify([c.threads])
     if (kind === 'asr') return JSON.stringify([c.threads, this.asrWant.language || c.language, c.prompt, this.asrWant.actx])
-    if (kind === 'llm') return JSON.stringify([c.threads, c.ctx])
+    if (kind === 'llm') return JSON.stringify([c.threads, this.batchThreads(), c.ctx])
     return JSON.stringify([c.threads, this.ttsWant.voice || c.voice, c.ttsLanguage, c.ttsSteps])
   }
 
@@ -247,7 +313,7 @@ class Engines {
   }
 
   async _load (kind) {
-    const c = this.cfg
+    const c = Object.assign({}, this.cfg, { threads: this.threadsFor(kind) })
     const file = this.models.file(kind)
     let m
     if (kind === 'asr') {
@@ -267,7 +333,7 @@ class Engines {
       const Llm = require('@qvac/llm-llamacpp')
       m = new Llm({
         files: { model: [file] },
-        config: { device: 'cpu', ctx_size: String(c.ctx), threads: String(c.threads), tools: 'true', reasoning_budget: '0', temp: '0', predict: '256' },
+        config: { device: 'cpu', ctx_size: String(c.ctx), threads: String(c.threads), 'threads-batch': String(this.batchThreads()), tools: 'true', reasoning_budget: '0', temp: '0', predict: '256' },
         opts: { stats: true }
       })
     } else if (kind === 'embed') {
@@ -313,6 +379,43 @@ class Engines {
       }
     }
   }
+}
+
+/** Forwards streamed text without a leading <think>...</think> block (Qwen3 may write an empty one even with
+ * /no_think). Text is held only while it could still be the start of "<think>" or "<tool_call>"; a <tool_call> block
+ * is not streamed (the final chunk carries the parsed call). */
+function thinkStripper (emit) {
+  let buf = ''
+  let state = 'start' // start | think | text | tool
+  const feed = (tok) => {
+    if (state === 'tool') return
+    if (state === 'text') {
+      const i = tok.indexOf('<tool_call>')
+      if (i < 0) return emit(tok)
+      if (i > 0) emit(tok.slice(0, i))
+      state = 'tool'
+      return
+    }
+    buf += tok
+    if (state === 'think') {
+      const j = buf.indexOf('</think>')
+      if (j < 0) return
+      const rest = buf.slice(j + 8)
+      buf = ''
+      state = 'start'
+      if (rest) feed(rest)
+      return
+    }
+    const t = buf.trimStart() // state start
+    if (!t) return
+    if (t.startsWith('<think>')) { state = 'think'; buf = t.slice(7); if (buf) { const b = buf; buf = ''; feed(b) } return }
+    if (t.startsWith('<tool_call>')) { state = 'tool'; return }
+    if ('<think>'.startsWith(t) || '<tool_call>'.startsWith(t)) return // could still become a tag
+    state = 'text'
+    buf = ''
+    feed(t)
+  }
+  return feed
 }
 
 /** Whisper marks non-speech as [BLANK_AUDIO], (music) and the like; drop those. */
@@ -383,4 +486,4 @@ function fnv1a (str) {
   return h.toString(16).padStart(16, '0')
 }
 
-module.exports = { Engines, parseAssistant, cleanTranscript, toQvacTool, toQvacMessage }
+module.exports = { Engines, thinkStripper, parseAssistant, cleanTranscript, toQvacTool, toQvacMessage }

@@ -696,6 +696,30 @@ namespace MetaCodex.AI
             return sb.ToString();
         }
 
+        /// A recap of the thread from its pulse, no model (owner 2026-11-12: a recap must not take 10-20 s): a short first
+        /// sentence with its state, so the voice starts at once, then what it is doing or answered, what was asked and the
+        /// work so far. The spoken part is the first two sentences (ShellVoice.SpokenSentences); the rest stays on the HUD.
+        public string Recap()
+        {
+            string name = Clip(Regex.Replace(Title ?? "", @"[“”""]", ""), 40).TrimEnd('…', ' ');
+            string who = name.Length > 0 ? "The " + name + " thread" : "This thread";
+            var sb = new StringBuilder(who);
+            switch (State)
+            {
+                case "working": sb.Append(MayBeStuck ? " may be stuck." : " is working."); break;
+                case "waiting": sb.Append(" is waiting for you."); break;
+                case "held": sb.Append(" has not started yet."); break;
+                case "error": sb.Append(" stopped on an error."); break;
+                case "stopped": sb.Append(" was stopped."); break;
+                default: sb.Append(" is idle."); break;
+            }
+            sb.Append(' ').Append(Speak());
+            if (Prompt.Length > 0) sb.Append(" You asked: ").Append(Clip(Prompt, 90).TrimEnd('.', ' ', '…')).Append('.');
+            string st = Stats(this);
+            if (st.Length > 0) sb.Append(" So far: ").Append(st).Append('.');
+            return sb.ToString();
+        }
+
         /// What changed since the previous pulse, as events for the mid-term memory (few: start, a failure, the fixing
         /// pattern, quiet, the answer, an error).
         public static List<string> Changes(ThreadPulse before, ThreadPulse now)

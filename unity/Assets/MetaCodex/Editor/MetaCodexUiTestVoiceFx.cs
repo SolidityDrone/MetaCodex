@@ -123,6 +123,58 @@ namespace MetaCodex.EditorTools
         /// SOUND (OFF / AI / SHIP / COMM; a pick says a short line with it), set_setting voice_effect by name, + / - and
         /// spoken synonyms, the control port `voice fx`, and the clips played: off trimmed only, the presets longer by
         /// their tail, comm opening with its squelch.
+        /// Section `streaming`: a streamed reply (the acknowledgement made ahead plays first, each finished sentence is
+        /// made and played in order, the 2-sentence cap holds, Stop ends it), the server-sent-events parser and the
+        /// recap template a recap question gets without the model.
+        private static void StreamingSection(MetaCodexShell shell)
+        {
+            var pending = new List<(string text, Action<byte[], string> cb)>();
+            shell.StopSpeaking();
+            shell.SpeakForTest = (text, cb) => pending.Add((text, cb));
+            float now = Time.unscaledTime;
+            void AnswerAll() { while (pending.Count > 0) { var p = pending[0]; pending.RemoveAt(0); p.cb(TestSpeechWav(0.2f), null); } }
+            try
+            {
+                shell.SayStreamBegin(true);              // no acknowledgement yet: it is made now for the next question
+                AnswerAll();
+                shell.StopSpeaking();
+                bool ackMade = shell.AckReadyForTest;
+                shell.SayStreamBegin(true);              // now it plays at once, before any sentence exists
+                bool ackPlays = shell.SpeechClipsPlayedForTest == 1 && pending.Count == 0 && shell.SayStreamingForTest;
+                bool a1 = shell.SayStreamAppend("The login thread is idle.");
+                bool a2 = shell.SayStreamAppend("It answered two minutes ago.");
+                bool a3 = shell.SayStreamAppend("You asked for the parser fix.");   // over the 2-sentence cap
+                shell.SayStreamEnd();
+                for (int k = 0; k < 300 && (pending.Count > 0 || shell.Speaking); k++) { AnswerAll(); now += 0.1f; shell.TickSpeechForTest(now); }
+                var parts = shell.SpeechPartsForTest.ToList();
+                Check(ackMade && ackPlays && a1 && a2 && !a3 && shell.SpeechClipsPlayedForTest == 3 && !shell.Speaking,
+                    $"streamed reply: the acknowledgement made ahead ({ackMade}) plays at once ({ackPlays}), then 2 sentences in order, the third over the cap ({!a3}); played {shell.SpeechClipsPlayedForTest} clips");
+                shell.SayStreamBegin(false);
+                shell.SayStreamAppend("A sentence that is stopped.");
+                shell.StopSpeaking();
+                AnswerAll();
+                Check(!shell.SayStreamingForTest && shell.SpeechClipsPlayedForTest == 0, "Stop ends a streamed reply: a sentence that arrives later never plays");
+            }
+            finally { shell.SpeakForTest = null; shell.StopSpeaking(); }
+
+            // the service's stream: deltas, the end, an error
+            string d1 = QvacClient.SseDelta("data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Hel\"},\"finish_reason\":null}]}", out bool e1, out string x1);
+            QvacClient.SseDelta("data: [DONE]", out bool e2, out _);
+            QvacClient.SseDelta("data: {\"error\":\"boom\"}", out _, out string x3);
+            string d4 = QvacClient.SseDelta("", out bool e4, out _);
+            Check(d1 == "Hel" && !e1 && x1 == null && e2 && x3 == "boom" && d4 == null && !e4, "streamed chat: SSE deltas, [DONE] and errors are read");
+
+            // a recap asked for a thread with a pulse is answered from the pulse, no model; the thread it names wins
+            var pulse = new ThreadPulse { Title = "Fix the login form", State = "idle", Prompt = "fix the login form validation", AnswerGist = "the form now checks the email field", Commands = 4, Files = 2, Added = 30, Removed = 5 };
+            string recap = pulse.Recap();
+            var snap = new JObject { ["data"] = new JObject { ["pulse"] = new JObject { ["recap"] = recap, ["speak"] = pulse.Speak() } } };
+            string exact = SessionContextText.ExactAnswer(snap, SessionQuestion.Parse("give me a recap of the login thread"));
+            var first = SpokenText.Sentences(recap).FirstOrDefault() ?? "";
+            Check(exact == recap && first.StartsWith("The Fix the login form thread is idle") && first.Length <= 60 && recap.Contains("You asked") && recap.Contains("4 commands"),
+                $"recap without the model: “{recap}” (first sentence {first.Length} chars)");
+            Check(SessionContextText.ExactAnswer(snap, SessionQuestion.Parse("why did the login thread fail")) != recap, "a “why” question still goes to the model");
+        }
+
         private static void VoiceFxSection(MetaCodexShell shell)
         {
             string saved = shell.Settings.voice.fx;

@@ -238,9 +238,28 @@ namespace MetaCodex.Shell
 
         public void SetPointedForTest(string panelId) { _panels.TryGetValue(panelId, out _ctxPointed); _ctxPointedAt = Time.unscaledTime; }
 
-        /// The thread a question is about: the one in the window pointed at, else the open one, else the latest active.
+        /// The thread a question names ("a recap of the login thread"): the best title match of the words before
+        /// "thread", or null. Owner 2026-11-12: before, the recap was always of the open / pointed / newest thread.
+        private string NamedThread(string question)
+        {
+            if (string.IsNullOrWhiteSpace(question)) return null;
+            var m = System.Text.RegularExpressions.Regex.Match(question, @"(?:of|on|about|for|in|the|recap|summari[sz]e)\s+(?:the\s+)?(.{2,60}?)\s+(?:thread|conversation|chat)\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            if (!m.Success) return null;
+            string name = m.Groups[1].Value.Trim();
+            if (System.Text.RegularExpressions.Regex.IsMatch(name, @"^(this|that|my|our|current|open|last|latest|the)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase)) return null;
+            var best = _threads.OfType<JObject>().Select(t => new { id = (string)t["id"], score = ThreadScore(((string)t["title"] ?? (string)t["titleFallback"] ?? "") + " " + (string)t["environmentBranchName"], name), at = t["updatedAt"]?.Value<long>() ?? 0 })
+                .OrderByDescending(x => x.score).ThenByDescending(x => x.at).FirstOrDefault();
+            return best != null && best.score >= 0.5f ? best.id : null;
+        }
+
+        private string _ctxQuestion; // the question BuildSessionSnapshot answers (a thread it names wins over the focus)
+
+        /// The thread a question is about: the one it names, the one in the window pointed at, else the open one, else
+        /// the latest active.
         private string SubjectThread(UiPanel focus)
         {
+            string named = NamedThread(_ctxQuestion);
+            if (named != null) return named;
             if (focus != null && (focus.Id == "thread" || focus.Id == SidebarId) && _threadOpen != null) return _threadOpen;
             if (focus != null && focus.Id != null && focus.Id.StartsWith("orb-thread-") && OrbCardThread(focus) != null) return OrbCardThread(focus); // the orb's card
             if (focus != null && focus.Id == "threads" && _threadSel != null) return _threadSel;
@@ -282,6 +301,7 @@ namespace MetaCodex.Shell
                     data["pulse"] = new JObject
                     {
                         ["speak"] = pulse.Speak() + (cpu != null ? $" Its process {proc.Comm} is {cpu}." : ""),
+                        ["recap"] = pulse.Recap() + (cpu != null ? $" Its process {proc.Comm} is {cpu}." : ""),
                         ["state"] = pulse.State, ["phase"] = pulse.Phase, ["stuck"] = pulse.MayBeStuck, ["pattern"] = pulse.Pattern,
                     };
                 }
@@ -400,18 +420,68 @@ namespace MetaCodex.Shell
 
         // ------------------------------------------------------------------ answering
 
-        /// A question about the session, answered from the context: exact facts first, else the local model.
-        public void AnswerSessionQuestion(string question, Action<string> done)
+        private System.Threading.CancellationTokenSource _answerCts; // the streamed answer being written (StopSpeaking cancels it)
+        private bool _sessionAnswerSpoken;                             // VoiceDone: already spoken as it streamed
+
+        /// A question about the session, answered from the context: exact facts first, else the local model. With
+        /// `speak`, the answer is spoken as it comes (owner 2026-11-12: no 10-20 s waits): the acknowledgement made ahead
+        /// at once, then each finished sentence while the model still writes the next.
+        public void AnswerSessionQuestion(string question, Action<string> done, bool speak = false)
         {
+            if (speak) { SayStreamBegin(true); _sessionAnswerSpoken = _sayStreaming; SetVoiceState("thinking", "◆ LOOKING", "“" + Short(question, 70) + "”"); }
             var q = SessionQuestion.Parse(question);
-            var snap = BuildSessionSnapshot(q);
+            _ctxQuestion = question;
+            JObject snap;
+            try { snap = BuildSessionSnapshot(q); } finally { _ctxQuestion = null; }
             string exact = SessionContextText.ExactAnswer(snap, q);
-            if (exact != null) { SessionMemory.Add("voice", "ask", "asked: " + Cut(question, 80)); done(exact); return; }
+            if (exact != null)
+            {
+                SessionMemory.Add("voice", "ask", "asked: " + Cut(question, 80));
+                if (speak) { foreach (var x in SpokenText.Sentences(exact)) if (!SayStreamAppend(x)) break; SayStreamEnd(); }
+                done(exact);
+                return;
+            }
             string context = SessionContextText.Build(snap, q);
-            if (Qvac == null || !Qvac.IsRunning) { done("The local AI service is off, so only the facts: " + FirstFacts(snap, q)); return; }
+            if (Qvac == null || !Qvac.IsRunning) { if (speak) SayStreamEnd(); _sessionAnswerSpoken = false; done("The local AI service is off, so only the facts: " + FirstFacts(snap, q)); return; }
             // 70 tokens hold the one or two short sentences the prompt asks for (110 let it ramble: decode and speech both
             // grow with the length); a reply cut by the limit loses its unfinished sentence (CleanAnswer)
             var body = new JObject { ["messages"] = SessionContextText.Messages(context, question), ["max_tokens"] = 70, ["temperature"] = 0.2 };
+            if (speak && _sayStreaming)
+            {
+                // streamed: a sentence is spoken once the next one has begun (a sentence is never spoken half), the HUD
+                // shows the text as it grows; Stop / TALK / a new question cancel the generation with the voice
+                var text = new System.Text.StringBuilder();
+                int spokenUpTo = 0;
+                float hudAt = 0f;
+                bool capped = false;
+                void Feed(bool final)
+                {
+                    var parts = SpokenText.Sentences(text.ToString());
+                    int ready = final ? parts.Count : parts.Count - 1;
+                    for (; spokenUpTo < ready && !capped; spokenUpTo++) if (!SayStreamAppend(parts[spokenUpTo])) capped = true;
+                }
+                _answerCts?.Cancel();
+                System.Threading.CancellationTokenSource mine = null;
+                mine = _answerCts = Qvac.Client.ChatStream(body, piece =>
+                {
+                    if (_answerCts != mine) return;
+                    text.Append(piece);
+                    Feed(false);
+                    if (Time.unscaledTime >= hudAt) { hudAt = Time.unscaledTime + 0.25f; SetVoiceState("thinking", "◆ ANSWERING", Short(text.ToString(), 260)); }
+                }, (all, e) =>
+                {
+                    bool current = _answerCts == mine;
+                    if (current) _answerCts = null;
+                    string a = e != null ? null : SessionContextText.CleanAnswer(all);
+                    if (current && a != null) { text.Clear().Append(a); Feed(true); }
+                    if (current) SayStreamEnd();
+                    SessionMemory.Add("voice", "ask", "asked: " + Cut(question, 80));
+                    if (e == "cancelled") { _sessionAnswerSpoken = false; done("Stopped."); return; }
+                    if (string.IsNullOrWhiteSpace(a)) _sessionAnswerSpoken = false; // the fallback text is spoken by VoiceDone
+                    done(string.IsNullOrWhiteSpace(a) ? "I could not put that together. The facts: " + FirstFacts(snap, q) : a);
+                });
+                return;
+            }
             Qvac.Client.Chat(body, (r, e) =>
             {
                 string a = e != null ? null : SessionContextText.CleanAnswer((string)r?["choices"]?[0]?["message"]?["content"]);
@@ -443,13 +513,16 @@ namespace MetaCodex.Shell
             matches != null && matches.Any() && IsInterpretation(text)
             && matches.All(m => m.Command.Name != "ask_about_session" && m.Command.Owner == "shell" && !m.Command.SpeakReply);
 
+        /// Session answers are spoken (VOICE: spoken answers on).
+        private bool SpeaksAnswers => Settings.voice.speak || Settings.voice.speakAnswers;
+
         private void VoiceAskSession(VoiceResult res, Action<VoiceResult> done)
         {
             res.Via = res.Via ?? "context";
             res.Command = "ask_about_session";
             res.Answer = true;
             SetVoiceState("thinking", "◆ LOOKING", "“" + Short(res.Transcript, 70) + "”");
-            AnswerSessionQuestion(res.Transcript, answer => { res.Reply = answer; VoiceDone(res, done); });
+            AnswerSessionQuestion(res.Transcript, answer => { res.Reply = answer; VoiceDone(res, done); }, SpeaksAnswers);
         }
 
         private void RegisterSessionVoiceCommand()
@@ -458,17 +531,19 @@ namespace MetaCodex.Shell
             {
                 Name = "ask_about_session",
                 Description = "Answer a question about what is going on in the workspace (threads, builds and processes, approvals asked, tools installed, scripts and plugins); not an action",
-                Phrases = new[] { "what's going on", "what is going on", "(what is|what's) (this|the) (thread|agent) doing", "what happened while i was away" },
+                Phrases = new[] { "what's going on", "what is going on", "(what is|what's) (this|the) (thread|agent) doing", "what happened while i was away",
+                    "(recap|summarize|summarise) [the|this|that] thread", "(give me|i want|can i get) [a|the] (recap|summary) [of] [the|this|that] thread", "catch me up [on] [the|this] thread" },
                 Samples = new[]
                 {
                     "is this build process stuck", "is the build still running", "did the build finish", "how is the install going", "is something running in the background",
                     "what is this thread doing", "what has this thread done so far", "what did the agent achieve", "which threads are running", "is the agent waiting for me",
                     "do we have the rust toolchain", "is node installed", "which python version do we have", "what is this command i'm asked to accept",
                     "is this command safe", "what is the agent asking me", "are my scripts working", "why did it fail", "what happened while i was away",
+                    "give me a recap of the login thread", "summarize the thread about the parser", "catch me up on what the agent did", "a quick summary of the docs thread",
                 },
                 Llm = false,
                 SpeakReply = true,
-                RunAsync = (args, reply) => AnswerSessionQuestion(_voiceUtterance, reply),
+                RunAsync = (args, reply) => AnswerSessionQuestion(_voiceUtterance, reply, SpeaksAnswers),
             });
         }
     }

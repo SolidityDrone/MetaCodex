@@ -117,6 +117,77 @@ namespace MetaCodex.AI
         /// OpenAI-style chat completion (with `tools`); the first call after a load can take ~10 s.
         public void Chat(JObject body, Action<JToken, string> cb) => Call(() => Json(HttpMethod.Post, "/v1/chat/completions", body, 90), cb);
 
+        /// Streamed chat (stream: true, server-sent events): `onDelta` gets each piece of answer text on the main thread
+        /// as the model writes it, `onDone` the whole text (or the error) once. The returned source cancels it: the
+        /// connection closes and the service stops generating (measured: ~20 ms). No overall timeout (a long answer may
+        /// take a while), but 30 s without a byte ends it.
+        public CancellationTokenSource ChatStream(JObject body, Action<string> onDelta, Action<string, string> onDone)
+        {
+            var cts = new CancellationTokenSource();
+            var b = (JObject)body.DeepClone();
+            b["stream"] = true;
+            Interlocked.Increment(ref _inFlight);
+            Task.Run(async () =>
+            {
+                var all = new StringBuilder();
+                string err = null;
+                try
+                {
+                    var content = new StringContent(b.ToString(Newtonsoft.Json.Formatting.None), Encoding.UTF8, "application/json");
+                    using (var res = await Http.SendAsync(Req(HttpMethod.Post, "/v1/chat/completions", content), HttpCompletionOption.ResponseHeadersRead, cts.Token).ConfigureAwait(false))
+                    {
+                        if (!res.IsSuccessStatusCode) throw new Exception($"{(int)res.StatusCode}: {await res.Content.ReadAsStringAsync().ConfigureAwait(false)}");
+                        Online = true;
+                        using (var stream = await res.Content.ReadAsStreamAsync().ConfigureAwait(false))
+                        using (var reader = new System.IO.StreamReader(stream, Encoding.UTF8))
+                        {
+                            while (!cts.IsCancellationRequested)
+                            {
+                                var read = reader.ReadLineAsync();
+                                if (await Task.WhenAny(read, Task.Delay(30000, cts.Token)).ConfigureAwait(false) != read) throw new TimeoutException("the AI service sent nothing for 30 s");
+                                string line = await read.ConfigureAwait(false);
+                                if (line == null) break;
+                                string piece = SseDelta(line, out bool end, out string sseErr);
+                                if (sseErr != null) throw new Exception(sseErr);
+                                if (end) break;
+                                if (string.IsNullOrEmpty(piece)) continue;
+                                all.Append(piece);
+                                _main.Enqueue(() => { if (!cts.IsCancellationRequested) onDelta?.Invoke(piece); });
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex) { err = cts.IsCancellationRequested ? "cancelled" : ex.Message; LastError = err; }
+                string text = all.ToString();
+                _main.Enqueue(() => onDone?.Invoke(err == null ? text : null, err));
+                Interlocked.Decrement(ref _inFlight);
+            });
+            return cts;
+        }
+
+        /// One server-sent-events line of a streamed chat: its delta text, `end` at [DONE] or a finish_reason, or the error.
+        public static string SseDelta(string line, out bool end, out string error)
+        {
+            end = false;
+            error = null;
+            if (string.IsNullOrEmpty(line) || !line.StartsWith("data:")) return null;
+            string data = line.Substring(5).Trim();
+            if (data == "[DONE]") { end = true; return null; }
+            JObject j;
+            try { j = JObject.Parse(data); } catch (Exception) { return null; }
+            if (j["error"] != null) { error = (string)j["error"]; return null; }
+            var c = j["choices"]?[0];
+            string piece = (string)c?["delta"]?["content"];
+            string finish = (string)c?["finish_reason"];
+            if (finish == "error") error = "the AI service stopped with an error";
+            return piece;
+        }
+
+        /// Speculative prefill: the session prompt without its question, evaluated while the user still speaks; the next
+        /// chat with the same messages before the question starts from it. Fire and forget (the service yields it to
+        /// speech-to-text).
+        public void Prefill(JArray messages) => Call(() => Json(HttpMethod.Post, "/v1/prefill", new JObject { ["messages"] = messages }, 10), (JToken _, string __) => { });
+
         /// Sentence vectors (the decision model, multilingual-e5-small; L2-normalised by the service). The JSON is parsed on
         /// the worker thread: a thousand vectors would otherwise cost the main thread a frame.
         public void Embed(IList<string> texts, Action<EmbedResult, string> cb) => Call(async () =>

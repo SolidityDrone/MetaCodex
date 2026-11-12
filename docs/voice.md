@@ -264,6 +264,36 @@ Tests: `tests/voicefx/run-voicefx-tests.sh` (splitter, units, shortening; also r
 in flight, first clip at once, Stop and a new reply drop late clips, clips freed, the VOICE panel's ■ STOP / ▶ START
 button and the COMMANDS row hint).
 
+## Streaming answers and recaps (feat/polish, 2026-11-12)
+
+Owner: "we can't have the user wait 10-20 seconds if he asks the resume of a thread". Measured where a session answer
+spent its time (PC, scaled to the headset): first word 15-19 s for a recap of an idle thread (the LLM read a 750-token
+prompt: 6.4-7.7 s on the headset, then the whole answer was synthesized before anything played), 11-14 s for a working
+thread, and the model was wrong 16 of 16 times on a working thread.
+
+What answers now:
+- **Recaps without the model.** "give me a recap of the login thread", "summarize this thread", "catch me up", "what has it
+  done so far" (`SessionContextText.RecapOnly`) on a thread with a pulse answer from `ThreadPulse.Recap()`: a short first
+  sentence with the state ("The login fix thread is idle."), then what it does or answered, what was asked and the work
+  so far (only the first two sentences are spoken). "why" / "explain" still go to the model.
+- **The thread the question names.** `NamedThread` matches the words before "thread" against the titles (the same
+  scorer as find_thread); before, a recap was always of the open / pointed / newest thread.
+- **An acknowledgement at once.** "Let me look." is made ahead (one WAV per voice / effect / speech setting, after the
+  service config) and plays the moment a session question starts; the answer is made while it plays. The HUD shows
+  "◆ LOOKING" at once, then the text as it streams ("◆ ANSWERING").
+- **Streamed model answers.** `POST /v1/chat/completions` with `"stream": true` sends server-sent events (OpenAI
+  chunks; no `<think>` text, no tool-call text); `QvacClient.ChatStream` reads them on a worker thread; a sentence is
+  spoken once the next one has begun (never half a sentence), at most 2 sentences / about 200 characters; Stop, TALK or a
+  new question cancel the generation too (the service stops in ~20 ms when the connection closes).
+- **3 threads on the 3 AI cores.** `llmThreads` 1, `llmBatchThreads` 2 (prompt evaluation), `ttsThreads` 2, sent by the app
+  (new per-engine settings; null = `threads`). PC, pinned to 3 cores: LLM 1 thread + voice 2 keep their solo speeds while
+  they overlap (LLM 18-21 tok/s, voice RTF 0.21-0.23), where 2 + 2 made the LLM 29 % and the voice 62 % slower.
+- `POST /v1/prefill` (a speculative prefill of the prompt without the question, cancelled by speech-to-text) is in the
+  service; the app does not call it yet.
+
+Expected first word on the headset (estimates from PC runs): recap 1.6-1.7 s (the acknowledgement), its first real
+sentence 3.7-4.5 s; a model answer about 4-6 s with the compact prompt still to come (open: the compact recap context).
+
 ## Speech quality: FAST (4 steps) or CLEAR (5) (feat/polish, 2026-11-12)
 
 VOICE > SPEECH (setting `voice.speech`, voice `set_setting speech_quality fast|clear`) picks Supertonic's diffusion steps,

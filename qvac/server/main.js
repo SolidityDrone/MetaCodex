@@ -43,7 +43,16 @@ const DEFAULTS = {
   ttsLanguage: 'en',
   ttsSteps: 5, // Supertonic diffusion steps (model default): 3 and 2 are faster but garble words (measured)
   minAudioCtx: 512, // smallest whisper encoder window (frames, 50 per second): 256 repeats and mishears (measured)
-  idleMinutes: { asr: 30, llm: 30, tts: 10, embed: 60 } // keep models loaded while voice is in use: a reload costs 1-4 s
+  idleMinutes: { asr: 30, llm: 30, tts: 10, embed: 60 }, // keep models loaded while voice is in use: a reload costs 1-4 s
+  // threads per engine (null = `threads`). Measured 2026-11-12 (docs/voice.md "Streaming answers"): with the LLM
+  // decoding on 1 thread (prompt evaluation on 2) and the voice on 2, both keep their solo speed while they overlap
+  // on the 3 cores; 2 + 2 made the LLM 29 % and the voice 62 % slower
+  llmThreads: null,
+  llmBatchThreads: null,
+  ttsThreads: null,
+  asrThreads: null,
+  embedThreads: null,
+  prefillYieldsToAsr: true // a speculative prefill is cancelled when speech-to-text needs the cores
 }
 const cfg = Object.assign({}, DEFAULTS, readJson(CONFIG) || {})
 if (args.threads) cfg.threads = Number(args.threads)
@@ -99,7 +108,15 @@ async function handle (req, res, body) {
     case 'POST /v1/audio/speech':
       return speech(res, parseJson(body))
     case 'POST /v1/chat/completions':
-      return completions(res, parseJson(body))
+      return completions(req, res, parseJson(body))
+    case 'POST /v1/prefill': { // the session prompt without its question, evaluated while the user still speaks
+      const j = parseJson(body)
+      if (!Array.isArray(j.messages) || !j.messages.length) throw httpError(400, 'messages is required')
+      engines.cancelSpeculative() // only the newest one is worth keeping
+      const p = engines.prefill(j.messages)
+      p.then((r) => log(`prefill ${r.cancelled ? 'cancelled' : r.ms + ' ms'}`)).catch((e) => log('prefill: ' + (e.message || e)))
+      return send(res, 202, { ok: true }) // fire and forget: the next chat with the same prefix starts from it
+    }
     case 'POST /v1/embeddings': { // OpenAI-style: { input: string | string[] } -> { data: [{ index, embedding }] }
       const j = parseJson(body)
       const input = Array.isArray(j.input) ? j.input.map(String) : [String(j.input == null ? '' : j.input)]
@@ -204,9 +221,9 @@ async function speech (res, j) {
   sendBytes(res, 200, 'audio/wav', wav)
 }
 
-async function completions (res, j) {
+async function completions (req, res, j) {
   if (!Array.isArray(j.messages) || !j.messages.length) throw httpError(400, 'messages is required')
-  if (j.stream) throw httpError(400, 'stream is not supported yet')
+  if (j.stream) return completionsStream(req, res, j)
   const r = await engines.chat(j.messages, Array.isArray(j.tools) ? j.tools : [], { max_tokens: j.max_tokens, temperature: j.temperature, grammar: j.grammar })
   const calls = r.tool_calls.map((c, i) => ({ id: 'call_' + Date.now().toString(36) + i, type: 'function', function: { name: c.name, arguments: JSON.stringify(c.arguments || {}) } }))
   const st = r.stats || {}
@@ -220,6 +237,45 @@ async function completions (res, j) {
     usage: { prompt_tokens: st.promptTokens || 0, completion_tokens: st.generatedTokens || 0, total_tokens: (st.promptTokens || 0) + (st.generatedTokens || 0) },
     timings: { ms: r.ms, firstMs: r.firstMs, tps: st.TPS || null }
   })
+}
+
+/** stream: true -> text/event-stream, OpenAI chunk format: a role chunk, one delta.content per decoded token (no
+ * <think> block, no <tool_call> text), a final chunk with finish_reason (and parsed tool_calls), then [DONE]. The
+ * client closing the connection cancels the generation (a queued one is skipped). */
+async function completionsStream (req, res, j) {
+  const id = 'chatcmpl-' + Date.now().toString(36)
+  const created = Math.floor(Date.now() / 1000)
+  const abort = { aborted: false, onabort: null }
+  const gone = () => { if (abort.aborted) return; abort.aborted = true; if (abort.onabort) abort.onabort() }
+  // the socket, not the request: bare-http1 closes the request object once its body has been read
+  try { if (req.socket) req.socket.on('close', gone) } catch {}
+  res.statusCode = 200
+  res.setHeader('Content-Type', 'text/event-stream')
+  res.setHeader('Cache-Control', 'no-cache')
+  const chunk = (delta, finish, extra) => {
+    if (abort.aborted) return
+    const o = { id, object: 'chat.completion.chunk', created, model: CATALOGUE.llm.id, choices: [{ index: 0, delta, finish_reason: finish || null }] }
+    try { res.write('data: ' + JSON.stringify(Object.assign(o, extra || {})) + '\n\n') } catch { gone() }
+  }
+  chunk({ role: 'assistant' })
+  let r
+  try {
+    r = await engines.chat(j.messages, Array.isArray(j.tools) ? j.tools : [], {
+      max_tokens: j.max_tokens, temperature: j.temperature, grammar: j.grammar, abort,
+      onToken: (t) => chunk({ content: t })
+    })
+  } catch (e) {
+    chunk({}, 'error', { error: String(e.message || e) })
+    try { res.end('data: [DONE]\n\n') } catch {}
+    throw Object.assign(e, { streamed: true })
+  }
+  const calls = r.tool_calls.map((c, i) => ({ index: i, id: 'call_' + Date.now().toString(36) + i, type: 'function', function: { name: c.name, arguments: JSON.stringify(c.arguments || {}) } }))
+  const st = r.stats || {}
+  log(`llm stream ${r.ms} ms (first ${r.firstMs} ms)${r.cancelled ? ' cancelled' : ''}: ${JSON.stringify(r.content).slice(0, 120)}`)
+  chunk(calls.length ? { tool_calls: calls } : {}, calls.length ? 'tool_calls' : 'stop', {
+    usage: { prompt_tokens: st.promptTokens || 0, completion_tokens: st.generatedTokens || 0 }, timings: { ms: r.ms, firstMs: r.firstMs, tps: st.TPS || null }
+  })
+  try { res.end('data: [DONE]\n\n') } catch {}
 }
 
 function authorized (req) {
@@ -289,6 +345,7 @@ const server = http.createServer((req, res) => {
     if (tooBig) return send(res, 413, { error: 'body larger than ' + MAX_BODY + ' bytes' })
     handle(req, res, Buffer.concat(chunks)).catch((e) => {
       if (!e.status || e.status >= 500) log(`${req.method} ${req.url}: ${e.stack || e}`)
+      if (e.streamed) return // the stream already carried the error
       try { send(res, e.status || 500, { error: String(e.message || e) }) } catch {}
     })
   })

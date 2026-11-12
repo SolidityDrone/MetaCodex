@@ -225,10 +225,37 @@ namespace MetaCodex.Shell
                 // VOICE > SPEECH: FAST = 4 diffusion steps, CLEAR = 5 (3 and 2 garble words); a change reloads the voice model once
                 ["ttsSteps"] = Settings.voice.speech == "clear" ? 5 : 4,
             };
+            // 3 threads on the 3 AI cores while an answer streams into speech (measured 2026-11-12, docs/voice.md
+            // "Streaming answers"): the LLM decodes on 1 (it still writes ~2x faster than speech plays) and reads its
+            // prompt on 2, the voice keeps 2; with 2 + 2 the LLM was 29 % and the voice 62 % slower while they overlapped
+            if (Settings.voice.threads >= 2) { cfg["llmThreads"] = 1; cfg["llmBatchThreads"] = 2; cfg["ttsThreads"] = 2; }
             string s = cfg.ToString(Newtonsoft.Json.Formatting.None);
-            if (s == _sentConfig) return;
+            if (s == _sentConfig) { PrepareAck(); return; }
             _sentConfig = s;
-            Qvac.Client.Config(cfg, (r, e) => { if (e != null) { Log("[ai] config: " + e); _sentConfig = null; } });
+            Qvac.Client.Config(cfg, (r, e) => { if (e != null) { Log("[ai] config: " + e); _sentConfig = null; } else PrepareAck(); });
+        }
+
+        // ------------------------------------------------------------------ the acknowledgement, made ahead
+
+        /// Said at once when a session question starts (its answer is made while this plays): owner 2026-11-12, "we
+        /// need to achieve the best feedback". Made once per voice / effect / speech setting and kept as a WAV.
+        public const string AckLine = "Let me look.";
+        private byte[] _ackWav;
+        private string _ackKey;
+        private bool _ackBusy;
+        private string AckKey() => Settings.voice.voice + "|" + Settings.voice.fx + "|" + Settings.voice.speech;
+        public bool AckReadyForTest => _ackWav != null && _ackKey == AckKey();
+
+        private void PrepareAck()
+        {
+            string key = AckKey();
+            if (_ackBusy || _ackKey == key && _ackWav != null) return;
+            if (SpeakForTest == null && (Qvac == null || !Qvac.IsRunning)) return;
+            _ackBusy = true;
+            var fx = VoiceFx.Parse(Settings.voice.fx);
+            Action<byte[], string> got = (wav, e) => { _ackBusy = false; if (wav != null && e == null) { _ackWav = wav; _ackKey = key; } else Log("[ai] acknowledgement: " + e); };
+            if (SpeakForTest != null) SpeakForTest(AckLine, (w, e) => got(w != null ? VoiceFx.ProcessWav(w, fx, true, false) : null, e));
+            else Qvac.Client.Speak(AckLine, Settings.voice.voice, fx, true, false, got);
         }
 
         private bool _cpuBoosted;
@@ -553,7 +580,9 @@ namespace MetaCodex.Shell
             Sounds?.Play(res.Ok ? "toast" : "error");
             EndBoostSoon();
             _vHudCloseAt = Time.unscaledTime + (sessionAnswer ? Mathf.Clamp(4f + res.Reply.Length / 16f, 6f, 16f) : res.Ok ? 2.5f : 4.5f);
-            if (res.Ok && res.Answer && (Settings.voice.speak || sessionAnswer && Settings.voice.speakAnswers) && !string.IsNullOrEmpty(res.Reply)) SayReply(res.Reply);
+            bool spoken = sessionAnswer && _sessionAnswerSpoken; // spoken sentence by sentence as it was written
+            _sessionAnswerSpoken = false;
+            if (!spoken && res.Ok && res.Answer && (Settings.voice.speak || sessionAnswer && Settings.voice.speakAnswers) && !string.IsNullOrEmpty(res.Reply)) SayReply(res.Reply);
             RefreshVoicePanel();
             done?.Invoke(res);
             VoiceState = "idle";
@@ -588,7 +617,7 @@ namespace MetaCodex.Shell
         /// Tests: speech comes from here instead of the AI service ((text, callback(wav, error))).
         public Action<string, Action<byte[], string>> SpeakForTest;
         /// A reply is being spoken: playing, waiting for the gap, or sentences still being made.
-        public bool Speaking => _sayPlaying || _sayInFlight || _sayReady.Count > 0 || _sayNext < _sayParts.Count;
+        public bool Speaking => _sayPlaying || _sayInFlight || _sayReady.Count > 0 || _sayNext < _sayParts.Count || _sayStreaming;
         /// Tests: the sentences of the reply being spoken, how many were requested, how many clips wait to play.
         public IReadOnlyList<string> SpeechPartsForTest => _sayParts;
         public int SpeechRequestedForTest => _sayNext;
@@ -599,6 +628,50 @@ namespace MetaCodex.Shell
 
         /// Speaks a reply: its first sentences only (SpokenSentences, about SpokenChars), the rest stays on the HUD.
         public void SayReply(string reply) => Say(SpokenText.ForSpeech(reply, SpokenSentences, SpokenChars), reply, null);
+
+        // ---- a reply whose sentences arrive one by one (a streamed answer): the acknowledgement plays at once, each
+        // finished sentence is made and queued as it comes, SayStreamEnd closes it
+        private bool _sayStreaming;
+        private int _sayStreamChars;
+
+        /// Opens a streamed reply; with `ack` the acknowledgement made ahead plays at once (when it is ready).
+        public void SayStreamBegin(bool ack)
+        {
+            StopSpeaking();
+            if (SpeakForTest == null && (Qvac == null || !Qvac.IsRunning)) return;
+            _sayStreaming = true;
+            _sayStreamChars = 0;
+            _sayDone = null;
+            _sayVoice = Settings.voice.voice;
+            _sayFx = VoiceFx.Parse(Settings.voice.fx);
+            _sayClips = 0;
+            _sayBoostUntil = Time.unscaledTime + SpeechBoostCap;
+            BoostCpuFor(2f);
+            if (ack && _ackWav != null && _ackKey == AckKey())
+            {
+                var clip = VoiceRecorder.ClipFromWav(_ackWav, "speech");
+                if (clip != null) { _sayReady.Enqueue(clip); TickSpeech(Time.unscaledTime); }
+            }
+            else if (ack) PrepareAck(); // the next question has it
+        }
+
+        /// Adds one finished sentence to the streamed reply (the spoken cap holds: SpokenSentences, about SpokenChars).
+        /// False when the cap is reached or no stream is open.
+        public bool SayStreamAppend(string sentence)
+        {
+            if (!_sayStreaming) return false;
+            string sp = SpokenText.Speakable(sentence ?? "");
+            if (sp.Length == 0) return true;
+            if (_sayParts.Count >= SpokenSentences || _sayParts.Count > 0 && _sayStreamChars + sp.Length > SpokenChars) return false;
+            _sayParts.Add(sp);
+            _sayStreamChars += sp.Length;
+            RequestNextSentence();
+            return true;
+        }
+
+        /// Closes the streamed reply: what is queued still plays.
+        public void SayStreamEnd() => _sayStreaming = false;
+        public bool SayStreamingForTest => _sayStreaming;
 
         /// Speaks `text` with the local text-to-speech model (shows it when that is not installed), one sentence at a
         /// time: the first plays as soon as it is made while the next one is made. `done` gets null when the first
@@ -626,6 +699,10 @@ namespace MetaCodex.Shell
         public void StopSpeaking()
         {
             _sayGen++;
+            _sayStreaming = false;
+            var cts = _answerCts; // a streamed answer still being written stops with its voice
+            _answerCts = null;
+            try { cts?.Cancel(); } catch (Exception) { }
             _sayParts.Clear();
             _sayNext = 0;
             _sayInFlight = false;
@@ -664,7 +741,7 @@ namespace MetaCodex.Shell
                 _sayNext = _sayParts.Count;
                 d?.Invoke(e);
             }
-            bool first = i == 0, last = i == _sayParts.Count - 1;
+            bool first = i == 0, last = !_sayStreaming && i == _sayParts.Count - 1; // a stream's last sentence is not known yet
             var fx = _sayFx;
             Action<byte[], string> got = (wav, e) =>
             {
@@ -684,16 +761,27 @@ namespace MetaCodex.Shell
         }
 
         /// Plays the next clip after the gap, holds the CPU Boost while a reply speaks, and frees each clip once played.
+        private float _sayPlayStart, _sayPlayLen; // when the clip playing started and how long it is
+
         private void TickSpeech(float now)
         {
-            if (_sayPlaying && (_voiceAudio == null || !_voiceAudio.isPlaying))
+            // a clip is over when the source stops, or at the latest its length (+0.3 s) after it started: audio that
+            // stalls (no audio device, as in the batch Editor, or a stuck output) never blocks the rest of a reply
+            if (_sayPlaying && (_voiceAudio == null || !_voiceAudio.isPlaying || now - _sayPlayStart > _sayPlayLen + 0.3f))
             {
+                if (_voiceAudio != null && _voiceAudio.isPlaying) _voiceAudio.Stop();
                 _sayPlaying = false;
                 if (_voiceAudio != null) { var c = _voiceAudio.clip; _voiceAudio.clip = null; DestroyClip(c); }
                 _sayNextAt = now + SentenceGap;
                 RequestNextSentence();
             }
-            if (!_sayPlaying && _sayReady.Count > 0 && now >= _sayNextAt) PlayClip(_sayReady.Dequeue());
+            if (!_sayPlaying && _sayReady.Count > 0 && now >= _sayNextAt)
+            {
+                var next = _sayReady.Dequeue();
+                _sayPlayStart = now;
+                _sayPlayLen = next != null ? next.length : 0f;
+                PlayClip(next);
+            }
             if (Speaking && Time.unscaledTime < _sayBoostUntil) _boostUntil = Mathf.Max(_boostUntil, Time.unscaledTime + 0.5f);
             if (Speaking) _sayIdleSince = -1f;
             else if (_sayIdleSince < 0f) _sayIdleSince = now;

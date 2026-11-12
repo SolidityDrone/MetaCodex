@@ -157,6 +157,7 @@ namespace MetaCodex.EditorTools
                 if (Want("voicewords")) VoiceWords(shell);
                 if (Want("spokenreplies")) SpokenRepliesSection(shell);
                 if (Want("voicefx")) VoiceFxSection(shell);
+                if (Want("streaming")) StreamingSection(shell);
                 if (Want("decider")) Decider(shell);
                 if (Want("views")) Views(shell, head, tmp);
                 if (Want("workspace")) Workspace(shell, head);
