@@ -1,5 +1,5 @@
 // Spoken-reply tests without Unity: the sentence splitter, the spoken units and the shortening of replies
-// (Runtime/AI/SpokenText.cs). Build + run: tests/voicefx/run-voicefx-tests.sh (also run by tests/terminal/run-core-tests.sh).
+// (Runtime/AI/SpokenText.cs), and the voice effect (Runtime/AI/VoiceFx.cs, VoiceFxTests.cs). Build + run: tests/voicefx/run-voicefx-tests.sh (also run by tests/terminal/run-core-tests.sh).
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -11,16 +11,23 @@ internal static partial class Program
 
     private static int Main(string[] args)
     {
+        Verbose = Array.IndexOf(args, "--verbose") >= 0;
         Sentences();
         Speakable();
         ForSpeech();
+        VoiceFxTests(); // VoiceFxTests.cs
+        int si = Array.IndexOf(args, "--samples");
+        if (si >= 0 && si + 1 < args.Length) VoiceFxSamples(args[si + 1]); // the service's own replies, when the script found them
         Console.WriteLine(_fails == 0 ? $"voicefx: ALL OK ({_passes} checks)" : $"voicefx: {_fails} FAILED, {_passes} passed");
         return _fails == 0 ? 0 : 1;
     }
 
+    /// --verbose: every passing check with its numbers too (for the commit and docs/voice.md).
+    private static bool Verbose;
+
     private static void Check(bool ok, string what, string detail = null)
     {
-        if (ok) { _passes++; return; }
+        if (ok) { _passes++; if (Verbose) Console.WriteLine("ok   " + what); return; }
         _fails++;
         Console.WriteLine("FAIL " + what + (detail != null ? "\n     " + detail.Replace("\n", "\n     ") : ""));
     }

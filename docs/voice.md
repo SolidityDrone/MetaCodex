@@ -258,6 +258,63 @@ Tests: `tests/voicefx/run-voicefx-tests.sh` (splitter, units, shortening; also r
 in flight, first clip at once, Stop and a new reply drop late clips, clips freed, the VOICE panel's ■ STOP / ▶ START
 button and the COMMANDS row hint).
 
+## Voice effect (feat/polish, 2026-11-12)
+
+The owner: "post process the voices so they sound more like an AI of a true sci-fi, just tweaking the output".
+`Runtime/AI/VoiceFx.cs` (pure C#, no UnityEngine) processes each sentence's WAV in `QvacClient.Speak`, on the
+worker thread that fetched it, never on the main thread. If it fails, the sentence plays dry.
+
+| Setting `voice.fx` | VOICE > SOUND | What it is |
+|---|---|---|
+| `off` | OFF | The service's voice, only trimmed and levelled (no filter: correlation 0.9994-1.0000 with the dry voice on the 8 sample replies). |
+| `adjutant` (default) | AI | A calm computer, clearly the same voice: presence and air, two faint detuned doubles (+9 / -11 cents at -21 dB), a light metallic comb and flanger, glue compression, soft saturation, a small bright plate (RT60 0.55 s at -22 dB). |
+| `starship` | SHIP | Clearly synthetic: an octave-down layer, a 1.9 kHz ring-mod sheen on the highs, stronger doubles and comb, a longer plate (0.85 s) with an octave-up shimmer in the tail. |
+| `comm` | COMM | A comm channel: 380-3500 Hz, an 8 kHz sample-and-hold grit, static that rides the speech, a squelch burst that opens the reply (first sentence) and closes it (last sentence), almost no tail. |
+
+Every preset, off included:
+- Trims the silence the service pads around speech (gate -60 dBFS, 25 ms kept in front, 20 ms behind). On the 8
+  sample replies it cuts 346 ms in front and 398 ms behind on average: the first word comes that much sooner.
+- Levels to -18 LUFS (BS.1770 K-weighted, gated), at most +24 dB (near silence is not pumped up), with a 2 ms
+  look-ahead limiter and a hard ceiling at -1 dBFS. The dry service audio hard-clips (7 of 8 replies have 10-272
+  samples at full scale) and sits at -14.8 to -18.1 LUFS, so a reply is now about 2 dB quieter on average, never
+  clipped, and every preset is equally loud (within 0.11 LU of off on the sample replies).
+- The tail: after the reply's last sentence the preset's reverb (0.2-0.85 s); between sentences 0.1 s, so the
+  0.2 s gap between sentences stays short.
+
+Changing it: VOICE > SOUND (a pick says "Systems online. All panels ready." with the new sound when the service
+runs), voice or the LLM (`set_setting voice_effect`: off / adjutant / starship / comm, or AI, ship, radio, robot,
+normal, "effetto vocale radio", ...; + / - step through the list; on = adjutant), the control port
+`voice fx off|adjutant|starship|comm`, MQH (`quest.settings`, key `voice.fx`).
+
+Measured (tests/voicefx, Windows dev PC, Unity's bundled .NET 8 with Unity's Roslyn, netstandard 2.1):
+
+| Preset | 5 s of synthetic speech | 7.45 s service reply | standalone bench, 7.57 s reply (draft in the same run) |
+|---|---|---|---|
+| off | 24 ms (4.8 ms per s) | 26 ms (3.5 ms per s) | - |
+| adjutant | 100 ms (19.8) | 119 ms (16.0) | 96 ms = 12.7 ms per s (draft 11.4) |
+| starship | 177 ms (35.1) | 212 ms (28.4) | 165 ms = 21.8 (draft 21.1) |
+| comm | 82 ms (16.3) | 108 ms (14.5) | 84 ms = 11.1 (draft 10.1) |
+
+Headset estimate (not measured; the PC is 4-6x faster than a Quest 3S core): adjutant about 50-120 ms per
+second of speech, starship 90-210, comm 45-100. Only the first sentence's cost is felt (the next one is made and
+processed while the first plays), and trimming gives back about 0.35 s in front. For a 3 s first sentence:
+off starts about 0.35 s sooner than before, adjutant costs 0.15-0.36 s (about what trimming gives back), starship
+0.27-0.63 s (up to about 0.3 s later than before), comm 0.13-0.29 s.
+Memory: scratch buffers are pooled (16 per type, the larger ones kept): a 5 s sentence allocates 483 KB for a
+481 KB output, a run of 7 sentences of all presets 1722 KB for 1722 KB of output, so no garbage beyond the WAV
+itself. The pool is dropped 2 min after the last reply (`VoiceFx.ReleaseScratch`).
+Intelligibility proxy (the service's Whisper base on 12 replies x 2 voices, 142 words; it mishears even the
+clean voice, about +-3 points is noise): clean 60.6 % word errors, adjutant 62.7 %, starship 73.2 %, comm
+59.9 %. Adjutant and comm cost no words for the recogniser; starship does (a human ear may differ).
+
+Retuning: `tools/voicefx/` (`fx.py` = the same chain in numpy, `PRESETS` 1:1 with `VoiceFxParams.For`; `asr.py`
+for the round trip; README there). `tests/voicefx/run-voicefx-tests.sh` checks: off = trim + level (correlation
+with the dry voice > 0.995), edge inputs (empty, 1 and 63 samples, silence, near silence, DC, square, noise, NaN,
+inf, 8-48 kHz, rate 0) finite and under the ceiling, peaks <= -1 dBFS, loudness within 1 LU of off, the same
+output twice and from two threads at once, the WAV header / rate / length, the tails, the allocations, the chain
+time; with the samples folder also the service's own replies and parity with the prototype's renders
+(correlation adjutant 0.995, starship 0.986, comm 0.974). Editor self-test section `voicefx`.
+
 ## GPU? (measured 2026-11-08, Quest 3S, the app not running)
 
 QVAC's Android prebuilds carry an OpenCL backend for Adreno (and Vulkan). On the headset it works once
@@ -316,5 +373,6 @@ vocabulary prompt fixes names ("MetaCodex", not "MedicoDex").
 | Registry, fast path, registry JSON and lint | `Runtime/AI/VoiceCommands.cs` |
 | Decision model | `Runtime/AI/VoiceDecider.cs`; bench `tools/voicebench/` (`bench.py`, `score_app.py`, `results/`) |
 | Pipeline, commands, VOICE panel, HUD | `Runtime/Shell/ShellVoice.cs` |
+| Spoken text (sentences, units), voice effect | `Runtime/AI/SpokenText.cs`, `Runtime/AI/VoiceFx.cs`; tests `tests/voicefx/`; retuning `tools/voicefx/` |
 | Lua API | `Runtime/Scripting/ScriptHost.cs` (`voice.*`) |
 | Userland | `userland/overlay/usr/local/bin/mcx-ai`, `mcx-ui voice ...` |

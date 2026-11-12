@@ -141,12 +141,30 @@ namespace MetaCodex.AI
         /// Fills the LLM's prompt cache for a system prompt + tool set, so the next command answers fast.
         public void Warmup(JObject body, Action<JToken, string> cb) => Call(() => Json(HttpMethod.Post, "/v1/warmup", body, 180), cb);
 
-        /// Text-to-speech: a mono 16-bit WAV.
+        /// Text-to-speech: a mono 16-bit WAV, as the service made it (silence around it, full scale).
         public void Speak(string text, string voice, Action<byte[], string> cb)
+        {
+            Call(() => SendRaw(HttpMethod.Post, "/v1/audio/speech", SpeechBody(text, voice), 60), cb);
+        }
+
+        /// Text-to-speech for playback: the WAV trimmed, levelled and with the voice effect (VoiceFx), done here on the
+        /// worker thread after the reply arrives (never on the main thread). `first` / `last`: the sentence's place in
+        /// its reply (the effect's squelch and tail).
+        public void Speak(string text, string voice, VoiceFxPreset fx, bool first, bool last, Action<byte[], string> cb)
+        {
+            Call(async () =>
+            {
+                var wav = await SendRaw(HttpMethod.Post, "/v1/audio/speech", SpeechBody(text, voice), 60).ConfigureAwait(false);
+                try { return VoiceFx.ProcessWav(wav, fx, first, last); }
+                catch (Exception) { return wav; } // the effect failing never costs the sentence: it plays dry
+            }, cb);
+        }
+
+        private static StringContent SpeechBody(string text, string voice)
         {
             var body = new JObject { ["input"] = text };
             if (!string.IsNullOrEmpty(voice)) body["voice"] = voice;
-            Call(() => SendRaw(HttpMethod.Post, "/v1/audio/speech", new StringContent(body.ToString(Newtonsoft.Json.Formatting.None), Encoding.UTF8, "application/json"), 60), cb);
+            return new StringContent(body.ToString(Newtonsoft.Json.Formatting.None), Encoding.UTF8, "application/json");
         }
     }
 }

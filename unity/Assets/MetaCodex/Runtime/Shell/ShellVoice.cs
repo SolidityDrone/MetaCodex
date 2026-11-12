@@ -36,6 +36,9 @@ namespace MetaCodex.Shell
         public int threads = 2;
         public float maxSeconds = 12f;
         public string voice = "F1";
+        /// The voice effect of spoken replies (VoiceFx): off | adjutant | starship | comm (VOICE > SOUND: OFF, AI, SHIP,
+        /// COMM). Every one trims the silence around the speech and levels it; off adds nothing else.
+        public string fx = "adjutant";
     }
 
     /// One voice request, start to end (VOICE panel history, control port replies).
@@ -569,6 +572,10 @@ namespace MetaCodex.Shell
         private int _sayGen;                                           // bumped by Stop / a new reply / TALK: late clips of an older one are dropped
         private Action<string> _sayDone;
         private string _sayVoice;
+        private VoiceFxPreset _sayFx;
+        private float _sayIdleSince = -1f; // when the last reply ended (the effect's scratch buffers go after a while)
+        /// The short line VOICE > SOUND says when the effect changes.
+        public const string VoiceFxSample = "Systems online. All panels ready.";
         private int _sayClips;
         /// Tests: clips played since the reply started.
         public int SpeechClipsPlayedForTest => _sayClips;
@@ -603,6 +610,7 @@ namespace MetaCodex.Shell
             if (_sayParts.Count == 0) { done?.Invoke("empty"); return; }
             _sayDone = done;
             _sayVoice = Settings.voice.voice;
+            _sayFx = VoiceFx.Parse(Settings.voice.fx);
             _sayClips = 0;
             _sayBoostUntil = Time.unscaledTime + SpeechBoostCap;
             BoostCpuFor(2f); // held while it speaks (TickSpeech), up to SpeechBoostCap
@@ -652,6 +660,8 @@ namespace MetaCodex.Shell
                 _sayNext = _sayParts.Count;
                 d?.Invoke(e);
             }
+            bool first = i == 0, last = i == _sayParts.Count - 1;
+            var fx = _sayFx;
             Action<byte[], string> got = (wav, e) =>
             {
                 if (gen != _sayGen) return; // stopped or replaced meanwhile: nothing of it plays
@@ -664,8 +674,9 @@ namespace MetaCodex.Shell
                 TickSpeech(Time.unscaledTime); // the first one plays at once
                 RequestNextSentence();
             };
-            if (SpeakForTest != null) SpeakForTest(text, got);
-            else Qvac.Client.Speak(text, _sayVoice, got);
+            // tests: the effect runs here on the main thread; on the device it runs on the request's worker thread
+            if (SpeakForTest != null) SpeakForTest(text, (w, e) => got(w != null ? VoiceFx.ProcessWav(w, fx, first, last) : null, e));
+            else Qvac.Client.Speak(text, _sayVoice, fx, first, last, got);
         }
 
         /// Plays the next clip after the gap, holds the CPU Boost while a reply speaks, and frees each clip once played.
@@ -680,6 +691,9 @@ namespace MetaCodex.Shell
             }
             if (!_sayPlaying && _sayReady.Count > 0 && now >= _sayNextAt) PlayClip(_sayReady.Dequeue());
             if (Speaking && Time.unscaledTime < _sayBoostUntil) _boostUntil = Mathf.Max(_boostUntil, Time.unscaledTime + 0.5f);
+            if (Speaking) _sayIdleSince = -1f;
+            else if (_sayIdleSince < 0f) _sayIdleSince = now;
+            else if (now - _sayIdleSince > 120f) { VoiceFx.ReleaseScratch(); _sayIdleSince = float.MaxValue; } // once, 2 min after the last reply
         }
 
         private void PlayClip(AudioClip clip)
@@ -961,8 +975,9 @@ namespace MetaCodex.Shell
             Voice.Register(new VoiceCommand
             {
                 Name = "set_setting",
-                Description = "Change a setting: on / off, a number (percent, metres) or more / less",
-                Parameters = VoiceCommands.Schema(("setting", "string", VoiceSettingsCatalog.Select(x => x.Id).ToArray(), "which setting", true), ("value", "string", null, "on, off, a number, + or -", true)),
+                Description = "Change a setting: on / off, a number (percent, metres), more / less, or the voice effect (off, adjutant, starship, comm)",
+                Parameters = VoiceCommands.Schema(("setting", "string", VoiceSettingsCatalog.Select(x => x.Id).ToArray(), "which setting", true),
+                    ("value", "string", null, "on, off, a number, + or -; voice_effect: off, adjutant (AI), starship (ship) or comm (radio)", true)),
                 // English names first: a name two settings share keeps its first (English) meaning
                 Synonyms = new Dictionary<string, Dictionary<string, string>> { ["setting"] = VoiceSettingsCatalog.SelectMany(x => x.Names.Select(n => (n, x.Id)))
                     .Concat(VoiceSettingsCatalog.SelectMany(x => x.Other.Select(n => (n, x.Id)))).GroupBy(x => x.n).ToDictionary(g => g.Key, g => g.First().Id) },
@@ -981,6 +996,7 @@ namespace MetaCodex.Shell
                 {
                     ("make the room completely dark", "set_setting focus_intensity 100"), ("set the dome to two meters", "set_setting focus_radius 2"),
                     ("make the windows bigger", "set_setting ui_scale +"), ("mute the clicks", "set_setting sounds off"),
+                    ("make your voice sound like a radio", "set_setting voice_effect comm"),
                 },
                 Samples = new[]
                 {
@@ -988,6 +1004,7 @@ namespace MetaCodex.Shell
                     "set the radius to 2 meters", "turn off the hand rays", "dim the room more",
                     "imposta il volume al 30 per cento", "metti il volume più alto", "abbassa la sfocatura", "attiva i suoni", "disattiva i raggi delle mani",
                     "rendi il testo più grande", "porta il raggio a tre metri", "intensità del focus al settanta per cento", "aumenta la morbidezza",
+                    "switch the voice effect to starship", "give the assistant its normal voice back", "metti l'effetto vocale radio", "togli l'effetto alla voce",
                 },
                 Check = a => VoiceSettingFits((string)a["setting"], (string)a["value"]) ? null : "that value does not fit " + (string)a["setting"],
                 Run = a => SetSettingByVoice((string)a["setting"], (string)a["value"]),
@@ -1160,8 +1177,12 @@ namespace MetaCodex.Shell
 
         private sealed class VoiceSetting
         {
+            /// Kind: bool (on / off), number (Min..Max, Unit) or choice (one of Options; + / - step through them).
             public string Id, Key, Kind, Unit, Label;
             public float Min, Max;
+            /// choice: the values in order, their spoken names (English and Italian) and the label each one shows.
+            public string[] Options, OptionLabels;
+            public Dictionary<string, string> Values;
             /// English names: synonyms of the setting and words the speech-to-text prompt carries.
             public string[] Names;
             /// Other names (Italian, colloquial; VoiceSettingOther): synonyms too, not in the speech-to-text prompt.
@@ -1191,6 +1212,21 @@ namespace MetaCodex.Shell
             ["foveation"] = new[] { "rendering foveato", "foveazione" },
             ["views_auto_open"] = new[] { "apertura automatica delle viste" },
             ["wrist_menu"] = new[] { "menu da polso", "menu sul polso", "menu al polso", "menu radiale" },
+            ["voice_effect"] = new[] { "effetto vocale", "effetto della voce", "effetto voce", "voce robotica", "voce fantascientifica", "stile della voce", "voce da computer", "suono della voce", "filtro della voce" },
+        };
+
+        /// voice_effect: what people call each preset (English and Italian; folded like the matcher folds them).
+        private static readonly Dictionary<string, string> VoiceEffectValues = new Dictionary<string, string>
+        {
+            ["off"] = "off", ["none"] = "off", ["normal"] = "off", ["plain"] = "off", ["clean"] = "off", ["natural"] = "off", ["dry"] = "off", ["no effect"] = "off",
+            ["spento"] = "off", ["spenta"] = "off", ["normale"] = "off", ["naturale"] = "off", ["nessuno"] = "off", ["niente"] = "off", ["senza effetto"] = "off",
+            ["adjutant"] = "adjutant", ["ai"] = "adjutant", ["a i"] = "adjutant", ["computer"] = "adjutant", ["sci fi"] = "adjutant", ["scifi"] = "adjutant",
+            ["science fiction"] = "adjutant", ["default"] = "adjutant", ["subtle"] = "adjutant", ["light"] = "adjutant", ["assistant"] = "adjutant",
+            ["intelligenza artificiale"] = "adjutant", ["ia"] = "adjutant", ["fantascienza"] = "adjutant", ["fantascientifica"] = "adjutant", ["leggero"] = "adjutant", ["assistente"] = "adjutant",
+            ["starship"] = "starship", ["ship"] = "starship", ["star ship"] = "starship", ["spaceship"] = "starship", ["space ship"] = "starship", ["strong"] = "starship",
+            ["heavy"] = "starship", ["robot"] = "starship", ["robotic"] = "starship", ["astronave"] = "starship", ["nave"] = "starship", ["forte"] = "starship", ["robotica"] = "starship", ["robotico"] = "starship",
+            ["comm"] = "comm", ["com"] = "comm", ["comms"] = "comm", ["radio"] = "comm", ["channel"] = "comm", ["walkie talkie"] = "comm", ["intercom"] = "comm",
+            ["transmission"] = "comm", ["canale"] = "comm", ["trasmissione"] = "comm", ["ricetrasmittente"] = "comm",
         };
 
         /// Settings that voice (and the local LLM) can change: id, the settings key, kind, range, unit, spoken names.
@@ -1198,6 +1234,7 @@ namespace MetaCodex.Shell
         public static JArray VoiceSettingsForBench() => new JArray(VoiceSettingsCatalog.Select(x => new JObject
         {
             ["id"] = x.Id, ["key"] = x.Key, ["kind"] = x.Kind, ["min"] = x.Min, ["max"] = x.Max, ["unit"] = x.Unit, ["label"] = x.Label, ["names"] = new JArray(x.Names), ["other"] = new JArray(x.Other),
+            ["options"] = x.Options != null ? new JArray(x.Options) : null, ["values"] = x.Values != null ? JObject.FromObject(x.Values) : null,
         }));
 
         private static readonly VoiceSetting[] VoiceSettingsCatalog =
@@ -1223,6 +1260,8 @@ namespace MetaCodex.Shell
             new VoiceSetting { Id = "views_auto_open", Key = "viewsAutoOpen", Kind = "bool", Label = "Agent views open by themselves", Names = new[] { "auto open views", "agent views auto open", "views auto open" } },
             new VoiceSetting { Id = "wrist_menu", Key = "wristMenu", Kind = "bool", Label = "Main menu on the wrist", Names = new[] { "wrist menu", "menu on the wrist", "radial menu", "watch menu" } },
             new VoiceSetting { Id = "orb", Key = "orb", Kind = "bool", Label = "Orb", Names = new[] { "orb", "the orb", "energy sphere", "sphere", "companion" } },
+            new VoiceSetting { Id = "voice_effect", Key = "voice.fx", Kind = "choice", Label = "Voice effect", Options = VoiceFx.Names, OptionLabels = new[] { "off", "AI", "ship", "comm" }, Values = VoiceEffectValues,
+                Names = new[] { "voice effect", "voice sound", "ai voice", "sci-fi voice", "robot voice", "voice style", "computer voice", "voice filter", "the effect on the voice" } },
         };
 
         private static readonly HashSet<string> OnWords = new HashSet<string> { "on", "yes", "true", "enable", "enabled", "active" };
@@ -1257,7 +1296,21 @@ namespace MetaCodex.Shell
             if (raw == "+" || raw == "-") return true;
             string v = VoiceCommands.Normalize(raw);
             if (vs.Kind == "bool") return OnWords.Contains(v) || OffWords.Contains(v) || v == "toggle" || v == "switch";
+            if (vs.Kind == "choice") return ChoiceValue(vs, v) != null || v == "toggle" || v == "switch";
             return VoiceCommands.TryNumber(raw, vs.Min, vs.Max, vs.Unit, out _);
+        }
+
+        /// A choice setting's value for a spoken one ("radio" -> comm, "on" -> the first after off, "off" -> the first);
+        /// null when it is none of them.
+        private static string ChoiceValue(VoiceSetting vs, string normalized)
+        {
+            string v = (normalized ?? "").Replace("-", " ").Trim();
+            if (vs.Options.Contains(v)) return v;
+            if (vs.Values != null && vs.Values.TryGetValue(v, out var m)) return m;
+            if (vs.Values != null) foreach (var kv in vs.Values) if (VoiceCommands.Normalize(kv.Key) == v) return kv.Value;
+            if (OnWords.Contains(v)) return vs.Options.Length > 1 ? vs.Options[1] : vs.Options[0];
+            if (OffWords.Contains(v)) return vs.Options[0];
+            return null;
         }
 
         /// set_setting: on / off / toggle, a number ("0", "50 percent", "two meters", "max"), or more / less ("+",
@@ -1279,6 +1332,19 @@ namespace MetaCodex.Shell
                 else { Settings.Set(vs.Key, on ? "true" : "false"); OnSettingsChanged(); }
                 SyncSettingsControls();
                 return vs.Label + (on ? " on" : " off");
+            }
+            if (vs.Kind == "choice")
+            {
+                string cur = Settings.Get(vs.Key) ?? vs.Options[0];
+                int ci = Math.Max(0, Array.IndexOf(vs.Options, cur));
+                string pick = value == "+" ? vs.Options[(ci + 1) % vs.Options.Length] : value == "-" ? vs.Options[(ci + vs.Options.Length - 1) % vs.Options.Length]
+                    : v == "toggle" || v == "switch" ? (ci == 0 ? vs.Options[Math.Min(1, vs.Options.Length - 1)] : vs.Options[0]) : ChoiceValue(vs, v);
+                if (pick == null) return "error: " + vs.Label + " is one of " + string.Join(", ", vs.Options);
+                Settings.Set(vs.Key, pick);
+                OnSettingsChanged();
+                SyncSettingsControls();
+                int pi = Array.IndexOf(vs.Options, pick);
+                return vs.Label + " " + (vs.OptionLabels != null && pi >= 0 && pi < vs.OptionLabels.Length ? vs.OptionLabels[pi] : pick);
             }
             float curN = float.TryParse(Settings.Get(vs.Key), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var cn) ? cn : vs.Min;
             double n;
@@ -1314,6 +1380,10 @@ namespace MetaCodex.Shell
                     else if (e is UiToggle tg) { var k = toggles.FirstOrDefault(kv => (tg.Text ?? "").StartsWith(kv.Key)); if (k.Value != null) tg.Set(Settings.Get(k.Value) == "true"); }
                 }
             _focusButton?.SetSelected(Settings.focusEnabled);
+            // VOICE > SOUND follows voice.fx (voice, MQH, the control port)
+            if (_panels.TryGetValue("voice", out var vp))
+                foreach (var sg in vp.Elements.OfType<UiSegmented>())
+                    if (sg.Text == "SOUND") { int fi = Array.IndexOf(VoiceFx.Names, VoiceFx.Name(VoiceFx.Parse(Settings.voice.fx))); if (sg.Selected != fi) sg.Set(fi); }
         }
 
         /// Closes every panel except the dock; returns how many were open.
@@ -1507,13 +1577,20 @@ namespace MetaCodex.Shell
             }
             female = p.Add(new UiSegmented("FEMALE", fv, Array.IndexOf(fv, Settings.voice.voice), i => PickVoice(fv[i])) { Rect = rs.Next(0.032f), LabelWidth = pickLabel });
             male = p.Add(new UiSegmented("MALE", mv, Array.IndexOf(mv, Settings.voice.voice), i => PickVoice(mv[i])) { Rect = rs.Next(0.032f), LabelWidth = pickLabel });
+            // the voice effect (VoiceFx): picking one says a short line with it
+            p.Add(new UiSegmented("SOUND", VoiceFx.Labels, (int)VoiceFx.Parse(Settings.voice.fx), i =>
+            {
+                Settings.voice.fx = VoiceFx.Names[i];
+                OnSettingsChanged();
+                if (SpeakForTest != null || Qvac != null && Qvac.IsRunning) VoiceSay(VoiceFxSample); // no service: no toast of the sample line
+            }) { Rect = rs.Next(0.032f), LabelWidth = pickLabel });
 
             p.Add(new UiLabel("COMMANDS (say them, or anything close)", t.SmallSize) { Rect = rs.Next(0.018f), UseDisplay = true, Color = t.TextDim });
             _vCmdList = p.Add(new UiList(0.034f, (item, idx) =>
             {
                 var cmd = Voice.Find(item.Tag as string);
                 if (cmd != null) Toast(CommandHint(cmd), "info");
-            }) { Rect = rs.Next(0.21f) });
+            }) { Rect = rs.Next(0.21f - 0.032f - t.Gap) }); // one row less: SOUND sits above
             p.Add(new UiLabel("LAST", t.SmallSize) { Rect = rs.Next(0.018f), UseDisplay = true, Color = t.TextDim });
             _vHistory = p.Add(new UiLabel("", t.SmallSize) { Rect = rs.Rest(), Wrap = true, Align = TextAlignmentOptions.TopLeft, UseMono = true, Color = t.TextDim });
             RefreshVoicePanel();
@@ -1641,7 +1718,7 @@ namespace MetaCodex.Shell
 
         // ------------------------------------------------------------------ control port
 
-        /// voice status | list | listen | stop | cancel | install | warm | start | stop-service | threads N | lang X | speak on|off
+        /// voice status | list | listen | stop | cancel | install | warm | start | stop-service | threads N | lang X | speak on|off | fx <preset>
         private string VoiceControl(string arg)
         {
             var parts = (arg ?? "").Split(new[] { ' ' }, 2, StringSplitOptions.RemoveEmptyEntries);
@@ -1675,10 +1752,19 @@ namespace MetaCodex.Shell
                 case "install": EnsureVoiceService(); After(0.2f, InstallVoiceModels); return "ok, installing in the background (voice status shows progress)";
                 case "threads": if (int.TryParse(rest, out int n)) { Settings.voice.threads = Mathf.Clamp(n, 1, 2); Qvac.Threads = Settings.voice.threads; OnSettingsChanged(); PushVoiceConfig(); } return "threads=" + Settings.voice.threads + " (max 2: more is slower on the service's 3 cores)";
                 case "voice": if (rest.Length > 0) { Settings.voice.voice = rest.Trim().ToUpperInvariant(); OnSettingsChanged(); PushVoiceConfig(); } return "voice=" + Settings.voice.voice + " (F1-F5, M1-M5)";
+                case "fx":
+                    if (rest.Length > 0)
+                    {
+                        if (!VoiceFx.TryParse(rest, out var preset)) return "error: voice fx off|adjutant|starship|comm";
+                        Settings.voice.fx = VoiceFx.Name(preset);
+                        OnSettingsChanged();
+                        SyncSettingsControls();
+                    }
+                    return "fx=" + Settings.voice.fx + " (off, adjutant, starship, comm)";
                 case "lang": if (rest.Length > 0) { Settings.voice.language = rest; OnSettingsChanged(); PushVoiceConfig(); } return "language=" + Settings.voice.language;
                 case "speak": Settings.voice.speak = rest != "off"; OnSettingsChanged(); return "speak=" + Settings.voice.speak;
                 case "llm": Settings.voice.useLlm = rest != "off"; OnSettingsChanged(); return "useLlm=" + Settings.voice.useLlm;
-                default: return "error: voice status | list | tools | registry | match <text> | decide <text> | decider on|off | fallback on|off | listen | stop | cancel | start | stop-service | install | threads N | lang en|it|auto | speak on|off | llm on|off | run <text> | say <text> | wav <file> | warm";
+                default: return "error: voice status | list | tools | registry | match <text> | decide <text> | decider on|off | fallback on|off | listen | stop | cancel | start | stop-service | install | threads N | lang en|it|auto | speak on|off | fx off|adjutant|starship|comm | llm on|off | run <text> | say <text> | wav <file> | warm";
             }
         }
 
