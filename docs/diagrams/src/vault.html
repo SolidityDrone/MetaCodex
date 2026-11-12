@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Secrets stay sealed</title>
+<link rel="stylesheet" href="../kit.css">
+<script src="../kit.js"></script>
+</head>
+<body>
+<div id="canvas">
+
+  <header class="titlebar" data-title="Secrets stay sealed" data-caption="One key lives in hardware. Every request meets a policy." data-tag="Vault"></header>
+
+  <!-- left: Linux userland -->
+  <section class="group" id="g-lin" data-tone="linux" data-label="Linux userland" data-sub="proot · Debian arm64" data-icon="terminal" data-x="48" data-y="132" data-w="404" data-gap="18">
+    <div class="card" id="signin" data-tone="ext" data-icon="x" data-title="CLI sign-ins" data-sub="never stored" data-h="100">
+      <p>Each CLI keeps its own login.</p>
+    </div>
+    <div class="card" id="agents" data-tone="agent" data-icon="terminal" data-title="Agent processes" data-sub="keys arrive as env" data-h="100">
+      <p>MQH sets them at start.</p>
+    </div>
+    <div class="card" id="mqh" data-tone="agent" data-icon="branch" data-title="MQH" data-sub="machine environment" data-h="130">
+      <p>Encrypts each API key. Keeps its envelope key in memory only.</p>
+    </div>
+    <div class="card" id="mcx" data-icon="key" data-title="mcx-secret" data-sub="asks the app" data-h="104">
+      <p>Sends a token and a request.</p>
+    </div>
+    <div class="card" id="git" data-icon="branch" data-title="git credential helper" data-sub="no token file" data-h="100">
+      <p>Asks the vault at each use.</p>
+    </div>
+  </section>
+
+  <!-- middle: the app -->
+  <section class="group" id="g-app" data-tone="app" data-label="App" data-sub="C# · main process" data-icon="cpu" data-x="592" data-y="132" data-w="436" data-gap="18">
+    <div class="row" data-gap="14">
+      <div class="card fill" id="appr" data-icon="eye" data-title="Approval" data-sub="in the headset" data-h="148">
+        <p>Allow once, always or deny. Silence is deny.</p>
+      </div>
+      <div class="card fill" id="log" data-icon="clock" data-title="Access log" data-sub="no values" data-h="148">
+        <p>Time, name, asker, answer. Never the value.</p>
+      </div>
+    </div>
+    <div class="card" id="pol" data-tone="sec" data-variant="hero" data-icon="shield" data-title="Vault policy" data-sub="one per secret" data-h="200">
+      <dl class="kv"><dt>ask</dt><dd>Ask in the headset. No answer in 115 s: deny.</dd><dt>once</dt><dd>One time per session.</dd><dt>allow</dt><dd>Always. Logged.</dd><dt>deny</dt><dd>Never leaves the app.</dd></dl>
+    </div>
+    <div class="card" id="ctl" data-icon="plug" data-title="Control port" data-sub="127.0.0.1 only" data-h="104">
+      <p>A new token at each launch.</p>
+    </div>
+  </section>
+
+  <!-- right: keyboard + Android -->
+  <div class="card" id="kb" data-tone="app" data-icon="user" data-title="You paste a key" data-sub="app keyboard · masked field" data-x="1172" data-y="132" data-w="380" data-h="104">
+    <p>The value is never shown again.</p>
+  </div>
+
+  <section class="group" id="g-and" data-tone="os" data-label="Android" data-sub="app private storage" data-icon="lock" data-x="1172" data-y="262" data-w="380" data-gap="18">
+    <div class="card" id="vjson" data-icon="database" data-title="vault.json" data-sub="sealed values · no backup" data-h="104">
+      <p>proot cannot see it.</p>
+    </div>
+    <div class="card" id="java" data-icon="code" data-title="Java bridge" data-sub="seal and open" data-h="104">
+      <p>The app never sees the key.</p>
+    </div>
+    <div class="card" id="ks" data-tone="sec" data-variant="hero" data-icon="lock" data-title="Android Keystore" data-sub="hardware-backed · TEE" data-chips="AES-256-GCM,No export" data-h="150">
+      <p>One key. It stays in the TEE.</p>
+    </div>
+  </section>
+
+  <div class="note" id="note" data-tone="warn" data-icon="warn" data-x="592" data-y="724" data-w="436">
+    <p><b>Release rule.</b> A debug APK lets adb use the key. Build a release APK before real keys.</p>
+  </div>
+
+  <div class="legend" id="legend" data-title="Legend" data-tones="" data-lines="secret:Secret flow,control:Control,data:Data,note:Not touched" data-x="48" data-y="838"></div>
+</div>
+
+<pre id="lint"></pre>
+<script>
+  connect('kb', 'left', 'pol', 'right@25%', { label: 'paste', badge: '1', style: 'secret', via: [{ x: 1100 }] });
+  connect('pol', 'right@52%', 'vjson', 'left', { label: 'sealed', style: 'data' });
+  connect('pol', 'right@82%', 'java', 'left', { label: 'seal', badge: '2', style: 'secret' });
+  connect('java', 'bottom', 'ks', 'top', { style: 'secret' });
+  connect('ctl', 'top', 'pol', 'bottom', { style: 'control' });
+  connect('pol', 'top@25%', 'appr', 'bottom', { style: 'control' });
+  connect('pol', 'top@75%', 'log', 'bottom', { style: 'data' });
+  connect('mcx', 'right', 'ctl', 'left', { label: 'token · ask', style: 'secret', arrow: 'both' });
+  connect('pol', 'left', 'mqh', 'right', { label: 'MQH env', badge: '3', style: 'secret' });
+  connect('mqh', 'bottom', 'mcx', 'top', { style: 'secret' });
+  connect('git', 'top', 'mcx', 'bottom', { style: 'secret' });
+  connect('mqh', 'top', 'agents', 'bottom', { style: 'secret' });
+  connect('signin', 'bottom', 'agents', 'top', { style: 'note' });
+</script>
+</body>
+</html>

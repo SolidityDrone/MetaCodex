@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>MetaCodex at a glance</title>
+<link rel="stylesheet" href="../kit.css">
+<script src="../kit.js"></script>
+</head>
+<body>
+<div id="canvas">
+
+  <header class="titlebar" data-title="MetaCodex at a glance" data-caption="A coding-agent workstation inside a standalone mixed-reality headset" data-tag="Overview"></header>
+
+  <!-- row 1, left: the app (main process) -->
+  <section class="group" id="g-app" data-tone="app" data-label="App" data-sub="main process" data-icon="cpu" data-x="48" data-y="132" data-w="330" data-h="290">
+    <div class="card" id="shell" data-icon="hand" data-title="Spatial interface" data-sub="hands and voice">
+      <p>Glass panels float in your room.</p>
+    </div>
+    <div class="card" id="engine" data-icon="layers" data-title="3D engine" data-sub="C# · OpenXR · Vulkan">
+      <p>Draws room and panels.</p>
+    </div>
+  </section>
+
+  <!-- row 1, right: the background service (:ai process) with the two AI stacks -->
+  <section class="group" id="g-svc" data-tone="svc" data-label="Service" data-sub=":ai process" data-icon="process" data-x="538" data-y="132" data-w="1014" data-h="290">
+    <div class="row" data-gap="24" data-h="220">
+      <div class="card fill" id="ai" data-tone="ai" data-icon="brain" data-title="Interface AI" data-sub="local, on the headset">
+        <ul class="lines"><li>Speech to text</li><li>Small language model</li><li>Text to speech</li><li>Decision model</li></ul>
+        <p class="dim">Private data stays on the headset.</p>
+        
+      </div>
+      <div class="card fill" id="agent" data-tone="agent" data-icon="branch" data-title="Coding agents" data-sub="MQH harness" data-variant="hero">
+        <ul class="lines"><li>Threads and approvals</li><li>Agent CLIs over ACP</li><li>Plugins and MCP tools</li></ul>
+        <p class="dim">Each agent CLI signs in to its own model provider.</p>
+        <div class="chips"><span class="chip">Node.js</span><span class="chip">TypeScript</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- row 2: Linux userland and native apps -->
+  <section class="group" id="g-linux" data-tone="linux" data-label="Linux userland" data-sub="Debian arm64 · proot" data-icon="terminal" data-x="48" data-y="490" data-w="980">
+    <div class="row" data-gap="16">
+      <div class="card fill" id="term" data-icon="terminal" data-title="Terminals" data-sub="real bash shells">
+        <p>One shell per frame.</p>
+      </div>
+      <div class="card fill" id="tools" data-icon="gear" data-title="Dev tools" data-sub="git · Node.js · python3">
+        <p>MQH and the agents run here.</p>
+      </div>
+      <div class="card fill" id="build" data-tone="native" data-icon="package" data-title="Native builder" data-sub="C++ · NDK clang">
+        <p>Compiles and signs an APK.</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="card" id="native" data-tone="native" data-icon="headset" data-title="Native apps" data-sub="built on the headset" data-variant="hero" data-x="1128" data-y="490" data-w="424">
+    <ul class="lines"><li>Agent writes C++ with OpenXR</li><li>Build, install, launch</li></ul>
+  </div>
+
+  <!-- row 3: the headset OS -->
+  <div class="card" id="os" data-tone="os" data-icon="shield" data-title="Headset OS" data-sub="Android-based · 6 cores · app on cores 3-5, service on cores 0-2 · key store · package installer" data-x="48" data-y="695" data-w="1504"></div>
+
+  <!-- row 4: metrics and legend -->
+  <div class="metric" id="m1" data-tone="app" data-value="72" data-unit="fps" data-caption="held, with the AI working" data-x="48" data-y="780" data-w="326"></div>
+  <div class="metric" id="m2" data-tone="native" data-value="1.9" data-unit="s" data-caption="one-file native build" data-x="390" data-y="780" data-w="326"></div>
+  <div class="metric" id="m3" data-tone="ai" data-value="17" data-unit="ms" data-caption="voice decision (PC bench)" data-x="732" data-y="780" data-w="326"></div>
+  <div class="metric" id="m4" data-tone="linux" data-value="1.6" data-unit="s" data-caption="Linux install from the APK" data-x="1074" data-y="780" data-w="326"></div>
+
+  <div class="legend" id="legend" data-title="Legend" data-layout="col" data-lines="data:Data,control:Starts" data-x="1428" data-y="780"></div>
+</div>
+
+<pre id="lint"></pre>
+<script>
+  connect('g-app', 'right', 'g-svc', 'left', { label: 'local HTTP', style: 'data', arrow: 'both' });
+  connect('g-app', 'bottom', 'g-linux', 'top', { label: 'pty', style: 'data', arrow: 'both' });
+  connect('g-svc', 'bottom', 'g-linux', 'top', { label: 'starts MQH', style: 'control' });
+  connect('build', 'right', 'native', 'left', { label: 'APK', style: 'data' });
+</script>
+</body>
+</html>

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Icon catalogue</title>
+<link rel="stylesheet" href="../kit.css">
+<script src="../kit.js"></script>
+<style>
+  .tile { align-items: center; justify-content: center; gap: 8px; padding: 14px 10px 12px; }
+  .tile .ico { width: 34px; height: 34px; color: var(--t); }
+</style>
+</head>
+<body>
+<div id="canvas">
+  <header class="titlebar" data-title="Icon catalogue" data-caption="Use with data-icon on cards, groups and notes, or inline as an i element" data-tag="Kit"></header>
+  <div id="grid" data-layout="grid" data-cols="9" data-gap="14" data-x="48" data-y="136" data-w="1504"></div>
+</div>
+<pre id="lint"></pre>
+<script>
+  var names = ['cpu','process','thread','lock','key','shield','mic','waveform','model','brain','plug','puzzle','hand','terminal','package','gear','folder','branch','headset','loop','file','code','globe','database','bolt','eye','user','speaker','check','warn','x','camera','clock','link','cloud','server','download','wifi','layers','sparkle'];
+  var tones = ['app','svc','linux','ai','agent','sec','native','os','ext'];
+  var g = document.getElementById('grid');
+  names.forEach(function (n, i) {
+    g.insertAdjacentHTML('beforeend', '<div class="card tile" data-tone="' + tones[i % tones.length] + '"><i data-icon="' + n + '"></i><code>' + n + '</code></div>');
+  });
+</script>
+</body>
+</html>

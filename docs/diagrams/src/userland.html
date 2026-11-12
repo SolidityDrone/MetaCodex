@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>A real Linux inside the app</title>
+<link rel="stylesheet" href="../kit.css">
+<script src="../kit.js"></script>
+</head>
+<body>
+<div id="canvas">
+
+  <header class="titlebar" data-title="A real Linux inside the app" data-caption="Debian arm64 runs in proot inside the app. Root in the guest is fake." data-tag="Userland"></header>
+
+  <!-- column 1: what the APK carries -->
+  <div class="card" id="apk" data-tone="app" data-icon="package" data-title="APK assets" data-sub="copied out at first launch" data-x="48" data-y="132" data-w="330" data-h="180">
+    <ul class="lines"><li>Debian layer · 30 MB</li><li>Overlay · 1.1 MB</li><li>MQH bundle · 12.4 MB</li></ul>
+  </div>
+  <div class="card" id="libs" data-tone="os" data-icon="folder" data-title="Native library folder" data-sub="proot starts from here" data-x="48" data-y="332" data-w="330" data-h="180">
+    <p>Android blocks exec of files an app writes. It allows exec from here.</p>
+    <div class="chips"><span class="chip mono">libproot.so</span><span class="chip mono">libmcxpty.so</span></div>
+  </div>
+
+  <!-- column 2: the guest, inside proot -->
+  <section class="group" id="g-proot" data-tone="linux" data-label="proot" data-sub="the guest runs inside it" data-icon="shield" data-x="498" data-y="132" data-w="500" data-h="380">
+    <div class="row" data-gap="14">
+      <div class="card fill" id="rootfs" data-icon="database" data-title="Debian rootfs" data-sub="13 · arm64 · read-write">
+        <p>2,677 files. Installs in 1.6 s.</p>
+      </div>
+      <div class="card fill" id="overlay" data-icon="layers" data-title="Overlay" data-sub="laid over the rootfs">
+        <p>Tools, templates and 47 skills.</p>
+      </div>
+    </div>
+    <div class="row" data-gap="14">
+      <div class="card fill" id="mounts" data-icon="link" data-title="Mounts" data-sub="what the guest sees">
+        <ul class="lines"><li>Shared folder, under <code>/mnt</code></li><li>Stand-in <code>/proc</code> files</li></ul>
+      </div>
+      <div class="card fill" id="fake" data-icon="key" data-title="Fake root" data-sub="ptrace · seccomp">
+        <ul class="lines"><li>uid 0 in the guest</li><li>Real user: the app's</li></ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- column 3: the two process trees -->
+  <section class="group" id="g-trees" data-tone="neutral" data-label="Process trees" data-sub="who forks whom" data-icon="branch" data-x="1098" data-y="132" data-w="454" data-h="444">
+    <div class="card" id="t1" data-tone="app" data-icon="terminal" data-title="Terminals" data-sub="main process · cores 3-5">
+      <ul class="lines"><li>App forks libmcxpty</li><li>libmcxpty execs proot</li><li>proot runs bash</li><li>bash runs your command</li></ul>
+    </div>
+    <div class="card" id="t2" data-tone="svc" data-icon="process" data-title="MQH and agents" data-sub=":ai process · cores 0-2">
+      <ul class="lines"><li>App starts the service</li><li>Service runs proot</li><li>proot runs MQH (Node.js)</li><li>MQH starts agents and builder</li></ul>
+    </div>
+  </section>
+
+  <!-- bottom: the pty bridge -->
+  <section class="group" id="g-pty" data-tone="app" data-label="pty bridge" data-sub="from the terminal frame to bash" data-icon="terminal" data-x="48" data-y="596" data-w="1010" data-h="210">
+    <div class="row" data-gap="140">
+      <div class="card fill" id="frame" data-icon="code" data-title="Terminal frame" data-sub="C# emulator">
+        <p>Xterm-compatible. Draws the cells.</p>
+      </div>
+      <div class="card fill" id="sess" data-icon="thread" data-title="PtySession" data-sub="two threads">
+        <p>Reader polls. Writer never blocks a frame.</p>
+      </div>
+      <div class="card fill" id="mcxpty" data-icon="cpu" data-title="libmcxpty" data-sub="C library">
+        <p>Opens the pty. Forks. Execs proot.</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="note" id="note" data-tone="warn" data-icon="warn" data-x="1098" data-y="596" data-w="454">
+    <p><b>Left out.</b> First-use setup, tool installs and the editor-only sessions.</p>
+  </div>
+
+  <div class="legend" id="legend" data-title="Legend" data-layout="col" data-lines="data:Bytes and files,control:Starts a process" data-x="1098" data-y="706"></div>
+</div>
+
+<pre id="lint"></pre>
+<script>
+  connect('apk', 'right', 'rootfs', 'left', { label: 'extract', style: 'data' });
+  connect('libs', 'right', 'g-proot', 'left', { label: 'exec', style: 'control' });
+  connect('frame', 'right', 'sess', 'left', { label: 'bytes', style: 'data', arrow: 'both' });
+  connect('sess', 'right', 'mcxpty', 'left', { label: 'P/Invoke', style: 'data', arrow: 'both' });
+  connect('mcxpty', 'top', 'g-proot', 'bottom', { label: 'fork · exec', style: 'control' });
+  connect('t1', 'left', 'g-proot', 'right', { label: 'fork', style: 'control' });
+  connect('t2', 'left', 'g-proot', 'right', { label: 'exec', style: 'control' });
+</script>
+</body>
+</html>

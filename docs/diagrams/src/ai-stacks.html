@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Two AI stacks, two jobs</title>
+<meta name="lint-allow-words" content="Whisper,Qwen3,e5">
+<link rel="stylesheet" href="../kit.css">
+<script src="../kit.js"></script>
+</head>
+<body>
+<div id="canvas">
+
+  <header class="titlebar" data-title="Two AI stacks, two jobs" data-caption="One AI drives the interface. The coding agents work on code. They never mix."></header>
+
+  <!-- LEFT: interface AI -->
+  <section class="group" id="g-ai" data-tone="ai" data-label="Interface AI" data-sub="service process · cores 0-2" data-icon="brain" data-x="48" data-y="132" data-w="612" data-h="560">
+    <div class="card" id="ai-job" data-variant="hero" data-icon="sparkle" data-title="Drives the interface" data-sub="local · on device · private">
+      <p>Panels, settings, the orb. Questions about the session.</p>
+    </div>
+    <div class="row" data-gap="14">
+      <div class="card fill" id="models" data-icon="model" data-title="Local models" data-sub="CPU only">
+        <dl class="kv">
+          <dt>Speech</dt><dd>Whisper base</dd>
+          <dt>Decide</dt><dd>multilingual-e5-small</dd>
+          <dt>Answer</dt><dd>Qwen3 0.6B</dd>
+          <dt>Speak</dt><dd>text-to-speech</dd>
+          <dt>Runs</dt><dd>2 threads, nice 10</dd>
+        </dl>
+      </div>
+      <div class="col fill" data-gap="14">
+        <div class="card" id="registry" data-icon="plug" data-title="Command registry" data-sub="MCP-like surface">
+          <p>25 commands. Every action is one.</p>
+        </div>
+        <div class="card" id="cscp" data-icon="eye" data-title="CSCP" data-sub="core session context">
+          <p>Read-only. Answers questions.</p>
+        </div>
+      </div>
+    </div>
+    <div class="row" data-gap="14">
+      <div class="metric fill" id="m-fps" data-tone="ai" data-value="72" data-unit="fps" data-caption="held, AI at work"></div>
+      <div class="metric fill" id="m-stt" data-tone="ai" data-value="0.7" data-unit="s" data-caption="speech to text"></div>
+    </div>
+  </section>
+
+  <!-- CENTRE: boundary -->
+  <section class="group" id="g-bound" data-tone="err" data-variant="dashed" data-label="Boundary" data-icon="shield" data-x="688" data-y="132" data-w="224" data-h="560" data-gap="28">
+    <div class="note" id="n1" data-tone="err" data-icon="x"><p><b>No CSCP for agents.</b> Only the local AI reads it.</p></div>
+    <div class="note" id="n2" data-tone="err" data-icon="x"><p><b>MQH does not drive the interface.</b></p></div>
+    <div class="note" id="n4" data-tone="err" data-icon="x"><p><b>Voice never approves.</b> The user does.</p></div>
+    <div class="note" id="n3" data-tone="ok" data-icon="check"><p><b>Agents may call a command.</b> The app checks it.</p></div>
+  </section>
+
+  <!-- RIGHT: coding agents -->
+  <section class="group" id="g-agent" data-tone="agent" data-label="Coding agents · MQH" data-sub="in Linux · cores 0-2" data-icon="branch" data-x="940" data-y="132" data-w="612" data-h="560">
+    <div class="card" id="ag-job" data-variant="hero" data-icon="code" data-title="Works on code. Only." data-sub="Node.js · TypeScript · SQLite">
+      <p>The harness for the coding-agent CLIs.</p>
+    </div>
+    <div class="row" data-gap="14">
+      <div class="card fill" id="threads" data-icon="loop" data-title="Threads" data-sub="one per task">
+        <p>Send, stop, fork.</p>
+      </div>
+      <div class="card fill" id="wspaces" data-icon="folder" data-title="Workspaces" data-sub="checkout or worktree">
+        <p>A guard queues turns in a busy folder.</p>
+      </div>
+    </div>
+    <div class="row" data-gap="14">
+      <div class="card fill" id="approvals" data-icon="shield" data-title="Approvals" data-sub="the user decides">
+        <p>ALLOW or DENY in the thread.</p>
+      </div>
+      <div class="card fill" id="skills" data-icon="puzzle" data-title="Skills · plugins" data-sub="the user reviews">
+        <p>Agents extend MQH.</p>
+      </div>
+    </div>
+    <div class="row" data-gap="14">
+      <div class="card fill" id="acp" data-icon="plug" data-title="ACP providers" data-sub="stdio">
+        <p>Wrap the supported CLIs.</p>
+      </div>
+      <div class="metric" id="m-mqh" data-tone="agent" data-value="6" data-unit="s" data-caption="MQH ready"></div>
+    </div>
+  </section>
+
+  <!-- BOTTOM -->
+  <div class="legend" id="legend" data-title="Legend" data-tones="" data-lines="secret:Call with token" data-x="48" data-y="772"></div>
+
+  <div class="card" id="app" data-tone="app" data-icon="headset" data-title="App shell" data-sub="main process · cores 3-5" data-x="520" data-y="772" data-w="560">
+    <p>Client of both stacks. Sends a token with each call.</p>
+  </div>
+
+  <div class="note" id="n-cores" data-tone="app" data-icon="cpu" data-x="1110" data-y="772" data-w="442">
+    <p><b>Cores.</b> Both stacks run in the service tree. The shell keeps cores 3-5.</p>
+  </div>
+</div>
+
+<pre id="lint"></pre>
+<script>
+  connect('app', 'top', 'g-ai', 'bottom', { label: 'loopback · token', style: 'secret' });
+  connect('app', 'top', 'g-agent', 'bottom', { label: 'HTTP · token', style: 'secret' });
+</script>
+</body>
+</html>

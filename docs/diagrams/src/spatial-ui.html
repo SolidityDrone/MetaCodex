@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>A workspace you can stand in</title>
+<link rel="stylesheet" href="../kit.css">
+<script src="../kit.js"></script>
+</head>
+<body>
+<div id="canvas">
+
+  <header class="titlebar" data-title="A workspace you can stand in" data-caption="Panels, an orb and your hands, placed in the room you are in." data-tag="Spatial UI"></header>
+
+  <!-- column 1: hands -->
+  <section class="group" id="g-hands" data-tone="neutral" data-label="Your hands" data-sub="no controllers" data-icon="hand" data-x="48" data-y="130" data-w="320" data-h="686">
+    <div class="card" id="hand" data-icon="hand" data-title="Hand input" data-sub="hand tracking only" data-x="20" data-y="54" data-w="280" data-h="206">
+      <ul class="lines"><li><b>Ray:</b> point and pinch.</li><li><b>Poke:</b> press with a fingertip.</li><li><b>Pinch</b> a header to move a panel.</li><li>Your hands always show in front of a panel.</li></ul>
+    </div>
+    <div class="card" id="gest" data-icon="puzzle" data-title="Gesture engine" data-sub="built in, plus Lua" data-x="20" data-y="276" data-w="280" data-h="190">
+      <p>Pinch, grab, point, open, palm-up, clap, select.</p>
+      <p class="dim">Lua detectors add more.</p>
+    </div>
+    <div class="card" id="wrist" data-icon="clock" data-title="Wrist menu" data-sub="left wrist" data-x="20" data-y="482" data-w="280" data-h="188">
+      <p>Look at your wrist like a watch. Touch it with a fingertip. It unfolds into rings of tiles.</p>
+      <p class="dim">It folds when you leave it.</p>
+    </div>
+  </section>
+
+  <!-- column 2: workspace -->
+  <section class="group" id="g-work" data-tone="app" data-label="The workspace" data-sub="panels in the room" data-icon="layers" data-x="416" data-y="130" data-w="768" data-h="686">
+    <div class="card" id="orb" data-tone="ai" data-icon="sparkle" data-title="The orb" data-sub="a sphere of energy by you" data-variant="hero" data-x="20" data-y="54" data-w="344" data-h="206">
+      <ul class="lines"><li><b>Menu arc, left:</b> TALK, SPEAK, PLACE, LOG.</li><li><b>Callout arc, right:</b> app messages.</li><li>Keeps off the window you watch.</li></ul>
+      <div class="chips"><span class="chip">idle</span><span class="chip">listens</span><span class="chip">thinks</span><span class="chip">speaks</span></div>
+    </div>
+    <div class="card" id="panels" data-icon="cpu" data-title="Panels" data-sub="one draw call each" data-x="404" data-y="54" data-w="344" data-h="206">
+      <ul class="lines"><li>One mesh per panel.</li><li>The GPU bends it round you.</li><li>The orb casts it open and closed.</li><li>Text stays crisp at any distance.</li></ul>
+    </div>
+    <div class="card" id="layouts" data-icon="layers" data-title="Two layouts" data-sub="fixed and float" data-x="20" data-y="276" data-w="344" data-h="190">
+      <dl class="kv"><dt>Fixed</dt><dd>Panels stay where you leave them.</dd><dt>Float</dt><dd>Panels ride a ring round you. A swipe spins it.</dd></dl>
+    </div>
+    <div class="card" id="place" data-icon="folder" data-title="Placement rules" data-sub="where a new panel opens" data-x="404" data-y="276" data-w="344" data-h="190">
+      <ul class="lines"><li>The free place in front, below eye level.</li><li>Never inside a wall.</li><li>A panel from a button opens beside it.</li></ul>
+    </div>
+    <div class="card" id="thread" data-tone="agent" data-icon="branch" data-title="Thread view and sidebar" data-sub="chat and review side by side" data-x="20" data-y="482" data-w="728" data-h="188">
+      <p>The chat shows your prompt, the agent's work and the answer. The sidebar opens beside it and bends with it. A status line shows when the agent seems stuck.</p>
+      <div class="chips"><span class="chip">CHANGES</span><span class="chip">FILES</span><span class="chip">GIT</span><span class="chip">STATUS</span><span class="chip">VIEWS</span></div>
+    </div>
+  </section>
+
+  <!-- column 3: the room -->
+  <section class="group" id="g-room" data-tone="os" data-label="The room" data-sub="headset OS" data-icon="eye" data-x="1232" data-y="130" data-w="320" data-h="686">
+    <div class="card" id="pass" data-icon="eye" data-title="Passthrough" data-sub="an underlay" data-x="20" data-y="54" data-w="280" data-h="206">
+      <p>The room shows behind every window. The headset OS composites it.</p>
+      <p class="dim">The app draws on top of the room.</p>
+    </div>
+    <div class="card" id="depth" data-icon="camera" data-title="Depth" data-sub="sharpened by the camera" data-x="20" data-y="276" data-w="280" data-h="190">
+      <p>Real things in front of a panel stay visible.</p>
+      <p class="dim">It also finds the floor under your feet.</p>
+    </div>
+    <div class="card" id="focus" data-tone="ai" data-icon="sparkle" data-title="Ambient Focus" data-sub="a dome round you" data-variant="hero" data-x="20" data-y="482" data-w="280" data-h="188">
+      <p>Inside the dome the room stays. Outside, it darkens or blurs.</p>
+      <div class="chips"><span class="chip">SUBTLE</span><span class="chip">FOCUS</span><span class="chip">BLACKOUT</span><span class="chip">no room scan</span></div>
+    </div>
+  </section>
+
+  <div class="legend" id="legend" data-title="Legend" data-tones="neutral:Hands,app:Workspace,ai:Orb and focus,agent:Thread,os:Headset OS" data-lines="data:Feeds,control:Input" data-x="48" data-y="838"></div>
+  <div class="note" id="note" data-tone="warn" data-icon="warn" data-x="1120" data-y="838" data-w="432"><p><b>Table keyboard:</b> being reworked.</p></div>
+</div>
+
+<pre id="lint"></pre>
+<script>
+  connect('hand', 'right', 'orb', 'left', { style: 'control', label: 'touch' });
+  connect('gest', 'right', 'layouts', 'left', { style: 'control', label: 'drop' });
+  connect('wrist', 'right', 'thread', 'left', { style: 'control' });
+  connect('orb', 'right', 'panels', 'left', { style: 'data' });
+  connect('place', 'top', 'panels', 'bottom', { style: 'data' });
+  connect('pass', 'left', 'panels', 'right', { style: 'data' });
+  connect('depth', 'left', 'place', 'right', { style: 'data', label: 'walls' });
+</script>
+</body>
+</html>

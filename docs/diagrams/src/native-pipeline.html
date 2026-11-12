@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Native apps, built on the headset</title>
+<link rel="stylesheet" href="../kit.css">
+<script src="../kit.js"></script>
+</head>
+<body>
+<div id="canvas">
+
+  <header class="titlebar" data-title="Native apps, built on the headset" data-caption="An agent writes, builds, signs and installs a real app. Nine steps, all on the headset." data-tag="Native apps"></header>
+
+  <!-- row 1: write and build -->
+  <section class="group" id="g-build" data-tone="svc" data-label="Write and build" data-sub="cores 0-2 · nice 10" data-icon="gear" data-x="48" data-y="130" data-w="1504">
+    <div class="row" data-gap="44" data-align="stretch">
+      <div class="card fill" id="s1" data-tone="agent" data-icon="branch" data-title="Agent writes" data-sub="Native project thread" data-badge="1">
+        <p>Writes C and C++ on the app's XR layer.</p>
+        <div class="chips"><span class="chip">C++17</span><span class="chip">OpenXR</span></div>
+      </div>
+      <div class="card fill" id="s2" data-icon="check" data-title="Check" data-sub="mcx-app check" data-badge="2">
+        <p>Syntax and type check with a precompiled header.</p>
+        <div class="chips"><span class="chip ok">0.7 s warm</span><span class="chip plain">2.9 s cold</span></div>
+      </div>
+      <div class="card fill" id="s3" data-flex="1.35" data-icon="process" data-title="Build" data-sub="mcx-build on mcx-buildd" data-badge="3" data-variant="hero">
+        <ul class="lines"><li>Compile, link, package, sign</li><li>Built-in signer, no JVM</li></ul>
+        <div class="chips"><span class="chip plain">cold 5.1 s</span><span class="chip ok">warm 1.9 s</span></div>
+      </div>
+      <div class="card fill" id="s4" data-icon="shield" data-title="Verify" data-sub="mcx-app verify" data-badge="4">
+        <p>Checks the manifest entry each XR feature needs.</p>
+        <div class="chips"><span class="chip">passthrough</span><span class="chip">depth</span><span class="chip">hands</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- row 2: install, run, return -->
+  <section class="group" id="g-run" data-tone="neutral" data-label="Install, run and return" data-sub="Back tested by the owner on the headset" data-icon="loop" data-x="48" data-y="406" data-w="1504">
+    <div class="row" data-gap="34" data-align="stretch">
+      <div class="card fill" id="s5" data-tone="app" data-icon="download" data-title="Install" data-sub="APP READY" data-badge="5">
+        <p>Your tap starts it. Updates are silent.</p>
+      </div>
+      <div class="card fill" id="s6" data-tone="app" data-icon="bolt" data-title="Launch" data-sub="with a launch id" data-badge="6">
+        <p>Starts on your tap only. One id per app.</p>
+      </div>
+      <div class="card fill" id="s7" data-flex="1.5" data-tone="native" data-icon="headset" data-title="The app runs" data-sub="own OpenXR session" data-badge="7" data-variant="hero">
+        <p>Passthrough, depth, hands, anchors. Passthrough apps ran on the headset.</p>
+      </div>
+      <div class="card fill" id="s8" data-flex="1.6" data-tone="native" data-icon="layers" data-title="App menu" data-sub="Back · Report · Restart · Quit" data-badge="8">
+        <p>Back and Report show only for apps MetaCodex launched.</p>
+      </div>
+      <div class="card fill" id="s9" data-flex="1.1" data-tone="app" data-icon="terminal" data-title="Return" data-sub="to MetaCodex" data-badge="9">
+        <p>The thread comes forward. A report draft waits.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- bottom band -->
+  <div class="card" id="guards" data-tone="warn" data-icon="shield" data-title="Guards" data-sub="builds never cost frames" data-x="48" data-y="628" data-w="520" data-h="192">
+    <ul class="lines">
+      <li><b>Memory floor.</b> Waits below 900 MB. Stops a tool below 450 MB.</li>
+      <li><b>CPU budget.</b> Pauses a job above 15 % over 300 s.</li>
+      <li><b>Foreground service.</b> Keeps builds alive. In code, not yet run on the device.</li>
+    </ul>
+  </div>
+
+  <div class="card" id="types" data-tone="agent" data-icon="folder" data-title="Project types" data-sub="set per folder" data-x="588" data-y="628" data-w="270" data-h="192">
+    <dl class="kv"><dt>Native</dt><dd>Five build skills and rules load.</dd><dt>General</dt><dd>Plain coding.</dd></dl>
+    <div class="chips"><span class="chip mono">.metacodex/project.json</span></div>
+  </div>
+
+  <div class="card" id="runner" data-tone="ext" data-icon="clock" data-title="Parked: Runner" data-sub="module apps, no build" data-x="878" data-y="628" data-w="318" data-h="192">
+    <p>A host app loads a module. Edit to run: 2.2 s. Parked since 2026-11-11.</p>
+    <p class="dim">Native apps are the default path.</p>
+  </div>
+
+  <div class="metric" id="m1" data-tone="native" data-value="1.9" data-unit="s" data-caption="build, was 9.0 s" data-x="1214" data-y="627" data-w="166"></div>
+  <div class="metric" id="m2" data-tone="svc" data-value="0.03" data-unit="s" data-caption="signing, built in" data-x="1386" data-y="627" data-w="166"></div>
+  <div class="metric" id="m3" data-tone="app" data-value="72" data-unit="fps" data-caption="held during builds" data-x="1214" data-y="728" data-w="166"></div>
+  <div class="metric" id="m4" data-tone="sec" data-value="100" data-unit="MB" data-caption="memory per build" data-x="1386" data-y="728" data-w="166"></div>
+
+  <div class="legend" id="legend" data-title="Legend" data-tones="agent:Agent,svc:Build service,app:MetaCodex,native:Native app" data-lines="data:Next step,async:User tap" data-x="48" data-y="840"></div>
+</div>
+
+<pre id="lint"></pre>
+<script>
+  connect('s1', 'right', 's2', 'left', { style: 'data' });
+  connect('s2', 'right', 's3', 'left', { style: 'data' });
+  connect('s3', 'right', 's4', 'left', { style: 'data' });
+  connect('s4', 'bottom', 's5', 'top', { style: 'data', label: 'signed APK', via: [{ y: 386 }], labelAt: 0.5 });
+  connect('s5', 'right', 's6', 'left', { style: 'async' });
+  connect('s6', 'right', 's7', 'left', { style: 'data' });
+  connect('s7', 'right', 's8', 'left', { style: 'data' });
+  connect('s8', 'right', 's9', 'left', { style: 'data' });
+</script>
+</body>
+</html>

@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>One app, two processes</title>
+<link rel="stylesheet" href="../kit.css">
+<script src="../kit.js"></script>
+</head>
+<body>
+<div id="canvas">
+
+  <header class="titlebar" data-title="One app, two processes" data-caption="The headset OS puts each process on its own CPU cores" data-tag="Platform"></header>
+
+  <!-- row A: main process -->
+  <section class="group" id="g-main" data-tone="app" data-label="Main process" data-sub="the app · cores 3-5" data-icon="cpu" data-x="48" data-y="132" data-w="1504" data-h="196">
+    <div class="row" data-gap="16">
+      <div class="card fill" id="eng" data-icon="layers" data-title="3D engine" data-sub="C# · shell and UI">
+        <p>Render loop at 72 fps. Hands, voice and panels.</p>
+      </div>
+      <div class="card fill" id="plug" data-icon="puzzle" data-title="Java plugins" data-sub="vault · installer · WebView">
+        <p>Vault keys stay in the key store.</p>
+      </div>
+      <div class="card fill" id="ctl" data-icon="plug" data-title="Control server" data-sub="127.0.0.1:47800">
+        <p>Token is new at each launch.</p>
+      </div>
+      <div class="card fill" id="term" data-icon="terminal" data-title="Terminals" data-sub="pty bridge · proot · bash">
+        <p>The app forks one process tree per frame.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- row B: :ai service process -->
+  <section class="group" id="g-ai" data-tone="svc" data-label="Service" data-sub=":ai · cores 0-2" data-icon="process" data-x="48" data-y="392" data-w="1504" data-h="196">
+    <div class="row" data-gap="16">
+      <div class="card fill" id="svc" data-icon="process" data-title="AI service" data-sub="Java · starts the children">
+        <p>The app starts it and binds to it.</p>
+      </div>
+      <div class="card fill" id="qvac" data-tone="ai" data-icon="brain" data-title="Local AI runtime" data-sub="127.0.0.1:47810">
+        <p>Speech, language, voice. Nice 10.</p>
+      </div>
+      <div class="card fill" id="mqh" data-tone="agent" data-icon="branch" data-title="MQH" data-sub="server 127.0.0.1:38990">
+        <p>Daemon on :38991. Token from the vault.</p>
+      </div>
+      <div class="card fill" id="agents" data-tone="agent" data-icon="code" data-title="Agent CLIs" data-sub="started by MQH">
+        <p>Run in proot, on cores 0-2.</p>
+      </div>
+      <div class="card fill" id="bld" data-tone="native" data-icon="package" data-title="Build daemon" data-sub="C++ to APK">
+        <p>One job at a time, nice 10.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- row C: background and OS -->
+  <section class="group" id="g-bg" data-tone="warn" data-label="In the background" data-sub="measured 2026-11-11" data-icon="clock" data-x="48" data-y="628" data-w="960" data-h="190">
+    <div class="row" data-gap="16">
+      <div class="card fill" id="bg1" data-icon="x" data-title="Plain service" data-sub="old design">
+        <p>Android killed :ai. Its children used over 25 % CPU for 5 min.</p>
+      </div>
+      <div class="card fill" id="bg2" data-status="warn" data-icon="check" data-title="Foreground service" data-sub="in the code">
+        <p>Not proven on the headset yet.</p>
+      </div>
+      <div class="card fill" id="bg3" data-icon="lock" data-title="Wake lock" data-sub="only while a build runs">
+        <p>The service sees a busy marker.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="group" id="g-os" data-tone="os" data-label="Headset OS" data-sub="Android-based" data-icon="shield" data-x="1048" data-y="628" data-w="504" data-h="190">
+    <div class="row" data-gap="16">
+      <div class="card fill" id="cpuset" data-icon="cpu" data-title="CPU sets" data-sub="6 cores">
+        <p>/immersive 3-5: app. /foreground 0-2: service.</p>
+      </div>
+      <div class="card fill" id="oss" data-icon="key" data-title="System parts" data-sub="Android">
+        <p>Key store, installer, low-memory killer.</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="legend" id="legend" data-title="Legend" data-lines="data:Local HTTP + token,control:Starts" data-x="48" data-y="836"></div>
+</div>
+
+<pre id="lint"></pre>
+<script>
+  connect('g-main', 'bottom@259px', 'svc', 'top@+100', { label: 'start · bind', style: 'control' });
+  connect('g-main', 'bottom@455px', 'qvac', 'top', { label: 'HTTP · token', style: 'data', arrow: 'both' });
+  connect('g-main', 'bottom@752px', 'mqh', 'top', { label: 'HTTP · token', style: 'data', arrow: 'both' });
+  connect('g-ai', 'bottom', 'g-bg', 'top', { style: 'note' });
+</script>
+</body>
+</html>

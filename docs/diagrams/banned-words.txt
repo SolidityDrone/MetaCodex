@@ -1,0 +1,43 @@
+# Words that must not appear in any diagram (brand rule). One entry per line.
+# Matching is case-insensitive and on whole words; "Hugging Face" matches across any whitespace.
+# Per-diagram exceptions (local-models diagrams only):
+#   <meta name="lint-allow-words" content="Whisper,Qwen3,e5">
+Meta
+Quest
+Horizon
+Oculus
+Unity
+TextMesh
+IL2CPP
+URP
+Google
+Apple
+Microsoft
+Windows
+WSL
+GitHub
+OpenAI
+Anthropic
+Claude
+Codex
+OpenCode
+Cursor
+Gemini
+xAI
+DeepSeek
+OpenRouter
+Qwen
+Whisper
+Supertonic
+Tether
+QVAC
+Holepunch
+Zed
+Chrome
+Edge
+npm
+Hugging Face
+Jev
+Kev
+bb
+e5

@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>From a spoken sentence to an action</title>
+<meta name="lint-allow-words" content="Whisper,Qwen3,e5">
+<link rel="stylesheet" href="../kit.css">
+<script src="../kit.js"></script>
+</head>
+<body>
+<div id="canvas">
+
+  <header class="titlebar" data-title="From a spoken sentence to an action" data-caption="Local speech, a fast match, then a router. The small LLM is the fallback."></header>
+
+  <!-- row A: the main path -->
+  <div class="card" id="stt" data-badge="1" data-tone="ai" data-icon="mic" data-title="Speech to text" data-sub="Whisper base · local" data-x="48" data-y="152" data-w="290" data-h="150">
+    <p>Microphone in. Text out.</p>
+    <div class="chips"><span class="chip">16 kHz</span><span class="chip">push to talk</span></div>
+  </div>
+  <div class="card" id="fast" data-badge="2" data-tone="ai" data-icon="bolt" data-title="Fast path" data-sub="phrase templates" data-x="378" data-y="152" data-w="290" data-h="150">
+    <p>Known phrases match at once.</p>
+    <div class="chips"><span class="chip">about 0 ms</span></div>
+  </div>
+  <div class="card" id="router" data-badge="3" data-tone="ai" data-variant="hero" data-icon="brain" data-title="Decision router" data-sub="multilingual-e5-small" data-x="708" data-y="152" data-w="462" data-h="150">
+    <p>Options in, scores out. One option is "none".</p>
+    <div class="chips"><span class="chip">cosine score</span><span class="chip">minimum 0.30</span><span class="chip">splits clauses</span></div>
+  </div>
+  <div class="card" id="run" data-badge="4" data-tone="app" data-icon="check" data-title="Command runs" data-sub="schema checked" data-x="1210" data-y="152" data-w="342" data-h="150">
+    <p>The shell runs the command.</p>
+    <div class="chips"><span class="chip">HUD shows result</span></div>
+  </div>
+
+  <!-- row B left: the registry -->
+  <div class="card" id="registry" data-tone="ai" data-icon="plug" data-title="Command registry" data-sub="the app's MCP-like surface" data-x="48" data-y="376" data-w="640" data-h="210">
+    <p>One list. 25 commands. Each has phrases, examples and a schema.</p>
+    <dl class="kv">
+      <dt>Voice</dt><dd>fast path, router, LLM grammar</dd>
+      <dt>Agents</dt><dd><code>mcx-ui voice registry</code></dd>
+      <dt>Plugins</dt><dd><code>voice.registry()</code></dd>
+    </dl>
+  </div>
+
+  <!-- row B right: fallback -->
+  <section class="group" id="g-fb" data-tone="ai" data-variant="dashed" data-label="Fallback" data-icon="loop" data-x="708" data-y="376" data-w="844" data-h="210" data-gap="48">
+    <div class="row" data-gap="48">
+      <div class="card fill" id="llm" data-icon="sparkle" data-title="Small LLM" data-sub="Qwen3 0.6B">
+        <p>Writes one command line. A grammar holds it.</p>
+        <div class="chips"><span class="chip warn">off by default</span></div>
+      </div>
+      <div class="card fill" id="cscp" data-icon="eye" data-title="CSCP" data-sub="session questions">
+        <p>Read-only view of the session. Never given to agents.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- row C: bench -->
+  <section class="group" id="g-bench" data-tone="neutral" data-label="Bench" data-sub="355 sentences · English and Italian · PC · 2026-11-09" data-icon="clock" data-x="48" data-y="624" data-w="1010" data-h="164" data-gap="16">
+    <div class="row" data-gap="14">
+      <div class="metric fill" id="m1" data-tone="ai" data-value="93" data-unit="%" data-caption="exact · decision router"></div>
+      <div class="metric fill" id="m2" data-tone="ext" data-value="59" data-unit="%" data-caption="exact · LLM path"></div>
+      <div class="metric fill" id="m3" data-tone="ai" data-value="17" data-unit="ms" data-caption="per decision · router"></div>
+      <div class="metric fill" id="m4" data-tone="ext" data-value="209" data-unit="ms" data-caption="per decision · LLM"></div>
+    </div>
+  </section>
+
+  <div class="note" id="note" data-tone="warn" data-icon="warn" data-x="1090" data-y="624" data-w="462">
+    <p><b>PC bench.</b> The router ran with a PC service. The headset latency is not benched the same way.</p>
+  </div>
+
+  <div class="legend" id="legend" data-title="Legend" data-tones="ai:Interface AI,app:App shell,ext:LLM path" data-lines="data,control" data-x="48" data-y="820"></div>
+</div>
+
+<pre id="lint"></pre>
+<script>
+  connect('stt', 'right', 'fast', 'left', { style: 'data' });
+  connect('fast', 'right', 'router', 'left', { style: 'control' });
+  connect('router', 'right', 'run', 'left', { style: 'data' });
+  connect('fast', 'top', 'run', 'top', { style: 'control', label: 'match', via: [{ y: 130 }] });
+  connect('router', 'bottom', 'llm', 'top', { style: 'control', label: 'nothing fits' });
+  connect('router', 'bottom@85%', 'cscp', 'top', { style: 'control', label: 'a question' });
+  connect('llm', 'right', 'cscp', 'left', { style: 'data', arrow: 'both' });
+  connect('registry', 'top', 'fast', 'bottom', { style: 'data', label: 'phrases' });
+</script>
+</body>
+</html>

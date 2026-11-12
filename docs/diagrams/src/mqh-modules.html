@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>How MQH grows</title>
+<link rel="stylesheet" href="../kit.css">
+<script src="../kit.js"></script>
+</head>
+<body>
+<div id="canvas">
+
+  <header class="titlebar" data-title="How MQH grows" data-caption="Extend it with text, data and code. No new APK." data-tag="Extension points"></header>
+
+  <!-- left: the app -->
+  <section class="group" id="g-app" data-tone="app" data-label="App" data-sub="C# · main process" data-icon="cpu" data-x="48" data-y="132" data-w="408">
+    <div class="card" id="client" data-icon="headset" data-title="App client" data-sub="polls the local API">
+      <p>Shows threads. Sends approve and deny.</p>
+    </div>
+    <div class="card" id="lua" data-icon="code" data-title="Lua scripts" data-sub="sandbox · hot reload">
+      <p>One file each. Budget: 200,000 instructions.</p>
+      <div class="chips"><span class="chip ok">Panels</span><span class="chip ok">Settings</span><span class="chip err">Files</span><span class="chip err">Network</span></div>
+    </div>
+    <div class="card" id="gest" data-icon="hand" data-title="Gesture plugins" data-sub="Lua · JSON · same sandbox">
+      <p>Poses are JSON. Lua detectors call <code>gesture.define</code>. Bindings run actions.</p>
+      <div class="chips"><span class="chip mono">plugins/&lt;id&gt;/</span><span class="chip ok">Actions</span></div>
+    </div>
+    <div class="card" id="views" data-icon="layers" data-title="Agent views" data-sub="panels, not text">
+      <p>An <code>mcx-view</code> block becomes a chart, table or 3D stage.</p>
+    </div>
+  </section>
+
+  <!-- middle: MQH -->
+  <section class="group" id="g-mqh" data-tone="agent" data-label="MQH" data-sub="Linux userland · Node.js · TypeScript" data-icon="branch" data-x="584" data-y="132" data-w="532">
+    <div class="card" id="core" data-variant="hero" data-icon="branch" data-title="MQH core" data-sub="SQLite store · local API">
+      <ul class="lines"><li><b>Threads:</b> the one source of truth</li><li><b>Workspaces:</b> checkout or git worktree</li><li><b>Approvals:</b> allow or deny in the headset</li></ul>
+    </div>
+    <div class="card" id="plugins" data-tone="svc" data-icon="puzzle" data-title="MQH plugins" data-sub="server code · Node.js · TypeScript">
+      <p>Run inside MQH. Add hooks, tools and providers.</p>
+      <div class="chips"><span class="chip ok">MQH API</span><span class="chip ok">Project files</span><span class="chip ok">Processes</span><span class="chip err">App memory</span><span class="chip err">Vault</span></div>
+    </div>
+    <div class="card" id="spatial" data-tone="ext" data-icon="layers" data-title="spatial.json" data-sub="plugin UI as data" data-chips="warn:Planned">
+      <p>The server serves it. The app cannot draw it yet.</p>
+    </div>
+    <div class="card" id="prov" data-tone="agent" data-icon="plug" data-title="Provider plugins" data-sub="ACP · stdio">
+      <p>Talk to an agent CLI over ACP. Add a custom agent as JSON.</p>
+    </div>
+  </section>
+
+  <!-- right: skills and agent CLIs -->
+  <section class="group" id="g-skills" data-tone="neutral" data-label="Skills" data-sub="text, no code" data-icon="file" data-x="1244" data-y="132" data-w="308" data-gap="12">
+    <div class="card" id="sk1" data-icon="package" data-title="Shipped" data-sub="read-only · 47 skills"></div>
+    <div class="card" id="sk2" data-icon="user" data-title="User skills" data-sub="~/.mqh/skills"></div>
+    <div class="card" id="sk3" data-icon="download" data-title="Registry" data-sub="a public skills site"></div>
+    <div class="card" id="sk4" data-icon="folder" data-title="Per project" data-sub="native app skills"></div>
+  </section>
+
+  <div class="card" id="cli" data-tone="agent" data-icon="terminal" data-title="Agent CLIs" data-sub="run in the Linux userland" data-x="1244" data-y="640" data-w="308">
+    <p>Read skills. Sign in on their own.</p>
+  </div>
+
+  <div class="legend" id="legend" data-title="Legend" data-tones="" data-lines="data,control,async" data-x="48" data-y="834">
+    <span class="chip ok">Can reach</span><span class="chip err">Cannot reach</span>
+  </div>
+  <div class="note" id="note" data-tone="warn" data-icon="check" data-x="760" data-y="834" data-w="792">
+    <p><b>Review rule.</b> An agent shows each change first. You approve it.</p>
+  </div>
+</div>
+
+<pre id="lint"></pre>
+<script>
+  connect('client', 'right', 'core', 'left', { label: 'local API', style: 'data', arrow: 'both' });
+  connect('prov', 'right', 'cli', 'left', { label: 'ACP · stdio', style: 'data', arrow: 'both' });
+  connect('g-skills', 'bottom', 'cli', 'top', { label: 'read', style: 'data' });
+  connect('plugins', 'bottom', 'spatial', 'top', { style: 'async' });
+  connect('spatial', 'left', 'g-app', 'right', { label: 'planned', style: 'async' });
+</script>
+</body>
+</html>

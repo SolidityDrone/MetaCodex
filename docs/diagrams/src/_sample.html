@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sample diagram</title>
+<meta name="lint-allow-words" content="Whisper,Qwen3,e5">
+<link rel="stylesheet" href="../kit.css">
+<script src="../kit.js"></script>
+</head>
+<body>
+<div id="canvas">
+
+  <header class="titlebar" data-title="Process model" data-caption="One headset, two Android processes, one Linux userland" data-tag="Kit sample"></header>
+
+  <!-- column 1: app main process -->
+  <section class="group" id="g-app" data-tone="app" data-label="App" data-sub="main process" data-icon="cpu" data-x="48" data-y="136" data-w="380">
+    <div class="card" id="shell" data-icon="headset" data-title="Table shell" data-sub="OpenXR frame loop">
+      <p>Panels, terminal and orb share one scene.</p>
+      <div class="chips"><span class="chip">OpenXR</span><span class="chip">Vulkan</span><span class="chip">C#</span></div>
+    </div>
+    <div class="card" id="input" data-icon="hand" data-title="Hand input" data-sub="pinch, poke, ray" data-status="ok">
+      <ul class="lines"><li>No controllers needed</li><li>Gestures become key events</li></ul>
+    </div>
+  </section>
+
+  <!-- column 2: background service -->
+  <section class="group" id="g-svc" data-tone="svc" data-label="Service" data-sub="own process" data-icon="process" data-x="548" data-y="136" data-w="360">
+    <div class="card" id="host" data-icon="process" data-title="Session host" data-sub="foreground service">
+      <p>Owns the Linux userland and every pty.</p>
+      <div class="chips"><span class="chip">Binder</span><span class="chip mono">/data/data</span></div>
+    </div>
+    <div class="card" id="pool" data-icon="thread" data-title="Workers" data-sub="thread pool">
+      <p>One thread per agent session; reads never block the frame.</p>
+    </div>
+  </section>
+
+  <!-- column 3: Linux userland -->
+  <section class="group" id="g-linux" data-tone="linux" data-label="Linux userland" data-sub="proot · Debian arm64" data-icon="terminal" data-x="1028" data-y="136" data-w="524" data-gap="60">
+    <div class="row" data-gap="14">
+      <div class="card fill" id="term" data-icon="terminal" data-title="Terminal" data-sub="80 × 24 pty">
+        <p><code>bash</code> inside the VR panel.</p>
+      </div>
+      <div class="card fill" id="vault" data-tone="sec" data-icon="lock" data-title="Vault" data-sub="sealed keys" data-status="warn">
+        <p>Tokens never reach the agent's files.</p>
+      </div>
+    </div>
+    <div class="card" id="harness" data-tone="agent" data-icon="branch" data-title="Agent harness" data-sub="one process per thread" data-variant="hero">
+      <div class="row" data-gap="12">
+        <div class="card fill" id="mcp" data-icon="plug" data-title="MCP tools" data-sub="stdio"><p>File, git, web.</p></div>
+        <div class="card fill" id="acp" data-icon="loop" data-title="ACP session" data-sub="JSON-RPC"><p>Streams turns.</p></div>
+      </div>
+      <div class="chips"><span class="chip">Node.js</span><span class="chip">TypeScript</span><span class="chip mono">~/work</span></div>
+    </div>
+  </section>
+
+  <!-- bottom band -->
+  <section class="group" id="g-ai" data-tone="ai" data-label="Interface AI" data-sub="on device" data-icon="brain" data-x="548" data-y="548" data-w="360">
+    <div class="card" id="stt" data-icon="mic" data-title="Speech to text" data-sub="Whisper base">
+      <div class="chips"><span class="chip">multilingual-e5-small</span><span class="chip">Qwen3 0.6B</span></div>
+    </div>
+  </section>
+
+  <div class="card" id="cloud" data-tone="ext" data-icon="cloud" data-title="Model API" data-sub="user's own account" data-x="1028" data-y="676" data-w="300">
+    <p class="dim">Remote, optional, opt in per thread.</p>
+  </div>
+
+  <div class="metric" id="m1" data-tone="app" data-value="72" data-unit="fps" data-caption="frame rate held" data-x="48" data-y="548"></div>
+  <div class="metric" id="m2" data-tone="svc" data-value="18" data-unit="ms" data-caption="key to screen" data-x="238" data-y="548"></div>
+
+  <div class="note" id="note" data-tone="warn" data-icon="warn" data-x="48" data-y="676" data-w="380">
+    <p><b>Lint rule.</b> Text below 13 px, overlaps and loose lines fail the build.</p>
+  </div>
+
+  <div class="legend" id="legend" data-title="Legend" data-tones="app:App process,svc:Service,linux:Linux userland,ai:Interface AI,agent:Agent harness,sec:Vault,ext:External" data-lines="data,control,secret,async" data-x="48" data-y="820"></div>
+
+  <div class="badge" id="b-free" data-tone="app" data-x="1360" data-y="700">7</div>
+</div>
+
+<pre id="lint"></pre>
+<script>
+  connect('shell', 'right', 'host', 'left', { label: 'Binder IPC', style: 'data', badge: '1' });
+  connect('input', 'right', 'pool', 'left', { label: 'events', style: 'control' });
+  connect('host', 'right', 'term', 'left', { label: 'pty stream', style: 'data', arrow: 'both' });
+  connect('vault', 'bottom', 'harness', 'top', { label: 'scoped token', style: 'secret', badge: '2' });
+  connect('harness', 'bottom', 'cloud', 'top', { label: 'HTTPS stream', style: 'async' });
+  connect('pool', 'bottom', 'g-ai', 'top', { style: 'control' });
+  connect('note', 'right', 'g-ai', 'left', { style: 'note' });
+  connect('input', 'bottom', 'm1', 'top', { style: 'data', badge: '3' });
+  connect('cloud', 'left', 'note', 'bottom', { style: 'async', label: 'fallback', via: [{ y: 790 }] });
+</script>
+</body>
+</html>

@@ -15,3 +15,6 @@ node_modules/
 # native apps: build outputs and the local debug signing key (native/hello-native/build.sh makes both)
 /native/*/build/
 /native/.debug.keystore
+
+# README diagrams: the WebP files ship; the PNGs are render outputs (docs/diagrams/render.sh)
+docs/assets/diagrams/*.png
