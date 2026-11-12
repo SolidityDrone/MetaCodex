@@ -65,8 +65,8 @@ function responseObject (id, model, r, status) {
   }
 }
 
-async function responses (req, res, j, { engines, send, sse, log }) {
-  const { messages, tools } = responsesToChat(j)
+async function responses (req, res, j, { engines, send, sse, log, cfg }) {
+  const { messages, tools } = slim(responsesToChat(j), !cfg || cfg.coderSlim !== false)
   const id = newId('resp_')
   const model = j.model || 'local-coder'
   const opts = { engine: 'coder', max_tokens: j.max_output_tokens, temperature: j.temperature }
@@ -150,8 +150,8 @@ function anthropicContent (r) {
   return content
 }
 
-async function messagesApi (req, res, j, { engines, send, sse, log }) {
-  const { messages, tools } = anthropicToChat(j)
+async function messagesApi (req, res, j, { engines, send, sse, log, cfg }) {
+  const { messages, tools } = slim(anthropicToChat(j), !cfg || cfg.coderSlim !== false)
   const id = newId('msg_')
   const model = j.model || 'local-coder'
   const opts = { engine: 'coder', max_tokens: j.max_tokens, temperature: j.temperature }
@@ -195,6 +195,49 @@ function countTokens (j) {
   return { input_tokens: Math.ceil(chars / 4) }
 }
 
+// ---------------------------------------------------------------- the slim profile
+
+// Owner 2026-11-12: "if using local shall use slim agent profiles". A harness sends a long system prompt and many
+// tools (Claude Code's first turn: 11,071 prompt tokens, 300 s to read on the PC, 10-20 min on the headset); a 1.7B
+// model gets lost in it anyway. For the local coder the system prompt becomes a short one plus the harness's own
+// environment facts (working folder, platform, date), and only the core file / shell tools go, their descriptions cut.
+const SLIM_TOOLS = /^(read|write|edit|multiedit|bash|glob|grep|ls|list|read_file|write_file|edit_file|apply_patch|shell|exec_command)$/i
+const SLIM_SYSTEM = [
+  'You are a coding agent running on a small local model on a VR headset. Work in small steps.',
+  'Use the tools: read files before you change them, write or edit files to make changes, run shell commands to check them.',
+  'Call one tool at a time. Use paths inside the working directory. When the task is done, say in one or two sentences what you did.'
+].join('\n')
+
+function slimSystem (text) {
+  const facts = []
+  for (const m of String(text || '').matchAll(/<env>[\s\S]*?<\/env>/g)) facts.push(m[0])
+  if (!facts.length) {
+    for (const line of String(text || '').split('\n')) {
+      if (/working directory|current directory|\bcwd\b|platform|operating system|today'?s date|is a git repo/i.test(line) && line.length < 300) facts.push(line.trim())
+      if (facts.length >= 8) break
+    }
+  }
+  return SLIM_SYSTEM + (facts.length ? '\n\n' + facts.join('\n') : '')
+}
+
+function cut (s, n) { s = String(s || ''); return s.length > n ? s.slice(0, n).replace(/\s+\S*$/, '') + '…' : s }
+
+/** The slim profile for one request: a short system prompt with the environment facts, the core tools only. */
+function slim ({ messages, tools }, on = true) {
+  if (!on) return { messages, tools }
+  // harness reminders inside user turns (Claude Code: <system-reminder> blocks with skill lists, todos) go too, except
+  // the project's own instructions (CLAUDE.md / AGENTS.md: e.g. how a native app is built and installed here)
+  const msgs = messages.map((m) => m.role === 'system' ? { role: 'system', content: slimSystem(m.content) }
+    : m.role === 'user' && typeof m.content === 'string' ? Object.assign({}, m, { content: m.content.replace(/<system-reminder>[\s\S]*?<\/system-reminder>\s*/g, (r) => /claudeMd|Contents of [^\n]*(CLAUDE|AGENTS)\.md/.test(r) ? r : '').trim() || m.content }) : m)
+  let kept = (tools || []).filter((t) => SLIM_TOOLS.test(((t.function || t).name) || ''))
+  if (!kept.length) kept = (tools || []).slice(0, 6)
+  kept = kept.map((t) => {
+    const f = t.function || t
+    return { type: 'function', function: { name: f.name, description: cut((f.description || '').split('\n')[0], 200), parameters: f.parameters } }
+  })
+  return { messages: msgs, tools: kept }
+}
+
 /** Qwen's template takes one system message, first: several (Codex: instructions + developer items) are joined. */
 function mergeSystem (messages) {
   const sys = messages.filter((m) => m.role === 'system').map((m) => m.content).filter(Boolean)
@@ -202,4 +245,4 @@ function mergeSystem (messages) {
   return sys.length ? [{ role: 'system', content: sys.join('\n\n') }, ...rest] : rest
 }
 
-module.exports = { wantsCoder, responses, messagesApi, countTokens, responsesToChat, anthropicToChat, mergeSystem }
+module.exports = { wantsCoder, responses, messagesApi, countTokens, responsesToChat, anthropicToChat, mergeSystem, slim }

@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 
-import { isLocalCoderModel, localCoderEndpoint } from "../local-coder.js";
 import { experimental_selectedSkillMentions as selectedSkillMentions } from "@get-bb/plugin-sdk/provider-bridge";
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
@@ -366,26 +365,13 @@ export function resolveAppServerLaunch(env: NodeJS.ProcessEnv = process.env): {
 } {
   const command = env[CODEX_APP_SERVER_COMMAND_ENV];
   const rawArgs = env[CODEX_APP_SERVER_ARGS_ENV];
-  let args = command
+  const args = command
     ? rawArgs
       ? z.array(z.string()).parse(JSON.parse(rawArgs))
       : []
     : ["app-server"];
   const poolBaseUrl = env[CODEX_POOL_BASE_URL_ENV];
   const poolToken = env[CODEX_POOL_AUTH_TOKEN_ENV];
-  // MetaCodex's local coder: registered as provider "metacodex" (Responses API on the local AI service); only a
-  // thread on the model "local-coder" selects it (thread/start modelProvider)
-  const local = localCoderEndpoint(env);
-  if (local !== null) {
-    args = [
-      ...args,
-      "-c", 'model_providers.metacodex.name="MetaCodex local"',
-      "-c", `model_providers.metacodex.base_url=${JSON.stringify(local.url + "/v1")}`,
-      "-c", 'model_providers.metacodex.wire_api="responses"',
-      "-c", 'model_providers.metacodex.env_key="MCX_LOCAL_CODER_KEY"',
-      "-c", "model_providers.metacodex.supports_websockets=false",
-    ];
-  }
   if (!poolBaseUrl || !poolToken) return { command: command ?? "codex", args };
   return {
     command: command ?? "codex",
@@ -1363,7 +1349,6 @@ async function constructThreadSession(
       cwd: args.cwd,
       ...instructionOverrides,
       model: decoded.sessionOptions.model ?? undefined,
-      ...(isLocalCoderModel(decoded.sessionOptions.model) ? { modelProvider: "metacodex" } : {}),
       serviceTier: toCodexServiceTier(decoded.sessionOptions.serviceTier),
       config: preparedGitRoots.config ?? undefined,
       ...(dynamicTools && dynamicTools.length > 0 ? { dynamicTools } : {}),

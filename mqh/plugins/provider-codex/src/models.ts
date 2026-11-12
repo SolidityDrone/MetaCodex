@@ -7,7 +7,6 @@ import {
   type ReasoningLevel,
 } from "@get-bb/plugin-sdk/provider-bridge";
 import { z } from "zod";
-import { localCoderEndpoint, localCoderModel } from "./local-coder.js";
 
 const CODEX_FAST_SERVICE_TIER = "priority";
 const MQH_FAST_SERVICE_TIER = "fast";
@@ -281,14 +280,10 @@ export function parseModelCatalog(result: unknown): CodexModelCatalog {
     (model) =>
       !isDaybreakAlias(model) && daybreakProgram(programsFor(model)) !== null,
   );
-  const local = localCoderEndpoint() !== null ? [localCoderModel()] : []; // MetaCodex's local model, when installed
   return {
-    models: [
-      ...(switchReplacesAliases
-        ? withOption.filter((model) => !isDaybreakAlias(model))
-        : withOption),
-      ...local,
-    ],
+    models: switchReplacesAliases
+      ? withOption.filter((model) => !isDaybreakAlias(model))
+      : withOption,
     selectedOnlyModels: switchReplacesAliases
       ? withOption.filter(isDaybreakAlias)
       : [],

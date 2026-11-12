@@ -587,7 +587,7 @@ Work windows:
 ## 38. The local coder (branch local-coder, 0.7.18)
 
 - [ ] AGENTS: the GET row has LOCAL CODER · GET 1 GB; tap: it counts up to 100 %, then "✓ ON HEADSET"; tap again: a hint how to use it
-- [ ] NEW THREAD with Claude Code, model "Local coder (this headset, slow)": "create hello.py that prints hello world" -> the file appears (minutes); a Claude Code thread on a normal model still uses your account as before
-- [ ] The same with OpenCode, model "MetaCodex (this headset) / Local coder", and with Codex (Codex may fail the task: tell what it did)
+- [ ] NEW THREAD with Claude Code, model "Local coder (this headset, slow)": ask anything small (a script, a fix, a small native app in a NATIVE project): it works in minutes; a Claude Code thread on a normal model still uses your account as before
+- [ ] The same with OpenCode, model "MetaCodex (this headset) / Local coder"; Codex does not offer the local coder
 - [ ] While a local-coder thread works: TALK shows "⏸ LOCAL CODER WORKING" and does not record; 15 s after the turn ends TALK works again; 72 fps all the time
 - [ ] Say "remove the local coder" (confirm): the tile says GET again, the model is gone from the threads' model lists after a restart of MQH

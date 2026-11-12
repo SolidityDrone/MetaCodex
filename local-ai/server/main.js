@@ -60,6 +60,7 @@ const DEFAULTS = {
   prefillYieldsToAsr: true, // a speculative prefill is cancelled when speech-to-text needs the cores
   coderThreads: 3, // the local coding model (compat.js) may use the 3 AI cores: it runs when voice is idle
   coderCtx: 16384,
+  coderSlim: true, // the slim agent profile for the local coder (compat.slim)
   coderHoldMs: 15000 // the interface AI waits this long after the coder's last request (engines.coderHolds)
 }
 const cfg = Object.assign({}, DEFAULTS, readJson(CONFIG) || {})
@@ -118,9 +119,9 @@ async function handle (req, res, body) {
     case 'POST /v1/chat/completions':
       return completions(req, res, parseJson(body))
     case 'POST /v1/responses': // Codex (wire_api = "responses") on the local coding model
-      return compat.responses(req, res, parseJson(body), { engines, send, sse, log })
+      return compat.responses(req, res, parseJson(body), { engines, send, sse, log, cfg })
     case 'POST /v1/messages': // Claude Code (ANTHROPIC_BASE_URL) on the local coding model
-      return compat.messagesApi(req, res, parseJson(body), { engines, send, sse, log })
+      return compat.messagesApi(req, res, parseJson(body), { engines, send, sse, log, cfg })
     case 'POST /v1/messages/count_tokens':
       return send(res, 200, compat.countTokens(parseJson(body)))
     case 'POST /v1/prefill': { // the session prompt without its question, evaluated while the user still speaks
@@ -237,6 +238,8 @@ async function speech (res, j) {
 
 async function completions (req, res, j) {
   if (!Array.isArray(j.messages) || !j.messages.length) throw httpError(400, 'messages is required')
+  // the local coder gets the slim profile (compat.slim): a short system prompt, the core tools (OpenCode threads)
+  if (compat.wantsCoder(j.model) && cfg.coderSlim !== false) Object.assign(j, compat.slim({ messages: j.messages.map((m) => Object.assign({}, m, { content: Array.isArray(m.content) ? m.content.map((p) => typeof p === 'string' ? p : p.text || '').join('') : m.content })), tools: j.tools || [] }))
   if (j.stream) return completionsStream(req, res, j)
   const r = await engines.chat(j.messages, Array.isArray(j.tools) ? j.tools : [], { max_tokens: j.max_tokens, temperature: j.temperature, grammar: j.grammar, engine: compat.wantsCoder(j.model) ? 'coder' : 'llm' })
   const calls = r.tool_calls.map((c, i) => ({ id: 'call_' + Date.now().toString(36) + i, type: 'function', function: { name: c.name, arguments: JSON.stringify(c.arguments || {}) } }))

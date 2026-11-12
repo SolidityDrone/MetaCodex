@@ -14,12 +14,12 @@ stupid, just to try it", for judges who want to try coding fully offline. Branch
   | Harness | API | Endpoint | How it is pointed there |
   |---|---|---|---|
   | OpenCode | OpenAI chat completions | `/v1/chat/completions`, model `local-coder` | `OPENCODE_CONFIG=/mnt/quest/local-coder.opencode.json` (provider "MetaCodex (this headset)") |
-  | Codex | OpenAI Responses (Codex refuses `wire_api = "chat"` now) | `/v1/responses` | MQH launches Codex with `-c model_providers.metacodex.*`; a thread on model `local-coder` uses it |
+  | (Codex) | OpenAI Responses | `/v1/responses` stays in the service, but Codex is not offered the local coder (owner: "we can ignore codex"; the 1.7B model loops on its tools) | - |
   | Claude Code | Anthropic Messages | `/v1/messages`, `/v1/messages/count_tokens` | MQH gives only a `local-coder` thread `ANTHROPIC_BASE_URL` / `ANTHROPIC_AUTH_TOKEN` / `ANTHROPIC_MODEL` |
 
 - **The key**: `<data>/coder.key`, made once by the app, shared as `/mnt/quest/local-coder.key`, given to MQH as
   `MCX_LOCAL_CODER_KEY`; it opens only the coder's routes (the per-start token still guards the rest). MQH also gets
-  `MCX_LOCAL_CODER_URL`; with both set, Claude Code's and Codex's model lists show "Local coder (this headset, slow)".
+  `MCX_LOCAL_CODER_URL`; with both set, Claude Code's model list shows "Local coder (this headset, slow)".
 
 ## Voice waits while it codes
 
@@ -41,9 +41,15 @@ Prompt reading is the cost: 8k tokens took 149 s with an f16 KV cache (54 tok/s)
 0.6-0.8 s when the same prefix comes again (the addon keeps it while loaded). On the headset expect the first turn of a
 new session to take 10-20 min and later turns seconds to a couple of minutes.
 
+## The slim profile (always on for the local coder; `coderSlim` in the service config)
+
+Owner: "if using local shall use slim agent profiles". Every coder request gets, in the service (`compat.slim`), the
+harness's system prompt replaced by a short one plus its environment facts (`<env>` block, working folder, platform,
+date), the `<system-reminder>` blocks of user turns removed except the project's own instructions (CLAUDE.md /
+AGENTS.md, e.g. how native apps are built here), and only the core tools (read / write / edit / bash / glob / grep),
+their descriptions cut to one line. Claude Code's first turn: 11,071 -> 3,363 prompt tokens; the same task 340 s -> 78 s
+on the PC (headset estimate 5-10 min -> 1-3 min).
+
 ## Open (before 0.7.18)
 
-- Save each harness's fixed prefix (system prompt + tools) to disk once, so a new session starts from it.
-- Slim agent profiles (fewer tools, a short system prompt) for OpenCode / Codex / Claude Code threads on the local coder.
-- A Codex-friendlier model or prompt (Qwen2.5-Coder 1.5B, or a Codex profile with fewer tools).
 - Headset measurements; the voice bench after the two new commands (AGENTS.md rule 3).
