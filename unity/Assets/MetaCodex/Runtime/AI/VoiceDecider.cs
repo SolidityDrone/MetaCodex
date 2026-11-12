@@ -76,6 +76,10 @@ namespace MetaCodex.AI
             "what is this", "i like it", "okay thanks", "who are you", "hello",
             "tell me a story", "what do you think", "i'm hungry", "you're funny", "i'm bored", "good night", "see you later",
             "how's it going", "nice to meet you", "that was fun",
+            // English in place of the Italian chit-chat removed 2026-11-12 ("non so", "va bene", "fammi pensare" also held
+            // English hesitations away from commands): the bench's "none" rows dropped 93 -> 87 without them
+            "forget it", "no worries", "i don't know", "okay fine", "it doesn't matter", "tell me about yourself",
+            "what are you able to do", "what's your name", "sounds good", "hmm let me see", "that's all for now",
         };
 
         /// (text, command) pairs: what the router compares a clause with.

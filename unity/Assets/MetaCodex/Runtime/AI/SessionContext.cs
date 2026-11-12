@@ -346,7 +346,7 @@ namespace MetaCodex.AI
 
         /// A recap request ("give me a recap of the login thread", "summarize this thread", "what has it done so far"):
         /// answered from the thread's pulse, not the model ("why" / "explain" still go to the model).
-        public static readonly Regex RecapOnly = new Regex(@"\b(recap|summar\w*|catch me up|so far|what (did|has) (it|the agent|this thread) (do|done|achiev\w*)|what have you done|overview of)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        public static readonly Regex RecapOnly = new Regex(@"\b(recap|summar\w*|catch me up|(done|achieved|did) so far|what (did|has) (it|the agent|this thread) (do|done|achiev\w*)|what have you done|overview of)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
         /// The question answered from the facts alone, or null when it needs the model (explanations).
         public static string ExactAnswer(JObject snapshot, SessionQuestion q)
@@ -354,7 +354,7 @@ namespace MetaCodex.AI
             var data = snapshot?["data"] as JObject ?? new JObject();
             // a recap of a thread with a pulse: its template (measured 2026-11-12: the model took 15-19 s to the first word
             // on the headset and got a working thread wrong 16 times of 16; this speaks in about 3-4 s)
-            if (data["pulse"] is JObject rp && (string)rp["recap"] != null && RecapOnly.IsMatch(q.Text ?? "")) return (string)rp["recap"];
+            if (!q.Counting && data["pulse"] is JObject rp && (string)rp["recap"] != null && RecapOnly.IsMatch(q.Text ?? "")) return (string)rp["recap"];
             if (q.Counting) { string n = HowMany(data, q); if (n != null) return n; }
             if (q.Topics.Contains("tools") && q.Tools.Count > 0 && data["tools"] is JArray tools)
             {
