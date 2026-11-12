@@ -15,7 +15,8 @@ namespace MetaCodex.Shell
     ///   beside that window: to its right when there is room, else its left, else above or below it;
     /// - a panel that was open before comes back where the user left it, when that place is still free and still
     ///   in view; else it is placed anew;
-    /// - when nothing is free it cascades in front, a little nearer each time, as before;
+    /// - when nothing is free at the panel distance it opens further away (up to twice as far, smaller in the view) in
+    ///   the nearest gap; only when nothing is free even there it cascades in front, a little nearer each time;
     /// - "in front" is where the user's body faces when they look down at their wrist or the dock to press (the nose
     ///   points at the hand then, not at where the window should go);
     /// - never inside a wall: while the room's depth runs, the last reading (48 x 48 points, every 0.3 s, the one the
@@ -139,7 +140,9 @@ namespace MetaCodex.Shell
         private float PlaceDistance(UiPanel p) => Mathf.Max(Settings.panelDistance * 0.95f, p.Width * p.RestLossyScale.x * 0.5f / Mathf.Tan(35f * Mathf.Deg2Rad));
 
         /// Places `p` (not open yet) at the free place that costs least; `opener` = the window it was opened from.
-        /// `obstacles` = the panels to keep clear of (default: every open one).
+        /// `obstacles` = the panels to keep clear of (default: every open one). When no place is free at the panel
+        /// distance, it looks further away (up to twice as far: smaller in the view, so it fits a gap) before it
+        /// cascades over the others: a window never covers another while some place is free.
         private void PlaceSmart(string id, UiPanel p, UiPanel opener = null, IEnumerable<UiPanel> obstacles = null)
         {
             var head = Head;
@@ -148,13 +151,9 @@ namespace MetaCodex.Shell
             float gaze = FrontYaw();
             float dist = PlaceDistance(p);
             float halfW = p.Width * 0.5f * p.RestLossyScale.x, halfH = p.Height * 0.5f * p.RestLossyScale.y;
-            float halfYaw = Mathf.Atan2(halfW, dist) * Mathf.Rad2Deg;
-            float halfPitch = Mathf.Atan2(halfH, dist) * Mathf.Rad2Deg;
             // a CONTROL window brings its rail on its left: that room is kept free too, and the pair is what is centred
             float reserveM = IsControlPage(id) ? (RailW + RailGap * 2f) * p.RestLossyScale.x : 0f;
-            float reserveYaw = Mathf.Atan2(reserveM, dist) * Mathf.Rad2Deg;
             var room = RoomClearance(eye, gaze, out int yawBins, out int pitchBins);
-            float level = Mathf.Asin(Mathf.Clamp(-0.06f / dist, -1f, 1f)) * Mathf.Rad2Deg; // centres just below the eyes, as before
             var taken = new List<ViewRect>();
             ViewRect openerRect = default;
             bool hasOpener = false;
@@ -165,44 +164,62 @@ namespace MetaCodex.Shell
                 if (q == opener) { openerRect = r; hasOpener = true; }
             }
             const float margin = 2f;
-            float best = float.MaxValue, bestYaw = float.NaN, bestPitch = 0f, bestDist = dist;
-            for (float pitchOff = 0f; pitchOff <= 60f; pitchOff += 3f)
+            float best = float.MaxValue, bestYaw = float.NaN, bestPitch = 0f, bestDist = dist, bestLevel = 0f;
+            float bestFar = 0f;
+            foreach (float far in PlaceFurther)
             {
-                foreach (float ps in pitchOff == 0f ? new[] { 1f } : new[] { 1f, -1f })
+                if (bestFar == 1f) break; // free at the panel distance: it goes there
+                float fd = dist * far;
+                float halfYaw = Mathf.Atan2(halfW, fd) * Mathf.Rad2Deg;
+                float halfPitch = Mathf.Atan2(halfH, fd) * Mathf.Rad2Deg;
+                float reserveYaw = RailReserveYaw(halfW, fd, reserveM);
+                float level = Mathf.Asin(Mathf.Clamp(-0.06f / fd, -1f, 1f)) * Mathf.Rad2Deg; // centres just below the eyes, as before
+                for (float pitchOff = 0f; pitchOff <= 60f; pitchOff += 3f)
                 {
-                    float pitch = level + pitchOff * ps;
-                    if (pitch + halfPitch > PlaceTop || pitch - halfPitch < PlaceBottom) continue;
-                    for (float yawOff = 0f; yawOff <= PlaceYawLimit; yawOff += 2f)
+                    foreach (float ps in pitchOff == 0f ? new[] { 1f } : new[] { 1f, -1f })
                     {
-                        foreach (float ys in yawOff == 0f ? new[] { 1f } : new[] { 1f, -1f })
+                        float pitch = level + pitchOff * ps;
+                        if (pitch + halfPitch > PlaceTop || pitch - halfPitch < PlaceBottom) continue;
+                        bool tilted = pitchOff >= 1.5f;
+                        for (float yawOff = 0f; yawOff <= PlaceYawLimit; yawOff += 2f)
                         {
-                            float yaw = yawOff * ys;
-                            var c = new ViewRect { Yaw0 = yaw - halfYaw - reserveYaw, Yaw1 = yaw + halfYaw, Pitch0 = pitch - halfPitch, Pitch1 = pitch + halfPitch };
-                            // something real there (a wall, a monitor): the panel comes 8 cm in front of it, and is larger in
-                            // the view for it; nearer than half a metre is a poor place
-                            float d = dist, wall = 0f;
-                            float clear = ClearanceIn(room, yawBins, pitchBins, c);
-                            if (clear - 0.08f < dist)
+                            foreach (float ys in yawOff == 0f ? new[] { 1f } : new[] { 1f, -1f })
                             {
-                                d = Mathf.Max(0.42f, clear - 0.08f);
-                                wall = d < 0.5f ? 40f + (0.5f - (clear - 0.08f)) * 200f : (dist - d) * 20f;
-                                float hy = Mathf.Atan2(halfW, d) * Mathf.Rad2Deg, hp = Mathf.Atan2(halfH, d) * Mathf.Rad2Deg;
-                                c = new ViewRect { Yaw0 = yaw - hy - Mathf.Atan2(reserveM, d) * Mathf.Rad2Deg, Yaw1 = yaw + hy, Pitch0 = pitch - hp, Pitch1 = pitch + hp };
+                                float yaw = yawOff * ys;
+                                var c = new ViewRect { Yaw0 = yaw - halfYaw - reserveYaw, Yaw1 = yaw + halfYaw, Pitch0 = pitch - halfPitch, Pitch1 = pitch + halfPitch };
+                                // something real there (a wall, a monitor): the panel comes 8 cm in front of it, and is larger in
+                                // the view for it; nearer than half a metre is a poor place
+                                float d = fd, wall = 0f;
+                                float clear = ClearanceIn(room, yawBins, pitchBins, c);
+                                if (clear - 0.08f < fd)
+                                {
+                                    d = Mathf.Max(0.42f, clear - 0.08f);
+                                    wall = d < 0.5f ? 40f + (0.5f - (clear - 0.08f)) * 200f : (fd - d) * 20f;
+                                    float hy = Mathf.Atan2(halfW, d) * Mathf.Rad2Deg, hp = Mathf.Atan2(halfH, d) * Mathf.Rad2Deg;
+                                    c = new ViewRect { Yaw0 = yaw - hy - RailReserveYaw(halfW, d, reserveM), Yaw1 = yaw + hy, Pitch0 = pitch - hp, Pitch1 = pitch + hp };
+                                }
+                                bool free = true;
+                                foreach (var t in taken) if (c.Overlaps(t, margin)) { free = false; break; }
+                                if (!free) continue;
+                                // the quick guess above is a window straight ahead; the real pose (tilted above or below eye
+                                // level, its rail turned towards the user) spreads wider: check what it really covers
+                                var exact = PoseRect(yaw, pitch, d, halfW, halfH, reserveM, tilted);
+                                foreach (var t in taken) if (exact.Overlaps(t, margin)) { free = false; break; }
+                                if (!free) continue;
+                                // turning the head sideways is easier than nodding: a degree up or down costs more
+                                // (and above a window rather than below it: below is where the hands and the dock are);
+                                // further away than the panel distance costs too (only when nothing nearer is free)
+                                float groupYaw = yaw - reserveYaw * 0.5f;
+                                float further = (far - 1f) * 40f;
+                                float cost = Mathf.Abs(groupYaw) + Mathf.Abs(pitch - level) * (pitch >= level ? 1.6f : 3.0f) + wall + further;
+                                if (hasOpener)
+                                {
+                                    // beside the window it was opened from: the gap to it counts most, its right side is preferred
+                                    var gap = c.Gap(openerRect);
+                                    cost = Mathf.Abs(groupYaw) * 0.25f + Mathf.Abs(pitch - level) * 0.5f + (gap.yaw + gap.pitch * 1.5f) * 1.6f + (c.YawMid < openerRect.YawMid ? 5f : 0f) + wall + further;
+                                }
+                                if (cost < best) { best = cost; bestYaw = yaw; bestPitch = pitch; bestDist = d; bestLevel = level; bestFar = far; }
                             }
-                            bool free = true;
-                            foreach (var t in taken) if (c.Overlaps(t, margin)) { free = false; break; }
-                            if (!free) continue;
-                            // turning the head sideways is easier than nodding: a degree up or down costs more
-                            // (and above a window rather than below it: below is where the hands and the dock are)
-                            float groupYaw = yaw - reserveYaw * 0.5f;
-                            float cost = Mathf.Abs(groupYaw) + Mathf.Abs(pitch - level) * (pitch >= level ? 1.6f : 3.0f) + wall;
-                            if (hasOpener)
-                            {
-                                // beside the window it was opened from: the gap to it counts most, its right side is preferred
-                                var gap = c.Gap(openerRect);
-                                cost = Mathf.Abs(groupYaw) * 0.25f + Mathf.Abs(pitch - level) * 0.5f + (gap.yaw + gap.pitch * 1.5f) * 1.6f + (c.YawMid < openerRect.YawMid ? 5f : 0f) + wall;
-                            }
-                            if (cost < best) { best = cost; bestYaw = yaw; bestPitch = pitch; bestDist = d; }
                         }
                     }
                 }
@@ -214,7 +231,6 @@ namespace MetaCodex.Shell
                 // first cascade place no open panel already sits in
                 var sits = PlacementObstacles(p).Where(q => q.Id != "dock").Select(q => q.transform.position).ToList();
                 float baseDist = dist;
-                bestPitch = level;
                 for (int k = 0; k < 16; k++)
                 {
                     float y = 4f * k, d = Mathf.Max(0.45f, baseDist - 0.07f * (k + 1)), l = 0.035f * k;
@@ -234,8 +250,53 @@ namespace MetaCodex.Shell
             // on a sphere round the eyes, facing them: a panel above or below eye level is tilted towards the user
             // (at eye level this is the old upright pose)
             var flat = new Vector3(Mathf.Sin(a), 0f, Mathf.Cos(a));
-            var facing = Mathf.Abs(bestPitch - level) < 1.5f ? flat : dir;
+            var facing = Mathf.Abs(bestPitch - bestLevel) < 1.5f ? flat : dir;
             p.transform.SetPositionAndRotation(eye + dir * dist, Quaternion.LookRotation(facing, Vector3.up));
+        }
+
+        /// The distances (times the panel distance) a panel may open at: the panel distance first, further only when
+        /// nothing is free there.
+        private static readonly float[] PlaceFurther = { 1f, 1.15f, 1.3f, 1.5f, 1.75f, 2f };
+
+        /// The degrees a CONTROL window's rail adds on the window's left, seen from the eyes. The rail leaves the
+        /// window's left edge turned RailYaw towards the user (RailPose), so beside a wide window it covers fewer degrees
+        /// than the same metres straight ahead: atan(metres / distance) reserved ~4 degrees too many beside a 0.76 m window (a gap between it and its neighbour).
+        private static float RailReserveYaw(float halfW, float d, float reserveM)
+        {
+            if (reserveM <= 0f) return 0f;
+            float t = RailYaw * Mathf.Deg2Rad;
+            return (Mathf.Atan2(halfW + reserveM * Mathf.Cos(t), d - reserveM * Mathf.Sin(t)) - Mathf.Atan2(halfW, d)) * Mathf.Rad2Deg;
+        }
+
+        /// What a panel posed as PlaceSmart poses it would cover (yaw relative to where it looks for a place): centred
+        /// at (yaw, pitch) d from the eyes, upright or (`tilted`) facing the eyes, with `reserveM` of rail on its left.
+        /// The probes of ViewRectOf: a window tilted above or below eye level spreads wider in yaw than half its width
+        /// over its distance.
+        private static ViewRect PoseRect(float yaw, float pitch, float d, float halfW, float halfH, float reserveM, bool tilted)
+        {
+            float a = yaw * Mathf.Deg2Rad, e = pitch * Mathf.Deg2Rad;
+            var dir = new Vector3(Mathf.Sin(a) * Mathf.Cos(e), Mathf.Sin(e), Mathf.Cos(a) * Mathf.Cos(e));
+            var rot = Quaternion.LookRotation(tilted ? dir : new Vector3(Mathf.Sin(a), 0f, Mathf.Cos(a)), Vector3.up);
+            var centre = dir * d;
+            var right = rot * Vector3.right;
+            var up = rot * Vector3.up;
+            var r = new ViewRect { Yaw0 = float.MaxValue, Yaw1 = float.MinValue, Pitch0 = float.MaxValue, Pitch1 = float.MinValue };
+            foreach (var probe in RectProbes) Grow(ref r, centre + right * ((probe.x * 2f - 1f) * halfW) + up * ((1f - probe.y * 2f) * halfH));
+            if (reserveM > 0f)
+            {
+                var railLeft = -(rot * (Quaternion.Euler(0f, -RailYaw, 0f) * Vector3.right)) * reserveM;
+                Grow(ref r, centre - right * halfW + up * halfH + railLeft);
+                Grow(ref r, centre - right * halfW - up * halfH + railLeft);
+            }
+            return r;
+        }
+
+        private static void Grow(ref ViewRect r, Vector3 w)
+        {
+            float yaw = Mathf.Atan2(w.x, w.z) * Mathf.Rad2Deg;
+            float pitch = Mathf.Atan2(w.y, new Vector2(w.x, w.z).magnitude) * Mathf.Rad2Deg;
+            r.Yaw0 = Mathf.Min(r.Yaw0, yaw); r.Yaw1 = Mathf.Max(r.Yaw1, yaw);
+            r.Pitch0 = Mathf.Min(r.Pitch0, pitch); r.Pitch1 = Mathf.Max(r.Pitch1, pitch);
         }
 
         /// A panel that was open before: its old place is still good when it is in view (within 70 degrees of where

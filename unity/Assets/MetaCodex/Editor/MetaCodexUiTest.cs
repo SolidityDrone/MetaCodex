@@ -393,7 +393,9 @@ namespace MetaCodex.EditorTools
             shell.OpenPanel("settings"); // the steps below move it by its header
             Check(File.Exists(Path.Combine("Temp", "mcx-uitest", "settings.json")) && File.ReadAllText(Path.Combine("Temp", "mcx-uitest", "settings.json")).Contains("38990"), "settings persisted to disk");
 
-            // files: a list row navigates
+            // files: a list row navigates. FILES must be open: a closed panel takes no ray (UiInputRouter skips it), and
+            // this section also runs without "panels" (MCX_UITEST_ONLY=...,interactions), which was what opened it
+            shell.OpenPanel("files");
             var files = shell.PanelsById["files"];
             shell.FilesNavigate("/");
             var list = files.Elements.OfType<UiList>().First();
@@ -407,18 +409,20 @@ namespace MetaCodex.EditorTools
             files.ForceRefresh();
             RenderPanel(files, "ui-files.png");
 
-            // move a panel by pinching its header
-            var before2 = settings.transform.position;
-            Click(r, settings, new Vector2(0.2f, 0.015f), new Vector2(0.35f, 0.06f));
-            Check(Vector3.Distance(settings.transform.position, before2) > 0.05f, "pinch-drag on the header moves the panel");
-
-            // selection tool: rectangle on a panel -> event to scripts
+            // selection tool: rectangle on a panel -> event to scripts (before SETTINGS is dragged below, so it cannot
+            // be moved over FILES' corner)
             shell.SetSelectionMode(true);
             int selects = 0;
             r.Selected += (p, rect) => selects++;
             Click(r, files, new Vector2(0.10f, 0.15f), new Vector2(0.30f, 0.30f));
             shell.SetSelectionMode(false);
-            Check(selects == 1 && shell.LastSelection.rect.width > 0.15f, $"select tool reports a {shell.LastSelection.rect.width * 100:F0}x{shell.LastSelection.rect.height * 100:F0} cm area");
+            Check(selects == 1 && shell.LastSelection.panel == "files" && shell.LastSelection.rect.width > 0.15f,
+                $"select tool reports a {shell.LastSelection.rect.width * 100:F0}x{shell.LastSelection.rect.height * 100:F0} cm area on {shell.LastSelection.panel ?? "nothing"}");
+
+            // move a panel by pinching its header
+            var before2 = settings.transform.position;
+            Click(r, settings, new Vector2(0.2f, 0.015f), new Vector2(0.35f, 0.06f));
+            Check(Vector3.Distance(settings.transform.position, before2) > 0.05f, "pinch-drag on the header moves the panel");
         }
 
         private static void Gestures(MetaCodexShell shell, SimulatedHands hands)
@@ -1747,8 +1751,11 @@ end)
             RenderPanel(vp, "ui-voice-panel.png");
             shell.ClosePanel("voice");
             // the same rule for every panel (reported; VOICE is the one that must hold)
-            var spill = shell.PanelsById.Values.SelectMany(p => p.Elements.Where(e => e.Visible && (e.Rect.xMax > p.Content.xMax + 0.002f || e.Rect.yMax > p.Content.yMax + 0.002f)).Select(e => p.Id + ":" + e.GetType().Name)).Distinct().ToList();
-            Line("controls past their panel's edge (all panels): " + (spill.Count == 0 ? "none" : string.Join(", ", spill.Take(12))));
+            // the body only, as for VOICE: the header's close / pin buttons sit right of the content on purpose (they were
+            // every panel's "UiButton" in this line, and the first 12 of those hid any real spill)
+            var spill = shell.PanelsById.Values.SelectMany(p => p.Elements.Where(e => e.Visible && e.Rect.yMin >= p.Content.yMin - 0.001f && (e.Rect.xMax > p.Content.xMax + 0.002f || e.Rect.yMax > p.Content.yMax + 0.002f))
+                .Select(e => p.Id + ":" + e.GetType().Name + (e is UiButton sb && !string.IsNullOrEmpty(sb.Text) ? " " + sb.Text.Replace("\n", " ") : ""))).Distinct().ToList();
+            Line("controls past their panel's edge (all panels' bodies): " + (spill.Count == 0 ? "none" : spill.Count + ": " + string.Join(", ", spill)));
 
             // SHARPNESS is gone: no slider, no voice setting, the render scale fixed at 1.6
             bool sliderGone = !shell.PanelsById["settings"].Elements.OfType<UiSlider>().Any(x => x.Text == "SHARPNESS");

@@ -35,7 +35,7 @@ Helpers on the PC: `tools/qterm` (control port), `adb logcat -s Unity`, `files/s
 - [ ] Hover over a slider without pinching → it does not move; pinch and drag → it moves
 - [ ] SELECT on → pinch-drag a rectangle → "Selected …" and the tool turns itself off; SELECT on, then SELECT again (dock or Settings) → off
 - [ ] Each dock button opens/closes its panel; new panels open where you look, beside the others, not overlapping
-- [ ] Open many panels (10+) → when no gap is left within a head turn, extra panels cascade in front (closer, higher, a bit to the side), never exactly on another
+- [ ] Open many panels (10+) → when no gap is left within a head turn, extra panels open further away in a free gap (smaller, tilted to you), and only when even that is full cascade in front (closer, higher, a bit to the side), never exactly on another
 - [ ] Ray + pinch clicks buttons; poke with the index fingertip clicks too
 - [ ] Pinch a panel header and move → panel follows; release → stays (fixed layout)
 - [ ] Close the hand (fist) while pointing at a panel → panel moves with the hand
