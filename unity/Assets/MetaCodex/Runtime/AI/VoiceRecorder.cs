@@ -194,7 +194,8 @@ namespace MetaCodex.AI
             if (dataOff < 0) return null;
             int frames = dataLen / 2 / channels;
             var data = new float[frames * channels];
-            for (int i = 0; i < data.Length; i++) data[i] = BitConverter.ToInt16(wav, dataOff + i * 2) / 32768f;
+            const float k = 1f / 32768f;
+            for (int i = 0, o = dataOff; i < data.Length; i++, o += 2) data[i] = (short)(wav[o] | wav[o + 1] << 8) * k; // runs on the main thread: no call per sample
             var clip = AudioClip.Create(name, frames, channels, rate, false);
             clip.SetData(data, 0);
             return clip;

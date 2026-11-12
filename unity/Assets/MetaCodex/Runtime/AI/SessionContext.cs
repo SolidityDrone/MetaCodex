@@ -442,7 +442,7 @@ namespace MetaCodex.AI
             {
                 ["role"] = "system",
                 ["content"] = "/no_think You are the assistant of MetaCodex, a VR headset workspace. Answer the user's question about their " +
-                              "workspace using ONLY the CONTEXT. One or two short sentences, plain spoken words, no lists, no markdown. If the " +
+                              "workspace using ONLY the CONTEXT. One or two short sentences (under 40 words), plain spoken words, no lists, no markdown. If the " +
                               "context does not say, say you don't know. Never call a command safe: say what it does.",
             },
             new JObject { ["role"] = "user", ["content"] = "CONTEXT:\n" + context + "\n\nQUESTION: " + question },
@@ -454,6 +454,12 @@ namespace MetaCodex.AI
             if (string.IsNullOrEmpty(s)) return "";
             s = Regex.Replace(s, @"<think>[\s\S]*?</think>", "").Trim();
             s = Regex.Replace(s, @"^(answer|risposta)\s*:\s*", "", RegexOptions.IgnoreCase).Trim().Trim('"');
+            // cut by max_tokens in the middle of a sentence: keep the finished ones
+            if (s.Length > 0 && !Regex.IsMatch(s, @"[.!?…][""')\]”’]*$"))
+            {
+                var m = Regex.Match(s, @"^[\s\S]*[.!?…](?=\s)");
+                if (m.Success && m.Length >= 12) s = m.Value.Trim();
+            }
             return s;
         }
     }

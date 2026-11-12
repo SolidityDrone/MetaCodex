@@ -409,7 +409,9 @@ namespace MetaCodex.Shell
             if (exact != null) { SessionMemory.Add("voice", "ask", "asked: " + Cut(question, 80)); done(exact); return; }
             string context = SessionContextText.Build(snap, q);
             if (Qvac == null || !Qvac.IsRunning) { done("The local AI service is off, so only the facts: " + FirstFacts(snap, q)); return; }
-            var body = new JObject { ["messages"] = SessionContextText.Messages(context, question), ["max_tokens"] = 110, ["temperature"] = 0.2 };
+            // 70 tokens hold the one or two short sentences the prompt asks for (110 let it ramble: decode and speech both
+            // grow with the length); a reply cut by the limit loses its unfinished sentence (CleanAnswer)
+            var body = new JObject { ["messages"] = SessionContextText.Messages(context, question), ["max_tokens"] = 70, ["temperature"] = 0.2 };
             Qvac.Client.Chat(body, (r, e) =>
             {
                 string a = e != null ? null : SessionContextText.CleanAnswer((string)r?["choices"]?[0]?["message"]?["content"]);

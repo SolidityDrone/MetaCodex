@@ -223,6 +223,41 @@ fallback on|off`.
 
 Voices: Supertonic 3 has ten, F1-F5 and M1-M5 (VOICE panel; `mcx-ui voice voice M2`).
 
+## Spoken replies, sentence by sentence (feat/polish, 2026-11-12)
+
+Before: one request for the whole reply, and playback only after the last sample was made. Synthesis time is
+linear in characters (Supertonic 3, 5 steps, 2 threads; PC service API: 11 chars 157-197 ms, 103 chars 558-792 ms,
+303 chars 1929-2463 ms, its first sentence alone 250-337 ms = 13 %). The headset runs at RTF 1.0-1.3, so a
+2-sentence answer stayed silent 8-24 s after its text existed.
+
+Now (`ShellVoice.Say`, `Runtime/AI/SpokenText.cs`):
+
+| Step | What it does |
+|---|---|
+| Split | `SpokenText.Sentences`: after `. ! ? …` when a space and a word that is not lower case follow; not inside `foo.cs`, `3.5`, `v1.2.4`, `e.g.`, `Dr. Rossi`, `J. Smith`, `No. 5`, `wait... then`, Italian `sig.`; line breaks, list items and ` · ` (joined replies) end a sentence; code blocks are not read. A sentence under 20 characters goes with the next one (a tiny clip costs a request and leaves a gap); one over 180 is cut at a comma. |
+| Shorten | A reply (`SayReply`: answers, session questions) speaks at most 2 sentences / about 200 characters; the full text stays on the HUD. `SAY…`, `voice say`, Lua `voice.say` speak everything. |
+| Speakable | `SpokenText.Speakable`: `3 min 20 s` -> `3 minutes 20 seconds`, `1 h`, `250 ms`; Italian words when the reply reads as Italian (`3 minuti`). `ThreadPulse.Speak` writes its durations as words itself (`SpokenText.Duration`). Before, "3 min" came back from speech-to-text as "three men". |
+| Pipeline | One request at a time, at most two clips made ahead: sentence 2 is made while sentence 1 plays; a Stop never waits behind a long service queue. Clip 1 plays as soon as it arrives; the next one follows 0.2 s after the previous ends (`SentenceGap`). |
+| Cancel | Stop (the HUD's ■ STOP, `voice:stop` / `voice:cancel`), TALK and a new reply call `StopSpeaking`: the playing clip stops, waiting clips are destroyed, late answers of the old reply are dropped (a generation counter). |
+| Orb | `OnSpeechStarted` runs per clip: the orb speaks each sentence, quiet in the gap. |
+| CPU Boost | Held while the reply speaks (was a fixed 15 s), 0.5 s after the last clip, capped at 60 s from its start (`SpeechBoostCap`). Boost makes synthesis 16-18 % faster, which brings the headset to about RTF 1: sentence 2 is ready when sentence 1 ends. |
+| Model kept loaded | TTS idle unload 3 -> 15 min (`PushVoiceConfig`): most replies no longer pay the 1-4 s reload. Costs about 0.5 GB RSS while loaded. |
+| Language | `ttsLanguage` = `it` when VOICE > LANGUAGE is IT, else `en` (Supertonic 3 speaks Italian; a change reloads the voice once). |
+| Shorter answers | Session answers: LLM `max_tokens` 110 -> 70, the prompt asks for one or two short sentences under 40 words; an answer cut by the limit keeps only its finished sentences (`CleanAnswer`). |
+| Clips | Every played or dropped `AudioClip` is destroyed (before, a replaced clip stayed in memory until Unity unloaded unused assets). The WAV is decoded without a call per sample. |
+
+Expected on the headset (scaled from the PC at about 8x; the owner's headset check is open): first audio for
+a 2-sentence answer about 3-4 s after the text exists (was 8.5-9.5 s), for long replies about 3 s (was 21-24 s),
+and 1-4 s less on most first answers (no reload). Unchanged on purpose: Supertonic steps 5 (2-4 garble or drop
+words in the speech-to-text round trip), 2 threads (72 fps), CPU only (GPU 12 % faster, not worth sharing it),
+and speed 1.0 (1.15 is 9 % shorter and still exact in the round trip, but speed is the owner's ear: not changed).
+Next step, not done: server-side chunk streaming (`streamChunkTokens`) and LLM token streaming into this queue.
+
+Tests: `tests/voicefx/run-voicefx-tests.sh` (splitter, units, shortening; also run by
+`tests/terminal/run-core-tests.sh`), Editor self-test section `spokenreplies` (a fake speech service: one request
+in flight, first clip at once, Stop and a new reply drop late clips, clips freed, the VOICE panel's ■ STOP / ▶ START
+button and the COMMANDS row hint).
+
 ## GPU? (measured 2026-11-08, Quest 3S, the app not running)
 
 QVAC's Android prebuilds carry an OpenCL backend for Adreno (and Vulkan). On the headset it works once

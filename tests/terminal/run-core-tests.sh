@@ -44,3 +44,5 @@ echo "compiled in $(echo "$(date +%s.%N) - $t0" | bc) s"
 "$DOTNET" "$(W "$OUT/CoreTests.dll")" "$(W "$ROOT/tests/terminal/corpus/cases")" \
   "$(W "$ROOT/unity/Assets/StreamingAssets/linux/rootfs.tar.gz")" "$(W "$ROOT/tests/terminal/corpus/synthetic.tar.gz")" \
   "$(W "$ROOT/unity/Assets/StreamingAssets/linux/overlay.tar.gz")" 2>&1 | tr -d '\r'
+# the voice output (sentence splitter, spoken units, voice effect): its own small program, same compiler and runtime
+MCX_SKIP_RAM_CHECK=1 "$ROOT/tests/voicefx/run-voicefx-tests.sh"

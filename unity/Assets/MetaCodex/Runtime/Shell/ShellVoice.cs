@@ -127,6 +127,9 @@ namespace MetaCodex.Shell
         private float _vHudCloseAt = -1f;
         private UiLabel _vStatus, _vModels, _vHistory;
         private UiList _vCmdList;
+        private UiButton _vServiceBtn;
+        /// VOICE's service button: what a tap does now.
+        private string ServiceButtonText() => Qvac != null && (Qvac.IsRunning || Qvac.IsBusyStarting) ? "■ STOP" : "▶ START";
         private UiProgress _vInstall;
         private float _nextVoicePoll;
         private int _warmedRevision = -1;
@@ -208,7 +211,11 @@ namespace MetaCodex.Shell
                 ["language"] = string.IsNullOrEmpty(Settings.voice.language) ? "en" : Settings.voice.language,
                 ["prompt"] = "Voice commands for MetaCodex: " + string.Join(", ", words.Distinct()) + ".",
                 ["voice"] = Settings.voice.voice,
-                ["idleMinutes"] = new JObject { ["asr"] = 10, ["llm"] = 15, ["tts"] = 3 },
+                // Supertonic 3 speaks Italian: with the voice language set to IT the replies are read as Italian (a
+                // change reloads the voice model once; "auto" and the other languages keep English)
+                ["ttsLanguage"] = Settings.voice.language == "it" ? "it" : "en",
+                // the voice model stays loaded 15 min (was 3): a reload costs 1-4 s before the first word on the headset
+                ["idleMinutes"] = new JObject { ["asr"] = 10, ["llm"] = 15, ["tts"] = 15 },
             };
             string s = cfg.ToString(Newtonsoft.Json.Formatting.None);
             if (s == _sentConfig) return;
@@ -239,6 +246,7 @@ namespace MetaCodex.Shell
 
         private void TickVoice()
         {
+            TickSpeech(Time.unscaledTime);
             if (_cpuBoosted && Time.unscaledTime > _boostUntil && (Recorder == null || !Recorder.Recording))
             {
                 try { OVRManager.suggestedCpuPerfLevel = _cpuBefore; } catch (Exception) { }
@@ -346,6 +354,7 @@ namespace MetaCodex.Shell
             Recorder.AutoStop = Settings.voice.autoStop;
             Recorder.MaxSeconds = Mathf.Clamp(Settings.voice.maxSeconds, 3f, 30f);
             if (!Recorder.Start()) { VoiceDone(new VoiceResult { Error = "microphone: " + Recorder.LastError }, null); return; }
+            StopSpeaking(); // TALK interrupts a reply: nothing of it plays on top of the new question
             SetVoiceState("listening", "● LISTENING", "speak now");
             Sounds?.Play("open");
             // load the LLM and its prompt cache while the user speaks (separate queue: never delays speech-to-text)
@@ -355,7 +364,7 @@ namespace MetaCodex.Shell
 
         public void VoiceStop()
         {
-            if (!Recorder.Recording) return;
+            if (!Recorder.Recording) { StopSpeaking(); return; }
             if (Dictating) { StopDictation(); return; } // ◉ dictation into a text field (ShellThreadView)
             bool heard = Recorder.HeardSpeech;
             var wav = Recorder.Stop();
@@ -366,6 +375,7 @@ namespace MetaCodex.Shell
         public void VoiceCancel()
         {
             Recorder.Cancel();
+            StopSpeaking();
             if (Dictating) { _dictateTo = null; _dictField = null; RestoreRecorder(); }
             SetVoiceState("idle", "", "");
             if (_vHud != null && _vHud.IsOpen) _vHud.Close();
@@ -535,44 +545,171 @@ namespace MetaCodex.Shell
             Sounds?.Play(res.Ok ? "toast" : "error");
             EndBoostSoon();
             _vHudCloseAt = Time.unscaledTime + (sessionAnswer ? Mathf.Clamp(4f + res.Reply.Length / 16f, 6f, 16f) : res.Ok ? 2.5f : 4.5f);
-            if (res.Ok && res.Answer && (Settings.voice.speak || sessionAnswer && Settings.voice.speakAnswers) && !string.IsNullOrEmpty(res.Reply)) VoiceSay(res.Reply);
+            if (res.Ok && res.Answer && (Settings.voice.speak || sessionAnswer && Settings.voice.speakAnswers) && !string.IsNullOrEmpty(res.Reply)) SayReply(res.Reply);
             RefreshVoicePanel();
             done?.Invoke(res);
             VoiceState = "idle";
         }
 
-        /// Speaks `text` with the local text-to-speech model (shows it when that is not installed).
-        public void VoiceSay(string text, Action<string> done = null)
+        // ------------------------------------------------------------------ spoken replies, sentence by sentence
+
+        /// The pause between two sentences of one reply (seconds).
+        public const float SentenceGap = 0.2f;
+        /// A reply speaks at most this much (the full text stays on the HUD): synthesis time grows with every character.
+        public const int SpokenSentences = 2, SpokenChars = 200;
+        /// The CPU Boost is held while a reply speaks, but never longer than this from its start.
+        public const float SpeechBoostCap = 60f;
+
+        private readonly List<string> _sayParts = new List<string>(); // the sentences of the reply being spoken
+        private int _sayNext;                                          // the next sentence to request
+        private bool _sayInFlight;                                     // one request at a time: Stop is quick, the service queue stays short
+        private readonly Queue<AudioClip> _sayReady = new Queue<AudioClip>();
+        private bool _sayPlaying;
+        private float _sayNextAt, _sayBoostUntil;
+        private int _sayGen;                                           // bumped by Stop / a new reply / TALK: late clips of an older one are dropped
+        private Action<string> _sayDone;
+        private string _sayVoice;
+        private int _sayClips;
+        /// Tests: clips played since the reply started.
+        public int SpeechClipsPlayedForTest => _sayClips;
+
+        /// Tests: speech comes from here instead of the AI service ((text, callback(wav, error))).
+        public Action<string, Action<byte[], string>> SpeakForTest;
+        /// A reply is being spoken: playing, waiting for the gap, or sentences still being made.
+        public bool Speaking => _sayPlaying || _sayInFlight || _sayReady.Count > 0 || _sayNext < _sayParts.Count;
+        /// Tests: the sentences of the reply being spoken, how many were requested, how many clips wait to play.
+        public IReadOnlyList<string> SpeechPartsForTest => _sayParts;
+        public int SpeechRequestedForTest => _sayNext;
+        public int SpeechReadyForTest => _sayReady.Count;
+        public bool SpeechPlayingForTest => _sayPlaying;
+        public AudioClip SpeechClipForTest => _voiceAudio != null ? _voiceAudio.clip : null;
+        public void TickSpeechForTest(float now) => TickSpeech(now);
+
+        /// Speaks a reply: its first sentences only (SpokenSentences, about SpokenChars), the rest stays on the HUD.
+        public void SayReply(string reply) => Say(SpokenText.ForSpeech(reply, SpokenSentences, SpokenChars), reply, null);
+
+        /// Speaks `text` with the local text-to-speech model (shows it when that is not installed), one sentence at a
+        /// time: the first plays as soon as it is made while the next one is made. `done` gets null when the first
+        /// sentence starts playing, or the error.
+        public void VoiceSay(string text, Action<string> done = null) => Say(SpokenText.Sentences(text), text, done);
+
+        private void Say(List<string> sentences, string text, Action<string> done)
         {
-            if (string.IsNullOrWhiteSpace(text)) { done?.Invoke("empty"); return; }
-            if (Qvac == null || !Qvac.IsRunning) { Toast(text, "info"); done?.Invoke("the AI service is not running"); return; }
-            BoostCpuFor(15f);
-            Qvac.Client.Speak(text, Settings.voice.voice, (wav, e) =>
+            if (string.IsNullOrWhiteSpace(text) || sentences.Count == 0) { done?.Invoke("empty"); return; }
+            if (SpeakForTest == null && (Qvac == null || !Qvac.IsRunning)) { Toast(text, "info"); done?.Invoke("the AI service is not running"); return; }
+            StopSpeaking(); // a new reply replaces what is still being said
+            bool italian = SpokenText.LooksItalian(text);
+            foreach (var x in sentences) { string sp = SpokenText.Speakable(x, italian); if (sp.Length > 0) _sayParts.Add(sp); }
+            if (_sayParts.Count == 0) { done?.Invoke("empty"); return; }
+            _sayDone = done;
+            _sayVoice = Settings.voice.voice;
+            _sayClips = 0;
+            _sayBoostUntil = Time.unscaledTime + SpeechBoostCap;
+            BoostCpuFor(2f); // held while it speaks (TickSpeech), up to SpeechBoostCap
+            RequestNextSentence();
+        }
+
+        /// Stops the reply being spoken: the clip playing, the ones waiting and the ones still being made (they are
+        /// dropped when they arrive). Stop, TALK, a new reply and voice:cancel call it.
+        public void StopSpeaking()
+        {
+            _sayGen++;
+            _sayParts.Clear();
+            _sayNext = 0;
+            _sayInFlight = false;
+            _sayNextAt = 0f; // the next reply starts at once
+            while (_sayReady.Count > 0) DestroyClip(_sayReady.Dequeue());
+            if (_voiceAudio != null)
             {
-                EndBoostSoon(0.2f);
-                if (e != null)
-                {
-                    Log("[ai] speech: " + e);
-                    if (e.StartsWith("409")) Toast("Spoken replies need the voice model: VOICE > INSTALL", "warn");
-                    done?.Invoke(e);
-                    return;
-                }
-                var clip = VoiceRecorder.ClipFromWav(wav);
-                if (clip == null) { done?.Invoke("bad audio"); return; }
-                if (_voiceAudio == null)
-                {
-                    var go = new GameObject("VoiceAudio");
-                    go.transform.SetParent(_root, false);
-                    _voiceAudio = go.AddComponent<AudioSource>();
-                    _voiceAudio.spatialBlend = 0f;
-                    _voiceAudio.playOnAwake = false;
-                }
-                _voiceAudio.volume = 0.9f;
-                _voiceAudio.clip = clip;
-                OnSpeechStarted(clip); // the orb speaks it: from its place, pulsing with the words
-                _voiceAudio.Play();
-                done?.Invoke(null);
-            });
+                if (_voiceAudio.isPlaying) _voiceAudio.Stop();
+                var c = _voiceAudio.clip;
+                _voiceAudio.clip = null;
+                DestroyClip(c);
+            }
+            if (_sayPlaying) _speechT = -1f; // the orb stops speaking with it
+            _sayPlaying = false;
+            var d = _sayDone;
+            _sayDone = null;
+            d?.Invoke("stopped");
+        }
+
+        private void RequestNextSentence()
+        {
+            // one request at a time and at most two clips made ahead: a Stop never waits for a long queue in the service
+            if (_sayInFlight || _sayNext >= _sayParts.Count || _sayReady.Count >= 2) return;
+            int gen = _sayGen, i = _sayNext++;
+            string text = _sayParts[i];
+            _sayInFlight = true;
+            float t0 = Time.realtimeSinceStartup;
+            void Fail(string e)
+            {
+                Log("[ai] speech: " + e);
+                if (e.StartsWith("409")) Toast("Spoken replies need the voice model: VOICE > INSTALL", "warn");
+                var d = _sayDone;
+                _sayDone = null;
+                // what was made still plays; nothing after the failed sentence does
+                _sayParts.RemoveRange(i, _sayParts.Count - i);
+                _sayNext = _sayParts.Count;
+                d?.Invoke(e);
+            }
+            Action<byte[], string> got = (wav, e) =>
+            {
+                if (gen != _sayGen) return; // stopped or replaced meanwhile: nothing of it plays
+                _sayInFlight = false;
+                if (e != null || wav == null) { Fail(e ?? "no audio"); return; }
+                var clip = VoiceRecorder.ClipFromWav(wav, "speech");
+                if (clip == null) { Fail("bad audio"); return; }
+                if (i == 0) Log($"[ai] speech: first sentence ready in {(Time.realtimeSinceStartup - t0) * 1000f:F0} ms ({clip.length:F1} s, {_sayParts.Count} sentence(s))");
+                _sayReady.Enqueue(clip);
+                TickSpeech(Time.unscaledTime); // the first one plays at once
+                RequestNextSentence();
+            };
+            if (SpeakForTest != null) SpeakForTest(text, got);
+            else Qvac.Client.Speak(text, _sayVoice, got);
+        }
+
+        /// Plays the next clip after the gap, holds the CPU Boost while a reply speaks, and frees each clip once played.
+        private void TickSpeech(float now)
+        {
+            if (_sayPlaying && (_voiceAudio == null || !_voiceAudio.isPlaying))
+            {
+                _sayPlaying = false;
+                if (_voiceAudio != null) { var c = _voiceAudio.clip; _voiceAudio.clip = null; DestroyClip(c); }
+                _sayNextAt = now + SentenceGap;
+                RequestNextSentence();
+            }
+            if (!_sayPlaying && _sayReady.Count > 0 && now >= _sayNextAt) PlayClip(_sayReady.Dequeue());
+            if (Speaking && Time.unscaledTime < _sayBoostUntil) _boostUntil = Mathf.Max(_boostUntil, Time.unscaledTime + 0.5f);
+        }
+
+        private void PlayClip(AudioClip clip)
+        {
+            if (_voiceAudio == null)
+            {
+                var go = new GameObject("VoiceAudio");
+                go.transform.SetParent(_root, false);
+                _voiceAudio = go.AddComponent<AudioSource>();
+                _voiceAudio.spatialBlend = 0f;
+                _voiceAudio.playOnAwake = false;
+            }
+            var old = _voiceAudio.clip;
+            _voiceAudio.volume = 0.9f;
+            _voiceAudio.clip = clip;
+            if (old != null && old != clip) DestroyClip(old);
+            _sayClips++;
+            OnSpeechStarted(clip); // the orb speaks it: from its place, pulsing with the words (per sentence)
+            _voiceAudio.Play();
+            _sayPlaying = true;
+            var d = _sayDone;
+            _sayDone = null;
+            d?.Invoke(null);
+            RequestNextSentence();
+        }
+
+        private static void DestroyClip(AudioClip c)
+        {
+            if (c == null) return;
+            if (Application.isPlaying) Destroy(c); else DestroyImmediate(c);
         }
 
         /// gesture bindings, Lua app.action and the control port: voice:listen | stop | toggle | cancel | say:<text> | run:<text>
@@ -1337,8 +1474,9 @@ namespace MetaCodex.Shell
             AddButtons(p, ls.Next(t.ButtonHeight), new (string, Action)[]
             {
                 ("INSTALL MODELS", () => { EnsureVoiceService(); After(0.1f, InstallVoiceModels); }),
-                ("START / STOP", () => { if (Qvac.IsRunning || Qvac.IsBusyStarting) Qvac.StopService(); else Qvac.StartService(); RefreshVoicePanel(); }),
+                (ServiceButtonText(), () => { if (Qvac.IsRunning || Qvac.IsBusyStarting) Qvac.StopService(); else Qvac.StartService(); RefreshVoicePanel(); }),
             }, primary: 0);
+            _vServiceBtn = p.Elements.OfType<UiButton>().LastOrDefault(); // says what a tap does now: ■ STOP or ▶ START
             AddButtons(p, ls.Next(t.ButtonHeight), new (string, Action)[]
             {
                 ("● TALK", VoiceToggle),
@@ -1374,11 +1512,31 @@ namespace MetaCodex.Shell
             _vCmdList = p.Add(new UiList(0.034f, (item, idx) =>
             {
                 var cmd = Voice.Find(item.Tag as string);
-                if (cmd != null) Toast($"{cmd.Name}: {cmd.Description}" + (cmd.Phrases.Length > 0 ? " · say “" + string.Join("”, “", cmd.Phrases.Take(3).Select(VoiceCommands.Example)) + "”" : ""), "info");
+                if (cmd != null) Toast(CommandHint(cmd), "info");
             }) { Rect = rs.Next(0.21f) });
             p.Add(new UiLabel("LAST", t.SmallSize) { Rect = rs.Next(0.018f), UseDisplay = true, Color = t.TextDim });
             _vHistory = p.Add(new UiLabel("", t.SmallSize) { Rect = rs.Rest(), Wrap = true, Align = TextAlignmentOptions.TopLeft, UseMono = true, Color = t.TextDim });
             RefreshVoicePanel();
+        }
+
+        /// What a tap on a VOICE > COMMANDS row shows: how to say it first (two examples), then one short line of what it
+        /// does; never the command's id (the toast shows two lines).
+        public static string CommandHint(VoiceCommand cmd)
+        {
+            var phrases = (cmd.Phrases ?? new string[0]).Select(VoiceCommands.Example).ToList();
+            var says = phrases.Where(x => !x.Contains("<"))
+                .Concat((cmd.Examples ?? new List<(string said, string line)>()).Select(e => e.said))
+                .Concat(phrases.Where(x => x.Contains("<")))
+                .Concat(cmd.Samples ?? new string[0])
+                .Select(x => (x ?? "").Trim()).Where(x => x.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).Take(2).ToList();
+            string d = cmd.Description ?? "";
+            int cut = d.IndexOfAny(new[] { ':', ';', '(' });
+            if (cut > 12) d = d.Substring(0, cut);
+            int dot = d.IndexOf(". ", StringComparison.Ordinal);
+            if (dot > 12) d = d.Substring(0, dot);
+            d = Short(d.Trim().TrimEnd('.', ','), 64);
+            string say = says.Count > 0 ? "Say “" + string.Join("”, “", says) + "”" : "";
+            return say.Length > 0 && d.Length > 0 ? say + "\n" + d : say + d;
         }
 
         private string DeciderCachePath => System.IO.Path.Combine(Application.persistentDataPath, "voice-decider-vectors.bin");
@@ -1446,6 +1604,7 @@ namespace MetaCodex.Shell
             var s = QvacStatus;
             string mem = s?["rssMB"] != null ? $" · {s["rssMB"]} MB · free {s["availableMB"]} MB" : "";
             _vStatus.Set($"AI service: <b>{svc}</b>{mem}\n{Qvac?.Status}" + (Decider != null && Settings.voice.decide ? "\ndecisions: " + Decider.Status : ""));
+            if (_vServiceBtn != null && _vServiceBtn.Text != ServiceButtonText()) _vServiceBtn.SetText(ServiceButtonText());
             if (s?["models"] is JObject models)
             {
                 var lines = new List<string>();

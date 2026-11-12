@@ -669,17 +669,18 @@ namespace MetaCodex.AI
             return outl;
         }
 
-        /// The spoken answer to "what is it doing?" / "is it stuck?": two short sentences from the facts, no model.
+        /// The spoken answer to "what is it doing?" / "is it stuck?": two short sentences from the facts, no model. Durations
+        /// are written as words ("3 minutes", not "3 min": the voice model read that as "three men").
         public string Speak()
         {
             var sb = new StringBuilder();
             switch (State)
             {
                 case "working":
-                    sb.Append($"It's been working for {Dur(TurnSecs)}; now {Doing}" + (PhaseSecs >= 20 && Phase != "between" ? $" for {Dur(PhaseSecs)}" : "") + ".");
-                    if (MayBeStuck) sb.Append($" Nothing new for {Dur(QuietSecs)}: it may be stuck. STOP in the thread ends the turn.");
+                    sb.Append($"It's been working for {Said(TurnSecs)}; now {Doing}" + (PhaseSecs >= 20 && Phase != "between" ? $" for {Said(PhaseSecs)}" : "") + ".");
+                    if (MayBeStuck) sb.Append($" Nothing new for {Said(QuietSecs)}: it may be stuck. STOP in the thread ends the turn.");
                     else if (Pattern == "fixing" || Pattern == "errors" || Pattern == "installing") sb.Append(" " + Cap(PatternText) + ".");
-                    else if (QuietSecs >= 45) sb.Append($" Quiet for {Dur(QuietSecs)}, still within normal.");
+                    else if (QuietSecs >= 45) sb.Append($" Quiet for {Said(QuietSecs)}, still within normal.");
                     else if (Pattern.Length > 0 && PatternText.Length > 0) sb.Append(" So far it " + (Pattern == "testing" ? "changed code and is checking it" : Pattern == "editing" ? "is changing code" : Pattern == "exploring" ? "is reading the code, nothing changed yet" : "is thinking it through") + ".");
                     break;
                 case "waiting": sb.Append("It's " + Doing + ". Answer it in the thread."); break;
@@ -687,7 +688,7 @@ namespace MetaCodex.AI
                 case "error": sb.Append("It stopped on an error" + (ErrorText.Length > 0 ? ": " + Clip(ErrorText, 100) : "") + "."); break;
                 case "stopped": sb.Append("It was stopped before it finished."); break;
                 default:
-                    sb.Append(AnsweredAt > 0 ? $"It's idle; it answered {Ago(AnsweredAt)}" : "It's idle");
+                    sb.Append(AnsweredAt > 0 ? $"It's idle; it answered {SaidAgo(AnsweredAt)}" : "It's idle");
                     sb.Append(AnswerGist.Length > 0 ? ": " + Clip(AnswerGist, 120).TrimEnd(':', ';', ',', ' ') : "");
                     if (!Regex.IsMatch(sb.ToString(), @"[.!?…]$")) sb.Append('.');
                     break;
@@ -719,6 +720,9 @@ namespace MetaCodex.AI
         public static string Dur(int secs) => secs < 60 ? secs + " s" : secs < 3600 ? (secs / 60) + " min" + (secs < 600 && secs % 60 >= 10 ? " " + (secs % 60) + " s" : "") : (secs / 3600.0).ToString("0.#", CultureInfo.InvariantCulture) + " h";
         public static string Clock(int secs) => secs < 3600 ? $"{secs / 60}:{secs % 60:00}" : $"{secs / 3600}:{secs / 60 % 60:00}:{secs % 60:00}";
         private string Ago(long ms) { int s = (int)Math.Max(0, (Now - ms) / 1000); return s < 60 ? "just now" : Dur(s) + " ago"; }
+        /// Spoken forms (Speak): "3 minutes 20 seconds", "3 minutes ago".
+        private static string Said(int secs) => SpokenText.Duration(secs);
+        private string SaidAgo(long ms) { int s = (int)Math.Max(0, (Now - ms) / 1000); return s < 60 ? "just now" : Said(s) + " ago"; }
         public static string Plural(int n, string one) => n == 1 ? "1 " + one : n + " " + one + "s";
         private static string Cap(string s) => string.IsNullOrEmpty(s) ? s : char.ToUpperInvariant(s[0]) + s.Substring(1);
         public static string FileName(string path) { if (string.IsNullOrEmpty(path)) return ""; int i = path.TrimEnd('/').LastIndexOf('/'); return i >= 0 ? path.Substring(i + 1) : path; }
