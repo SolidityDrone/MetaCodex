@@ -9,6 +9,7 @@ import {
   type ModelReasoningEffort,
 } from "@get-bb/plugin-sdk/provider-bridge";
 import type { ModelInfo } from "@anthropic-ai/claude-agent-sdk";
+import { localCoderEndpoint, localCoderModel } from "./local-coder.js";
 
 const CLAUDE_MODEL_ID_PATTERN =
   /^claude-([a-z]+)-(\d+)(?:-(\d{1,2}))?(?:-\d{8})?(\[1m\])?$/;
@@ -118,6 +119,7 @@ export function buildClaudeCodeModels(
     models.some((candidate) => candidate.model === defaultModel)
       ? defaultModel
       : models[0]?.model;
+  if (localCoderEndpoint() !== null) models.push(localCoderModel()); // MetaCodex's local model, when installed
   return {
     models: models.map((model) =>
       model.model === resolvedDefault ? { ...model, isDefault: true } : model,

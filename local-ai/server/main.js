@@ -20,6 +20,10 @@ const DATA = path.resolve(args.data || 'qvac-data')
 const PORT = Number(args.port || 47810)
 const HOST = args.host || '127.0.0.1'
 const TOKEN = args['token-file'] ? fs.readFileSync(args['token-file'], 'utf8').trim() : (args.token || '')
+// the agent harnesses' key for the local coder (docs/local-coder.md): stable across starts (the app makes it once and
+// shares it as /mnt/quest/local-coder.key), so their configs keep working; it opens only the coder's routes
+const CODER_KEY = (() => { try { return fs.readFileSync(path.join(args.data || '.', 'coder.key'), 'utf8').trim() } catch { return '' } })()
+const CODER_ROUTES = new Set(['POST /v1/responses', 'POST /v1/messages', 'POST /v1/messages/count_tokens', 'POST /v1/chat/completions', 'GET /v1/models'])
 const T0 = Date.now()
 
 fs.mkdirSync(DATA, { recursive: true })
@@ -86,7 +90,7 @@ async function handle (req, res, body) {
   const u = new URL(req.url, 'http://127.0.0.1')
   const route = req.method + ' ' + u.pathname
   if (route === 'GET /health') return send(res, 200, { ok: true, service: 'metacodex-ai', version: VERSION })
-  if (TOKEN && !authorized(req)) return send(res, 401, { error: 'missing or wrong bearer token' })
+  if (TOKEN && !authorized(req) && !(CODER_KEY && CODER_ROUTES.has(route) && authorized(req, CODER_KEY))) return send(res, 401, { error: 'missing or wrong bearer token' })
   switch (route) {
     case 'GET /status':
       return send(res, 200, status())
@@ -304,11 +308,11 @@ function sse (req, res) {
   }
 }
 
-function authorized (req) {
+function authorized (req, key) {
   // Anthropic clients send the key as x-api-key (Claude Code with ANTHROPIC_API_KEY), the others as a bearer token
   if (req.headers['x-api-key'] && !req.headers.authorization) req.headers.authorization = 'Bearer ' + req.headers['x-api-key']
   const h = String(req.headers.authorization || '')
-  const want = 'Bearer ' + TOKEN
+  const want = 'Bearer ' + (key || TOKEN)
   if (h.length !== want.length) return false
   let d = 0
   for (let i = 0; i < h.length; i++) d |= h.charCodeAt(i) ^ want.charCodeAt(i)

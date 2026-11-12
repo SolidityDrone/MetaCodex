@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { isLocalCoderModel, LOCAL_CODER_MODEL, localCoderEndpoint } from "../local-coder.js";
 import { experimental_selectedSkillMentions as selectedSkillMentions } from "@get-bb/plugin-sdk/provider-bridge";
 import { ClaudeContextUsageCollector } from "./context-usage.js";
 import { readIsolatedClaudeContextUsage } from "./context-usage-probe.js";
@@ -1787,6 +1788,24 @@ async function closeClaudeThreadSession(
   }
 }
 
+/** A thread on MetaCodex's local coder: Claude Code talks to the local AI service's Anthropic Messages endpoint with
+ * the coder's key, and no other request leaves the headset. Other threads get nothing from here. */
+function localCoderSessionEnv(model: string | undefined): Record<string, string> {
+  const local = localCoderEndpoint();
+  if (local === null || !isLocalCoderModel(model)) return {};
+  return {
+    ANTHROPIC_BASE_URL: local.url,
+    ANTHROPIC_AUTH_TOKEN: local.key,
+    ANTHROPIC_API_KEY: "",
+    ANTHROPIC_MODEL: LOCAL_CODER_MODEL,
+    ANTHROPIC_SMALL_FAST_MODEL: LOCAL_CODER_MODEL,
+    ANTHROPIC_DEFAULT_HAIKU_MODEL: LOCAL_CODER_MODEL,
+    ANTHROPIC_DEFAULT_SONNET_MODEL: LOCAL_CODER_MODEL,
+    ANTHROPIC_DEFAULT_OPUS_MODEL: LOCAL_CODER_MODEL,
+    CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
+  };
+}
+
 function buildSessionEnv(
   envOverrides: Record<string, string>,
 ): NodeJS.ProcessEnv {
@@ -2399,7 +2418,10 @@ function attachThreadSession(
   resume: boolean,
 ): void {
   const threadIdRef = { current: params.threadId };
-  const env = buildSessionEnv(readConfigEnvOverrides(params.config));
+  const env = buildSessionEnv({
+    ...readConfigEnvOverrides(params.config),
+    ...localCoderSessionEnv(params.model ?? undefined),
+  });
   const sessionOptions = buildTrackedSessionOptions(params, env, threadIdRef);
   if (!resume) {
     sessionOptions.sessionId = providerThreadId;
