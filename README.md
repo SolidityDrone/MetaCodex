@@ -10,8 +10,52 @@ You control them with your hands and your voice.
 Local AI models run the interface.
 Coding agents work in the Linux, and they can build native headset apps on the headset itself.
 
+## What is MetaCodex
+
+MetaCodex is a workstation for software work that you wear.
+It is one app on a standalone mixed-reality headset.
+You do not need a PC, a monitor or a keyboard.
+
+You see your room through the headset.
+Your work floats in that room as panels: terminals, agent threads, files, diffs, git and a web view.
+You touch the panels with your fingers, or you point at them and pinch.
+You talk to the app, and it answers with a voice.
+
+Inside the app there is a full Debian Linux system.
+Coding agents work in that Linux system for you.
+They read and change code, run builds and tests, and use git.
+They can also make native apps for the headset, and the headset installs and runs those apps.
+
+## Productivity in the metacoding era
+
+We call it **metacoding** when you direct coding agents and do not write every line yourself.
+In metacoding, your work changes:
+
+- You give goals to several agents at the same time.
+- You read their plans, their changes and their results.
+- You make decisions: approve, correct, merge or stop.
+- You switch fast between many tasks, and you must always know their status.
+
+A laptop screen is too small for this work.
+Agent threads, terminals and diffs compete for the same few windows.
+MetaCodex gives you the space and the controls that metacoding needs:
+
+| Need | What MetaCodex gives you |
+|---|---|
+| See many agents at once | Each thread has its own panel. The panels stand around you in the room, so the status of all your work is in view. |
+| Know what an agent did | Ask "give me a recap of the login thread". A spoken answer starts in seconds. The thread panel shows a live map of the changed files and their diffs. |
+| Run agents in parallel safely | Threads that work in the same folder wait for each other. A new thread can get its own git worktree. A dry run shows merge conflicts before you merge. |
+| Control without a keyboard | Hands and voice do the common actions: open, close, switch, approve, find a thread. A keyboard on the table is there for real typing. |
+| Close the loop on one device | An agent builds a native app on the headset. You launch it, test it and go back to the thread. One tap sends a picture and the logs back to the agent. |
+| Work offline and in private | Local models run the voice interface on the headset. Keys stay sealed in a vault, and the agents' sign-ins stay inside their own tools. |
+
+MetaCodex does not replace your coding agents.
+It is the place where you work with them: a desk that is always with you and as large as your room.
+
 ## Contents
 
+- [What is MetaCodex](#what-is-metacodex)
+- [Productivity in the metacoding era](#productivity-in-the-metacoding-era)
 - [Highlights](#highlights)
 - [How it works](#how-it-works)
   - [One app, two processes](#one-app-two-processes)
