@@ -41,8 +41,8 @@ All values come from one standalone headset (Android 14, 6 cores, 7.9 GB RAM), u
 | Frame rate during builds | 72.5 fps average, 70 minimum | Five builds in a row on cores 0-2. |
 | Linux install from the APK | 1.6 s | 2,677 files, first launch. |
 | MQH ready | about 6 s | The server is up and the host daemon is enrolled. |
-| Decision model accuracy | 93 % | 355 test sentences, exact match, PC bench, 2026-11-09. The language model alone scored 59 %. |
-| Decision latency | 17 ms | Median per decision, PC bench, 2026-11-09. The language model needed 209 ms. |
+| Decision model accuracy | 93 % | 180 English test sentences, exact match, PC bench, 2026-11-12. On the same sentences, the language model path scored 83 % (2026-11-09). |
+| Decision latency | 18 ms | Median per decision, PC bench, 2026-11-12. The language model path needed 209 ms (2026-11-09). |
 | Speech-to-text | 0.66 to 0.73 s | Per command, on the headset, while the app runs at 72 fps. |
 | Rebuild of a native app | 1.9 s | One file changed, on the headset. The first pipeline needed 9.04 s. |
 | Syntax check of a native app | 0.7 s | Warm. A cold check takes 2.9 s. |
@@ -181,12 +181,12 @@ Most commands run without the language model.
 9. The language model is the last step. It is off by default. When you turn it on, it writes one command line that a grammar constrains. The app checks that line against the schema before it runs.
 10. The HUD shows the result. Only commands marked `speak` answer aloud.
 
-| Pipeline (355 sentences, PC bench, 2026-11-09) | Exact match | Latency per decision |
+| Pipeline (180 English sentences, PC bench) | Exact match | Latency per decision |
 |---|---|---|
-| Fast path, then decision model | 93 % | 17 ms median |
-| Fast path, then language model | 59 % | 209 ms median |
+| Fast path, then decision model (2026-11-12) | 93 % | 18 ms median |
+| Fast path, then language model (2026-11-09) | 83 % | 209 ms median |
 
-A later bench on 2026-11-11, with more commands, gave 91 % and 20 ms median.
+The 2026-11-09 latency of the language model is the median of that full run.
 The PC bench used a PC copy of the AI service.
 The repository holds no headset latency for the decision model.
 
@@ -311,14 +311,15 @@ The notes in [native-build-and-install.md](docs/native-build-and-install.md) and
 | Text-to-speech | 2.1 to 3.5 s for 1.6 to 3 s of speech |
 | Memory (RSS) | speech 0.28 GB, language model 1.1 GB, voice 0.5 GB |
 
-**Voice routing (PC bench, 355 sentences, exact match)**
+**Voice routing (PC bench, the 180 English sentences, exact match)**
 
 | Date | Fast path, then decision model | Fast path, then language model |
 |---|---|---|
-| 2026-11-09 | 93 % (English 94, Italian 91), 17 ms median | 59 % (English 83, Italian 34), 209 ms median |
-| 2026-11-11 | 91 % (English 93, Italian 88), 20 ms median | not repeated |
+| 2026-11-09 | 94 %, 17 ms median | 83 %, 209 ms median |
+| 2026-11-11 | 93 %, 20 ms median | not repeated |
+| 2026-11-12 (English-only registry) | 93 %, 18 ms median | not repeated |
 
-Since 2026-11-12, the app and the bench are English only. The bench has 180 English sentences. The 2026-11-11 run gives 93 % on them.
+Since 2026-11-12, the app and the bench are English only. The latencies of 2026-11-09 and 2026-11-11 are medians of runs that also held other sentences.
 
 The bench builds the decision model from 1,373 examples of 17 commands in 16 s.
 The honest run removed every bench sentence from the examples. A self-test fails on any copy.
