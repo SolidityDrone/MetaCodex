@@ -571,3 +571,15 @@ Work windows:
 - [ ] VOICE > SPEECH: FAST is selected on a fresh install. Ask the same question with FAST and with CLEAR: FAST starts a little sooner; say if FAST ever drops or swaps a word you notice (then CLEAR becomes the default).
 - [ ] Restart the app: the chosen SOUND and SPEECH are kept.
 - [ ] Watch fps during a long spoken reply with SHIP: 72 fps holds (the effect runs off the main thread).
+
+## 37. Fast recaps, streamed answers, the tools list (0.7.17)
+
+- [ ] Ask "give me a recap of the <name> thread" (a thread that is not open): "Let me look." at once (about 1.5 s after you stop talking), the HUD says ◆ LOOKING, then "The <name> thread is idle / working / waiting for you." and one more sentence; it is the thread you named, not the open one
+- [ ] Same with "summarize this thread", "catch me up", "what has it done so far" on the open thread: the first real sentence within about 4 s
+- [ ] "How many captures did we take so far?" answers the count (not a recap)
+- [ ] A question the app needs the model for ("why did the build fail?"): "Let me look.", then the answer is spoken sentence by sentence while the HUD text still grows (◆ ANSWERING); STOP or TALK mid-answer: the voice stops and no later sentence plays
+- [ ] During a long spoken answer: 72 fps holds, the voice has no gaps between words
+- [ ] Change VOICE > SOUND or SPEECH, then ask a recap: "Let me look." already has the new sound (or, the very first time, the answer comes without it)
+- [ ] VOICE has no LANGUAGE row; Italian phrases do nothing (English only)
+- [ ] "never mind", "what can you do for me?": nothing opens or toggles
+- [ ] SYSTEM > TOOLS: a grouped plain list (no logos, no gh); ABOUT > LICENCES opens /usr/share/doc/metacodex
