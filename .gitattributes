@@ -173,3 +173,4 @@ LightingData.asset     binary
 
 # README images are normal git blobs, not LFS: LFS bandwidth would limit how often the README can load them
 docs/assets/diagrams/** -filter -diff -merge binary
+docs/assets/brand/** -filter -diff -merge binary
