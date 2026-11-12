@@ -176,6 +176,7 @@ printf 'echo hi\n' > notes/run.sh
             shell.SetLayout("fixed");
             bool bend0 = shell.Settings.bendPanels;
             shell.Settings.bendPanels = false;
+            shell.OnSettingsChanged(); // flattens every panel now (a bend left by an earlier section made the handle tap miss)
             shell.ForgetSidebarMemoryForTest();
             // the test's terminal sits 0.85 m ahead, in the very plane THREAD is put in below: its rows ("git status") would
             // be drawn through the chat in every picture. Out of the way for this section (no real layout puts a window there)
@@ -256,7 +257,7 @@ printf 'echo hi\n' > notes/run.sh
             SbPic(shell, sb, "ui-sidebar-diff.png");
             SbTextsOverThread(shell, th, sb);
             // a long line: scroll sideways (drag) or wrap
-            int longRow = Enumerable.Range(0, doc.RowCount).FirstOrDefault(i => doc.Diff.Lines[i].Text.Contains("LONG-LINE-START"));
+            int longRow = doc?.Diff?.Lines == null ? 0 : Enumerable.Range(0, Mathf.Min(doc.RowCount, doc.Diff.Lines.Count)).FirstOrDefault(i => doc.Diff.Lines[i].Text.Contains("LONG-LINE-START")); // no diff (an earlier check failed): the later checks still report
             dv.ScrollToRow(Mathf.Max(0, longRow - 3));
             var d0 = dv.Rect.center;
             Click(shell.Router, sb, d0, d0 + new Vector2(-0.12f, 0f));
@@ -274,10 +275,10 @@ printf 'echo hi\n' > notes/run.sh
             dv.SetWrap(false);
             dv.ScrollToRow(0);
             // a tap on a fold opens it
-            int folds0 = doc.Diff.Folds, fold = dv.FirstFoldRow();
+            int folds0 = doc?.Diff?.Folds ?? -1, fold = dv.FirstFoldRow();
             float foldY = dv.Rect.y + (fold - Mathf.FloorToInt(dv.ScrollRows)) * dv.RowHeight + dv.RowHeight * 0.5f;
             Click(shell.Router, sb, new Vector2(dv.Rect.center.x, foldY));
-            Check(fold >= 0 && doc.Diff.Folds == folds0 - 1, $"a tap on “⋯ N unchanged lines” opens them ({folds0} -> {doc.Diff.Folds} folds)");
+            Check(fold >= 0 && doc?.Diff != null && doc.Diff.Folds == folds0 - 1, $"a tap on “⋯ N unchanged lines” opens them ({folds0} -> {doc?.Diff?.Folds} folds)");
             // drag to scroll, keys move the cursor
             float s0 = dv.ScrollRows;
             Click(shell.Router, sb, dv.Rect.center, dv.Rect.center + new Vector2(0f, -0.12f));

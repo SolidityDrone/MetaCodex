@@ -588,6 +588,9 @@ namespace MetaCodex.Shell
             foreach (var p in _panels.Values) p.BaseScale = Vector3.one * Mathf.Clamp(Settings.uiScale, 0.6f, 1.8f);
             ApplyMainMenuMode();
             ApplyOrbSetting();
+            // FIXED: the frame loop bends panels only while "Bend panels" is on, so turning it off any way (voice, a
+            // script, MQH's settings, not only DISPLAY's toggle) must flatten them here, open and closed ones
+            UpdateFixedBend();
             if (rebuild) _rebuildPending = true; // next frame: never destroy panels inside the click that asked for it
             // sliders call this on every step: push to MQH once things are quiet for a moment
             if (Settings.mqhSync) _settingsPushDue = _clock.Elapsed.TotalSeconds + 1.5;
