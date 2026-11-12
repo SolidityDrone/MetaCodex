@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Intelligibility proxy for the voice effect: the service's speech-to-text on each preset's output, word error rate
 against the text (tools/voicefx/fx.py, docs/voice.md "Voice effect"). The dev AI service must run
-(tools/qvac-dev.sh pc start; url + token in unity/Bench/qvac-dev.json).
+(tools/local-ai-dev.sh pc start; url + token in unity/Bench/qvac-dev.json).
 
   python3 asr.py --make-dry              -> <samples>/asr/dry-<voice>-<n>.wav for every line of texts.txt (voices F1, M1)
   python3 asr.py clean adjutant starship comm adjutant-no-plate ...

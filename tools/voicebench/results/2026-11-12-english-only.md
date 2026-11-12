@@ -22,7 +22,7 @@ Routes on the English rows: fast path 120, decision model 60. This equals the En
 The registry lost its Italian samples, synonyms, phrases and none examples, and the decision model lost its Italian
 words (fillers, verbs, joiners, numbers, on / off, more / less). The English rows must not drop below the baseline
 above. Not run in this change (no Editor in this lane). The integrator runs, with the dev AI service up
-(`tools/qvac-dev.sh pc start`):
+(`tools/local-ai-dev.sh pc start`):
 
 ```
 MCX_UITEST_ONLY=decider,voicewords,spokenreplies,voicefx,control,sidebar,context,qol,voiceexport,voicedecide  (tools/unity-batch.sh BatchUiTest)

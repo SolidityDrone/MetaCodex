@@ -15,7 +15,7 @@ every licence named below is linked to its text the first time it appears in a t
 image's `dpkg` status and `copyright` files were read, the native libraries were inspected for the libraries embedded in
 them (`strings`), the assemblies and fonts in the build data were listed, and the Unity package cache supplied the
 package licences. What is downloaded later was read from the scripts that download it (`mcx-setup`,
-`qvac/server/models.js`, `ShellSystem.cs`, `ShellAgentGet.cs`), from the npm registry, from the Hugging Face model cards
+`local-ai/server/models.js`, `ShellSystem.cs`, `ShellAgentGet.cs`), from the npm registry, from the Hugging Face model cards
 and from the upstream repositories. Where something could not be verified, the text says so. Open duties are in
 [section 8](#8-gaps).
 
@@ -90,7 +90,7 @@ commits, github.com/SolidityDrone/MetaCodex); the owner may put his legal name i
 
 **What the MIT licence covers:** the code and documents written for MetaCodex: `unity/Assets/MetaCodex` (C#, HLSL
 shaders; not its `Fonts` folder), the Java classes in `unity/Assets/Plugins/Android`, `userland/` (scripts, Core v0,
-build tools; not `userland/agent-skills`), `native/`, `tools/`, `tests/`, `qvac/server`, `docs/` (not `docs/licenses` and
+build tools; not `userland/agent-skills`), `native/`, `tools/`, `tests/`, `local-ai/server`, `docs/` (not `docs/licenses` and
 not `docs/diagrams/fonts`), and our changes to MQH. Written by the owner with AI coding assistants (git history is the
 record); no third-party code was found copied into these files (searched for "adapted from", "based on",
 "copied from", copyright and licence headers; the only hits are fonts and MQH, listed below).
@@ -150,13 +150,13 @@ record); no third-party code was found copied into these files (searched for "ad
 Unity licence to be used (G11); the 50 third-party icons of MQH are of unknown licence and should leave the APK and
 the repository (G10); a written-offer contact address is needed for the GPL parts (G2).
 
-**`qvac/package.json` says `"license": "Apache-2.0"`.** Recommendation: change it to `"MIT"` (it is `private: true`,
-the service `qvac/server/*.js` is our code, and it contains no Tether or Holepunch code: it only `require`s their
+**`local-ai/package.json` says `"license": "Apache-2.0"`.** Recommendation: change it to `"MIT"` (it is `private: true`,
+the service `local-ai/server/*.js` is our code, and it contains no Tether or Holepunch code: it only `require`s their
 packages). Apache-2.0 for our own service would also be legal, but it would give one project two licences for no gain
 and make the Apache NOTICE duty look like ours. The Apache-2.0 packages it depends on (`@qvac/*`, `bare-*`) keep
 their licence; they are separate packages. The file also names the licence of the shipped bundle's own package
 (`metacodex-ai 0.1.0`, listed as ours in the QVAC set below). Not edited here: the change belongs to the next
-`qvac-bundle.sh` run.
+`local-ai-bundle.sh` run.
 
 ## 3. Group A: shipped inside the APK
 
@@ -346,9 +346,9 @@ What is in the tar (read from `opt/mqh/`):
 
 ### 3.9 The local AI runtime (`assets/qvac/runtime.tar`, 489 files, 62,791,511 bytes unpacked)
 
-The service `metacodex-ai 0.1.0` (`qvac/server`, ours, MIT) on Bare 1.36.0, built 2026-11-11 by `tools/qvac-bundle.sh`,
+The service `metacodex-ai 0.1.0` (`local-ai/server`, ours, MIT) on Bare 1.36.0, built 2026-11-11 by `tools/local-ai-bundle.sh`,
 with **133 third-party npm packages** (listed in [Appendix B](#appendix-b-npm-packages-in-the-apk)):
-Apache-2.0 83, MIT 45, ISC 5. 15 are named by `qvac/package.json` (`@qvac/asr-ggml` 0.12.0, `@qvac/embed-llamacpp`
+Apache-2.0 83, MIT 45, ISC 5. 15 are named by `local-ai/package.json` (`@qvac/asr-ggml` 0.12.0, `@qvac/embed-llamacpp`
 0.55.0, `@qvac/fabric` 0.26.0, `@qvac/llm-llamacpp` 0.68.0, `@qvac/registry-client` 0.8.0, `@qvac/tts-ggml` 0.15.0 and
 their android-arm64 builds, `bare-fs`, `bare-http1`, `bare-https`, `bare-os`, `bare-path`, `sodium-native`), the rest
 are their dependencies. The `@qvac/*` packages are "Copyright 2026 Tether Data, S.A. de C.V.", Apache-2.0; the
@@ -378,7 +378,7 @@ others). Those terms bind only whoever distributes those models. MetaCodex's fou
 ### 4.1 The four AI models
 
 The AI service fetches them on request into the app's private storage (VOICE > INSTALL MODELS, 660 MB), pinned by
-sha256 in `qvac/server/models.js`; nothing is redistributed by us inside the APK. Licences read from the model cards on
+sha256 in `local-ai/server/models.js`; nothing is redistributed by us inside the APK. Licences read from the model cards on
 2026-11-12.
 
 | Role | Exact model | File, sha256 | From | Licence | Copyright | Duties |
@@ -502,7 +502,7 @@ Status of the gaps of 2026-11-10 (G1-G9) and the new ones. "Owner" = a decision 
 | G4 | OpenRAIL-M use restrictions must reach users | **partly closed**: the ABOUT tab says the voice licence forbids some uses and points here; summary in 4.1 | **code**: also show them in the VOICE panel next to INSTALL MODELS |
 | G5 | Launcher icon is Unity's logo (`res/mipmap*/app_icon.png`, `ic_launcher_foreground.png`, checked in APK 0.7.16) | **open** | **code**: set our own icon in `MetaCodexSetup` (drawn from the MetaCodex mark) |
 | G6 | android.jar is downloaded without asking for acceptance of the Android SDK License | **open** (the script prints the name and URL, it does not ask) | **code**: `mcx-setup quest` must show the terms and ask first |
-| G7 | No licence for our code; `qvac/package.json` says Apache-2.0 | **closed**: MIT, `LICENSE` written; section 2 | **code**: change `qvac/package.json` `license` to `MIT` at the next bundle |
+| G7 | No licence for our code; `local-ai/package.json` says Apache-2.0 | **closed**: MIT, `LICENSE` written; section 2 | **code**: change `local-ai/package.json` `license` to `MIT` at the next bundle |
 | G8 | MQH on the headset must not carry Anthropic's Agent SDK | **closed**: verified absent from `mqh.tar` (APK 0.7.16); MQH's MIT and npm notices are in `docs/licenses/` | keep `tools/mqh-bundle.sh` removing `provider-claude-code` and `provider-pi` |
 | G9 | `UiIcon` shader left without a user | open, tidiness only (still in `Resources/Shaders`, still named by the self-test) | **code**: delete when the orb branch has landed |
 | G10 | **New.** 50 third-party icons in the APK (52 in the repository): `mqh/plugins/provider-acp/icons` (47 in the APK: logos of other agents), `provider-codex/icons` (2), `storage-retention/icons` (1), plus `provider-claude-code` and `provider-pi` (1 each, repository only); licence and provenance unknown (came with bb), trademarks of their owners | **open**: conflicts with the no-logo rule and contest section 4, and the MIT notice of bb does not clearly cover them | **code**: delete the `icons` folders in `tools/mqh-bundle.sh` (the plugins show no icon in the VR terminal) and drop them from `mqh/`, or replace them with our own; **owner** decides |

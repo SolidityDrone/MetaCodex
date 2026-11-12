@@ -10,7 +10,7 @@ rows only (an older `app.jsonl` with Italian rows still scores). Settings of kin
 1. `python3 tools/voicebench/make_eval.py` (only when the sentences change)
 2. Editor export (registry, the exact LLM request, the fast path on every sentence):
    `echo voiceexport > unity/Bench/uitest-only && tools/unity-batch.sh BatchUiTest 20` -> `unity/Bench/voice/`
-3. Today's LLM: `tools/qvac-dev.sh pc start`, `python3 tools/voicebench/llm_run.py`, `tools/qvac-dev.sh pc stop`
+3. Today's LLM: `tools/local-ai-dev.sh pc start`, `python3 tools/voicebench/llm_run.py`, `tools/local-ai-dev.sh pc stop`
 4. Routers: `~/mcxwork/voicebench/venv/bin/python tools/voicebench/bench.py [model filters]`
    (venv: fastembed, model2vec, numpy) -> table + `~/mcxwork/voicebench/{report.md,results.jsonl}`
 

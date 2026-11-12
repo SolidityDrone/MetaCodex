@@ -2,7 +2,7 @@
 
 > **Status 2026-11-07 (evening): phases 0-3 built.** Phase 0 ran the three models natively on the Quest 3S
 > over adb (numbers in `docs/voice.md`: speech-to-text 0.7 s, an LLM tool call 1.2-2 s, 72 fps held with 2
-> threads at nice 10). The service (`qvac/server`), its packing into the APK (`tools/qvac-bundle.sh`), the
+> threads at nice 10). The service (`local-ai/server`), its packing into the APK (`tools/local-ai-bundle.sh`), the
 > app side (QvacHost, microphone, voice pipeline, VOICE panel) and the command registry (shell commands,
 > Lua `voice.command`, control port `voice`) are in; `docs/voice.md` is the reference. Placement, measured in the
 > first APK: Horizon OS runs the immersive app and all its child processes in the `/immersive` CPU set

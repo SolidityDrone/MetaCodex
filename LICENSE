@@ -26,7 +26,7 @@ SOFTWARE.
 Scope. This licence covers the source code and documents written for MetaCodex:
 unity/Assets/MetaCodex (except its Fonts folder), unity/Assets/Plugins/Android/*.java,
 userland/ (our scripts, Core v0 and build tools; except userland/agent-skills),
-native/, tools/, tests/, qvac/server, docs/ (except docs/licenses/ and
+native/, tools/, tests/, local-ai/server, docs/ (except docs/licenses/ and
 docs/diagrams/fonts/, which hold third-party texts and fonts), and our changes
 to MQH. It does NOT cover the third-party material that is in this repository
 or that the app ships or downloads: Unity-made files (unity/Assets/TextMesh Pro,

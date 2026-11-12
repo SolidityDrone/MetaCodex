@@ -989,7 +989,7 @@ end)
         // ------------------------------------------------------------------ voice
 
         /// Voice control: the fast path (phrase templates, synonyms, fillers), the actions, a Lua plugin command,
-        /// then, with a dev AI service (tools/qvac-dev.sh device start), speech -> text -> command for real and the
+        /// then, with a dev AI service (tools/local-ai-dev.sh device start), speech -> text -> command for real and the
         /// LLM path for phrasings no template covers.
         private static void VoiceControl(MetaCodexShell shell)
         {
@@ -1085,7 +1085,7 @@ end)
                 "LLM grammar: shell commands, no free-text typing");
             // the real thing: the local AI service (QVAC) behind it
             DevForward();
-            if (!shell.Qvac.ConnectDevNow()) { Line("skip voice AI: " + shell.Qvac.Status + " (tools/qvac-dev.sh device start)"); RenderVoice(shell); return; }
+            if (!shell.Qvac.ConnectDevNow()) { Line("skip voice AI: " + shell.Qvac.Status + " (tools/local-ai-dev.sh device start)"); RenderVoice(shell); return; }
             shell.PumpForTest(4f);
             Check(shell.QvacStatus != null && shell.QvacStatus["models"]?["asr"]?["installed"]?.Value<bool>() == true, "AI service status with models: " + shell.QvacStatus?["models"]?.ToString(Newtonsoft.Json.Formatting.None));
             byte[] wav = null;
@@ -1616,11 +1616,11 @@ end)
         }
 
         /// The 180 English bench sentences (English only since 2026-11-12) through the app's own pipeline (fast path -> decision model) with the real model in the
-        /// dev AI service (tools/qvac-dev.sh pc start). Writes Bench/voice/app.jsonl; tools/voicebench/score_app.py scores it.
+        /// dev AI service (tools/local-ai-dev.sh pc start). Writes Bench/voice/app.jsonl; tools/voicebench/score_app.py scores it.
         private static void VoiceDecideBench(MetaCodexShell shell)
         {
             string devPath = Path.Combine("Bench", "qvac-dev.json");
-            if (!File.Exists(devPath)) { Fail("decision bench: no Bench/qvac-dev.json (tools/qvac-dev.sh pc start)"); return; }
+            if (!File.Exists(devPath)) { Fail("decision bench: no Bench/qvac-dev.json (tools/local-ai-dev.sh pc start)"); return; }
             var dev = JObject.Parse(File.ReadAllText(devPath));
             string url = ((string)dev["url"]).TrimEnd('/') + "/v1/embeddings";
             var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(120) };

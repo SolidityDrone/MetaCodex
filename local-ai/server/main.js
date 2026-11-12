@@ -1,7 +1,7 @@
 'use strict'
 // MetaCodex local AI service: QVAC speech-to-text, a small LLM with tool calling and text-to-speech on the
 // Bare runtime, in its own process on Horizon OS (the app starts it pinned to cores 0-2 at low priority).
-// HTTP/1.1 on 127.0.0.1 with a bearer token; OpenAI-style endpoints where a standard exists. docs/qvac.md.
+// HTTP/1.1 on 127.0.0.1 with a bearer token; OpenAI-style endpoints where a standard exists. docs/local-ai.md.
 //
 //   bare main.js --data <dir> [--port 47810] [--host 127.0.0.1] [--token-file <file>] [--threads 2]
 const http = require('bare-http1')

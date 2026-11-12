@@ -1,12 +1,12 @@
 #!/bin/bash
-# Builds the local AI service (docs/qvac.md) from the versions pinned in qvac/package.json + qvac/bun.lock:
+# Builds the local AI service (docs/local-ai.md) from the versions pinned in local-ai/package.json + local-ai/bun.lock:
 #   unity/Assets/StreamingAssets/qvac/runtime.tar.gz   service JS + QVAC addons (android-arm64, CPU backends only)
 #                                                      + libc++_shared.so from NDK r29 (the addons need it)
 #   unity/Assets/StreamingAssets/qvac/runtime.json     version and sha256; the app re-extracts when it changes
 #   unity/Assets/Plugins/Android/libs/arm64-v8a/libbare.so   the Bare runtime executable (stripped)
 # All three are generated and gitignored. Work tree: $QVAC_WORK (default ~/mcxwork/qvac-build), which also keeps
-# the unpruned node_modules (with linux-x64 addons) that tools/qvac-dev.sh runs on the PC.
-# Usage: tools/qvac-bundle.sh [--no-unity]   (--no-unity: only refresh the work tree)
+# the unpruned node_modules (with linux-x64 addons) that tools/local-ai-dev.sh runs on the PC.
+# Usage: tools/local-ai-bundle.sh [--no-unity]   (--no-unity: only refresh the work tree)
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 WORK=${QVAC_WORK:-$HOME/mcxwork/qvac-build}
@@ -20,11 +20,11 @@ say() { echo "[qvac-bundle] $*"; }
 
 mkdir -p "$WORK/pkg"
 # 1. install the pinned packages (bun; the lockfile lives in the repo)
-cp "$ROOT/qvac/package.json" "$WORK/pkg/"
-[ -f "$ROOT/qvac/bun.lock" ] && cp "$ROOT/qvac/bun.lock" "$WORK/pkg/"
+cp "$ROOT/local-ai/package.json" "$WORK/pkg/"
+[ -f "$ROOT/local-ai/bun.lock" ] && cp "$ROOT/local-ai/bun.lock" "$WORK/pkg/"
 (cd "$WORK/pkg" && if [ -f bun.lock ]; then bun install --frozen-lockfile; else bun install; fi) | tail -2
-[ -f "$ROOT/qvac/bun.lock" ] || { cp "$WORK/pkg/bun.lock" "$ROOT/qvac/"; say "created qvac/bun.lock (commit it)"; }
-rm -rf "$WORK/pkg/server" && cp -r "$ROOT/qvac/server" "$WORK/pkg/server"
+[ -f "$ROOT/local-ai/bun.lock" ] || { cp "$WORK/pkg/bun.lock" "$ROOT/local-ai/"; say "created local-ai/bun.lock (commit it)"; }
+rm -rf "$WORK/pkg/server" && cp -r "$ROOT/local-ai/server" "$WORK/pkg/server"
 
 # 2. the Bare runtimes (npm tarballs; bun skips packages whose os/cpu do not match the PC)
 for plat in android-arm64 linux-x64; do
@@ -66,7 +66,7 @@ while IFS= read -r -d '' f; do
   fi
 done < <(find "$STAGE" -type f \( -name '*.bare' -o -name '*.so' \) -print0)
 say "stripped $n native files"
-VERSION=$(python3 -c "import json;print(json.load(open('$ROOT/qvac/package.json'))['version'])")
+VERSION=$(python3 -c "import json;print(json.load(open('$ROOT/local-ai/package.json'))['version'])")
 SRCHASH=$( (cd "$STAGE" && find . -type f -print0 | sort -z | xargs -0 sha256sum) | sha256sum | cut -c1-16)
 
 # 5. outputs for Unity

@@ -52,7 +52,7 @@ Devpost support if in doubt. Core v0 stays in git history as the fallback engine
 | Gestures | maps gesture ids to actions (bindings are data); custom gestures arrive as plugins (data: pose templates) | recognises hand poses at frame rate, emits gesture ids |
 | Terminal | PTY sessions (bb terminals), scoped to thread / environment / machine | terminal panels attach to them; LinuxHost still boots the userland |
 | Files, artifacts | project files under the userland | previews (later: 3D, charts, docs) |
-| Local AI (QVAC) | client of the local AI API (plugin `qvac`: clean-up before providers, tools for agents) | voice capture, playback; owns the frame budget. QVAC itself runs natively in an Android service process (`docs/qvac.md`) |
+| Local AI (QVAC) | client of the local AI API (plugin `qvac`: clean-up before providers, tools for agents) | voice capture, playback; owns the frame budget. QVAC itself runs natively in an Android service process (`docs/local-ai.md`) |
 
 **Plugin UI in VR.** bb plugins ship UI as React (`plugin-sdk/app`); IL2CPP cannot load code at runtime.
 MQH adds a declarative surface: a plugin contributes JSON panels (list, card, form, buttons, text,

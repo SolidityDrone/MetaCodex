@@ -10,7 +10,7 @@ using Newtonsoft.Json.Linq;
 
 namespace MetaCodex.AI
 {
-    /// Client of the local AI service (qvac/server, docs/qvac.md): OpenAI-style speech-to-text, chat with tools
+    /// Client of the local AI service (local-ai/server, docs/local-ai.md): OpenAI-style speech-to-text, chat with tools
     /// and text-to-speech on 127.0.0.1 with a bearer token. Requests run off the main thread; every callback
     /// is queued to the main thread with (result, error) where exactly one is null.
     public sealed class QvacClient

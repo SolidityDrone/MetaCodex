@@ -1,7 +1,7 @@
 'use strict'
 // The engines (speech-to-text, LLM, text-to-speech, sentence vectors): loaded on first use, one job at a time,
 // unloaded after some idle minutes. CPU only, few threads: the GPU and the other cores belong to the
-// app's frame loop (docs/qvac.md, "Rules for a stable frame rate").
+// app's frame loop (docs/local-ai.md, "Rules for a stable frame rate").
 const fs = require('bare-fs')
 const path = require('bare-path')
 const { CATALOGUE } = require('./models')

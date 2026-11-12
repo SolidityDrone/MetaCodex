@@ -48,7 +48,7 @@ running with the headset off (risk R4).
 | Agent skill | `mqh/plugins/bb-guide/skills/quest-native-apps/SKILL.md` | written for the current flow |
 | `:ai` service process: named children (extras `argv` `env` `cwd` `log` `name`); MQH and the agents run under it | `MetaCodexAiService.java`, `MqhHost.cs` | **plain started service: no `startForeground`, no wake lock** |
 
-## Facts that shape the design (LEARNINGS 2026-11-07, docs/qvac.md)
+## Facts that shape the design (LEARNINGS 2026-11-07, docs/local-ai.md)
 
 - Horizon OS puts the immersive app **and all its child processes** in `/immersive` = **cores 3-5**. That
   includes Unity, proot and every in-app terminal. `taskset -c 0-2` from there fails (EINVAL), so

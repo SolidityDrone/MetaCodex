@@ -86,7 +86,7 @@ namespace MetaCodex.Shell
 
         /// Tests: a decision model with its own embedder, used without the AI service (`on` false restores the normal rule).
         public void UseDeciderForTest(VoiceDecider d, bool on) { Decider = d; _deciderTest = on; }
-        /// The vectors on disk belong to this model (qvac/server/models.js `embed.id`) and prefix; other ones are ignored.
+        /// The vectors on disk belong to this model (local-ai/server/models.js `embed.id`) and prefix; other ones are ignored.
         private const string DeciderModelTag = "multilingual-e5-small-q8_0|query: ";
         /// idle | listening | transcribing | thinking | done | error
         public string VoiceState { get; private set; } = "idle";

@@ -65,11 +65,11 @@ Android 10 and later forbids `exec()` of files an app writes. Only files in `nat
 |---|---|---|
 | `unity/` | The headset app. Runtime code in `Assets/MetaCodex/Runtime` (36,432 lines in 78 files: `AI/ App/ Hands/ Linux/ Scripting/ Security/ Shell/ Terminal/ Typing/ UI/`). Editor tools and self-tests in `Assets/MetaCodex/Editor`. Java plugins in `Assets/Plugins/Android`. | C#, Java |
 | `mqh/` | `apps/{server,host-daemon,cli}`, `packages/*`, `plugins/*` (including the `bb-guide` skills). | TypeScript, Node.js 24 |
-| `qvac/` | The local AI service: `server/{main,engines,models,audio}.js`, `package.json`. | JavaScript (Bare) |
+| `local-ai/` | The local AI service: `server/{main,engines,models,audio}.js`, `package.json`. | JavaScript (Bare) |
 | `userland/` | The proot and Debian fetchers, the overlay (`overlay/usr/local/bin/mcx-*`, `overlay/opt/metacodex/*`), `agent-skills/` (bundled third-party skills), `mqh/mqh-run`, `g0-shell.sh`. | shell, Python |
 | `native/` | `pty/`, `xr/` (`mcx_xr`), `hello-native/` (template), `examples/nightvision`, `runner/`, `module-template/`, `skills/` (5 native-app skills), `project/AGENTS.md`. | C, C++ |
 | `tests/` | `terminal/`, `typing/`, `sidebar/`. | C# (.NET 8) |
-| `tools/` | Compile check, batch Editor, device test, `qterm`, MQH build and bundle, `qvac-bundle.sh`, `qvac-dev.sh`, `voicebench/`, agent tests, `check-native-skills.py`, `return-test.sh`, `gpu-switch-test.sh`. | shell, Python |
+| `tools/` | Compile check, batch Editor, device test, `qterm`, MQH build and bundle, `local-ai-bundle.sh`, `local-ai-dev.sh`, `voicebench/`, agent tests, `check-native-skills.py`, `return-test.sh`, `gpu-switch-test.sh`. | shell, Python |
 | `docs/` | Design documents, licence inventory, diagrams. | Markdown |
 
 The build writes generated parts into `unity/Assets`:
@@ -98,7 +98,7 @@ tools/device-test.sh                # install the APK and drive the in-app termi
 
 Generated parts before a build:
 
-- `tools/qvac-bundle.sh` packs the local AI service.
+- `tools/local-ai-bundle.sh` packs the local AI service.
 - `tools/mqh-build.sh && tools/mqh-bundle.sh` pack MQH (server, host daemon, CLI and plugins, without the Claude Code provider and the Pi provider).
 - `userland/build-overlay.py` builds the overlay.
 
@@ -111,7 +111,7 @@ Inside the headset, in a terminal:
 - Use Wi-Fi adb: `adb tcpip 5555`, then `adb connect <ip>:5555`.
 - Forward the control port: `adb forward tcp:47800 tcp:47800`, then use `tools/qterm`.
 - The app writes `files/session_log.txt`.
-- Dev AI service: `tools/qvac-dev.sh device start` (on the headset, over adb) or `tools/qvac-dev.sh pc start` (in WSL).
+- Dev AI service: `tools/local-ai-dev.sh device start` (on the headset, over adb) or `tools/local-ai-dev.sh pc start` (in WSL).
 - Return-path tests: `tools/return-test.sh <pkg> [report] [cold]` and `tools/gpu-switch-test.sh <pkg> 10`.
 - The checklist is [TEST_CHECKLIST.md](TEST_CHECKLIST.md). Sections 25 to 33 are still to tick.
 
@@ -143,7 +143,7 @@ Sections include `decider`, `voiceexport,voicedecide`, `context`, `chat`, `sideb
 
 - `python3 tools/voicebench/make_eval.py` makes the 180-sentence English set (the 175 Italian sentences were removed on 2026-11-12: voice is English only).
 - Export the registry from the Editor: `echo voiceexport > unity/Bench/uitest-only && tools/unity-batch.sh BatchUiTest 20`.
-- Start the PC AI service: `tools/qvac-dev.sh pc start`. Then run `python3 tools/voicebench/llm_run.py`.
+- Start the PC AI service: `tools/local-ai-dev.sh pc start`. Then run `python3 tools/voicebench/llm_run.py`.
 - Compare routers: `~/mcxwork/voicebench/venv/bin/python tools/voicebench/bench.py`.
 - Score the app run: `tools/voicebench/score_app.py`.
 - Results: `tools/voicebench/results/2026-11-09-app-decision-model.md`, `2026-11-09-router-vs-llm.md`, `2026-11-11-thread-sidebar.md`.
@@ -154,11 +154,11 @@ Sections include `decider`, `voiceexport,voicedecide`, `context`, `chat`, `sideb
 
 - The service runs the QVAC JavaScript runtime (`libbare.so server/main.js`) as a child of `MetaCodexAiService`.
 - Command line: `taskset 7 nice -n 10 libbare.so server/main.js --data files/qvac/data --token-file files/qvac/token --port 47810 --threads 2`.
-- Packaging: `tools/qvac-bundle.sh` packs five addon families for android-arm64 (CPU only) into `StreamingAssets/qvac/runtime.tar.gz` (25,015,017 bytes; 62,791,511 unpacked).
+- Packaging: `tools/local-ai-bundle.sh` packs five addon families for android-arm64 (CPU only) into `StreamingAssets/qvac/runtime.tar.gz` (25,015,017 bytes; 62,791,511 unpacked).
 - Versions: service 0.1.0; `asr-ggml` 0.12.0; `tts-ggml` 0.15.0; `llm-llamacpp` 0.68.0 with `fabric` 0.26.0; `embed-llamacpp` 0.55.0; registry client 0.8.0. All Apache-2.0.
 - The addons need the NDK r29 `libc++_shared.so`. An r27 one fails `dlopen`.
 - Engine settings: speech `use_gpu false`, Whisper `audio_ctx` 512 minimum; LLM `device cpu`, `ctx_size 2048`, `temp 0`, `reasoning_budget 0`, `predict 256`; embeddings `device cpu`, batch 512, ctx 512; voice `useGPU false`, 5 diffusion steps.
-- Models: `ggml-base-q8_0.bin` (81,768,585 bytes), `Qwen3-0.6B-Q4_0.gguf` (382,156,480), `multilingual-e5-small-q8_0.gguf` (132,439,008), `supertonic3-q4_0.gguf` (84,658,368). Each is pinned by revision and SHA-256 in `qvac/server/models.js`.
+- Models: `ggml-base-q8_0.bin` (81,768,585 bytes), `Qwen3-0.6B-Q4_0.gguf` (382,156,480), `multilingual-e5-small-q8_0.gguf` (132,439,008), `supertonic3-q4_0.gguf` (84,658,368). Each is pinned by revision and SHA-256 in `local-ai/server/models.js`.
 - API: `GET /health`, `GET /status`, `POST /v1/models/install`, `/v1/embeddings`, `/v1/audio/transcriptions`, `/v1/audio/speech`, `/v1/chat/completions`, `/v1/warmup`, `/config`, `/unload`, `/pause`, `/resume`, `/shutdown`, `GET /log`.
 - From the Linux: `mcx-ai status|install|transcribe f.wav|say "text"|chat "prompt"|env|log`.
 - The models install from VOICE > INSTALL MODELS. The first three took 72 s on the headset (2026-11-07).
@@ -210,7 +210,7 @@ App: TerminalView (TMP rows + cell mesh) <- VtTerminal (xterm emulator) <- pty b
 |---|---|
 | [ui.md](ui.md) | Spatial UI, hands, gestures, panels, Ambient Focus. |
 | [voice.md](voice.md) | The voice path, models, measurements. |
-| [qvac.md](qvac.md) | The local AI runtime and why it runs in its own process. |
+| [local-ai.md](local-ai.md) | The local AI runtime and why it runs in its own process. |
 | [mqh.md](mqh.md) | The agent harness. |
 | [mqh-spatial.md](mqh-spatial.md) | Design of `spatial.json` panels (not rendered yet). |
 | [secrets.md](secrets.md) | The vault, policies and the threat model. |
@@ -228,7 +228,7 @@ Known differences between these documents and the code (the code wins):
 - `mqh.md` says MQH uses HTTP and a WebSocket. The app polls over HTTP only.
 - `session-context.md` says the memory is not in a file in the Linux. The app saves `session-context.jsonl` in the shared folder.
 - `voice.md` lists 17 commands and some old idle times. The code registers 25 commands and unloads speech and the LLM after 30 min.
-- `qvac.md` says MQH and the agents share cores 3-5. Since 2026-11-10 they run under `:ai` on cores 0-2.
+- `local-ai.md` says MQH and the agents share cores 3-5. Since 2026-11-10 they run under `:ai` on cores 0-2.
 - `LICENSES.md` says MQH is not in the APK. `mqh.tar.gz` is in the APK.
 - `secrets.md` says "StrongBox or TEE". On the test headset the key is in the TEE.
 

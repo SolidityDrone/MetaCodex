@@ -1,5 +1,5 @@
 """Today's LLM on every bench sentence: the app's exact request (unity/Bench/voice/llm-request.json, exported by the
-Editor) sent to the dev AI service (tools/qvac-dev.sh pc start; url + token in unity/Bench/qvac-dev.json).
+Editor) sent to the dev AI service (tools/local-ai-dev.sh pc start; url + token in unity/Bench/qvac-dev.json).
 Writes ~/mcxwork/voicebench/llm.jsonl: {id, content, ms}. One warm-up request first (not counted).
 """
 import json, os, sys, time, urllib.request

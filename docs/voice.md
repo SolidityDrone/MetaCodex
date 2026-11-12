@@ -161,8 +161,8 @@ with each part's command, score and runner-up; nothing runs. Rules for every com
 
 ## The local AI service
 
-QVAC (Tether's local AI stack) on the Bare runtime, in its own process: `qvac/server/` (Bare JS),
-packed by `tools/qvac-bundle.sh` into `StreamingAssets/qvac/runtime.tar.gz` (24 MB: QVAC addons for
+QVAC (Tether's local AI stack) on the Bare runtime, in its own process: `local-ai/server/` (Bare JS),
+packed by `tools/local-ai-bundle.sh` into `StreamingAssets/qvac/runtime.tar.gz` (24 MB: QVAC addons for
 android-arm64 with CPU backends only, `libc++_shared.so` from NDK r29) plus `libbare.so` (the Bare
 executable, 62 MB, stripped) in `Plugins/Android/libs/arm64-v8a`. Models are not in the APK: VOICE >
 INSTALL MODELS downloads them once (660 MB) into the app's private storage, each checked against the
@@ -374,7 +374,7 @@ time; with the samples folder also the service's own replies and parity with the
 ## English-only models: later options (2026-11-12, not done)
 
 The app is English only, but the models stay multilingual in this change: a model swap needs a new download, its
-sha256 in `qvac/server/models.js`, a `docs/LICENSES.md` entry and a headset install, and none was measured yet.
+sha256 in `local-ai/server/models.js`, a `docs/LICENSES.md` entry and a headset install, and none was measured yet.
 
 | Now | Option | Why it may help | What it needs |
 |---|---|---|---|
@@ -418,9 +418,9 @@ vocabulary prompt fixes names ("MetaCodex", not "MedicoDex").
 
 ## Development without an APK
 
-- `tools/qvac-bundle.sh`: builds the runtime and `libbare.so` (also needed once before the dev runners).
-- `tools/qvac-dev.sh device start`: the same service on the headset over adb (`/data/local/tmp/mcx-ai`),
-  port forwarded; `tools/qvac-dev.sh pc start` in WSL with the linux-x64 addons. Both write
+- `tools/local-ai-bundle.sh`: builds the runtime and `libbare.so` (also needed once before the dev runners).
+- `tools/local-ai-dev.sh device start`: the same service on the headset over adb (`/data/local/tmp/mcx-ai`),
+  port forwarded; `tools/local-ai-dev.sh pc start` in WSL with the linux-x64 addons. Both write
   `unity/Bench/qvac-dev.json`, which the Editor uses instead of starting a process.
 - Self-test: `MCX_UITEST_ONLY=voice tools/unity-batch.sh BatchUiTest` (fast path, actions, a Lua plugin
   command, the control port, MQH commands, and with a dev service: speech -> text -> command and the
@@ -433,8 +433,8 @@ vocabulary prompt fixes names ("MetaCodex", not "MedicoDex").
 
 | Piece | Path |
 |---|---|
-| Service (Bare JS) | `qvac/server/main.js`, `engines.js`, `models.js`, `audio.js`; `qvac/package.json` + `bun.lock` |
-| Bundle and dev runners | `tools/qvac-bundle.sh`, `tools/qvac-dev.sh`, `tools/remote-unzip.py` |
+| Service (Bare JS) | `local-ai/server/main.js`, `engines.js`, `models.js`, `audio.js`; `local-ai/package.json` + `bun.lock` |
+| Bundle and dev runners | `tools/local-ai-bundle.sh`, `tools/local-ai-dev.sh`, `tools/remote-unzip.py` |
 | Process, client | `unity/Assets/MetaCodex/Runtime/AI/QvacHost.cs`, `QvacClient.cs` |
 | Microphone | `Runtime/AI/VoiceRecorder.cs` |
 | Registry, fast path, registry JSON and lint | `Runtime/AI/VoiceCommands.cs` |

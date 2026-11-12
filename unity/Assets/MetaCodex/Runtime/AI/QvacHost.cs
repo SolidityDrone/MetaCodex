@@ -16,10 +16,10 @@ namespace MetaCodex.AI
     /// its own process. Horizon OS keeps the immersive app and everything it starts on cores 3-5 (the frame
     /// loop's cores), so the app asks its own Android service process (":ai", MetaCodexAiService.java), which
     /// the system places on cores 0-2, to start `libbare.so` (the Bare executable, in nativeLibraryDir where
-    /// exec is allowed) with the service JS that tools/qvac-bundle.sh packs into StreamingAssets/qvac, at
+    /// exec is allowed) with the service JS that tools/local-ai-bundle.sh packs into StreamingAssets/qvac, at
     /// nice 10, CPU only. HTTP on 127.0.0.1:47810 with a token made at every start (the userland reads it from
     /// /mnt/quest/qvac.token). Health-checked; restarted when it stops answering (3 times in 5 min).
-    /// In the Editor it uses a dev service started by tools/qvac-dev.sh (unity/Bench/qvac-dev.json).
+    /// In the Editor it uses a dev service started by tools/local-ai-dev.sh (unity/Bench/qvac-dev.json).
     public sealed class QvacHost : MonoBehaviour
     {
         public enum HostState { Idle, NotBundled, Preparing, Starting, Running, Stopped, Failed }
@@ -29,7 +29,7 @@ namespace MetaCodex.AI
         public string Status { get; private set; } = "not started";
         public float Progress { get; private set; }
         public QvacClient Client { get; private set; }
-        /// Editor: a service started by tools/qvac-dev.sh (in WSL or on the headset over adb).
+        /// Editor: a service started by tools/local-ai-dev.sh (in WSL or on the headset over adb).
         public bool IsDev { get; private set; }
         public string RuntimeDir { get; private set; }
         public string DataDir { get; private set; }
@@ -117,7 +117,7 @@ namespace MetaCodex.AI
             _restartAt = -1f;
             _gen++;
             _routine = false;
-            if (IsDev) { Set(HostState.Stopped, "dev service left running (tools/qvac-dev.sh … stop)"); return; }
+            if (IsDev) { Set(HostState.Stopped, "dev service left running (tools/local-ai-dev.sh … stop)"); return; }
             Client.Shutdown();
             ServiceIntent("stop", null, null, null, null);
             Set(HostState.Stopped, "stopped");
@@ -227,7 +227,7 @@ namespace MetaCodex.AI
             Set(HostState.Preparing, "preparing the AI runtime");
             string info = null;
             yield return ReadStreaming("qvac/runtime.json", t => info = t);
-            if (info == null) { Set(HostState.NotBundled, "this build has no AI runtime (run tools/qvac-bundle.sh before building)"); yield break; }
+            if (info == null) { Set(HostState.NotBundled, "this build has no AI runtime (run tools/local-ai-bundle.sh before building)"); yield break; }
             string hash;
             try { hash = (string)JObject.Parse(info)["hash"] ?? "?"; }
             catch (Exception ex) { Fail("runtime.json: " + ex.Message); yield break; }
@@ -309,7 +309,7 @@ namespace MetaCodex.AI
                 if (ok) { Set(HostState.Running, $"running on 127.0.0.1:{Port}" + (IsDev ? " (dev)" : "")); _restarts = Math.Max(0, _restarts - 1); yield break; }
                 yield return new WaitForSecondsRealtime(0.5f);
             }
-            Fail(IsDev ? "no dev AI service answers (tools/qvac-dev.sh pc start)" : "the AI service did not answer in time; see files/qvac/data/service.log");
+            Fail(IsDev ? "no dev AI service answers (tools/local-ai-dev.sh pc start)" : "the AI service did not answer in time; see files/qvac/data/service.log");
         }
 
         private void KillStale()
@@ -352,7 +352,7 @@ namespace MetaCodex.AI
         {
             IsDev = true;
             var j = DevConfig();
-            if (j == null) { Set(HostState.NotBundled, "no dev AI service: tools/qvac-dev.sh pc start (or device start)"); return false; }
+            if (j == null) { Set(HostState.NotBundled, "no dev AI service: tools/local-ai-dev.sh pc start (or device start)"); return false; }
             Client.BaseUrl = (string)j["url"] ?? Client.BaseUrl;
             Client.Token = (string)j["token"] ?? "";
             try
@@ -368,7 +368,7 @@ namespace MetaCodex.AI
         private IEnumerator ConnectDev()
         {
             var j = DevConfig();
-            if (j == null) { Set(HostState.NotBundled, "no dev AI service: tools/qvac-dev.sh pc start (or device start)"); yield break; }
+            if (j == null) { Set(HostState.NotBundled, "no dev AI service: tools/local-ai-dev.sh pc start (or device start)"); yield break; }
             Client.BaseUrl = (string)j["url"] ?? Client.BaseUrl;
             Client.Token = (string)j["token"] ?? "";
             Set(HostState.Starting, "connecting to the dev AI service (" + (string)j["where"] + ")");
