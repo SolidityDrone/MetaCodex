@@ -6,7 +6,9 @@ const fs = require('bare-fs')
 const path = require('bare-path')
 const { CATALOGUE } = require('./models')
 
-const KINDS = ['asr', 'llm', 'tts', 'embed']
+const KINDS = ['asr', 'llm', 'tts', 'embed', 'coder']
+const INTERFACE = ['asr', 'llm', 'tts', 'embed'] // the app's own voice / UI AI
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 class Engines {
   constructor ({ models, cfg, log, cacheDir }) {
@@ -15,16 +17,17 @@ class Engines {
     this.log = log
     this.cacheDir = cacheDir
     fs.mkdirSync(cacheDir, { recursive: true })
-    this.inst = { asr: null, llm: null, tts: null, embed: null }
-    this.state = { asr: 'unloaded', llm: 'unloaded', tts: 'unloaded', embed: 'unloaded' }
-    this.lastUsed = { asr: 0, llm: 0, tts: 0, embed: 0 }
+    const each = (v) => Object.fromEntries(KINDS.map((k) => [k, v]))
+    this.inst = each(null)
+    this.state = each('unloaded')
+    this.lastUsed = each(0)
     this.loadMs = {}
     this.loadedWith = {}
     // one queue per engine: speech-to-text never waits behind an LLM warm-up, and each engine runs one job
     // at a time with `threads` threads (all of them pinned to cores 0-2 by the launcher)
-    this.chains = { asr: Promise.resolve(), llm: Promise.resolve(), tts: Promise.resolve(), embed: Promise.resolve() }
-    this.busy = { asr: null, llm: null, tts: null, embed: null }
-    this.queued = { asr: 0, llm: 0, tts: 0, embed: 0 }
+    this.chains = Object.fromEntries(KINDS.map((k) => [k, Promise.resolve()]))
+    this.busy = each(null)
+    this.queued = each(0)
     this.paused = false
     this.waiters = []
     this.jobs = 0
@@ -43,18 +46,39 @@ class Engines {
       if (this.loadMs[k]) engines[k].loadMs = this.loadMs[k]
     }
     const busy = KINDS.map((k) => this.busy[k]).filter(Boolean)
-    return { busy: busy.length ? busy.join(',') : null, queued: KINDS.reduce((n, k) => n + this.queued[k], 0), paused: this.paused, jobs: this.jobs, lastMs: this.last, engines }
+    return { coderHold: this.coderHolds(), busy: busy.length ? busy.join(',') : null, queued: KINDS.reduce((n, k) => n + this.queued[k], 0), paused: this.paused, jobs: this.jobs, lastMs: this.last, engines }
+  }
+
+  /**
+   * The local coder and the interface AI never share the 3 AI cores (owner 2026-11-12: "if we choose the local
+   * provider ... talk or local AI for interfacing with UI shall await, otherwise we hit a bottleneck"): while the
+   * coder works, and for coderHoldMs after its last request (an agent turn is many requests with tool runs between
+   * them), speech-to-text, the voice LLM, speech and sentence vectors wait; a coder request waits for an interface
+   * job that already runs (they are short).
+   */
+  coderHolds () {
+    return !!(this.busy.coder || this.queued.coder > 0 || Date.now() - (this.coderLastEnd || 0) < (Number(this.cfg.coderHoldMs) || 15000))
+  }
+
+  async _gate (kind) {
+    if (kind === 'coder') { while (INTERFACE.some((k) => this.busy[k])) await sleep(100); return }
+    if (!INTERFACE.includes(kind)) return
+    let waited = 0
+    while (this.coderHolds()) { await sleep(250); waited += 250 }
+    if (waited) this.log(`${kind} waited ${waited} ms for the local coder`)
   }
 
   /** Runs the jobs of one engine one at a time; waits while paused. */
   job (kind, label, fn) {
     this.queued[kind]++
     const run = async () => {
+      if (label !== 'unload') await this._gate(kind)
       this.queued[kind]--
       while (this.paused) await new Promise((resolve) => this.waiters.push(resolve))
       this.busy[kind] = label
       const t0 = Date.now()
       try { return await fn() } finally {
+        if (kind === 'coder') this.coderLastEnd = Date.now()
         this.busy[kind] = null
         this.jobs++
         this.last[label] = Date.now() - t0
@@ -113,15 +137,16 @@ class Engines {
    */
   chat (messages, tools, opts = {}) {
     const abort = opts.abort || null
-    return this.job('llm', opts.onToken ? 'llm-stream' : 'llm', async () => {
+    const kind = opts.engine === 'coder' ? 'coder' : 'llm' // coder: the local coding model of the agent harnesses
+    return this.job(kind, opts.onToken ? kind + '-stream' : kind, async () => {
       if (abort && abort.aborted) return { content: '', tool_calls: [], raw: '', ms: 0, firstMs: 0, stats: null, cancelled: true, skipped: true }
-      const llm = await this._ensure('llm')
+      const llm = await this._ensure(kind)
       const prompt = [...(tools || []).map(toQvacTool), ...(messages || []).map(toQvacMessage)]
-      const gen = { temp: opts.temperature != null ? Number(opts.temperature) : 0, predict: opts.max_tokens != null ? Number(opts.max_tokens) : 256 }
+      const gen = { temp: opts.temperature != null ? Number(opts.temperature) : 0, predict: opts.max_tokens != null ? Math.min(Number(opts.max_tokens), kind === 'coder' ? 2048 : 1024) : (kind === 'coder' ? 1024 : 256) }
       if (typeof opts.grammar === 'string' && opts.grammar.trim()) gen.grammar = opts.grammar // GBNF: e.g. one command line
       const runOpts = { generationParams: gen }
-      const base = this._prefixFile(tools, (messages || []).slice(0, -1)) // all but the new user turn
-      if (fs.existsSync(base)) runOpts.baseCacheKey = base // system prompt + examples + tools, prefilled once (warm)
+      const base = kind === 'llm' ? this._prefixFile(tools, (messages || []).slice(0, -1)) : null // all but the new user turn
+      if (base && fs.existsSync(base)) runOpts.baseCacheKey = base // system prompt + examples + tools, prefilled once (warm)
       const t0 = Date.now()
       let first = 0
       let out = ''
@@ -283,6 +308,7 @@ class Engines {
     if (kind === 'embed') return JSON.stringify([c.threads])
     if (kind === 'asr') return JSON.stringify([c.threads, this.asrWant.language || c.language, c.prompt, this.asrWant.actx])
     if (kind === 'llm') return JSON.stringify([c.threads, this.batchThreads(), c.ctx])
+    if (kind === 'coder') return JSON.stringify([c.threads, c.coderCtx])
     return JSON.stringify([c.threads, this.ttsWant.voice || c.voice, c.ttsLanguage, c.ttsSteps])
   }
 
@@ -336,6 +362,15 @@ class Engines {
         config: { device: 'cpu', ctx_size: String(c.ctx), threads: String(c.threads), 'threads-batch': String(this.batchThreads()), tools: 'true', reasoning_budget: '0', temp: '0', predict: '256' },
         opts: { stats: true }
       })
+    } else if (kind === 'coder') {
+      // an agent harness's system prompt + tools are 6-20k tokens: a 16k context (KV about 1.8 GB at f16 for 1.7B;
+      // q8_0 halves it); thinking off (reasoning_budget 0) keeps turns short
+      const Llm = require('@qvac/llm-llamacpp')
+      m = new Llm({
+        files: { model: [file] },
+        config: { device: 'cpu', ctx_size: String(c.coderCtx || 16384), threads: String(c.threads), 'threads-batch': String(c.threads), tools: 'true', reasoning_budget: '0', temp: '0', predict: '1024' },
+        opts: { stats: true }
+      })
     } else if (kind === 'embed') {
       const GGMLBert = require('@qvac/embed-llamacpp')
       m = new GGMLBert({ files: { model: [file] }, config: { device: 'cpu', threads: String(c.threads), batch_size: '512', ctx_size: '512' } })
@@ -371,7 +406,7 @@ class Engines {
     const now = Date.now()
     for (const k of KINDS) {
       if (this.busy[k] || this.queued[k]) continue
-      const minutes = Number((this.cfg.idleMinutes || {})[k] || 0)
+      const minutes = Number((this.cfg.idleMinutes || {})[k] || (k === 'coder' ? 10 : 0)) // the coder (1-2 GB) goes after 10 idle minutes
       if (this.inst[k] && minutes > 0 && now - this.lastUsed[k] > minutes * 60000) {
         this.job(k, 'unload', async () => {
           if (this.inst[k] && Date.now() - this.lastUsed[k] > minutes * 60000) await this._unload(k)
@@ -432,7 +467,9 @@ function toQvacTool (t) {
 /** OpenAI assistant tool_calls (arguments as JSON text) -> QVAC tool_calls (arguments object). */
 function toQvacMessage (m) {
   if (!m || typeof m !== 'object') return m
-  const out = { role: m.role, content: m.content == null ? '' : m.content }
+  // content as a list of parts (OpenCode, the compat layers): the text parts, joined
+  const content = Array.isArray(m.content) ? m.content.map((p) => typeof p === 'string' ? p : (p && (p.text != null ? p.text : p.content)) || '').join('') : m.content
+  const out = { role: m.role, content: content == null ? '' : content }
   if (Array.isArray(m.tool_calls)) {
     out.tool_calls = m.tool_calls.map((c, i) => {
       const f = c.function || c

@@ -373,15 +373,35 @@ namespace MetaCodex.Shell
             else VoiceListen();
         }
 
-        public void VoiceListen()
+        public void VoiceListen() => VoiceListen(false);
+
+        /// The local coder holds the AI cores (an agent on the local model is working): voice waits for its turn to end
+        /// instead of queueing behind it (owner 2026-11-12). The service enforces it too; this tells the user at once.
+        private void VoiceListen(bool coderChecked)
         {
             if (Recorder.Recording) return;
+            if (!coderChecked && Qvac != null && Qvac.IsRunning)
+            {
+                Qvac.Client.Status((r, e) =>
+                {
+                    QvacStatus = r as JObject ?? QvacStatus;
+                    if (e == null && r?["coderHold"]?.Value<bool>() == true)
+                    {
+                        SetVoiceState("error", "⏸ LOCAL CODER WORKING", "Voice waits until the agent's turn on the local model ends");
+                        _vHudCloseAt = Time.unscaledTime + 4f;
+                        Sounds?.Play("error");
+                        return;
+                    }
+                    VoiceListen(true);
+                });
+                return;
+            }
             EnsureVoiceService();
             if (!VoiceRecorder.HasPermission)
             {
                 VoiceRecorder.RequestPermission(ok => _main.Enqueue(() =>
                 {
-                    if (ok) VoiceListen();
+                    if (ok) VoiceListen(true);
                     else VoiceDone(new VoiceResult { Error = "microphone permission denied (Horizon settings > Apps > MetaCodex)" }, null);
                 }));
                 return;

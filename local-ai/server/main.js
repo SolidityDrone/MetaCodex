@@ -10,6 +10,7 @@ const path = require('bare-path')
 const os = require('bare-os')
 const { Models, CATALOGUE } = require('./models')
 const { Engines } = require('./engines')
+const compat = require('./compat')
 const audio = require('./audio')
 
 const VERSION = '0.1.0'
@@ -52,7 +53,10 @@ const DEFAULTS = {
   ttsThreads: null,
   asrThreads: null,
   embedThreads: null,
-  prefillYieldsToAsr: true // a speculative prefill is cancelled when speech-to-text needs the cores
+  prefillYieldsToAsr: true, // a speculative prefill is cancelled when speech-to-text needs the cores
+  coderThreads: 3, // the local coding model (compat.js) may use the 3 AI cores: it runs when voice is idle
+  coderCtx: 16384,
+  coderHoldMs: 15000 // the interface AI waits this long after the coder's last request (engines.coderHolds)
 }
 const cfg = Object.assign({}, DEFAULTS, readJson(CONFIG) || {})
 if (args.threads) cfg.threads = Number(args.threads)
@@ -109,6 +113,12 @@ async function handle (req, res, body) {
       return speech(res, parseJson(body))
     case 'POST /v1/chat/completions':
       return completions(req, res, parseJson(body))
+    case 'POST /v1/responses': // Codex (wire_api = "responses") on the local coding model
+      return compat.responses(req, res, parseJson(body), { engines, send, sse, log })
+    case 'POST /v1/messages': // Claude Code (ANTHROPIC_BASE_URL) on the local coding model
+      return compat.messagesApi(req, res, parseJson(body), { engines, send, sse, log })
+    case 'POST /v1/messages/count_tokens':
+      return send(res, 200, compat.countTokens(parseJson(body)))
     case 'POST /v1/prefill': { // the session prompt without its question, evaluated while the user still speaks
       const j = parseJson(body)
       if (!Array.isArray(j.messages) || !j.messages.length) throw httpError(400, 'messages is required')
@@ -224,7 +234,7 @@ async function speech (res, j) {
 async function completions (req, res, j) {
   if (!Array.isArray(j.messages) || !j.messages.length) throw httpError(400, 'messages is required')
   if (j.stream) return completionsStream(req, res, j)
-  const r = await engines.chat(j.messages, Array.isArray(j.tools) ? j.tools : [], { max_tokens: j.max_tokens, temperature: j.temperature, grammar: j.grammar })
+  const r = await engines.chat(j.messages, Array.isArray(j.tools) ? j.tools : [], { max_tokens: j.max_tokens, temperature: j.temperature, grammar: j.grammar, engine: compat.wantsCoder(j.model) ? 'coder' : 'llm' })
   const calls = r.tool_calls.map((c, i) => ({ id: 'call_' + Date.now().toString(36) + i, type: 'function', function: { name: c.name, arguments: JSON.stringify(c.arguments || {}) } }))
   const st = r.stats || {}
   log(`llm ${r.ms} ms (first ${r.firstMs} ms): ${calls.length ? calls.map((c) => c.function.name + c.function.arguments).join(' ') : JSON.stringify(r.content).slice(0, 120)}`)
@@ -232,7 +242,7 @@ async function completions (req, res, j) {
     id: 'chatcmpl-' + Date.now().toString(36),
     object: 'chat.completion',
     created: Math.floor(Date.now() / 1000),
-    model: CATALOGUE.llm.id,
+    model: (compat.wantsCoder(j.model) ? CATALOGUE.coder : CATALOGUE.llm).id,
     choices: [{ index: 0, message: Object.assign({ role: 'assistant', content: r.content || null }, calls.length ? { tool_calls: calls } : {}), finish_reason: calls.length ? 'tool_calls' : 'stop' }],
     usage: { prompt_tokens: st.promptTokens || 0, completion_tokens: st.generatedTokens || 0, total_tokens: (st.promptTokens || 0) + (st.generatedTokens || 0) },
     timings: { ms: r.ms, firstMs: r.firstMs, tps: st.TPS || null }
@@ -254,14 +264,14 @@ async function completionsStream (req, res, j) {
   res.setHeader('Cache-Control', 'no-cache')
   const chunk = (delta, finish, extra) => {
     if (abort.aborted) return
-    const o = { id, object: 'chat.completion.chunk', created, model: CATALOGUE.llm.id, choices: [{ index: 0, delta, finish_reason: finish || null }] }
+    const o = { id, object: 'chat.completion.chunk', created, model: (compat.wantsCoder(j.model) ? CATALOGUE.coder : CATALOGUE.llm).id, choices: [{ index: 0, delta, finish_reason: finish || null }] }
     try { res.write('data: ' + JSON.stringify(Object.assign(o, extra || {})) + '\n\n') } catch { gone() }
   }
   chunk({ role: 'assistant' })
   let r
   try {
     r = await engines.chat(j.messages, Array.isArray(j.tools) ? j.tools : [], {
-      max_tokens: j.max_tokens, temperature: j.temperature, grammar: j.grammar, abort,
+      max_tokens: j.max_tokens, temperature: j.temperature, grammar: j.grammar, abort, engine: compat.wantsCoder(j.model) ? 'coder' : 'llm',
       onToken: (t) => chunk({ content: t })
     })
   } catch (e) {
@@ -278,7 +288,25 @@ async function completionsStream (req, res, j) {
   try { res.end('data: [DONE]\n\n') } catch {}
 }
 
+/** A server-sent-events response: event(name, obj) writes `event:` + `data:` lines, end() closes it; `abort` is set
+ * when the client goes away (the socket, not the request: bare-http1 closes the request once its body is read). */
+function sse (req, res) {
+  const abort = { aborted: false, onabort: null }
+  const gone = () => { if (abort.aborted) return; abort.aborted = true; if (abort.onabort) abort.onabort() }
+  try { if (req.socket) req.socket.on('close', gone) } catch {}
+  res.statusCode = 200
+  res.setHeader('Content-Type', 'text/event-stream')
+  res.setHeader('Cache-Control', 'no-cache')
+  return {
+    abort,
+    event (name, obj) { if (abort.aborted) return; try { res.write('event: ' + name + '\ndata: ' + JSON.stringify(obj) + '\n\n') } catch { gone() } },
+    end () { try { res.end() } catch {} }
+  }
+}
+
 function authorized (req) {
+  // Anthropic clients send the key as x-api-key (Claude Code with ANTHROPIC_API_KEY), the others as a bearer token
+  if (req.headers['x-api-key'] && !req.headers.authorization) req.headers.authorization = 'Bearer ' + req.headers['x-api-key']
   const h = String(req.headers.authorization || '')
   const want = 'Bearer ' + TOKEN
   if (h.length !== want.length) return false
@@ -289,7 +317,7 @@ function authorized (req) {
 
 function kindsOf (j) {
   const k = j.kinds || j.models || j.kind
-  if (!k) return Object.keys(CATALOGUE)
+  if (!k) return Object.keys(CATALOGUE).filter((x) => !CATALOGUE[x].optional) // the coder only on request
   return (Array.isArray(k) ? k : [k]).map(String)
 }
 
