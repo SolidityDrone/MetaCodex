@@ -583,3 +583,10 @@ Work windows:
 - [ ] VOICE has no LANGUAGE row; Italian phrases do nothing (English only)
 - [ ] "never mind", "what can you do for me?": nothing opens or toggles
 - [ ] SYSTEM > TOOLS: a grouped plain list (no logos, no gh); ABOUT > LICENCES opens /usr/share/doc/metacodex
+
+## 40. Stone-metal frames and buttons (branch feat/stone-ui)
+
+- [ ] Every window (not the small cards) has carved stone-metal corner pieces with a blue groove and a light node on each cut, slim rails between them, a carved plate with a blue gem over the top centre; the blue only spills inward onto the glass
+- [ ] Buttons are dark blue slate plates with an engraved channel: dim blue at rest, bright when a finger or the ray is on them, full for the primary (CD HERE) and red for a danger button; list rows and ghost buttons look as before; text stays easy to read
+- [ ] A window opening: the cast's brackets hand over to the stone corners without a jump; bent windows: the pieces bend with them
+- [ ] 72 fps with many windows open (the look is computed in the existing UI shader, no textures)

@@ -373,3 +373,7 @@ detection, themes, saved layouts, git through WSL, the float carousel, and MQH (
 projects, a real thread, machine environment) when `tools/mqh-dev.sh start` runs. On the headset the
 control port adds `ui`, `orb`, `script`, `plugin`, `gesture`, `hand`, `action` and `secret` commands (`tools/qterm`,
 or `mcx-ui` / `mcx-secret` inside the userland).
+
+## Stone-metal frames and buttons (2026-11-12, branch feat/stone-ui)
+
+Owner: "metallish-stone with blueish glowing, in the style of an RTS console, just an improvement to our current UI", "for panels wrapping and buttons only". In `Shaders/SciFiUI.shader` (no new meshes or textures): the panel's corner brackets became carved stone-metal pieces round each corner (the outline offset 3 mm, 9 mm thick, 45-degree tips, an engraved groove with energy, a node on the cut), slim stone rails between them and a carved plate with an energy gem over the top centre (windows wider than 0.24 m); the blue leaks inward only. Normal and filled buttons are carved slate plates with an engraved channel 2.6 mm inside the edge, energy in the button's colour (dim at rest, bright hovered, full when filled; red danger stays red). List rows and ghost buttons keep their look. Helpers `Stone`, `StoneGrain`, `ChamferNormal`; prototype `~/mcxwork/proto/frame.py` (frame-v4 / v5).
