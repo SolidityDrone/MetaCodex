@@ -53,7 +53,7 @@ namespace MetaCodex.Shell
         private void BuildAgentGetRow(UiPanel p, Rect row)
         {
             var t = UiTheme.Current;
-            int n = GetAgents.Length + 1;
+            int n = GetAgents.Length + 2; // + the local coder + MORE
             float w = (row.width - t.Gap * (n - 1)) / n;
             _getTiles.Clear();
             for (int i = 0; i < GetAgents.Length; i++)
@@ -63,10 +63,13 @@ namespace MetaCodex.Shell
                     { Rect = new Rect(row.x + i * (w + t.Gap), row.y, w, row.height), TextSize = 0.0125f });
                 _getTiles[a.Id] = b;
             }
-            var more = p.Add(new UiButton("MORE\nCOMING SOON", null, UiButtonStyle.Ghost)
+            // the local coder (docs/local-coder.md): a model in the AI service any of the agents above can use
+            _coderTile = p.Add(new UiButton(LocalCoderTileText(), OnLocalCoderTile)
                 { Rect = new Rect(row.x + GetAgents.Length * (w + t.Gap), row.y, w, row.height), TextSize = 0.0125f });
+            var more = p.Add(new UiButton("MORE\nCOMING SOON", null, UiButtonStyle.Ghost)
+                { Rect = new Rect(row.x + (GetAgents.Length + 1) * (w + t.Gap), row.y, w, row.height), TextSize = 0.0125f });
             more.SetEnabled(false);
-            p.Tick += _ => TickAgentProbe();
+            p.Tick += _ => { TickAgentProbe(); TickLocalCoderTile(); };
         }
 
         private void RefreshGetTiles()
@@ -108,6 +111,31 @@ namespace MetaCodex.Shell
         }
 
         /// While an install runs (and once when AGENTS opens): which agents are on the PATH, with their versions.
+        private UiButton _coderTile;
+        private float _coderPollAt;
+
+        private void OnLocalCoderTile()
+        {
+            if (LocalCoderInstalled)
+            {
+                SyncLocalCoder(true);
+                Toast("Local coder ready: in NEW THREAD pick Claude Code or Codex with the model “Local coder (this headset, slow)”, or OpenCode with “MetaCodex (this headset)”. Slow: minutes per turn; voice waits while it works.", "info");
+                return;
+            }
+            var err = InstallLocalCoder();
+            if (err != null) Toast("Local coder: " + err, "warn");
+        }
+
+        private void TickLocalCoderTile()
+        {
+            if (_coderTile == null) return;
+            bool downloading = LocalCoderInstallState == "downloading" || LocalCoderInstallState == "verifying";
+            if (Time.unscaledTime >= _coderPollAt) { _coderPollAt = Time.unscaledTime + (downloading ? 2f : 10f); PollVoiceStatus(); }
+            string text = LocalCoderTileText();
+            if (text != _coderTile.Text) { _coderTile.SetText(text); _coderTile.SetSelected(LocalCoderInstalled); }
+            SyncLocalCoder();
+        }
+
         private void TickAgentProbe()
         {
             if (_agentProbing || Time.unscaledTime < _agentNextProbe || Time.unscaledTime > _agentProbeUntil) return;

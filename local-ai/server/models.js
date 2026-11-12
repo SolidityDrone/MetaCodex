@@ -32,6 +32,18 @@ const CATALOGUE = {
     sha256: 'e011debc1208e31bf7b6aebee2d9fc8bd2ca11694a77ed66ac9d0c9d0a877c93',
     url: 'https://huggingface.co/TwinSunsLLC/multilingual-e5-small-gguf/resolve/b6cac9615d4e/multilingual-e5-small-q8_0.gguf'
   },
+  // the local coding model for the agent harnesses (OpenCode, Codex, Claude Code) through the OpenAI / Anthropic
+  // compatible endpoints (compat.js): optional, installed only on request (POST /v1/models/install {kinds:["coder"]}).
+  // Apache-2.0. Slow on the headset's 3 AI cores, but fully offline.
+  coder: {
+    id: 'qwen3-1.7b-q4_0',
+    name: 'Qwen3 1.7B instruct, local coding model (q4_0)',
+    file: 'Qwen3-1.7B-Q4_0.gguf',
+    bytes: 1056782912,
+    sha256: 'c876f159707a4e4f70e045106c69db15bfc935a4981706fd4f65c6e7ea1e81c5',
+    url: 'https://huggingface.co/unsloth/Qwen3-1.7B-GGUF/resolve/d7f544eead698dbd1f15126ef60b45a1e1933222/Qwen3-1.7B-Q4_0.gguf',
+    optional: true
+  },
   tts: {
     id: 'supertonic3-q4_0',
     name: 'Supertonic 3, 31 languages (q4_0)',

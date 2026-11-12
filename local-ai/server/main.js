@@ -10,6 +10,7 @@ const path = require('bare-path')
 const os = require('bare-os')
 const { Models, CATALOGUE } = require('./models')
 const { Engines } = require('./engines')
+const compat = require('./compat')
 const audio = require('./audio')
 
 const VERSION = '0.1.0'
@@ -19,6 +20,10 @@ const DATA = path.resolve(args.data || 'qvac-data')
 const PORT = Number(args.port || 47810)
 const HOST = args.host || '127.0.0.1'
 const TOKEN = args['token-file'] ? fs.readFileSync(args['token-file'], 'utf8').trim() : (args.token || '')
+// the agent harnesses' key for the local coder (docs/local-coder.md): stable across starts (the app makes it once and
+// shares it as /mnt/quest/local-coder.key), so their configs keep working; it opens only the coder's routes
+const CODER_KEY = (() => { try { return fs.readFileSync(path.join(args.data || '.', 'coder.key'), 'utf8').trim() } catch { return '' } })()
+const CODER_ROUTES = new Set(['POST /v1/responses', 'POST /v1/messages', 'POST /v1/messages/count_tokens', 'POST /v1/chat/completions', 'GET /v1/models'])
 const T0 = Date.now()
 
 fs.mkdirSync(DATA, { recursive: true })
@@ -52,7 +57,11 @@ const DEFAULTS = {
   ttsThreads: null,
   asrThreads: null,
   embedThreads: null,
-  prefillYieldsToAsr: true // a speculative prefill is cancelled when speech-to-text needs the cores
+  prefillYieldsToAsr: true, // a speculative prefill is cancelled when speech-to-text needs the cores
+  coderThreads: 3, // the local coding model (compat.js) may use the 3 AI cores: it runs when voice is idle
+  coderCtx: 16384,
+  coderSlim: true, // the slim agent profile for the local coder (compat.slim)
+  coderHoldMs: 15000 // the interface AI waits this long after the coder's last request (engines.coderHolds)
 }
 const cfg = Object.assign({}, DEFAULTS, readJson(CONFIG) || {})
 if (args.threads) cfg.threads = Number(args.threads)
@@ -82,7 +91,7 @@ async function handle (req, res, body) {
   const u = new URL(req.url, 'http://127.0.0.1')
   const route = req.method + ' ' + u.pathname
   if (route === 'GET /health') return send(res, 200, { ok: true, service: 'metacodex-ai', version: VERSION })
-  if (TOKEN && !authorized(req)) return send(res, 401, { error: 'missing or wrong bearer token' })
+  if (TOKEN && !authorized(req) && !(CODER_KEY && CODER_ROUTES.has(route) && authorized(req, CODER_KEY))) return send(res, 401, { error: 'missing or wrong bearer token' })
   switch (route) {
     case 'GET /status':
       return send(res, 200, status())
@@ -109,6 +118,12 @@ async function handle (req, res, body) {
       return speech(res, parseJson(body))
     case 'POST /v1/chat/completions':
       return completions(req, res, parseJson(body))
+    case 'POST /v1/responses': // Codex (wire_api = "responses") on the local coding model
+      return compat.responses(req, res, parseJson(body), { engines, send, sse, log, cfg })
+    case 'POST /v1/messages': // Claude Code (ANTHROPIC_BASE_URL) on the local coding model
+      return compat.messagesApi(req, res, parseJson(body), { engines, send, sse, log, cfg })
+    case 'POST /v1/messages/count_tokens':
+      return send(res, 200, compat.countTokens(parseJson(body)))
     case 'POST /v1/prefill': { // the session prompt without its question, evaluated while the user still speaks
       const j = parseJson(body)
       if (!Array.isArray(j.messages) || !j.messages.length) throw httpError(400, 'messages is required')
@@ -223,16 +238,18 @@ async function speech (res, j) {
 
 async function completions (req, res, j) {
   if (!Array.isArray(j.messages) || !j.messages.length) throw httpError(400, 'messages is required')
+  // the local coder gets the slim profile (compat.slim): a short system prompt, the core tools (OpenCode threads)
+  if (compat.wantsCoder(j.model) && cfg.coderSlim !== false) Object.assign(j, compat.slim({ messages: j.messages.map((m) => Object.assign({}, m, { content: Array.isArray(m.content) ? m.content.map((p) => typeof p === 'string' ? p : p.text || '').join('') : m.content })), tools: j.tools || [] }))
   if (j.stream) return completionsStream(req, res, j)
-  const r = await engines.chat(j.messages, Array.isArray(j.tools) ? j.tools : [], { max_tokens: j.max_tokens, temperature: j.temperature, grammar: j.grammar })
+  const r = await engines.chat(j.messages, Array.isArray(j.tools) ? j.tools : [], { max_tokens: j.max_tokens, temperature: j.temperature, grammar: j.grammar, engine: compat.wantsCoder(j.model) ? 'coder' : 'llm' })
   const calls = r.tool_calls.map((c, i) => ({ id: 'call_' + Date.now().toString(36) + i, type: 'function', function: { name: c.name, arguments: JSON.stringify(c.arguments || {}) } }))
   const st = r.stats || {}
-  log(`llm ${r.ms} ms (first ${r.firstMs} ms): ${calls.length ? calls.map((c) => c.function.name + c.function.arguments).join(' ') : JSON.stringify(r.content).slice(0, 120)}`)
+  log(`llm ${r.ms} ms (first ${r.firstMs} ms, prompt ${st.promptTokens || '?'} tok): ${calls.length ? calls.map((c) => c.function.name + c.function.arguments).join(' ') : JSON.stringify(r.content).slice(0, 120)}`)
   send(res, 200, {
     id: 'chatcmpl-' + Date.now().toString(36),
     object: 'chat.completion',
     created: Math.floor(Date.now() / 1000),
-    model: CATALOGUE.llm.id,
+    model: (compat.wantsCoder(j.model) ? CATALOGUE.coder : CATALOGUE.llm).id,
     choices: [{ index: 0, message: Object.assign({ role: 'assistant', content: r.content || null }, calls.length ? { tool_calls: calls } : {}), finish_reason: calls.length ? 'tool_calls' : 'stop' }],
     usage: { prompt_tokens: st.promptTokens || 0, completion_tokens: st.generatedTokens || 0, total_tokens: (st.promptTokens || 0) + (st.generatedTokens || 0) },
     timings: { ms: r.ms, firstMs: r.firstMs, tps: st.TPS || null }
@@ -254,14 +271,14 @@ async function completionsStream (req, res, j) {
   res.setHeader('Cache-Control', 'no-cache')
   const chunk = (delta, finish, extra) => {
     if (abort.aborted) return
-    const o = { id, object: 'chat.completion.chunk', created, model: CATALOGUE.llm.id, choices: [{ index: 0, delta, finish_reason: finish || null }] }
+    const o = { id, object: 'chat.completion.chunk', created, model: (compat.wantsCoder(j.model) ? CATALOGUE.coder : CATALOGUE.llm).id, choices: [{ index: 0, delta, finish_reason: finish || null }] }
     try { res.write('data: ' + JSON.stringify(Object.assign(o, extra || {})) + '\n\n') } catch { gone() }
   }
   chunk({ role: 'assistant' })
   let r
   try {
     r = await engines.chat(j.messages, Array.isArray(j.tools) ? j.tools : [], {
-      max_tokens: j.max_tokens, temperature: j.temperature, grammar: j.grammar, abort,
+      max_tokens: j.max_tokens, temperature: j.temperature, grammar: j.grammar, abort, engine: compat.wantsCoder(j.model) ? 'coder' : 'llm',
       onToken: (t) => chunk({ content: t })
     })
   } catch (e) {
@@ -271,16 +288,34 @@ async function completionsStream (req, res, j) {
   }
   const calls = r.tool_calls.map((c, i) => ({ index: i, id: 'call_' + Date.now().toString(36) + i, type: 'function', function: { name: c.name, arguments: JSON.stringify(c.arguments || {}) } }))
   const st = r.stats || {}
-  log(`llm stream ${r.ms} ms (first ${r.firstMs} ms)${r.cancelled ? ' cancelled' : ''}: ${JSON.stringify(r.content).slice(0, 120)}`)
+  log(`llm stream ${r.ms} ms (first ${r.firstMs} ms, prompt ${st.promptTokens || '?'} tok)${r.cancelled ? ' cancelled' : ''}: ${JSON.stringify(r.content).slice(0, 120)}`)
   chunk(calls.length ? { tool_calls: calls } : {}, calls.length ? 'tool_calls' : 'stop', {
     usage: { prompt_tokens: st.promptTokens || 0, completion_tokens: st.generatedTokens || 0 }, timings: { ms: r.ms, firstMs: r.firstMs, tps: st.TPS || null }
   })
   try { res.end('data: [DONE]\n\n') } catch {}
 }
 
-function authorized (req) {
+/** A server-sent-events response: event(name, obj) writes `event:` + `data:` lines, end() closes it; `abort` is set
+ * when the client goes away (the socket, not the request: bare-http1 closes the request once its body is read). */
+function sse (req, res) {
+  const abort = { aborted: false, onabort: null }
+  const gone = () => { if (abort.aborted) return; abort.aborted = true; if (abort.onabort) abort.onabort() }
+  try { if (req.socket) req.socket.on('close', gone) } catch {}
+  res.statusCode = 200
+  res.setHeader('Content-Type', 'text/event-stream')
+  res.setHeader('Cache-Control', 'no-cache')
+  return {
+    abort,
+    event (name, obj) { if (abort.aborted) return; try { res.write('event: ' + name + '\ndata: ' + JSON.stringify(obj) + '\n\n') } catch { gone() } },
+    end () { try { res.end() } catch {} }
+  }
+}
+
+function authorized (req, key) {
+  // Anthropic clients send the key as x-api-key (Claude Code with ANTHROPIC_API_KEY), the others as a bearer token
+  if (req.headers['x-api-key'] && !req.headers.authorization) req.headers.authorization = 'Bearer ' + req.headers['x-api-key']
   const h = String(req.headers.authorization || '')
-  const want = 'Bearer ' + TOKEN
+  const want = 'Bearer ' + (key || TOKEN)
   if (h.length !== want.length) return false
   let d = 0
   for (let i = 0; i < h.length; i++) d |= h.charCodeAt(i) ^ want.charCodeAt(i)
@@ -289,7 +324,7 @@ function authorized (req) {
 
 function kindsOf (j) {
   const k = j.kinds || j.models || j.kind
-  if (!k) return Object.keys(CATALOGUE)
+  if (!k) return Object.keys(CATALOGUE).filter((x) => !CATALOGUE[x].optional) // the coder only on request
   return (Array.isArray(k) ? k : [k]).map(String)
 }
 

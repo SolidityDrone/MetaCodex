@@ -273,6 +273,11 @@ namespace MetaCodex.AI
                 Directory.CreateDirectory(DataDir);
                 File.WriteAllText(_tokenFile, token);
                 if (!string.IsNullOrEmpty(_sharedDir)) File.WriteAllText(Path.Combine(_sharedDir, "qvac.token"), token);
+                // the local coder's key for the agent harnesses: made once, kept (their configs read it from
+                // /mnt/quest/local-coder.key), it opens only the coder's routes (docs/local-coder.md)
+                string coderKey = Path.Combine(DataDir, "coder.key");
+                if (!File.Exists(coderKey)) File.WriteAllText(coderKey, NewToken());
+                if (!string.IsNullOrEmpty(_sharedDir)) File.WriteAllText(Path.Combine(_sharedDir, "local-coder.key"), File.ReadAllText(coderKey).Trim());
             }
             catch (Exception ex) { Fail("token: " + ex.Message); yield break; }
             Client.Token = token;
