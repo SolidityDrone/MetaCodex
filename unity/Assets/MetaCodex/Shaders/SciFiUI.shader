@@ -203,6 +203,39 @@ Shader "MetaCodex/SciFiUI"
             // 1 on a line `w` wide (metres) at distance 0 of `d`, anti-aliased by `aa`
             float LineAt(float d, float w, float aa) { return saturate(0.5 - (abs(d) - w * 0.5) / aa); }
 
+            // ---- carved stone-metal (owner 2026-11-12: "metallish-stone with blueish glowing ... just an improvement to
+            // our current UI", for panel frames and buttons only): dark slate with a fine grain, a worn lit bevel on the
+            // edges that face up, a shadowed bevel on the ones that face down, energy in engraved channels.
+            // Prototype: ~/mcxwork/proto/frame.py (owner's pick: frame-v4 / v5). Linear colours.
+            static const float3 kStoneLo = float3(0.0075, 0.0100, 0.0144);
+            static const float3 kStoneHi = float3(0.053, 0.069, 0.092);
+            float Hash21(float2 q) { return frac(sin(dot(q, float2(127.1, 311.7))) * 43758.5453); }
+            float VNoise(float2 x)
+            {
+                float2 i = floor(x), f = frac(x), u = f * f * (3.0 - 2.0 * f);
+                return lerp(lerp(Hash21(i), Hash21(i + float2(1, 0)), u.x), lerp(Hash21(i + float2(0, 1)), Hash21(i + float2(1, 1)), u.x), u.y);
+            }
+            float StoneGrain(float2 p) { return 0.5 * VNoise(p / 0.0060) + 0.3 * VNoise((p + 3.1) / 0.0022) + 0.2 * VNoise((p + 7.7) / 0.0009); }
+            // dd < 0 inside the piece, halfW its half width (metres), n the outward normal of its nearest edge (panel space)
+            float3 Stone(float2 p, float dd, float halfW, float2 n)
+            {
+                float depth = saturate(-dd / max(halfW, 1e-6));             // 0 at the edge .. 1 in the middle
+                float facing = dot(n, float2(-0.45, 0.89));                 // +1: the edge faces the light (top-left)
+                float bevel = saturate(1.0 - depth / 0.30);
+                float3 c = lerp(kStoneLo, kStoneHi, 0.35 + 0.45 * StoneGrain(p) + 0.20 * depth);
+                c *= 1.0 + bevel * facing * 0.9;
+                c += bevel * pow(saturate(facing), 3.0) * 0.12;             // a thin worn highlight
+                return lerp(c, kStoneLo * 0.4, bevel * saturate(-facing) * 0.6);
+            }
+            // the outward normal of sdChamfer at p (central differences, panel space)
+            float2 ChamferNormal(float2 p, float2 h, float cBig, float cSmall)
+            {
+                const float e = 0.0004;
+                float2 g = float2(sdChamfer(p + float2(e, 0), h, cBig, cSmall) - sdChamfer(p - float2(e, 0), h, cBig, cSmall),
+                                  sdChamfer(p + float2(0, e), h, cBig, cSmall) - sdChamfer(p - float2(0, e), h, cBig, cSmall));
+                return g / max(length(g), 1e-9);
+            }
+
             half4 fragBody(Varyings i);
 
             // everything a panel draws fades where something real (a hand, a person) is in front of it
@@ -406,35 +439,21 @@ Shader "MetaCodex/SciFiUI"
                         edgeA = 0.9 * state;
                         glowA = 0.25 * state;
                     }
-                    else if (style2 > 0.5) // filled: primary / danger, charged with its colour
-                    {
-                        float2 hc;
-                        float hx1 = HexCell(p, 0.010, hc);
-                        fill = lerp(tint * 0.38, tint * 0.80, smoothstep(-1.0, 1.0, yN)) * (0.85 + 0.3 * state) + white * 0.06 * topLight;
-                        fill += tint * 0.25 * HexLine(hx1, 0.10, px / 0.010) * saturate(1.3 - px / 0.010 * 6.0);
-                        fill += white * sheen * 0.10;
+                    else // normal and filled (primary / danger): a carved stone-metal plate with an engraved channel 2.6 mm
+                    {    // inside its edge; energy in its colour runs in the channel: dim at rest, bright hovered, full when filled
+                        bool filled = style2 > 0.5;
+                        float3 stone = Stone(p, d, min(h.x, h.y), ChamferNormal(p, h, cBig, cBig * 0.28)) * 0.80;
+                        float cd = abs(d + 0.0026);
+                        fill = lerp(stone, kStoneLo * 0.30, saturate(1.0 - cd / 0.0009) * 0.85);
+                        float energy = filled ? 0.95 + 0.25 * state : 0.30 + 0.70 * saturate(state * 1.2);
+                        float3 hot = lerp(tint, white, 0.35);
+                        fill += hot * saturate(1.0 - cd / 0.00042) * energy * 0.95 + tint * exp(-cd / 0.0014) * energy * 0.40;
+                        if (filled) fill += tint * exp(-max(-d - 0.0026, 0.0) / 0.010) * 0.22;   // the charge fills it softly
+                        fill += (tint * 0.6 + 0.4) * sheen * 0.10;
                         fillA = 0.97;
-                        edgeCol = lerp(tint, white, 0.45);
-                        edgeA = 0.75 + 0.25 * state;
-                        glowA = 0.16 + 0.30 * state;
-                    }
-                    else // normal: a dark steel-blue plate that charges up with the accent colour
-                    {
-                        float3 plate = lerp(float3(0.016, 0.034, 0.058), float3(0.040, 0.078, 0.120), smoothstep(-1.0, 1.0, yN));
-                        fill = plate + tint * (0.42 * state) + white * 0.025 * topLight;
-                        fill += tint * 0.35 * exp(d / 0.004) * state;                    // light pooling at the rim when lit
-                        // a bevel: a hair of light under the top edge, a hair of shade over the bottom edge
-                        float bev = LineAt(d + 0.0024, 0.0006, aa);
-                        fill += white * bev * smoothstep(0.3, 1.0, yN) * 0.055;
-                        fill *= 1.0 - bev * smoothstep(-0.3, -1.0, yN) * 0.45;
-                        // accent ticks hugging the two big cuts
-                        float tk = LineAt(d + 0.0042, 0.0007, aa) * step(p.x * p.y, 0.0) * step(h.x - cBig - 0.004, abs(p.x)) * step(h.y - cBig - 0.004, abs(p.y));
-                        fill = lerp(fill, tint * 1.2, tk * (0.40 + 0.6 * state));
-                        fill += (tint * 0.6 + 0.4) * sheen * 0.16;
-                        fillA = 0.95;
-                        edgeCol = lerp(float3(0.30, 0.40, 0.52) * (0.7 + 0.5 * topLight), tint * 1.25, saturate(state * 1.2));
-                        edgeA = 0.7 + 0.3 * state;
-                        glowA = 0.22 * state;
+                        edgeCol = kStoneHi * (0.9 + 0.6 * topLight);                               // a worn stone rim
+                        edgeA = 0.55;
+                        glowA = 0.30 * state + (filled ? 0.20 : 0.0);
                     }
                     shadeA = style2 > 1.5 ? 0.0 : 0.12;
                 }
@@ -525,33 +544,74 @@ Shader "MetaCodex/SciFiUI"
                 a = max(a, outA);
                 if (kind == 0)
                 {
-                    // corner brackets: the frame's outline offset 4 mm outwards, near each corner only, with a node of light
-                    // in the middle of each cut; drawn exactly like the transition's brackets (UiPanelFx: a 1.2 mm line
-                    // with a soft glow, the same node), which hand over to these (1 - hidden) once they have locked on:
-                    // the last frames of a cast and the panel at rest look the same (owner 2026-11-09)
-                    float cc = (p.x * p.y < 0.0) ? cBig : style2;
-                    float arm = clamp(max(min(0.030, min(h.x, h.y) * 0.32), cc + 0.006), 0.0, min(h.x, h.y));
-                    float near = step(h.x - arm, abs(p.x)) * step(h.y - arm, abs(p.y));
-                    near *= step(0.055, min(h.x, h.y)); // not on a small card (a callout, the voice HUD): brackets would crowd it
-                    float keep = near * (1.0 - saturate(pfx.w));
+                    // stone-metal armour (owner 2026-11-12: "metallish-stone with blueish glowing", for panel frames and
+                    // buttons): a carved piece wrapping each corner along the frame's outline offset 3 mm outwards, 9 mm
+                    // thick, its tips cut at 45 degrees (the outer edge the longer one), an engraved groove with energy
+                    // in it and a node of light on the cut; slim stone rails with a hairline between the corners; a
+                    // carved plate with an energy gem over the top centre. The blue leaks inward onto the glass only.
+                    // It takes over from the cast's corner brackets (UiPanelFx) once they have locked on (1 - pfx.w).
+                    float keep = step(0.055, min(h.x, h.y)) * (1.0 - saturate(pfx.w)); // not on small cards (callouts, the HUD)
                     if (keep > 0.0)
                     {
-                        float off = abs(d - 0.004) - 0.0006;
-                        float brk = saturate(0.5 - off / aa);
-                        float brkGlow = exp(-max(off, 0.0) / 0.0017) * 0.45;
-                        // the node: the middle of the cut's offset line (as UiPanelFx draws it)
-                        float2 sg = float2(p.x >= 0.0 ? 1.0 : -1.0, p.y >= 0.0 ? 1.0 : -1.0);
-                        const float o = 0.004, k = 0.41421356;
-                        float2 a1 = sg * float2(h.x + o, h.y - cc + o * k), b1 = sg * float2(h.x - cc + o * k, h.y + o);
-                        float2 m = (a1 + b1) * 0.5, u = normalize(b1 - a1);
-                        float2 q = p - m;
-                        float dn = length(q - clamp(dot(q, u), -0.0015, 0.0015) * u) - 0.0014;
-                        float node = saturate(0.5 - dn / aa);
-                        float3 lineCol = tint * 1.35 + 0.06, hot = lerp(tint, white, 0.55) * 1.2;
-                        float lit = saturate(brk + brkGlow) * keep, nodeA = node * keep;
-                        col = lerp(col, lineCol, saturate(brk * keep + brkGlow * keep * 0.6));
-                        col = lerp(col, hot, nodeA);
-                        a = max(a, max(lit * 0.82, nodeA * 0.95));
+                        const float off = 0.003, halfT = 0.0045, railW = 0.0009;
+                        float cc = (p.x * p.y < 0.0) ? cBig : style2;
+                        float2 hO = h + off;
+                        float cBO = cBig + off * 0.6, cSO = style2 + off * 0.6;
+                        float dO = sdChamfer(p, hO, cBO, cSO);                               // + outside the centre line
+                        float2 nO = ChamferNormal(p, hO, cBO, cSO);
+                        float L = clamp(min(h.x, h.y) * 0.35, cc + 0.020, 0.075);             // arm length from the corner
+                        float ex = hO.x - abs(p.x), ey = hO.y - abs(p.y);
+                        float sAlong = (abs(p.y) - h.y > abs(p.x) - h.x) ? ex : ey;           // along the nearest edge
+                        float dArm = max(abs(dO) - halfT, (sAlong - L - dO) * 0.70710678);
+                        float dRail = abs(dO) - railW;
+                        float3 energy = lerp(accent, white, 0.30);
+                        float inward = step(dO, 0.0);
+                        // rails
+                        float rIn = saturate(0.5 - dRail / aa) * keep;
+                        float3 railCol = Stone(p, dRail, railW, nO * sign(dO + 1e-6));
+                        col = lerp(col, railCol, rIn);
+                        a = max(a, rIn * 0.95);
+                        col += accent * (LineAt(dRail + railW * 0.4, 0.0005, aa) * 0.30 + exp(-max(dRail, 0.0) / 0.003) * 0.08 * inward) * keep;
+                        // the corner pieces
+                        float armIn = saturate(0.5 - dArm / aa) * keep;
+                        if (dArm < 0.012)
+                        {
+                            float3 stone = Stone(p, dArm, halfT, nO * sign(dO + 1e-6));
+                            float gd = abs(dO);                                              // from the groove (the centre line)
+                            stone = lerp(stone, kStoneLo * 0.3, saturate(1.0 - gd / 0.0011) * 0.9);
+                            float3 groove = energy * saturate(1.0 - gd / 0.0005) * 0.9 + accent * exp(-gd / 0.0016) * 0.45;
+                            col = lerp(col, stone + groove, armIn);
+                            a = max(a, armIn);
+                            col += accent * (exp(-max(dArm, 0.0) / 0.003) * 0.40 + exp(-max(dArm, 0.0) / 0.012) * 0.08) * inward * (1.0 - armIn) * keep;
+                            // a node of light on the cut
+                            float2 sg = float2(p.x >= 0.0 ? 1.0 : -1.0, p.y >= 0.0 ? 1.0 : -1.0);
+                            float ccO = (p.x * p.y < 0.0) ? cBO : cSO;
+                            float2 mid = sg * (hO - ccO * 0.5);
+                            float dn = length(p - mid) - 0.0016;
+                            col += energy * (saturate(0.5 - dn / aa) * 1.0 + exp(-max(dn, 0.0) / 0.003) * 0.45) * keep;
+                            a = max(a, saturate(0.5 - dn / aa) * keep);
+                        }
+                        // the crest: a carved plate over the top centre with an energy gem and a short light line above
+                        float2 cq = p - float2(0.0, hO.y + 0.0012);
+                        if (abs(cq.x) < 0.045 && abs(cq.y) < 0.016 && h.x > 0.12)
+                        {
+                            float dPlate = sdChamfer(cq, float2(0.030, 0.0085), 0.008, 0.008);
+                            float pIn = saturate(0.5 - dPlate / aa) * keep;
+                            float3 plate = Stone(p, dPlate, 0.006, ChamferNormal(cq, float2(0.030, 0.0085), 0.008, 0.008));
+                            float dg = (abs(cq.x) / 0.0062 + abs(cq.y + 0.0004) / 0.0055) - 1.0;   // the gem, in its size
+                            float sock = saturate(0.5 - (dg - 0.14) * 0.0055 / aa);
+                            float gem = saturate(0.5 - dg * 0.0055 / aa);
+                            float facet = (cq.x < 0.0 ? 1.0 : 0.65) * (cq.y > -0.0004 ? 1.0 : 0.75);
+                            plate = lerp(plate, kStoneLo * 0.25, sock);
+                            plate += (accent * 0.9 + energy * 0.6 * facet) * gem;
+                            col = lerp(col, plate, pIn);
+                            a = max(a, pIn);
+                            col += accent * exp(-max(dPlate, 0.0) / 0.003) * 0.35 * step(cq.y, 0.0) * (1.0 - pIn) * keep;
+                            col += accent * exp(-max(dg, 0.0) / 0.8) * 0.25 * keep;
+                            float beam = exp(-abs(cq.x) / 0.0008) * saturate((cq.y - 0.0085) / 0.002) * exp(-max(cq.y - 0.0085, 0.0) / 0.004);
+                            col += energy * beam * 0.9 * keep;
+                            a = max(a, beam * 0.6 * keep);
+                        }
                     }
                 }
                 return half4(col, saturate(a * i.color.a));
