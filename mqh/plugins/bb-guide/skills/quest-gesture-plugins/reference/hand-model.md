@@ -55,10 +55,27 @@ Source of truth: `unity/Assets/MetaCodex/Runtime/Hands/Gestures.cs` (GestureEngi
 
 Several can be active at once (`grab` is also true during `thumbs-up`: the fingers are curled).
 
-## Starter plugins (installed on first run; read them as examples)
+## Examples (NOT installed; copy their fields into your own plugin)
+
+The app ships two example plugins that are off by default (GESTURES > ALL > EXAMPLES, + ADD; or, after the
+user's OK, `mcx-ui plugin example core-poses|swipes`). Never assume they are there.
 
 - `core-poses` (poses only): `thumbs-up`, `thumbs-down`, `victory`, `horns`, `call-me`.
 - `swipes` (Lua detectors): `swipe-left`, `swipe-right`, `swipe-up` (open hand, fast).
+
+Their poses, ready to copy into `poses/<name>.json` of your plugin (`hold` 0.15, `cooldown` 0.5,
+`hand` "any", `tolerance` 0.35 in all of them):
+
+| Name | `fingers` | Extra |
+|---|---|---|
+| `thumbs-up` | `{ "thumb": 0, "index": 1, "middle": 1, "ring": 1, "little": 1 }` | `"thumbPointing": "up"` |
+| `thumbs-down` | `{ "thumb": 0, "index": 1, "middle": 1, "ring": 1, "little": 1 }` | `"thumbPointing": "down"` |
+| `victory` | `{ "index": 0, "middle": 0, "ring": 1, "little": 1 }` | |
+| `horns` | `{ "index": 0, "middle": 1, "ring": 1, "little": 0 }` | |
+| `call-me` | `{ "thumb": 0, "index": 1, "middle": 1, "ring": 1, "little": 0 }` | |
+
+Swipes: `h.open and h.vel.x < -1.1 and math.abs(h.vel.y) < 0.7` (left; `> 1.1` right), up:
+`h.open and h.palmFacing == "up" and h.vel.y > 1.1 and math.abs(h.vel.x) < 0.7`; `hold = 0`, `cooldown = 0.7`.
 
 ## Timing
 

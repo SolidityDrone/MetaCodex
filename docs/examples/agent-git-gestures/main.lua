@@ -1,7 +1,7 @@
 -- description: right-hand thumbs up opens the git panel; a fast open-palm push away closes it
 
 -- OPEN: thumbs up with the RIGHT hand.
--- `thumbs-up` is the pose from the core-poses starter plugin (hand = any), so the hand is filtered here.
+-- `thumbs-up` is this plugin's own pose (poses/thumbs-up.json, hand = any), so the hand is filtered here.
 -- ui.open (not toggle) so a second thumbs up never closes the panel by accident.
 gesture.on("thumbs-up", function(e)
   if e.phase ~= "start" or e.hand ~= "right" then return end

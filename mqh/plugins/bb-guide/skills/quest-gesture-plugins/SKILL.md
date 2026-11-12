@@ -17,15 +17,24 @@ Read this whole file before writing anything. Details: `reference/hand-model.md`
 
 | Need | Use | Code |
 |---|---|---|
-| An existing gesture should do something | a **binding** (no plugin) | `mcx-ui gesture bind thumbs-up open:git` |
+| A gesture that `mcx-ui gesture list` shows should do something | a **binding** (no plugin) | `mcx-ui gesture bind clap toggle:files` |
 | A static hand shape ("finger gun", "OK") | a **pose file** `poses/<name>.json` | JSON only |
 | A shape plus a condition a pose can't express (two hands, distances, palm + motion) | a **Lua detector** `gesture.define` | small `main.lua` |
 | Motion (swipe, push, wave, circle) | a **Lua detector** on `h.vel` (+ a tiny state machine for waves/circles) | `main.lua` |
 | "A then B" (double clap, thumbs up twice) | `gesture.sequence` | `main.lua` |
 | The reaction (toast, panel, terminal command, URL, modal) | `gesture.on(name, fn)` or `app.action("...")` | `main.lua` |
 
-Check what exists first: `mcx-ui gesture list` (built-ins, the starter plugins' poses, everything loaded).
-Reuse names that exist (e.g. `thumbs-up` from `core-poses`) instead of redefining them.
+Check what exists first: `mcx-ui gesture list` (the 7 built-ins and every plugin loaded on this headset).
+
+**A plugin brings its own poses.** A fresh headset has only the built-ins (`pinch grab point open palm-up
+clap select`): the examples `core-poses` (thumbs-up, thumbs-down, victory, horns, call-me) and `swipes`
+(swipe-left / right / up) are NOT installed unless the user added them. Never react to `thumbs-up` or any
+other non-built-in name your plugin does not define, unless `mcx-ui gesture list` shows it right now: a
+`gesture.on` for a name nobody defines never fires, and nothing reports it. Copy the fields you need from
+`reference/hand-model.md` (the examples' poses) into `poses/<name>.json` inside your own plugin. If the
+same name is defined twice, the plugin loaded last wins, and disabling it drops the name until the other one
+reloads: prefer the name the user said, defined once, in your plugin. To install an example itself, ask
+first, then `mcx-ui plugin example core-poses` (or `swipes`).
 
 ## 1. Where files go
 
@@ -53,7 +62,7 @@ headset: write to the folder the user or the test harness gives you, same layout
 ```
 
 Only `id`/`name`/`version`/`description` are read today (`main` and `poses` override the defaults
-`main.lua` and `poses/`). Keep the description one line: the Gestures panel shows it.
+`main.lua` and `poses/`). Keep the description one line: MQH > PLUGINS shows it.
 
 ## 2. Pose files (static shapes)
 
@@ -104,7 +113,7 @@ gesture.define("push", { hand = "any", hold = 0, cooldown = 0.8, description = "
 gesture.on("push", function(e)
   if e.phase ~= "start" then return end
   ui.toast("Push (" .. e.hand .. ")")
-  ui.close("browser")
+  ui.close("web")
 end)
 
 -- a sequence: start/tap events in order, within a time window
@@ -141,11 +150,11 @@ Rules that keep it working:
 `voice.say(text)` · `voice.command{...}` (the same plugin can add voice commands: complete, with `samples` in
 English and Italian; skill `quest-scripting`, "MUST: every command complete") · `log(...)`
 
-Panels: `dock` `terminals` `files` `git` `browser` `scripts` `gestures` `agents` `threads` `thread`
-`thread-new` `vault` `settings` `voice`. Actions (`app.action`, bindings): `open:` `close:` `toggle:<panel>`,
+Panels: `dock` `terminals` `files` `git` `web` (the in-app browser window) `browser` (its LINKS page)
+`scripts` `gestures` `plugins` `agents` `threads` `thread` `thread-new` `vault` `settings` `voice`. Actions (`app.action`, bindings): `open:` `close:` `toggle:<panel>`,
 `toast:<text>`, `run:<command>`, `type:<text>` (`\n` Enter, `\e` Esc, `\x03` Ctrl-C), `url:<url>`,
 `layout:fixed|float`, `spin:<degrees>`, `select[:on|off]`, `keyboard`, `terminal:new`, `recenter`,
-`gesture:<name>`, `lua:<code>`, `voice:listen|stop|toggle|say:<text>|run:<text>`.
+`gesture:<name>`, `lua:<code>`, `voice:listen|stop|toggle|say:<text>|run:<text>`, `focus[:on|off]`.
 
 ## 5. Procedure (do all of it)
 
@@ -153,19 +162,20 @@ Panels: `dock` `terminals` `files` `git` `browser` `scripts` `gestures` `agents`
    to turn it off, and wait for their OK. The same for changes to an existing plugin.
 1. Restate the gesture as a precise shape/motion: which hand(s), which fingers straight or curled,
    where the palm and thumb point, what motion, how long. Pick the mechanism from section 0.
-2. `mcx-ui gesture list` and `mcx-ui plugin list`: reuse existing names; pick a new plugin id.
-3. Write `plugin.json`, then the pose files and/or `main.lua` (complete files; no placeholders).
+2. `mcx-ui gesture list` and `mcx-ui plugin list`: see what is loaded; pick a new plugin id.
+3. Write `plugin.json`, then the pose files and/or `main.lua` (complete files; no placeholders). Every
+   gesture your reactions name is a built-in or defined in this plugin (section 0).
 4. Within ~1 s the app loads it. Check: `mcx-ui plugin list` → your plugin, `error=-`;
    `mcx-ui plugin log <id>` → `loaded (N handlers, N poses, N detectors)`;
    `mcx-ui gesture list` → your gesture names.
 5. Prove the reaction: `mcx-ui gesture <name> right start` simulates the event; the toast/panel
    should happen (`mcx-ui ui list` shows `open=True`). Fix and repeat until clean.
 6. Tell the user, in one short message: the gesture to make (in body words), what it triggers, how to
-   watch it live (Gestures panel > LIVE shows finger bars and active gestures), how to turn it off
-   (Gestures > PLUGINS, or `mcx-ui plugin disable <id>`), and the plugin folder.
+   watch it live (MQH > GESTURES > LIVE shows finger bars and active gestures), how to turn it off
+   (MQH > PLUGINS, or `mcx-ui plugin disable <id>`), and the plugin folder.
 
 The simulation proves the wiring, not the recognition: real recognition needs the user's hands. When a
-pose does not fire for the user, ask them to record it (Gestures > RECORD makes `my-poses/poses/<name>.json`
+pose does not fire for the user, ask them to record it (GESTURES > RECORD makes `my-poses/poses/<name>.json`
 from their real hand) and compare its curls with yours; or read `hands.get("right")` through
 `mcx-ui script eval 'local h = hands.get("right"); return h.curl.thumb .. " " .. h.palmFacing'`
 while they hold it.
@@ -173,6 +183,8 @@ while they hold it.
 ## 6. Checklist before you answer
 
 - [ ] Folder `/mnt/quest/plugins/<id>/` with a valid `plugin.json` (JSON parses; id = folder name)
+- [ ] Every gesture the plugin reacts to is a built-in or defined in the plugin itself (never assume the
+      examples `core-poses` / `swipes` are installed)
 - [ ] Every gesture name is unique and lowercase-with-dashes; no clash with built-ins
       (`pinch grab point open palm-up clap select`) unless you mean to react to those
 - [ ] Poses: only the fingers that matter are listed; tolerance 0.3-0.4; `hold` 0.1-0.3

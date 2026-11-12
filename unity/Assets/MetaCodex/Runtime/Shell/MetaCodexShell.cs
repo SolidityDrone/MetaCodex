@@ -165,7 +165,7 @@ namespace MetaCodex.Shell
             string dir = scriptsDir ?? DefaultScriptsDir(host);
             Scripts = new ScriptHost(this, dir);
             Scripts.Changed += () => { RefreshScriptsPanel(); RefreshGesturesPanel(); };
-            EnsureStarterPlugins();
+            RetireStarterExamples(); // no seeding: gesture examples are opt-in (GESTURES > ALL > EXAMPLES); old untouched copies go once
             InitSessionContext(); // the session's context for the local model (docs/session-context.md)
             InitKeyboard(); // MetaCodex's own keyboard, on a table or in the air (ShellKeyboard)
 
@@ -505,7 +505,6 @@ namespace MetaCodex.Shell
         {
             Scripts?.Dispatch(e);
             ApplyBindings(e);
-            if (_gestureMonitor != null) RefreshGestureMonitor();
         }
 
         private void OnSelected(UiPanel panel, Rect r)
@@ -800,13 +799,15 @@ namespace MetaCodex.Shell
                     {
                         case "list": return string.Join("\n", Scripts.Entries.Where(e => e.Kind == "plugin").Select(e => $"{e.Name} v{e.Version} enabled={e.Enabled} poses={e.Poses} detectors={e.Detectors} handlers={e.Handlers} error={e.Error ?? "-"}"));
                         case "new": { var e = NewPlugin(id.Length > 0 ? id : "my-gestures"); return "ok, /mnt/quest/plugins/" + e.Name; }
+                        case "examples": return string.Join("\n", GestureExampleIds.Select(x => $"{x} installed={Scripts.Find("plugin/" + x) != null} gestures={string.Join(",", GestureNamesIn(ExamplePlugins[x]))}"));
+                        case "example": { var err = InstallGestureExample(id); return err == null ? "ok, /mnt/quest/plugins/" + id.Trim().ToLowerInvariant() : "error: " + err; }
                         case "enable": Scripts.SetEnabled("plugin/" + id, true); return "ok";
                         case "disable": Scripts.SetEnabled("plugin/" + id, false); return "ok";
                         case "reload": Scripts.ReloadAll(); return "ok";
                         case "log": { var e = Scripts.Find("plugin/" + id); return e == null ? "error: no plugin " + id : string.Join("\n", e.Log); }
                         case "delete": return Scripts.Delete("plugin/" + id) ? "ok" : "error: no plugin " + id;
                         case "dir": return Scripts.PluginsDir;
-                        default: return "error: plugin list | new <id> | enable <id> | disable <id> | reload | log <id> | delete <id> | dir";
+                        default: return "error: plugin list | new <id> | examples | example <id> | enable <id> | disable <id> | reload | log <id> | delete <id> | dir";
                     }
                 }
                 default: return null;

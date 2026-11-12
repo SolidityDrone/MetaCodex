@@ -16,23 +16,33 @@ Each block is a whole file. Change names and reactions; keep the structure.
   "tolerance": 0.35, "thumbPointing": "up", "hold": 0.2, "cooldown": 1.0,
   "description": "thumb up, index straight, other fingers curled" }
 ```
-Then bind it without code: `mcx-ui gesture bind finger-gun open:browser`
-(or add `main.lua` with `gesture.on("finger-gun", function(e) if e.phase == "start" then ui.open("browser") end end)`).
+Then bind it without code: `mcx-ui gesture bind finger-gun open:web`
+(or add `main.lua` with `gesture.on("finger-gun", function(e) if e.phase == "start" then ui.open("web") end end)`).
 
 ## 2. Pose + reaction in Lua: thumbs up / down opens / closes git
 
+The plugin brings its own two poses (the `core-poses` example is not installed on a fresh headset).
+
+`/mnt/quest/plugins/thumbs-git/poses/thumbs-up.json`
+```json
+{ "name": "thumbs-up", "hand": "any", "description": "fist, thumb pointing up",
+  "fingers": { "thumb": 0, "index": 1, "middle": 1, "ring": 1, "little": 1 },
+  "tolerance": 0.35, "thumbPointing": "up", "hold": 0.15, "cooldown": 0.5 }
+```
+`/mnt/quest/plugins/thumbs-git/poses/thumbs-down.json`: the same with `"name": "thumbs-down"`,
+`"thumbPointing": "down"`.
+
+`/mnt/quest/plugins/thumbs-git/main.lua`
 ```lua
--- description: thumbs up opens git, thumbs down closes it (poses from core-poses)
+-- description: thumbs up opens git, thumbs down closes it (poses in this plugin's poses/)
 gesture.on("thumbs-up", function(e) if e.phase == "start" then ui.open("git") end end)
 gesture.on("thumbs-down", function(e) if e.phase == "start" then ui.close("git") end end)
 ```
-If `core-poses` might be disabled, define the poses in your plugin under new names
-(`my-thumbs-up`) with the same fields as `core-poses/poses/thumbs-up.json`.
 
 ## 3. Motion: push away to close the focused panel (Lua detector)
 
 ```lua
--- description: push an open palm away from you to close the browser and git panels
+-- description: push an open palm away from you to close the web and git windows
 gesture.define("push", { hand = "any", hold = 0, cooldown = 0.8,
                          description = "open palm facing away, pushed forward fast" },
   function(h)
@@ -41,7 +51,7 @@ gesture.define("push", { hand = "any", hold = 0, cooldown = 0.8,
 
 gesture.on("push", function(e)
   if e.phase ~= "start" then return end
-  ui.close("browser")
+  ui.close("web")
   ui.close("git")
   ui.toast("Pushed away")
 end)
@@ -82,6 +92,8 @@ gesture.on("wave", function(e) if e.phase == "start" then ui.toast("Hello!") end
 
 ## 6. Sequence + confirmation: double thumbs-up runs tests, after a yes
 
+(`thumbs-up` comes from this plugin's own `poses/thumbs-up.json`, as in recipe 2.)
+
 ```lua
 -- description: thumbs up twice asks to run the test suite in the terminal
 gesture.sequence({ "thumbs-up", "thumbs-up" }, 1.5, function(e)
@@ -92,6 +104,9 @@ end)
 ```
 
 ## 7. A toggle that survives restarts
+
+(`horns` comes from this plugin's own `poses/horns.json`: fingers `{ "index": 0, "middle": 1, "ring": 1,
+"little": 0 }`, see reference/hand-model.md.)
 
 ```lua
 -- description: horns toggles the float layout (remembered across restarts)

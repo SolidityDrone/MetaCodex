@@ -28,20 +28,24 @@ namespace MetaCodex.Shell
     /// recording poses, plugin scaffolds and the starter plugins.
     public sealed partial class MetaCodexShell
     {
+        /// BIND's presets: what a hand is good for (owner 2026-11-12: "clean up a bit scripts/gestures"). Opening the
+        /// other panels, layouts and spins stay reachable through CUSTOM ACTION… and RunAction keeps every verb, so
+        /// bindings saved with an older preset (toggle:browser, spin:40, …) still run.
         public static readonly (string label, string action)[] PresetActions =
         {
-            ("Open terminals", "toggle:terminals"), ("Open files", "toggle:files"), ("Open git", "toggle:git"),
-            ("Open agents", "toggle:agents"), ("Open threads", "toggle:threads"), ("Open web", "toggle:browser"),
-            ("Open scripts", "toggle:scripts"), ("Open gestures", "toggle:gestures"), ("Open settings", "toggle:settings"),
-            ("Open vault", "toggle:vault"), ("New terminal", "terminal:new"), ("System keyboard", "keyboard"),
-            ("Select tool on/off", "select"), ("Recenter", "recenter"), ("Float layout", "layout:float"),
-            ("Fixed layout", "layout:fixed"), ("Spin carousel left", "spin:-40"), ("Spin carousel right", "spin:40"),
-            ("Ctrl-C in terminal", "type:\u0003"), ("git status in terminal", "run:git status"), ("Toast hello", "toast:Hello from a gesture"),
+            ("TALK", "voice:toggle"), ("TERMINALS", "toggle:terminals"), ("NEW TERMINAL", "terminal:new"),
+            ("THREADS", "toggle:threads"), ("FILES", "toggle:files"), ("WEB", "toggle:web"), ("GIT", "toggle:git"),
+            ("KEYBOARD", "keyboard"), ("SELECT", "select"), ("RECENTER", "recenter"), ("FOCUS", "focus"),
+            ("CTRL-C", "type:\u0003"),
         };
 
         private UiTabs _gTabs;
         private UiList _gList, _gBindings, _gActions, _gPlugins;
         private UiLabel _gDetail, _gBindTarget, _gRecordStatus, _gEvents, _gPluginDetail, _gCost;
+        private UiButton _gTestBtn, _gBindBtn, _gSourceBtn, _gDeleteBtn, _gAddBtn;
+        /// The example row picked in ALL (null: a gesture row is picked), and whether EXAMPLES is unfolded.
+        private string _gExample;
+        private bool _gExamplesOpen;
         private readonly UiLabel[] _gHandText = new UiLabel[2];
         private readonly UiProgress[,] _gBars = new UiProgress[2, 6];
         private UiTextField _gRecordName;
@@ -123,45 +127,30 @@ namespace MetaCodex.Shell
             RefreshGesturesPanel();
         }
 
-        // ------------------------------------------------------------------ starter plugins
+        // ------------------------------------------------------------------ gesture examples (opt-in)
 
-        /// First run: two example plugins builders can read and copy (data-only poses; Lua detectors).
-        private void EnsureStarterPlugins()
-        {
-            try
-            {
-                var marker = Path.Combine(Scripts.PluginsDir, ".starter-installed");
-                if (File.Exists(marker)) return;
-                Directory.CreateDirectory(Scripts.PluginsDir);
-                foreach (var plugin in StarterPlugins)
-                {
-                    var dir = Path.Combine(Scripts.PluginsDir, plugin.Key);
-                    if (Directory.Exists(dir)) continue;
-                    foreach (var f in plugin.Value)
-                    {
-                        var path = Path.Combine(dir, f.Key);
-                        Directory.CreateDirectory(Path.GetDirectoryName(path));
-                        File.WriteAllText(path, f.Value);
-                    }
-                }
-                File.WriteAllText(marker, "starter plugins installed " + DateTime.UtcNow.ToString("o") + "\nDelete a plugin folder to remove it; this file stops it from coming back.\n");
-            }
-            catch (Exception ex) { Log("starter plugins not installed: " + ex.Message); }
-        }
+        /// The marker of the one-time cleanup of the old starter copies (RetireStarterExamples). It also stops the
+        /// cleanup from ever touching an example the user adds later. `.starter-installed` stays where it is: an
+        /// older build then never seeds the starters again after a downgrade.
+        public const string ExamplesMarker = ".examples-v2";
 
-        private static string PoseFile(string name, string desc, string fingers, string extra = "") =>
+        private static string PoseFileV1(string name, string desc, string fingers, string extra = "") =>
             "{\n  \"name\": \"" + name + "\",\n  \"description\": \"" + desc + "\",\n  \"hand\": \"any\",\n  \"fingers\": " + fingers + ",\n  \"tolerance\": 0.35," + extra + "\n  \"hold\": 0.15,\n  \"cooldown\": 0.5\n}\n";
 
-        public static readonly Dictionary<string, Dictionary<string, string>> StarterPlugins = new Dictionary<string, Dictionary<string, string>>
+        /// FROZEN: the exact files the builds up to 2026-11-12 seeded into /mnt/quest/plugins on first run. Only the
+        /// cleanup compares against them, to tell an untouched copy from one the owner edited. Never change a byte
+        /// here (an edit would make old untouched copies look edited, or worse, edited ones look untouched); change
+        /// ExamplePlugins instead.
+        public static readonly IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> StarterV1 = new Dictionary<string, IReadOnlyDictionary<string, string>>
         {
             ["core-poses"] = new Dictionary<string, string>
             {
                 ["plugin.json"] = "{\n  \"id\": \"core-poses\",\n  \"name\": \"Core poses\",\n  \"version\": \"1.0.0\",\n  \"kind\": \"gesture\",\n  \"description\": \"Thumbs up / down, victory, horns and call-me as named gestures (data only: poses/*.json)\"\n}\n",
-                ["poses/thumbs-up.json"] = PoseFile("thumbs-up", "fist, thumb pointing up", "{ \"thumb\": 0, \"index\": 1, \"middle\": 1, \"ring\": 1, \"little\": 1 }", "\n  \"thumbPointing\": \"up\","),
-                ["poses/thumbs-down.json"] = PoseFile("thumbs-down", "fist, thumb pointing down", "{ \"thumb\": 0, \"index\": 1, \"middle\": 1, \"ring\": 1, \"little\": 1 }", "\n  \"thumbPointing\": \"down\","),
-                ["poses/victory.json"] = PoseFile("victory", "index and middle up, the rest curled", "{ \"index\": 0, \"middle\": 0, \"ring\": 1, \"little\": 1 }"),
-                ["poses/horns.json"] = PoseFile("horns", "index and little up, middle and ring curled", "{ \"index\": 0, \"middle\": 1, \"ring\": 1, \"little\": 0 }"),
-                ["poses/call-me.json"] = PoseFile("call-me", "thumb and little out, the rest curled", "{ \"thumb\": 0, \"index\": 1, \"middle\": 1, \"ring\": 1, \"little\": 0 }"),
+                ["poses/thumbs-up.json"] = PoseFileV1("thumbs-up", "fist, thumb pointing up", "{ \"thumb\": 0, \"index\": 1, \"middle\": 1, \"ring\": 1, \"little\": 1 }", "\n  \"thumbPointing\": \"up\","),
+                ["poses/thumbs-down.json"] = PoseFileV1("thumbs-down", "fist, thumb pointing down", "{ \"thumb\": 0, \"index\": 1, \"middle\": 1, \"ring\": 1, \"little\": 1 }", "\n  \"thumbPointing\": \"down\","),
+                ["poses/victory.json"] = PoseFileV1("victory", "index and middle up, the rest curled", "{ \"index\": 0, \"middle\": 0, \"ring\": 1, \"little\": 1 }"),
+                ["poses/horns.json"] = PoseFileV1("horns", "index and little up, middle and ring curled", "{ \"index\": 0, \"middle\": 1, \"ring\": 1, \"little\": 0 }"),
+                ["poses/call-me.json"] = PoseFileV1("call-me", "thumb and little out, the rest curled", "{ \"thumb\": 0, \"index\": 1, \"middle\": 1, \"ring\": 1, \"little\": 0 }"),
             },
             ["swipes"] = new Dictionary<string, string>
             {
@@ -187,6 +176,151 @@ end)
             },
         };
 
+        /// The gesture examples: nothing installs them by itself. GESTURES > ALL > EXAMPLES (+ ADD), the control
+        /// port (`plugin example <id>`) and voice install one with InstallGestureExample. Today they are the
+        /// starter files; change them here freely (StarterV1 keeps the old ones for the cleanup).
+        public static readonly IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> ExamplePlugins = StarterV1;
+
+        /// Example ids in the order the list shows them.
+        public static IEnumerable<string> GestureExampleIds => ExamplePlugins.Keys;
+
+        /// The gesture names a plugin's files define: poses/<name>.json and gesture.define("<name>", …).
+        public static List<string> GestureNamesIn(IReadOnlyDictionary<string, string> files)
+        {
+            var names = new List<string>();
+            foreach (var kv in files)
+            {
+                if (kv.Key.StartsWith("poses/") && kv.Key.EndsWith(".json")) names.Add(kv.Key.Substring(6, kv.Key.Length - 11));
+                else if (kv.Key.EndsWith(".lua"))
+                    foreach (System.Text.RegularExpressions.Match m in System.Text.RegularExpressions.Regex.Matches(kv.Value, "gesture\\.define\\(\\s*[\"']([^\"']+)[\"']"))
+                        names.Add(m.Groups[1].Value);
+            }
+            return names;
+        }
+
+        /// Installs one example plugin (GESTURES > EXAMPLES > + ADD, `plugin example <id>`, voice). null = ok, else
+        /// the error. An existing folder of that name is never overwritten: it is only enabled again.
+        public string InstallGestureExample(string id)
+        {
+            id = (id ?? "").Trim().ToLowerInvariant();
+            if (!ExamplePlugins.TryGetValue(id, out var files)) return $"no example '{id}' (examples: {string.Join(", ", GestureExampleIds)})";
+            try
+            {
+                Directory.CreateDirectory(Scripts.PluginsDir);
+                var marker = Path.Combine(Scripts.PluginsDir, ExamplesMarker);
+                if (!File.Exists(marker)) File.WriteAllText(marker, "gesture examples are opt-in; the old starter copies were checked " + DateTime.UtcNow.ToString("o") + "\n");
+                if (Directory.Exists(Path.Combine(Scripts.PluginsDir, id)))
+                {
+                    Scripts.SetEnabled("plugin/" + id, true);
+                    Log($"gesture example {id}: already in /mnt/quest/plugins, enabled");
+                }
+                else
+                {
+                    var e = Scripts.SavePlugin(id, files.ToDictionary(kv => kv.Key, kv => kv.Value));
+                    if (e.Error != null) return e.Error;
+                    Log($"gesture example {id} installed: {e.Poses} poses, {e.Detectors} detectors");
+                }
+            }
+            catch (Exception ex) { return ex.Message; }
+            RefreshGesturesPanel();
+            return null;
+        }
+
+        /// True when the plugin folder holds exactly one of the given file sets (same files, same text; CRLF = LF).
+        public static bool SameFiles(string dir, IReadOnlyDictionary<string, string> files)
+        {
+            if (!Directory.Exists(dir)) return false;
+            var onDisk = Directory.GetFiles(dir, "*", SearchOption.AllDirectories)
+                .Select(f => f.Substring(dir.Length).TrimStart('/', '\\').Replace('\\', '/')).ToList();
+            if (onDisk.Count != files.Count || onDisk.Any(f => !files.ContainsKey(f))) return false;
+            foreach (var kv in files)
+            {
+                string text;
+                try { text = File.ReadAllText(Path.Combine(dir, kv.Key.Replace('/', Path.DirectorySeparatorChar))); }
+                catch (Exception) { return false; }
+                if (text.Replace("\r\n", "\n") != kv.Value.Replace("\r\n", "\n")) return false;
+            }
+            return true;
+        }
+
+        /// Runs once per plugins folder (marker ExamplesMarker), in place of the old first-run seeding: deletes the
+        /// starter copies (core-poses, swipes) that are untouched (StarterV1, byte for byte) AND unused (no binding
+        /// names one of their gestures, no other script or plugin's Lua quotes one). Edited or used copies stay
+        /// (logged with the reason); my-poses and every other folder are never touched. Returns what it did.
+        public static List<string> RetireStarterCopies(string pluginsDir, string scriptsDir, IEnumerable<string> boundGestures)
+        {
+            var log = new List<string>();
+            if (string.IsNullOrEmpty(pluginsDir) || !Directory.Exists(pluginsDir)) return log;
+            var marker = Path.Combine(pluginsDir, ExamplesMarker);
+            if (File.Exists(marker)) return log;
+            var bound = new HashSet<string>(boundGestures ?? Enumerable.Empty<string>());
+            foreach (var starter in StarterV1)
+            {
+                var dir = Path.Combine(pluginsDir, starter.Key);
+                if (!Directory.Exists(dir)) continue;
+                if (!SameFiles(dir, starter.Value)) { log.Add($"kept {starter.Key}: edited"); continue; }
+                var names = GestureNamesIn(starter.Value);
+                string usedBy = names.Where(bound.Contains).Select(n => "binding " + n).FirstOrDefault()
+                                ?? UsedInLua(pluginsDir, scriptsDir, dir, names);
+                if (usedBy != null) { log.Add($"kept {starter.Key}: used ({usedBy})"); continue; }
+                try { Directory.Delete(dir, true); log.Add($"removed {starter.Key}: untouched, unused"); }
+                catch (Exception ex) { log.Add($"kept {starter.Key}: {ex.Message}"); }
+            }
+            try { File.WriteAllText(marker, "gesture examples are opt-in; the old starter copies were checked " + DateTime.UtcNow.ToString("o") + "\n" + string.Join("\n", log) + "\n"); }
+            catch (Exception ex) { log.Add("marker not written: " + ex.Message); }
+            return log;
+        }
+
+        /// The first Lua file outside `self` that quotes one of the names ("thumbs-up" or 'thumbs-up'), or null.
+        private static string UsedInLua(string pluginsDir, string scriptsDir, string self, List<string> names)
+        {
+            var files = new List<string>();
+            if (!string.IsNullOrEmpty(scriptsDir) && Directory.Exists(scriptsDir)) files.AddRange(Directory.GetFiles(scriptsDir, "*.lua"));
+            foreach (var d in Directory.GetDirectories(pluginsDir))
+                if (!string.Equals(Path.GetFullPath(d).TrimEnd('/', '\\'), Path.GetFullPath(self).TrimEnd('/', '\\'), StringComparison.Ordinal))
+                    files.AddRange(Directory.GetFiles(d, "*.lua", SearchOption.AllDirectories));
+            foreach (var f in files)
+            {
+                string text;
+                try { text = File.ReadAllText(f); } catch (Exception) { continue; }
+                foreach (var n in names)
+                    if (text.Contains("\"" + n + "\"") || text.Contains("'" + n + "'")) return Path.GetFileName(Path.GetDirectoryName(f)) + "/" + Path.GetFileName(f) + " names " + n;
+            }
+            return null;
+        }
+
+        /// Shell start: the one-time cleanup, with the user's bindings (on or off); forgets the removed plugins'
+        /// enabled flags.
+        private void RetireStarterExamples()
+        {
+            try
+            {
+                var log = RetireStarterCopies(Scripts.PluginsDir, Scripts.Dir, Settings?.bindings?.Select(b => b.gesture));
+                foreach (var l in log)
+                {
+                    Log("gesture examples: " + l);
+                    if (l.StartsWith("removed ")) Scripts.ForgetState("plugin/" + l.Substring(8).Split(':')[0]);
+                }
+            }
+            catch (Exception ex) { Log("gesture examples: cleanup skipped: " + ex.Message); }
+        }
+
+        /// Installed = the folder exists. Untouched = it still holds the shipped files (it shows under EXAMPLES, not
+        /// YOURS). Cached per plugin change time: the list refreshes on every scan.
+        private readonly Dictionary<string, (DateTime mtime, bool untouched)> _exampleState = new Dictionary<string, (DateTime, bool)>();
+
+        private bool IsUntouchedExample(string id)
+        {
+            if (!ExamplePlugins.ContainsKey(id)) return false;
+            var e = Scripts.Find("plugin/" + id);
+            if (e == null) return false;
+            if (_exampleState.TryGetValue(id, out var c) && c.mtime == e.Mtime) return c.untouched;
+            var dir = Path.Combine(Scripts.PluginsDir, id);
+            bool same = SameFiles(dir, ExamplePlugins[id]) || SameFiles(dir, StarterV1[id]);
+            _exampleState[id] = (e.Mtime, same);
+            return same;
+        }
+
         public const string PluginTemplateLua =
 @"-- description: my gesture plugin (edit me: the app reloads this file within a second)
 -- Pose files in poses/*.json define named hand shapes; gesture.define adds Lua detectors;
@@ -197,21 +331,22 @@ gesture.define(""both-palms-up"", { hand = ""both"", hold = 0.3, cooldown = 1.0,
   return l.open and r.open and l.palmFacing == ""up"" and r.palmFacing == ""up""
 end)
 
+-- the reaction: a toast only, so a new plugin changes nothing until you say what it does
+-- (e.g. app.action(""toggle:threads""); actions: the skill quest-gesture-plugins)
 gesture.on(""both-palms-up"", function(e)
   if e.phase == ""start"" then
     ui.toast(""Both palms up"")
-    ui.toggle(""threads"")
   end
 end)
 ";
 
-        /// Scaffolds a plugin folder from the template (Gestures panel > NEW PLUGIN, control port).
+        /// Scaffolds a plugin folder from the template (MQH > PLUGINS > + NEW PLUGIN…, control port `plugin new`).
         public ScriptHost.Entry NewPlugin(string id)
         {
             id = ScriptHost.Sanitize(id);
             return Scripts.SavePlugin(id, new Dictionary<string, string>
             {
-                ["plugin.json"] = "{\n  \"id\": \"" + id + "\",\n  \"name\": \"" + id + "\",\n  \"version\": \"0.1.0\",\n  \"kind\": \"gesture\",\n  \"description\": \"both palms up toggles the threads panel\"\n}\n",
+                ["plugin.json"] = "{\n  \"id\": \"" + id + "\",\n  \"name\": \"" + id + "\",\n  \"version\": \"0.1.0\",\n  \"kind\": \"gesture\",\n  \"description\": \"both palms up shows a toast (a template: edit main.lua)\"\n}\n",
                 ["main.lua"] = PluginTemplateLua,
             });
         }
@@ -267,24 +402,23 @@ end)
             float leftW = 0.30f;
             var right = new Rect(area.x + leftW + t.Gap * 2, area.y, area.width - leftW - t.Gap * 2, area.height);
 
-            // GESTURES: every gesture the engine knows, with its source and live state
-            _gList = _gTabs.AddTo(0, new UiList(0.030f, (item, idx) => { _gSelected = item.Tag as string; ShowGestureDetail(); }) { Rect = new Rect(area.x, area.y, leftW, area.height) });
+            // ALL: YOURS / SYSTEM / EXAMPLES (folded), like SKILLS; the list refreshes by itself on every scan
+            _gList = _gTabs.AddTo(0, new UiList(0.030f, (item, idx) => GestureRowPicked(item)) { Rect = new Rect(area.x, area.y, leftW, area.height) });
             var rs = new UiStack(right, t.Gap);
             _gDetail = _gTabs.AddTo(0, new UiLabel("", t.SmallSize * 1.1f) { Rect = rs.Next(area.height - t.ButtonHeight * 2 - t.Gap * 3), Wrap = true, Align = TextAlignmentOptions.TopLeft });
-            var row1 = rs.Next(t.ButtonHeight);
-            var acts1 = new (string, Action)[]
+            var row1 = AddRow(_gTabs, 0, rs.Next(t.ButtonHeight), new (string, Action)[]
             {
-                ("TEST ▶", () => TestGesture(_gSelected)),
-                ("BIND →", () => { _gTabs.Select(2); RefreshGesturesPanel(); }),
+                ("TEST ▶", () => { if (_gExample == null) TestGesture(_gSelected); }),
+                ("BIND →", () => { if (_gExample != null) return; _gTabs.Select(2); RefreshGesturesPanel(); }),
                 ("SOURCE", ShowGestureSource),
-            };
-            AddRow(_gTabs, 0, row1, acts1);
-            var row2 = rs.Next(t.ButtonHeight);
-            AddRow(_gTabs, 0, row2, new (string, Action)[]
+            });
+            var row2 = AddRow(_gTabs, 0, rs.Next(t.ButtonHeight), new (string, Action)[]
             {
                 ("DELETE POSE", DeleteSelectedPose),
-                ("⟳ REFRESH", RefreshGesturesPanel),
-            }, danger: 0);
+                ("+ ADD", AddPickedExample),
+            }, primary: 1, danger: 0);
+            (_gTestBtn, _gBindBtn, _gSourceBtn) = (row1[0], row1[1], row1[2]);
+            (_gDeleteBtn, _gAddBtn) = (row2[0], row2[1]);
 
             // LIVE: both hands, finger by finger
             float colW = (area.width - t.Gap * 2) / 2f;
@@ -340,53 +474,175 @@ end)
             _gTabs.AddTo(3, new UiSlider("HOLD", 0f, 1f, _gHold, v => _gHold = v) { Rect = rec.Next(0.032f), LabelWidth = 0.12f, Format = "0.00 s" });
             AddRow(_gTabs, 3, rec.Next(t.ButtonHeight), new (string, Action)[] { ("● RECORD IN 3 s", StartRecording) }, primary: 0);
             _gRecordStatus = _gTabs.AddTo(3, new UiLabel("", t.SmallSize) { Rect = rec.Rest(), Wrap = true, Align = TextAlignmentOptions.TopLeft });
+            // plugins have one home (MQH > PLUGINS: + NEW PLUGIN…, FOLDER); here only where to find it
             var tpl = new UiStack(new Rect(area.x + area.width * 0.57f, area.y, area.width * 0.43f, area.height), t.Gap);
-            _gTabs.AddTo(3, new UiLabel("BUILD A PLUGIN", t.SmallSize) { Rect = tpl.Next(0.018f), UseDisplay = true, Color = t.TextDim });
-            _gTabs.AddTo(3, new UiLabel("A plugin is a folder in /mnt/quest/plugins: plugin.json, main.lua (detectors, handlers) and poses/*.json. Ask your agent: “make a gesture plugin that …” (skill quest-gesture-plugins).", t.SmallSize) { Rect = tpl.Next(0.09f), Wrap = true, Color = t.TextDim, Align = TextAlignmentOptions.TopLeft });
-            AddRow(_gTabs, 3, tpl.Next(t.ButtonHeight), new (string, Action)[]
-            {
-                ("+ NEW PLUGIN…", () => UiKeyboard.Edit("my-gestures", false, null, id => { if (string.IsNullOrWhiteSpace(id)) return; var e = NewPlugin(id); Toast($"Plugin {e.Name} created in /mnt/quest/plugins/{e.Name}", "ok"); RefreshGesturesPanel(); })),
-            });
-            AddRow(_gTabs, 3, tpl.Next(t.ButtonHeight), new (string, Action)[]
-            {
-                ("OPEN IN TERMINAL", () => TerminalSend("cd /mnt/quest/plugins && ls -la\r")),
-            });
+            _gTabs.AddTo(3, new UiLabel("Plugins: MQH > PLUGINS (+ NEW, or ask an agent)", t.SmallSize) { Rect = tpl.Next(0.04f), Wrap = true, Color = t.TextDim, Align = TextAlignmentOptions.TopLeft });
 
             _gTabs.OnChanged = _ => RefreshGesturesPanel();
             RefreshGesturesPanel();
         }
 
-        private static void AddRow(UiTabs tabs, int page, Rect row, (string label, Action act)[] items, int primary = -1, int danger = -1)
+        private static UiButton[] AddRow(UiTabs tabs, int page, Rect row, (string label, Action act)[] items, int primary = -1, int danger = -1)
         {
             var t = UiTheme.Current;
             float bw = (row.width - t.Gap * (items.Length - 1)) / items.Length;
+            var buttons = new UiButton[items.Length];
             for (int i = 0; i < items.Length; i++)
-                tabs.AddTo(page, new UiButton(items[i].label, items[i].act, i == primary ? UiButtonStyle.Primary : i == danger ? UiButtonStyle.Danger : UiButtonStyle.Normal)
+                buttons[i] = tabs.AddTo(page, new UiButton(items[i].label, items[i].act, i == primary ? UiButtonStyle.Primary : i == danger ? UiButtonStyle.Danger : UiButtonStyle.Normal)
                 { Rect = new Rect(row.x + i * (bw + t.Gap), row.y, bw, row.height) });
+            return buttons;
         }
 
-        private ScriptHost.Entry SelectedPlugin() =>
-            _gPlugins != null && _gPlugins.SelectedIndex >= 0 && _gPlugins.SelectedIndex < _gPlugins.Items.Count ? _gPlugins.Items[_gPlugins.SelectedIndex].Tag as ScriptHost.Entry : null;
+        /// A group header row in ALL (YOURS, SYSTEM, EXAMPLES); EXAMPLES folds and unfolds on a tap.
+        private sealed class GestureGroupRow { public string Name; }
+        /// An example plugin's row in ALL > EXAMPLES.
+        private sealed class GestureExampleRow { public string Id; }
+
+        /// Short roles of the built-ins in ALL > SYSTEM.
+        private static string BuiltInRole(string n)
+        {
+            switch (n)
+            {
+                case "pinch": return "click";
+                case "grab": return "move · spin";
+                case "point": return "ray";
+                case "open": return "open hand";
+                case "palm-up": return "palm up";
+                case "clap": return "two hands";
+                case "select": return "select tool";
+                default: return "";
+            }
+        }
+
+        /// The example a gesture comes from when that example is installed and untouched, else null (then it is YOURS).
+        private string ExampleOf(GestureEngine.CustomInfo c)
+        {
+            if (c?.Owner == null || !c.Owner.StartsWith("plugin/")) return null;
+            string id = c.Owner.Substring(7);
+            return IsUntouchedExample(id) ? id : null;
+        }
+
+        /// The rows of ALL. Public for the self-test.
+        public List<UiListItem> GestureRows()
+        {
+            var t = UiTheme.Current;
+            var items = new List<UiListItem>();
+            var custom = Gestures.Custom.OrderBy(x => x.Name).ToList();
+            var yours = custom.Where(c => ExampleOf(c) == null).ToList();
+            UiListItem Header(string name, string title) => new UiListItem { Icon = "", Title = title, TitleColor = t.TextAccent, Tag = new GestureGroupRow { Name = name } };
+            UiListItem Row(GestureEngine.CustomInfo c, int indent) => new UiListItem
+            {
+                Icon = c.Kind == "pose" ? "✋" : "ƒ",
+                IconColor = c.Kind == "pose" ? t.Violet : t.Warn,
+                Title = c.Name,
+                Sub = (c.Kind == "pose" ? "pose · " : "lua · ") + c.Owner.Replace("plugin/", ""),
+                Badge = BindingBadge(c.Name),
+                BadgeColor = t.Ok,
+                Indent = indent,
+                Tag = c.Name,
+            };
+
+            items.Add(Header("YOURS", $"YOURS  ({yours.Count})"));
+            if (yours.Count == 0) items.Add(new UiListItem { Icon = "", Title = "none · RECORD a pose or ASK AN AGENT", TitleColor = t.TextDim, Tag = null });
+            foreach (var c in yours) items.Add(Row(c, 0));
+
+            items.Add(Header("SYSTEM", $"SYSTEM  ({GestureEngine.Names.Length})"));
+            foreach (var n in GestureEngine.Names)
+                items.Add(new UiListItem { Icon = "◆", IconColor = t.Accent, Title = n, Sub = BuiltInRole(n), Badge = BindingBadge(n), BadgeColor = t.Ok, Tag = n });
+
+            var ids = GestureExampleIds.ToList();
+            var exHeader = Header("EXAMPLES", $"EXAMPLES  ({ids.Count})");
+            exHeader.Icon = _gExamplesOpen ? "▾" : "▸"; // folds like THREADS' projects
+            items.Add(exHeader);
+            if (_gExamplesOpen)
+                foreach (var id in ids)
+                {
+                    bool installed = Scripts.Find("plugin/" + id) != null;
+                    var names = GestureNamesIn(ExamplePlugins[id]);
+                    items.Add(new UiListItem
+                    {
+                        Icon = installed ? "▣" : "+",
+                        IconColor = installed ? t.Ok : t.TextDim,
+                        Title = id,
+                        Sub = string.Join(" ", names),
+                        Badge = installed ? "ADDED" : "+ ADD",
+                        BadgeColor = installed ? t.Ok : t.Accent,
+                        Tag = new GestureExampleRow { Id = id },
+                    });
+                    if (installed)
+                        foreach (var c in custom.Where(c => ExampleOf(c) == id)) items.Add(Row(c, 1));
+                }
+            return items;
+        }
+
+        private void GestureRowPicked(UiListItem item)
+        {
+            switch (item?.Tag)
+            {
+                case string name: _gSelected = name; _gExample = null; break;
+                case GestureExampleRow ex: _gExample = ex.Id; break;
+                case GestureGroupRow g when g.Name == "EXAMPLES": _gExamplesOpen = !_gExamplesOpen; RefreshGesturesPanel(); return;
+                default: RestoreGesturePick(); return; // a header or the hint row: the pick stays where it was
+            }
+            ShowGestureDetail();
+            RefreshBindTarget();
+        }
+
+        /// Fold or unfold ALL > EXAMPLES (also the self-test).
+        public void SetGestureExamplesOpen(bool open) { _gExamplesOpen = open; RefreshGesturesPanel(); }
+
+        private void AddPickedExample()
+        {
+            if (_gExample == null) return;
+            string id = _gExample;
+            var err = InstallGestureExample(id);
+            if (err != null) { Toast($"Example {id}: {err}", "error"); return; }
+            Toast($"Example {id} added: {string.Join(", ", GestureNamesIn(ExamplePlugins[id]))}", "ok");
+        }
+
+        /// Highlights the row of the current pick after the list changed (headers move rows around).
+        private void RestoreGesturePick()
+        {
+            if (_gList == null) return;
+            int idx = -1;
+            for (int i = 0; i < _gList.Items.Count && idx < 0; i++)
+            {
+                var tag = _gList.Items[i].Tag;
+                if (_gExample != null ? tag is GestureExampleRow ex && ex.Id == _gExample : tag is string n && n == _gSelected) idx = i;
+            }
+            if (idx >= 0) _gList.SelectIndex(idx, notify: false);
+            else _gList.SelectedIndex = -1;
+        }
+
+        /// True when the gesture is one of YOURS (from a plugin or script that is not an untouched example).
+        private bool IsYoursGesture(string name)
+        {
+            var c = Gestures.Custom.FirstOrDefault(x => x.Name == name);
+            return c != null && !Gestures.IsBuiltIn(name) && ExampleOf(c) == null;
+        }
+
+        /// The ALL buttons follow the pick: TEST / BIND for any gesture, SOURCE and DELETE POSE only for YOURS,
+        /// + ADD only for an example that is not installed yet.
+        private void UpdateGestureButtons()
+        {
+            if (_gTestBtn == null) return;
+            bool gesture = _gExample == null && !string.IsNullOrEmpty(_gSelected);
+            bool yours = gesture && IsYoursGesture(_gSelected);
+            var pose = yours ? Gestures.GetPose(_gSelected) : null;
+            _gTestBtn.SetEnabled(gesture);
+            _gBindBtn.SetEnabled(gesture);
+            _gSourceBtn.SetEnabled(yours);
+            _gDeleteBtn.SetEnabled(pose != null && !string.IsNullOrEmpty(pose.Source) && File.Exists(pose.Source));
+            _gAddBtn.SetEnabled(_gExample != null && Scripts.Find("plugin/" + _gExample) == null);
+        }
 
         public void RefreshGesturesPanel()
         {
             if (_gList == null || Gestures == null) return;
             var t = UiTheme.Current;
-            var items = new List<UiListItem>();
-            foreach (var n in GestureEngine.Names)
-                items.Add(new UiListItem { Icon = "◆", IconColor = t.Accent, Title = n, Sub = "built-in", Badge = BindingBadge(n), BadgeColor = t.Ok, Tag = n });
-            foreach (var cinfo in Gestures.Custom.OrderBy(x => x.Name))
-                items.Add(new UiListItem
-                {
-                    Icon = cinfo.Kind == "pose" ? "✋" : "ƒ",
-                    IconColor = cinfo.Kind == "pose" ? t.Violet : t.Warn,
-                    Title = cinfo.Name,
-                    Sub = (cinfo.Kind == "pose" ? "pose · " : "lua · ") + cinfo.Owner.Replace("plugin/", ""),
-                    Badge = BindingBadge(cinfo.Name),
-                    BadgeColor = t.Ok,
-                    Tag = cinfo.Name,
-                });
-            _gList.SetItems(items, keepScroll: true);
+            if (_gExample != null && !_gExamplesOpen) _gExample = null;
+            _gList.SetItems(GestureRows(), keepScroll: true);
+            RestoreGesturePick();
             ShowGestureDetail();
             RefreshBindTarget();
             _gBindings?.SetItems(Settings.bindings.Select(b => new UiListItem
@@ -411,6 +667,8 @@ end)
         {
             if (_gDetail == null) return;
             var t = UiTheme.Current;
+            UpdateGestureButtons();
+            if (_gExample != null) { ShowExampleDetail(_gExample); return; }
             string name = _gSelected ?? "";
             string what;
             var pose = Gestures.GetPose(name);
@@ -423,6 +681,18 @@ end)
             bool active = Gestures.IsActive(name);
             _gDetail.Set($"<size=130%><b>{name}</b></size>  {(active ? "<color=#4DFFA6>● ACTIVE</color>" : "")}\n{what}\n\n<color=#7FA9BF>BINDINGS</color>\n" + (binds.Count == 0 ? "  none: BIND → to add one" : string.Join("\n", binds)) +
                 "\n\n<color=#7FA9BF>LUA</color>\n  gesture.on(\"" + name + "\", function(e) … end)", t.Text);
+        }
+
+        private void ShowExampleDetail(string id)
+        {
+            var t = UiTheme.Current;
+            var files = ExamplePlugins[id];
+            string desc = "";
+            try { desc = (string)Newtonsoft.Json.Linq.JObject.Parse(files["plugin.json"])["description"] ?? ""; } catch (Exception) { }
+            bool installed = Scripts.Find("plugin/" + id) != null;
+            _gDetail.Set($"<size=130%><b>{id}</b></size>  <color=#7FA9BF>EXAMPLE</color>\n{desc}\n\n<color=#7FA9BF>GESTURES</color>\n  " + string.Join("\n  ", GestureNamesIn(files)) + "\n\n" +
+                (installed ? "<color=#4DFFA6>● added</color> in /mnt/quest/plugins/" + id + ": bind its gestures in BIND; remove it in MQH > PLUGINS."
+                           : "Not installed: nothing runs. + ADD puts it in /mnt/quest/plugins/" + id + "."), t.Text);
         }
 
         private static string BuiltInHelp(string n)
@@ -460,7 +730,7 @@ end)
             var pose = Gestures.GetPose(_gSelected);
             var info = Gestures.Custom.FirstOrDefault(x => x.Name == _gSelected);
             string owner = pose?.Owner ?? info?.Owner;
-            if (owner == null) { Toast("Built-in gesture: see Gestures.cs", "info"); return; }
+            if (owner == null || !IsYoursGesture(_gSelected)) return; // SOURCE is for YOURS only
             var e = Scripts.Find(owner);
             if (e == null) return;
             string linux = e.Kind == "plugin" ? "/mnt/quest/plugins/" + e.Name : "/mnt/quest/scripts/" + e.Name + ".lua";
@@ -469,8 +739,8 @@ end)
 
         private void DeleteSelectedPose()
         {
-            var pose = Gestures.GetPose(_gSelected);
-            if (pose == null || string.IsNullOrEmpty(pose.Source) || !File.Exists(pose.Source)) { Toast("Only poses from files can be deleted here", "warn"); return; }
+            var pose = _gExample == null && IsYoursGesture(_gSelected) ? Gestures.GetPose(_gSelected) : null;
+            if (pose == null || string.IsNullOrEmpty(pose.Source) || !File.Exists(pose.Source)) return; // YOURS poses only (the button is off otherwise)
             Modal("DELETE POSE", $"Delete the pose file of '{pose.Name}'?", new[] { "DELETE", "CANCEL" }, i =>
             {
                 if (i != 0) return;

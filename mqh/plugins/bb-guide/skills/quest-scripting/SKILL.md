@@ -41,20 +41,21 @@ Handler argument `e`: `name`, `hand` (`left` | `right` | `both`), `phase` (`star
 |---|---|
 | `gesture.on(name, fn)` | `fn(e)` on every event of that gesture (`"*"` = all) |
 | `gesture.sequence({names...}, seconds, fn)` | `fn(e)` when the gestures happen in order within `seconds` |
-| `gesture.names()` / `gesture.list()` | every gesture the app knows: the built-ins above plus plugins' (`thumbs-up`, `swipe-left`, ...) |
+| `gesture.names()` / `gesture.list()` | every gesture the app knows now: the built-ins above plus the loaded plugins' (none on a fresh headset: the examples `core-poses` / `swipes` are opt-in) |
 | `gesture.active(name[, hand])` | true while that gesture is active |
 | `gesture.define(name, opts, detect)` / `gesture.pose(name, spec)` | new gestures: see the skill `quest-gesture-plugins` |
 | `hands.get("left"\|"right")` (alias `hands.state`) | `{tracked, pinch, pinching, grabbing, pointing, open, palmUp, x, y, z, curl = {thumb, index, middle, ring, little}, rel, vel, speed, palmFacing, thumbPointing, ...}` |
 
 New gestures (hand poses, swipes, two-hand shapes) belong in a **plugin** folder
-(`/mnt/quest/plugins/<id>/`, skill `quest-gesture-plugins`); a script can react to them by name.
+(`/mnt/quest/plugins/<id>/`, skill `quest-gesture-plugins`); a script can react to them by name, but only to
+names `mcx-ui gesture list` shows: a script never assumes a plugin's gesture is installed.
 
 ## App API
 
 | Call | Does |
 |---|---|
 | `ui.toast(text[, "info"\|"ok"\|"warn"\|"error"])` | a short message in front of the user |
-| `ui.open(id)` `ui.close(id)` `ui.toggle(id)` | panels: `dock`, `terminals`, `files`, `git`, `browser`, `scripts`, `gestures`, `agents`, `threads`, `thread`, `thread-new`, `vault`, `settings`, `voice`, `term-1`... |
+| `ui.open(id)` `ui.close(id)` `ui.toggle(id)` | panels: `dock`, `terminals`, `files`, `git`, `web` (browser window), `browser` (its LINKS page), `scripts`, `gestures`, `agents`, `threads`, `thread`, `thread-new`, `vault`, `settings`, `voice`, `term-1`... |
 | `ui.panels()` | ids of all panels |
 | `ui.modal(title, text, {"YES","NO"}, fn)` | a dialog; `fn(index, label)` with the answer |
 | `ui.select(true\|false)` | the select tool (pinch-drag a rectangle on a panel) |

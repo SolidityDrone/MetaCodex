@@ -504,6 +504,27 @@ docs/native-build-and-install.md.
 - [ ] A Bluetooth keyboard after touching the sidebar: ↑ ↓ / Page / Enter / Esc move and open in it; touch the terminal and the keys go there again
 - [ ] Voice: "open the sidebar on the git tab", "chiudi la barra laterale", "show the status tab of this thread", and in a folder with no repo "make this folder a git repository"
 
+## 34. Gestures and scripts: a clean start (branch feat/polish)
+
+Replaces the section 7 steps that expect `core-poses` / `swipes` to be there, "Open vault" in BIND, + NEW PLUGIN… in RECORD, PLUGINS in the studio, and the SCRIPTS gesture monitor.
+
+- [ ] Fresh install (or the app's data cleared): MQH > GESTURES > ALL shows YOURS (0) with one dim line "none · RECORD a pose or ASK AN AGENT", SYSTEM (7) (pinch click, grab move · spin, point ray, open open hand, palm-up palm up, clap two hands, select select tool), ▸ EXAMPLES (2) folded; no ⟳ REFRESH button
+- [ ] Tap EXAMPLES: it opens (▾ EXAMPLES) with `core-poses` and `swipes`, each "+ ADD"; tap it again: it folds
+- [ ] Pick a SYSTEM gesture: TEST ▶ and BIND → work; SOURCE and DELETE POSE are greyed out and do nothing
+- [ ] Pick `core-poses` under EXAMPLES: the right side lists its 5 gestures and says "Not installed"; + ADD (the only lit button) → toast "Example core-poses added …", the row says ADDED and its gestures appear indented under it; YOURS stays (0)
+- [ ] Make a thumbs up after + ADD → LIVE shows `thumbs-up`; MQH > PLUGINS lists Core poses
+- [ ] `mcx-ui plugin examples` lists both with installed=True/False; `mcx-ui plugin example swipes` → ok, swipes appear under EXAMPLES
+- [ ] RECORD a pose "finger-gun" → it appears under YOURS (✋ pose · my-poses); SOURCE and DELETE POSE are lit for it; DELETE POSE asks, then removes it
+- [ ] RECORD's right side is one dim line "Plugins: MQH > PLUGINS (+ NEW, or ask an agent)"; no + NEW PLUGIN… and no OPEN IN TERMINAL there
+- [ ] MQH > PLUGINS > + NEW PLUGIN… "test-plugin" → both palms up shows the toast "Both palms up" and opens nothing
+- [ ] BIND: 12 presets in this order: TALK, TERMINALS, NEW TERMINAL, THREADS, FILES, WEB, GIT, KEYBOARD, SELECT, RECENTER, FOCUS, CTRL-C; bind `clap` to WEB → a clap opens the WEB window (not LINKS); bind `clap` to TALK → a clap starts listening, another stops; DELETE the bindings
+- [ ] A binding saved before this build with an old preset (e.g. `toggle:browser`, `spin:40`) still runs
+- [ ] MQH > SCRIPTS on a fresh install: one dim line "No scripts · + EXAMPLE, or ask an agent (skill quest-scripting)"; no plugin rows, no GESTURE MONITOR; + EXAMPLE → `double-clap` with badge ON; double clap toggles TERMINALS
+- [ ] Update over an old install that had the starters, never edited, no binding on them: after the first start `core-poses` and `swipes` are gone from MQH > PLUGINS and /mnt/quest/plugins (`ls -a` shows `.examples-v2` and still `.starter-installed`); my-poses and your own plugins are still there
+- [ ] Update over an old install where a binding names `victory` (or a script or plugin reacts to `thumbs-up`): `core-poses` stays (under EXAMPLES, still working); an edited starter (one pose file changed) stays and shows under YOURS
+- [ ] Restart the app after + ADD of an example: it is still installed (the cleanup runs only once)
+- [ ] Ask an agent on the headset for "a thumbs up with my right hand opens git" on a fresh install: its plugin has its own `poses/thumbs-up.json` and works without + ADD
+
 ## 35. Menus and layout polish (branch feat/polish)
 
 Main menu (dock: Settings > DISPLAY, main menu on the wrist off; wrist: on):

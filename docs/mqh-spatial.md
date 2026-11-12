@@ -33,7 +33,7 @@ plugin's own server code over RPC. A plugin an agent writes on the headset shows
       ]
     }
   ],
-  "gestures": [ { "gesture": "thumbs-up", "when": "panel:questions", "action": { "rpc": "answer", "args": { "choice": "a" } } } ]
+  "gestures": [ { "gesture": "clap", "when": "panel:questions", "action": { "rpc": "answer", "args": { "choice": "a" } } } ]
 }
 ```
 
@@ -52,8 +52,11 @@ instead of failing.
 
 Recognition runs in Unity (hand joints at frame rate); everything else is data in MQH.
 
-- **Built-in gestures** (Unity): `pinch`, `pinch-hold`, `poke`, `palm-up`, `palm-up-pinch` (push to talk),
-  `thumbs-up`, `thumbs-down`, `fist`, `point`, `two-hand-push`, `flick-left`, `flick-right`.
+- **Built-in gestures** (Unity, `GestureEngine.Names`): `pinch`, `grab`, `point`, `open`, `palm-up`, `clap`,
+  `select`. Everything else is a plugin gesture. `thumbs-up`, `thumbs-down`, `victory`, `horns`, `call-me`
+  (example `core-poses`) and `swipe-left` / `-right` / `-up` (example `swipes`) are opt-in examples, not
+  installed on a fresh headset. Plan, not built: `pinch-hold`, `palm-up-pinch` (push to talk), `fist`,
+  `two-hand-push`, `flick-left`, `flick-right`.
 - **Plugin gestures**: `gestures.json` in a plugin, pose templates Unity can evaluate:
   `{ "id": "ok-sign", "hand": "any", "fingers": { "thumb": "touching-index", "middle": "extended", "ring": "extended", "pinky": "extended" }, "palm": "any", "holdMs": 250 }`.
 - **Bindings** (settings, user-editable, agents can change them): gesture id + context (`global`,

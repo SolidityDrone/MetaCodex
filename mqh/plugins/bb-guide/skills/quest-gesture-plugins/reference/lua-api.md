@@ -28,7 +28,7 @@ Every call is limited to 200 000 instructions; going over stops the plugin (erro
 | Call | Does |
 |---|---|
 | `ui.toast(text [, kind])` | kind `info` `ok` `warn` `error` |
-| `ui.open(id)` `ui.close(id)` `ui.toggle(id)` | panels: `dock terminals files git browser scripts gestures agents threads thread thread-new vault settings`; returns false for unknown ids |
+| `ui.open(id)` `ui.close(id)` `ui.toggle(id)` | panels: `dock terminals files git web browser scripts gestures plugins agents threads thread thread-new vault settings` (`web` = the browser window, `browser` = its LINKS page); returns false for unknown ids |
 | `ui.panels()` | list of panel ids |
 | `ui.modal(title, text, {"A", "B"}, fn(index, label))` | a dialog in front of the user; index starts at 1 |
 | `ui.select(true/false)` | the select tool (rectangle selection) on/off |
@@ -52,7 +52,7 @@ Every call is limited to 200 000 instructions; going over stops the plugin (erro
 | `app.time()` | seconds since the app started |
 | `app.after(seconds, fn)` / `app.every(seconds, fn)` | timers; return an id for `app.cancel(id)` |
 | `app.action("verb:arg")` | same actions as bindings: `open:` `close:` `toggle:<panel>`, `toast:`, `run:`, `type:`, `url:`, `layout:`, `spin:`, `select[:on|off]`, `keyboard`, `terminal:new`, `recenter`, `gesture:<name>`, `lua:<code>`; returns true or an error string |
-| `log(...)` / `print(...)` | a line in the plugin's log (`mcx-ui plugin log <id>`, Gestures > PLUGINS) |
+| `log(...)` / `print(...)` | a line in the plugin's log (`mcx-ui plugin log <id>`, MQH > PLUGINS) |
 | `plugin.id` `plugin.name` `plugin.version` `plugin.dir` | (plugins only) |
 
 ## voice

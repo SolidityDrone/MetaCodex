@@ -690,10 +690,41 @@ end)
         {
             var host = shell.Scripts;
             host.Scan();
+            // a clean start: nothing seeded, the one-time cleanup marked the folder (so a later + ADD is never cleaned up)
+            Check(host.Find("plugin/core-poses") == null && host.Find("plugin/swipes") == null && !Directory.Exists(Path.Combine(host.PluginsDir, "core-poses")) && !Directory.Exists(Path.Combine(host.PluginsDir, "swipes")),
+                "fresh start: no gesture examples installed");
+            Check(File.Exists(Path.Combine(host.PluginsDir, MetaCodexShell.ExamplesMarker)), "fresh start: the cleanup marker " + MetaCodexShell.ExamplesMarker + " is written");
+            shell.SetGestureExamplesOpen(false);
+            var rows = shell.GestureRows();
+            int sys = rows.FindIndex(r => r.Title.StartsWith("SYSTEM")), exh = rows.FindIndex(r => r.Title.StartsWith("EXAMPLES"));
+            Check(rows.Count > 0 && rows[0].Title.StartsWith("YOURS") && sys > 0 && exh == sys + 8 && rows.Skip(sys + 1).Take(7).Select(r => r.Title).SequenceEqual(GestureEngine.Names),
+                $"ALL: YOURS, SYSTEM (7 built-ins: {string.Join(" ", rows.Skip(sys + 1).Take(7).Select(r => r.Title + "=" + r.Sub))}), EXAMPLES");
+            Check(exh == rows.Count - 1 && rows[exh].Icon == "▸", "ALL: EXAMPLES folded on a fresh start (nothing under it)");
+            Check(rows[0].Title == "YOURS  (0)" && rows[1].Title.StartsWith("none"), "ALL: YOURS empty shows one hint row: " + (rows.Count > 1 ? rows[1].Title : "-"));
+            Check(!rows.Any(r => r.Title.Contains("REFRESH")), "ALL: no ⟳ REFRESH");
+            shell.SetGestureExamplesOpen(true);
+            rows = shell.GestureRows();
+            Check(rows.Count(r => r.Badge == "+ ADD") == 2 && rows.Any(r => r.Title == "core-poses") && rows.Any(r => r.Title == "swipes"), "EXAMPLES unfolded: core-poses and swipes, each + ADD");
+            Check(shell.InstallGestureExample("no-such") != null, "+ ADD of an unknown example: an error, nothing written");
+            Check(shell.InstallGestureExample("core-poses") == null, "+ ADD core-poses installs it");
+            string viaPort = shell.ControlCommand("plugin", "example swipes");
+            Check(viaPort.StartsWith("ok"), "control port: plugin example swipes → " + viaPort);
+            Check(shell.ControlCommand("plugin", "examples").Contains("core-poses installed=True"), "control port: plugin examples lists them as installed");
+            rows = shell.GestureRows();
+            int core1 = rows.FindIndex(r => r.Title == "core-poses");
+            Check(core1 >= 0 && rows[core1].Badge == "ADDED" && rows.Skip(core1 + 1).Take(5).All(r => r.Indent == 1) && rows.Count(r => r.Title == "thumbs-up") == 1 && rows[0].Title == "YOURS  (0)",
+                "an added, untouched example lists its gestures under EXAMPLES, not YOURS");
             var core = host.Find("plugin/core-poses");
             var swipes = host.Find("plugin/swipes");
-            Check(core != null && core.Error == null && core.Poses == 5, $"starter plugin core-poses loaded ({core?.Poses} poses{(core?.Error != null ? ", " + core.Error : "")})");
-            Check(swipes != null && swipes.Error == null && swipes.Detectors == 3, $"starter plugin swipes loaded ({swipes?.Detectors} Lua detectors{(swipes?.Error != null ? ", " + swipes.Error : "")})");
+            Check(core != null && core.Error == null && core.Poses == 5, $"example core-poses loaded ({core?.Poses} poses{(core?.Error != null ? ", " + core.Error : "")})");
+            Check(swipes != null && swipes.Error == null && swipes.Detectors == 3, $"example swipes loaded ({swipes?.Detectors} Lua detectors{(swipes?.Error != null ? ", " + swipes.Error : "")})");
+            GestureExamplesCleanup(tmp);
+            // SCRIPTS lists scripts only (the examples just added are plugins: MQH > PLUGINS), or one empty line
+            var scriptRows = shell.ScriptRowsForTest;
+            int nScripts = host.Entries.Count(e => e.Kind == "script");
+            Check(scriptRows != null && (nScripts == 0 ? scriptRows.Count == 1 && scriptRows[0].Title == MetaCodexShell.ScriptsEmptyText && scriptRows[0].Tag == null
+                                                       : scriptRows.Count == nScripts && scriptRows.All(r => r.Tag is ScriptHost.Entry e && e.Kind == "script")),
+                $"SCRIPTS: only the {nScripts} script(s), no plugin rows" + (nScripts == 0 ? ", empty line shown" : ""));
             foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
             hands.Hide(Handedness.Left);
             hands.Hide(Handedness.Right);
@@ -751,6 +782,9 @@ end)
             shell.TickGesturesForTest(0.3f);
             int guns = CountEvents(shell, "finger-gun", "start", () => { shell.PoseHand(Handedness.Right, 0, 0, 1, 1, 1, Vector3.up); shell.TickGesturesForTest(0.5f); });
             Check(guns == 1, "the recorded pose is recognised");
+            var yoursRows = shell.GestureRows();
+            int sysAt = yoursRows.FindIndex(r => r.Title.StartsWith("SYSTEM"));
+            Check(yoursRows.Take(sysAt).Any(r => (r.Tag as string) == "finger-gun") && yoursRows.Take(sysAt).Any(r => (r.Tag as string) == "push"), "ALL > YOURS lists the recorded pose and the saved plugin's gesture");
 
             // a runaway detector stops only its plugin
             var bad = shell.Scripts.SavePlugin("bad-detector", new System.Collections.Generic.Dictionary<string, string>
@@ -771,8 +805,35 @@ end)
             Check(shell.ControlCommand("gesture", "bind clap toggle:files") == "ok" && shell.ControlCommand("gesture", "bindings").Contains("clap"), "control port: gesture bind");
             shell.ControlCommand("gesture", "unbind clap");
 
+            // BIND's presets: 12, TALK first, WEB is the WEB window (not LINKS); every one runs (RunAction → null)
+            var presets = MetaCodexShell.PresetActions;
+            Check(presets.Length == 12 && presets[0].action == "voice:toggle" && presets.Any(a => a.label == "WEB" && a.action == "toggle:web") && !presets.Any(a => a.action.Contains("browser")),
+                "BIND: 12 presets: " + string.Join(", ", presets.Select(a => a.label)));
+            foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
+            bool focusWas = shell.Settings.focusEnabled;
+            var failed = new List<string>();
+            foreach (var a in presets)
+            {
+                // voice:toggle would start the microphone and the AI service: the same verb runs with voice:cancel
+                string act = a.action.StartsWith("voice:") ? "voice:cancel" : a.action;
+                string err;
+                try
+                {
+                    err = shell.RunAction(act);
+                    if (err == null && (act.StartsWith("toggle:") || act == "select" || act == "focus")) err = shell.RunAction(act); // back as it was
+                }
+                catch (Exception ex) { err = ex.GetType().Name + " " + ex.Message; }
+                if (err != null) failed.Add(a.label + ": " + err);
+            }
+            shell.Keyboard?.Hide();
+            Check(failed.Count == 0 && shell.Settings.focusEnabled == focusWas && !shell.Router.SelectionMode, "every BIND preset runs (RunAction returns null)" + (failed.Count > 0 ? ": " + string.Join("; ", failed) : ""));
+            Check(shell.RunAction("toggle:browser") == null && shell.RunAction("spin:40") == null && shell.RunAction("toast:old binding") == null,
+                "verbs of the removed presets still run (old saved bindings keep working)");
+            shell.RunAction("toggle:browser");
+
             // the panel, tab by tab (alone, so the picture shows only it)
             foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
+            shell.SetGestureExamplesOpen(true); // the picture shows the three groups, EXAMPLES open with what was added
             shell.OpenPanel("gestures"); // a tab of MQH, with the studio's own tabs
             var gp = shell.PanelsById["mqh"];
             var tabs = shell.GestureTabsForTest;
@@ -788,6 +849,7 @@ end)
                 RenderPanel(gp, $"ui-gestures-{names[i]}.png");
             }
             tabs.Select(0);
+            shell.SetGestureExamplesOpen(false);
             shell.OpenPanel("plugins"); // the gesture plugins are in MQH > PLUGINS now
             gp.ForceRefresh();
             RenderPanel(gp, "ui-gestures-plugins.png");
@@ -796,12 +858,87 @@ end)
             shell.TickGesturesForTest(0.2f);
         }
 
+        /// The one-time cleanup of the old starter copies (RetireStarterCopies), on folders of its own: only untouched
+        /// AND unused copies go; edited ones, ones a binding or a script names, my-poses and other folders stay; a
+        /// second run does nothing (so an example added later is never removed).
+        private static void GestureExamplesCleanup(string tmp)
+        {
+            int n = 0;
+            (string plugins, string scripts) Fresh()
+            {
+                var root = Path.Combine(tmp, "examples-cleanup-" + n++);
+                if (Directory.Exists(root)) Directory.Delete(root, true);
+                Directory.CreateDirectory(Path.Combine(root, "plugins"));
+                Directory.CreateDirectory(Path.Combine(root, "scripts"));
+                return (Path.Combine(root, "plugins"), Path.Combine(root, "scripts"));
+            }
+            void Seed(string plugins, string id, bool crlf = false)
+            {
+                foreach (var f in MetaCodexShell.StarterV1[id])
+                {
+                    var path = Path.Combine(plugins, id, f.Key.Replace('/', Path.DirectorySeparatorChar));
+                    Directory.CreateDirectory(Path.GetDirectoryName(path));
+                    File.WriteAllText(path, crlf ? f.Value.Replace("\n", "\r\n") : f.Value);
+                }
+            }
+            bool Has(string plugins, string id) => Directory.Exists(Path.Combine(plugins, id));
+            var none = new string[0];
+
+            // an old headset: both starters untouched (one with Windows line ends), my-poses and another plugin beside them
+            var a = Fresh();
+            Seed(a.plugins, "core-poses");
+            Seed(a.plugins, "swipes", crlf: true);
+            File.WriteAllText(Path.Combine(a.plugins, ".starter-installed"), "old marker\n");
+            Directory.CreateDirectory(Path.Combine(a.plugins, "my-poses", "poses"));
+            File.WriteAllText(Path.Combine(a.plugins, "my-poses", "plugin.json"), "{ \"id\": \"my-poses\" }");
+            File.WriteAllText(Path.Combine(a.plugins, "my-poses", "poses", "finger-gun.json"), "{ \"name\": \"finger-gun\" }");
+            Directory.CreateDirectory(Path.Combine(a.plugins, "mine"));
+            File.WriteAllText(Path.Combine(a.plugins, "mine", "plugin.json"), "{ \"id\": \"mine\" }");
+            var log = MetaCodexShell.RetireStarterCopies(a.plugins, a.scripts, none);
+            Check(!Has(a.plugins, "core-poses") && !Has(a.plugins, "swipes"), "cleanup: untouched, unused starter copies removed (" + string.Join("; ", log) + ")");
+            Check(File.Exists(Path.Combine(a.plugins, "my-poses", "poses", "finger-gun.json")) && File.Exists(Path.Combine(a.plugins, "mine", "plugin.json")) && File.Exists(Path.Combine(a.plugins, ".starter-installed")),
+                "cleanup: my-poses, other plugins and .starter-installed untouched");
+            Check(File.Exists(Path.Combine(a.plugins, MetaCodexShell.ExamplesMarker)), "cleanup: marker written");
+            // the user adds an example afterwards: the next start must leave it alone
+            Seed(a.plugins, "core-poses");
+            log = MetaCodexShell.RetireStarterCopies(a.plugins, a.scripts, none);
+            Check(log.Count == 0 && Has(a.plugins, "core-poses"), "cleanup: a second run does nothing (an example added later stays)");
+
+            // edited: one pose changed, or a file added
+            var b = Fresh();
+            Seed(b.plugins, "core-poses");
+            File.AppendAllText(Path.Combine(b.plugins, "core-poses", "poses", "victory.json"), " ");
+            Seed(b.plugins, "swipes");
+            File.WriteAllText(Path.Combine(b.plugins, "swipes", "notes.txt"), "mine");
+            log = MetaCodexShell.RetireStarterCopies(b.plugins, b.scripts, none);
+            Check(Has(b.plugins, "core-poses") && Has(b.plugins, "swipes") && log.Count(l => l.Contains("edited")) == 2, "cleanup: edited copies kept (" + string.Join("; ", log) + ")");
+
+            // used: a binding (even one switched off) names swipe-left; a script reacts to 'thumbs-up'
+            var c = Fresh();
+            Seed(c.plugins, "core-poses");
+            Seed(c.plugins, "swipes");
+            File.WriteAllText(Path.Combine(c.scripts, "thumbs.lua"), "gesture.on('thumbs-up', function(e) ui.open('git') end)\n");
+            log = MetaCodexShell.RetireStarterCopies(c.plugins, c.scripts, new[] { "swipe-left" });
+            Check(Has(c.plugins, "core-poses") && Has(c.plugins, "swipes") && log.Count(l => l.Contains("used")) == 2, "cleanup: copies a binding or a script names kept (" + string.Join("; ", log) + ")");
+
+            // used by another plugin's Lua
+            var d = Fresh();
+            Seed(d.plugins, "core-poses");
+            Directory.CreateDirectory(Path.Combine(d.plugins, "git-gestures"));
+            File.WriteAllText(Path.Combine(d.plugins, "git-gestures", "plugin.json"), "{ \"id\": \"git-gestures\" }");
+            File.WriteAllText(Path.Combine(d.plugins, "git-gestures", "main.lua"), "gesture.on(\"victory\", function(e) end)\n");
+            log = MetaCodexShell.RetireStarterCopies(d.plugins, d.scripts, none);
+            Check(Has(d.plugins, "core-poses"), "cleanup: a copy another plugin's Lua names kept (" + string.Join("; ", log) + ")");
+        }
+
         /// A gesture plugin written by a real agent from the skill (tools/agent-plugin-test.sh puts it in Bench/agent/plugins).
         private static void AgentPlugin(MetaCodexShell shell, SimulatedHands hands, string tmp)
         {
             string src = Path.GetFullPath(Path.Combine("Bench", "agent", "plugins"));
             var dirs = Directory.Exists(src) ? Directory.GetDirectories(src).Where(d => File.Exists(Path.Combine(d, "plugin.json"))).ToArray() : new string[0];
             if (dirs.Length == 0) { Line("skip agent plugin: none in Bench/agent/plugins (tools/agent-plugin-test.sh)"); return; }
+            // a plugin brings its own poses: nothing may rely on the examples (a fresh headset has none)
+            foreach (var ex in MetaCodexShell.GestureExampleIds) shell.Scripts.Delete("plugin/" + ex);
             foreach (var d in dirs)
             {
                 var dest = Path.Combine(shell.Scripts.PluginsDir, Path.GetFileName(d));
@@ -815,6 +952,9 @@ end)
             shell.Scripts.Scan();
             var loaded = dirs.Select(d => shell.Scripts.Find("plugin/" + ScriptHost.Sanitize(Path.GetFileName(d)))).ToList();
             Check(loaded.All(e => e != null && e.Error == null), "agent plugin(s) load: " + string.Join(", ", loaded.Select(e => e == null ? "missing" : e.Name + (e.Error != null ? " ERROR " + e.Error : $" ({e.Poses} poses, {e.Detectors} detectors, {e.Handlers} handlers)"))));
+            var owners = new HashSet<string>(loaded.Where(e => e != null).Select(e => e.Key));
+            Check(shell.Gestures.Custom.Any(c => c.Name == "thumbs-up" && owners.Contains(c.Owner)),
+                "agent plugin brings its own thumbs-up pose (no examples installed; an older agent output that relies on core-poses: re-run tools/agent-plugin-test.sh)");
             // the story the agent was asked for: right thumbs-up opens git; a fast push of an open palm closes it
             foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
             hands.Hide(Handedness.Left);

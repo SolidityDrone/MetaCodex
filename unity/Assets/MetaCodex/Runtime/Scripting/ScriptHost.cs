@@ -322,6 +322,14 @@ namespace MetaCodex.Scripting
             Changed?.Invoke();
         }
 
+        /// Drops the saved enabled flag and store of a script or plugin that no longer exists (the gesture examples'
+        /// cleanup), so a later install of the same id starts clean.
+        public void ForgetState(string key)
+        {
+            bool changed = _enabled.Remove(key) | _stores.Remove(key);
+            if (changed) SaveState();
+        }
+
         public void ReloadAll()
         {
             foreach (var e in _entries.ToList()) Load(e, e.Kind == "plugin" ? PluginMtime(e.PluginDir) : File.GetLastWriteTimeUtc(e.Path));

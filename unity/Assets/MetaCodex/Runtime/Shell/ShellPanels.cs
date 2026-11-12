@@ -447,12 +447,13 @@ namespace MetaCodex.Shell
         private UiLabel _scriptDetail;
         private UiButton _scriptToggle;
 
-        /// SCRIPTS (a tab of MQH): the Lua behaviours in /mnt/quest/scripts and plugins' main.lua, live.
+        /// SCRIPTS (a tab of MQH): the Lua scripts in /mnt/quest/scripts, live. Plugins (their main.lua too) are in
+        /// MQH > PLUGINS; the hands' live view is GESTURES > LIVE.
         private void BuildScriptsTab(UiTabs tabs, int page, Rect area)
         {
             var t = UiTheme.Current;
             var st = new UiStack(area, t.Gap);
-            _scriptList = tabs.AddTo(page, new UiList(0.032f, (item, idx) => ScriptPicked()) { Rect = st.Next(0.17f) });
+            _scriptList = tabs.AddTo(page, new UiList(0.032f, (item, idx) => ScriptPicked()) { Rect = st.Next(area.height - 0.075f - t.ButtonHeight - t.Gap * 2) });
             _scriptDetail = tabs.AddTo(page, new UiLabel("", t.SmallSize) { Rect = st.Next(0.075f), Wrap = true, UseMono = true, Color = t.TextDim, Align = TextAlignmentOptions.TopLeft });
             var row = st.Next(t.ButtonHeight);
             var acts = new (string, Action)[]
@@ -461,7 +462,7 @@ namespace MetaCodex.Shell
                 ("⟳ RELOAD", () => { Scripts.ReloadAll(); Toast("Scripts reloaded", "ok"); }),
                 ("+ EXAMPLE", () => { Scripts.Save("double-clap", ExampleScript); Toast("Example script: double clap opens TERMINALS", "ok"); }),
                 ("FOLDER", () => TerminalSend("cd /mnt/quest/scripts && ls -la\r")),
-                ("DELETE", () => { var e = SelectedScript(); if (e != null) Modal(e.Kind == "plugin" ? "DELETE PLUGIN" : "DELETE SCRIPT", e.Kind == "plugin" ? $"Delete the plugin folder {e.Name}?" : $"Delete {e.Name}.lua?", new[] { "DELETE", "CANCEL" }, i => { if (i == 0) Scripts.Delete(e.Key); }); }),
+                ("DELETE", () => { var e = SelectedScript(); if (e != null) Modal("DELETE SCRIPT", $"Delete {e.Name}.lua?", new[] { "DELETE", "CANCEL" }, i => { if (i == 0) Scripts.Delete(e.Key); }); }),
             };
             float bw = (row.width - t.Gap * (acts.Length - 1)) / acts.Length;
             for (int i = 0; i < acts.Length; i++)
@@ -469,9 +470,6 @@ namespace MetaCodex.Shell
                 var b = tabs.AddTo(page, new UiButton(acts[i].Item1, acts[i].Item2, i == 4 ? UiButtonStyle.Danger : UiButtonStyle.Normal) { Rect = new Rect(row.x + i * (bw + t.Gap), row.y, bw, row.height) });
                 if (i == 0) _scriptToggle = b;
             }
-            tabs.AddTo(page, new UiDivider { Rect = st.Next(0.008f) });
-            tabs.AddTo(page, new UiLabel("GESTURE MONITOR", t.SmallSize) { Rect = st.Next(0.018f), UseDisplay = true, Color = t.TextDim });
-            _gestureMonitor = tabs.AddTo(page, new UiLabel("", t.SmallSize) { Rect = st.Rest(), Wrap = true, UseMono = true, Color = t.TextAccent, Align = TextAlignmentOptions.TopLeft });
             RefreshScriptsPanel();
         }
 
@@ -490,8 +488,9 @@ end)
         private void ScriptPicked()
         {
             var e = SelectedScript();
-            if (e == null || _scriptDetail == null) return;
+            if (_scriptDetail == null) return;
             var t = UiTheme.Current;
+            if (e == null) { _scriptDetail.Set(""); _scriptToggle?.SetText("ENABLE"); return; }
             _scriptDetail.Set(e.Error != null ? "ERROR " + e.Error : string.Join("\n", e.Log.Skip(Math.Max(0, e.Log.Count - 4))), e.Error != null ? t.Danger : t.TextDim);
             _scriptToggle?.SetText(e.Enabled ? "DISABLE" : "ENABLE");
         }
@@ -500,27 +499,26 @@ end)
         {
             if (_scriptList == null || Scripts == null) return;
             var t = UiTheme.Current;
-            _scriptList.SetItems(Scripts.Entries.Select(e => new UiListItem
+            var items = Scripts.Entries.Where(e => e.Kind == "script").Select(e => new UiListItem
             {
-                Icon = e.Kind == "plugin" ? "▣" : "●",
+                Icon = "●",
                 IconColor = e.Error != null ? t.Danger : e.Enabled ? t.Ok : t.TextDim,
-                Title = e.Kind == "plugin" ? e.Name + " (plugin)" : e.Name,
+                Title = e.Name,
                 TitleColor = e.Error != null ? t.Danger : e.Enabled ? (Color?)null : t.TextDim,
                 Sub = e.Description,
-                Badge = e.Error != null ? "ERROR" : !e.Enabled ? "OFF" : e.Handlers + " ON",
+                Badge = e.Error != null ? "ERROR" : !e.Enabled ? "OFF" : "ON",
                 BadgeColor = e.Error != null ? t.Danger : !e.Enabled ? t.TextDim : t.Ok,
                 Tag = e,
-            }), keepScroll: true);
+            }).ToList();
+            if (items.Count == 0) items.Add(new UiListItem { Icon = "", Title = ScriptsEmptyText, TitleColor = t.TextDim, Tag = null });
+            _scriptList.SetItems(items, keepScroll: true);
             ScriptPicked();
         }
 
-        private void RefreshGestureMonitor()
-        {
-            if (_gestureMonitor == null || Gestures == null) return;
-            var lines = Gestures.Recent.Reverse().Take(6).Select(g => $"{g.Time,7:F2}  {g.Name,-8} {g.Hand,-5} {g.Phase}");
-            string l = HandLine(Gestures.Left, "L"), r = HandLine(Gestures.Right, "R");
-            _gestureMonitor.Set(l + "\n" + r + "\n" + string.Join("\n", lines));
-        }
+        public const string ScriptsEmptyText = "No scripts · + EXAMPLE, or ask an agent (skill quest-scripting)";
+
+        /// SCRIPTS' rows (self-test).
+        public IReadOnlyList<UiListItem> ScriptRowsForTest => _scriptList?.Items;
 
         private static string HandLine(HandState s, string tag) =>
             !s.Tracked ? $"{tag}: not tracked" : $"{tag}: pinch {s.Pinch:F2} {(s.Pinching ? "PINCH " : "")}{(s.Grabbing ? "GRAB " : "")}{(s.Pointing ? "POINT " : "")}{(s.Open ? "OPEN " : "")}{(s.PalmUp ? "PALM-UP" : "")}";

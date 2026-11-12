@@ -1,0 +1,10 @@
+{
+  "name": "thumbs-up",
+  "description": "fist, thumb pointing up",
+  "hand": "any",
+  "fingers": { "thumb": 0, "index": 1, "middle": 1, "ring": 1, "little": 1 },
+  "tolerance": 0.35,
+  "thumbPointing": "up",
+  "hold": 0.15,
+  "cooldown": 0.5
+}
