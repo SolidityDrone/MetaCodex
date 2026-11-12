@@ -583,3 +583,11 @@ Work windows:
 - [ ] VOICE has no LANGUAGE row; Italian phrases do nothing (English only)
 - [ ] "never mind", "what can you do for me?": nothing opens or toggles
 - [ ] SYSTEM > TOOLS: a grouped plain list (no logos, no gh); ABOUT > LICENCES opens /usr/share/doc/metacodex
+
+## 38. The local coder (branch local-coder, 0.7.18)
+
+- [ ] AGENTS: the GET row has LOCAL CODER · GET 1 GB; tap: it counts up to 100 %, then "✓ ON HEADSET"; tap again: a hint how to use it
+- [ ] NEW THREAD with Claude Code, model "Local coder (this headset, slow)": "create hello.py that prints hello world" -> the file appears (minutes); a Claude Code thread on a normal model still uses your account as before
+- [ ] The same with OpenCode, model "MetaCodex (this headset) / Local coder", and with Codex (Codex may fail the task: tell what it did)
+- [ ] While a local-coder thread works: TALK shows "⏸ LOCAL CODER WORKING" and does not record; 15 s after the turn ends TALK works again; 72 fps all the time
+- [ ] Say "remove the local coder" (confirm): the tile says GET again, the model is gone from the threads' model lists after a restart of MQH
