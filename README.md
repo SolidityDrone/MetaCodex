@@ -149,7 +149,8 @@ Everything you can do in the app is a registered command.
 Voice, the local language model, agents, plugins and the bench read the same entries.
 
 - The shell registers 25 commands, for example `open_panel`, `set_setting`, `find_thread` and `switch_workspace`.
-- Each command has a name, a JSON schema, synonyms (English and Italian), phrase templates, examples and flags.
+- Each command has a name, a JSON schema, synonyms, phrase templates, examples and flags.
+- Voice is English only. Speech-to-text, spoken replies and all command phrases use English.
 - A lint check rejects a weak command. The self-test fails on any warning.
 - A disabled or deleted plugin loses its commands at once.
 - From the Linux, `mcx-ui voice registry` returns every enabled command as JSON.
@@ -316,6 +317,8 @@ The notes in [native-build-and-install.md](docs/native-build-and-install.md) and
 |---|---|---|
 | 2026-11-09 | 93 % (English 94, Italian 91), 17 ms median | 59 % (English 83, Italian 34), 209 ms median |
 | 2026-11-11 | 91 % (English 93, Italian 88), 20 ms median | not repeated |
+
+Since 2026-11-12, the app and the bench are English only. The bench has 180 English sentences. The 2026-11-11 run gives 93 % on them.
 
 The bench builds the decision model from 1,373 examples of 17 commands in 16 s.
 The honest run removed every bench sentence from the examples. A self-test fails on any copy.

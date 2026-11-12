@@ -147,8 +147,8 @@ Rules that keep it working:
 `terminal.run(cmd)` · `terminal.send(text)` · `terminal.new()` · `browser.open(url)` ·
 `keyboard.open()` · `settings.get/set(key, value)` · `app.action("verb:arg")` · `app.after(s, fn)` ·
 `app.every(s, fn)` · `store.get/set` · `gesture.emit(name, hand, phase)` · `voice.listen()` ·
-`voice.say(text)` · `voice.command{...}` (the same plugin can add voice commands: complete, with `samples` in
-English and Italian; skill `quest-scripting`, "MUST: every command complete") · `log(...)`
+`voice.say(text)` · `voice.command{...}` (the same plugin can add voice commands: complete, with `samples`
+(English: voice is English only); skill `quest-scripting`, "MUST: every command complete") · `log(...)`
 
 Panels: `dock` `terminals` `files` `git` `web` (the in-app browser window) `browser` (its LINKS page)
 `scripts` `gestures` `plugins` `agents` `threads` `thread` `thread-new` `vault` `settings` `voice`. Actions (`app.action`, bindings): `open:` `close:` `toggle:<panel>`,

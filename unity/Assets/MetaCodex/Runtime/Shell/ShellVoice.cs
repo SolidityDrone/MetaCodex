@@ -24,13 +24,14 @@ namespace MetaCodex.Shell
         /// not ready, and as its fallback when `llmFallback` is on).
         public bool useLlm = true;
         /// Decide commands with the decision model (VoiceDecider: multilingual sentence vectors, ~10-60 ms) instead of the
-        /// LLM (0.5-9 s): tools/voicebench measured 79-81 % exact against the LLM's 58 % (English and Italian).
+        /// LLM (0.5-9 s): tools/voicebench measured 79-81 % exact against the LLM's 58 %.
         public bool decide = true;
         /// When the decision model finds no command, still ask the LLM (slower; for unusual phrasings).
         public bool llmFallback = false;
         /// Stop listening by itself after a pause in speech.
         public bool autoStop = true;
-        /// Speech-to-text language: en, it, de, fr, es, ... or auto.
+        /// Speech-to-text language: always "en" (English only since 2026-11-12). The key stays so old settings files
+        /// load; a stored "it" or "auto" reads as "en" (ShellSettings.Load).
         public string language = "en";
         /// Inference threads (cores 0-2 only): 2 keeps 72 fps (measured), 3 is faster.
         public int threads = 2;
@@ -215,12 +216,10 @@ namespace MetaCodex.Shell
             var cfg = new JObject
             {
                 ["threads"] = Mathf.Clamp(Settings.voice.threads, 1, 2), // measured: 3 and 4 are slower on the 3 cores the service has
-                ["language"] = string.IsNullOrEmpty(Settings.voice.language) ? "en" : Settings.voice.language,
+                ["language"] = "en", // English only since 2026-11-12
                 ["prompt"] = "Voice commands for MetaCodex: " + string.Join(", ", words.Distinct()) + ".",
                 ["voice"] = Settings.voice.voice,
-                // Supertonic 3 speaks Italian: with the voice language set to IT the replies are read as Italian (a
-                // change reloads the voice model once; "auto" and the other languages keep English)
-                ["ttsLanguage"] = Settings.voice.language == "it" ? "it" : "en",
+                ["ttsLanguage"] = "en",
                 // the voice model stays loaded 15 min (was 3): a reload costs 1-4 s before the first word on the headset
                 ["idleMinutes"] = new JObject { ["asr"] = 10, ["llm"] = 15, ["tts"] = 15 },
                 // VOICE > SPEECH: FAST = 4 diffusion steps, CLEAR = 5 (3 and 2 garble words); a change reloads the voice model once
@@ -611,8 +610,7 @@ namespace MetaCodex.Shell
             if (string.IsNullOrWhiteSpace(text) || sentences.Count == 0) { done?.Invoke("empty"); return; }
             if (SpeakForTest == null && (Qvac == null || !Qvac.IsRunning)) { Toast(text, "info"); done?.Invoke("the AI service is not running"); return; }
             StopSpeaking(); // a new reply replaces what is still being said
-            bool italian = SpokenText.LooksItalian(text);
-            foreach (var x in sentences) { string sp = SpokenText.Speakable(x, italian); if (sp.Length > 0) _sayParts.Add(sp); }
+            foreach (var x in sentences) { string sp = SpokenText.Speakable(x); if (sp.Length > 0) _sayParts.Add(sp); }
             if (_sayParts.Count == 0) { done?.Invoke("empty"); return; }
             _sayDone = done;
             _sayVoice = Settings.voice.voice;
@@ -761,7 +759,7 @@ namespace MetaCodex.Shell
                 ["browser"] = "web", ["internet"] = "web", ["website"] = "web", ["web browser"] = "web", ["web page"] = "web", ["page"] = "web", ["site"] = "web",
                 ["bookmarks"] = "links", ["local servers"] = "links", ["dev servers"] = "links", ["bookmark"] = "links",
                 ["setup"] = "settings", ["preferences"] = "settings", ["options"] = "settings", ["config"] = "settings", ["configuration"] = "settings",
-                ["control panel"] = "control", ["control center"] = "control", ["control centre"] = "control", ["pannello di controllo"] = "control", ["centro di controllo"] = "control",
+                ["control panel"] = "control", ["control center"] = "control", ["control centre"] = "control",
                 ["display settings"] = "display", ["screen settings"] = "display", ["layout settings"] = "display", ["look and sound"] = "look", ["appearance"] = "look", ["look settings"] = "look",
                 ["hand settings"] = "hands", ["hands settings"] = "hands", ["version"] = "about", ["licences"] = "about", ["licenses"] = "about", ["app info"] = "about",
                 ["gesture"] = "gestures", ["gesture studio"] = "gestures", ["hand gestures"] = "gestures",
@@ -777,17 +775,6 @@ namespace MetaCodex.Shell
                 ["disk"] = "storage", ["disk space"] = "storage", ["space"] = "storage", ["installed tools"] = "tools", ["packages"] = "tools", ["linux"] = "system",
                 ["ambient focus"] = "focus", ["focus mode"] = "focus", ["focus settings"] = "focus", ["ambient"] = "focus", ["the dome"] = "focus",
                 ["console"] = "terminals", ["commit"] = "git", ["branch"] = "git", ["account"] = "agents", ["accounts"] = "agents", ["chat"] = "threads", ["password"] = "vault",
-                // Italian (the decision model reads them; folded, so accents do not matter)
-                ["terminale"] = "terminals", ["terminali"] = "terminals", ["cartella"] = "files", ["cartelle"] = "files", ["gestore dei file"] = "files", ["gestore file"] = "files",
-                ["controllo versione"] = "git", ["controllo di versione"] = "git", ["rami"] = "git", ["agenti"] = "agents", ["fornitori"] = "agents", ["modelli"] = "agents",
-                ["accesso"] = "agents", ["conversazioni"] = "threads", ["conversazione"] = "threads", ["discussioni"] = "threads", ["progetti"] = "threads",
-                ["navigatore"] = "web", ["segnalibri"] = "links", ["collegamenti"] = "links", ["appunti"] = "clipboard", ["catture"] = "clipboard", ["schermate"] = "clipboard", ["istantanee"] = "clipboard", ["competenze"] = "skills", ["abilità"] = "skills", ["estensioni"] = "mqh", ["gesti"] = "gestures", ["gesti delle mani"] = "gestures", ["cassaforte"] = "vault", ["casa forte"] = "vault",
-                ["segreti"] = "vault", ["chiavi api"] = "vault", ["impostazioni"] = "settings", ["impostazione"] = "settings", ["schermo"] = "display", ["aspetto"] = "look", ["aspetto e suoni"] = "look",
-                ["mani"] = "hands", ["impostazioni delle mani"] = "hands", ["informazioni"] = "about", ["licenze"] = "about", ["versione"] = "about",
-                ["preferenze"] = "settings", ["opzioni"] = "settings", ["configurazione"] = "settings", ["voce"] = "voice", ["controllo vocale"] = "voice",
-                ["comandi vocali"] = "voice", ["microfono"] = "voice", ["assistente"] = "voice", ["sistema"] = "system", ["focus ambientale"] = "focus",
-                ["modalità focus"] = "focus", ["spazio"] = "storage", ["spazio su disco"] = "storage", ["archiviazione"] = "storage", ["disco"] = "storage",
-                ["memoria"] = "storage", ["strumenti"] = "tools", ["strumenti installati"] = "tools", ["pacchetti"] = "tools",
             };
             string Label(string id) => id.ToUpperInvariant();
 
@@ -799,7 +786,6 @@ namespace MetaCodex.Shell
                 Samples = new[]
                 {
                     "i need a new terminal", "spawn another shell", "open one more console", "can i get a fresh terminal", "add a terminal window",
-                    "apri un altro terminale", "crea una nuova shell", "voglio un terminale nuovo", "aggiungi una console",
                 },
                 Run = a => { TerminalNew(); return "New terminal"; },
             });
@@ -816,7 +802,6 @@ namespace MetaCodex.Shell
                 Samples = new[]
                 {
                     "get rid of all the windows", "close all of it", "shut every panel", "clean up my space", "remove all the panels",
-                    "chiudi tutti i pannelli", "chiudi ogni pannello aperto", "togli tutte le finestre", "fai pulizia", "libera lo spazio",
                 },
                 Run = a => { int n = CloseAllPanels(); return n == 0 ? "Nothing to close" : $"Closed {n} panel{(n == 1 ? "" : "s")}"; },
             });
@@ -839,8 +824,6 @@ namespace MetaCodex.Shell
                 Samples = new[]
                 {
                     "let me see my files", "pull up the git history", "i want to check the agents", "take me to the settings page", "display the vault",
-                    "apri il pannello dei file", "mostrami le impostazioni", "fammi vedere i terminali", "vai alla pagina degli agenti", "apri il pannello del controllo versione",
-                    "portami ai segreti", "elenca le discussioni", "voglio navigare sul web", "fammi vedere gli strumenti installati",
                 },
                 Run = a => { string id = (string)a["panel"]; return OpenPanel(id) ? "Opened " + Label(id) : "error: no panel " + id; },
             });
@@ -854,7 +837,6 @@ namespace MetaCodex.Shell
                 Samples = new[]
                 {
                     "put away the files", "close the git window", "dismiss the settings", "i am done with the vault",
-                    "chiudi il pannello dei file", "chiudi la finestra delle preferenze", "nascondi il browser", "togli la cassaforte", "basta con il controllo versione",
                 },
                 Run = a => { string id = (string)a["panel"]; return ClosePanel(id) ? "Closed " + Label(id) : "error: no panel " + id; },
             });
@@ -874,8 +856,7 @@ namespace MetaCodex.Shell
                 Samples = new[]
                 {
                     "find the conversation about the database migration", "which thread talked about docker", "look up the chat where we fixed the login",
-                    "search my threads for payments", "trova la conversazione sulla migrazione del database", "cerca il thread che parla di docker",
-                    "in quale chat abbiamo sistemato il login", "cerca nelle conversazioni i pagamenti",
+                    "search my threads for payments",
                 },
                 RunAsync = (a, reply) => VoiceFindThread((string)a["query"], reply),
             });
@@ -894,7 +875,6 @@ namespace MetaCodex.Shell
                 Samples = new[]
                 {
                     "go to the project called atlas", "switch to the website workspace", "change project to backend", "open the workspace named demo",
-                    "passa al progetto atlas", "cambia progetto", "vai al workspace sito", "apri il progetto chiamato demo",
                 },
                 RunAsync = (a, reply) => VoiceSwitchWorkspace((string)a["name"], reply),
             });
@@ -909,8 +889,6 @@ namespace MetaCodex.Shell
                     {
                         ["floating"] = "float", ["carousel"] = "float", ["follow"] = "float", ["follow me"] = "float", ["locked"] = "fixed", ["static"] = "fixed", ["pinned"] = "fixed",
                         ["world"] = "fixed", ["world locked"] = "fixed", ["stay"] = "fixed", ["stay put"] = "fixed", ["in place"] = "fixed", ["lock"] = "fixed", ["pin"] = "fixed",
-                        ["fisso"] = "fixed", ["fissi"] = "fixed", ["fissa"] = "fixed", ["blocca"] = "fixed", ["bloccati"] = "fixed", ["fermi"] = "fixed",
-                        ["fluttuante"] = "float", ["fluttuanti"] = "float", ["segui"] = "float", ["seguimi"] = "float", ["seguire"] = "float", ["seguano"] = "float", ["carosello"] = "float",
                     },
                 },
                 Phrases = new[]
@@ -923,7 +901,6 @@ namespace MetaCodex.Shell
                 Samples = new[]
                 {
                     "make the panels stay where they are", "lock the windows in place", "let the windows follow me", "switch to the carousel layout",
-                    "usa il layout fisso", "metti le finestre fluttuanti", "blocca i pannelli", "fai seguire le finestre", "voglio le finestre fisse",
                 },
                 Run = a => { SetLayout((string)a["mode"]); return "Layout " + ((string)a["mode"]).ToUpperInvariant(); },
             });
@@ -935,7 +912,7 @@ namespace MetaCodex.Shell
                 Samples = new[]
                 {
                     "move everything back in front of my eyes", "center the windows again", "line the panels up in front of me",
-                    "ricentra la vista", "rimetti tutto davanti a me", "centra le finestre", "riporta i pannelli qui", "riallinea la vista",
+                    "bring the panels back to where i am looking",
                 },
                 Run = a => { RunAction("recenter"); return "Recentered"; },
             });
@@ -945,7 +922,7 @@ namespace MetaCodex.Shell
                 Description = "Type text into the focused terminal (no Enter)",
                 Parameters = VoiceCommands.Schema(("text", "string", null, "the text to type", true)),
                 Phrases = new[] { "(type|write) {text}" },
-                Samples = new[] { "type echo done", "write git status", "scrivi buongiorno", "digita npm install" },
+                Samples = new[] { "type echo done", "write git status", "type cd projects", "write npm run dev" },
                 Llm = false, // free text goes verbatim into a terminal: only when said as "type ..."
                 Run = a => { TerminalSend((string)a["text"]); return "Typed"; },
             });
@@ -957,7 +934,7 @@ namespace MetaCodex.Shell
                 Confirm = true,
                 Llm = false,
                 Phrases = new[] { "(run|execute) [the] [command] {command} [in the terminal]" },
-                Samples = new[] { "run npm install", "execute make build in the terminal", "esegui npm install", "lancia il comando make", "esegui ls nel terminale" },
+                Samples = new[] { "run npm install", "execute make build in the terminal", "run git pull in the terminal", "execute npm test" },
                 Run = a => { TerminalSend((string)a["command"] + "\r"); return "Running " + (string)a["command"]; },
             });
             Voice.Register(new VoiceCommand
@@ -972,7 +949,6 @@ namespace MetaCodex.Shell
                 Samples = new[]
                 {
                     "darken everything around me", "no more focus mode", "i want to see the room again", "enable focus mode", "black out my surroundings",
-                    "voglio il focus acceso", "togli il focus", "attiva la modalità concentrazione", "oscura l'ambiente", "fammi rivedere la stanza", "basta focus",
                 },
                 Phrases = new[]
                 {
@@ -1011,9 +987,7 @@ namespace MetaCodex.Shell
                 {
                     "set the volume to 30 percent", "silence the interface sounds", "make the text larger", "lower the opacity", "increase the blur",
                     "set the radius to 2 meters", "turn off the hand rays", "dim the room more",
-                    "imposta il volume al 30 per cento", "metti il volume più alto", "abbassa la sfocatura", "attiva i suoni", "disattiva i raggi delle mani",
-                    "rendi il testo più grande", "porta il raggio a tre metri", "intensità del focus al settanta per cento", "aumenta la morbidezza",
-                    "switch the voice effect to starship", "give the assistant its normal voice back", "metti l'effetto vocale radio", "togli l'effetto alla voce",
+                    "switch the voice effect to starship", "give the assistant its normal voice back",
                 },
                 Check = a => VoiceSettingFits((string)a["setting"], (string)a["value"]) ? null : "that value does not fit " + (string)a["setting"],
                 Run = a => SetSettingByVoice((string)a["setting"], (string)a["value"]),
@@ -1028,15 +1002,14 @@ namespace MetaCodex.Shell
                     ["example"] = new Dictionary<string, string>
                     {
                         ["core poses"] = "core-poses", ["example poses"] = "core-poses", ["hand poses"] = "core-poses", ["thumbs up poses"] = "core-poses", ["poses"] = "core-poses",
-                        ["pose di esempio"] = "core-poses", ["pose della mano"] = "core-poses", ["pollice in su"] = "core-poses", ["pose"] = "core-poses",
-                        ["swipe"] = "swipes", ["swipe gestures"] = "swipes", ["swipes example"] = "swipes", ["gesti di swipe"] = "swipes", ["scorrimenti"] = "swipes", ["gesti di scorrimento"] = "swipes",
+                        ["pose"] = "core-poses",
+                        ["swipe"] = "swipes", ["swipe gestures"] = "swipes", ["swipes example"] = "swipes",
                     },
                 },
-                Phrases = new[] { "(add|install) the {example} example", "(add|install) [the] example {example}", "(aggiungi|installa) [l'] esempio [dei|delle|di] {example}" },
+                Phrases = new[] { "(add|install) the {example} example", "(add|install) [the] example {example}" },
                 Samples = new[]
                 {
                     "add the example hand poses", "install the swipe gestures example", "i want the thumbs up and victory poses", "give me the example swipes",
-                    "aggiungi le pose di esempio", "installa i gesti di swipe di esempio", "voglio le pose del pollice in su", "metti l'esempio degli scorrimenti",
                 },
                 Vocabulary = new[] { "core-poses", "swipes", "thumbs-up", "victory", "horns", "call-me" },
                 Confirm = true,
@@ -1047,7 +1020,7 @@ namespace MetaCodex.Shell
                 Name = "show_keyboard",
                 Description = "Show the keyboard to type into the terminal",
                 Phrases = new[] { "(open|show|bring up) [the] keyboard", "keyboard", "(open|show) [the] keys" },
-                Samples = new[] { "can i have the keyboard", "pull up the keyboard", "voglio scrivere con la tastiera", "fammi vedere la tastiera", "tira fuori la tastiera" },
+                Samples = new[] { "can i have the keyboard", "pull up the keyboard", "i need to type something", "bring up the keys for me" },
                 Run = a => { ShowTerminalKeyboard(); return "Keyboard"; },
             });
             var agentSyn = new Dictionary<string, Dictionary<string, string>>
@@ -1065,8 +1038,8 @@ namespace MetaCodex.Shell
                 Description = "Install (download) an AI coding agent in this headset's Linux: opencode, claude (Claude Code) or codex; it runs in a terminal",
                 Parameters = VoiceCommands.Schema(("agent", "string", GetAgents.Select(a => a.Id).ToArray(), "the agent to install", true)),
                 Synonyms = agentSyn,
-                Phrases = new[] { "(install|get|download|add) [the] {agent} [agent|cli|app]", "(installa|scarica) [il|l'] {agent}" },
-                Samples = new[] { "i want opencode on the headset", "put codex in the linux", "set up claude code for me", "installa opencode", "scarica codex", "mi serve claude code" },
+                Phrases = new[] { "(install|get|download|add) [the] {agent} [agent|cli|app]" },
+                Samples = new[] { "i want opencode on the headset", "put codex in the linux", "set up claude code for me", "download the codex cli" },
                 Vocabulary = new[] { "opencode", "codex", "claude code" },
                 Run = a => { var d = GetAgents.FirstOrDefault(x => x.Id == (string)a["agent"]); if (d == null) return "error: no agent " + (string)a["agent"]; OpenPanel("agents"); StartAgentInstall(d); return "Installing " + d.Name; },
             });
@@ -1077,7 +1050,7 @@ namespace MetaCodex.Shell
                 Parameters = VoiceCommands.Schema(("agent", "string", GetAgents.Select(a => a.Id).ToArray(), "the agent the key is for", true)),
                 Synonyms = agentSyn,
                 Phrases = new[] { "(add|set|paste|enter) [an|the|my] [api] key (for|to) {agent}", "{agent} [api] key" },
-                Samples = new[] { "i have a key for opencode", "let me paste my openai key for codex", "where do i put the anthropic key", "aggiungi la chiave di opencode", "incolla la chiave per codex", "voglio mettere la mia api key" },
+                Samples = new[] { "i have a key for opencode", "let me paste my openai key for codex", "where do i put the anthropic key", "save my api key for claude" },
                 Run = a => { OpenAgentKey((string)a["agent"]); return "API key for " + (string)a["agent"]; },
             });
             Voice.Register(new VoiceCommand
@@ -1085,7 +1058,7 @@ namespace MetaCodex.Shell
                 Name = "table_keyboard",
                 Description = "MetaCodex's keyboard for the terminal laid on a table, with the touchpad on its right: rest both hands flat on the table and it lies down under them",
                 Phrases = new[] { "(open|show|bring up) [the] (table|surface|desk) keyboard", "[the] keyboard on [the] (table|desk)", "(turn on|enable|activate) [the] (table|surface) keyboard" },
-                Samples = new[] { "i want to type on the table", "put the keyboard on my desk", "can i use the surface keyboard", "voglio scrivere sul tavolo", "metti la tastiera sul tavolo", "attiva la tastiera da tavolo" },
+                Samples = new[] { "i want to type on the table", "put the keyboard on my desk", "can i use the surface keyboard", "lay the keyboard down on the table" },
                 Vocabulary = new[] { "surface keyboard", "touchpad" },
                 Run = a => { OpenTableKeyboard(); return "Table keyboard"; },
             });
@@ -1100,15 +1073,13 @@ namespace MetaCodex.Shell
                     {
                         ["light"] = "subtle", ["soft"] = "subtle", ["gentle"] = "subtle", ["mild"] = "subtle", ["normal"] = "focus", ["default"] = "focus", ["standard"] = "focus",
                         ["medium"] = "focus", ["total"] = "blackout", ["black out"] = "blackout", ["cinema"] = "blackout", ["pitch black"] = "blackout", ["dark"] = "blackout",
-                        ["leggero"] = "subtle", ["leggera"] = "subtle", ["delicato"] = "subtle", ["normale"] = "focus", ["medio"] = "focus",
-                        ["buio totale"] = "blackout", ["buio"] = "blackout", ["oscuramento totale"] = "blackout",
                     },
                 },
                 Phrases = new[] { "(use|apply|choose|pick|set|switch to) [the] {preset} [focus] preset", "{preset} [focus] preset", "(focus|ambient) preset {preset}" },
                 Samples = new[]
                 {
                     "use the subtle focus preset", "switch to the blackout preset", "apply the normal focus preset", "i want the gentle preset",
-                    "usa il preset leggero", "attiva il preset buio totale", "metti il preset normale", "preset cinema",
+                    "preset cinema",
                 },
                 Run = a => { string p = (string)a["preset"]; ApplyFocusPreset(p); return "Focus preset " + p.ToUpperInvariant(); },
             });
@@ -1122,8 +1093,6 @@ namespace MetaCodex.Shell
                     ["direction"] = new Dictionary<string, string>
                     {
                         ["next"] = "right", ["forward"] = "right", ["previous"] = "left", ["back"] = "left",
-                        ["destra"] = "right", ["sinistra"] = "left", ["avanti"] = "right", ["indietro"] = "left", ["successivo"] = "right", ["successiva"] = "right",
-                        ["prossimo"] = "right", ["prossima"] = "right", ["precedente"] = "left",
                     },
                 },
                 Phrases = new[]
@@ -1134,7 +1103,6 @@ namespace MetaCodex.Shell
                 Samples = new[]
                 {
                     "spin the carousel to the right", "rotate the panels left", "show me the next window", "go to the previous panel",
-                    "gira il carosello a destra", "ruota i pannelli a sinistra", "pannello successivo", "finestra precedente",
                 },
                 Run = a =>
                 {
@@ -1163,7 +1131,6 @@ namespace MetaCodex.Shell
                 Samples = new[]
                 {
                     "i want to select part of a panel", "turn on the selection tool", "let me select an area", "stop selecting",
-                    "attiva la selezione", "modalità selezione", "disattiva la selezione", "voglio selezionare una parte del pannello",
                 },
                 Run = a => { bool on = (string)a["state"] != "off"; SetSelectionMode(on); return on ? "Select tool on" : "Select tool off"; },
             });
@@ -1174,7 +1141,7 @@ namespace MetaCodex.Shell
                 Parameters = VoiceCommands.Schema(("url", "string", null, "the address", true)),
                 Llm = false, // free words become an address: only when said as "browse to ..." / "open the website ..."
                 Phrases = new[] { "(browse|navigate) to {url}", "(open|visit|go to) [the] (website|site|web page|url|address) {url}" },
-                Samples = new[] { "open the website github dot com", "browse to example dot org", "apri il sito github punto com", "vai al sito example punto org", "naviga su wikipedia punto org" },
+                Samples = new[] { "open the website github dot com", "browse to example dot org", "go to the site wikipedia dot org", "visit the web page example dot com slash docs" },
                 Check = a => SpokenUrl((string)a["url"]) != null ? null : "say the address with “dot”, e.g. github dot com",
                 Run = a => { string u = SpokenUrl((string)a["url"]); if (u == null) return "error: no address in that"; OpenBrowser(u); return "Opening " + u; },
             });
@@ -1193,12 +1160,12 @@ namespace MetaCodex.Shell
             Voice.Changed += () => _main.Enqueue(RefreshVoicePanel);
         }
 
-        /// "github dot com slash docs" -> https://github.com/docs (English and Italian words for . / :); null when it has no dot.
+        /// "github dot com slash docs" -> https://github.com/docs (the spoken words for . / : -); null when it has no dot.
         public static string SpokenUrl(string said)
         {
             if (string.IsNullOrWhiteSpace(said)) return null;
             string t = " " + said.Trim().ToLowerInvariant() + " ";
-            foreach (var (w, c) in new[] { (" dot ", "."), (" punto ", "."), (" slash ", "/"), (" barra ", "/"), (" colon ", ":"), (" due punti ", ":"), (" dash ", "-"), (" trattino ", "-") })
+            foreach (var (w, c) in new[] { (" dot ", "."), (" slash ", "/"), (" colon ", ":"), (" dash ", "-") })
                 t = t.Replace(w, c);
             t = System.Text.RegularExpressions.Regex.Replace(t, @"\s+", "").Trim('.', '/');
             if (!t.Contains(".") || t.Length < 4) return null;
@@ -1213,61 +1180,40 @@ namespace MetaCodex.Shell
             /// Kind: bool (on / off), number (Min..Max, Unit) or choice (one of Options; + / - step through them).
             public string Id, Key, Kind, Unit, Label;
             public float Min, Max;
-            /// choice: the values in order, their spoken names (English and Italian) and the label each one shows.
+            /// choice: the values in order, their spoken names and the label each one shows.
             public string[] Options, OptionLabels;
             public Dictionary<string, string> Values;
             /// English names: synonyms of the setting and words the speech-to-text prompt carries.
             public string[] Names;
-            /// Other names (Italian, colloquial; VoiceSettingOther): synonyms too, not in the speech-to-text prompt.
+            /// Other names (colloquial; VoiceSettingOther): synonyms too, not in the speech-to-text prompt.
             public string[] Other => VoiceSettingOther.TryGetValue(Id, out var o) ? o : new string[0];
         }
 
         /// More names per setting, by id (kept apart from the catalog so the English rows stay readable).
         private static readonly Dictionary<string, string[]> VoiceSettingOther = new Dictionary<string, string[]>
         {
-            ["focus"] = new[] { "focus ambientale", "modalità focus", "modalità concentrazione" },
-            ["focus_intensity"] = new[] { "intensità", "intensità del focus", "buia", "buio", "stanza", "room", "dark", "oscuramento" },
-            ["focus_radius"] = new[] { "raggio", "raggio della cupola", "cupola", "raggio del focus", "dimensione della cupola" },
-            ["focus_blur"] = new[] { "sfocatura", "sfocatura dello sfondo", "blur dello sfondo" },
-            ["occlusion"] = new[] { "occlusione", "cose reali davanti", "mani davanti" },
-            ["depth_camera"] = new[] { "profondità nitida", "camera di profondità" },
-            ["focus_softness"] = new[] { "morbidezza", "morbidezza del bordo", "sfumatura", "sfumatura del bordo" },
-            ["opacity"] = new[] { "opacità", "opacità dei pannelli", "trasparenza", "trasparenti", "transparent", "transparency" },
-            ["panel_distance"] = new[] { "distanza", "distanza dei pannelli", "distanza delle finestre" },
-            ["ui_scale"] = new[] { "finestre", "pannelli", "dimensione del testo", "testo", "grandezza", "text", "bigger" },
-            ["carousel_radius"] = new[] { "raggio del carosello", "carosello", "dimensione del carosello" },
-            ["bend"] = new[] { "curvatura", "pannelli curvi", "curva" },
-            ["sounds"] = new[] { "suoni", "click", "suoni dell'interfaccia" },
-            ["volume"] = new[] { "volume dei suoni" },
-            ["speak"] = new[] { "risposte vocali", "risposte parlate" },
-            ["clap"] = new[] { "applauso", "battito di mani" },
-            ["hand_rays"] = new[] { "raggi delle mani", "raggi", "puntatori", "laser" },
-            ["foveation"] = new[] { "rendering foveato", "foveazione" },
-            ["views_auto_open"] = new[] { "apertura automatica delle viste" },
-            ["wrist_menu"] = new[] { "menu da polso", "menu sul polso", "menu al polso", "menu radiale" },
-            ["speech_quality"] = new[] { "qualita della voce", "qualita del parlato", "qualita della sintesi", "modo della voce", "voce veloce", "voce chiara" },
-            ["voice_effect"] = new[] { "effetto vocale", "effetto della voce", "effetto voce", "voce robotica", "voce fantascientifica", "stile della voce", "voce da computer", "suono della voce", "filtro della voce" },
+            ["focus_intensity"] = new[] { "room", "dark" },
+            ["opacity"] = new[] { "transparent", "transparency" },
+            ["ui_scale"] = new[] { "text", "bigger" },
+            ["sounds"] = new[] { "click" },
+            ["hand_rays"] = new[] { "laser" },
         };
 
-        /// voice_effect: what people call each preset (English and Italian; folded like the matcher folds them).
+        /// speech_quality and voice_effect: what people call each value (folded like the matcher folds them).
         private static readonly Dictionary<string, string> SpeechValues = new Dictionary<string, string>
         {
             ["fast"] = "fast", ["faster"] = "fast", ["quick"] = "fast", ["quicker"] = "fast", ["sooner"] = "fast", ["speedy"] = "fast", ["low"] = "fast",
-            ["veloce"] = "fast", ["rapida"] = "fast", ["rapido"] = "fast", ["piu veloce"] = "fast", ["bassa"] = "fast",
             ["clear"] = "clear", ["clearer"] = "clear", ["best"] = "clear", ["high"] = "clear", ["exact"] = "clear", ["precise"] = "clear", ["slow"] = "clear", ["quality"] = "clear",
-            ["chiara"] = "clear", ["chiaro"] = "clear", ["nitida"] = "clear", ["precisa"] = "clear", ["alta"] = "clear", ["migliore"] = "clear", ["lenta"] = "clear",
         };
         private static readonly Dictionary<string, string> VoiceEffectValues = new Dictionary<string, string>
         {
             ["off"] = "off", ["none"] = "off", ["normal"] = "off", ["plain"] = "off", ["clean"] = "off", ["natural"] = "off", ["dry"] = "off", ["no effect"] = "off",
-            ["spento"] = "off", ["spenta"] = "off", ["normale"] = "off", ["naturale"] = "off", ["nessuno"] = "off", ["niente"] = "off", ["senza effetto"] = "off",
             ["adjutant"] = "adjutant", ["ai"] = "adjutant", ["a i"] = "adjutant", ["computer"] = "adjutant", ["sci fi"] = "adjutant", ["scifi"] = "adjutant",
             ["science fiction"] = "adjutant", ["default"] = "adjutant", ["subtle"] = "adjutant", ["light"] = "adjutant", ["assistant"] = "adjutant",
-            ["intelligenza artificiale"] = "adjutant", ["ia"] = "adjutant", ["fantascienza"] = "adjutant", ["fantascientifica"] = "adjutant", ["leggero"] = "adjutant", ["assistente"] = "adjutant",
             ["starship"] = "starship", ["ship"] = "starship", ["star ship"] = "starship", ["spaceship"] = "starship", ["space ship"] = "starship", ["strong"] = "starship",
-            ["heavy"] = "starship", ["robot"] = "starship", ["robotic"] = "starship", ["astronave"] = "starship", ["nave"] = "starship", ["forte"] = "starship", ["robotica"] = "starship", ["robotico"] = "starship",
+            ["heavy"] = "starship", ["robot"] = "starship", ["robotic"] = "starship",
             ["comm"] = "comm", ["com"] = "comm", ["comms"] = "comm", ["radio"] = "comm", ["channel"] = "comm", ["walkie talkie"] = "comm", ["intercom"] = "comm",
-            ["transmission"] = "comm", ["canale"] = "comm", ["trasmissione"] = "comm", ["ricetrasmittente"] = "comm",
+            ["transmission"] = "comm",
         };
 
         /// Settings that voice (and the local LLM) can change: id, the settings key, kind, range, unit, spoken names.
@@ -1602,11 +1548,9 @@ namespace MetaCodex.Shell
             p.Add(new UiToggle("Ask the LLM when nothing fits", Settings.voice.useLlm && Settings.voice.llmFallback, v => { Settings.voice.llmFallback = v; if (v) Settings.voice.useLlm = true; OnSettingsChanged(); }) { Rect = ls.Next(0.03f) });
             p.Add(new UiToggle("Stop listening after a pause", Settings.voice.autoStop, v => { Settings.voice.autoStop = v; OnSettingsChanged(); }) { Rect = ls.Next(0.03f) });
             p.Add(new UiToggle("Start the AI service with the app", Settings.voice.enabled, v => { Settings.voice.enabled = v; OnSettingsChanged(); }) { Rect = ls.Next(0.03f) });
-            // right column: language and the reply voice on top (the left one is full), then the commands
+            // right column: the reply voice on top (the left one is full), then the commands
             var rs = new UiStack(new Rect(c.x + leftW + t.Gap * 2, c.y, c.width - leftW - t.Gap * 2, c.height), t.Gap);
             const float pickLabel = 0.075f; // the same label column on every row: the buttons line up
-            string[] langs = { "en", "it", "auto" };
-            p.Add(new UiSegmented("LANGUAGE", new[] { "EN", "IT", "AUTO" }, Math.Max(0, Array.IndexOf(langs, Settings.voice.language)), i => { Settings.voice.language = langs[i]; OnSettingsChanged(); PushVoiceConfig(); }) { Rect = rs.Next(0.032f), LabelWidth = pickLabel });
             // the voice of spoken replies: Supertonic 3 has ten (F1-F5, M1-M5); picking one says a sample
             string[] fv = { "F1", "F2", "F3", "F4", "F5" }, mv = { "M1", "M2", "M3", "M4", "M5" };
             UiSegmented female = null, male = null;
@@ -1770,7 +1714,7 @@ namespace MetaCodex.Shell
 
         // ------------------------------------------------------------------ control port
 
-        /// voice status | list | listen | stop | cancel | install | warm | start | stop-service | threads N | lang X | speak on|off | fx <preset>
+        /// voice status | list | listen | stop | cancel | install | warm | start | stop-service | threads N | speak on|off | fx <preset>
         private string VoiceControl(string arg)
         {
             var parts = (arg ?? "").Split(new[] { ' ' }, 2, StringSplitOptions.RemoveEmptyEntries);
@@ -1813,10 +1757,9 @@ namespace MetaCodex.Shell
                         SyncSettingsControls();
                     }
                     return "fx=" + Settings.voice.fx + " (off, adjutant, starship, comm)";
-                case "lang": if (rest.Length > 0) { Settings.voice.language = rest; OnSettingsChanged(); PushVoiceConfig(); } return "language=" + Settings.voice.language;
                 case "speak": Settings.voice.speak = rest != "off"; OnSettingsChanged(); return "speak=" + Settings.voice.speak;
                 case "llm": Settings.voice.useLlm = rest != "off"; OnSettingsChanged(); return "useLlm=" + Settings.voice.useLlm;
-                default: return "error: voice status | list | tools | registry | match <text> | decide <text> | decider on|off | fallback on|off | listen | stop | cancel | start | stop-service | install | threads N | lang en|it|auto | speak on|off | fx off|adjutant|starship|comm | llm on|off | run <text> | say <text> | wav <file> | warm";
+                default: return "error: voice status | list | tools | registry | match <text> | decide <text> | decider on|off | fallback on|off | listen | stop | cancel | start | stop-service | install | threads N | speak on|off | fx off|adjutant|starship|comm | llm on|off | run <text> | say <text> | wav <file> | warm";
             }
         }
 

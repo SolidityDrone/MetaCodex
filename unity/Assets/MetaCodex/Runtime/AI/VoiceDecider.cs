@@ -10,12 +10,12 @@ namespace MetaCodex.AI
 {
     /// A Jev-style decision layer for voice commands ("System 1"; tools/voicebench measured it against the LLM).
     /// The options are the registry's commands and "none". Each command is represented by example sentences: its phrase
-    /// templates expanded, its examples and samples (any language), its description. A sentence is split into clauses
-    /// (English and Italian "and / then / commas"); each clause is embedded (multilingual-e5-small in the AI service) and
+    /// templates expanded, its examples and samples, its description. A sentence is split into clauses
+    /// ("and / then / commas"); each clause is embedded (multilingual-e5-small in the AI service) and
     /// scored against every command's examples (best cosine); the best command wins unless "none" scores higher or the best
     /// is under Threshold. Arguments are read from the clause through the command's own schema: enum values and their
     /// synonyms, numbers with their units, on / off, free text (the clause without the command's trigger words). A clause
-    /// without a verb ("the files", "e la morbidezza a mezzo metro") repeats the previous command with its own values.
+    /// without a verb ("the files", "and the softness to half a metre") repeats the previous command with its own values.
     /// Clauses run in the spoken order. No text is generated, so nothing is invented: a command, its values, or nothing.
     public sealed class VoiceDecider
     {
@@ -70,15 +70,12 @@ namespace MetaCodex.AI
             ["value"] = new[] { "on", "off", "40 percent", "three meters", "max", "more" },
         };
 
-        /// Sentences that are no command (English and Italian chit-chat): the "none" option.
+        /// Sentences that are no command (chit-chat): the "none" option.
         public static readonly string[] NoneExamples =
         {
             "what is this", "i like it", "okay thanks", "who are you", "hello",
-            "come ti chiami", "va bene", "che bello", "non so", "fammi pensare",
             "tell me a story", "what do you think", "i'm hungry", "you're funny", "i'm bored", "good night", "see you later",
             "how's it going", "nice to meet you", "that was fun",
-            "raccontami una storia", "cosa ne pensi", "ho fame", "sei simpatico", "mi annoio", "buonanotte", "a dopo", "come va",
-            "piacere di conoscerti", "parlami di te",
         };
 
         /// (text, command) pairs: what the router compares a clause with.
@@ -309,7 +306,7 @@ namespace MetaCodex.AI
         private bool Available(string name) => _registry.Find(name) is VoiceCommand c && c.Enabled;
 
         /// First words too common to say which command is meant.
-        private static readonly HashSet<string> GenericFirst = new HashSet<string> { "let", "can", "could", "please", "want", "need", "voglio", "vorrei", "puoi", "what", "how" };
+        private static readonly HashSet<string> GenericFirst = new HashSet<string> { "let", "can", "could", "please", "want", "need", "what", "how" };
 
         /// How much the clause itself points at the command: its own verb first (a phrase's or sample's first word), and a
         /// closed-set value it names (a panel, a setting, a preset; on / off does not count).
@@ -424,9 +421,8 @@ namespace MetaCodex.AI
             return null;
         }
 
-        private static readonly string[] OnWords = { "turn on", "switch on", "enable", "activate", "start", "show", "on", "accendi", "attiva", "avvia", "mostra", "mostrami", "darken", "dim", "oscura" };
-        private static readonly string[] OffWords = { "turn off", "switch off", "turn of", "disable", "deactivate", "stop", "mute", "hide", "off", "end", "flat", "again",
-            "spegni", "disattiva", "ferma", "togli", "nascondi", "muto", "di nuovo", "rivedere" };
+        private static readonly string[] OnWords = { "turn on", "switch on", "enable", "activate", "start", "show", "on", "darken", "dim" };
+        private static readonly string[] OffWords = { "turn off", "switch off", "turn of", "disable", "deactivate", "stop", "mute", "hide", "off", "end", "flat", "again" };
 
         /// "on" / "off" from the clause's words (off wins); `fallback`: "on" when neither is said.
         public static string OnOff(string clause, bool fallback)
@@ -437,40 +433,40 @@ namespace MetaCodex.AI
         }
 
         private static readonly string[] MoreWords = { "a bit more", "a little more", "more", "up", "higher", "bigger", "larger", "stronger", "darker", "wider", "louder",
-            "brighter", "increase", "raise", "di piu", "piu grandi", "piu grande", "piu", "aumenta", "alza", "ingrandisci", "scurisci" };
+            "brighter", "increase", "raise" };
         private static readonly string[] LessWords = { "a bit less", "a little less", "less", "down", "lower", "smaller", "weaker", "lighter", "narrower", "quieter", "decrease",
-            "reduce", "transparent", "meno", "piu piccoli", "piu piccolo", "diminuisci", "abbassa", "riduci", "rimpicciolisci", "trasparenti" };
+            "reduce", "transparent" };
 
         /// The value said in a clause, in the words the app's number reader takes: "30 percent", "2.5 m", "50 cm", "max",
         /// "half m", "quarter", "+" / "-" (more / less); null when there is none.
         public static string ValueText(string clause)
         {
             string t = clause;
-            bool pct = Regex.IsMatch(t, @"%|\bpercent\b|\bper cent\b|\bper cento\b|\bpercento\b");
-            string unit = Regex.IsMatch(t, @"\b(cm|centimet(er|re|ri|ro)s?)\b") ? " cm" : Regex.IsMatch(t, @"\b(meters?|metres?|metri|metro)\b") ? " m" : "";
+            bool pct = Regex.IsMatch(t, @"%|\bpercent\b|\bper cent\b");
+            string unit = Regex.IsMatch(t, @"\b(cm|centimet(er|re)s?)\b") ? " cm" : Regex.IsMatch(t, @"\b(meters?|metres?)\b") ? " m" : "";
             string suffix = pct ? " percent" : unit;
-            if (Regex.IsMatch(t, @"\b(max|maximum|full|massimo|completely|completamente)\b")) return "max";
-            if (Regex.IsMatch(t, @"\b(min|minimum|minimo)\b")) return "min";
+            if (Regex.IsMatch(t, @"\b(max|maximum|full|completely)\b")) return "max";
+            if (Regex.IsMatch(t, @"\b(min|minimum)\b")) return "min";
             var m = Regex.Match(t, @"(\d+(?:\.\d+)?)");
             if (m.Success)
             {
                 double v = double.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture);
-                if (Regex.IsMatch(t, @"\b(and a half|e mezzo)\b")) v += 0.5;
+                if (Regex.IsMatch(t, @"\b(and a half)\b")) v += 0.5;
                 return v.ToString(CultureInfo.InvariantCulture) + suffix;
             }
             if (VoiceCommands.TryNumberWords(t, out double w))
             {
-                if (Regex.IsMatch(t, @"\b(and a half|e mezzo)\b")) w += 0.5;
+                if (Regex.IsMatch(t, @"\b(and a half)\b")) w += 0.5;
                 return w.ToString(CultureInfo.InvariantCulture) + suffix;
             }
-            // "un metro e mezzo", "a meter and a half", "a metre": the article is the number one ("mezzo metro" is not)
-            bool andHalf = Regex.IsMatch(t, @"\b(and a half|e mezzo)\b");
-            if (unit != "" && !Regex.IsMatch(Regex.Replace(t, @"\b(and a half|e mezzo)\b", " "), @"\b(half|mezzo|meta|mezza)\b")
-                && Regex.IsMatch(t, @"\b(un|uno|una|a|one)\s+(cm|centimet\w*|meters?|metres?|metri|metro)\b"))
+            // "a meter and a half", "a metre": the article is the number one ("half a metre" is not)
+            bool andHalf = Regex.IsMatch(t, @"\b(and a half)\b");
+            if (unit != "" && !Regex.IsMatch(Regex.Replace(t, @"\b(and a half)\b", " "), @"\b(half)\b")
+                && Regex.IsMatch(t, @"\b(a|one)\s+(cm|centimet\w*|meters?|metres?)\b"))
                 return (andHalf ? 1.5 : 1.0).ToString(CultureInfo.InvariantCulture) + suffix;
-            if (Regex.IsMatch(t, @"\b(half|mezzo|meta|mezza)\b")) return "half" + unit;
-            if (Regex.IsMatch(t, @"\b(quarter|quarto)\b")) return "quarter";
-            // the most specific word wins: "più trasparenti" is less opacity, "più piccoli" smaller, "più grandi" bigger
+            if (Regex.IsMatch(t, @"\b(half)\b")) return "half" + unit;
+            if (Regex.IsMatch(t, @"\b(quarter)\b")) return "quarter";
+            // the most specific word wins: "a bit less" over "less"
             string more = MoreWords.Where(x => HasWord(t, x)).OrderByDescending(x => x.Length).FirstOrDefault();
             string less = LessWords.Where(x => HasWord(t, x)).OrderByDescending(x => x.Length).FirstOrDefault();
             if (more != null && (less == null || more.Length >= less.Length)) return "+";
@@ -478,8 +474,8 @@ namespace MetaCodex.AI
             return null;
         }
 
-        private static readonly HashSet<string> Stop = new HashSet<string> { "the", "a", "an", "to", "my", "me", "please", "of", "for", "il", "la", "lo", "i", "gli", "le", "l", "di",
-            "del", "della", "dei", "al", "alla", "per", "favore", "un", "una", "chiamato", "chiamata", "called", "named" };
+        private static readonly HashSet<string> Stop = new HashSet<string> { "the", "a", "an", "to", "my", "me", "please", "of", "for", "i",
+            "called", "named" };
 
         /// The clause without the command's own words (its phrase templates' literals) and filler words.
         public static string FreeText(VoiceCommand cmd, string clause)
@@ -492,8 +488,7 @@ namespace MetaCodex.AI
                     foreach (var w in Fold(tok.Trim('(', ')', '[', ']').Replace('|', ' ')).Split(' ')) if (w.Length > 0) trig.Add(w);
                 }
             foreach (var w in new[] { "find", "search", "look", "thread", "threads", "conversation", "chat", "chats", "where", "which", "about", "was", "workspace", "project",
-                "switch", "go", "change", "open", "trova", "cerca", "conversazione", "dove", "quale", "parlava", "sulla", "sui", "nelle", "passa", "vai", "progetto", "cambia",
-                "apri", "type", "run", "execute", "scrivi", "esegui", "digita", "lancia", "nel", "sul", "terminale", "sito", "naviga", "su", "verso", "pagina", "indirizzo" })
+                "switch", "go", "change", "open", "type", "run", "execute" })
                 trig.Add(w);
             var words = clause.Split(' ').Where(w => w.Length > 0).ToList();
             // keep what follows the first non-trigger word (a query can contain "the")
@@ -501,7 +496,7 @@ namespace MetaCodex.AI
             if (start < 0) return null;
             var rest = words.Skip(start).ToList();
             if (cmd.Name == "switch_workspace") rest = rest.Where(w => !trig.Contains(w)).ToList();
-            // and without the command's words at the end ("ls in the terminal", "ls nel terminale")
+            // and without the command's words at the end ("ls in the terminal")
             while (rest.Count > 1 && trig.Contains(rest[rest.Count - 1])) rest.RemoveAt(rest.Count - 1);
             return rest.Count == 0 ? null : string.Join(" ", rest);
         }
@@ -509,13 +504,11 @@ namespace MetaCodex.AI
         // ------------------------------------------------------------------ text
 
         private static readonly string[] Fillers = { "hey metacodex", "ok", "okay", "hey", "please", "could you", "can you", "would you", "i want to", "i would like to",
-            "id like to", "lets", "now", "per favore", "puoi", "potresti", "ehi", "vorrei", "adesso" };
-        private static readonly Regex Join = new Regex(@"\s*(?:[,;]|\band then\b|\band also\b|\bafter that\b|\bthen\b|\balso\b|\band\b|\be poi\b|\bpoi\b|\banche\b|\bed\b|\be\b)\s*", RegexOptions.Compiled);
+            "id like to", "lets", "now" };
+        private static readonly Regex Join = new Regex(@"\s*(?:[,;]|\band then\b|\band also\b|\bafter that\b|\bthen\b|\balso\b|\band\b)\s*", RegexOptions.Compiled);
         private static readonly string[] Verbs = { "open", "close", "show", "hide", "turn", "set", "make", "switch", "use", "find", "search", "look", "start", "run", "type", "put",
             "bring", "dim", "darken", "increase", "decrease", "reduce", "raise", "lower", "mute", "enable", "disable", "recenter", "go", "give", "change", "let", "pin", "clear",
-            "get", "list", "take", "dismiss", "volume", "radius", "intensity", "apri", "chiudi", "mostra", "mostrami", "nascondi", "accendi", "spegni", "imposta", "metti",
-            "rendi", "passa", "usa", "trova", "cerca", "avvia", "esegui", "scrivi", "porta", "portami", "riporta", "oscura", "aumenta", "diminuisci", "alza", "abbassa",
-            "attiva", "disattiva", "togli", "ricentra", "vai", "cambia", "fai", "blocca", "rimpicciolisci", "scurisci", "elenca", "dammi", "pulisci", "fammi", "intensita", "raggio" };
+            "get", "list", "take", "dismiss", "volume", "radius", "intensity" };
 
         /// The sentence's parts, each lower-case and folded (accents off), polite fillers dropped.
         public static List<string> Clauses(string text)
@@ -523,12 +516,11 @@ namespace MetaCodex.AI
             string t = (text ?? "").ToLowerInvariant();
             t = Regex.Replace(t, @"(\d),(\d)", "$1.$2");
             t = Regex.Replace(t, @"\band a half\b", " andahalf ");
-            t = Regex.Replace(t, @"\be mezzo\b", " emezzo ");
             var outList = new List<string>();
             foreach (var part in Join.Split(t))
             {
                 // sentence punctuation off ("turn the focus off." must read "off"); a decimal point stays ("2.5")
-                string p = part.Replace("andahalf", "and a half").Replace("emezzo", "e mezzo").Trim(' ', '.', '!', '?', '…');
+                string p = part.Replace("andahalf", "and a half").Trim(' ', '.', '!', '?', '…');
                 string f = Fold(p).Trim('.', ' ');
                 for (bool changed = true; changed;)
                 {

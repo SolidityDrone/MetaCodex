@@ -67,10 +67,10 @@ description: Where you are when you run inside MetaCodex - a Meta Quest headset 
 - Views: show charts, diagrams (Mermaid), tables, checklists, choices or a physics scene in the headset
   with a ```mcx-view``` / ```mermaid``` block in your reply, or `mcx-ui view show spec.json` from a shell
   (skill `quest-views`). A tapped choice comes back as the user's next message.
-- Voice: the user speaks commands (TALK on the dock), in English or Italian. Phrase templates first, then a
+- Voice: the user speaks commands (TALK on the dock), in English (English only since 2026-11-12). Phrase templates first, then a
   decision model that picks the command from what each command declares (no LLM in the loop).
   `mcx-ui voice registry` is the app's whole command surface as JSON (MCP-like: every enabled command with its
-  schema, spoken names, samples and lint warnings); `mcx-ui voice decide "accendi il focus e apri i file"` shows
+  schema, spoken names, samples and lint warnings); `mcx-ui voice decide "turn on the focus and open the files"` shows
   what would run, nothing runs; `mcx-ui voice run "close all windows"` runs text as if spoken. Scripts and
   plugins add their own commands (`voice.command`, skill `quest-scripting`): complete, or the user cannot reach
   them; removed when the plugin is disabled.

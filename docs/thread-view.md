@@ -70,7 +70,7 @@ can answer short and fast without reading the conversation.
 - The open thread's pulse comes from its panel's polls; other threads that work get a small read (last 2 exchanges)
   every 15 s. Changes go into the mid-term memory (started, a step failed, fixing, may be stuck, waiting, answered
   after 4 min, an error).
-- Questions: "what is it doing?", "is it stuck?", "cosa sta facendo?" are answered from the pulse in two sentences,
+- Questions: "what is it doing?", "is it stuck?" are answered from the pulse in two sentences,
   no model (a long command adds the ps sampler's CPU verdict); "is the build stuck?" stays with the process vitals;
   recaps ("what did it achieve?") go to the local model with the pulse lines (a few hundred characters), not the
   conversation.

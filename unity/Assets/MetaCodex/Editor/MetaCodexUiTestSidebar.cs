@@ -441,17 +441,17 @@ printf 'echo hi\n' > notes/run.sh
             foreach (var p in new[] { th, sb }) p.ForceRefresh();
             Render(shell, "ui-sidebar-thread-flat.png", th.transform.position + th.transform.rotation * new Vector3(0.38f, 0f, -1.15f), th.transform.rotation * Quaternion.Euler(0f, 4f, 0f), 64f, 1920, 1080);
 
-            // the registry: its commands, and the fast path in both languages
+            // the registry: its commands, and the fast path
             var lint = new[] { "thread_sidebar", "init_git" }.SelectMany(n => VoiceCommands.Lint(shell.Voice.Find(n)).Select(w => n + ": " + w)).ToList();
             Check(lint.Count == 0, lint.Count == 0 ? "registry: thread_sidebar and init_git are complete (lint clean)" : "registry: " + string.Join("; ", lint));
             string M(string said) { var m = shell.Voice.FastMatch(said); return m == null ? "none" : (m.Command.Name + " " + string.Join(" ", m.Args.Properties().OrderBy(p => p.Name).Select(p => p.Value.ToString()))).Trim(); }
             var said = new (string text, string want)[]
             {
                 ("close the thread sidebar", "thread_sidebar close"), ("open the sidebar on the git tab", "thread_sidebar open git"), ("show the status tab of this thread", "thread_sidebar open status"),
-                ("chiudi la barra laterale", "thread_sidebar close"), ("apri la scheda file del thread", "thread_sidebar open files"),
+                ("hide the sidebar of this thread", "thread_sidebar close"), ("show me the files tab of this thread", "thread_sidebar open files"),
             };
             var bad = said.Where(x => M(x.text) != x.want).Select(x => $"“{x.text}” -> {M(x.text)} (want {x.want})").ToList();
-            Check(bad.Count == 0, bad.Count == 0 ? $"fast path: {said.Length} sentences (EN, IT) run the sidebar commands" : "fast path: " + string.Join("; ", bad));
+            Check(bad.Count == 0, bad.Count == 0 ? $"fast path: {said.Length} sentences run the sidebar commands" : "fast path: " + string.Join("; ", bad));
             VoiceResult vr = null;
             shell.VoiceProcessText("close the thread sidebar", x => vr = x);
             SbPump(shell, 1f);

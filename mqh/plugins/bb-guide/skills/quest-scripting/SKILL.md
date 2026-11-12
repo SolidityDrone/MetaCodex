@@ -102,9 +102,9 @@ voice.command{
   description = "Show git status of a project folder in the terminal (path: the folder, default the current one)",
   params = { path = { type = "string", description = "folder", required = false } },
   phrases = { "(show|what is) [the] git status", "git status [of|in] {path}" },
-  samples = {                                -- REQUIRED: 4+ natural requests, English AND Italian
+  samples = {                                -- REQUIRED: 4+ natural requests (English: voice is English only)
     "what changed in the repo", "show me the git status", "is there anything to commit",
-    "mostrami lo stato di git", "cosa è cambiato nel repository", "ci sono modifiche da committare",
+    "are there changes in this folder", "how does the repository look",
   },
   vocabulary = { "git" },                    -- words to hear right and fix when misheard
   examples = { {"what changed in the repo", "git_status"} },
@@ -117,9 +117,9 @@ voice.command{
 
 Phrase templates: plain words, `(a|b)` one of, `[a|b]` optional, `{param}` captures words for a parameter,
 `{param:value}` sets a fixed value ("(make|let) the panels follow me {mode:float}"). Text is matched lower-case
-without punctuation, after polite fillers ("hey", "could you", "please", "per favore") are dropped. Enum
-parameters (`enum = {"cyan","amber"}`) accept spoken synonyms in any language:
-`synonyms = { color = { orange = "amber", arancione = "amber" } }`; the longest known name wins ("dome radius"
+without punctuation, after polite fillers ("hey", "could you", "please") are dropped. Enum
+parameters (`enum = {"cyan","amber"}`) accept spoken synonyms:
+`synonyms = { color = { orange = "amber", gold = "amber" } }`; the longest known name wins ("dome radius"
 before "dome"). `confirm = true` makes the user approve in VR before `run` (anything that deletes or cannot be
 undone). `llm = false` marks commands that take free words verbatim (typing, shell lines): they run only when
 the sentence starts with their own verb (a phrase's first word or a sample's first word). Return
@@ -132,11 +132,13 @@ Voice, the decision model, the LLM and other agents only know what the command d
 
 - `description`: one line, what it does and every option it takes;
 - `params`: each with `type` (`string`, `number`, `integer`, `boolean`), `description`, `required`; `enum` for
-  closed sets; `min`, `max`, `unit` (`"%"`, `"m"`, `"s"`...) for numbers (spoken numbers are parsed for you in
-  English and Italian: "fifty percent", "due metri e mezzo", "30 cm", "max", "half");
-- `synonyms` for every enum value people say differently, English and Italian;
-- `phrases` for the common wordings and `samples`: 4 or more natural requests, English and Italian, covering
-  every option (a sample per enum value, with and without numbers);
+  closed sets; `min`, `max`, `unit` (`"%"`, `"m"`, `"s"`...) for numbers (spoken numbers are parsed for you:
+  "fifty percent", "two meters and a half", "30 cm", "max", "half");
+- `synonyms` for every enum value people say differently;
+- `phrases` for the common wordings and `samples`: 4 or more natural requests, covering every option (a sample
+  per enum value, with and without numbers);
+- English only: MetaCodex's voice (speech-to-text, the decision model, spoken replies) is English since
+  2026-11-12; do not add Italian or other non-English phrases, samples or synonyms;
 - `vocabulary` for unusual words, `examples` for tricky phrasings.
 
 The app checks this when the command registers: missing parts appear as `voice.command <name>: ...` lines in the
@@ -153,11 +155,11 @@ longer work: the decision model and agents would offer it.
 ### Test, then tell
 
 `mcx-ui voice registry` (the full JSON: your command, its schema, samples, `warnings: []`),
-`mcx-ui voice decide "mostrami lo stato di git"` (what the decision model makes of a sentence, with scores;
+`mcx-ui voice decide "how does the repository look"` (what the decision model makes of a sentence, with scores;
 nothing runs), `mcx-ui voice match "git status"` (the fast path), then `mcx-ui voice run "git status"` (runs it,
 prints the result as JSON). One sentence can hold several commands ("turn on ambient focus and set the
-intensity to zero", "accendi il focus e poi apri i file"): they run in the spoken order, and a part without a
-verb ("e la morbidezza a mezzo metro") repeats the previous command with its own values.
+intensity to zero", "turn on the focus and then open the files"): they run in the spoken order, and a part without a
+verb ("and the softness to half a metre") repeats the previous command with its own values.
 
 ## Rules
 

@@ -141,7 +141,7 @@ Sections include `decider`, `voiceexport,voicedecide`, `context`, `chat`, `sideb
 
 ## Voice bench
 
-- `python3 tools/voicebench/make_eval.py` makes the 355-sentence set (180 English, 175 Italian).
+- `python3 tools/voicebench/make_eval.py` makes the 180-sentence English set (the 175 Italian sentences were removed on 2026-11-12: voice is English only).
 - Export the registry from the Editor: `echo voiceexport > unity/Bench/uitest-only && tools/unity-batch.sh BatchUiTest 20`.
 - Start the PC AI service: `tools/qvac-dev.sh pc start`. Then run `python3 tools/voicebench/llm_run.py`.
 - Compare routers: `~/mcxwork/voicebench/venv/bin/python tools/voicebench/bench.py`.

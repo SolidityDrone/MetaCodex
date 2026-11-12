@@ -74,8 +74,8 @@ terminal.
 ## Commands (AGENTS.md)
 
 - `thread_sidebar` (`action`: open | close, `tab`: changes | files | git | status | views): "open the sidebar on the git
-  tab", "fold the sidebar away", "apri la scheda file del thread", "chiudi la barra laterale". Enabled while a thread is open.
-- `init_git`: "make this folder a git repository", "inizializza git in questa cartella". Enabled only while the open
+  tab", "fold the sidebar away", "show me the files tab of this thread", "close the thread sidebar". Enabled while a thread is open.
+- `init_git`: "make this folder a git repository", "start a repo here". Enabled only while the open
   thread's folder is known to be in no repository.
 - Removed: the setting `workspace_module` (the module is gone; the sidebar is opened per thread).
 

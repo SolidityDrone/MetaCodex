@@ -1,8 +1,11 @@
 # Voice bench: decision model (router) vs LLM for voice commands
 
-355 sentences (English and Italian; single commands, several in one sentence, misheard words, non-commands) with
-the commands they must run, in order (`eval.jsonl`, made by `make_eval.py`). Pipelines are scored on the exact
-result (commands, order and values; values parsed the same way for all).
+180 English sentences (single commands, several in one sentence, misheard words, non-commands) with the commands
+they must run, in order (`eval.jsonl`, made by `make_eval.py`). Pipelines are scored on the exact result (commands,
+order and values; values parsed the same way for all). English only since 2026-11-12 (the app's voice is English):
+the 175 Italian sentences were removed, the English ones keep their ids, `bench.py` and `score_app.py` score English
+rows only (an older `app.jsonl` with Italian rows still scores). Settings of kind `choice` (`voice_effect`,
+`speech_quality`: the registry export carries their `options` and spoken `values`) are scored like the app reads them.
 
 1. `python3 tools/voicebench/make_eval.py` (only when the sentences change)
 2. Editor export (registry, the exact LLM request, the fast path on every sentence):
@@ -11,4 +14,4 @@ result (commands, order and values; values parsed the same way for all).
 4. Routers: `~/mcxwork/voicebench/venv/bin/python tools/voicebench/bench.py [model filters]`
    (venv: fastembed, model2vec, numpy) -> table + `~/mcxwork/voicebench/{report.md,results.jsonl}`
 
-Results: `results/`.
+Results: `results/` (the files before 2026-11-12 are history: they also scored the Italian sentences).

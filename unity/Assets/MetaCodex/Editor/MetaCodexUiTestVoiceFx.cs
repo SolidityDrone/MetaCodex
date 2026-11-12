@@ -73,14 +73,14 @@ namespace MetaCodex.EditorTools
                 shell.VoiceCancel(); // the HUD's STOP
                 Check(!shell.Speaking && shell.SpeechClipForTest == null, "STOP on the voice HUD stops the reply");
 
-                // a spoken reply: two sentences at most, spoken units, Italian ones too
+                // a spoken reply: two sentences at most, spoken units
                 shell.SayReply("It's been working for 3 min 20 s; now running the tests. Nothing new for 40 s. It may be stuck. STOP in the thread ends the turn.");
                 var parts = shell.SpeechPartsForTest.ToList();
                 Check(parts.Count == 2 && parts[0].Contains("3 minutes 20 seconds") && parts[1].Contains("40 seconds") && parts.Sum(x => x.Length) <= 230,
                     "a reply speaks 2 sentences with spoken units: " + string.Join(" | ", parts));
                 shell.StopSpeaking();
-                shell.VoiceSay("Il thread sta ancora lavorando da 3 min, non è bloccato.");
-                Check(shell.SpeechPartsForTest.Count == 1 && shell.SpeechPartsForTest[0].Contains("3 minuti"), "Italian reply: Italian units (" + shell.SpeechPartsForTest.FirstOrDefault() + ")");
+                shell.VoiceSay("The thread has been working for 2 h, it is not stuck.");
+                Check(shell.SpeechPartsForTest.Count == 1 && shell.SpeechPartsForTest[0].Contains("2 hours"), "a said text: spoken units (" + shell.SpeechPartsForTest.FirstOrDefault() + ")");
                 shell.StopSpeaking();
                 pending.Clear();
 
@@ -171,11 +171,11 @@ namespace MetaCodex.EditorTools
                 string r1 = shell.SetSettingByVoice("voice_effect", "starship"), v1 = shell.Settings.voice.fx;
                 string r2 = shell.SetSettingByVoice("voice_effect", "radio"), v2 = shell.Settings.voice.fx;
                 string r3 = shell.SetSettingByVoice("voice_effect", "+"), v3 = shell.Settings.voice.fx;
-                string r4 = shell.SetSettingByVoice("voice_effect", "normale"), v4 = shell.Settings.voice.fx;
+                string r4 = shell.SetSettingByVoice("voice_effect", "normal"), v4 = shell.Settings.voice.fx;
                 string r5 = shell.SetSettingByVoice("voice_effect", "on"), v5 = shell.Settings.voice.fx;
                 string r6 = shell.SetSettingByVoice("voice_effect", "banana"), v6 = shell.Settings.voice.fx;
                 Check(enumHas && v1 == "starship" && v2 == "comm" && v3 == "off" && v4 == "off" && v5 == "adjutant" && r6.StartsWith("error") && v6 == "adjutant",
-                    $"set_setting voice_effect: starship -> {v1} ({r1}), radio -> {v2} ({r2}), + -> {v3} ({r3}), normale -> {v4}, on -> {v5} ({r5}), banana -> {r6}");
+                    $"set_setting voice_effect: starship -> {v1} ({r1}), radio -> {v2} ({r2}), + -> {v3} ({r3}), normal -> {v4}, on -> {v5} ({r5}), banana -> {r6}");
                 bool fits = set != null && set.Check != null && set.Check(new JObject { ["setting"] = "voice_effect", ["value"] = "ship" }) == null
                             && set.Check(new JObject { ["setting"] = "voice_effect", ["value"] = "banana" }) != null;
                 Check(fits, "set_setting's check: voice_effect takes ship, not banana");
@@ -185,9 +185,9 @@ namespace MetaCodex.EditorTools
                 string q1 = shell.SetSettingByVoice("speech_quality", "clear"), w1 = shell.Settings.voice.speech;
                 shell.SyncSettingsControls();
                 int sel1 = speech != null ? speech.Selected : -1;
-                string q2 = shell.SetSettingByVoice("speech_quality", "veloce"), w2 = shell.Settings.voice.speech;
+                string q2 = shell.SetSettingByVoice("speech_quality", "quick"), w2 = shell.Settings.voice.speech;
                 Check(speech != null && sq0 == "fast" && w1 == "clear" && sel1 == 1 && w2 == "fast",
-                    $"VOICE > SPEECH: default {sq0}, clear -> {w1} (row {sel1}, {q1}), veloce -> {w2} ({q2})");
+                    $"VOICE > SPEECH: default {sq0}, clear -> {w1} (row {sel1}, {q1}), quick -> {w2} ({q2})");
                 var lint = VoiceCommands.Lint(set);
                 Check(lint.Count == 0, "set_setting lint stays clean" + (lint.Count > 0 ? ": " + string.Join("; ", lint) : ""));
 

@@ -1068,16 +1068,14 @@ namespace MetaCodex.Shell
                     ["action"] = new Dictionary<string, string>
                     {
                         ["show"] = "open", ["expand"] = "open", ["display"] = "open", ["pull out"] = "open", ["hide"] = "close", ["collapse"] = "close", ["fold"] = "close", ["shut"] = "close", ["dismiss"] = "close",
-                        ["apri"] = "open", ["mostra"] = "open", ["espandi"] = "open", ["fammi vedere"] = "open", ["chiudi"] = "close", ["nascondi"] = "close", ["comprimi"] = "close", ["richiudi"] = "close", ["togli"] = "close",
                     },
                     ["tab"] = new Dictionary<string, string>
                     {
                         ["diff"] = "changes", ["diffs"] = "changes", ["differences"] = "changes", ["changed files"] = "changes", ["edits"] = "changes", ["modifications"] = "changes",
-                        ["modifiche"] = "changes", ["differenze"] = "changes", ["file modificati"] = "changes", ["cambiamenti"] = "changes",
-                        ["file"] = "files", ["explorer"] = "files", ["folder"] = "files", ["project folder"] = "files", ["tree"] = "files", ["cartella"] = "files", ["cartella del progetto"] = "files", ["albero"] = "files",
-                        ["repository"] = "git", ["repo"] = "git", ["branch"] = "git", ["commits"] = "git", ["version control"] = "git", ["controllo versione"] = "git", ["rami"] = "git",
-                        ["state"] = "status", ["model"] = "status", ["context"] = "status", ["approvals"] = "status", ["stato"] = "status", ["contesto"] = "status", ["approvazioni"] = "status",
-                        ["view"] = "views", ["charts"] = "views", ["diagrams"] = "views", ["viste"] = "views", ["grafici"] = "views", ["diagrammi"] = "views",
+                        ["file"] = "files", ["explorer"] = "files", ["folder"] = "files", ["project folder"] = "files", ["tree"] = "files",
+                        ["repository"] = "git", ["repo"] = "git", ["branch"] = "git", ["commits"] = "git", ["version control"] = "git",
+                        ["state"] = "status", ["model"] = "status", ["context"] = "status", ["approvals"] = "status",
+                        ["view"] = "views", ["charts"] = "views", ["diagrams"] = "views",
                     },
                 },
                 Phrases = new[]
@@ -1087,16 +1085,13 @@ namespace MetaCodex.Shell
                     "{action} [the] [thread] sidebar on [the] {tab} [tab]",
                     "(show|open) [me] [the] {tab} (tab|page) [of|in] [the|this] (thread|sidebar) {action:open}",
                     "(show|open) [me] [the] thread's {tab} {action:open}",
-                    "{action} [la] barra laterale [del thread]",
-                    "(mostra|apri) [la] scheda {tab} [del thread|della barra laterale] {action:open}",
                 },
                 Samples = new[]
                 {
                     "pull out the thread sidebar", "show me what the agent changed in this thread", "fold the sidebar away", "show the git tab of this thread", "open the sidebar on the files",
-                    "apri la barra laterale del thread", "fammi vedere le modifiche dell'agente nella barra laterale", "chiudi la barra laterale", "apri la scheda git del thread", "mostra lo stato del thread nella barra laterale",
                 },
                 Examples = new List<(string, string)> { ("what did the agent change in this thread", "thread_sidebar open changes"), ("hide the thread's side panel", "thread_sidebar close") },
-                Vocabulary = new[] { "sidebar", "barra laterale", "diff" },
+                Vocabulary = new[] { "sidebar", "diff" },
                 Run = a =>
                 {
                     bool open = (string)a["action"] != "close";
@@ -1114,12 +1109,10 @@ namespace MetaCodex.Shell
                 {
                     "(init|initialize|initialise|start|create|set up) [a] git [repository|repo] [here|in this folder|in the project|for this project]",
                     "(make|turn) (this|the) (folder|project) [into] a git (repo|repository)",
-                    "(inizializza|crea|avvia) [un] [repository] git [qui|nel progetto|in questa cartella]",
                 },
                 Samples = new[]
                 {
                     "put this project under git", "make this folder a git repository", "set up version control for this project", "start a repo here",
-                    "metti il progetto sotto git", "crea un repository git qui", "inizializza git in questa cartella", "avvia il controllo versione per questo progetto",
                 },
                 Vocabulary = new[] { "git init", "repository" },
                 Run = a => SbInitGit(),

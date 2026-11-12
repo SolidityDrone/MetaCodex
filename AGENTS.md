@@ -38,10 +38,11 @@ voice (fast path and the decision model `VoiceDecider`), the local LLM, agents (
 1. **Every capability has a complete command.** A new or changed app action (a `RunAction` verb, control-port
    command, panel, setting, mode) gets its command in the same change: `Name` (snake_case), one-line
    `Description` with its options, a JSON schema with typed and described `Parameters` (`enum` for closed sets,
-   `minimum` / `maximum` / unit for numbers), `Synonyms` for every enum value people say differently (English
-   and Italian), `Phrases` (fast path), `Samples` (4+ natural requests, English and Italian, none copied from
-   `tools/voicebench/eval.jsonl`), `Examples` and `Vocabulary` for unusual words. Settings go into
-   `VoiceSettingsCatalog` (English `Names`) and `VoiceSettingOther` (Italian and colloquial names).
+   `minimum` / `maximum` / unit for numbers), `Synonyms` for every enum value people say differently,
+   `Phrases` (fast path), `Samples` (4+ natural requests, none copied from `tools/voicebench/eval.jsonl`), `Examples`
+   and `Vocabulary` for unusual words. Settings go into `VoiceSettingsCatalog` (`Names`) and `VoiceSettingOther`
+   (colloquial names). Voice is English only (owner, 2026-11-12): add no Italian (or other non-English) phrases,
+   samples, synonyms or names.
    `VoiceCommands.Lint(command)` must return nothing; the self-test section `decider` fails otherwise.
 2. **Disabled or removed means unregistered, at once.** A plugin or script that is disabled, deleted or stopped
    by an error loses its commands (ScriptHost `Unload` -> `RemoveOwnedBy`); a shell feature that is switched
@@ -51,7 +52,7 @@ voice (fast path and the decision model `VoiceDecider`), the local LLM, agents (
 3. **Measured, not guessed.** After a registry change run the `decider` self-test and the named bench
    (`MCX_UITEST_ONLY=voiceexport,voicedecide`, dev AI service up), score it with
    `tools/voicebench/score_app.py`, and compare with the last `tools/voicebench/results/` file: no drop in
-   exact accuracy, English or Italian. Commit the new results file with the change.
+   exact accuracy (the bench is English only). Commit the new results file with the change.
 4. **Every change goes through review before it lands.** Work on a feature branch; before merging, the diff,
    the test and bench numbers and what changed for the user are reviewed (the owner, or a reviewer agent the
    owner asked for), and only then merged. The same holds for agents inside the app changing plugins,

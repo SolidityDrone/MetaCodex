@@ -5,8 +5,13 @@ installed on the headset); 0.5 makes the cycle faster (measured below) and fixes
 headset sleeps; 0.6 confirms actions silently (the HUD shows them) and adds `set_focus` and the SYSTEM panel;
 0.7 fixes misheard words against the commands' vocabulary, runs several commands said in one sentence and
 adds `set_setting` (every setting by voice: on / off, numbers, more / less). 0.7.2 replaces the LLM in the loop
-with a **decision model** (below: English and Italian, 79-81 % exact against the LLM's 58 %, ~10-60 ms
-instead of 0.5-9 s) and makes the registry complete (samples, Italian names, four more commands, `voice registry`).
+with a **decision model** (below: 79-81 % exact against the LLM's 58 %, ~10-60 ms instead of 0.5-9 s) and makes
+the registry complete (samples, more names, four more commands, `voice registry`).
+
+**English only (2026-11-12).** The owner dropped Italian: speech-to-text, spoken replies, the LLM prompts, the
+command registry and the bench are English. VOICE > LANGUAGE and `voice lang` are gone; the setting `voice.language`
+stays in the settings file (old files load) and always reads as `en` (a stored `it` or `auto` becomes `en` at load).
+Italian phrases no longer match. Later options, not done in this change (see "English-only models: later options").
 
 ## What it does
 
@@ -45,7 +50,7 @@ tool), phrase templates for the fast path, and a run function. The shell registe
 | `new_terminal` | | "open a new terminal", "new shell" |
 | `find_thread` | `query` | "find the thread where {query}", "search threads for {query}" |
 | `switch_workspace` | `name` (optional) | "switch to the workspace called {name}", "change workspace" |
-| `thread_sidebar` | `action` (open, close), `tab` (changes, files, git, status, views) | "open the sidebar on the git tab", "chiudi la barra laterale" (while a thread is open) |
+| `thread_sidebar` | `action` (open, close), `tab` (changes, files, git, status, views) | "open the sidebar on the git tab", "close the thread sidebar" (while a thread is open) |
 | `init_git` | none | "make this folder a git repository" (only while the open thread's folder is no repo) |
 | `set_layout` | `mode`: fixed float | "use the floating layout", "fixed mode" |
 | `recenter` | | "recenter", "bring the panels back" |
@@ -54,15 +59,15 @@ tool), phrase templates for the fast path, and a run function. The shell registe
 | `show_keyboard` | | "show the keyboard" |
 | `set_focus` | `state`: on off | "focus mode on", "turn off the focus", "darken the room" (Ambient Focus) |
 | `set_setting` | `setting` (see below), `value`: on, off, toggle, a number, + or - | "set the dome radius to two meters", "intensity 30", "turn off the sounds", "make the windows bigger", "volume a bit less" |
-| `focus_preset` | `preset`: subtle focus blackout | "use the subtle preset", "blackout preset", "usa il preset leggero" |
-| `spin_carousel` | `direction`: left right, `panels` (1-6, optional) | "spin the carousel to the right", "next panel", "gira il carosello a sinistra" (float layout) |
-| `select_mode` | `state`: on off | "turn on the selection tool", "stop selecting", "attiva la selezione" |
-| `open_url` | `url` (spoken: "github dot com slash docs") | "browse to example dot org", "open the website github dot com", "apri il sito github punto com" |
+| `focus_preset` | `preset`: subtle focus blackout | "use the subtle preset", "blackout preset", "apply the normal focus preset" |
+| `spin_carousel` | `direction`: left right, `panels` (1-6, optional) | "spin the carousel to the right", "next panel", "rotate the panels left" (float layout) |
+| `select_mode` | `state`: on off | "turn on the selection tool", "stop selecting", "let me select an area" |
+| `open_url` | `url` (spoken: "github dot com slash docs") | "browse to example dot org", "open the website github dot com", "go to the site wikipedia dot org" |
 
-Every command also carries **samples**: 4-15 natural requests in English and Italian that the decision model
-compares with (none of them copied from the bench sentences). Panels and settings have Italian names too
-(`impostazioni` -> settings, `cassaforte` -> vault, `morbidezza` -> focus_softness, `cupola` -> focus_radius...;
-`VoiceSettingOther` keeps them out of the speech-to-text prompt).
+Every command also carries **samples**: 4 or more natural requests (English) that the decision model compares
+with (none of them copied from the bench sentences). Panels and settings have colloquial names too
+(`preferences` -> settings, `secrets` -> vault, `dark` -> focus_intensity, `transparent` -> opacity...;
+`VoiceSettingOther` keeps the settings' colloquial ones out of the speech-to-text prompt).
 
 `open_panel` also knows panels by their tabs: `focus` (Settings, FOCUS tab: "open ambient focus"),
 `storage` and `tools` (SYSTEM: "show the installed tools", "how much disk space is left"), `git` (the
@@ -116,29 +121,30 @@ slips) and opens the best match; `switch_workspace` matches MQH project names an
 
 Jev-style, without generating text: the options are the registry's enabled commands plus "none"; the answer is
 a command and its values, or nothing. Chosen by measurement (`docs/VOICE_DECISION_RESEARCH.md`,
-`tools/voicebench/`): on 355 sentences (English and Italian; single, composite, misheard, chit-chat) today's
-pipeline (fast path -> Qwen3 0.6B) was 58 % exact (Italian 34 %), fast path -> this model 79-81 % (Italian
-70-72 %), and the decision takes ~6-10 ms on the PC instead of ~205 ms for the LLM.
+`tools/voicebench/`): on 355 sentences (then English and Italian; single, composite, misheard, chit-chat) today's
+pipeline (fast path -> Qwen3 0.6B) was 58 % exact, fast path -> this model 79-81 %, and the decision takes ~6-10 ms
+on the PC instead of ~205 ms for the LLM. Since 2026-11-12 the bench is the 180 English sentences only (the app's
+pipeline: 93 % exact on them, as on 2026-11-11).
 
 - **Model:** multilingual-e5-small (118M parameters, q8_0 GGUF, 132 MB) in the local AI service
   (`POST /v1/embeddings`, `@qvac/embed-llamacpp`), on the service's cores 0-2, unloaded after 60 idle minutes.
   Installed with the voice models; a headset that already has them fetches it once by itself.
 - **Examples** (`VoiceDecider.BuildExamples`): each enabled command's phrase templates expanded with its enum
-  values and synonyms, its examples, samples and description; "none" from chit-chat in both languages. Their
+  values and synonyms, its examples, samples and description; "none" from chit-chat. Their
   vectors are cached on disk (`voice-decider-vectors.bin`, ~2 MB) and rebuilt only for what changed when a
   plugin adds, removes or disables commands; a removed or disabled command is never offered, even before the
   rebuild.
-- **Clauses:** the sentence is split on and / then / also / after that / commas and e / e poi / poi / anche,
-  keeping "and a half", "e mezzo" and decimal commas; fillers and punctuation are dropped. Each part is decided
+- **Clauses:** the sentence is split on and / then / also / after that / commas, keeping "and a half" and
+  decimal commas; fillers and punctuation are dropped. Each part is decided
   on its own and they run in the spoken order ("turn on ambient focus and set the intensity to 100 %": focus on,
-  then intensity). A part without a verb repeats the previous command with its own values ("imposta il volume
-  al 30 per cento e la morbidezza a mezzo metro").
+  then intensity). A part without a verb repeats the previous command with its own values ("set the volume to 30
+  percent and the softness to half a metre").
 - **Choice:** the best cosine against each command's nearest example; "none" wins chit-chat, and below 0.30
   nothing runs. Commands that take words verbatim (`type_text`, `run_in_terminal`, `open_url`) run only when the
   part starts with their own verb.
 - **Values from the schema:** enum values and synonyms (longest first, then one or two letters off), numbers
-  with units and percent (English and Italian words: "ventitré", "due metri e mezzo"), on / off, more / less
-  (the most specific word wins: "più trasparenti" is less opacity), free text without the command's own words.
+  with units and percent (number words too: "twenty three", "two meters and a half"), on / off, more / less
+  (the most specific word wins: "more transparent" is less opacity), free text without the command's own words.
   The command's `Check` and the schema validate before anything runs.
 - **Settings:** VOICE > "Decision model for commands" (on), "Ask the LLM when nothing fits" (off). The VOICE
   status line shows the model's state ("ready: 1500 examples, 17 commands").
@@ -199,12 +205,12 @@ the service starts the Bare executable as its child.
 | `POST /v1/audio/speech` `{input, voice}` | WAV (44.1 kHz, 16-bit mono) |
 | `POST /v1/chat/completions` | OpenAI-style, with `tools` -> `tool_calls`; `timings` |
 | `POST /v1/warmup` `{messages:[system], tools}` | prefills and saves the prompt prefix |
-| `POST /config` | threads, language, vocabulary prompt, voice, idle minutes |
+| `POST /config` | threads, language (the app sends `en`), vocabulary prompt, voice, idle minutes |
 | `POST /unload`, `/pause`, `/resume`, `/shutdown`; `GET /log` | control |
 
 From the Linux userland: `mcx-ai status | install | transcribe f.wav | say "text" | chat "prompt" | env`.
 From the app's control port: `mcx-ui voice status | list | match <text> | run <text> | say <text> |
-wav /mnt/quest/f.wav | listen | install | threads N | lang en|it|auto | registry | decide <text> | decider on|off |
+wav /mnt/quest/f.wav | listen | install | threads N | registry | decide <text> | decider on|off |
 fallback on|off`.
 
 ## Faster cycle (0.5, measured)
@@ -234,15 +240,15 @@ Now (`ShellVoice.Say`, `Runtime/AI/SpokenText.cs`):
 
 | Step | What it does |
 |---|---|
-| Split | `SpokenText.Sentences`: after `. ! ? …` when a space and a word that is not lower case follow; not inside `foo.cs`, `3.5`, `v1.2.4`, `e.g.`, `Dr. Rossi`, `J. Smith`, `No. 5`, `wait... then`, Italian `sig.`; line breaks, list items and ` · ` (joined replies) end a sentence; code blocks are not read. A sentence under 20 characters goes with the next one (a tiny clip costs a request and leaves a gap); one over 180 is cut at a comma. |
+| Split | `SpokenText.Sentences`: after `. ! ? …` when a space and a word that is not lower case follow; not inside `foo.cs`, `3.5`, `v1.2.4`, `e.g.`, `Dr. Rossi`, `J. Smith`, `No. 5`, `wait... then`; line breaks, list items and ` · ` (joined replies) end a sentence; code blocks are not read. A sentence under 20 characters goes with the next one (a tiny clip costs a request and leaves a gap); one over 180 is cut at a comma. |
 | Shorten | A reply (`SayReply`: answers, session questions) speaks at most 2 sentences / about 200 characters; the full text stays on the HUD. `SAY…`, `voice say`, Lua `voice.say` speak everything. |
-| Speakable | `SpokenText.Speakable`: `3 min 20 s` -> `3 minutes 20 seconds`, `1 h`, `250 ms`; Italian words when the reply reads as Italian (`3 minuti`). `ThreadPulse.Speak` writes its durations as words itself (`SpokenText.Duration`). Before, "3 min" came back from speech-to-text as "three men". |
+| Speakable | `SpokenText.Speakable`: `3 min 20 s` -> `3 minutes 20 seconds`, `1 h`, `250 ms` (English words only since 2026-11-12). `ThreadPulse.Speak` writes its durations as words itself (`SpokenText.Duration`). Before, "3 min" came back from speech-to-text as "three men". |
 | Pipeline | One request at a time, at most two clips made ahead: sentence 2 is made while sentence 1 plays; a Stop never waits behind a long service queue. Clip 1 plays as soon as it arrives; the next one follows 0.2 s after the previous ends (`SentenceGap`). |
 | Cancel | Stop (the HUD's ■ STOP, `voice:stop` / `voice:cancel`), TALK and a new reply call `StopSpeaking`: the playing clip stops, waiting clips are destroyed, late answers of the old reply are dropped (a generation counter). |
 | Orb | `OnSpeechStarted` runs per clip: the orb speaks each sentence, quiet in the gap. |
 | CPU Boost | Held while the reply speaks (was a fixed 15 s), 0.5 s after the last clip, capped at 60 s from its start (`SpeechBoostCap`). Boost makes synthesis 16-18 % faster, which brings the headset to about RTF 1: sentence 2 is ready when sentence 1 ends. |
 | Model kept loaded | TTS idle unload 3 -> 15 min (`PushVoiceConfig`): most replies no longer pay the 1-4 s reload. Costs about 0.5 GB RSS while loaded. |
-| Language | `ttsLanguage` = `it` when VOICE > LANGUAGE is IT, else `en` (Supertonic 3 speaks Italian; a change reloads the voice once). |
+| Language | `ttsLanguage` is always `en` (English only since 2026-11-12; before, VOICE > LANGUAGE IT read replies as Italian). |
 | Shorter answers | Session answers: LLM `max_tokens` 110 -> 70, the prompt asks for one or two short sentences under 40 words; an answer cut by the limit keeps only its finished sentences (`CleanAnswer`). |
 | Clips | Every played or dropped `AudioClip` is destroyed (before, a replaced clip stayed in memory until Unity unloaded unused assets). The WAV is decoded without a call per sample. |
 
@@ -335,6 +341,17 @@ output twice and from two threads at once, the WAV header / rate / length, the t
 time; with the samples folder also the service's own replies and parity with the prototype's renders
 (correlation adjutant 0.995, starship 0.986, comm 0.974). Editor self-test section `voicefx`.
 
+## English-only models: later options (2026-11-12, not done)
+
+The app is English only, but the models stay multilingual in this change: a model swap needs a new download, its
+sha256 in `qvac/server/models.js`, a `docs/LICENSES.md` entry and a headset install, and none was measured yet.
+
+| Now | Option | Why it may help | What it needs |
+|---|---|---|---|
+| Whisper base, multilingual (q8_0, 78 MB) | Whisper `base.en` | English-only Whisper models make fewer English errors than the multilingual one of the same size, and never switch language on a short or noisy command | the download (ggml `base.en`, q8_0), sha256 and pinned revision in `models.js`, a LICENSES row (MIT), a headset install, then the bench and the owner's recordings |
+| multilingual-e5-small (118M, q8_0, 126 MB) | an English-only sentence embedder (for example a bge-small-en class model, 33M) | smaller and faster; the 2026-11-09 bench (`tools/voicebench/bench.py`) already scores English routers next to e5-small | the GGUF download, sha256, LICENSES row, new cached vectors (the tag `DeciderModelTag` changes), a `voicedecide` bench run with no drop in exact accuracy |
+| Supertonic 3 (31 languages) | keep | English is one of its languages; `ttsLanguage` = `en` | nothing |
+
 ## GPU? (measured 2026-11-08, Quest 3S, the app not running)
 
 QVAC's Android prebuilds carry an OpenCL backend for Adreno (and Vulkan). On the headset it works once
@@ -378,7 +395,7 @@ vocabulary prompt fixes names ("MetaCodex", not "MedicoDex").
 - Self-test: `MCX_UITEST_ONLY=voice tools/unity-batch.sh BatchUiTest` (fast path, actions, a Lua plugin
   command, the control port, MQH commands, and with a dev service: speech -> text -> command and the
   LLM path); `decider` (the decision model's mechanics with an oracle embedder, the registry complete, a
-  plugin's commands gone when it is disabled); named `voiceexport,voicedecide` (the 355 bench sentences through
+  plugin's commands gone when it is disabled); named `voiceexport,voicedecide` (the 180 English bench sentences through
   the app's pipeline with the real model in the dev service -> `Bench/voice/app.jsonl`, scored by
   `tools/voicebench/score_app.py`).
 

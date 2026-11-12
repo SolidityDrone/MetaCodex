@@ -41,7 +41,7 @@ can **ask** about it ("is this build stuck?", "what did this thread achieve?", "
    or processes or an approval's risks; otherwise the LLM from the context. The answer is spoken (VOICE setting
    "Speak answers to questions", on) and shown on the HUD.
 
-Thread state questions ("what is it doing?", "is it stuck?", "cosa sta facendo?") are answered from the pulse without
+Thread state questions ("what is it doing?", "is it stuck?") are answered from the pulse without
 the model; recaps get the pulse lines (a few hundred characters) instead of the conversation (owner 2026-11-11: fast,
 short, accurate).
 

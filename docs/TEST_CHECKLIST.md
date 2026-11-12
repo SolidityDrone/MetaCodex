@@ -160,7 +160,7 @@ Reference: `docs/voice.md`. The models are not in the APK: install them once (53
 - [ ] Silence after TALK → "no speech heard" after ~6 s; TALK twice → stops and processes what was said
 - [ ] VOICE > Spoken replies ON → the reply is also spoken (needs the voice model)
 - [ ] VOICE > TYPE… "close all windows" → same as saying it; SAY… → speaks the text
-- [ ] LANGUAGE IT, say "apri git" → transcribed in Italian (commands match English phrases; the LLM path may still map it)
+- [ ] ~~LANGUAGE IT, say "apri git" → transcribed in Italian~~ (English only since 2026-11-12): VOICE has no LANGUAGE row; say "open git" → GIT opens
 - [ ] Frame rate while talking: the status line stays at about 72 fps; VOICE shows the service's RAM
 - [ ] VOICE: pick a voice (F1-F5, M1-M5) → a sample sentence in that voice; spoken replies use it
 - [ ] Speed: "open git" → done right after you stop talking (~0.7 s pause + ~0.6 s); an unusual phrasing → ◆ THINKING under a second
@@ -272,14 +272,14 @@ Voice:
 - [ ] Dock / wrist: one MQH entry (no SCRIPTS / GESTURE); MQH opens on SKILLS; the tabs PLUGINS, SCRIPTS, GESTURES, DAEMON work; Settings has no DAEMON tab
 - [ ] MQH > SKILLS: the shipped skills say READ-ONLY and REMOVE refuses them; + NEW SKILL opens NEW THREAD with the brief; ⌕ FIND finds skills, ⇣ INSTALL adds one under YOURS, REMOVE removes it
 - [ ] SELECT, then pinch-drag over a window at low PANEL OPACITY: CLIPBOARD has the capture, opaque, nothing of the room or the hands; no hitch at the moment of the capture (72 fps)
-- [ ] CLIPBOARD from the wrist (CLIP), the dock and by voice ("open the clipboard", "apri gli appunti"); 21 captures with CLIPBOARD's KEEP at 20 → the oldest is gone
+- [ ] CLIPBOARD from the wrist (CLIP), the dock and by voice ("open the clipboard", "show the screenshots"; Italian removed: English only since 2026-11-12); 21 captures with CLIPBOARD's KEEP at 20 → the oldest is gone
 - [ ] A thread: + → REFERENCE CAPTURE → the list inside the thread panel; pick two → two chips; + → ATTACH FILES → a Linux file; SEND: the agent sees the images and the file
 - [ ] Ask by voice, with a thread waiting for an approval: "what is this command I'm asked to accept, is it safe?" → spoken answer naming the thread, the command and its risks, never "it's safe"
 - [ ] Ask by voice: "do we have the rust toolchain?", "is this build stuck?" (during a long `cargo build`), "what has this thread done so far?" (pointing at THREAD) → short spoken answers; "open settings" still opens Settings
 
 ## 18. After 0.7.6 (owner's feedback): questions, dialogs, captures, the new wrist menu
 
-- [ ] Voice: "how many captures we took so far?" / "quante catture abbiamo fatto?" → a spoken count (and the newest's time); CLIPBOARD does not open. "open the clipboard" and "can I open the clipboard?" still open it
+- [ ] Voice: "how many captures we took so far?" / "how many screenshots do we have?" (Italian removed: English only since 2026-11-12) → a spoken count (and the newest's time); CLIPBOARD does not open. "open the clipboard" and "can I open the clipboard?" still open it
 - [ ] CLIPBOARD > CLEAR ALL pressed three times quickly: one dialog, parallel to CLIPBOARD, centred over it a few cm in front (never through it, never half off its edge); the extra taps delete nothing; CANCEL closes it
 - [ ] Any other window's dialog (MQH > SKILLS > REMOVE, a thread's dialogs) opens over that window, parallel to it; a dialog asked by voice opens in front of you
 - [ ] SELECT, pinch-drag over a window: the orange frame goes as soon as the capture is taken; the capture in CLIPBOARD has no orange border
@@ -388,7 +388,7 @@ The in-app browser, WEB (same version):
 - [ ] Scroll up while it works: the view holds still, `↓ NEW` shows; a tap goes back to the end
 - [ ] The meta row shows the plan and the usage windows (OpenCode Go: 5h · week · month); the CONTEXT ring's picker lists them with their resets
 - [ ] ◉ beside SEND: say a message, pause: the words are typed into the composer (not sent); SEND sends them. The same ◉ in NEW THREAD
-- [ ] TALK: "what is this thread doing?" / "is it stuck?" / "cosa sta facendo?": a short spoken answer at once (no waiting for the model)
+- [ ] TALK: "what is this thread doing?" / "is it stuck?" (the Italian one removed: English only since 2026-11-12): a short spoken answer at once (no waiting for the model)
 - [ ] Stop a thread's provider mid-turn or wait on a silent step: after ~2 min the status line turns amber ("may be stuck")
 - [ ] A thread finishes while its window is open: the frame pulses three times and the answer glows; the orb casts “✓ … answered: …”
 - [ ] A thread finishes while you do something else (its window closed): within a few seconds the orb casts “✓ … answered”; a tap on the callout opens the thread
@@ -402,7 +402,7 @@ The in-app browser, WEB (same version):
 - [ ] Tap AGENTS, MQH, VAULT, VOICE, SYSTEM in the rail: each takes the same place, the rail stays still; DISPLAY / LOOK & SOUND / FOCUS / HANDS / ABOUT only change SETTINGS' page
 - [ ] Drag the window by its header: the rail comes along; pinch the rail's bar and move it: the window comes along
 - [ ] ✕ on the window closes the rail too; CONTROL on the menu brings back the last category; pressed again it closes
-- [ ] Voice: "open the control panel", "open agents", "open git", "apri le impostazioni" open the right page with the rail
+- [ ] Voice: "open the control panel", "open agents", "open git", "open the settings" (Italian removed: English only since 2026-11-12) open the right page with the rail
 - [ ] THREADS > ◆ AGENTS opens CONTROL on AGENTS
 - [ ] With a terminal open, TERMS from the menu opens right beside it; with a thread open, CLIP opens beside the thread
 - [ ] FLOAT: CONTROL and its rail take one place on the ring, nothing overlaps them
@@ -471,7 +471,7 @@ docs/native-build-and-install.md.
 - [ ] A Native project's folder has `.metacodex/project.json`, `.claude/skills/quest-native-*` (links) and AGENTS.md / CLAUDE.md with the native block; a General one has none of them (`ls -la <folder> <folder>/.claude 2>&1` in a terminal)
 - [ ] In a General project ask an agent "what are your rules for apps?": no word about launch requests or the app menu
 - [ ] In a Native project, with the thread in its most permissive approval mode, ask for a small app: the agent builds and verifies, then a dialog APP READY: <app>: LAUNCH / LATER appears in front of you (and a toast in MESSAGES); nothing opens by itself
-- [ ] LATER: the app does not open; say "launch the app" (or "lancia l'app"): it opens; its menu's Back brings you to that thread
+- [ ] LATER: the app does not open; say "launch the app" (Italian removed: English only since 2026-11-12): it opens; its menu's Back brings you to that thread
 - [ ] A brand-new app: the dialog says INSTALL first; INSTALL -> Android's dialog -> then APP READY with LAUNCH
 - [ ] Say "don't open the app" while one waits: the agent's `mcx-app status` says declined
 
@@ -502,7 +502,7 @@ docs/native-build-and-install.md.
 - [ ] GIT in a repo: branch, ahead / behind, status, recent commits; in a folder with no repo only NOT A GIT REPOSITORY + INIT GIT; INIT GIT works and the tab becomes a repo
 - [ ] STATUS: model, access, context %, what runs now and for how long, approvals waiting, usage, folder, MQH
 - [ ] A Bluetooth keyboard after touching the sidebar: ↑ ↓ / Page / Enter / Esc move and open in it; touch the terminal and the keys go there again
-- [ ] Voice: "open the sidebar on the git tab", "chiudi la barra laterale", "show the status tab of this thread", and in a folder with no repo "make this folder a git repository"
+- [ ] Voice: "open the sidebar on the git tab", "close the thread sidebar" (Italian removed: English only since 2026-11-12), "show the status tab of this thread", and in a folder with no repo "make this folder a git repository"
 
 ## 34. Gestures and scripts: a clean start (branch feat/polish)
 
@@ -563,11 +563,11 @@ Work windows:
 
 - [ ] Ask a session question with a 2-sentence answer: the first words come about 3-4 s after the text appears (was 8-10 s), with a short pause between sentences; only 2 sentences / about 200 characters are spoken and the full answer stays on the HUD.
 - [ ] While a reply speaks, press ■ STOP on the voice HUD (also try TALK, and a new question): the voice stops at once and no later sentence plays.
-- [ ] Ask "is it stuck?" on a working thread: durations are spoken as "3 minutes 20 seconds", not "three men". With VOICE > LANGUAGE IT an Italian reply says "3 minuti" with the Italian voice.
+- [ ] Ask "is it stuck?" on a working thread: durations are spoken as "3 minutes 20 seconds", not "three men". ~~With VOICE > LANGUAGE IT an Italian reply says "3 minuti" with the Italian voice.~~ (English only since 2026-11-12)
 - [ ] VOICE panel: the service button reads ▶ START or ■ STOP from the state; a tap on a COMMANDS row shows Say “…” first and at most one short line, never an id like open_panel.
 - [ ] VOICE > SOUND shows OFF / AI / SHIP / COMM with AI selected on a fresh install. Pick each one: it says "Systems online. All panels ready." in that sound. AI is the same voice, slightly computer-like with a small room; SHIP is clearly synthetic with a longer tail; COMM is a narrow radio with a squelch at the start and the end; OFF is the plain voice.
 - [ ] All four are equally loud, never crackle or clip, and the first word starts without the old half-second of silence.
-- [ ] Say "make your voice sound like a radio" -> COMM is selected and replies sound like a radio; say "give the assistant its normal voice back" -> OFF; "metti l'effetto vocale astronave" -> SHIP.
+- [ ] Say "make your voice sound like a radio" -> COMM is selected and replies sound like a radio; say "give the assistant its normal voice back" -> OFF; "switch the voice effect to starship" -> SHIP (the Italian one removed: English only since 2026-11-12).
 - [ ] VOICE > SPEECH: FAST is selected on a fresh install. Ask the same question with FAST and with CLEAR: FAST starts a little sooner; say if FAST ever drops or swaps a word you notice (then CLEAR becomes the default).
 - [ ] Restart the app: the chosen SOUND and SPEECH are kept.
 - [ ] Watch fps during a long spoken reply with SHIP: 72 fps holds (the effect runs off the main thread).

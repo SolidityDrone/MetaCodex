@@ -21,13 +21,13 @@ namespace MetaCodex.AI
         private static readonly HashSet<string> Abbreviations = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "mr", "mrs", "ms", "dr", "prof", "st", "vs", "approx", "cf", "ca", "e.g", "i.e", "eg", "ie",
-            "sig", "sigg", "dott", "ing", "avv", "es", "p.es", "ver", "rev", "inc", "ltd", "jr", "sr",
+            "ver", "rev", "inc", "ltd", "jr", "sr",
         };
-        /// Abbreviations only in front of a number ("No. 5", "pag. 3"); "No. It works." still ends a sentence.
-        private static readonly HashSet<string> NumberAbbreviations = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "no", "nr", "n", "fig", "pag", "art", "vol", "p", "pp" };
+        /// Abbreviations only in front of a number ("No. 5", "fig. 3"); "No. It works." still ends a sentence.
+        private static readonly HashSet<string> NumberAbbreviations = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "no", "nr", "n", "fig", "art", "vol", "p", "pp" };
 
         /// The sentences of `text`, in order: split after . ! ? … when a space and a word that is not lower case follow,
-        /// but not inside "foo.cs", "3.5", "e.g.", "Dr. Rossi", "J. Smith" or "wait... then"; line breaks, list items
+        /// but not inside "foo.cs", "3.5", "e.g.", "Dr. Brown", "J. Smith" or "wait... then"; line breaks, list items
         /// and " · " (several replies joined) also end one. Very short ones join the next, very long ones are cut at a comma.
         public static List<string> Sentences(string text)
         {
@@ -49,7 +49,7 @@ namespace MetaCodex.AI
                     if (k + 1 < b.Length && b[k + 1] != ' ') { i = k; continue; } // foo.cs, 3.5, v1.2, e.g.x
                     char next = k + 2 < b.Length ? b[k + 2] : '\0';
                     if (next != '\0' && char.IsLower(next)) { i = k; continue; } // "e.g. the", "wait... then", "approx. three"
-                    if (ch == '.' && j == i && next != '\0' && IsAbbreviation(b, start, i, char.IsDigit(next))) { i = k; continue; } // "Dr. Rossi", "No. 5"
+                    if (ch == '.' && j == i && next != '\0' && IsAbbreviation(b, start, i, char.IsDigit(next))) { i = k; continue; } // "Dr. Brown", "No. 5"
                     string s = b.Substring(start, k + 1 - start).Trim();
                     if (s.Length > 0) res.Add(s);
                     start = k + 1;
@@ -84,9 +84,9 @@ namespace MetaCodex.AI
 
         private static readonly Regex Units = new Regex(@"(?<![\w.,])(\d+(?:[.,]\d+)?)(\s?)(ms|mins?|secs?|s|hrs?|h)\b(?!['’])", RegexOptions.CultureInvariant);
 
-        /// The text as the voice model reads it well: "3 min 20 s" -> "3 minutes 20 seconds" ("3 minuti 20 secondi" in
-        /// Italian), "1 h" -> "1 hour", "250 ms" -> "250 milliseconds"; arrows and the reply separator become words / commas.
-        public static string Speakable(string text, bool italian)
+        /// The text as the voice model reads it well: "3 min 20 s" -> "3 minutes 20 seconds",
+        /// "1 h" -> "1 hour", "250 ms" -> "250 milliseconds"; arrows and the reply separator become words / commas.
+        public static string Speakable(string text)
         {
             if (string.IsNullOrEmpty(text)) return "";
             string t = Units.Replace(text, m =>
@@ -98,58 +98,32 @@ namespace MetaCodex.AI
                 string word;
                 switch (unit)
                 {
-                    case "ms": word = italian ? (one ? "millisecondo" : "millisecondi") : (one ? "millisecond" : "milliseconds"); break;
-                    case "min": case "mins": word = italian ? (one ? "minuto" : "minuti") : (one ? "minute" : "minutes"); break;
-                    case "h": case "hr": case "hrs": word = italian ? (one ? "ora" : "ore") : (one ? "hour" : "hours"); break;
-                    default: word = italian ? (one ? "secondo" : "secondi") : (one ? "second" : "seconds"); break;
+                    case "ms": word = one ? "millisecond" : "milliseconds"; break;
+                    case "min": case "mins": word = one ? "minute" : "minutes"; break;
+                    case "h": case "hr": case "hrs": word = one ? "hour" : "hours"; break;
+                    default: word = one ? "second" : "seconds"; break;
                 }
                 return num + " " + word;
             });
-            t = t.Replace(" · ", ", ").Replace("·", ", ").Replace(" → ", italian ? " a " : " to ").Replace(" -> ", italian ? " a " : " to ");
+            t = t.Replace(" · ", ", ").Replace("·", ", ").Replace(" → ", " to ").Replace(" -> ", " to ");
             return Regex.Replace(t, @"\s+", " ").Trim();
         }
 
         /// A duration in spoken words: 40 -> "40 seconds", 200 -> "3 minutes 20 seconds", 900 -> "15 minutes",
-        /// 5400 -> "1.5 hours" (Italian: "40 secondi", "3 minuti 20 secondi", "1,5 ore").
-        public static string Duration(int secs, bool italian = false)
+        /// 5400 -> "1.5 hours".
+        public static string Duration(int secs)
         {
             secs = Math.Max(0, secs);
-            string U(int n, string en1, string en, string it1, string it) => n + " " + (italian ? (n == 1 ? it1 : it) : (n == 1 ? en1 : en));
-            if (secs < 60) return U(secs, "second", "seconds", "secondo", "secondi");
+            string U(int n, string en1, string en) => n + " " + (n == 1 ? en1 : en);
+            if (secs < 60) return U(secs, "second", "seconds");
             if (secs < 3600)
             {
-                string m = U(secs / 60, "minute", "minutes", "minuto", "minuti");
-                return secs < 600 && secs % 60 >= 10 ? m + " " + U(secs % 60, "second", "seconds", "secondo", "secondi") : m;
+                string m = U(secs / 60, "minute", "minutes");
+                return secs < 600 && secs % 60 >= 10 ? m + " " + U(secs % 60, "second", "seconds") : m;
             }
             double h = secs / 3600.0;
             string hs = h.ToString("0.#", CultureInfo.InvariantCulture);
-            if (italian) hs = hs.Replace('.', ',');
-            return hs + " " + (italian ? (hs == "1" ? "ora" : "ore") : (hs == "1" ? "hour" : "hours"));
-        }
-
-        private static readonly HashSet<string> ItalianWords = new HashSet<string>
-        {
-            "il", "lo", "gli", "che", "non", "è", "sono", "per", "con", "una", "uno", "del", "della", "dei", "delle", "nel", "nella",
-            "sta", "stai", "ho", "hai", "questo", "questa", "ancora", "già", "anche", "perché", "più", "cosa", "niente", "nessun",
-            "nessuna", "finito", "lavorando", "sì", "fatto", "c'è", "tutto", "tutti", "adesso", "ora", "minuti", "secondi",
-        };
-        private static readonly HashSet<string> EnglishWords = new HashSet<string>
-        {
-            "the", "is", "are", "and", "it", "of", "to", "for", "with", "this", "that", "was", "has", "have", "not", "still",
-            "its", "it's", "you", "your", "now", "nothing", "done", "working", "yes", "there", "be", "on", "at", "running",
-        };
-
-        /// Whether a reply reads as Italian (function words counted; ties are English).
-        public static bool LooksItalian(string text)
-        {
-            if (string.IsNullOrEmpty(text)) return false;
-            int it = 0, en = 0;
-            foreach (Match m in Regex.Matches(text.ToLowerInvariant(), @"[\p{L}']+"))
-            {
-                if (ItalianWords.Contains(m.Value)) it++;
-                else if (EnglishWords.Contains(m.Value)) en++;
-            }
-            return it >= 2 && it > en;
+            return hs + " " + (hs == "1" ? "hour" : "hours");
         }
 
         // ---- helpers
@@ -174,7 +148,7 @@ namespace MetaCodex.AI
             string word = b.Substring(w + 1, dot - w - 1);
             if (word.Length == 0) return false;
             if (word.Length == 1 && char.IsUpper(word[0])) return true; // "J. Smith"
-            if (word.Length <= 5 && word.IndexOf('.') > 0) return true; // "U.S", "a.C", "p.es"
+            if (word.Length <= 5 && word.IndexOf('.') > 0) return true; // "U.S", "a.m", "p.m"
             return Abbreviations.Contains(word) || numberNext && NumberAbbreviations.Contains(word);
         }
 

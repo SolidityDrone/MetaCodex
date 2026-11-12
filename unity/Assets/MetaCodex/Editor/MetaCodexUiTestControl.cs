@@ -102,8 +102,8 @@ namespace MetaCodex.EditorTools
             Check(back && !st.IsOpen && !rail.IsOpen, "CONTROL on the menu brings back the last category (LOOK & SOUND); pressed again it closes");
             // voice names
             var vm = shell.Voice.FastMatch("open the control panel");
-            var vi = shell.Voice.FastMatch("apri il pannello di controllo");
-            Check((string)vm?.Args["panel"] == "control" && (string)vi?.Args["panel"] == "control", $"voice: “open the control panel” -> {(string)vm?.Args["panel"]}, “apri il pannello di controllo” -> {(string)vi?.Args["panel"]}");
+            var vi = shell.Voice.FastMatch("show me the control centre");
+            Check((string)vm?.Args["panel"] == "control" && (string)vi?.Args["panel"] == "control", $"voice: “open the control panel” -> {(string)vm?.Args["panel"]}, “show me the control centre” -> {(string)vi?.Args["panel"]}");
             // a saved layout never holds the rail on its own
             shell.OpenControl("mqh");
             shell.SaveNamedLayout("control-test");

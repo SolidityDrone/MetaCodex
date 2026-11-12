@@ -286,7 +286,15 @@ namespace MetaCodex.Shell
         public static ShellSettings Load(string path = null)
         {
             path ??= PathOnDisk;
-            try { if (File.Exists(path)) return JsonUtility.FromJson<ShellSettings>(File.ReadAllText(path)) ?? new ShellSettings(); }
+            try
+            {
+                if (File.Exists(path))
+                {
+                    var s = JsonUtility.FromJson<ShellSettings>(File.ReadAllText(path)) ?? new ShellSettings();
+                    if (s.voice != null) s.voice.language = "en"; // English only since 2026-11-12: a stored "it" / "auto" reads as "en"
+                    return s;
+                }
+            }
             catch (Exception ex) { Debug.LogWarning("[MetaCodex] settings unreadable, defaults used: " + ex.Message); }
             return new ShellSettings();
         }

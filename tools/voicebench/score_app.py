@@ -1,5 +1,6 @@
 """Scores the app's own pipeline on the bench: unity/Bench/voice/app.jsonl, written by the Editor section `voicedecide`
-(fast path -> VoiceDecider with the real model in the dev AI service). Same canon and scoring as bench.py.
+(fast path -> VoiceDecider with the real model in the dev AI service). Same canon and scoring as bench.py. English
+only since 2026-11-12: rows of other languages (an older app.jsonl has the 175 Italian ones) are not scored or counted.
 
 Baseline "0.7.1" = the fast path as it shipped (a copy of its export in ~/mcxwork/voicebench/before/fastpath.jsonl)
 followed by the LLM's answers (~/mcxwork/voicebench/llm.jsonl, llm_run.py).
@@ -14,7 +15,8 @@ import bench  # noqa: E402  (loads eval.jsonl, the registry export, the LLM answ
 
 APP = os.path.join(bench.REPO, "unity", "Bench", "voice", "app.jsonl")
 BEFORE = os.path.join(bench.WORK, "before", "fastpath.jsonl")
-app = {d["id"]: d for d in (json.loads(l) for l in open(APP, encoding="utf-8") if l.strip())}
+EN_IDS = {r["id"] for r in bench.EVAL}  # bench.EVAL holds the English rows only
+app = {d["id"]: d for d in (json.loads(l) for l in open(APP, encoding="utf-8") if l.strip()) if d["id"] in EN_IDS}
 before = {}
 if os.path.exists(BEFORE):
     before = {d["id"]: d for d in (json.loads(l) for l in open(BEFORE, encoding="utf-8") if l.strip())}

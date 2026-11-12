@@ -241,20 +241,18 @@ namespace MetaCodex.AI
         private static readonly string[] QuestionStarts =
         {
             "what", "whats", "what's", "why", "how", "is", "are", "was", "were", "do", "does", "did", "can", "could", "should", "will", "which", "who",
-            "where", "when", "any", "have", "has", "cosa", "che", "perche", "perché", "come", "quale", "quali", "chi", "dove", "quando", "è", "sono",
-            "c'e", "c'è", "ci", "abbiamo", "hai", "ha", "posso", "devo", "quanti", "quante", "quanto", "quanta",
+            "where", "when", "any", "have", "has",
         };
-        private static readonly Regex CountWords = new Regex(@"\bhow many\b|\bnumber of\b|\bquant[ieao]\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        private static readonly Regex CountWords = new Regex(@"\bhow many\b|\bnumber of\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
         private static readonly (string topic, string[] words)[] TopicWords =
         {
-            ("tools", new[] { "install", "installed", "have", "toolchain", "version", "compiler", "sdk", "available", "abbiamo", "installat", "versione", "disponibil", "toolchain" }),
-            ("processes", new[] { "build", "compil", "stuck", "running", "process", "hang", "frozen", "slow", "progress", "finish", "done yet", "download", "still", "bloccat", "processo", "in esecuzione", "finit", "lento", "va avanti", "sta andando" }),
-            ("approval", new[] { "command", "accept", "allow", "approv", "permission", "asked", "asking", "safe", "danger", "risk", "harm", "comando", "accett", "permess", "sicur", "pericol", "rischi", "chiede", "chiedendo" }),
-            ("thread", new[] { "thread", "agent", "doing", "achiev", "so far", "working on", "chat", "conversation", "claude", "codex", "opencode", "agente", "sta facendo", "ha fatto", "conversazion", "finora" }),
-            ("extensions", new[] { "script", "plugin", "gesture", "skill", "error", "broken", "gesto", "gesti", "errore", "rotto" }),
-            ("system", new[] { "storage", "space", "disk", "memory", "setup", "first use", "capture", "screenshot", "clipboard", "terminal", "window", "panel", "focus",
-                "spazio", "memoria", "disco", "cattur", "schermat", "appunti", "finestr", "pannell" }),
-            ("events", new[] { "happened", "while i was", "recently", "last", "today", "lately", "away", "successo", "mentre ero", "ultimamente", "oggi", "ultimo", "ultima" }),
+            ("tools", new[] { "install", "installed", "have", "toolchain", "version", "compiler", "sdk", "available", "toolchain" }),
+            ("processes", new[] { "build", "compil", "stuck", "running", "process", "hang", "frozen", "slow", "progress", "finish", "done yet", "download", "still" }),
+            ("approval", new[] { "command", "accept", "allow", "approv", "permission", "asked", "asking", "safe", "danger", "risk", "harm" }),
+            ("thread", new[] { "thread", "agent", "doing", "achiev", "so far", "working on", "chat", "conversation", "claude", "codex", "opencode" }),
+            ("extensions", new[] { "script", "plugin", "gesture", "skill", "error", "broken" }),
+            ("system", new[] { "storage", "space", "disk", "memory", "setup", "first use", "capture", "screenshot", "clipboard", "terminal", "window", "panel", "focus" }),
+            ("events", new[] { "happened", "while i was", "recently", "last", "today", "lately", "away" }),
         };
         // spoken names -> SYSTEM > TOOLS names
         private static readonly (string[] words, string[] tools)[] ToolNames =
@@ -286,7 +284,7 @@ namespace MetaCodex.AI
             string t = " " + q.Text.ToLowerInvariant().Replace("’", "'").Trim() + " ";
             string first = Regex.Match(t, @"^\s*([\p{L}']+)").Groups[1].Value;
             q.IsQuestion = q.Text.TrimEnd().EndsWith("?") || QuestionStarts.Contains(first);
-            q.Deictic = Regex.IsMatch(t, @"\b(this|that|these|those|here|it)\b|\b(questo|questa|questi|quello|quella|qui)\b");
+            q.Deictic = Regex.IsMatch(t, @"\b(this|that|these|those|here|it)\b");
             foreach (var (topic, words) in TopicWords) if (words.Any(w => t.Contains(w))) q.Topics.Add(topic);
             foreach (var (words, tools) in ToolNames)
                 if (words.Any(w => t.Contains(w))) { q.Tools.AddRange(tools.Where(x => !q.Tools.Contains(x))); q.Topics.Add("tools"); }
@@ -295,17 +293,17 @@ namespace MetaCodex.AI
             return q;
         }
 
-        /// "How many ...?" / "quante ...?": a count, answered from the numbers.
+        /// "How many ...?": a count, answered from the numbers.
         public bool Counting;
 
         /// How much it asks for interpretation rather than an action, 0..1 (a question about state, not an order).
         public float InterpretationScore()
         {
             string t = " " + Text.ToLowerInvariant().Trim() + " ";
-            bool action = Regex.IsMatch(t, @"\b(open(ing)?|clos(e|ing)|show(ing)?|start(ing)?|stop(ping)?|turn(ing)?|set(ting)?|make|create|run|launch|hide|switch|toggle|take|apri(re|mi)?|chiud(i|ere)|mostr(a|are|ami)|avvi(a|are)|ferm(a|are)|accend(i|ere)|speg?n(i|ere)|impost(a|are)|nascond(i|ere)|attiv(a|are)|disattiv(a|are)|fai|fare)\b");
-            // an order put politely ("can you open the files?", "can I open...", "is it possible to...", "puoi aprire...")
+            bool action = Regex.IsMatch(t, @"\b(open(ing)?|clos(e|ing)|show(ing)?|start(ing)?|stop(ping)?|turn(ing)?|set(ting)?|make|create|run|launch|hide|switch|toggle|take)\b");
+            // an order put politely ("can you open the files?", "can I open...", "is it possible to...")
             // is a command, not a question about state
-            if (action && Regex.IsMatch(t, @"^\s*((can|could|would|will) (you|i|we)|please|is it possible to|(do|would) you mind|mind|puoi|potresti|posso|possiamo|per favore|si può|si puo|è possibile|e possibile)\b")) return 0.1f;
+            if (action && Regex.IsMatch(t, @"^\s*((can|could|would|will) (you|i|we)|please|is it possible to|(do|would) you mind|mind)\b")) return 0.1f;
             float s = IsQuestion ? 0.6f : 0f;
             if (Topics.Contains("processes") || Topics.Contains("approval") || Topics.Contains("thread") || Topics.Contains("events")) s += 0.25f;
             if (Topics.Contains("tools") && Tools.Count > 0) s += 0.25f;
@@ -343,8 +341,8 @@ namespace MetaCodex.AI
             return sb.ToString().TrimEnd();
         }
 
-        private static readonly Regex StateWords = new Regex(@"\b(stuck|still|progress|doing|working|busy|finish(ed)?|done yet|how long|waiting|status|hang(ing)?|frozen|alive|bloccat[oa]|fermo|sta facendo|lavorando|lavora|finit[oa]|quanto manca|aspett\w*|a che punto|va avanti|procede)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-        private static readonly Regex RecapWords = new Regex(@"achiev|so far|summar|recap|riassun|what did|what has it done|what have|cosa ha fatto|finora|\bwhy\b|perch|explain|spiega", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        private static readonly Regex StateWords = new Regex(@"\b(stuck|still|progress|doing|working|busy|finish(ed)?|done yet|how long|waiting|status|hang(ing)?|frozen|alive)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        private static readonly Regex RecapWords = new Regex(@"achiev|so far|summar|recap|what did|what has it done|what have|\bwhy\b|explain", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
         /// The question answered from the facts alone, or null when it needs the model (recaps, explanations).
         public static string ExactAnswer(JObject snapshot, SessionQuestion q)
@@ -404,7 +402,7 @@ namespace MetaCodex.AI
             string t = q.Text.ToLowerInvariant();
             int N(string k) => c[k]?.Value<int>() ?? 0;
             string Plural(int n, string one, string many) => n == 1 ? "1 " + one : n + " " + many;
-            if (Regex.IsMatch(t, @"captur|screenshot|screen shot|clipboard|cattur|schermat|appunti|foto"))
+            if (Regex.IsMatch(t, @"captur|screenshot|screen shot|clipboard"))
             {
                 int n = N("captures"), max = N("capturesMax"), taken = N("capturesTaken");
                 string newest = (string)c["capturesNewest"], since = (string)c["capturesSince"];
@@ -414,7 +412,7 @@ namespace MetaCodex.AI
                 if (taken > n && since != null) s += n >= max ? $"; {taken} taken since {since}, it keeps the newest {max}" : $"; {taken} taken since {since}";
                 return s + ".";
             }
-            if (Regex.IsMatch(t, @"thread|chat|conversation|conversazion|discussion"))
+            if (Regex.IsMatch(t, @"thread|chat|conversation|discussion"))
             {
                 int n = N("threads"), run = N("threadsRunning"), wait = N("threadsWaiting");
                 if (n == 0) return "No threads yet.";
@@ -424,10 +422,10 @@ namespace MetaCodex.AI
                 return Plural(n, "thread", "threads") + (parts.Count > 0 ? ": " + string.Join(", ", parts) : ", none running") + ".";
             }
             if (Regex.IsMatch(t, @"terminal")) return Plural(N("terminals"), "terminal", "terminals") + " open.";
-            if (Regex.IsMatch(t, @"window|panel|finestr|pannell")) return Plural(N("panels"), "window", "windows") + " open.";
-            if (Regex.IsMatch(t, @"script|plugin|gesture|gest"))
+            if (Regex.IsMatch(t, @"window|panel")) return Plural(N("panels"), "window", "windows") + " open.";
+            if (Regex.IsMatch(t, @"script|plugin|gesture"))
                 return $"{Plural(N("extensionsOn"), "script or plugin", "scripts and plugins")} running, {N("extensionsOff")} turned off.";
-            if (Regex.IsMatch(t, @"build|compil|process|processi"))
+            if (Regex.IsMatch(t, @"build|compil|process"))
             {
                 int n = (data["processes"] as JArray)?.Count(p => (string)p["kind"] == "build") ?? 0;
                 return n == 0 ? "No build is running in the Linux right now." : Plural(n, "build", "builds") + " running in the Linux.";

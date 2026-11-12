@@ -1,7 +1,8 @@
 """Voice-command bench: the sentences and what they must do (tools/voicebench/eval.jsonl).
 
-English and Italian; single commands, several commands in one sentence (order matters), misheard words (the real
-ones from the headset's session log and typical speech-to-text slips) and sentences that are no command at all.
+English only (since 2026-11-12: the 175 Italian rows were dropped; the English ids stay). Single commands, several
+commands in one sentence (order matters), misheard words (the real ones from the headset's session log and typical
+speech-to-text slips) and sentences that are no command at all.
 Gold = the ordered list of [command, args] the app must run. Values use the app's units: fractions for percent
 settings (100 % -> 1.0), metres, "on" / "off", "+" / "-" for more / less. Free text (thread queries, workspace
 names) is judged on its key words (`keys`).
@@ -39,7 +40,7 @@ en_panels = {
     "git": ["open git", "show me the source control", "open the repository panel"],
     "agents": ["open the providers page", "which AI providers are signed in", "show me the agents"],
     "threads": ["show my conversations", "open the threads list", "where are my chats"],
-    "browser": ["open the web browser", "I need a browser", "bring up the browser"],
+    "web": ["open the web browser", "I need a browser", "bring up the browser"],
     "scripts": ["open the scripts", "show my lua scripts", "go to the scripts panel"],
     "gestures": ["open the gestures studio", "show the hand gestures", "take me to gestures"],
     "vault": ["open the vault", "where are my api keys", "show my secrets"],
@@ -53,7 +54,7 @@ en_panels = {
 for panel, says in en_panels.items():
     for s in says: add("en", "single", s, P(panel))
 for s, p in [("close the vault", "vault"), ("hide the files", "files"), ("close git", "git"), ("close the settings", "settings"),
-             ("dismiss the browser", "browser"), ("put away the scripts panel", "scripts")]:
+             ("dismiss the browser", "web"), ("put away the scripts panel", "scripts")]:
     add("en", "single", s, C(p))
 for s in ["close all windows", "close everything", "clear my view", "get rid of all the panels"]: add("en", "single", s, CLOSE_ALL)
 for s in ["open a new terminal", "I need another shell", "give me a new console", "start a terminal"]: add("en", "single", s, NEW_TERM)
@@ -104,7 +105,7 @@ en_multi = [
     ("recenter and use the floating layout", [RECENTER, L("float")]),
     ("set the radius to two meters and the softness to half a meter", [S("focus_radius", 2.0), S("focus_softness", 0.5)]),
     ("darken the room, then open settings", [F("on"), P("settings")]),
-    ("open the browser, the files and git", [P("browser"), P("files"), P("git")]),
+    ("open the browser, the files and git", [P("web"), P("files"), P("git")]),
     ("turn off ambient focus and close everything", [F("off"), CLOSE_ALL]),
     ("make the windows bigger and increase the opacity", [S("ui_scale", "+"), S("opacity", "+")]),
     ("switch to the metacodex workspace and open the threads", [W("metacodex"), P("threads")]),
@@ -143,114 +144,6 @@ for s in ["Thank you.", "Ugh.", "What can you do for me?", "What is the name of 
           "what's the weather like", "good morning", "tell me a joke", "I'm tired", "who made you", "how are you",
           "what time is it", "that's great", "never mind", "hmm let me think"]:
     add("en", "none", s)
-
-# ---------------------------------------------------------------- Italiano, comandi singoli
-it_panels = {
-    "terminals": ["mostrami i terminali", "apri i terminali", "elenca i terminali aperti"],
-    "files": ["apri i file", "mostrami le cartelle", "apri il gestore dei file"],
-    "git": ["apri git", "mostra il controllo versione", "apri il pannello del repository"],
-    "agents": ["apri la pagina dei provider", "quali provider AI sono collegati", "mostrami gli agenti"],
-    "threads": ["mostra le mie conversazioni", "apri la lista dei thread", "dove sono le mie chat"],
-    "browser": ["apri il browser", "mi serve il browser web", "fammi vedere il browser"],
-    "scripts": ["apri gli script", "mostra i miei script lua", "vai al pannello degli script"],
-    "gestures": ["apri lo studio dei gesti", "mostra i gesti delle mani", "portami ai gesti"],
-    "vault": ["apri la cassaforte", "dove sono le mie chiavi api", "mostra i miei segreti"],
-    "settings": ["apri le impostazioni", "voglio cambiare le impostazioni", "apri le preferenze"],
-    "voice": ["apri il pannello voce", "mostra il controllo vocale", "apri le impostazioni della voce"],
-    "system": ["apri il pannello di sistema", "mostra le informazioni di sistema", "vai al sistema"],
-    "focus": ["apri le impostazioni del focus ambientale", "mostra le opzioni del focus", "apri il focus ambientale"],
-    "storage": ["quanto spazio mi rimane", "mostra lo spazio su disco", "apri l'archiviazione"],
-    "tools": ["mostra gli strumenti installati", "quali strumenti sono installati", "apri la lista degli strumenti"],
-}
-for panel, says in it_panels.items():
-    for s in says: add("it", "single", s, P(panel))
-for s, p in [("chiudi la cassaforte", "vault"), ("nascondi i file", "files"), ("chiudi git", "git"), ("chiudi le impostazioni", "settings"),
-             ("chiudi il browser", "browser"), ("togli il pannello degli script", "scripts")]:
-    add("it", "single", s, C(p))
-for s in ["chiudi tutte le finestre", "chiudi tutto", "pulisci la vista", "togli tutti i pannelli"]: add("it", "single", s, CLOSE_ALL)
-for s in ["apri un nuovo terminale", "mi serve un'altra shell", "dammi una nuova console", "avvia un terminale"]: add("it", "single", s, NEW_TERM)
-add("it", "single", "trova il thread dove abbiamo sistemato la tastiera", T("tastiera"))
-add("it", "single", "quale conversazione parlava della pagina di login", T("login"))
-add("it", "single", "cerca nelle chat la migrazione del database", T("migrazione", "database"))
-add("it", "single", "cerca la conversazione sui comandi vocali", T("comandi", "vocali"))
-add("it", "single", "passa al workspace metacodex", W("metacodex"))
-add("it", "single", "vai al progetto sandybridge", W("sandybridge"))
-add("it", "single", "cambia workspace", W())
-add("it", "single", "apri il workspace del progetto alpha", W("alpha"))
-add("it", "single", "usa il layout fluttuante", L("float"))
-add("it", "single", "fai fluttuare le finestre intorno a me", L("float"))
-add("it", "single", "layout fisso per favore", L("fixed"))
-add("it", "single", "blocca i pannelli al loro posto", L("fixed"))
-for s in ["ricentra", "riporta tutto davanti a me", "metti le finestre davanti a me", "riposiziona la vista"]: add("it", "single", s, RECENTER)
-for s in ["mostra la tastiera", "apri la tastiera", "mi serve la tastiera"]: add("it", "single", s, KEYBOARD)
-add("it", "single", "scrivi ciao mondo", TYPE("ciao mondo"))
-add("it", "single", "esegui git status", RUN("git status"))
-for s, st in [("accendi il focus ambientale", "on"), ("attiva la modalità focus", "on"), ("oscura la stanza", "on"), ("spegni il focus", "off"),
-              ("mostrami di nuovo la stanza", "off"), ("disattiva il focus ambientale", "off")]:
-    add("it", "single", s, F(st))
-it_settings = [
-    ("imposta l'intensità al 50 per cento", "focus_intensity", 0.5), ("rendi la stanza completamente buia", "focus_intensity", 1.0),
-    ("scurisci un po' di più la stanza", "focus_intensity", "+"), ("imposta il raggio della cupola a due metri", "focus_radius", 2.0),
-    ("raggio un metro e mezzo", "focus_radius", 1.5), ("imposta la morbidezza a mezzo metro", "focus_softness", 0.5),
-    ("metti la sfocatura al cinquanta per cento", "focus_blur", 0.5), ("imposta l'opacità al massimo", "opacity", 1.0),
-    ("rendi le finestre più trasparenti", "opacity", "-"), ("imposta la distanza dei pannelli a un metro", "panel_distance", 1.0),
-    ("rendi le finestre più grandi", "ui_scale", "+"), ("rimpicciolisci il testo", "ui_scale", "-"), ("aumenta la nitidezza", "sharpness", "+"),
-    ("attiva la curvatura dei pannelli", "bend", "on"), ("spegni la curvatura dei pannelli", "bend", "off"), ("disattiva i suoni", "sounds", "off"),
-    ("togli i click", "sounds", "off"), ("metti il volume a un quarto", "volume", 0.25), ("alza il volume", "volume", "+"),
-    ("abbassa un po' il volume", "volume", "-"), ("attiva le risposte vocali", "speak", "on"), ("nascondi i raggi delle mani", "hand_rays", "off"),
-    ("mostra i raggi", "hand_rays", "on"), ("disattiva l'occlusione", "occlusion", "off"), ("attiva il rendering foveato", "foveation", "on"),
-    ("disattiva il gesto dell'applauso", "clap", "off"), ("imposta il raggio del carosello a un metro", "carousel_radius", 1.0),
-    ("metti il volume all'ottanta per cento", "volume", 0.8), ("intensità 30", "focus_intensity", 0.3),
-]
-for s, k, v in it_settings: add("it", "single", s, S(k, v))
-
-# ---------------------------------------------------------------- Italiano, più comandi (l'ordine conta)
-it_multi = [
-    ("accendi il focus ambientale e metti l'intensità al 100%", [F("on"), S("focus_intensity", 1.0)]),
-    ("accendi il focus ambientale e imposta l'intensità a zero", [F("on"), S("focus_intensity", 0.0)]),
-    ("imposta l'intensità al 50 per cento e accendi il focus ambientale", [S("focus_intensity", 0.5), F("on")]),
-    ("chiudi tutte le finestre e apri la cassaforte", [CLOSE_ALL, P("vault")]),
-    ("apri git e poi apri i file", [P("git"), P("files")]),
-    ("apri un nuovo terminale e mostra la tastiera", [NEW_TERM, KEYBOARD]),
-    ("disattiva i suoni e metti il volume al 30 per cento", [S("sounds", "off"), S("volume", 0.3)]),
-    ("ricentra e usa il layout fluttuante", [RECENTER, L("float")]),
-    ("imposta il raggio a due metri e la morbidezza a mezzo metro", [S("focus_radius", 2.0), S("focus_softness", 0.5)]),
-    ("oscura la stanza, poi apri le impostazioni", [F("on"), P("settings")]),
-    ("apri il browser, i file e git", [P("browser"), P("files"), P("git")]),
-    ("spegni il focus ambientale e chiudi tutto", [F("off"), CLOSE_ALL]),
-    ("rendi le finestre più grandi e aumenta l'opacità", [S("ui_scale", "+"), S("opacity", "+")]),
-    ("passa al workspace metacodex e apri i thread", [W("metacodex"), P("threads")]),
-    ("mostra gli strumenti installati e l'archiviazione", [P("tools"), P("storage")]),
-    ("attiva le risposte vocali e metti il volume al massimo", [S("speak", "on"), S("volume", 1.0)]),
-    ("chiudi tutte le finestre, accendi il focus ambientale e imposta l'intensità all'80 per cento", [CLOSE_ALL, F("on"), S("focus_intensity", 0.8)]),
-    ("trova il thread sulla tastiera e apri i file", [T("tastiera"), P("files")]),
-    ("nascondi la cassaforte e mostra gli agenti", [C("vault"), P("agents")]),
-    ("apri le impostazioni, poi ricentra", [P("settings"), RECENTER]),
-    ("spegni i raggi delle mani e accendi i suoni", [S("hand_rays", "off"), S("sounds", "on")]),
-    ("usa il layout fisso e chiudi tutte le finestre", [L("fixed"), CLOSE_ALL]),
-    ("apri il pannello voce e il pannello di sistema", [P("voice"), P("system")]),
-    ("metti la sfocatura al 70 per cento e l'intensità al 40 per cento", [S("focus_blur", 0.7), S("focus_intensity", 0.4)]),
-    ("apri un nuovo terminale, poi chiudi la cassaforte, poi ricentra", [NEW_TERM, C("vault"), RECENTER]),
-]
-for s, g in it_multi: add("it", "multi", s, *g)
-
-# ---------------------------------------------------------------- Italiano, parole sentite male
-it_noisy = [
-    ("accendi il fokus ambientale", [F("on")]), ("spegni il focus ambientali", [F("off")]), ("apri le impostazione", [P("settings")]),
-    ("apri la casa forte", [P("vault")]), ("metti il volume a cinquanta percento", [S("volume", 0.5)]), ("chiudi tutte le finestra", [CLOSE_ALL]),
-    ("apri un nuovo terminali", [NEW_TERM]), ("ri centra", [RECENTER]), ("mostra la tastira", [KEYBOARD]), ("apri i fail", [P("files")]),
-    ("apri il pannello vocce", [P("voice")]), ("rendi le finestre piu grandi", [S("ui_scale", "+")]),
-    ("trova il tred sulla tastiera", [T("tastiera")]), ("usa il layout flutuante", [L("float")]),
-    ("accendi il focus e metti l'intensita al massimo", [F("on"), S("focus_intensity", 1.0)]),
-    ("spegni il focus e apri la cassaforte", [F("off"), P("vault")]), ("apri gli scrip", [P("scripts")]),
-    ("disattiva i suonni", [S("sounds", "off")]), ("chiudi il brauser", [C("browser")]), ("apri il sistemma", [P("system")]),
-]
-for s, g in it_noisy: add("it", "noisy", s, *g)
-
-# ---------------------------------------------------------------- Italiano, nessun comando
-for s in ["grazie", "ciao", "che tempo fa oggi", "buongiorno", "raccontami una barzelletta", "sono stanco", "chi ti ha creato",
-          "come stai", "che ore sono", "perfetto", "lascia stare", "mmm fammi pensare", "cosa sai fare", "uffa", "va bene così"]:
-    add("it", "none", s)
 
 # settings the app no longer has (0.7.3: the render scale is fixed, no "sharpness"): asking for them is no command.
 # Kept as rows, so every other sentence keeps its id (the LLM answers in llm.jsonl are cached by id).

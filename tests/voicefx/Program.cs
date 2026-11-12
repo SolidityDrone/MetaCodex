@@ -50,8 +50,8 @@ internal static partial class Program
         // abbreviations and initials
         Split("Use a short flag, e.g. the dry run, before you push it. It is safe.",
             "Use a short flag, e.g. the dry run, before you push it.", "It is safe.");
-        Split("Dr. Rossi and J. Smith reviewed the patch in detail. It merged cleanly.",
-            "Dr. Rossi and J. Smith reviewed the patch in detail.", "It merged cleanly.");
+        Split("Dr. Brown and J. Smith reviewed the patch in detail. It merged cleanly.",
+            "Dr. Brown and J. Smith reviewed the patch in detail.", "It merged cleanly.");
         Split("See issue No. 5 for the details of the crash. The fix is in.",
             "See issue No. 5 for the details of the crash.", "The fix is in.");
         // ellipses: a lower-case word after them goes on; an upper-case one starts a sentence
@@ -64,11 +64,6 @@ internal static partial class Program
         Split("Is it stuck? No, it is linking.", "Is it stuck? No, it is linking."); // a short question goes with its answer
         Split("It said “all tests passed.” Then the agent opened a pull request.",
             "It said “all tests passed.”", "Then the agent opened a pull request.");
-        // Italian
-        Split("Il thread sta ancora lavorando da 3 minuti. Non è bloccato: sta compilando il progetto.",
-            "Il thread sta ancora lavorando da 3 minuti.", "Non è bloccato: sta compilando il progetto.");
-        Split("Il sig. Rossi ha approvato la modifica alle ore 10.30 di oggi. È tutto pronto.",
-            "Il sig. Rossi ha approvato la modifica alle ore 10.30 di oggi.", "È tutto pronto.");
         // short sentences go with the next one; replies joined with " · " and lines are separate
         Split("Done. Nothing needs your attention right now.", "Done. Nothing needs your attention right now.");
         Split("Opened GIT · Closed 2 panels", "Opened GIT Closed 2 panels"); // both short: one request
@@ -86,33 +81,24 @@ internal static partial class Program
 
     private static void Speakable()
     {
-        void S(string text, bool it, string want)
+        void S(string text, string want)
         {
-            string got = SpokenText.Speakable(text, it);
+            string got = SpokenText.Speakable(text);
             Check(got == want, "speakable: " + text, "got  " + got + "\nwant " + want);
         }
-        S("It's been working for 3 min 20 s; now running npm test.", false, "It's been working for 3 minutes 20 seconds; now running npm test.");
-        S("Nothing new for 1 min: it may be stuck.", false, "Nothing new for 1 minute: it may be stuck.");
-        S("Quiet for 40 s, still within normal.", false, "Quiet for 40 seconds, still within normal.");
-        S("It answered 1.5 h ago, in 250 ms.", false, "It answered 1.5 hours ago, in 250 milliseconds.");
-        S("Sta lavorando da 3 min e 1 s.", true, "Sta lavorando da 3 minuti e 1 secondo.");
-        S("Fermo da 2 h.", true, "Fermo da 2 ore.");
-        S("Music from the 1990s and 3 minutes of silence.", false, "Music from the 1990s and 3 minutes of silence.");
-        S("Opened GIT · Closed 2 panels", false, "Opened GIT, Closed 2 panels");
-        S("It moved main -> feat/menu.", false, "It moved main to feat/menu.");
-        S("The file foo.cs has 12 lines; s is a variable, min() a function.", false, "The file foo.cs has 12 lines; s is a variable, min() a function.");
+        S("It's been working for 3 min 20 s; now running npm test.", "It's been working for 3 minutes 20 seconds; now running npm test.");
+        S("Nothing new for 1 min: it may be stuck.", "Nothing new for 1 minute: it may be stuck.");
+        S("Quiet for 40 s, still within normal.", "Quiet for 40 seconds, still within normal.");
+        S("It answered 1.5 h ago, in 250 ms.", "It answered 1.5 hours ago, in 250 milliseconds.");
+        S("Music from the 1990s and 3 minutes of silence.", "Music from the 1990s and 3 minutes of silence.");
+        S("Opened GIT · Closed 2 panels", "Opened GIT, Closed 2 panels");
+        S("It moved main -> feat/menu.", "It moved main to feat/menu.");
+        S("The file foo.cs has 12 lines; s is a variable, min() a function.", "The file foo.cs has 12 lines; s is a variable, min() a function.");
 
         Check(SpokenText.Duration(40) == "40 seconds" && SpokenText.Duration(1) == "1 second" && SpokenText.Duration(60) == "1 minute"
               && SpokenText.Duration(200) == "3 minutes 20 seconds" && SpokenText.Duration(900) == "15 minutes" && SpokenText.Duration(5400) == "1.5 hours"
               && SpokenText.Duration(3600) == "1 hour", "spoken durations (English)",
             string.Join(", ", new[] { 40, 1, 60, 200, 900, 5400, 3600 }.Select(x => SpokenText.Duration(x))));
-        Check(SpokenText.Duration(40, true) == "40 secondi" && SpokenText.Duration(61, true) == "1 minuto" && SpokenText.Duration(200, true) == "3 minuti 20 secondi"
-              && SpokenText.Duration(5400, true) == "1,5 ore", "spoken durations (Italian)",
-            string.Join(", ", new[] { 40, 61, 200, 5400 }.Select(x => SpokenText.Duration(x, true))));
-
-        Check(SpokenText.LooksItalian("Il thread sta ancora lavorando, non è bloccato."), "Italian reply detected");
-        Check(!SpokenText.LooksItalian("It's been working for 3 minutes; it is not stuck."), "English reply is not Italian");
-        Check(!SpokenText.LooksItalian("") && !SpokenText.LooksItalian("OK"), "no words: English");
     }
 
     private static void ForSpeech()

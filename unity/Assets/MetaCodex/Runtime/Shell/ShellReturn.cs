@@ -243,7 +243,6 @@ namespace MetaCodex.Shell
                 Samples = new[]
                 {
                     "ok launch the app now", "let me try the new app", "open the app the agent made", "go ahead and start it",
-                    "lancia l'app", "apri la nuova app", "fammi provare l'app", "avvia l'applicazione adesso",
                 },
                 Run = a => { var r = PendingLaunch; return r == null ? "No app is waiting" : r.Label + ": " + DoLaunchRequest(r); },
             });
@@ -255,7 +254,6 @@ namespace MetaCodex.Shell
                 Samples = new[]
                 {
                     "not now, don't open the app", "skip launching it", "cancel the app launch", "no i don't want to open it",
-                    "non aprire l'app", "annulla l'avvio dell'app", "non adesso, niente app", "lascia perdere l'app",
                 },
                 Run = a => { var r = PendingLaunch; if (r == null) return "No app is waiting"; r.State = "declined"; r.T = DateTimeOffset.UtcNow.ToUnixTimeSeconds(); UpdateLaunchVoice(); return r.Label + ": not opened"; },
             });

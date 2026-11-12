@@ -35,7 +35,7 @@ namespace MetaCodex.AI
         public List<(string said, string line)> Examples = new List<(string, string)>();
         /// Words this command needs heard right (speech-to-text prompt) and fixed when misheard ("fogus" -> "focus").
         public string[] Vocabulary = new string[0];
-        /// More example requests, any language ("accendi il focus ambientale"): the decision model (VoiceDecider) compares
+        /// More example requests ("darken the room around me"): the decision model (VoiceDecider) compares
         /// what was said with them; not shown to the LLM (its prompt stays short). The more natural ways to ask, the better.
         public string[] Samples = new string[0];
         /// Runs on the main thread with validated arguments; returns a short reply (shown, optionally spoken),
@@ -396,18 +396,17 @@ namespace MetaCodex.AI
             value = 0;
             string s = VoiceDecider.Fold((raw ?? "").Replace("%", " percent ").Replace(",", "."));
             if (s.Length == 0) return false;
-            bool percent = Regex.IsMatch(s, @"\b(percent|per cent|pc|per cento|percento)\b");
-            bool cm = Regex.IsMatch(s, @"\b(cm|centimeters?|centimetres?|centimetri|centimetro)\b");
-            bool metres = Regex.IsMatch(s, @"\b(m|meters?|metres?|metri|metro)\b");
-            s = Regex.Replace(s, @"\b(percent|per cent|per cento|percento|pc|meters?|metres?|metri|metro|m|cm|centimeters?|centimetres?|centimetri|centimetro|degrees?|seconds?|units?)\b", " ").Trim();
-            s = Regex.Replace(s, @"\b(to|at|of|the|a|an|by|al|a|il|la|un|una)\b", " ").Trim();
+            bool percent = Regex.IsMatch(s, @"\b(percent|per cent|pc)\b");
+            bool cm = Regex.IsMatch(s, @"\b(cm|centimeters?|centimetres?)\b");
+            bool metres = Regex.IsMatch(s, @"\b(m|meters?|metres?)\b");
+            s = Regex.Replace(s, @"\b(percent|per cent|pc|meters?|metres?|m|cm|centimeters?|centimetres?|degrees?|seconds?|units?)\b", " ").Trim();
+            s = Regex.Replace(s, @"\b(to|at|of|the|a|an|by)\b", " ").Trim();
             s = Regex.Replace(s, @"\s+", " ");
-            if (s == "max" || s == "maximum" || s == "full" || s == "all way" || s == "highest" || s == "top" || s == "massimo" || s == "completely" || s == "completamente") { if (max == null) return false; value = max.Value; return true; }
-            if (s == "min" || s == "minimum" || s == "lowest" || s == "bottom" || s == "nothing" || s == "none" || s == "minimo") { if (min == null) return false; value = min.Value; return true; }
+            if (s == "max" || s == "maximum" || s == "full" || s == "all way" || s == "highest" || s == "top" || s == "completely") { if (max == null) return false; value = max.Value; return true; }
+            if (s == "min" || s == "minimum" || s == "lowest" || s == "bottom" || s == "nothing" || s == "none") { if (min == null) return false; value = min.Value; return true; }
             // "half a metre" is 0.5 m; "half" alone is the middle of the range
-            if ((s == "half" || s == "mezzo" || s == "meta") && metres) { value = 0.5; return true; }
-            if (s == "half" || s == "meta") { value = min != null && max != null ? (min.Value + max.Value) / 2 : 0.5; return true; }
-            if (s == "quarto") s = "quarter";
+            if (s == "half" && metres) { value = 0.5; return true; }
+            if (s == "half") { value = min != null && max != null ? (min.Value + max.Value) / 2 : 0.5; return true; }
             if (s == "quarter") { value = min != null && max != null ? min.Value + (max.Value - min.Value) / 4 : 0.25; return true; }
             // digits ("0.5" or "0 5" after Simplify split the point)
             var dm = Regex.Match(s, @"^(\d+)(?:(?:\.| | point )(\d+))?$");
@@ -422,15 +421,7 @@ namespace MetaCodex.AI
             return true;
         }
 
-        private static readonly Dictionary<string, int> ItalianNumbers = new Dictionary<string, int>
-        {
-            ["zero"] = 0, ["uno"] = 1, ["un"] = 1, ["una"] = 1, ["due"] = 2, ["tre"] = 3, ["quattro"] = 4, ["cinque"] = 5, ["sei"] = 6, ["sette"] = 7,
-            ["otto"] = 8, ["nove"] = 9, ["dieci"] = 10, ["undici"] = 11, ["dodici"] = 12, ["quindici"] = 15, ["venti"] = 20, ["trenta"] = 30, ["quaranta"] = 40,
-            ["cinquanta"] = 50, ["sessanta"] = 60, ["settanta"] = 70, ["ottanta"] = 80, ["novanta"] = 90, ["cento"] = 100,
-        };
-
-        /// The first group of number words in a text, English or Italian ("set it to twenty five percent" -> 25,
-        /// "al cinquanta per cento" -> 50, "ottantacinque" -> 85). false when there is none.
+        /// The first group of number words in a text ("set it to twenty five percent" -> 25). false when there is none.
         public static bool TryNumberWords(string text, out double v)
         {
             v = 0;
@@ -444,12 +435,6 @@ namespace MetaCodex.AI
                 if (u >= 0) add = u;
                 else if (t >= 2) add = t * 10;
                 else if (w == "hundred") { total = (total == 0 ? 1 : total) * 100; any = true; continue; }
-                else if (w != "un" && w != "una" && ItalianNumbers.TryGetValue(w, out int it)) add = it;
-                else
-                {
-                    var m = Regex.Match(w, @"^(venti|trenta|quaranta|cinquanta|sessanta|settanta|ottanta|novanta)(uno|due|tre|quattro|cinque|sei|sette|otto|nove)$");
-                    if (m.Success) add = ItalianNumbers[m.Groups[1].Value] + ItalianNumbers[m.Groups[2].Value];
-                }
                 if (add >= 0) { total += add; any = true; }
                 else if (any) break; // the number words ended
             }
@@ -703,7 +688,7 @@ namespace MetaCodex.AI
             if (string.IsNullOrWhiteSpace(c.Description)) w.Add("no description (one line: what it does, its options)");
             int samples = c.Samples?.Length ?? 0;
             if ((c.Phrases?.Length ?? 0) == 0 && samples == 0) w.Add("nothing to recognise it by: add phrases and samples");
-            if (samples < 4) w.Add($"{samples} samples: add 4 or more natural requests (English and Italian)");
+            if (samples < 4) w.Add($"{samples} samples: add 4 or more natural requests");
             foreach (var p in c.Properties.Properties())
             {
                 var prop = p.Value as JObject;

@@ -67,7 +67,7 @@ namespace MetaCodex.UI
 
         private static readonly HashSet<string> KeepUpper = new HashSet<string>
         {
-            "AI", "MQH", "LLM", "TTS", "STT", "API", "URL", "ID", "OK", "UI", "PTY", "SSH", "MB", "GB", "VR", "EN", "IT", "TEE", "ENV", "PIN", "RAM", "FPS", "CPU", "GPU",
+            "AI", "MQH", "LLM", "TTS", "STT", "API", "URL", "ID", "OK", "UI", "PTY", "SSH", "MB", "GB", "VR", "TEE", "ENV", "PIN", "RAM", "FPS", "CPU", "GPU",
         };
 
         /// Labels written in capitals stay in capitals: the console look (titles and buttons in the display font,

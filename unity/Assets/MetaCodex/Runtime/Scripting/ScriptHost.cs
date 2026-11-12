@@ -675,7 +675,7 @@ namespace MetaCodex.Scripting
             var ph = t.Get("phrases");
             if (ph.Type == DataType.Table) cmd.Phrases = ph.Table.Values.Where(v => v.Type == DataType.String).Select(v => v.String).ToArray();
             else if (ph.Type == DataType.String) cmd.Phrases = new[] { ph.String };
-            // samples = {"show git status", "mostrami lo stato di git"}: natural requests in any language; the decision model
+            // samples = {"show git status", "what changed in the repo"}: natural requests (English); the decision model
             // compares what was said with them (the more ways to ask, the better it finds the command)
             var sa = t.Get("samples");
             if (sa.Type == DataType.Table) cmd.Samples = sa.Table.Values.Where(v => v.Type == DataType.String).Select(v => v.String).ToArray();

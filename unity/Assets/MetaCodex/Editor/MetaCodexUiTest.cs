@@ -1469,12 +1469,12 @@ end)
                 if (all != null) hit++;
             }
             File.WriteAllText(Path.Combine(dir, "fastpath.jsonl"), sb.ToString());
-            Check(n > 300 && cmds.Count >= 13, $"voice bench export: {cmds.Count} commands, {n} sentences, the fast path matched {hit} ({Path.GetFullPath(dir)})");
+            Check(n >= 170 && cmds.Count >= 13, $"voice bench export: {cmds.Count} commands, {n} sentences, the fast path matched {hit} ({Path.GetFullPath(dir)})");
         }
 
         /// The decision model's mechanics without the AI service: an oracle embedder gives each example and test clause the
         /// vector of the command it belongs to, so what is checked is the rest: clauses and their order, values read
-        /// from the schema (English and Italian), a verbless part continuing the previous command, "none", verbatim
+        /// from the schema, a verbless part continuing the previous command, "none", verbatim
         /// commands only with their verb, disabled / removed commands never offered, the registry complete.
         private static void Decider(MetaCodexShell shell)
         {
@@ -1490,19 +1490,19 @@ end)
             string J(List<string> l) => string.Join(" | ", l);
             var cl = VoiceDecider.Clauses("Turn on ambient focus and set the intensity to 100%.");
             Check(J(cl) == "turn on ambient focus | set the intensity to 100%", "clauses in the spoken order: " + J(cl));
-            cl = VoiceDecider.Clauses("Accendi il focus e poi imposta il raggio a due metri e mezzo.");
-            Check(J(cl) == "accendi il focus | imposta il raggio a due metri e mezzo", "Italian clauses (“e mezzo” stays in its part): " + J(cl));
+            cl = VoiceDecider.Clauses("Turn on the focus and then set the radius to two meters and a half.");
+            Check(J(cl) == "turn on the focus | set the radius to two meters and a half", "clauses (“and a half” stays in its part): " + J(cl));
             cl = VoiceDecider.Clauses("Hey MetaCodex, open the files please!");
             Check(J(cl) == "open the files", "fillers and punctuation off: " + J(cl));
             var vals = new (string said, string want)[]
             {
-                ("al 30 per cento", "30 percent"), ("a due metri e mezzo", "2.5 m"), ("a mezzo metro", "half m"), ("al massimo", "max"), ("to fifty percent", "50 percent"),
-                ("ventitre", "23"), ("novantanove per cento", "99 percent"), ("piu trasparenti", "-"), ("piu grandi", "+"), ("piu piccoli", "-"), ("a bit more", "+"), ("50 cm", "50 cm"),
+                ("at 30 percent", "30 percent"), ("to two meters and a half", "2.5 m"), ("to half a meter", "half m"), ("to the maximum", "max"), ("to fifty percent", "50 percent"),
+                ("twenty three", "23"), ("ninety nine percent", "99 percent"), ("more transparent", "-"), ("a bit bigger", "+"), ("a little smaller", "-"), ("a bit more", "+"), ("50 cm", "50 cm"),
             };
             var badVals = vals.Where(x => VoiceDecider.ValueText(VoiceDecider.Fold(x.said)) != x.want).Select(x => $"{x.said} -> {VoiceDecider.ValueText(VoiceDecider.Fold(x.said)) ?? "null"} (want {x.want})").ToList();
-            Check(badVals.Count == 0, badVals.Count == 0 ? $"values read in English and Italian ({vals.Length} cases: percent, metres, half, max, number words, more / less)" : "values: " + string.Join("; ", badVals));
-            string dec = VoiceDecider.ValueText(VoiceDecider.Clauses("metti la distanza a 2,5 metri")[0]);
-            Check(dec == "2.5 m", "a decimal comma: “2,5 metri” -> " + dec);
+            Check(badVals.Count == 0, badVals.Count == 0 ? $"values read ({vals.Length} cases: percent, metres, half, max, number words, more / less)" : "values: " + string.Join("; ", badVals));
+            string dec = VoiceDecider.ValueText(VoiceDecider.Clauses("set the distance to 2,5 meters")[0]);
+            Check(dec == "2.5 m", "a decimal comma: “2,5 meters” -> " + dec);
 
             // the oracle: example texts -> their command's axis, test clauses -> the intended command's axis
             var probe = new VoiceDecider(v, (t, done) => done(null, "unused"));
@@ -1513,10 +1513,10 @@ end)
             foreach (var (t, c) in ex) if (!oracle.ContainsKey(t)) oracle[t] = c;
             var said = new Dictionary<string, string>
             {
-                ["turn on ambient focus"] = "set_focus", ["set the intensity to 100 percent"] = "set_setting", ["imposta il volume al 30 per cento"] = "set_setting",
-                ["apri i file"] = "open_panel", ["show the keyboard"] = "show_keyboard", ["hello world"] = "type_text", ["scrivi buongiorno"] = "type_text",
-                ["esegui ls nel terminale"] = "run_in_terminal", ["usa il preset buio totale"] = "focus_preset", ["gira il carosello a destra"] = "spin_carousel",
-                ["apri il sito github punto com"] = "open_url", ["spegni il focus"] = "set_focus", ["apri le impostazioni"] = "open_panel", ["good morning"] = "none",
+                ["turn on ambient focus"] = "set_focus", ["set the intensity to 100 percent"] = "set_setting", ["set the volume to 30 percent"] = "set_setting",
+                ["open the files"] = "open_panel", ["show the keyboard"] = "show_keyboard", ["hello world"] = "type_text", ["type hello there"] = "type_text",
+                ["run ls in the terminal"] = "run_in_terminal", ["use the pitch black preset"] = "focus_preset", ["turn the carousel to the right"] = "spin_carousel",
+                ["visit the website github dot com"] = "open_url", ["turn off the focus"] = "set_focus", ["let me see the settings"] = "open_panel", ["good morning"] = "none",
                 ["greet me"] = "say_hello",
             };
             float[] Vec(string text)
@@ -1541,23 +1541,23 @@ end)
             bool focusOn1 = Is(r1, 0, "set_focus", "state", "on") || Is(r1, 0, "set_setting", "setting", "focus") && (string)r1.Matches[0].Args["value"] == "on";
             Check(r1.Matches.Count == 2 && focusOn1 && Is(r1, 1, "set_setting", "setting", "focus_intensity") && (string)r1.Matches[1].Args["value"] == "100 percent",
                 "composite, in order: focus on, then intensity 100 % -> " + M(r1));
-            var r2 = D("Imposta il volume al 30 per cento e la morbidezza a mezzo metro.");
+            var r2 = D("Set the volume to 30 percent and the softness to half a metre.");
             Check(r2.Matches.Count == 2 && Is(r2, 0, "set_setting", "setting", "volume") && (string)r2.Matches[0].Args["value"] == "30 percent" && Is(r2, 1, "set_setting", "setting", "focus_softness")
-                && (string)r2.Matches[1].Args["value"] == "half m" && r2.Clauses[1].Note != null, "Italian, a verbless part continues the command: volume 30 %, softness half a metre -> " + M(r2));
-            var r3 = D("apri i file e poi il terminale");
-            Check(r3.Matches.Count == 2 && Is(r3, 0, "open_panel", "panel", "files") && Is(r3, 1, "open_panel", "panel", "terminals"), "“apri i file e poi il terminale” -> " + M(r3));
+                && (string)r2.Matches[1].Args["value"] == "half m" && r2.Clauses[1].Note != null, "a verbless part continues the command: volume 30 %, softness half a metre -> " + M(r2));
+            var r3 = D("open the files and then the terminal");
+            Check(r3.Matches.Count == 2 && Is(r3, 0, "open_panel", "panel", "files") && Is(r3, 1, "open_panel", "panel", "terminals"), "“open the files and then the terminal” -> " + M(r3));
             var r4 = D("hello world");
             Check(r4.Matches.Count == 0 && (r4.Clauses.FirstOrDefault()?.Note ?? "").Contains("verb"), "verbatim typing never without its verb: “hello world” -> " + (r4.Clauses.FirstOrDefault()?.Note ?? M(r4)));
-            var r5 = D("scrivi buongiorno");
-            Check(Is(r5, 0, "type_text", "text", "buongiorno"), "“scrivi buongiorno” -> " + M(r5));
-            var r6 = D("esegui ls nel terminale");
-            Check(Is(r6, 0, "run_in_terminal", "command", "ls"), "“esegui ls nel terminale” -> " + M(r6));
-            var r7 = D("usa il preset buio totale");
-            Check(Is(r7, 0, "focus_preset", "preset", "blackout"), "“usa il preset buio totale” -> " + M(r7));
-            var r8 = D("gira il carosello a destra");
-            Check(Is(r8, 0, "spin_carousel", "direction", "right") && r8.Matches[0].Args["panels"] == null, "“gira il carosello a destra” -> " + M(r8));
-            var r9 = D("apri il sito github punto com");
-            Check(Is(r9, 0, "open_url") && MetaCodexShell.SpokenUrl((string)r9.Matches[0].Args["url"]) == "https://github.com/", "“apri il sito github punto com” -> " + M(r9) + " -> " + MetaCodexShell.SpokenUrl((string)r9.Matches.FirstOrDefault()?.Args["url"]));
+            var r5 = D("type hello there");
+            Check(Is(r5, 0, "type_text", "text", "hello there"), "“type hello there” -> " + M(r5));
+            var r6 = D("run ls in the terminal");
+            Check(Is(r6, 0, "run_in_terminal", "command", "ls"), "“run ls in the terminal” -> " + M(r6));
+            var r7 = D("use the pitch black preset");
+            Check(Is(r7, 0, "focus_preset", "preset", "blackout"), "“use the pitch black preset” -> " + M(r7));
+            var r8 = D("turn the carousel to the right");
+            Check(Is(r8, 0, "spin_carousel", "direction", "right") && r8.Matches[0].Args["panels"] == null, "“turn the carousel to the right” -> " + M(r8));
+            var r9 = D("visit the website github dot com");
+            Check(Is(r9, 0, "open_url") && MetaCodexShell.SpokenUrl((string)r9.Matches[0].Args["url"]) == "https://github.com/", "“visit the website github dot com” -> " + M(r9) + " -> " + MetaCodexShell.SpokenUrl((string)r9.Matches.FirstOrDefault()?.Args["url"]));
             var r10 = D("good morning");
             Check(r10.Matches.Count == 0 && r10.Clauses.Count == 1 && r10.Clauses[0].Command == "none", "chit-chat is no command: " + r10);
             var j10 = r1.ToJson();
@@ -1582,7 +1582,7 @@ end)
             File.WriteAllText(Path.Combine(pdir, "plugin.json"), "{ \"id\": \"voicetest\", \"name\": \"Voice test\", \"version\": \"1.0.0\", \"description\": \"a voice command for the decider test\" }");
             File.WriteAllText(Path.Combine(pdir, "main.lua"),
                 "voice.command{ name = \"say_hello\", description = \"Say hello back (test plugin)\", phrases = { \"say hello\" },\n" +
-                "  samples = { \"greet me\", \"say hi to me\", \"salutami\", \"dimmi ciao\" }, run = function(a) return \"hello\" end }\n" +
+                "  samples = { \"greet me\", \"say hi to me\", \"give me a hello\", \"welcome me back\" }, run = function(a) return \"hello\" end }\n" +
                 "voice.command{ name = \"bare_test\", run = function(a) return \"ok\" end }\n");
             host.Scan();
             var pe = host.Find("plugin/voicetest");
@@ -1606,14 +1606,15 @@ end)
             shell.UseDeciderForTest(d, true);
             shell.Settings.focusEnabled = true;
             VoiceResult vr = null;
-            shell.VoiceProcessText("Spegni il focus, poi apri le impostazioni.", x => vr = x);
+            // "let me see ..." matches no phrase template: the whole sentence goes to the decision model
+            shell.VoiceProcessText("Turn off the focus, then let me see the settings.", x => vr = x);
             Check(vr != null && vr.Ok && !shell.Settings.focusEnabled && shell.IsPanelOpen("settings") && vr.Via == "decide",
-                "the shell decides and runs it: “spegni il focus, poi apri le impostazioni” -> " + vr);
+                "the shell decides and runs it: “turn off the focus, then let me see the settings” -> " + vr);
             shell.UseDeciderForTest(orig, false);
             foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
         }
 
-        /// The 355 bench sentences through the app's own pipeline (fast path -> decision model) with the real model in the
+        /// The 180 English bench sentences (English only since 2026-11-12) through the app's own pipeline (fast path -> decision model) with the real model in the
         /// dev AI service (tools/qvac-dev.sh pc start). Writes Bench/voice/app.jsonl; tools/voicebench/score_app.py scores it.
         private static void VoiceDecideBench(MetaCodexShell shell)
         {
@@ -1694,14 +1695,14 @@ end)
             File.WriteAllText(outPath, sb.ToString());
             ms.Sort();
             double med = ms.Count > 0 ? ms[ms.Count / 2] : 0, p90 = ms.Count > 0 ? ms[(int)(ms.Count * 0.9)] : 0;
-            Check(n > 300 && errors == 0, $"decision bench: {n} sentences, fast path {fast}, decision model {decided} + {none} no command, {errors} errors; decide {med:0} ms median, {p90:0} ms p90 (HTTP + model, PC) -> {Path.GetFullPath(outPath)} (score: tools/voicebench/score_app.py)");
-            // the commands added with the decision model (not in the 355 sentences): own wordings, not their samples
+            Check(n >= 170 && errors == 0, $"decision bench: {n} sentences, fast path {fast}, decision model {decided} + {none} no command, {errors} errors; decide {med:0} ms median, {p90:0} ms p90 (HTTP + model, PC) -> {Path.GetFullPath(outPath)} (score: tools/voicebench/score_app.py)");
+            // the commands added with the decision model (not in the bench sentences): own wordings, not their samples
             var extra = new (string said, string cmd, string key, string val)[]
             {
-                ("switch to the gentle focus preset", "focus_preset", "preset", "subtle"), ("metti il preset cinema per favore", "focus_preset", "preset", "blackout"),
-                ("spin the ring to the left", "spin_carousel", "direction", "left"), ("gira i pannelli verso destra", "spin_carousel", "direction", "right"),
-                ("i want to select an area on this panel", "select_mode", "state", "on"), ("attiva lo strumento di selezione", "select_mode", "state", "on"),
-                ("visit the site wikipedia dot org", "open_url", null, null), ("naviga verso example punto com", "open_url", null, null),
+                ("switch to the gentle focus preset", "focus_preset", "preset", "subtle"), ("put on the cinema preset please", "focus_preset", "preset", "blackout"),
+                ("spin the ring to the left", "spin_carousel", "direction", "left"), ("move the windows towards the right", "spin_carousel", "direction", "right"),
+                ("i want to select an area on this panel", "select_mode", "state", "on"), ("switch on the selection tool", "select_mode", "state", "on"),
+                ("visit the site wikipedia dot org", "open_url", null, null), ("navigate to example dot com", "open_url", null, null),
             };
             var got = new List<string>();
             int hits = 0;
@@ -3416,16 +3417,16 @@ end)
             // interpretation or command
             var cases = new (string text, bool ask)[]
             {
-                ("open settings", false), ("close all windows", false), ("turn on ambient focus", false), ("apri il terminale", false),
-                ("can you open the files?", false), ("puoi chiudere tutto?", false),
+                ("open settings", false), ("close all windows", false), ("turn on ambient focus", false), ("open the terminal", false),
+                ("can you open the files?", false), ("could you close everything?", false),
                 ("Is this build process stuck?", true), ("What this thread achieved so far?", true), ("Do we have rust toolchain?", true),
-                ("what is this command i'm asked to accept? is it safe?", true), ("il build è bloccato?", true), ("cosa sta facendo questo thread?", true),
+                ("what is this command i'm asked to accept? is it safe?", true), ("is the build stuck?", true), ("what is this thread doing?", true),
                 // 2026-11-09: questions that name a panel or a setting, and polite orders put as questions
-                ("How many captures we took so far", true), ("quante catture abbiamo fatto?", true), ("is the focus on?", true), ("what does this command run?", true),
+                ("How many captures we took so far", true), ("how many screenshots do we have?", true), ("is the focus on?", true), ("what does this command run?", true),
                 ("can I open the clipboard?", false), ("is it possible to open the files", false), ("could we close all windows?", false),
             };
             var wrong = cases.Where(c => MetaCodexShell.IsInterpretation(c.text) != c.ask).Select(c => $"{c.text} ({SessionQuestion.Parse(c.text).InterpretationScore():F2})").ToList();
-            Check(wrong.Count == 0, wrong.Count == 0 ? $"questions about state go to the session context, orders (polite ones too) stay commands ({cases.Length} phrasings, EN + IT)" : "misrouted: " + string.Join("; ", wrong));
+            Check(wrong.Count == 0, wrong.Count == 0 ? $"questions about state go to the session context, orders (polite ones too) stay commands ({cases.Length} phrasings)" : "misrouted: " + string.Join("; ", wrong));
             // a match on a panel's name is set aside for a question (owner 2026-11-09: “how many captures we took so far”
             // opened CLIPBOARD), kept for an order
             var openClip = new VoiceMatch { Command = shell.Voice.Find("open_panel"), Args = new JObject { ["panel"] = "clipboard" }, Via = "fast" };
@@ -3485,7 +3486,7 @@ end)
             // “how many captures…” end to end (owner 2026-11-09): answered with the count, CLIPBOARD stays shut
             shell.ClosePanel("clipboard");
             int clipN = shell.Clipboard.Items.Count;
-            foreach (var said in new[] { "How many captures we took so far", "quante catture abbiamo fatto?" })
+            foreach (var said in new[] { "How many captures we took so far", "how many screenshots do we have?" })
             {
                 VoiceResult vh = null;
                 shell.VoiceProcessText(said, x => vh = x);

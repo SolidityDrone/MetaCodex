@@ -2,10 +2,11 @@
 
 A router decides like Jev: the options are the app's commands (and "none"), each represented by example sentences built
 from the command registry the app exports (phrase templates expanded, examples, descriptions); a sentence is split into
-clauses (and / then / commas, English and Italian), each clause is embedded and scored against every command's
+clauses (and / then / commas), each clause is embedded and scored against every command's
 examples (cosine, best example), the best command wins unless it scores under a threshold (then: no command). Values
 are read by rules (numbers, units, percent, on / off, more / less, panel and setting names), the same parser for every
-pipeline, so the comparison is about choosing the right commands in the right order.
+pipeline, so the comparison is about choosing the right commands in the right order. English only since 2026-11-12
+(the app's voice is English; any non-English row left in eval.jsonl is skipped).
 
 Inputs: tools/voicebench/eval.jsonl, unity/Bench/voice/{registry.json, fastpath.jsonl} (Editor: uitest section
 voiceexport), ~/mcxwork/voicebench/llm.jsonl (llm_run.py). Run with ~/mcxwork/voicebench/venv/bin/python.
@@ -16,7 +17,8 @@ import numpy as np
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 WORK = os.path.expanduser("~/mcxwork/voicebench")
-EVAL = [json.loads(l) for l in open(os.path.join(REPO, "tools", "voicebench", "eval.jsonl"), encoding="utf-8") if l.strip()]
+EVAL = [r for r in (json.loads(l) for l in open(os.path.join(REPO, "tools", "voicebench", "eval.jsonl"), encoding="utf-8") if l.strip())
+        if r.get("lang", "en") == "en"]
 REG = json.load(open(os.path.join(REPO, "unity", "Bench", "voice", "registry.json"), encoding="utf-8"))
 FAST = {d["id"]: d for d in (json.loads(l) for l in open(os.path.join(REPO, "unity", "Bench", "voice", "fastpath.jsonl"), encoding="utf-8") if l.strip())}
 LLM = {}
@@ -47,19 +49,18 @@ def lev(a, b):
 
 # ------------------------------------------------------------------------------------------ clauses
 FILLERS = ["hey metacodex", "ok", "okay", "hey", "please", "could you", "can you", "would you", "i want to", "i would like to",
-           "id like to", "lets", "now", "per favore", "puoi", "potresti", "ehi", "vorrei", "adesso"]
-JOIN = re.compile(r"\s*(?:[,;]|\band then\b|\band also\b|\bafter that\b|\bthen\b|\balso\b|\band\b|\be poi\b|\bpoi\b|\banche\b|\bed\b|\be\b)\s*")
+           "id like to", "lets", "now"]
+JOIN = re.compile(r"\s*(?:[,;]|\band then\b|\band also\b|\bafter that\b|\bthen\b|\balso\b|\band\b)\s*")
 
 
 def clauses(text):
     t = text.lower()
     t = re.sub(r"(\d),(\d)", r"\1.\2", t)
     t = re.sub(r"\band a half\b", " andahalf ", t)
-    t = re.sub(r"\be mezzo\b", " emezzo ", t)
     parts = [p.strip(" .!?") for p in JOIN.split(t)]
     out = []
     for p in parts:
-        p = p.replace("andahalf", "and a half").replace("emezzo", "e mezzo").strip()
+        p = p.replace("andahalf", "and a half").strip()
         f = fold(p)
         changed = True
         while changed:
@@ -72,35 +73,31 @@ def clauses(text):
     return out
 
 
-# ------------------------------------------------------------------------------------------ values (English + Italian)
+# ------------------------------------------------------------------------------------------ values
 UNITS_EN = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen",
             "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen"]
 TENS_EN = {"twenty": 20, "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90}
-WORDS_IT = {"zero": 0, "uno": 1, "un": 1, "una": 1, "due": 2, "tre": 3, "quattro": 4, "cinque": 5, "sei": 6, "sette": 7, "otto": 8,
-            "nove": 9, "dieci": 10, "venti": 20, "trenta": 30, "quaranta": 40, "cinquanta": 50, "sessanta": 60, "settanta": 70,
-            "ottanta": 80, "novanta": 90, "cento": 100}
 MORE = ["a bit more", "a little more", "more", "up", "higher", "bigger", "biger", "larger", "stronger", "darker", "wider", "louder",
-        "brighter", "increase", "raise", "piu grandi", "piu grande", "di piu", "piu", "aumenta", "alza", "ingrandisci", "scurisci"]
+        "brighter", "increase", "raise"]
 LESS = ["a bit less", "a little less", "less", "down", "lower", "smaller", "weaker", "lighter", "narrower", "quieter", "decrease",
-        "reduce", "transparent", "meno", "piu piccoli", "piu piccolo", "diminuisci", "abbassa", "riduci", "rimpicciolisci", "trasparenti"]
-ON = ["turn on", "switch on", "enable", "activate", "start", "show", "on", "accendi", "attiva", "avvia", "mostra", "metti"]
-OFF = ["turn off", "switch off", "turn of", "disable", "deactivate", "stop", "mute", "hide", "off", "flat", "spegni", "disattiva",
-       "ferma", "togli", "nascondi", "muto"]
+        "reduce", "transparent"]
+ON = ["turn on", "switch on", "enable", "activate", "start", "show", "on"]
+OFF = ["turn off", "switch off", "turn of", "disable", "deactivate", "stop", "mute", "hide", "off", "flat"]
 
 
 def has(t, w): return re.search(r"(?:^|\s)" + re.escape(w) + r"(?:$|\s)", t) is not None
 
 
 def number(t):
-    """(value, percent, unit) from a clause: digits, English and Italian number words, half / quarter / max / min."""
-    pct = bool(re.search(r"%|\bpercent\b|\bper cent\b|\bper cento\b|\bpercento\b", t))
-    unit = "cm" if re.search(r"\b(cm|centimet(er|re|ri|ro)s?)\b", t) else "m" if re.search(r"\b(meters?|metres?|metri|metro)\b", t) else None
-    if re.search(r"\b(max|maximum|full|massimo|completamente|completely)\b", t): return ("max", pct, unit)
-    if re.search(r"\b(min|minimum|minimo)\b", t): return ("min", pct, unit)
+    """(value, percent, unit) from a clause: digits, number words, half / quarter / max / min."""
+    pct = bool(re.search(r"%|\bpercent\b|\bper cent\b", t))
+    unit = "cm" if re.search(r"\b(cm|centimet(er|re)s?)\b", t) else "m" if re.search(r"\b(meters?|metres?)\b", t) else None
+    if re.search(r"\b(max|maximum|full|completely)\b", t): return ("max", pct, unit)
+    if re.search(r"\b(min|minimum)\b", t): return ("min", pct, unit)
     m = re.search(r"(\d+(?:\.\d+)?)", t)
     if m:
         v = float(m.group(1))
-        if re.search(r"\b(and a half|e mezzo)\b", t): v += 0.5
+        if re.search(r"\b(and a half)\b", t): v += 0.5
         return (v, pct, unit)
     words = t.split()
     total, any_ = 0, False
@@ -108,22 +105,20 @@ def number(t):
         if w in UNITS_EN: total += UNITS_EN.index(w); any_ = True
         elif w in TENS_EN: total += TENS_EN[w]; any_ = True
         elif w == "hundred": total = (total or 1) * 100; any_ = True
-        elif w in WORDS_IT: total += WORDS_IT[w]; any_ = True
-        elif re.fullmatch(r"(venti|trenta|quaranta|cinquanta|sessanta|settanta|ottanta|novanta)(uno|due|tre|quattro|cinque|sei|sette|otto|nove)", w):
-            a, b = re.fullmatch(r"(venti|trenta|quaranta|cinquanta|sessanta|settanta|ottanta|novanta)(\w+)", w).groups(); total += WORDS_IT[a] + WORDS_IT.get(b, 0); any_ = True
     if any_:
-        if re.search(r"\b(and a half|e mezzo)\b", t): total += 0.5
+        if re.search(r"\b(and a half)\b", t): total += 0.5
         return (float(total), pct, unit)
-    if re.search(r"\b(half|mezzo|meta|mezza)\b", t): return ("half", pct, unit)
-    if re.search(r"\b(quarter|quarto)\b", t): return ("quarter", pct, unit)
+    if re.search(r"\bhalf\b", t): return ("half", pct, unit)
+    if re.search(r"\bquarter\b", t): return ("quarter", pct, unit)
     return None
 
 
 def setting_value(sid, raw):
-    """A spoken value -> the setting's value: on / off, + / -, or a number in its units (percent -> fraction)."""
+    """A spoken value -> the setting's value: on / off, + / -, a choice's option, or a number in its units (percent -> fraction)."""
     s = SETTINGS[sid]
     t = fold(str(raw)) if raw not in ("+", "-") else raw
     if t in ("+", "-"): return t
+    if s["kind"] == "choice": return choice_value(s, t)
     if s["kind"] == "bool":
         if any(has(t, w) for w in OFF) or t in ("0", "false", "no"): return "off"
         if any(has(t, w) for w in ON) or t in ("1", "true", "yes", "toggle"): return "on"
@@ -143,23 +138,29 @@ def setting_value(sid, raw):
     return max(lo, min(hi, v))
 
 
-# ------------------------------------------------------------------------------------------ names: panels, settings (+ Italian)
-PANEL_IT = {"terminali": "terminals", "terminale": "terminals", "file": "files", "cartelle": "files", "gestore dei file": "files",
-            "controllo versione": "git", "repository": "git", "provider": "agents", "agenti": "agents", "conversazioni": "threads",
-            "thread": "threads", "chat": "threads", "navigatore": "browser", "script": "scripts", "gesti": "gestures",
-            "cassaforte": "vault", "casa forte": "vault", "segreti": "vault", "chiavi api": "vault", "impostazioni": "settings",
-            "impostazione": "settings", "preferenze": "settings", "voce": "voice", "controllo vocale": "voice", "vocale": "voice",
-            "sistema": "system", "focus ambientale": "focus", "focus": "focus", "spazio": "storage", "archiviazione": "storage",
-            "disco": "storage", "strumenti": "tools", "strumenti installati": "tools"}
-SETTING_IT = {"intensita": "focus_intensity", "buia": "focus_intensity", "raggio della cupola": "focus_radius", "raggio": "focus_radius",
-              "cupola": "focus_radius", "morbidezza": "focus_softness", "sfocatura": "focus_blur", "opacita": "opacity",
-              "trasparenti": "opacity", "distanza dei pannelli": "panel_distance", "distanza": "panel_distance",
-              "finestre": "ui_scale", "testo": "ui_scale", "nitidezza": "sharpness", "curvatura": "bend", "suoni": "sounds",
-              "click": "sounds", "volume": "volume", "risposte vocali": "speak", "raggi delle mani": "hand_rays", "raggi": "hand_rays",
-              "occlusione": "occlusion", "rendering foveato": "foveation", "applauso": "clap", "raggio del carosello": "carousel_radius",
-              "carosello": "carousel_radius", "stanza": "focus_intensity"}
+def choice_value(s, t):
+    """A choice setting (voice_effect, speech_quality; the registry export carries options and values): an option said,
+    a spoken name of one (longest first), else on -> the first after off, off -> the first. None when it is none of them."""
+    opts = s.get("options") or []
+    vals = {fold(k): v for k, v in (s.get("values") or {}).items()}
+    t = t.replace("-", " ").strip()
+    if t in opts: return t
+    if t in vals: return vals[t]
+    for o in opts:
+        if has(t, o): return o
+    for k in sorted(vals, key=len, reverse=True):
+        if k and has(t, k): return vals[k]
+    if not opts: return None
+    if any(has(t, w) for w in OFF) or t in ("0", "false", "no"): return opts[0]
+    if any(has(t, w) for w in ON) or t in ("1", "true", "yes"): return opts[1] if len(opts) > 1 else opts[0]
+    return None
+
+
+# ------------------------------------------------------------------------------------------ names: panels, settings
+PANEL_EN_EXTRA = {"file": "files", "repository": "git", "provider": "agents", "thread": "threads", "chat": "threads", "script": "scripts",
+                  "focus": "focus"}
 SETTING_EN_EXTRA = {"room": "focus_intensity", "dark": "focus_intensity", "transparent": "opacity", "bending": "bend", "curved panels": "bend",
-                    "bigger": "ui_scale", "text": "ui_scale", "windows": "ui_scale", "pointer rays": "hand_rays"}
+                    "bigger": "ui_scale", "text": "ui_scale", "windows": "ui_scale", "pointer rays": "hand_rays", "click": "sounds"}
 
 
 def name_map(param):
@@ -167,12 +168,11 @@ def name_map(param):
     if param == "panel":
         for v in CMDS["open_panel"]["parameters"]["properties"]["panel"]["enum"]: m[fold(v)] = v
         for k, v in CMDS["open_panel"]["synonyms"].get("panel", {}).items(): m[fold(k)] = v
-        for k, v in PANEL_IT.items(): m[fold(k)] = v
+        for k, v in PANEL_EN_EXTRA.items(): m[fold(k)] = v
     else:
         for s in REG["settings"]:
             for n in s["names"]: m[fold(n)] = s["id"]
         for k, v in SETTING_EN_EXTRA.items(): m.setdefault(fold(k), v)
-        for k, v in SETTING_IT.items(): m[fold(k)] = v
     return m
 
 
@@ -276,21 +276,7 @@ def fast_pred(row):
 # ------------------------------------------------------------------------------------------ the router's examples
 FREE = {"query": ["the release notes", "the crash on startup", "fixing the build"], "name": ["omega", "website"],
         "text": ["good morning"], "command": ["ls -la", "npm test"], "value": ["on", "off", "40 percent", "three meters", "max", "more"]}
-IT_EXAMPLES = {  # a few Italian sentences per command (none of them in the bench)
-    "open_panel": ["apri il pannello", "mostrami la pagina", "fammi vedere la lista", "vai alla schermata", "apri la finestra delle impostazioni"],
-    "close_panel": ["chiudi il pannello", "chiudi la finestra", "nascondi il pannello", "togli la pagina"],
-    "close_all_panels": ["chiudi tutti i pannelli", "chiudi ogni finestra", "pulisci lo spazio", "togli tutte le finestre"],
-    "new_terminal": ["apri un altro terminale", "crea una nuova shell", "nuovo terminale"],
-    "find_thread": ["trova la conversazione in cui", "cerca il thread che parla di", "in quale chat abbiamo parlato di"],
-    "switch_workspace": ["passa al progetto", "cambia progetto", "apri il workspace chiamato"],
-    "set_layout": ["usa il layout fisso", "metti le finestre fluttuanti", "cambia la disposizione delle finestre"],
-    "recenter": ["rimetti tutto davanti", "centra le finestre", "riporta i pannelli qui"],
-    "type_text": ["scrivi", "digita il testo"], "run_in_terminal": ["esegui il comando", "lancia nel terminale"],
-    "set_focus": ["accendi la modalità concentrazione", "spegni il focus", "oscura l'ambiente", "fammi rivedere la stanza"],
-    "set_setting": ["imposta il volume a", "metti la luminosità al", "alza il", "abbassa la", "attiva i suoni", "rendi più grande"],
-    "show_keyboard": ["fammi vedere la tastiera", "tira fuori la tastiera"],
-}
-NONE_EXTRA = ["what is this", "i like it", "okay thanks", "who are you", "come ti chiami", "va bene", "che bello", "non so"]
+NONE_EXTRA = ["what is this", "i like it", "okay thanks", "who are you"]
 
 
 def expand(template, rnd, n=24):
@@ -325,7 +311,7 @@ def expand(template, rnd, n=24):
     return sorted(out)
 
 
-def build_examples(with_it):
+def build_examples():
     rnd = random.Random(7)
     ex = []  # (text, command)
     for c in REG["commands"]:
@@ -333,8 +319,6 @@ def build_examples(with_it):
             for e in expand(ph, rnd): ex.append((e, c["name"]))
         for said, line in c["examples"]: ex.append((fold(said), line.split()[0]))
         ex.append((fold(c["description"]), c["name"]))
-        if with_it:
-            for s in IT_EXAMPLES.get(c["name"], []): ex.append((fold(s), c["name"]))
     for said, line in REG["general_examples"]:
         name = line.split()[0]
         if name == "none": ex.append((fold(said), "none"))
@@ -373,17 +357,13 @@ class Encoder:
 
 VERBS = ["open", "close", "show", "hide", "turn", "set", "make", "switch", "use", "find", "search", "look", "start", "run", "type", "put",
          "bring", "dim", "darken", "increase", "decrease", "reduce", "raise", "lower", "mute", "enable", "disable", "recenter", "go", "give",
-         "change", "let", "pin", "clear", "get", "list", "take", "dismiss", "volume", "radius", "intensity",
-         "apri", "chiudi", "mostra", "mostrami", "nascondi", "accendi", "spegni", "imposta", "metti", "rendi", "passa", "usa", "trova",
-         "cerca", "avvia", "esegui", "scrivi", "porta", "portami", "riporta", "oscura", "aumenta", "diminuisci", "alza", "abbassa", "attiva",
-         "disattiva", "togli", "ricentra", "vai", "cambia", "fai", "blocca", "rimpicciolisci", "scurisci", "elenca", "dammi", "pulisci",
-         "fammi", "intensita", "raggio"]
+         "change", "let", "pin", "clear", "get", "list", "take", "dismiss", "volume", "radius", "intensity"]
 
 
 class Router:
-    def __init__(self, enc, with_it):
+    def __init__(self, enc):
         self.enc = enc
-        self.ex = build_examples(with_it)
+        self.ex = build_examples()
         self.labels = [c for _, c in self.ex]
         self.E = enc.embed([t for t, _ in self.ex])
         self.names = sorted(set(self.labels))
@@ -403,7 +383,7 @@ class Router:
             best = max(sc, key=sc.get)
             top = sc[best]
             verbless = not any(has(c, w) for w in VERBS)
-            # an elliptic part ("the files", "e la morbidezza a mezzo metro"): the previous command with new values
+            # an elliptic part ("the files", "and the softness to half a metre"): the previous command with new values
             if prev and verbless and prev[0] in ("open_panel", "close_panel", "set_setting"):
                 a = self.args(prev[0], c)
                 if a and (prev[0] != "set_setting" or a.get("setting")):
@@ -428,21 +408,21 @@ class Router:
                 return {"setting": sid, "value": v}
             return {"setting": sid, "value": c}
         if cmd == "set_focus":
-            return {"state": "off" if any(has(c, w) for w in OFF + ["again", "di nuovo", "rivedere"]) else "on"}
+            return {"state": "off" if any(has(c, w) for w in OFF + ["again"]) else "on"}
         if cmd == "set_layout":
-            return {"mode": "fixed" if re.search(r"\b(fixed|pin|fisso|blocca)\b", c) else "float"}
+            return {"mode": "fixed" if re.search(r"\b(fixed|pin)\b", c) else "float"}
         if cmd == "find_thread": return {"query": c}
         if cmd == "switch_workspace":
-            m = re.search(r"\b(?:called|named|workspace|project|progetto|al)\s+(?:the\s+|del\s+progetto\s+)?([a-z0-9]+)", c)
+            m = re.search(r"\b(?:called|named|workspace|project)\s+(?:the\s+)?([a-z0-9]+)", c)
             n = m.group(1) if m else None
-            if n in ("workspace", "project", "progetto", "please", "per", None): n = None
-            m2 = re.search(r"\b(?:to the|al|the)\s+([a-z0-9]+)\s+(?:project|workspace)\b", c)
+            if n in ("workspace", "project", "please", None): n = None
+            m2 = re.search(r"\b(?:to the|the)\s+([a-z0-9]+)\s+(?:project|workspace)\b", c)
             if not n and m2: n = m2.group(1)
             return {"name": n} if n else {}
         if cmd == "type_text":
-            return {"text": re.sub(r"^(type|scrivi|digita)\s+", "", c)}
+            return {"text": re.sub(r"^(type|write)\s+", "", c)}
         if cmd == "run_in_terminal":
-            return {"command": re.sub(r"^(run|execute|esegui|lancia)\s+", "", c)}
+            return {"command": re.sub(r"^(run|execute)\s+", "", c)}
         return {}
 
 
@@ -461,7 +441,7 @@ def evaluate(name, predict):
 
 
 def table(all_res, lat):
-    keys = [("all", None, None)] + [(f"{l}/{k}", l, k) for l in ("en", "it") for k in ("single", "multi", "noisy", "none")] + [("en", "en", None), ("it", "it", None)]
+    keys = [("all", None, None)] + [(k, "en", k) for k in ("single", "multi", "noisy", "none")]
     pipes = list(dict.fromkeys(r["pipeline"] for r in all_res))
     lines = ["| pipeline | " + " | ".join(k for k, _, _ in keys) + " | ms / sentence (PC) |", "|---" * (len(keys) + 2) + "|"]
     for p in pipes:
@@ -501,25 +481,24 @@ def main():
             enc = Encoder(kind, name, prefix)
         except Exception as e:
             print("skip", name, e); continue
-        for with_it in (False, True):
-            router = Router(enc, with_it)
-            even = [row for i, row in enumerate(EVAL) if i % 2 == 0]
-            best = None
-            for theta in np.arange(0.30, 0.92, 0.02):  # the threshold chosen on half the sentences only
-                ok = 0
-                for row in even:
-                    pred, _ = router.decide(row["text"], theta)
-                    ok += correct(pred, [tuple(g) for g in row["gold"]])[0]
-                if best is None or ok > best[1]: best = (float(theta), ok)
-            theta = best[0]
-            tag = f"{label}{' + IT examples' if with_it else ''}"
-            r, t1 = evaluate(f"fast path -> {tag}", lambda row: fast_pred(row) if fast_pred(row) is not None else router.decide(row["text"], theta)[0])
-            out_res += r
-            r2, t2 = evaluate(f"{tag} alone", lambda row: router.decide(row["text"], theta)[0])
-            out_res += r2
-            lat[f"fast path -> {tag}"] = f"{np.median(t2):.1f} (router, θ {theta:.2f})"
-            lat[f"{tag} alone"] = f"{np.median(t2):.1f}"
-            print(f"{tag}: θ {theta:.2f}, {len(router.ex)} examples, load {enc.load_s:.1f} s", flush=True)
+        router = Router(enc)
+        even = [row for i, row in enumerate(EVAL) if i % 2 == 0]
+        best = None
+        for theta in np.arange(0.30, 0.92, 0.02):  # the threshold chosen on half the sentences only
+            ok = 0
+            for row in even:
+                pred, _ = router.decide(row["text"], theta)
+                ok += correct(pred, [tuple(g) for g in row["gold"]])[0]
+            if best is None or ok > best[1]: best = (float(theta), ok)
+        theta = best[0]
+        tag = label
+        r, t1 = evaluate(f"fast path -> {tag}", lambda row: fast_pred(row) if fast_pred(row) is not None else router.decide(row["text"], theta)[0])
+        out_res += r
+        r2, t2 = evaluate(f"{tag} alone", lambda row: router.decide(row["text"], theta)[0])
+        out_res += r2
+        lat[f"fast path -> {tag}"] = f"{np.median(t2):.1f} (router, θ {theta:.2f})"
+        lat[f"{tag} alone"] = f"{np.median(t2):.1f}"
+        print(f"{tag}: θ {theta:.2f}, {len(router.ex)} examples, load {enc.load_s:.1f} s", flush=True)
     t = table(out_res, lat)
     print(t)
     with open(os.path.join(WORK, "results.jsonl"), "w", encoding="utf-8") as f:
