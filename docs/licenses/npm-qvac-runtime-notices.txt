@@ -1,0 +1,2396 @@
+QVAC runtime and Bare packages shipped in the APK (assets/qvac/runtime.tar)
+===========================================================================
+
+Each text below is reproduced verbatim from the package's own LICENSE / NOTICE file; identical texts are
+printed once with the list of packages they come from. Copyright lines are part of the texts.
+
+Packages that publish no licence file of their own (the licence is declared in package.json; the standard text is in
+Apache-2.0.txt, MIT.txt or ISC.txt next to this file; see gap G13 in docs/LICENSES.md):
+  - bare-stdio@1.0.3 (Apache-2.0)
+  - corestore@7.16.1 (MIT)
+  - noise-curve-ed@2.1.0 (ISC)
+  - varint@5.0.0 (MIT)
+
+------------------------------------------------------------------------------
+[1] LICENSE applies to 73 package(s):
+    @hyperswarm/secret-stream@6.9.2, @qvac/error@0.1.1, @qvac/registry-client@0.8.0, @qvac/registry-schema@0.4.0, adaptive-timeout@1.0.1, b4a@1.9.0, bare-abort@2.0.14, bare-abort-controller@1.1.2, bare-addon-resolve@1.11.1, bare-ansi-escapes@2.2.4, bare-assert@1.3.0, bare-buffer@3.7.1, bare-dns@2.3.1, bare-env@3.0.1, bare-events@2.9.2, bare-fs@4.8.4, bare-hrtime@2.1.2, bare-http-parser@2.1.4, bare-http1@4.6.3, bare-https@3.1.0, bare-inspect@3.1.10, bare-module-resolve@1.12.6, bare-net@2.3.3, bare-os@3.9.4, bare-path@3.1.2, bare-pipe@4.4.0, bare-posix@1.0.1, bare-process@4.5.1, bare-semver@1.1.0, bare-signals@5.0.0, bare-stream@2.13.4, bare-tcp@2.6.1, bare-tls@3.2.0, bare-tty@5.2.2, bare-type@1.4.0, bare-url@2.5.6, blind-relay@1.6.1, compact-encoding@3.6.0, compact-encoding-bitfield@1.1.0, compact-encoding-net@1.3.0, device-file@2.3.1, events-universal@1.0.1, fd-lock@2.2.0, fs-native-extensions@1.5.3, hyperblobs@2.13.0, hypercore-errors@1.5.0, hypercore-id-encoding@1.3.0, hypercore-stats@2.5.2, hypercore-storage@3.4.0, hyperdb@6.11.1, hyperdht-address@1.1.1, hyperdht-stats@1.11.1, hyperdispatch@1.6.0, hyperschema@1.26.2, hyperswarm-stats@1.3.4, index-encoder@3.5.0, noise-handshake@4.2.0, paparam@1.15.0, passive-core-watcher@1.0.2, quickbit-native@2.4.9, quickbit-universal@2.2.1, rache@1.0.1, refcounter@1.0.0, require-addon@1.3.0, resource-on-exit@1.0.0, rocksdb-native@3.19.3, scope-lock@1.2.4, simdle-native@1.3.10, simdle-universal@1.1.3, text-decoder@1.2.7, udx-native@1.22.1, unslab@1.3.1, which-runtime@1.4.0
+------------------------------------------------------------------------------
+                                 Apache License
+                           Version 2.0, January 2004
+                        http://www.apache.org/licenses/
+
+   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
+
+   1. Definitions.
+
+      "License" shall mean the terms and conditions for use, reproduction,
+      and distribution as defined by Sections 1 through 9 of this document.
+
+      "Licensor" shall mean the copyright owner or entity authorized by
+      the copyright owner that is granting the License.
+
+      "Legal Entity" shall mean the union of the acting entity and all
+      other entities that control, are controlled by, or are under common
+      control with that entity. For the purposes of this definition,
+      "control" means (i) the power, direct or indirect, to cause the
+      direction or management of such entity, whether by contract or
+      otherwise, or (ii) ownership of fifty percent (50%) or more of the
+      outstanding shares, or (iii) beneficial ownership of such entity.
+
+      "You" (or "Your") shall mean an individual or Legal Entity
+      exercising permissions granted by this License.
+
+      "Source" form shall mean the preferred form for making modifications,
+      including but not limited to software source code, documentation
+      source, and configuration files.
+
+      "Object" form shall mean any form resulting from mechanical
+      transformation or translation of a Source form, including but
+      not limited to compiled object code, generated documentation,
+      and conversions to other media types.
+
+      "Work" shall mean the work of authorship, whether in Source or
+      Object form, made available under the License, as indicated by a
+      copyright notice that is included in or attached to the work
+      (an example is provided in the Appendix below).
+
+      "Derivative Works" shall mean any work, whether in Source or Object
+      form, that is based on (or derived from) the Work and for which the
+      editorial revisions, annotations, elaborations, or other modifications
+      represent, as a whole, an original work of authorship. For the purposes
+      of this License, Derivative Works shall not include works that remain
+      separable from, or merely link (or bind by name) to the interfaces of,
+      the Work and Derivative Works thereof.
+
+      "Contribution" shall mean any work of authorship, including
+      the original version of the Work and any modifications or additions
+      to that Work or Derivative Works thereof, that is intentionally
+      submitted to Licensor for inclusion in the Work by the copyright owner
+      or by an individual or Legal Entity authorized to submit on behalf of
+      the copyright owner. For the purposes of this definition, "submitted"
+      means any form of electronic, verbal, or written communication sent
+      to the Licensor or its representatives, including but not limited to
+      communication on electronic mailing lists, source code control systems,
+      and issue tracking systems that are managed by, or on behalf of, the
+      Licensor for the purpose of discussing and improving the Work, but
+      excluding communication that is conspicuously marked or otherwise
+      designated in writing by the copyright owner as "Not a Contribution."
+
+      "Contributor" shall mean Licensor and any individual or Legal Entity
+      on behalf of whom a Contribution has been received by Licensor and
+      subsequently incorporated within the Work.
+
+   2. Grant of Copyright License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      copyright license to reproduce, prepare Derivative Works of,
+      publicly display, publicly perform, sublicense, and distribute the
+      Work and such Derivative Works in Source or Object form.
+
+   3. Grant of Patent License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      (except as stated in this section) patent license to make, have made,
+      use, offer to sell, sell, import, and otherwise transfer the Work,
+      where such license applies only to those patent claims licensable
+      by such Contributor that are necessarily infringed by their
+      Contribution(s) alone or by combination of their Contribution(s)
+      with the Work to which such Contribution(s) was submitted. If You
+      institute patent litigation against any entity (including a
+      cross-claim or counterclaim in a lawsuit) alleging that the Work
+      or a Contribution incorporated within the Work constitutes direct
+      or contributory patent infringement, then any patent licenses
+      granted to You under this License for that Work shall terminate
+      as of the date such litigation is filed.
+
+   4. Redistribution. You may reproduce and distribute copies of the
+      Work or Derivative Works thereof in any medium, with or without
+      modifications, and in Source or Object form, provided that You
+      meet the following conditions:
+
+      (a) You must give any other recipients of the Work or
+          Derivative Works a copy of this License; and
+
+      (b) You must cause any modified files to carry prominent notices
+          stating that You changed the files; and
+
+      (c) You must retain, in the Source form of any Derivative Works
+          that You distribute, all copyright, patent, trademark, and
+          attribution notices from the Source form of the Work,
+          excluding those notices that do not pertain to any part of
+          the Derivative Works; and
+
+      (d) If the Work includes a "NOTICE" text file as part of its
+          distribution, then any Derivative Works that You distribute must
+          include a readable copy of the attribution notices contained
+          within such NOTICE file, excluding those notices that do not
+          pertain to any part of the Derivative Works, in at least one
+          of the following places: within a NOTICE text file distributed
+          as part of the Derivative Works; within the Source form or
+          documentation, if provided along with the Derivative Works; or,
+          within a display generated by the Derivative Works, if and
+          wherever such third-party notices normally appear. The contents
+          of the NOTICE file are for informational purposes only and
+          do not modify the License. You may add Your own attribution
+          notices within Derivative Works that You distribute, alongside
+          or as an addendum to the NOTICE text from the Work, provided
+          that such additional attribution notices cannot be construed
+          as modifying the License.
+
+      You may add Your own copyright statement to Your modifications and
+      may provide additional or different license terms and conditions
+      for use, reproduction, or distribution of Your modifications, or
+      for any such Derivative Works as a whole, provided Your use,
+      reproduction, and distribution of the Work otherwise complies with
+      the conditions stated in this License.
+
+   5. Submission of Contributions. Unless You explicitly state otherwise,
+      any Contribution intentionally submitted for inclusion in the Work
+      by You to the Licensor shall be under the terms and conditions of
+      this License, without any additional terms or conditions.
+      Notwithstanding the above, nothing herein shall supersede or modify
+      the terms of any separate license agreement you may have executed
+      with Licensor regarding such Contributions.
+
+   6. Trademarks. This License does not grant permission to use the trade
+      names, trademarks, service marks, or product names of the Licensor,
+      except as required for reasonable and customary use in describing the
+      origin of the Work and reproducing the content of the NOTICE file.
+
+   7. Disclaimer of Warranty. Unless required by applicable law or
+      agreed to in writing, Licensor provides the Work (and each
+      Contributor provides its Contributions) on an "AS IS" BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+      implied, including, without limitation, any warranties or conditions
+      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A
+      PARTICULAR PURPOSE. You are solely responsible for determining the
+      appropriateness of using or redistributing the Work and assume any
+      risks associated with Your exercise of permissions under this License.
+
+   8. Limitation of Liability. In no event and under no legal theory,
+      whether in tort (including negligence), contract, or otherwise,
+      unless required by applicable law (such as deliberate and grossly
+      negligent acts) or agreed to in writing, shall any Contributor be
+      liable to You for damages, including any direct, indirect, special,
+      incidental, or consequential damages of any character arising as a
+      result of this License or out of the use or inability to use the
+      Work (including but not limited to damages for loss of goodwill,
+      work stoppage, computer failure or malfunction, or any and all
+      other commercial damages or losses), even if such Contributor
+      has been advised of the possibility of such damages.
+
+   9. Accepting Warranty or Additional Liability. While redistributing
+      the Work or Derivative Works thereof, You may choose to offer,
+      and charge a fee for, acceptance of support, warranty, indemnity,
+      or other liability obligations and/or rights consistent with this
+      License. However, in accepting such obligations, You may act only
+      on Your own behalf and on Your sole responsibility, not on behalf
+      of any other Contributor, and only if You agree to indemnify,
+      defend, and hold each Contributor harmless for any liability
+      incurred by, or claims asserted against, such Contributor by reason
+      of your accepting any such warranty or additional liability.
+
+   END OF TERMS AND CONDITIONS
+
+   APPENDIX: How to apply the Apache License to your work.
+
+      To apply the Apache License to your work, attach the following
+      boilerplate notice, with the fields enclosed by brackets "[]"
+      replaced with your own identifying information. (Don't include
+      the brackets!)  The text should be enclosed in the appropriate
+      comment syntax for the file format. We also recommend that a
+      file or class name and description of purpose be included on the
+      same "printed page" as the copyright notice for easier
+      identification within third-party archives.
+
+   Copyright [yyyy] [name of copyright owner]
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+
+------------------------------------------------------------------------------
+[2] LICENSE applies to 11 package(s):
+    @qvac/asr-ggml@0.12.0, @qvac/asr-ggml-android-arm64@0.12.0, @qvac/embed-llamacpp@0.55.0, @qvac/fabric@0.26.0, @qvac/fabric-android-arm64@0.26.0, @qvac/infer-base@0.8.0, @qvac/langdetect-text@0.1.3, @qvac/llm-llamacpp@0.68.0, @qvac/logging@0.1.1, @qvac/tts-ggml@0.15.0, @qvac/tts-ggml-android-arm64@0.15.0
+------------------------------------------------------------------------------
+                                 Apache License
+                           Version 2.0, January 2004
+                        http://www.apache.org/licenses/
+
+   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
+
+   1. Definitions.
+
+      "License" shall mean the terms and conditions for use, reproduction,
+      and distribution as defined by Sections 1 through 9 of this document.
+
+      "Licensor" shall mean the copyright owner or entity authorized by
+      the copyright owner that is granting the License.
+
+      "Legal Entity" shall mean the union of the acting entity and all
+      other entities that control, are controlled by, or are under common
+      control with that entity. For the purposes of this definition,
+      "control" means (i) the power, direct or indirect, to cause the
+      direction or management of such entity, whether by contract or
+      otherwise, or (ii) ownership of fifty percent (50%) or more of the
+      outstanding shares, or (iii) beneficial ownership of such entity.
+
+      "You" (or "Your") shall mean an individual or Legal Entity
+      exercising permissions granted by this License.
+
+      "Source" form shall mean the preferred form for making modifications,
+      including but not limited to software source code, documentation
+      source, and configuration files.
+
+      "Object" form shall mean any form resulting from mechanical
+      transformation or translation of a Source form, including but
+      not limited to compiled object code, generated documentation,
+      and conversions to other media types.
+
+      "Work" shall mean the work of authorship, whether in Source or
+      Object form, made available under the License, as indicated by a
+      copyright notice that is included in or attached to the work
+      (an example is provided in the Appendix below).
+
+      "Derivative Works" shall mean any work, whether in Source or Object
+      form, that is based on (or derived from) the Work and for which the
+      editorial revisions, annotations, elaborations, or other modifications
+      represent, as a whole, an original work of authorship. For the purposes
+      of this License, Derivative Works shall not include works that remain
+      separable from, or merely link (or bind by name) to the interfaces of,
+      the Work and Derivative Works thereof.
+
+      "Contribution" shall mean any work of authorship, including
+      the original version of the Work and any modifications or additions
+      to that Work or Derivative Works thereof, that is intentionally
+      submitted to Licensor for inclusion in the Work by the copyright owner
+      or by an individual or Legal Entity authorized to submit on behalf of
+      the copyright owner. For the purposes of this definition, "submitted"
+      means any form of electronic, verbal, or written communication sent
+      to the Licensor or its representatives, including but not limited to
+      communication on electronic mailing lists, source code control systems,
+      and issue tracking systems that are managed by, or on behalf of, the
+      Licensor for the purpose of discussing and improving the Work, but
+      excluding communication that is conspicuously marked or otherwise
+      designated in writing by the copyright owner as "Not a Contribution."
+
+      "Contributor" shall mean Licensor and any individual or Legal Entity
+      on behalf of whom a Contribution has been received by Licensor and
+      subsequently incorporated within the Work.
+
+   2. Grant of Copyright License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      copyright license to reproduce, prepare Derivative Works of,
+      publicly display, publicly perform, sublicense, and distribute the
+      Work and such Derivative Works in Source or Object form.
+
+   3. Grant of Patent License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      (except as stated in this section) patent license to make, have made,
+      use, offer to sell, sell, import, and otherwise transfer the Work,
+      where such license applies only to those patent claims licensable
+      by such Contributor that are necessarily infringed by their
+      Contribution(s) alone or by combination of their Contribution(s)
+      with the Work to which such Contribution(s) was submitted. If You
+      institute patent litigation against any entity (including a
+      cross-claim or counterclaim in a lawsuit) alleging that the Work
+      or a Contribution incorporated within the Work constitutes direct
+      or contributory patent infringement, then any patent licenses
+      granted to You under this License for that Work shall terminate
+      as of the date such litigation is filed.
+
+   4. Redistribution. You may reproduce and distribute copies of the
+      Work or Derivative Works thereof in any medium, with or without
+      modifications, and in Source or Object form, provided that You
+      meet the following conditions:
+
+      (a) You must give any other recipients of the Work or
+          Derivative Works a copy of this License; and
+
+      (b) You must cause any modified files to carry prominent notices
+          stating that You changed the files; and
+
+      (c) You must retain, in the Source form of any Derivative Works
+          that You distribute, all copyright, patent, trademark, and
+          attribution notices from the Source form of the Work,
+          excluding those notices that do not pertain to any part of
+          the Derivative Works; and
+
+      (d) If the Work includes a "NOTICE" text file as part of its
+          distribution, then any Derivative Works that You distribute must
+          include a readable copy of the attribution notices contained
+          within such NOTICE file, excluding those notices that do not
+          pertain to any part of the Derivative Works, in at least one
+          of the following places: within a NOTICE text file distributed
+          as part of the Derivative Works; within the Source form or
+          documentation, if provided along with the Derivative Works; or,
+          within a display generated by the Derivative Works, if and
+          wherever such third-party notices normally appear. The contents
+          of the NOTICE file are for informational purposes only and
+          do not modify the License. You may add Your own attribution
+          notices within Derivative Works that You distribute, alongside
+          or as an addendum to the NOTICE text from the Work, provided
+          that such additional attribution notices cannot be construed
+          as modifying the License.
+
+      You may add Your own copyright statement to Your modifications and
+      may provide additional or different license terms and conditions
+      for use, reproduction, or distribution of Your modifications, or
+      for any such Derivative Works as a whole, provided Your use,
+      reproduction, and distribution of the Work otherwise complies with
+      the conditions stated in this License.
+
+   5. Submission of Contributions. Unless You explicitly state otherwise,
+      any Contribution intentionally submitted for inclusion in the Work
+      by You to the Licensor shall be under the terms and conditions of
+      this License, without any additional terms or conditions.
+      Notwithstanding the above, nothing herein shall supersede or modify
+      the terms of any separate license agreement you may have executed
+      with Licensor regarding such Contributions.
+
+   6. Trademarks. This License does not grant permission to use the trade
+      names, trademarks, service marks, or product names of the Licensor,
+      except as required for reasonable and customary use in describing the
+      origin of the Work and reproducing the content of the NOTICE file.
+
+   7. Disclaimer of Warranty. Unless required by applicable law or
+      agreed to in writing, Licensor provides the Work (and each
+      Contributor provides its Contributions) on an "AS IS" BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+      implied, including, without limitation, any warranties or conditions
+      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A
+      PARTICULAR PURPOSE. You are solely responsible for determining the
+      appropriateness of using or redistributing the Work and assume any
+      risks associated with Your exercise of permissions under this License.
+
+   8. Limitation of Liability. In no event and under no legal theory,
+      whether in tort (including negligence), contract, or otherwise,
+      unless required by applicable law (such as deliberate and grossly
+      negligent acts) or agreed to in writing, shall any Contributor be
+      liable to You for damages, including any direct, indirect, special,
+      incidental, or consequential damages of any character arising as a
+      result of this License or out of the use or inability to use the
+      Work (including but not limited to damages for loss of goodwill,
+      work stoppage, computer failure or malfunction, or any and all
+      other commercial damages or losses), even if such Contributor
+      has been advised of the possibility of such damages.
+
+   9. Accepting Warranty or Additional Liability. While redistributing
+      the Work or Derivative Works thereof, You may choose to offer,
+      and charge a fee for, acceptance of support, warranty, indemnity,
+      or other liability obligations and/or rights consistent with this
+      License. However, in accepting such obligations, You may act only
+      on Your own behalf and on Your sole responsibility, not on behalf
+      of any other Contributor, and only if You agree to indemnify,
+      defend, and hold each Contributor harmless for any liability
+      incurred by, or claims asserted against, such Contributor by reason
+      of your accepting any such warranty or additional liability.
+
+   END OF TERMS AND CONDITIONS
+
+Copyright 2026 Tether Data, S.A. de C.V.
+
+------------------------------------------------------------------------------
+[3] NOTICE applies to 2 package(s):
+    @qvac/asr-ggml@0.12.0, @qvac/asr-ggml-android-arm64@0.12.0
+------------------------------------------------------------------------------
+@qvac/asr-ggml
+Copyright 2026 Tether Data, S.A. de C.V.
+
+This product includes third-party components under their
+respective licenses. @qvac/asr-ggml itself is licensed under
+Apache-2.0; bundled dependencies are governed by the licenses
+listed below.
+
+@qvac/asr-ggml is the merge of @qvac/transcription-whispercpp and
+@qvac/transcription-parakeet; the entries below are the union of both
+packages' notices.
+
+=========================================================================
+Third-Party Model Licenses
+=========================================================================
+
+--- nvidia-open-model-license ---
+
+  Parakeet and Sortformer checkpoints, converted from the upstream
+  NVIDIA NeMo `.nemo` releases. See each model card for the terms.
+
+  parakeet-ctc-0.6b
+    https://huggingface.co/nvidia/parakeet-ctc-0.6b
+  parakeet-tdt-0.6b-v3
+    https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3
+  parakeet_realtime_eou_120m-v1
+    https://huggingface.co/nvidia/parakeet_realtime_eou_120m-v1
+  diar_sortformer_4spk-v1
+    https://huggingface.co/nvidia/diar_sortformer_4spk-v1
+  diar_streaming_sortformer_4spk-v2.1
+    https://huggingface.co/nvidia/diar_streaming_sortformer_4spk-v2.1
+
+--- apache-2.0 (Apache License 2.0) ---
+
+  moss-transcribe-diarize (f16, q8_0, q5_0 GGUF)
+    https://huggingface.co/OpenMOSS-Team/MOSS-Transcribe-Diarize
+  de-tiny-ggml-model-f16
+    https://huggingface.co/primeline/whisper-tiny-german-1224
+  en-base-ggml-model-f16
+    https://huggingface.co/openai/whisper-base
+  fr-base-ggml-model-f16
+    https://huggingface.co/personalizedrefrigerator/whisper-base-fr
+  fr-tiny-ggml-model-f16
+    https://huggingface.co/JaepaX/whisper-tiny-fr
+  it-base-ggml-model-f16
+    https://huggingface.co/gustavv-andrzejewski/distil-whisper-base-it
+  it-tiny-ggml-model-f16
+    https://huggingface.co/luigisaetta/whisper-tiny-it
+  ja-base-ggml-model-f16
+    https://huggingface.co/bygreencn/whisper-base-ja
+  ja-tiny-ggml-model-f16
+    https://huggingface.co/CheeLi03/whisper-tiny-ja-puct-4k
+  nb-tiny-ggml-model
+    https://huggingface.co/NbAiLab/nb-whisper-tiny
+  pt-base-ggml-model-f16
+    https://huggingface.co/mariana-coelho-9/whisper-base-pt
+  ru-base-ggml-model-f16
+    https://huggingface.co/CheeLi03/whisper-base-rus-8
+  ru-tiny-ggml-model-f16
+    https://huggingface.co/yaroslav0530/whisper-tiny-ru
+
+--- mit (MIT License) ---
+
+  de-base-ggml-model-f16
+    https://huggingface.co/aware-ai/whisper-base-german
+  es-tiny-ggml-model-f16
+    https://huggingface.co/JaepaX/whisper-tiny-es
+  pt-tiny-ggml-model-f16
+    https://huggingface.co/DavyCosta701/whisper-tiny-pt-bpra
+  tiny_acft_q8_0
+    https://voiceinput.futo.org/VoiceInput/tiny_en_acft_q8_0.bin
+  tiny_en_acft_q8_0
+    https://voiceinput.futo.org/VoiceInput/tiny_en_acft_q8_0.bin
+  whisper-vad
+    https://huggingface.co/ggml-org/whisper-vad
+  whisper.cpp
+    https://huggingface.co/ggerganov/whisper.cpp
+
+=========================================================================
+Modification Notice
+=========================================================================
+
+Models listed above may have been converted from original model
+weights into optimized inference formats (GGUF, GGML, ONNX, or
+Bergamot intgemm). These conversions involve format transformation
+and/or weight quantization. No architectural changes were made to
+the underlying models.
+
+Source URLs for original weights are recorded in each model's
+metadata entry within the registry.
+
+=========================================================================
+JavaScript Dependencies
+=========================================================================
+
+--- apache-2.0 (Apache License 2.0) ---
+
+  @qvac/error@0.1.1
+  @qvac/infer-base@0.6.1
+    https://github.com/tetherto/qvac
+  @qvac/logging@0.1.1
+    https://github.com/tetherto/qvac
+  b4a@1.8.1
+    https://github.com/holepunchto/b4a
+  bare-buffer@3.6.1
+    https://github.com/holepunchto/bare-buffer
+  bare-env@3.0.0
+    https://github.com/holepunchto/bare-env
+  bare-events@2.9.1
+    https://github.com/holepunchto/bare-events
+  bare-fs@4.7.2
+    https://github.com/holepunchto/bare-fs
+  bare-os@3.9.1
+    https://github.com/holepunchto/bare-os
+  bare-path@3.0.1
+    https://github.com/holepunchto/bare-path
+  bare-stream@2.13.3
+    https://github.com/holepunchto/bare-stream
+  bare-url@2.4.5
+    https://github.com/holepunchto/bare-url
+  events-universal@1.0.1
+    https://github.com/holepunchto/events-universal
+  text-decoder@1.2.7
+    https://github.com/holepunchto/text-decoder
+
+--- mit (MIT License) ---
+
+  fast-fifo@1.3.2
+    https://github.com/mafintosh/fast-fifo
+  streamx@2.28.0
+    https://github.com/mafintosh/streamx
+  teex@1.0.1
+    https://github.com/mafintosh/teex
+
+
+=========================================================================
+Python Dependencies
+=========================================================================
+
+--- apache-2.0 (Apache License 2.0) ---
+
+  boto3
+    https://github.com/boto/boto3
+  datasets
+    https://github.com/huggingface/datasets
+  evaluate
+    https://github.com/huggingface/evaluate
+  huggingface-hub
+    https://github.com/huggingface/huggingface_hub
+  jiwer
+    UNKNOWN
+  safetensors
+    https://github.com/huggingface/safetensors
+  sentencepiece
+    https://github.com/google/sentencepiece
+  transformers
+    https://github.com/huggingface/transformers
+
+--- bsd-3-clause (BSD 3-Clause License) ---
+
+  httpx
+    https://github.com/encode/httpx
+  soundfile
+    https://github.com/bastibe/python-soundfile
+  torch
+    https://pytorch.org
+
+--- bsd-3-clause AND 0bsd AND mit AND zlib AND cc0-1.0 ---
+
+  numpy
+    https://numpy.org
+
+--- isc license (iscl) ---
+
+  librosa
+    https://librosa.org
+
+--- mit (MIT License) ---
+
+  gguf
+    https://github.com/ggml-org/llama.cpp/tree/master/gguf-py
+  jieba
+    https://github.com/fxsjy/jieba
+  openai-whisper
+    https://github.com/openai/whisper
+  pydantic
+    https://github.com/pydantic/pydantic
+  pyyaml
+    https://pyyaml.org/
+  unidic-lite
+    https://github.com/polm/unidic-lite
+
+--- mit AND bsd-3-clause ---
+
+  fugashi
+    https://github.com/polm/fugashi
+
+--- mpl-2.0 (Mozilla Public License 2.0) ---
+
+  datacollective
+    https://github.com/Mozilla-Data-Collective/datacollective-python
+
+
+=========================================================================
+C++ Dependencies
+=========================================================================
+
+--- apache-2.0 (Apache License 2.0) ---
+
+  parakeet-cpp
+    https://github.com/tetherto/qvac-fabric-speech.cpp/tree/master/engines/parakeet
+  qvac-lib-inference-addon-cpp
+    https://github.com/tetherto/qvac
+
+--- apache-2.0-with-llvm-exception ---
+
+  libc++ (LLVM C++ Standard Library)
+    https://github.com/llvm/llvm-project
+
+--- bsd-3-clause (BSD 3-Clause License) ---
+
+  gtest
+    https://github.com/google/googletest
+
+--- mit (MIT License) ---
+
+  whisper-cpp
+    https://github.com/tetherto/qvac-fabric-speech.cpp
+
+--- Unknown ---
+
+  qvac-lint-cpp
+
+------------------------------------------------------------------------------
+[4] NOTICE applies to 1 package(s):
+    @qvac/embed-llamacpp@0.55.0
+------------------------------------------------------------------------------
+@qvac/embed-llamacpp
+Copyright 2026 Tether Data, S.A. de C.V.
+
+This product includes third-party components under their
+respective licenses. @qvac/embed-llamacpp itself is licensed under
+Apache-2.0; bundled dependencies are governed by the licenses
+listed below.
+
+=========================================================================
+Required Attribution Notices
+=========================================================================
+
+Gemma is provided under and subject to the Gemma Terms of Use found
+at ai.google.dev/gemma/terms
+
+Additional requirements per Section 3.1:
+  Distribution must be accompanied by the Gemma Terms of Use.
+  Use is subject to the Gemma Prohibited Use Policy at
+  ai.google.dev/gemma/prohibited_use_policy
+
+=========================================================================
+Third-Party Model Licenses
+=========================================================================
+
+--- gemma (Gemma Terms of Use) ---
+
+  embeddinggemma-300m-GGUF
+    https://huggingface.co/unsloth/embeddinggemma-300m-GGUF
+
+--- mit (MIT License) ---
+
+  gte-large_fp16-00001-of-00005
+    https://huggingface.co/ChristianAzinn/gte-large-gguf
+  gte-large-gguf
+    https://huggingface.co/ChristianAzinn/gte-large-gguf
+
+=========================================================================
+Modification Notice
+=========================================================================
+
+Models listed above may have been converted from original model
+weights into optimized inference formats (GGUF, GGML, ONNX, or
+Bergamot intgemm). These conversions involve format transformation
+and/or weight quantization. No architectural changes were made to
+the underlying models.
+
+Source URLs for original weights are recorded in each model's
+metadata entry within the registry.
+
+=========================================================================
+JavaScript Dependencies
+=========================================================================
+
+--- apache-2.0 (Apache License 2.0) ---
+
+  @qvac/diagnostics@0.1.1
+  @qvac/error@0.1.1
+  @qvac/infer-base@0.4.1
+    https://github.com/tetherto/qvac
+  @qvac/logging@0.1.0
+  b4a@1.8.1
+    https://github.com/holepunchto/b4a
+  bare-events@2.4.2
+    https://github.com/holepunchto/bare-events
+  bare-events@2.8.2
+    https://github.com/holepunchto/bare-events
+  bare-fs@4.7.1
+    https://github.com/holepunchto/bare-fs
+  bare-os@3.9.1
+    https://github.com/holepunchto/bare-os
+  bare-path@3.0.0
+    https://github.com/holepunchto/bare-path
+  bare-stream@2.13.1
+    https://github.com/holepunchto/bare-stream
+  bare-url@2.4.3
+    https://github.com/holepunchto/bare-url
+  events-universal@1.0.1
+    https://github.com/holepunchto/events-universal
+  text-decoder@1.2.7
+    https://github.com/holepunchto/text-decoder
+
+--- mit (MIT License) ---
+
+  fast-fifo@1.3.2
+    https://github.com/mafintosh/fast-fifo
+  streamx@2.25.0
+    https://github.com/mafintosh/streamx
+  teex@1.0.1
+    https://github.com/mafintosh/teex
+
+
+=========================================================================
+Python Dependencies
+=========================================================================
+
+--- apache-2.0 (Apache License 2.0) ---
+
+  huggingface-hub
+    https://github.com/huggingface/huggingface_hub
+  mteb
+    https://github.com/embeddings-benchmark/mteb
+  sentence-transformers
+    https://www.SBERT.net
+
+--- bsd-3-clause (BSD 3-Clause License) ---
+
+  httpx
+    https://github.com/encode/httpx
+
+--- bsd-3-clause AND 0bsd AND mit AND zlib AND cc0-1.0 ---
+
+  numpy
+    https://numpy.org
+
+
+=========================================================================
+C++ Dependencies
+=========================================================================
+
+--- apache-2.0 (Apache License 2.0) ---
+
+  opencl
+    https://github.com/KhronosGroup/OpenCL-ICD-Loader
+  qvac-lib-inference-addon-cpp
+    https://github.com/tetherto/qvac
+  qvac-lint-cpp
+
+--- apache-2.0-with-llvm-exception ---
+
+  libc++ (LLVM C++ Standard Library)
+    https://github.com/llvm/llvm-project
+
+--- mit (MIT License) ---
+
+  qvac-fabric
+    https://github.com/tetherto/qvac-fabric-llm.cpp
+
+------------------------------------------------------------------------------
+[5] NOTICE applies to 2 package(s):
+    @qvac/fabric@0.26.0, @qvac/fabric-android-arm64@0.26.0
+------------------------------------------------------------------------------
+@qvac/fabric
+Copyright 2026 Tether Data, S.A. de C.V.
+
+This product includes third-party components under their
+respective licenses. @qvac/fabric itself is licensed under
+Apache-2.0; bundled dependencies are governed by the licenses
+listed below.
+
+=========================================================================
+C++ Dependencies
+=========================================================================
+
+--- apache-2.0 (Apache License 2.0) ---
+
+  opencl
+    https://github.com/KhronosGroup/OpenCL-ICD-Loader
+  qvac-lint-cpp
+
+--- apache-2.0-with-llvm-exception ---
+
+  libc++ (LLVM C++ Standard Library)
+    https://github.com/llvm/llvm-project
+
+--- mit (MIT License) ---
+
+  hip (system ROCm/HIP SDK shim, linux-x64 only)
+    https://rocm.docs.amd.com
+  qvac-fabric (forked llama.cpp + ggml)
+    https://github.com/tetherto/qvac-fabric-llm.cpp
+
+------------------------------------------------------------------------------
+[6] NOTICE applies to 1 package(s):
+    @qvac/infer-base@0.8.0
+------------------------------------------------------------------------------
+@qvac/infer-base
+Copyright 2026 Tether Data, S.A. de C.V.
+
+This product includes third-party components under their
+respective licenses. @qvac/infer-base itself is licensed under
+Apache-2.0; bundled dependencies are governed by the licenses
+listed below.
+
+=========================================================================
+JavaScript Dependencies
+=========================================================================
+
+--- apache-2.0 (Apache License 2.0) ---
+
+  bare-events@2.4.2
+    https://github.com/holepunchto/bare-events
+  bare-os@3.9.0
+    https://github.com/holepunchto/bare-os
+
+------------------------------------------------------------------------------
+[7] NOTICE applies to 1 package(s):
+    @qvac/langdetect-text@0.1.3
+------------------------------------------------------------------------------
+
+
+------------------------------------------------------------------------------
+[8] NOTICE applies to 1 package(s):
+    @qvac/llm-llamacpp@0.68.0
+------------------------------------------------------------------------------
+@qvac/llm-llamacpp
+Copyright 2026 Tether Data, S.A. de C.V.
+
+This product includes third-party components under their
+respective licenses. @qvac/llm-llamacpp itself is licensed under
+Apache-2.0; bundled dependencies are governed by the licenses
+listed below.
+
+=========================================================================
+Required Attribution Notices
+=========================================================================
+
+HAI-DEF is provided under and subject to the Health AI Developer
+Foundations Terms of Use found at
+https://developers.google.com/health-ai-developer-foundations/terms
+
+Additional requirements per Section 3.1:
+  Distribution must be accompanied by the HAI-DEF Terms of Use.
+  Clinical use requires Health Regulatory Authorization from the
+  relevant authority (Section 3.1.3).
+  Use is subject to the HAI-DEF Prohibited Use Policy at
+  developers.google.com/health-ai-developer-foundations/prohibited-use-policy
+
+Llama 3.2 is licensed under the Llama 3.2 Community License,
+Copyright (c) Meta Platforms, Inc. All Rights Reserved.
+
+Additional requirements per license Section 1.b.i:
+  Products or services distributing or containing Llama 3.2 materials
+  must prominently display "Built with Llama" on a related website,
+  user interface, blog post, about page, or product documentation.
+
+=========================================================================
+Third-Party Model Licenses
+=========================================================================
+
+--- apache-2.0 (Apache License 2.0) ---
+
+  dolphin-mixtral-2x7b-dop-Q2_K-00001-of-00005
+    https://huggingface.co/jmb95/laser-dolphin-mixtral-2x7b-dpo-GGUF
+  gpt-oss-120b-Q4_K_M-00001-of-00002
+    https://huggingface.co/unsloth/gpt-oss-120b-GGUF
+  gpt-oss-20b-GGUF
+    https://huggingface.co/unsloth/gpt-oss-20b-GGUF
+  laser-dolphin-mixtral-2x7b-dpo-GGUF
+    https://huggingface.co/jmb95/laser-dolphin-mixtral-2x7b-dpo-GGUF
+  LightOnOCR-2-1B-ocr-soup-GGUF
+    https://huggingface.co/noctrex/LightOnOCR-2-1B-ocr-soup-GGUF
+  unlimited-ocr-gguf
+    https://huggingface.co/vimalnakrani/unlimited-ocr-gguf
+    (GGUF conversion of https://huggingface.co/baidu/Unlimited-OCR)
+  Llama_3.2_1B_Intruct_Tool_Calling_V2-GGUF
+    https://huggingface.co/mav23/Llama_3.2_1B_Intruct_Tool_Calling_V2-GGUF
+  Qwen3-0.6B-GGUF
+    https://huggingface.co/unsloth/Qwen3-0.6B-GGUF
+  Qwen3-1.7B-GGUF
+    https://huggingface.co/unsloth/Qwen3-1.7B-GGUF
+  Qwen3-1.7B-Q4_0-00001-of-00005
+    https://huggingface.co/unsloth/Qwen3-1.7B-GGUF
+  Qwen3-4B-Q4_0-00001-of-00005
+    https://huggingface.co/unsloth/Qwen3-4B-GGUF
+  Qwen3-4B-Q4_K_M
+    https://huggingface.co/Qwen/Qwen3-4B-GGUF
+  Qwen3-8B-GGUF
+    https://huggingface.co/Qwen/Qwen3-8B-GGUF
+  Qwen3-VL-2B-Instruct-GGUF
+    https://huggingface.co/Qwen/Qwen3-VL-2B-Instruct-GGUF
+  salamandrata_2b_inst_q4-00001-of-00003
+    https://huggingface.co/BSC-LT/salamandraTA-2B-instruct-GGUF
+  salamandrata_2b_inst_q8-00001-of-00004
+    https://huggingface.co/BSC-LT/salamandraTA-2B-instruct-GGUF
+  salamandraTA-2B-instruct-GGUF
+    https://huggingface.co/BSC-LT/salamandraTA-2B-instruct-GGUF
+  SmolVLM2-500M-Video-Instruct-GGUF
+    https://huggingface.co/ggml-org/SmolVLM2-500M-Video-Instruct-GGUF
+
+--- cc-by-4.0 (Creative Commons Attribution 4.0 International) ---
+
+  AfriqueGemma-4B-GGUF
+    https://huggingface.co/mradermacher/AfriqueGemma-4B-GGUF
+
+--- health-ai-developer-foundations (HAI-DEF Terms of Use) ---
+
+  medgemma-4b-it-GGUF
+    https://huggingface.co/unsloth/medgemma-4b-it-GGUF
+  medgemma-4b-it-Q4_1-00001-of-00005
+    https://huggingface.co/unsloth/medgemma-4b-it-GGUF
+  medgemma-4b-it-Q8_0-00001-of-00005
+    https://huggingface.co/unsloth/medgemma-4b-it-GGUF
+
+--- llama3.2 (Llama 3.2 Community License) ---
+
+  Llama-3.2-1B-Instruct-GGUF
+    https://huggingface.co/unsloth/Llama-3.2-1B-Instruct-GGUF
+  Llama-3.2-1B-Instruct-Q4_0-00001-of-00008
+    https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF
+
+--- mit (MIT License) ---
+
+  bitnet_b1_58-3B-TQ2_0
+    https://huggingface.co/1bitLLM/bitnet_b1_58-3B
+  bitnet_b1_58-large-TQ2_0
+    https://huggingface.co/1bitLLM/bitnet_b1_58-large
+  bitnet_b1_58-xl-TQ2_0
+    https://huggingface.co/1bitLLM/bitnet_b1_58-xl
+
+=========================================================================
+Modification Notice
+=========================================================================
+
+Models listed above may have been converted from original model
+weights into optimized inference formats (GGUF, GGML, ONNX, or
+Bergamot intgemm). These conversions involve format transformation
+and/or weight quantization. No architectural changes were made to
+the underlying models.
+
+Source URLs for original weights are recorded in each model's
+metadata entry within the registry.
+
+=========================================================================
+JavaScript Dependencies
+=========================================================================
+
+--- apache-2.0 (Apache License 2.0) ---
+
+  @qvac/diagnostics@0.1.1
+  @qvac/error@0.1.1
+  @qvac/infer-base@0.4.1
+    https://github.com/tetherto/qvac
+  @qvac/logging@0.1.0
+  b4a@1.8.1
+    https://github.com/holepunchto/b4a
+  bare-abort@2.0.13
+    https://github.com/holepunchto/bare-abort
+  bare-env@3.0.0
+    https://github.com/holepunchto/bare-env
+  bare-events@2.4.2
+    https://github.com/holepunchto/bare-events
+  bare-events@2.8.2
+    https://github.com/holepunchto/bare-events
+  bare-fs@4.7.1
+    https://github.com/holepunchto/bare-fs
+  bare-hrtime@2.1.1
+    https://github.com/holepunchto/bare-hrtime
+  bare-os@3.9.1
+    https://github.com/holepunchto/bare-os
+  bare-path@3.0.0
+    https://github.com/holepunchto/bare-path
+  bare-pipe@4.1.5
+    https://github.com/holepunchto/bare-pipe
+  bare-process@4.4.1
+    https://github.com/holepunchto/bare-process
+  bare-signals@4.2.0
+    https://github.com/holepunchto/bare-signals
+  bare-stdio@1.0.2
+    https://github.com/holepunchto/bare-stdio
+  bare-stream@2.13.1
+    https://github.com/holepunchto/bare-stream
+  bare-tty@5.1.0
+    https://github.com/holepunchto/bare-tty
+  bare-url@2.4.3
+    https://github.com/holepunchto/bare-url
+  events-universal@1.0.1
+    https://github.com/holepunchto/events-universal
+  text-decoder@1.2.7
+    https://github.com/holepunchto/text-decoder
+
+--- mit (MIT License) ---
+
+  fast-fifo@1.3.2
+    https://github.com/mafintosh/fast-fifo
+  streamx@2.25.0
+    https://github.com/mafintosh/streamx
+  teex@1.0.1
+    https://github.com/mafintosh/teex
+
+
+=========================================================================
+Python Dependencies
+=========================================================================
+
+--- apache-2.0 (Apache License 2.0) ---
+
+  accelerate
+    https://github.com/huggingface/accelerate
+  datasets
+    https://github.com/huggingface/datasets
+  deepeval
+    https://github.com/confident-ai/deepeval
+  huggingface-hub
+    https://github.com/huggingface/huggingface_hub
+  transformers
+    https://github.com/huggingface/transformers
+
+--- bsd-3-clause (BSD 3-Clause License) ---
+
+  httpx
+    https://github.com/encode/httpx
+  psutil
+    https://github.com/giampaolo/psutil
+  torch
+    https://pytorch.org
+
+--- bsd-3-clause AND 0bsd AND mit AND zlib AND cc0-1.0 ---
+
+  numpy
+    https://numpy.org
+
+--- mit (MIT License) ---
+
+  llama-cpp-python
+    https://github.com/abetlen/llama-cpp-python
+
+
+=========================================================================
+C++ Dependencies
+=========================================================================
+
+--- apache-2.0 (Apache License 2.0) ---
+
+  opencl
+    https://github.com/KhronosGroup/OpenCL-ICD-Loader
+  qvac-lib-inference-addon-cpp
+    https://github.com/tetherto/qvac
+  qvac-lint-cpp
+
+--- apache-2.0-with-llvm-exception ---
+
+  libc++ (LLVM C++ Standard Library)
+    https://github.com/llvm/llvm-project
+
+--- bsd-2-clause (BSD 2-Clause License) ---
+
+  picojson
+    https://github.com/kazuho/picojson
+
+--- mit (MIT License) ---
+
+  nlohmann-json
+    https://github.com/nlohmann/json
+  qvac-fabric
+    https://github.com/tetherto/qvac-fabric-llm.cpp
+  stb_image v2.30 (MIT or public domain)
+    https://github.com/nothings/stb
+
+------------------------------------------------------------------------------
+[9] NOTICE applies to 1 package(s):
+    @qvac/logging@0.1.1
+------------------------------------------------------------------------------
+@qvac/logging
+Copyright 2026 Tether Data, S.A. de C.V.
+
+This product includes third-party components under their
+respective licenses. @qvac/logging itself is licensed under
+Apache-2.0; bundled dependencies are governed by the licenses
+listed below.
+
+=========================================================================
+JavaScript Dependencies
+=========================================================================
+
+--- apache-2.0 (Apache License 2.0) ---
+
+  bare-env@3.0.0
+    https://github.com/holepunchto/bare-env
+  bare-os@3.9.1
+    https://github.com/holepunchto/bare-os
+
+------------------------------------------------------------------------------
+[10] NOTICE applies to 1 package(s):
+    @qvac/registry-client@0.8.0
+------------------------------------------------------------------------------
+@qvac/registry-client
+Copyright 2026 Tether Data, S.A. de C.V.
+
+This product includes third-party components under their
+respective licenses. @qvac/registry-client itself is licensed under
+Apache-2.0; bundled dependencies are governed by the licenses
+listed below.
+
+=========================================================================
+Required Attribution Notices
+=========================================================================
+
+Gemma is provided under and subject to the Gemma Terms of Use found
+at ai.google.dev/gemma/terms
+
+Additional requirements per Section 3.1:
+  Distribution must be accompanied by the Gemma Terms of Use.
+  Use is subject to the Gemma Prohibited Use Policy at
+  ai.google.dev/gemma/prohibited_use_policy
+
+HAI-DEF is provided under and subject to the Health AI Developer
+Foundations Terms of Use found at
+https://developers.google.com/health-ai-developer-foundations/terms
+
+Additional requirements per Section 3.1:
+  Distribution must be accompanied by the HAI-DEF Terms of Use.
+  Clinical use requires Health Regulatory Authorization from the
+  relevant authority (Section 3.1.3).
+  Use is subject to the HAI-DEF Prohibited Use Policy at
+  developers.google.com/health-ai-developer-foundations/prohibited-use-policy
+
+Llama 3.2 is licensed under the Llama 3.2 Community License,
+Copyright (c) Meta Platforms, Inc. All Rights Reserved.
+
+Additional requirements per license Section 1.b.i:
+  Products or services distributing or containing Llama 3.2 materials
+  must prominently display "Built with Llama" on a related website,
+  user interface, blog post, about page, or product documentation.
+
+=========================================================================
+Third-Party Model Licenses
+=========================================================================
+
+--- apache-2.0 (Apache License 2.0) ---
+
+  de-tiny-ggml-model-f16
+    https://huggingface.co/primeline/whisper-tiny-german-1224
+  en-base-ggml-model-f16
+    https://huggingface.co/openai/whisper-base
+  fr-base-ggml-model-f16
+    https://huggingface.co/personalizedrefrigerator/whisper-base-fr
+  fr-tiny-ggml-model-f16
+    https://huggingface.co/JaepaX/whisper-tiny-fr
+  gpt-oss-20b-GGUF
+    https://huggingface.co/unsloth/gpt-oss-20b-GGUF
+  it-base-ggml-model-f16
+    https://huggingface.co/gustavv-andrzejewski/distil-whisper-base-it
+  it-tiny-ggml-model-f16
+    https://huggingface.co/luigisaetta/whisper-tiny-it
+  ja-base-ggml-model-f16
+    https://huggingface.co/bygreencn/whisper-base-ja
+  ja-tiny-ggml-model-f16
+    https://huggingface.co/CheeLi03/whisper-tiny-ja-puct-4k
+  laser-dolphin-mixtral-2x7b-dpo-GGUF
+    https://huggingface.co/jmb95/laser-dolphin-mixtral-2x7b-dpo-GGUF
+  Llama_3.2_1B_Intruct_Tool_Calling_V2-GGUF
+    https://huggingface.co/mav23/Llama_3.2_1B_Intruct_Tool_Calling_V2-GGUF
+  nb-tiny-ggml-model
+    https://huggingface.co/NbAiLab/nb-whisper-tiny
+  pt-base-ggml-model-f16
+    https://huggingface.co/mariana-coelho-9/whisper-base-pt
+  Qwen3-0.6B-GGUF
+    https://huggingface.co/unsloth/Qwen3-0.6B-GGUF
+  Qwen3-1.7B-GGUF
+    https://huggingface.co/unsloth/Qwen3-1.7B-GGUF
+  Qwen3-4B-Q4_0-00001-of-00005
+    https://huggingface.co/unsloth/Qwen3-4B-GGUF
+  Qwen3-4B-Q4_K_M
+    https://huggingface.co/Qwen/Qwen3-4B-GGUF
+  Qwen3-8B-GGUF
+    https://huggingface.co/Qwen/Qwen3-8B-GGUF
+  Qwen3-VL-2B-Instruct-GGUF
+    https://huggingface.co/Qwen/Qwen3-VL-2B-Instruct-GGUF
+  recognizer_latin
+    https://www.jaided.ai/easyocr/modelhub/
+  ru-base-ggml-model-f16
+    https://huggingface.co/CheeLi03/whisper-base-rus-8
+  ru-tiny-ggml-model-f16
+    https://huggingface.co/yaroslav0530/whisper-tiny-ru
+  salamandraTA-2B-instruct-GGUF
+    https://huggingface.co/BSC-LT/salamandraTA-2B-instruct-GGUF
+  SmolVLM2-500M-Video-Instruct-GGUF
+    https://huggingface.co/ggml-org/SmolVLM2-500M-Video-Instruct-GGUF
+
+--- gemma (Gemma Terms of Use) ---
+
+  embeddinggemma-300m-GGUF
+    https://huggingface.co/unsloth/embeddinggemma-300m-GGUF
+
+--- health-ai-developer-foundations (HAI-DEF Terms of Use) ---
+
+  medgemma-4b-it-GGUF
+    https://huggingface.co/unsloth/medgemma-4b-it-GGUF
+
+--- llama3.2 (Llama 3.2 Community License) ---
+
+  Llama-3.2-1B-Instruct-GGUF
+    https://huggingface.co/unsloth/Llama-3.2-1B-Instruct-GGUF
+  Llama-3.2-1B-Instruct-Q4_0-00001-of-00008
+    https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF
+
+--- mit (MIT License) ---
+
+  chatterbox-turbo-ONNX
+    https://huggingface.co/ResembleAI/chatterbox-turbo-ONNX
+  de-base-ggml-model-f16
+    https://huggingface.co/aware-ai/whisper-base-german
+  es-tiny-ggml-model-f16
+    https://huggingface.co/JaepaX/whisper-tiny-es
+  ggml-indictrans2-en-indic-1B-f16
+    https://huggingface.co/ai4bharat/indictrans2-en-indic-1B
+  ggml-indictrans2-en-indic-dist-200M-f16
+    https://huggingface.co/ai4bharat/indictrans2-en-indic-dist-200M
+  ggml-indictrans2-indic-en-1B-f16
+    https://huggingface.co/ai4bharat/indictrans2-indic-en-1B
+  ggml-indictrans2-indic-en-dist-200M-f16
+    https://huggingface.co/ai4bharat/indictrans2-indic-en-dist-200M
+  ggml-indictrans2-indic-indic-1B-f16
+    https://huggingface.co/ai4bharat/indictrans2-indic-indic-1B
+  ggml-indictrans2-indic-indic-dist-320M-f16
+    https://huggingface.co/ai4bharat/indictrans2-indic-indic-dist-320M
+  gte-large-gguf
+    https://huggingface.co/ChristianAzinn/gte-large-gguf
+  pt-tiny-ggml-model-f16
+    https://huggingface.co/DavyCosta701/whisper-tiny-pt-bpra
+  tiny_acft_q8_0
+    https://voiceinput.futo.org/VoiceInput/tiny_en_acft_q8_0.bin
+  whisper-vad
+    https://huggingface.co/ggml-org/whisper-vad
+  whisper.cpp
+    https://huggingface.co/ggerganov/whisper.cpp
+
+--- mpl-2.0 (Mozilla Public License 2.0) ---
+
+  lex.50.50.aren.s2t
+    https://github.com/mozilla/firefox-translations-models/tree/main/models/base-memory/aren
+  lex.50.50.csen.s2t
+    https://github.com/mozilla/firefox-translations-models/tree/main/models/base-memory/csen
+  lex.50.50.enar.s2t
+    https://github.com/mozilla/firefox-translations-models/tree/main/models/base-memory/enar
+  lex.50.50.encs.s2t
+    https://github.com/mozilla/firefox-translations-models/tree/main/models/base-memory/encs
+  lex.50.50.enes.s2t
+    https://github.com/mozilla/firefox-translations-models/tree/main/models/base-memory/enes
+  lex.50.50.enfr.s2t
+    https://github.com/mozilla/firefox-translations-models/tree/main/models/base-memory/enfr
+  lex.50.50.enit.s2t
+    https://github.com/mozilla/firefox-translations-models/tree/main/models/base-memory/enit
+  lex.50.50.enja.s2t
+    https://github.com/mozilla/firefox-translations-models/tree/main/models/base-memory/enja
+  lex.50.50.enpt.s2t
+    https://github.com/mozilla/firefox-translations-models/tree/main/models/base-memory/enpt
+  lex.50.50.enru.s2t
+    https://github.com/mozilla/firefox-translations-models/tree/main/models/base-memory/enru
+  lex.50.50.enzh.s2t
+    https://github.com/mozilla/firefox-translations-models/tree/main/models/base-memory/enzh
+  lex.50.50.esen.s2t
+    https://github.com/mozilla/firefox-translations-models/tree/main/models/base-memory/esen
+  lex.50.50.fren.s2t
+    https://github.com/mozilla/firefox-translations-models/tree/main/models/base-memory/fren
+  lex.50.50.iten.s2t
+    https://github.com/mozilla/firefox-translations-models/tree/main/models/base-memory/iten
+  lex.50.50.jaen.s2t
+    https://github.com/mozilla/firefox-translations-models/tree/main/models/base-memory/jaen
+  lex.50.50.pten.s2t
+    https://github.com/mozilla/firefox-translations-models/tree/main/models/base-memory/pten
+  lex.50.50.ruen.s2t
+    https://github.com/mozilla/firefox-translations-models/tree/main/models/tiny/ruen
+  lex.50.50.zhen.s2t
+    https://github.com/mozilla/firefox-translations-models/tree/main/models/base-memory/zhen
+
+--- openrail ---
+
+  Supertonic-TTS-ONNX
+    https://huggingface.co/onnx-community/Supertonic-TTS-ONNX
+
+=========================================================================
+Modification Notice
+=========================================================================
+
+Models listed above may have been converted from original model
+weights into optimized inference formats (GGUF, GGML, ONNX, or
+Bergamot intgemm). These conversions involve format transformation
+and/or weight quantization. No architectural changes were made to
+the underlying models.
+
+Source URLs for original weights are recorded in each model's
+metadata entry within the registry.
+
+=========================================================================
+JavaScript Dependencies
+=========================================================================
+
+--- apache-2.0 (Apache License 2.0) ---
+
+  @hyperswarm/secret-stream@6.9.1
+    https://github.com/holepunchto/hyperswarm-secret-stream
+  @qvac/error@0.1.1
+  @qvac/registry-schema@0.1.1
+  adaptive-timeout@1.0.1
+    https://github.com/holepunchto/adaptive-timeout
+  b4a@1.7.3
+    https://github.com/holepunchto/b4a
+  bare-addon-resolve@1.9.7
+    https://github.com/holepunchto/bare-addon-resolve
+  bare-env@3.0.0
+    https://github.com/holepunchto/bare-env
+  bare-events@2.8.2
+    https://github.com/holepunchto/bare-events
+  bare-fs@4.5.4
+    https://github.com/holepunchto/bare-fs
+  bare-hrtime@2.1.1
+    https://github.com/holepunchto/bare-hrtime
+  bare-module-resolve@1.12.1
+    https://github.com/holepunchto/bare-module-resolve
+  bare-node-fs@1.0.2
+    https://github.com/holepunchto/bare-node
+  bare-node-os@1.0.1
+    https://github.com/holepunchto/bare-node
+  bare-node-path@1.0.1
+    https://github.com/holepunchto/bare-node
+  bare-node-process@1.0.1
+    https://github.com/holepunchto/bare-node
+  bare-os@3.6.2
+    https://github.com/holepunchto/bare-os
+  bare-path@3.0.0
+    https://github.com/holepunchto/bare-path
+  bare-pipe@4.1.3
+    https://github.com/holepunchto/bare-pipe
+  bare-process@4.2.2
+    https://github.com/holepunchto/bare-process
+  bare-semver@1.0.2
+    https://github.com/holepunchto/bare-semver
+  bare-signals@4.2.0
+    https://github.com/holepunchto/bare-signals
+  bare-stream@2.7.0
+    https://github.com/holepunchto/bare-stream
+  bare-tty@5.0.3
+    https://github.com/holepunchto/bare-tty
+  bare-url@2.3.2
+    https://github.com/holepunchto/bare-url
+  blind-relay@1.4.0
+    https://github.com/holepunchto/blind-relay
+  compact-encoding@2.18.0
+    https://github.com/compact-encoding/compact-encoding
+  device-file@2.3.1
+    https://github.com/holepunchto/device-file
+  events-universal@1.0.1
+    https://github.com/holepunchto/events-universal
+  fd-lock@2.1.1
+    https://github.com/holepunchto/fd-lock
+  fs-native-extensions@1.4.5
+    https://github.com/holepunchto/fs-native-extensions
+  hyperblobs@2.8.0
+    https://github.com/holepunchto/hyperblobs
+  hypercore-errors@1.5.0
+    https://github.com/holepunchto/hypercore-errors
+  hypercore-id-encoding@1.3.0
+    https://github.com/holepunchto/hypercore-id-encoding
+  hypercore-storage@2.4.1
+  hyperdb@4.22.3
+    https://github.com/holepunchto/hyperdb
+  hyperdispatch@1.4.4
+    https://github.com/holepunchto/hyperdispatch
+  hyperschema@1.19.0
+    https://github.com/holepunchto/hyperschema
+  index-encoder@3.4.0
+    https://github.com/holepunchto/index-encoder
+  noise-handshake@4.2.0
+    https://github.com/holepunchto/noise-handshake
+  paparam@1.10.0
+    https://github.com/holepunchto/paparam
+  quickbit-native@2.4.8
+    https://github.com/holepunchto/quickbit-native
+  rache@1.0.0
+    https://github.com/holepunchto/rache
+  refcounter@1.0.0
+    https://github.com/holepunchto/refcounter
+  require-addon@1.2.0
+    https://github.com/holepunchto/require-addon
+  resource-on-exit@1.0.0
+    https://github.com/holepunchto/bare-teardown
+  rocksdb-native@3.12.0
+    https://github.com/holepunchto/rocksdb-native
+  scope-lock@1.2.4
+    https://github.com/holepunchto/scope-lock
+  simdle-native@1.3.9
+    https://github.com/holepunchto/simdle-native
+  text-decoder@1.2.3
+    https://github.com/holepunchto/text-decoder
+  udx-native@1.19.2
+    https://github.com/holepunchto/udx-native
+  unslab@1.3.0
+    https://github.com/holepunchto/unslab
+  which-runtime@1.3.2
+    https://github.com/holepunchto/which-runtime
+
+--- isc (ISC License) ---
+
+  bits-to-bytes@1.3.0
+    https://github.com/holepunchto/bits-to-bytes
+  compact-encoding-bitfield@1.0.0
+    https://github.com/compact-encoding/compact-encoding-bitfield
+  compact-encoding-net@1.2.0
+    https://github.com/compact-encoding/compact-encoding-net
+  nanoassert@2.0.0
+    https://github.com/emilbayes/nanoassert
+  noise-curve-ed@2.1.0
+    https://github.com/chm-diederichs/noise-curve-ed
+  quickbit-universal@2.2.0
+    https://github.com/holepunchto/quickbit-universal
+  simdle-universal@1.1.2
+    https://github.com/holepunchto/simdle-universal
+
+--- mit (MIT License) ---
+
+  big-sparse-array@1.0.3
+    https://github.com/mafintosh/big-sparse-array
+  bogon@1.2.0
+    https://github.com/mafintosh/bogon
+  codecs@3.1.0
+    https://github.com/mafintosh/codecs
+  corestore@7.8.0
+    https://github.com/holepunchto/corestore
+  debounceify@1.1.0
+    https://github.com/mafintosh/debounceify
+  dht-rpc@6.24.2
+    https://github.com/mafintosh/dht-rpc
+  fast-fifo@1.3.2
+    https://github.com/mafintosh/fast-fifo
+  flat-tree@1.13.0
+    https://github.com/mafintosh/flat-tree
+  generate-object-property@2.0.0
+    https://github.com/mafintosh/generate-object-property
+  generate-string@1.0.1
+    https://github.com/mafintosh/generate-string
+  hyperbee@2.27.3
+    https://github.com/holepunchto/hyperbee
+  hypercore@11.24.0
+    https://github.com/holepunchto/hypercore
+  hypercore-crypto@3.6.1
+    https://github.com/mafintosh/hypercore-crypto
+  hyperdht@6.29.0
+    https://github.com/holepunchto/hyperdht
+  hyperswarm@4.16.0
+    https://github.com/holepunchto/hyperswarm
+  is-options@1.0.2
+    https://github.com/mafintosh/is-options
+  is-property@1.0.2
+    https://github.com/mikolalysenko/is-property
+  kademlia-routing-table@1.0.6
+    https://github.com/mafintosh/kademlia-routing-table
+  mutexify@1.4.0
+    https://github.com/mafintosh/mutexify
+  nat-sampler@1.0.1
+    https://github.com/mafintosh/nat-sampler
+  protocol-buffers-encodings@1.2.0
+    https://github.com/mafintosh/protocol-buffers-encodings
+  protomux@3.10.1
+    https://github.com/mafintosh/protomux
+  queue-tick@1.0.1
+    https://github.com/mafintosh/queue-tick
+  random-array-iterator@1.0.0
+    https://github.com/mafintosh/random-array-iterator
+  ready-resource@1.2.0
+    https://github.com/holepunchto/ready-resource
+  record-cache@1.2.0
+    https://github.com/mafintosh/record-cache
+  resolve-reject-promise@1.1.0
+    https://github.com/mafintosh/resolve-reject-promise
+  safety-catch@1.0.2
+    https://github.com/mafintosh/safety-catch
+  shuffled-priority-queue@2.1.0
+    https://github.com/mafintosh/shuffled-priority-queue
+  signal-promise@1.0.3
+    https://github.com/mafintosh/signal-promise
+  signed-varint@2.0.1
+    https://github.com/dominictarr/signed-varint
+  sodium-native@5.0.10
+    https://github.com/holepunchto/sodium-native
+  sodium-secretstream@1.2.0
+    https://github.com/mafintosh/sodium-secretstream
+  sodium-universal@5.0.1
+    https://github.com/holepunchto/sodium-universal
+  speedometer@1.1.0
+    https://github.com/mafintosh/speedometer
+  streamx@2.23.0
+    https://github.com/mafintosh/streamx
+  time-ordered-set@2.0.1
+    https://github.com/mafintosh/time-ordered-set
+  timeout-refresh@2.0.1
+    https://github.com/mafintosh/timeout-refresh
+  unordered-set@2.0.1
+    https://github.com/mafintosh/unordered-set
+  varint@5.0.0
+    https://github.com/chrisdickinson/varint
+  xache@1.2.1
+    https://github.com/mafintosh/xache
+  z32@1.1.0
+    https://github.com/mafintosh/z32
+
+------------------------------------------------------------------------------
+[11] NOTICE applies to 1 package(s):
+    @qvac/registry-schema@0.4.0
+------------------------------------------------------------------------------
+@qvac/registry-schema
+Copyright 2026 Tether Data, S.A. de C.V.
+
+This product includes third-party components under their
+respective licenses. @qvac/registry-schema itself is licensed under
+Apache-2.0; bundled dependencies are governed by the licenses
+listed below.
+
+=========================================================================
+JavaScript Dependencies
+=========================================================================
+
+--- apache-2.0 (Apache License 2.0) ---
+
+  b4a@1.7.5
+    https://github.com/holepunchto/b4a
+  bare-addon-resolve@1.10.0
+    https://github.com/holepunchto/bare-addon-resolve
+  bare-events@2.8.2
+    https://github.com/holepunchto/bare-events
+  bare-fs@4.5.4
+    https://github.com/holepunchto/bare-fs
+  bare-module-resolve@1.12.1
+    https://github.com/holepunchto/bare-module-resolve
+  bare-os@3.6.2
+    https://github.com/holepunchto/bare-os
+  bare-path@3.0.0
+    https://github.com/holepunchto/bare-path
+  bare-semver@1.0.2
+    https://github.com/holepunchto/bare-semver
+  bare-stream@2.8.0
+    https://github.com/holepunchto/bare-stream
+  bare-url@2.3.2
+    https://github.com/holepunchto/bare-url
+  compact-encoding@2.19.0
+    https://github.com/compact-encoding/compact-encoding
+  events-universal@1.0.1
+    https://github.com/holepunchto/events-universal
+  hypercore-errors@1.5.0
+    https://github.com/holepunchto/hypercore-errors
+  hypercore-id-encoding@1.3.0
+    https://github.com/holepunchto/hypercore-id-encoding
+  hyperdb@4.22.3
+    https://github.com/holepunchto/hyperdb
+  hyperdispatch@1.4.4
+    https://github.com/holepunchto/hyperdispatch
+  hyperschema@1.20.1
+    https://github.com/holepunchto/hyperschema
+  index-encoder@3.4.0
+    https://github.com/holepunchto/index-encoder
+  rache@1.0.0
+    https://github.com/holepunchto/rache
+  refcounter@1.0.0
+    https://github.com/holepunchto/refcounter
+  require-addon@1.2.0
+    https://github.com/holepunchto/require-addon
+  rocksdb-native@3.13.0
+    https://github.com/holepunchto/rocksdb-native
+  scope-lock@1.2.4
+    https://github.com/holepunchto/scope-lock
+  text-decoder@1.2.7
+    https://github.com/holepunchto/text-decoder
+  unslab@1.3.0
+    https://github.com/holepunchto/unslab
+
+--- isc (ISC License) ---
+
+  nanoassert@2.0.0
+    https://github.com/emilbayes/nanoassert
+
+--- mit (MIT License) ---
+
+  codecs@3.1.0
+    https://github.com/mafintosh/codecs
+  debounceify@1.1.0
+    https://github.com/mafintosh/debounceify
+  fast-fifo@1.3.2
+    https://github.com/mafintosh/fast-fifo
+  generate-object-property@2.0.0
+    https://github.com/mafintosh/generate-object-property
+  generate-string@1.0.1
+    https://github.com/mafintosh/generate-string
+  hyperbee@2.27.3
+    https://github.com/holepunchto/hyperbee
+  is-property@1.0.2
+    https://github.com/mikolalysenko/is-property
+  mutexify@1.4.0
+    https://github.com/mafintosh/mutexify
+  protocol-buffers-encodings@1.2.0
+    https://github.com/mafintosh/protocol-buffers-encodings
+  queue-tick@1.0.1
+    https://github.com/mafintosh/queue-tick
+  ready-resource@1.2.0
+    https://github.com/holepunchto/ready-resource
+  resolve-reject-promise@1.1.0
+    https://github.com/mafintosh/resolve-reject-promise
+  safety-catch@1.0.2
+    https://github.com/mafintosh/safety-catch
+  signal-promise@1.0.3
+    https://github.com/mafintosh/signal-promise
+  signed-varint@2.0.1
+    https://github.com/dominictarr/signed-varint
+  streamx@2.23.0
+    https://github.com/mafintosh/streamx
+  teex@1.0.1
+    https://github.com/mafintosh/teex
+  varint@5.0.0
+    https://github.com/chrisdickinson/varint
+  z32@1.1.0
+    https://github.com/mafintosh/z32
+
+------------------------------------------------------------------------------
+[12] NOTICE applies to 1 package(s):
+    @qvac/tts-ggml-android-arm64@0.15.0
+------------------------------------------------------------------------------
+@qvac/tts-ggml
+Copyright 2026 Tether Data, S.A. de C.V.
+
+This product includes third-party components under their
+respective licenses. @qvac/tts-ggml itself is licensed under
+Apache-2.0; bundled dependencies are governed by the licenses
+listed below.
+
+=========================================================================
+JavaScript Dependencies
+=========================================================================
+
+--- apache-2.0 (Apache License 2.0) ---
+
+  @qvac/error@0.1.1
+  @qvac/infer-base@0.6.2
+    https://github.com/tetherto/qvac
+  @qvac/langdetect-text@0.1.2
+    https://github.com/tetherto/qvac
+  @qvac/logging@0.1.1
+    https://github.com/tetherto/qvac
+  b4a@1.9.0
+    https://github.com/holepunchto/b4a
+  bare-abort@2.0.13
+    https://github.com/holepunchto/bare-abort
+  bare-addon-resolve@1.10.1
+    https://github.com/holepunchto/bare-addon-resolve
+  bare-ansi-escapes@2.2.3
+    https://github.com/holepunchto/bare-ansi-escapes
+  bare-assert@1.2.0
+    https://github.com/holepunchto/bare-assert
+  bare-buffer@3.7.1
+    https://github.com/holepunchto/bare-buffer
+  bare-bundle@1.11.0
+    https://github.com/holepunchto/bare-bundle
+  bare-cov@1.2.2
+    https://github.com/holepunchto/bare-cov
+  bare-crypto@1.15.3
+    https://github.com/holepunchto/bare-crypto
+  bare-debug-log@2.0.0
+    https://github.com/holepunchto/bare-debug-log
+  bare-dns@2.2.0
+    https://github.com/holepunchto/bare-dns
+  bare-encoding@1.0.3
+    https://github.com/holepunchto/bare-encoding
+  bare-env@3.0.1
+    https://github.com/holepunchto/bare-env
+  bare-events@2.9.2
+    https://github.com/holepunchto/bare-events
+  bare-format@1.0.2
+    https://github.com/holepunchto/bare-format
+  bare-fs@4.8.1
+    https://github.com/holepunchto/bare-fs
+  bare-hrtime@2.1.2
+    https://github.com/holepunchto/bare-hrtime
+  bare-http-parser@2.1.4
+    https://github.com/holepunchto/bare-http-parser
+  bare-http1@4.6.2
+    https://github.com/holepunchto/bare-http1
+  bare-https@3.1.0
+    https://github.com/holepunchto/bare-https
+  bare-inspect@3.1.10
+    https://github.com/holepunchto/bare-inspect
+  bare-inspector@6.1.0
+    https://github.com/holepunchto/bare-inspector
+  bare-module@6.4.0
+    https://github.com/holepunchto/bare-module
+  bare-module-lexer@1.6.6
+    https://github.com/holepunchto/bare-module-lexer
+  bare-module-resolve@1.12.5
+    https://github.com/holepunchto/bare-module-resolve
+  bare-net@2.3.3
+    https://github.com/holepunchto/bare-net
+  bare-os@3.9.3
+    https://github.com/holepunchto/bare-os
+  bare-path@3.1.2
+    https://github.com/holepunchto/bare-path
+  bare-pipe@4.3.1
+    https://github.com/holepunchto/bare-pipe
+  bare-posix@1.0.1
+    https://github.com/holepunchto/bare-posix
+  bare-process@4.5.1
+    https://github.com/holepunchto/bare-process
+  bare-semver@1.1.0
+    https://github.com/holepunchto/bare-semver
+  bare-signals@5.0.0
+    https://github.com/holepunchto/bare-signals
+  bare-stdio@1.0.3
+    https://github.com/holepunchto/bare-stdio
+  bare-stream@2.13.4
+    https://github.com/holepunchto/bare-stream
+  bare-stylize@0.0.1
+    https://github.com/holepunchto/bare-stylize
+  bare-subprocess@5.2.3
+    https://github.com/holepunchto/bare-subprocess
+  bare-tcp@2.6.1
+    https://github.com/holepunchto/bare-tcp
+  bare-tls@3.1.10
+    https://github.com/holepunchto/bare-tls
+  bare-tty@5.2.1
+    https://github.com/holepunchto/bare-tty
+  bare-type@1.1.1
+    https://github.com/holepunchto/bare-type
+  bare-type-stripper@0.1.6
+    https://github.com/holepunchto/bare-type-stripper
+  bare-url@2.5.4
+    https://github.com/holepunchto/bare-url
+  bare-utils@1.6.0
+    https://github.com/holepunchto/bare-utils
+  bare-v8-to-istanbul@1.0.4
+    https://github.com/holepunchto/bare-v8-to-istanbul
+  bare-ws@3.2.0
+    https://github.com/holepunchto/bare-ws
+  brittle@3.19.1
+    https://github.com/holepunchto/brittle
+  events-universal@1.0.1
+    https://github.com/holepunchto/events-universal
+  globbie@1.0.6
+    https://github.com/holepunchto/globbie
+  paparam@1.13.0
+    https://github.com/holepunchto/paparam
+  require-addon@1.3.0
+    https://github.com/holepunchto/require-addon
+  text-decoder@1.2.7
+    https://github.com/holepunchto/text-decoder
+  which-runtime@1.4.0
+    https://github.com/holepunchto/which-runtime
+
+--- isc (ISC License) ---
+
+  tmatch@5.0.0
+    https://github.com/isaacs/tmatch
+  v8-to-istanbul@9.3.0
+    https://github.com/istanbuljs/v8-to-istanbul
+
+--- mit (MIT License) ---
+
+  @jridgewell/resolve-uri@3.1.2
+    https://github.com/jridgewell/resolve-uri
+  @jridgewell/sourcemap-codec@1.6.0
+    https://github.com/jridgewell/sourcemaps
+  @jridgewell/trace-mapping@0.3.31
+    https://github.com/jridgewell/sourcemaps
+  @types/istanbul-lib-coverage@2.0.6
+    https://github.com/DefinitelyTyped/DefinitelyTyped
+  convert-source-map@2.0.0
+    https://github.com/thlorenz/convert-source-map
+  error-stack-parser@2.1.4
+    https://github.com/stacktracejs/error-stack-parser
+  fast-fifo@1.3.2
+    https://github.com/mafintosh/fast-fifo
+  picomatch@4.0.7
+    https://github.com/micromatch/picomatch
+  same-object@1.0.2
+    https://github.com/holepunchto/same-object
+  stackframe@1.3.4
+    https://github.com/stacktracejs/stackframe
+  streamx@2.28.1
+    https://github.com/mafintosh/streamx
+  teex@1.0.1
+    https://github.com/mafintosh/teex
+  test-tmp@1.4.0
+    https://github.com/mafintosh/test-tmp
+  tinyld@1.3.4
+    https://github.com/komodojp/tinyld
+
+
+=========================================================================
+C++ Dependencies
+=========================================================================
+
+--- apache-2.0 (Apache License 2.0) ---
+
+  qvac-lib-inference-addon-cpp
+    https://github.com/tetherto/qvac
+
+--- mit (MIT License) ---
+
+  ggml-speech
+    https://github.com/tetherto/qvac-ext-ggml
+  speech-cpp
+    https://github.com/tetherto/qvac-ext-lib-whisper.cpp
+
+--- Unknown ---
+
+  qvac-lint-cpp
+
+------------------------------------------------------------------------------
+[13] NOTICE applies to 1 package(s):
+    bare-path@3.1.2
+------------------------------------------------------------------------------
+Copyright 2023 Holepunch Inc
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+---
+
+Copyright Joyent, Inc. and other Node contributors.
+
+Permission is hereby granted, free of charge, to any person obtaining a
+copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to permit
+persons to whom the Software is furnished to do so, subject to the
+following conditions:
+
+The above copyright notice and this permission notice shall be included
+in all copies or substantial portions of the Software.
+
+------------------------------------------------------------------------------
+[14] LICENSE applies to 6 package(s):
+    big-sparse-array@1.0.3, debounceify@1.1.0, hyperbee@2.27.3, random-array-iterator@1.0.0, signal-promise@1.0.3, teex@1.0.1
+------------------------------------------------------------------------------
+The MIT License (MIT)
+
+Copyright (c) 2020 Mathias Buus
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+------------------------------------------------------------------------------
+[15] LICENSE applies to 1 package(s):
+    bits-to-bytes@1.3.0
+------------------------------------------------------------------------------
+ISC License
+
+Copyright (c) 2022 Contributors
+
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted, provided that the above
+copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY
+AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
+OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+PERFORMANCE OF THIS SOFTWARE.
+
+------------------------------------------------------------------------------
+[16] LICENSE applies to 8 package(s):
+    bogon@1.3.0, dht-rpc@6.28.0, nat-sampler@1.0.1, protomux@3.13.0, queue-tick@1.0.1, safety-catch@1.0.3, sodium-secretstream@1.2.0, xache@1.3.0
+------------------------------------------------------------------------------
+The MIT License (MIT)
+
+Copyright (c) 2021 Mathias Buus
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+------------------------------------------------------------------------------
+[17] LICENSE applies to 3 package(s):
+    codecs@3.1.0, hypercore@11.40.3, unordered-set@2.0.1
+------------------------------------------------------------------------------
+The MIT License (MIT)
+
+Copyright (c) 2016 Mathias Buus
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+------------------------------------------------------------------------------
+[18] NOTICE applies to 3 package(s):
+    compact-encoding-net@1.3.0, index-encoder@3.5.0, refcounter@1.0.0
+------------------------------------------------------------------------------
+Copyright 2023 Holepunch Inc
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+------------------------------------------------------------------------------
+[19] LICENSE applies to 3 package(s):
+    fast-fifo@1.3.2, kademlia-routing-table@1.0.6, streamx@2.28.1
+------------------------------------------------------------------------------
+The MIT License (MIT)
+
+Copyright (c) 2019 Mathias Buus
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+------------------------------------------------------------------------------
+[20] LICENSE applies to 1 package(s):
+    flat-tree@1.13.0
+------------------------------------------------------------------------------
+The MIT License (MIT)
+
+Copyright (c) 2015 Mathias Buus
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+------------------------------------------------------------------------------
+[21] LICENSE applies to 2 package(s):
+    generate-object-property@2.0.0, mutexify@1.4.0
+------------------------------------------------------------------------------
+The MIT License (MIT)
+
+Copyright (c) 2014 Mathias Buus
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+------------------------------------------------------------------------------
+[22] LICENSE applies to 2 package(s):
+    generate-string@1.0.1, resolve-reject-promise@1.1.0
+------------------------------------------------------------------------------
+The MIT License (MIT)
+
+Copyright (c) 2024 Mathias Buus
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+------------------------------------------------------------------------------
+[23] LICENSE applies to 5 package(s):
+    hypercore-crypto@3.7.0, is-options@1.0.2, protocol-buffers-encodings@1.2.0, record-cache@1.2.0, timeout-refresh@2.0.1
+------------------------------------------------------------------------------
+The MIT License (MIT)
+
+Copyright (c) 2018 Mathias Buus
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+------------------------------------------------------------------------------
+[24] LICENSE applies to 1 package(s):
+    hyperdht@6.36.0
+------------------------------------------------------------------------------
+The MIT License (MIT)
+
+Copyright (c) 2018-2019 Mathias Buus, David Mark Clements & Contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+------------------------------------------------------------------------------
+[25] LICENSE applies to 1 package(s):
+    hyperswarm@4.17.2
+------------------------------------------------------------------------------
+The MIT License (MIT)
+
+Copyright (c) 2019 Mathias Buus, Paul Frazee, David Mark Clements and contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+------------------------------------------------------------------------------
+[26] LICENSE applies to 1 package(s):
+    is-property@1.0.2
+------------------------------------------------------------------------------
+The MIT License (MIT)
+
+Copyright (c) 2013 Mikola Lysenko
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+------------------------------------------------------------------------------
+[27] LICENSE applies to 1 package(s):
+    nanoassert@2.0.0
+------------------------------------------------------------------------------
+Copyright (c) 2017, Emil Bay <github@tixz.dk>
+
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted, provided that the above
+copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+------------------------------------------------------------------------------
+[28] LICENSE applies to 3 package(s):
+    ready-resource@1.2.0, tiny-byte-size@1.1.0, z32@1.1.0
+------------------------------------------------------------------------------
+The MIT License (MIT)
+
+Copyright (c) 2022 Mathias Buus
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+------------------------------------------------------------------------------
+[29] NOTICE applies to 1 package(s):
+    resource-on-exit@1.0.0
+------------------------------------------------------------------------------
+Copyright 2024 Holepunch Inc
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+------------------------------------------------------------------------------
+[30] LICENSE applies to 2 package(s):
+    shuffled-priority-queue@2.1.0, time-ordered-set@2.0.1
+------------------------------------------------------------------------------
+The MIT License (MIT)
+
+Copyright (c) 2017 Mathias Buus
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+------------------------------------------------------------------------------
+[31] LICENSE applies to 1 package(s):
+    signed-varint@2.0.1
+------------------------------------------------------------------------------
+Copyright (c) 2014 Dominic Tarr
+
+Permission is hereby granted, free of charge, 
+to any person obtaining a copy of this software and 
+associated documentation files (the "Software"), to 
+deal in the Software without restriction, including 
+without limitation the rights to use, copy, modify, 
+merge, publish, distribute, sublicense, and/or sell 
+copies of the Software, and to permit persons to whom 
+the Software is furnished to do so, 
+subject to the following conditions:
+
+The above copyright notice and this permission notice 
+shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, 
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES 
+OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. 
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR 
+ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, 
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE 
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+------------------------------------------------------------------------------
+[32] LICENSE applies to 1 package(s):
+    sodium-native@5.2.0
+------------------------------------------------------------------------------
+The MIT License (MIT)
+
+Copyright (c) 2016 Mathias Buus and Emil Bay
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+------------------------------------------------------------------------------
+[33] LICENSE (the published package has no licence file; text taken from the upstream repository) applies to 1 package(s):
+    sodium-universal@5.0.1
+------------------------------------------------------------------------------
+Copyright 2017 Mathias Buus & Emil Bay
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+------------------------------------------------------------------------------
+[34] LICENSE applies to 1 package(s):
+    speedometer@1.1.0
+------------------------------------------------------------------------------
+Copyright 2013 Mathias Buus
+
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+------------------------------------------------------------------------------
+[35] LICENSE applies to 1 package(s):
+    tinyld@1.3.4
+------------------------------------------------------------------------------
+MIT License
+
+Copyright (c) 2021 Komodo
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+

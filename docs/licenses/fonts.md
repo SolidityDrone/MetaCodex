@@ -1,11 +1,11 @@
 # Fonts: copyright notices and licences
 
-Read from each font file's own name table (copyright, version, licence fields) on 2026-11-10, and checked against
-APK 0.7.8 (which fonts are inside it). All are redistributed unmodified; MetaCodex builds TextMesh Pro SDF atlases
+Read from each font file's own name table (copyright, version, licence fields) on 2026-11-10, and checked again on
+2026-11-12 against APK 0.7.16 (which fonts are inside it: font names searched in the build's asset files; the same eight). All are redistributed unmodified; MetaCodex builds TextMesh Pro SDF atlases
 from them at run time (that is "use", not a modified font). The full licence texts ship next to this file on the
 headset (`/usr/share/doc/metacodex/licenses/fonts/`) and are in the repository next to the fonts.
 
-## In the app (APK 0.7.8)
+## In the app (APK 0.7.16)
 
 | Font | Version | Copyright (verbatim from the font) | Licence | Full text in the repo |
 |---|---|---|---|---|
@@ -25,6 +25,13 @@ headset (`/usr/share/doc/metacodex/licenses/fonts/`) and are in the repository n
 | Orbitron | 2.001 | Copyright 2018 The Orbitron Project Authors (https://github.com/theleagueof/orbitron), with Reserved Font Name: "Orbitron". | SIL Open Font License 1.1 | `unity/Assets/MetaCodex/Fonts/Orbitron-OFL.txt` |
 | Inter SemiBold | 4.001 | Copyright 2016 The Inter Project Authors | SIL Open Font License 1.1 | `unity/Assets/MetaCodex/Fonts/Inter-OFL.txt` |
 | Rajdhani Medium | 1.201 | Copyright (c) 2014 Indian Type Foundry | SIL Open Font License 1.1 | `unity/Assets/MetaCodex/Fonts/Rajdhani-OFL.txt` |
+
+## Other copies of fonts in the repository
+
+| Where | Fonts | Licence | Notes |
+|---|---|---|---|
+| `docs/diagrams/fonts/` (diagram kit, 2026-11-12; may grow) | Inter Medium, Inter SemiBold, Rajdhani SemiBold, DejaVu Sans Mono, with `Inter-OFL.txt`, `Rajdhani-OFL.txt`, `DejaVu-LICENSE.txt` | OFL-1.1; Bitstream Vera | used by `docs/diagrams/kit.css` through `@font-face`; Windows Chrome renders the PNGs, nothing is shipped in the APK |
+| `native/xr/mcx_font.h`, `userland/overlay/opt/metacodex/quest-native/xr/mcx_font.h` (in the overlay) | DejaVu Sans Mono rasterised to a 16 x 32 ASCII coverage atlas by `native/xr/tools/make-font.py` | Bitstream Vera licence; DejaVu changes public domain | a derived work of the font: the notice must go with every copy, in apps built from the template too (gap G12 in `docs/LICENSES.md`) |
 
 ## What the licences ask
 

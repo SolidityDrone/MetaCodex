@@ -1,0 +1,42 @@
+MIT License
+
+Copyright (c) 2026 the MetaCodex authors (https://github.com/SolidityDrone/MetaCodex)
+Copyright (c) 2026 Michael Yong (the MQH harness in mqh/, a fork of bb, https://github.com/get-bb/bb)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+--------------------------------------------------------------------------------
+
+Scope. This licence covers the source code and documents written for MetaCodex:
+unity/Assets/MetaCodex (except its Fonts folder), unity/Assets/Plugins/Android/*.java,
+userland/ (our scripts, Core v0 and build tools; except userland/agent-skills),
+native/, tools/, tests/, qvac/server, docs/ (except docs/licenses/ and
+docs/diagrams/fonts/, which hold third-party texts and fonts), and our changes
+to MQH. It does NOT cover the third-party material that is in this repository
+or that the app ships or downloads: Unity-made files (unity/Assets/TextMesh Pro,
+unity/Assets/Settings, unity/Assets/XR, unity/Assets/CompositionLayers,
+unity/Assets/Scenes/SampleScene.unity, unity/Assets/InputSystem_Actions.inputactions),
+Meta SDK settings files (unity/Assets/Oculus, unity/Assets/Resources/*Settings*.asset,
+OVRBuildConfig.asset), the binaries in unity/Assets/Plugins (proot, talloc,
+libandroid-shmem, MoonSharp), all fonts, userland/agent-skills, and the icons
+under mqh/plugins/*/icons. Each of them stays under its own licence. The Meta XR
+SDK, the Unity engine, the Linux image (Debian), the local AI runtime and the AI
+models are not in this repository; they are fetched or built separately, under
+their own licences. Everything is listed, with licence, source and obligations,
+in docs/LICENSES.md; the licence texts are in docs/licenses/.

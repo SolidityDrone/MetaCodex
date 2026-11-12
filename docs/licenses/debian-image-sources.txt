@@ -1,0 +1,302 @@
+Corresponding source of the 78 Debian packages in the Linux image of MetaCodex (assets/linux/rootfs.tar:
+debian:trixie-slim, linux/arm64, manifest digest sha256:24a01011d10eba3a023bc8585b9650b8b29021240d4217c05b905e09ef4a5232).
+
+55 source packages. Every file is on snapshot.debian.org, the Debian project's archive of all published versions;
+its SHA-1 is the file's address:   https://snapshot.debian.org/file/<sha1>
+Read from https://snapshot.debian.org/mr/package/<source>/<version>/srcfiles on 2026-11-12.
+
+To fetch one source package with Debian's own tools:
+    apt-get source <source>=<version>        (deb-src lines: deb-src https://deb.debian.org/debian trixie main  and  deb-src https://security.debian.org/debian-security trixie-security main;
+     older or replaced versions: https://snapshot.debian.org/)
+To fetch every file listed here (the lines that start with two spaces are 'sha1 name' pairs):
+    grep -E '^  [0-9a-f]{40} ' debian-image-sources.txt | while read -r sha name; do curl -fLo "$name" https://snapshot.debian.org/file/$sha; done
+A written offer for the same material is in docs/LICENSES.md, section 6, 'Source code for the GPL and LGPL parts'.
+
+
+acl 2.3.2-2   (binary packages in the image: libacl1)
+  2674394a4061791c77d80fd2089a39c3675a5980 acl_2.3.2.orig.tar.xz
+  884c1cae6bbc52db9deba2f5523f6624df796201 acl_2.3.2.orig.tar.xz.asc
+  a69f6cb6c5eeb21e17debd698968c5c9c03782b6 acl_2.3.2-2.debian.tar.xz
+  a78c0a5e511ee122ba5976bbd7cabeff0fd7cbe6 acl_2.3.2-2.dsc
+
+apt 3.0.4   (binary packages in the image: apt, libapt-pkg7.0)
+  10cfc55acc4632dce0336edd1a40ad51b46ea50a apt_3.0.4.dsc
+  b1e9d1bda2a44fef4ea8db7e78c7b89765905631 apt_3.0.4.tar.xz
+
+attr 1:2.5.2-3   (binary packages in the image: libattr1)
+  9f7fbe109938c86fa973dae5e77f3bda24d0574c attr_2.5.2-3.debian.tar.xz
+  cd31cdd7a10abf9f6edd5a3050bed9eaf4cd4c9d attr_2.5.2-3.dsc
+  dfced877779583861401389eea82dfeb88cb5d3a attr_2.5.2.orig.tar.xz
+  eee0e22675431900d88d16eab9d76c122cffb89e attr_2.5.2.orig.tar.xz.asc
+
+audit 1:4.0.2-2+deb13u1   (binary packages in the image: libaudit-common, libaudit1)
+  65bf7227fb8ee21bdbdf6d9493ad0ceb6a25acc4 audit_4.0.2-2+deb13u1.debian.tar.xz
+  f318926afbbfa4cc8f96188d7907199116567d72 audit_4.0.2-2+deb13u1.dsc
+  fcb0bdecdaa649d1e688196713a824c332f37d65 audit_4.0.2.orig.tar.gz
+
+base-files 13.8+deb13u7   (binary packages in the image: base-files)
+  09c6e9bef6e1c0234e4cd91d2a7ac5d52f6dc8b3 base-files_13.8+deb13u7.dsc
+  967e7c01534a5ffee64590239c8c22371619c1aa base-files_13.8+deb13u7.tar.xz
+
+base-passwd 3.6.7   (binary packages in the image: base-passwd)
+  96b8461fab82edcbd97e75db607c4c134b40e990 base-passwd_3.6.7.tar.xz
+  c9a3fe0b6da25cfac124b9ace5c5882606f9235b base-passwd_3.6.7.dsc
+
+bash 5.2.37-2   (binary packages in the image: bash)
+  a1af1bbde88b868738d336b2804dbbe72cebe648 bash_5.2.37-2.debian.tar.xz
+  cf4da6fb3798f10b9510ab13fc69a5a9bf75e86e bash_5.2.37.orig.tar.xz
+  d32750d217c43dabc3b63b1d6431071e6cd506dc bash_5.2.37-2.dsc
+
+bzip2 1.0.8-6   (binary packages in the image: libbz2-1.0)
+  339a767cb2f05ec32402bae7269d98fd14413428 bzip2_1.0.8-6.debian.tar.bz2
+  bf7badf7e248e0ecf465d33c2f5aeec774209227 bzip2_1.0.8.orig.tar.gz
+  d6f4c6bc376a703658ee6a6811c4e876944c3f13 bzip2_1.0.8-6.dsc
+
+cdebconf 0.280   (binary packages in the image: libdebconfclient0)
+  94a37e191c3df033a9ae39bfbe6d7acd11c8d996 cdebconf_0.280.dsc
+  eaddf7a38a41aa060d81a5cdf659561d1ab0a4e3 cdebconf_0.280.tar.xz
+
+coreutils 9.7-3   (binary packages in the image: coreutils)
+  10ba8173099a993fdb9cac8a7a3042b455ce54f5 coreutils_9.7.orig.tar.xz.asc
+  850e25c476de51e09af13540425ec42669d0a210 coreutils_9.7-3.debian.tar.xz
+  8cab01ea1c688c66c5b76274f92f6a36d27aba71 coreutils_9.7-3.dsc
+  920791e12e7471479565a066e116a087edcc0df9 coreutils_9.7.orig.tar.xz
+
+dash 0.5.12-12   (binary packages in the image: dash)
+  0302a1006f740bc89faf8f4cf3d8f3f5dd1cbfd2 dash_0.5.12-12.debian.tar.xz
+  6dfbaf7435adb82d03033aabb3f06783fc7cbb23 dash_0.5.12-12.dsc
+  e15444a93853f693774df003f87d9040ab600a5e dash_0.5.12.orig.tar.gz
+
+db5.3 5.3.28+dfsg2-9   (binary packages in the image: libdb5.3t64)
+  5a9565fb65d95f3c03d77fe053950451242c133f db5.3_5.3.28+dfsg2-9.dsc
+  b22b47d5420774557ddbed0a50f1e2d9f100c911 db5.3_5.3.28+dfsg2-9.debian.tar.xz
+  c2e52e52021c4df2ebff57f1fb68e2879d65376a db5.3_5.3.28+dfsg2.orig.tar.xz
+
+debconf 1.5.91   (binary packages in the image: debconf)
+  0cd43ac0c9b8d69755c00876128ca1c969d35997 debconf_1.5.91.tar.xz
+  258e67779a4053a81b60528b1dd4e25b587d2fcf debconf_1.5.91.dsc
+
+debian-archive-keyring 2025.1   (binary packages in the image: debian-archive-keyring)
+  1629ea8905ffbf6d25ce63553d086c2db6fc2835 debian-archive-keyring_2025.1.dsc
+  dc99ba5c567a918dbc1f7c10c45964c95a3a9773 debian-archive-keyring_2025.1.tar.xz
+
+debianutils 5.23.2   (binary packages in the image: debianutils)
+  617a03e001015cdb7651df4ddbf5b22d0f716271 debianutils_5.23.2.dsc
+  7432fd03bb106c03e2c6e34ffc042a5f83ae7652 debianutils_5.23.2.tar.xz
+  cea61a30b5a1e9d9af8d3d189ad3e66b23c25cbb debianutils_5.23.2.git.tar.xz
+
+diffutils 1:3.10-4   (binary packages in the image: diffutils)
+  0cb61e8a7c5802e7bf8c70c9168105d9eebec476 diffutils_3.10-4.dsc
+  7712d36db350c347a6c44bd1483996f84ac3bc52 diffutils_3.10.orig.tar.xz.asc
+  82f441d0158e30c292ee6039abda0168e983bd55 diffutils_3.10-4.debian.tar.xz
+  c16a9cf107ad1f0f791b6d00852dc5e961c1c451 diffutils_3.10.orig.tar.xz
+
+dpkg 1.22.22   (binary packages in the image: dpkg)
+  3f562f6937e1df756e7275a303914f0efaa3c377 dpkg_1.22.22.tar.xz
+  e0dbbfa6400dc9a838176b4e046b7a57ce844c85 dpkg_1.22.22.dsc
+
+findutils 4.10.0-3   (binary packages in the image: findutils)
+  7adc5849ee272795be86d66a1eda10e8f37a6bf5 findutils_4.10.0-3.debian.tar.xz
+  aa0646445da9aba2ab7823d7298f3a9a40a6b6ad findutils_4.10.0.orig.tar.xz
+  c2274f0252eda9175f71c9233e9fef87be421678 findutils_4.10.0-3.dsc
+  f0dfd4608b3c2215868b3f0ac9a32ea97151db2e findutils_4.10.0.orig.tar.xz.asc
+
+gcc-14 14.2.0-19   (binary packages in the image: gcc-14-base, libgcc-s1, libstdc++6)
+  065b6e84c53e405389c312739057e1a42e41b44c gcc-14_14.2.0-19.dsc
+  40f4fae7a993865facd67321c28b95ef19aa7ab1 gcc-14_14.2.0.orig.tar.gz
+  47c1fc8b2b6a5643058a6d903ba5734cae7c03b7 gcc-14_14.2.0-19.debian.tar.xz
+
+glibc 2.41-12+deb13u4   (binary packages in the image: libc-bin, libc6)
+  57751ec678751a3cf5bf3badb54f6ab6b9760eea glibc_2.41-12+deb13u4.debian.tar.xz
+  ecf54de179ba3fb468949af843c8270979e53cc8 glibc_2.41.orig.tar.xz
+  f291d4082eef7e094241a1a87585f275cf336149 glibc_2.41-12+deb13u4.dsc
+
+gmp 2:6.3.0+dfsg-3   (binary packages in the image: libgmp10)
+  72323f8cf07aa5d338aff92ef42eea622569ed2c gmp_6.3.0+dfsg.orig.tar.xz
+  89d865c92f775ca7c7affc74388c204365268ac2 gmp_6.3.0+dfsg-3.dsc
+  917f804f224e3b64179f8672905a6517cdc38e4d gmp_6.3.0+dfsg-3.debian.tar.xz
+
+grep 3.11-4   (binary packages in the image: grep)
+  11e1b405ff336ae264c25f1ee8aed46031f91e11 grep_3.11-4.dsc
+  3686e9c246f03108dad1379f3e1d666fbd065d91 grep_3.11-4.debian.tar.xz
+  55d07b1247899b99e5b6cb956b0720491c235f32 grep_3.11.orig.tar.xz.asc
+  955146a0a4887eca33606e391481bbef37055b86 grep_3.11.orig.tar.xz
+
+gzip 1.13-1+deb13u1   (binary packages in the image: gzip)
+  8a722d74425395decd1588fb5b79a2ca97d5e549 gzip_1.13-1+deb13u1.debian.tar.xz
+  a793e107a54769576adc16703f97c39ee7afdd4e gzip_1.13.orig.tar.xz
+  da29a1d6cbffd22cf19ba0acb51355aedae2c985 gzip_1.13-1+deb13u1.dsc
+
+hostname 3.25   (binary packages in the image: hostname)
+  5c3ce185949d8440dda78a4639819802480c693d hostname_3.25.tar.xz
+  bdc52533af77ed664f9f91ecb72e786e4ff90251 hostname_3.25.dsc
+
+init-system-helpers 1.69~deb13u1   (binary packages in the image: init-system-helpers)
+  a9f896dadb2cb3ac8fb63ceaf22a7908f3611d60 init-system-helpers_1.69~deb13u1.tar.xz
+  b79c1fca08ca8c538a5967b46f9af5fd767308ae init-system-helpers_1.69~deb13u1.dsc
+
+libbsd 0.12.2-2   (binary packages in the image: libbsd0)
+  a3e0557ef167fd83e16803225c4de6abd69c26bf libbsd_0.12.2-2.dsc
+  c60b41226e738fc9872fc8a633fd2f501465f954 libbsd_0.12.2-2.debian.tar.xz
+  c8f49920dec71e8e72f2b19f6c209b440a367d3a libbsd_0.12.2.orig.tar.xz
+  e234fc7862bd78065ebf5222f7dcc54ae6b33786 libbsd_0.12.2.orig.tar.xz.asc
+
+libcap-ng 0.8.5-4   (binary packages in the image: libcap-ng0)
+  37693cccf2a13576c7b642a19f83db298fd1979d libcap-ng_0.8.5.orig.tar.gz
+  77af6afc188df68af65da122de5f56a8533f906a libcap-ng_0.8.5-4.debian.tar.xz
+  9b8a214e343e0cad71743b2e4e8ce4500c79554f libcap-ng_0.8.5-4.dsc
+
+libcap2 1:2.75-10+deb13u1   (binary packages in the image: libcap2)
+  1551cef1dd86c56a41c6e5793a79d7a7a9c648fb libcap2_2.75.orig.tar.xz
+  6295bbcaf6a5ffad653da306d98370d1e8966ecb libcap2_2.75-10+deb13u1.debian.tar.xz
+  c8c3bd695ab0cac34ea0ac0c395fa0777dec1105 libcap2_2.75-10+deb13u1.dsc
+  fe47ee3715175c88a5261a6f6275ea6eddf426dd libcap2_2.75.orig.tar.xz.asc
+
+libmd 1.1.0-2   (binary packages in the image: libmd0)
+  1240d4d6fa5945654e74f7e4e7084c79b57f3171 libmd_1.1.0-2.dsc
+  36302180a69e21afb53f5e30c1c2df3d75db61a9 libmd_1.1.0.orig.tar.xz.asc
+  7073624fcfe38f68b4faddd51c3af703883946a2 libmd_1.1.0-2.debian.tar.xz
+  72718d5ffad112b702ba84fd40900486f8179642 libmd_1.1.0.orig.tar.xz
+
+libseccomp 2.6.0-2   (binary packages in the image: libseccomp2)
+  2e7b2ad26b39ade9ee22652047d2c2c40a04991b libseccomp_2.6.0-2.debian.tar.xz
+  2eb0222d379756bd5f0a52c0488a20e3311bbf00 libseccomp_2.6.0.orig.tar.gz
+  6cfdde70eba246af6ae8fc25814318164e80f72f libseccomp_2.6.0-2.dsc
+  a3a445eac376025b8b55998ac7c9ceb92db9a0d3 libseccomp_2.6.0.orig.tar.gz.asc
+
+libselinux 3.8.1-1   (binary packages in the image: libselinux1)
+  5999a5d34d86dbf2379f1a41abe8cb9706721d8d libselinux_3.8.1-1.debian.tar.xz
+  6af7920fefad36d817bb5f4e39507de9a08668dd libselinux_3.8.1-1.dsc
+  e039453ee0b5ebb980ddf082a2b1024171913834 libselinux_3.8.1.orig.tar.gz
+  f43f4b604b59642e23e41713fb7ba465094f5fd3 libselinux_3.8.1.orig.tar.gz.asc
+
+libsemanage 3.8.1-1   (binary packages in the image: libsemanage-common, libsemanage2)
+  13e857e719133b658b5ce7870e2fd8629364ce9e libsemanage_3.8.1.orig.tar.gz.asc
+  6cd27679ad83becede4ac4d92beea54dabbe695a libsemanage_3.8.1.orig.tar.gz
+  74bd19c38e0821c833f2c3b70f0dd14e5dad7b20 libsemanage_3.8.1-1.dsc
+  b3faa24ae0a937771fa9338e66650cacc22e2a53 libsemanage_3.8.1-1.debian.tar.xz
+
+libsepol 3.8.1-1   (binary packages in the image: libsepol2)
+  6ef55c7f475df3fca85be45bd6570e539d8fa255 libsepol_3.8.1.orig.tar.gz.asc
+  7ae668832ae5456c363bda01cc2698c5d142102f libsepol_3.8.1.orig.tar.gz
+  7ba9eb7910f59be4932f4d0b1a0bd8d35f0aaa46 libsepol_3.8.1-1.debian.tar.xz
+  fc4625ed3b1317ca6ced73b6a64a9438fa7946f5 libsepol_3.8.1-1.dsc
+
+libxcrypt 1:4.4.38-1   (binary packages in the image: libcrypt1)
+  1ddb65a7d360d026586ee83b35430b0d1da39b34 libxcrypt_4.4.38.orig.tar.xz
+  554bbfe851512b6f83b8035d8608591d8311d1cf libxcrypt_4.4.38-1.dsc
+  a153f83a63de70924cdd8c04d06f6e3edef57505 libxcrypt_4.4.38-1.debian.tar.xz
+
+libzstd 1.5.7+dfsg-1   (binary packages in the image: libzstd1)
+  232037627d9d8bd80033e4316bdb62f737c9968f libzstd_1.5.7+dfsg.orig.tar.xz
+  5882e87bb6e8f39c83044b4aefa3b819b1310e67 libzstd_1.5.7+dfsg-1.dsc
+  899c78a644062eefb4cb056a23e22c5aed8cd4f4 libzstd_1.5.7+dfsg-1.debian.tar.xz
+
+lz4 1.10.0-4   (binary packages in the image: liblz4-1)
+  1a12361295cb206d28afa6461cfe1e2466bfd1e8 lz4_1.10.0-4.debian.tar.xz
+  6d870247eeda54129ef9a6b7a81d7f8d5377ff31 lz4_1.10.0-4.dsc
+  e6a01c6d457365f9e26bc440394daab80ab0aff0 lz4_1.10.0.orig.tar.gz
+
+mawk 1.3.4.20250131-1   (binary packages in the image: mawk)
+  6ce8be9766f59cec41c4463ea632649eed5676fc mawk_1.3.4.20250131-1.debian.tar.xz
+  77ccc0eef274106391fe509ab0adfcfcc745a676 mawk_1.3.4.20250131.orig.tar.gz.asc
+  8f63fbdec6d94845289d707e25efdb74f0a1ac8e mawk_1.3.4.20250131-1.dsc
+  cc9d8dfb14c35a4d06e4ef3cf694d8e960e266e3 mawk_1.3.4.20250131.orig.tar.gz
+
+ncurses 6.5+20250216-2   (binary packages in the image: libtinfo6, ncurses-base, ncurses-bin)
+  025a3164026bef20a1872b0cc9107236d5738a4a ncurses_6.5+20250216-2.debian.tar.xz
+  69f4cedccc8fe157ec94ea231017d65e37cde091 ncurses_6.5+20250216-2.dsc
+  df154cc6de3378e3705f4db1ce663d38a9c765d9 ncurses_6.5+20250216.orig.tar.gz.asc
+  e9a1792b02cd603c5a094dadc5046d5440723c4b ncurses_6.5+20250216.orig.tar.gz
+
+nettle 3.10.1-1   (binary packages in the image: libhogweed6t64, libnettle8t64)
+  7b2881587b42d0748de55a39491c14f96adde821 nettle_3.10.1.orig.tar.gz
+  9f8922b81b23705fcacf6c8f5dcd6727523250b2 nettle_3.10.1-1.dsc
+  a893d45b20ec91e65f1a8645e50619e788e277b7 nettle_3.10.1-1.debian.tar.xz
+
+openssl 3.5.7-1~deb13u3   (binary packages in the image: libssl3t64, openssl-provider-legacy)
+  11a6b388b1ce45f8c60021ed66f8772f7c963c62 openssl_3.5.7-1~deb13u3.debian.tar.xz
+  53d331880fbde8e6fe25870d5325a61201f6264d openssl_3.5.7.orig.tar.gz
+  9408998095f984b36591732286ef1df1ba7ce492 openssl_3.5.7.orig.tar.gz.asc
+  db56cd5070f847d98b8fec3dde05ce8ee276ba64 openssl_3.5.7-1~deb13u3.dsc
+
+pam 1.7.0-5   (binary packages in the image: libpam-modules, libpam-modules-bin, libpam-runtime, libpam0g)
+  0cc8ae9ba7a17610041e702b70eaba8765f93ced pam_1.7.0.orig.tar.xz.asc
+  935f3a737f834ac94a6600e4e3619de47e0cfa6a pam_1.7.0.orig.tar.xz
+  dc44d975a3cee93b2e116db4682b90abc8a11f31 pam_1.7.0-5.dsc
+  e27bfdcceb1294670f95467e4ce4e2455ce841c7 pam_1.7.0-5.debian.tar.xz
+
+pcre2 10.46-1~deb13u3   (binary packages in the image: libpcre2-8-0)
+  205a17397d764e25a8b4e86af9d70263e74eff66 pcre2_10.46-1~deb13u3.diff.gz
+  6858f0eb287c8285f53a038c8a95dc43ba51c653 pcre2_10.46.orig.tar.gz
+  e5fb135d6cf0465aa05ebdd5b5e72c3eb700a52b pcre2_10.46-1~deb13u3.dsc
+
+perl 5.40.1-6+deb13u1   (binary packages in the image: perl-base)
+  1c181a089b69ccda8f7adce847dd5d8984e247a7 perl_5.40.1-6+deb13u1.debian.tar.xz
+  4ffe5246c791df884363aed05ba81ba41cb02084 perl_5.40.1.orig.tar.xz
+  735f1a33e381a4037b22f895726d2ffce281b39a perl_5.40.1-6+deb13u1.dsc
+  82d1edc45031c917619d2c412c6d5c34a50fde0a perl_5.40.1.orig-regen-configure.tar.xz
+
+rust-sequoia-sqv 1.3.0-3   (binary packages in the image: sqv)
+  2fa9c040526922b732991ab5e752c7f4b32c2006 rust-sequoia-sqv_1.3.0-3.dsc
+  9178a31edda5e16a872c6c26593d3f0092473154 rust-sequoia-sqv_1.3.0.orig.tar.gz
+  b087e30e5a26d8e07eec12b6a3f921b0e0d4bad9 rust-sequoia-sqv_1.3.0-3.debian.tar.xz
+
+sed 4.9-2+deb13u1   (binary packages in the image: sed)
+  8ded1b543f1f558cbd5d7b713602f6a8ee84bde4 sed_4.9.orig.tar.xz
+  a20e0007bcf83fd3d4af77f6dfc40067dfb620b9 sed_4.9-2+deb13u1.dsc
+  c06297931461cd71d87fbf5115980a5a2722d5c7 sed_4.9-2+deb13u1.debian.tar.xz
+
+shadow 1:4.17.4-2   (binary packages in the image: login.defs, passwd)
+  6472ed66405924de1f564d0a18f01f12e5ce44d0 shadow_4.17.4.orig.tar.xz
+  7bd20c7d3f803fa040e0778ff8fb01423b61fbdb shadow_4.17.4.orig.tar.xz.asc
+  995c806c27f295af2fc46c9b7b565ada9b6ce9e9 shadow_4.17.4-2.debian.tar.xz
+  e4d18b937f954167778fbeb365b5661658a97780 shadow_4.17.4-2.dsc
+
+sqlite3 3.46.1-7+deb13u2   (binary packages in the image: libsqlite3-0)
+  0a1dee600409dded148a8595d8f8b7b7c6a3c2a9 sqlite3_3.46.1.orig.tar.xz
+  17c0f982c06df44a531d8ef3aef8b226b65cf6cd sqlite3_3.46.1.orig-www.tar.xz
+  9df0075462130032e1641d6646c01e691dbe0a40 sqlite3_3.46.1-7+deb13u2.debian.tar.xz
+  e9d9d4e7b5c82a96d3f233e46eb23a35376700eb sqlite3_3.46.1-7+deb13u2.dsc
+
+systemd 257.13-1~deb13u1   (binary packages in the image: libsystemd0, libudev1)
+  6f9f1a95623f849371303ee6fd11b95c2b7a2493 systemd_257.13-1~deb13u1.debian.tar.xz
+  a30ac2421a76ec05eeb4627e19d94f653279dff0 systemd_257.13.orig.tar.gz
+  fc07f2628e44c0ddbcc964768730cab7b094d627 systemd_257.13-1~deb13u1.dsc
+
+sysvinit 3.14-4   (binary packages in the image: sysvinit-utils)
+  03d7606ab74829d04a9db953e2151c15b4391ca4 sysvinit_3.14-4.debian.tar.xz
+  23f55970b5e4fbd904934845950713a43d76ba07 sysvinit_3.14.orig.tar.gz
+  f8c0e7ebbc91f5312e19f9d97bd4747d007c6b24 sysvinit_3.14-4.dsc
+
+tar 1.35+dfsg-3.1   (binary packages in the image: tar)
+  3741fabff56ede7bf8448ef7f5069b25ca36b761 tar_1.35+dfsg-3.1.debian.tar.xz
+  d910d9a9dc1252a793ca1837ac4f1080a64fca1f tar_1.35+dfsg.orig.tar.xz
+  f0a9bdc3c47cf3b0e7864db3e7a8876a9d61ebf1 tar_1.35+dfsg-3.1.dsc
+
+tzdata 2026f-0+deb13u1   (binary packages in the image: tzdata)
+  0d0a54d527c3dbf9b11ac02badbc445cdc10239f tzdata_2026f-0+deb13u1.debian.tar.xz
+  18ef1f36d1704f1613b31b56eeada48e16c9a3e7 tzdata_2026f.orig.tar.gz
+  97c9e345a2c4c28dc15f6a4449082efdc6e1209f tzdata_2026f-0+deb13u1.dsc
+  a3c920bd1fec58a6071ae932df5ecbd02bbb35cf tzdata_2026f.orig.tar.gz.asc
+
+util-linux 2.41.5-0+deb13u1   (binary packages in the image: bsdutils, libblkid1, liblastlog2-2, libmount1, libsmartcols1, libuuid1, login, mount, util-linux)
+  44d5f01ef357eca57a89f86125392fed89a8b14b util-linux_2.41.5-0+deb13u1.debian.tar.xz
+  aad638b4dea74be6227238f5e6398a8f54daefb4 util-linux_2.41.5.orig.tar.xz
+  af0f23320ed30c50ca540273f6f659b152be2c6f util-linux_2.41.5-0+deb13u1.dsc
+
+xxhash 0.8.3-2   (binary packages in the image: libxxhash0)
+  226be1e33182d1835530149ecbd67c4a6dc4cca8 xxhash_0.8.3-2.dsc
+  61e2b4577bb87fc219135cf9bd5b95b5e93e935d xxhash_0.8.3-2.debian.tar.xz
+  6caf7421bbcb2be76006f31ab514d484a8d8b628 xxhash_0.8.3.orig.tar.gz
+
+xz-utils 5.8.1-1+deb13u2   (binary packages in the image: liblzma5)
+  183b0cf1dce421176532909902d728165be3748b xz-utils_5.8.1-1+deb13u2.dsc
+  3658f92b0eec052a58ca69fa3c12c5b095a05fc6 xz-utils_5.8.1.orig.tar.xz.asc
+  4d9c41375f1fcc5f8ee0f803e8853257e576da7b xz-utils_5.8.1-1+deb13u2.debian.tar.xz
+  c29df8058b6279bfab2744f3e79b2940229207a3 xz-utils_5.8.1.orig.tar.xz
+
+zlib 1:1.3.dfsg+really1.3.1-1   (binary packages in the image: zlib1g)
+  3b19b81105d3436095134a648c521b678905eaac zlib_1.3.dfsg+really1.3.1.orig.tar.gz
+  8b454f72def33b4a329489b8dcb2568ba0ccac69 zlib_1.3.dfsg+really1.3.1-1.debian.tar.xz
+  f1d41173a0d8586644be4a5b9ee6185a794a767c zlib_1.3.dfsg+really1.3.1-1.dsc
