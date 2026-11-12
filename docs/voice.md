@@ -258,6 +258,26 @@ Tests: `tests/voicefx/run-voicefx-tests.sh` (splitter, units, shortening; also r
 in flight, first clip at once, Stop and a new reply drop late clips, clips freed, the VOICE panel's ■ STOP / ▶ START
 button and the COMMANDS row hint).
 
+## Speech quality: FAST (4 steps) or CLEAR (5) (feat/polish, 2026-11-12)
+
+VOICE > SPEECH (setting `voice.speech`, voice `set_setting speech_quality fast|clear`) picks Supertonic's diffusion steps,
+sent to the service as `ttsSteps` (a change reloads the voice model once). FAST = 4 is the default, CLEAR = 5 (the model
+default). Measured on the PC, linux-x64 addon, 2 threads on 2 cores, warm, median of 3, two interleaved rounds:
+
+| Text | chars | audio | 5 steps | 4 steps | 4 vs 5 |
+|---|---|---|---|---|---|
+| "Opened the agents panel." | 24 | 1.97 s | 599-661 ms | 500-502 ms | -17 to -24 % |
+| "Three threads are working. Claude finished the login fix." | 57 | 4.23 s | 1137-1403 ms | 949-953 ms | -17 to -32 % |
+| a 127-char status line | 127 | 8.32 s | 2020-2033 ms | 1687-1724 ms | -15 to -17 % |
+| a 303-char paragraph | 303 | 18.40 s | 4615-4662 ms | 4060-4421 ms | -4 to -13 % |
+
+Speech-to-text round trip (the service's Whisper base): 5 steps exact on all five; 4 steps (identical in both rounds) "a
+login fix" for "the login fix", "most the project" for "most of the project", "came out" for "came up": small words slip,
+nothing becomes unreadable. Synthesis on the PC runs at 55-70 characters a second (speech plays at about 16 a second);
+the headset is about 4-6x slower than this loaded PC, so there Supertonic makes speech about as fast as it plays
+(RTF ~1.0-1.3 at 5 steps, ~0.85-1.1 at 4). The 0.6B LLM writes about 14 tokens (~55 characters) a second on the same cores:
+the voice, not the LLM, is the slow part of a spoken answer.
+
 ## Voice effect (feat/polish, 2026-11-12)
 
 The owner: "post process the voices so they sound more like an AI of a true sci-fi, just tweaking the output".

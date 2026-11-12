@@ -17,7 +17,6 @@ namespace MetaCodex.Shell
     public sealed partial class MetaCodexShell
     {
         private UiButton _selectButton;
-        private UiLabel _gestureMonitor;
 
         private void BuildPanels()
         {

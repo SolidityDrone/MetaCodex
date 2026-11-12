@@ -179,6 +179,15 @@ namespace MetaCodex.EditorTools
                 bool fits = set != null && set.Check != null && set.Check(new JObject { ["setting"] = "voice_effect", ["value"] = "ship" }) == null
                             && set.Check(new JObject { ["setting"] = "voice_effect", ["value"] = "banana" }) != null;
                 Check(fits, "set_setting's check: voice_effect takes ship, not banana");
+                // VOICE > SPEECH: FAST (4 diffusion steps) by default, CLEAR = 5; set_setting speech_quality moves it
+                var speech = vp.Elements.OfType<UiSegmented>().FirstOrDefault(x => x.Text == "SPEECH");
+                string sq0 = shell.Settings.voice.speech;
+                string q1 = shell.SetSettingByVoice("speech_quality", "clear"), w1 = shell.Settings.voice.speech;
+                shell.SyncSettingsControls();
+                int sel1 = speech != null ? speech.Selected : -1;
+                string q2 = shell.SetSettingByVoice("speech_quality", "veloce"), w2 = shell.Settings.voice.speech;
+                Check(speech != null && sq0 == "fast" && w1 == "clear" && sel1 == 1 && w2 == "fast",
+                    $"VOICE > SPEECH: default {sq0}, clear -> {w1} (row {sel1}, {q1}), veloce -> {w2} ({q2})");
                 var lint = VoiceCommands.Lint(set);
                 Check(lint.Count == 0, "set_setting lint stays clean" + (lint.Count > 0 ? ": " + string.Join("; ", lint) : ""));
 

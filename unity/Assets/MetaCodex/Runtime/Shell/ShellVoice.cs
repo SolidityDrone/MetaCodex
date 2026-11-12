@@ -39,6 +39,10 @@ namespace MetaCodex.Shell
         /// The voice effect of spoken replies (VoiceFx): off | adjutant | starship | comm (VOICE > SOUND: OFF, AI, SHIP,
         /// COMM). Every one trims the silence around the speech and levels it; off adds nothing else.
         public string fx = "adjutant";
+        /// Speech quality (VOICE > SPEECH): fast = Supertonic with 4 diffusion steps, clear = 5 (the model default).
+        /// Measured 2026-11-12 (PC, 2 threads): 4 steps makes a sentence 10-18 % sooner; through speech-to-text it
+        /// now and then slips a small word ("a login fix" for "the login fix", "most the project"); 5 is exact.
+        public string speech = "fast";
     }
 
     /// One voice request, start to end (VOICE panel history, control port replies).
@@ -121,7 +125,7 @@ namespace MetaCodex.Shell
         private JArray _voicePrefix;
         private int _voicePrefixRev = -1;
         private string _voiceGrammar;
-        public static readonly string[] VoicePanels = { "terminals", "files", "git", "agents", "threads", "web", "links", "clipboard", "mqh", "skills", "plugins", "scripts", "gestures", "vault", "settings", "voice", "system", "focus", "storage", "tools", "messages", "workspaces" };
+        public static readonly string[] VoicePanels = { "terminals", "files", "git", "agents", "threads", "web", "links", "clipboard", "mqh", "skills", "plugins", "scripts", "gestures", "vault", "settings", "voice", "system", "focus", "storage", "tools", "messages", "workspaces", "control", "display", "look", "hands", "about" };
 
         private AudioSource _voiceAudio;
         private UiPanel _vHud;
@@ -219,6 +223,8 @@ namespace MetaCodex.Shell
                 ["ttsLanguage"] = Settings.voice.language == "it" ? "it" : "en",
                 // the voice model stays loaded 15 min (was 3): a reload costs 1-4 s before the first word on the headset
                 ["idleMinutes"] = new JObject { ["asr"] = 10, ["llm"] = 15, ["tts"] = 15 },
+                // VOICE > SPEECH: FAST = 4 diffusion steps, CLEAR = 5 (3 and 2 garble words); a change reloads the voice model once
+                ["ttsSteps"] = Settings.voice.speech == "clear" ? 5 : 4,
             };
             string s = cfg.ToString(Newtonsoft.Json.Formatting.None);
             if (s == _sentConfig) return;
@@ -755,13 +761,15 @@ namespace MetaCodex.Shell
                 ["browser"] = "web", ["internet"] = "web", ["website"] = "web", ["web browser"] = "web", ["web page"] = "web", ["page"] = "web", ["site"] = "web",
                 ["bookmarks"] = "links", ["local servers"] = "links", ["dev servers"] = "links", ["bookmark"] = "links",
                 ["setup"] = "settings", ["preferences"] = "settings", ["options"] = "settings", ["config"] = "settings", ["configuration"] = "settings",
-                ["control panel"] = "settings", ["control center"] = "settings", ["control centre"] = "settings", ["pannello di controllo"] = "settings", ["centro di controllo"] = "settings",
-                ["gesture"] = "gestures", ["hands"] = "gestures", ["gesture studio"] = "gestures",
+                ["control panel"] = "control", ["control center"] = "control", ["control centre"] = "control", ["pannello di controllo"] = "control", ["centro di controllo"] = "control",
+                ["display settings"] = "display", ["screen settings"] = "display", ["layout settings"] = "display", ["look and sound"] = "look", ["appearance"] = "look", ["look settings"] = "look",
+                ["hand settings"] = "hands", ["hands settings"] = "hands", ["version"] = "about", ["licences"] = "about", ["licenses"] = "about", ["app info"] = "about",
+                ["gesture"] = "gestures", ["gesture studio"] = "gestures", ["hand gestures"] = "gestures",
                 ["captures"] = "clipboard", ["capture"] = "clipboard", ["screenshots"] = "clipboard", ["screenshot"] = "clipboard", ["screen captures"] = "clipboard",
                 ["image clipboard"] = "clipboard", ["snapshots"] = "clipboard", ["clips"] = "clipboard",
                 ["skill"] = "skills", ["agent skills"] = "skills", ["plugin"] = "plugins", ["extensions"] = "mqh", ["harness"] = "mqh", ["daemon"] = "mqh", ["m q h"] = "mqh",
                 ["script"] = "scripts", ["lua"] = "scripts", ["lua scripts"] = "scripts",
-                ["secrets"] = "vault", ["keys"] = "vault", ["passwords"] = "vault", ["keystore"] = "vault", ["key vault"] = "vault", ["api keys"] = "vault", ["tokens"] = "vault", ["api key"] = "vault",
+                ["secrets"] = "vault", ["passwords"] = "vault", ["keystore"] = "vault", ["key vault"] = "vault", ["api keys"] = "vault", ["tokens"] = "vault", ["api key"] = "vault",
                 ["file"] = "files", ["explorer"] = "files", ["file manager"] = "files", ["folders"] = "files", ["file browser"] = "files",
                 ["repository"] = "git", ["repo"] = "git", ["source control"] = "git", ["branches"] = "git", ["commits"] = "git", ["get"] = "git", ["gift"] = "git", ["jet"] = "git",
                 ["terminal list"] = "terminals", ["consoles"] = "terminals", ["shells"] = "terminals",
@@ -774,7 +782,8 @@ namespace MetaCodex.Shell
                 ["controllo versione"] = "git", ["controllo di versione"] = "git", ["rami"] = "git", ["agenti"] = "agents", ["fornitori"] = "agents", ["modelli"] = "agents",
                 ["accesso"] = "agents", ["conversazioni"] = "threads", ["conversazione"] = "threads", ["discussioni"] = "threads", ["progetti"] = "threads",
                 ["navigatore"] = "web", ["segnalibri"] = "links", ["collegamenti"] = "links", ["appunti"] = "clipboard", ["catture"] = "clipboard", ["schermate"] = "clipboard", ["istantanee"] = "clipboard", ["competenze"] = "skills", ["abilità"] = "skills", ["estensioni"] = "mqh", ["gesti"] = "gestures", ["gesti delle mani"] = "gestures", ["cassaforte"] = "vault", ["casa forte"] = "vault",
-                ["segreti"] = "vault", ["chiavi"] = "vault", ["chiavi api"] = "vault", ["impostazioni"] = "settings", ["impostazione"] = "settings",
+                ["segreti"] = "vault", ["chiavi api"] = "vault", ["impostazioni"] = "settings", ["impostazione"] = "settings", ["schermo"] = "display", ["aspetto"] = "look", ["aspetto e suoni"] = "look",
+                ["mani"] = "hands", ["impostazioni delle mani"] = "hands", ["informazioni"] = "about", ["licenze"] = "about", ["versione"] = "about",
                 ["preferenze"] = "settings", ["opzioni"] = "settings", ["configurazione"] = "settings", ["voce"] = "voice", ["controllo vocale"] = "voice",
                 ["comandi vocali"] = "voice", ["microfono"] = "voice", ["assistente"] = "voice", ["sistema"] = "system", ["focus ambientale"] = "focus",
                 ["modalità focus"] = "focus", ["spazio"] = "storage", ["spazio su disco"] = "storage", ["archiviazione"] = "storage", ["disco"] = "storage",
@@ -817,7 +826,7 @@ namespace MetaCodex.Shell
                 Description = "Open a panel to see or manage something: terminals (open terminals), files (folders), git (repositories, branches, commits), " +
                     "agents (AI providers: which are signed in, logins, accounts, models), threads (agent conversations, workspaces, projects), web (the browser: web pages, localhost), links (bookmarks and local dev servers), " +
                     "clipboard (captures, screenshots of windows), mqh (skills, plugins, scripts, gestures, the harness), skills (the agents' skills), plugins (MQH and gesture plugins), scripts (Lua scripts), " +
-                    "gestures (hand gestures), vault (secrets, API keys), settings (look, layout, hands), voice (voice control, AI models), workspaces (the folders threads work in: checkout, worktrees, merging)",
+                    "gestures (hand gestures), vault (secrets, API keys), settings (look, layout, hands), voice (voice control, AI models), workspaces (the folders threads work in: checkout, worktrees, merging), control (the control center, on its last page), display (layout, distance, scale, the wrist menu), look (look and sound: opacity, shadows, sounds, the orb), hands (click, pinch, ray, clap, the select tool), about (version, licences, app permissions)",
                 Parameters = VoiceCommands.Schema(("panel", "string", VoicePanels, "the panel to open", true)),
                 Synonyms = new Dictionary<string, Dictionary<string, string>> { ["panel"] = panelSyn },
                 Phrases = new[]
@@ -975,9 +984,9 @@ namespace MetaCodex.Shell
             Voice.Register(new VoiceCommand
             {
                 Name = "set_setting",
-                Description = "Change a setting: on / off, a number (percent, metres), more / less, or the voice effect (off, adjutant, starship, comm)",
+                Description = "Change a setting: on / off, a number (percent, metres), more / less, the voice effect (off, adjutant, starship, comm) or the speech quality (fast, clear)",
                 Parameters = VoiceCommands.Schema(("setting", "string", VoiceSettingsCatalog.Select(x => x.Id).ToArray(), "which setting", true),
-                    ("value", "string", null, "on, off, a number, + or -; voice_effect: off, adjutant (AI), starship (ship) or comm (radio)", true)),
+                    ("value", "string", null, "on, off, a number, + or -; voice_effect: off, adjutant (AI), starship (ship) or comm (radio); speech_quality: fast or clear", true)),
                 // English names first: a name two settings share keeps its first (English) meaning
                 Synonyms = new Dictionary<string, Dictionary<string, string>> { ["setting"] = VoiceSettingsCatalog.SelectMany(x => x.Names.Select(n => (n, x.Id)))
                     .Concat(VoiceSettingsCatalog.SelectMany(x => x.Other.Select(n => (n, x.Id)))).GroupBy(x => x.n).ToDictionary(g => g.Key, g => g.First().Id) },
@@ -1011,11 +1020,35 @@ namespace MetaCodex.Shell
             });
             Voice.Register(new VoiceCommand
             {
+                Name = "add_gesture_example",
+                Description = "Install a gesture example plugin: core-poses (thumbs-up, thumbs-down, victory, horns, call-me) or swipes (swipe-left, swipe-right, swipe-up); the user confirms first",
+                Parameters = VoiceCommands.Schema(("example", "string", ExamplePlugins.Keys.ToArray(), "the example plugin to install", true)),
+                Synonyms = new Dictionary<string, Dictionary<string, string>>
+                {
+                    ["example"] = new Dictionary<string, string>
+                    {
+                        ["core poses"] = "core-poses", ["example poses"] = "core-poses", ["hand poses"] = "core-poses", ["thumbs up poses"] = "core-poses", ["poses"] = "core-poses",
+                        ["pose di esempio"] = "core-poses", ["pose della mano"] = "core-poses", ["pollice in su"] = "core-poses", ["pose"] = "core-poses",
+                        ["swipe"] = "swipes", ["swipe gestures"] = "swipes", ["swipes example"] = "swipes", ["gesti di swipe"] = "swipes", ["scorrimenti"] = "swipes", ["gesti di scorrimento"] = "swipes",
+                    },
+                },
+                Phrases = new[] { "(add|install) the {example} example", "(add|install) [the] example {example}", "(aggiungi|installa) [l'] esempio [dei|delle|di] {example}" },
+                Samples = new[]
+                {
+                    "add the example hand poses", "install the swipe gestures example", "i want the thumbs up and victory poses", "give me the example swipes",
+                    "aggiungi le pose di esempio", "installa i gesti di swipe di esempio", "voglio le pose del pollice in su", "metti l'esempio degli scorrimenti",
+                },
+                Vocabulary = new[] { "core-poses", "swipes", "thumbs-up", "victory", "horns", "call-me" },
+                Confirm = true,
+                Run = a => { var err = InstallGestureExample((string)a["example"]); return err != null ? "error: " + err : "Added the " + (string)a["example"] + " example"; },
+            });
+            Voice.Register(new VoiceCommand
+            {
                 Name = "show_keyboard",
                 Description = "Show the keyboard to type into the terminal",
-                Phrases = new[] { "(open|show|bring up) [the] keyboard", "keyboard" },
+                Phrases = new[] { "(open|show|bring up) [the] keyboard", "keyboard", "(open|show) [the] keys" },
                 Samples = new[] { "can i have the keyboard", "pull up the keyboard", "voglio scrivere con la tastiera", "fammi vedere la tastiera", "tira fuori la tastiera" },
-                Run = a => { OpenKeyboard(); return "Keyboard"; },
+                Run = a => { ShowTerminalKeyboard(); return "Keyboard"; },
             });
             var agentSyn = new Dictionary<string, Dictionary<string, string>>
             {
@@ -1050,7 +1083,7 @@ namespace MetaCodex.Shell
             Voice.Register(new VoiceCommand
             {
                 Name = "table_keyboard",
-                Description = "The system keyboard on a table (Surface Keyboard and Touchpad): asks to open it now (both hands flat on the table) or to turn it on in Settings",
+                Description = "MetaCodex's keyboard for the terminal laid on a table, with the touchpad on its right: rest both hands flat on the table and it lies down under them",
                 Phrases = new[] { "(open|show|bring up) [the] (table|surface|desk) keyboard", "[the] keyboard on [the] (table|desk)", "(turn on|enable|activate) [the] (table|surface) keyboard" },
                 Samples = new[] { "i want to type on the table", "put the keyboard on my desk", "can i use the surface keyboard", "voglio scrivere sul tavolo", "metti la tastiera sul tavolo", "attiva la tastiera da tavolo" },
                 Vocabulary = new[] { "surface keyboard", "touchpad" },
@@ -1212,10 +1245,18 @@ namespace MetaCodex.Shell
             ["foveation"] = new[] { "rendering foveato", "foveazione" },
             ["views_auto_open"] = new[] { "apertura automatica delle viste" },
             ["wrist_menu"] = new[] { "menu da polso", "menu sul polso", "menu al polso", "menu radiale" },
+            ["speech_quality"] = new[] { "qualita della voce", "qualita del parlato", "qualita della sintesi", "modo della voce", "voce veloce", "voce chiara" },
             ["voice_effect"] = new[] { "effetto vocale", "effetto della voce", "effetto voce", "voce robotica", "voce fantascientifica", "stile della voce", "voce da computer", "suono della voce", "filtro della voce" },
         };
 
         /// voice_effect: what people call each preset (English and Italian; folded like the matcher folds them).
+        private static readonly Dictionary<string, string> SpeechValues = new Dictionary<string, string>
+        {
+            ["fast"] = "fast", ["faster"] = "fast", ["quick"] = "fast", ["quicker"] = "fast", ["sooner"] = "fast", ["speedy"] = "fast", ["low"] = "fast",
+            ["veloce"] = "fast", ["rapida"] = "fast", ["rapido"] = "fast", ["piu veloce"] = "fast", ["bassa"] = "fast",
+            ["clear"] = "clear", ["clearer"] = "clear", ["best"] = "clear", ["high"] = "clear", ["exact"] = "clear", ["precise"] = "clear", ["slow"] = "clear", ["quality"] = "clear",
+            ["chiara"] = "clear", ["chiaro"] = "clear", ["nitida"] = "clear", ["precisa"] = "clear", ["alta"] = "clear", ["migliore"] = "clear", ["lenta"] = "clear",
+        };
         private static readonly Dictionary<string, string> VoiceEffectValues = new Dictionary<string, string>
         {
             ["off"] = "off", ["none"] = "off", ["normal"] = "off", ["plain"] = "off", ["clean"] = "off", ["natural"] = "off", ["dry"] = "off", ["no effect"] = "off",
@@ -1249,7 +1290,7 @@ namespace MetaCodex.Shell
             new VoiceSetting { Id = "opacity", Key = "panelOpacity", Kind = "number", Min = 0.5f, Max = 1f, Unit = "%", Label = "Panel opacity", Names = new[] { "opacity", "panel opacity", "window opacity" } },
             new VoiceSetting { Id = "panel_distance", Key = "panelDistance", Kind = "number", Min = 0.5f, Max = 1.4f, Unit = "m", Label = "Panel distance", Names = new[] { "distance", "panel distance", "window distance" } },
             new VoiceSetting { Id = "ui_scale", Key = "uiScale", Kind = "number", Min = 0.8f, Max = 1.8f, Unit = "x", Label = "UI scale", Names = new[] { "ui scale", "scale", "panel size", "window size", "windows", "panels", "text size", "size" } },
-            new VoiceSetting { Id = "carousel_radius", Key = "carouselRadius", Kind = "number", Min = 0.6f, Max = 1.6f, Unit = "m", Label = "Carousel radius", Names = new[] { "carousel radius", "ring radius", "carousel size", "carousel" } },
+            new VoiceSetting { Id = "carousel_radius", Key = "carouselRadius", Kind = "number", Min = 0.6f, Max = 1.6f, Unit = "m", Label = "Float radius", Names = new[] { "carousel radius", "ring radius", "carousel size", "carousel" } },
             new VoiceSetting { Id = "bend", Key = "bendPanels", Kind = "bool", Label = "Bend panels", Names = new[] { "bend", "bending", "bend panels", "curved panels", "curve" } },
             new VoiceSetting { Id = "sounds", Key = "sounds", Kind = "bool", Label = "Sounds", Names = new[] { "sounds", "sound", "ui sounds", "clicks" } },
             new VoiceSetting { Id = "volume", Key = "soundVolume", Kind = "number", Min = 0f, Max = 1f, Unit = "%", Label = "Volume", Names = new[] { "volume", "sound volume" } },
@@ -1262,6 +1303,8 @@ namespace MetaCodex.Shell
             new VoiceSetting { Id = "orb", Key = "orb", Kind = "bool", Label = "Orb", Names = new[] { "orb", "the orb", "energy sphere", "sphere", "companion" } },
             new VoiceSetting { Id = "voice_effect", Key = "voice.fx", Kind = "choice", Label = "Voice effect", Options = VoiceFx.Names, OptionLabels = new[] { "off", "AI", "ship", "comm" }, Values = VoiceEffectValues,
                 Names = new[] { "voice effect", "voice sound", "ai voice", "sci-fi voice", "robot voice", "voice style", "computer voice", "voice filter", "the effect on the voice" } },
+            new VoiceSetting { Id = "speech_quality", Key = "voice.speech", Kind = "choice", Label = "Speech", Options = new[] { "fast", "clear" }, OptionLabels = new[] { "fast", "clear" }, Values = SpeechValues,
+                Names = new[] { "speech quality", "voice quality", "speech mode", "speaking quality", "text to speech quality", "fast speech", "clear speech" } },
         };
 
         private static readonly HashSet<string> OnWords = new HashSet<string> { "on", "yes", "true", "enable", "enabled", "active" };
@@ -1368,7 +1411,7 @@ namespace MetaCodex.Shell
         /// Sliders and toggles of open panels follow settings changed elsewhere (voice, scripts, MQH).
         public void SyncSettingsControls()
         {
-            var sliders = new Dictionary<string, string> { { "DISTANCE", "panelDistance" }, { "CAROUSEL RADIUS", "carouselRadius" }, { "UI SCALE", "uiScale" },
+            var sliders = new Dictionary<string, string> { { "DISTANCE", "panelDistance" }, { "FLOAT RADIUS", "carouselRadius" }, { "UI SCALE", "uiScale" },
                 { "PANEL OPACITY", "panelOpacity" }, { "VOLUME", "soundVolume" }, { "RADIUS", "focusRadius" }, { "INTENSITY", "focusIntensity" }, { "SOFTNESS", "focusSoftness" }, { "BLUR", "focusBlur" } };
             var toggles = new Dictionary<string, string> { { "Bend panels", "bendPanels" }, { "Sounds", "sounds" }, { "Clap gesture", "gestures.clapEnabled" }, { "Show hand rays", "gestures.rayVisible" },
                 { "Foveated", "foveation" }, { "Ambient focus", "focusEnabled" }, { "Speak answers", "voice.speak" },
@@ -1384,6 +1427,7 @@ namespace MetaCodex.Shell
             if (_panels.TryGetValue("voice", out var vp))
                 foreach (var sg in vp.Elements.OfType<UiSegmented>())
                     if (sg.Text == "SOUND") { int fi = Array.IndexOf(VoiceFx.Names, VoiceFx.Name(VoiceFx.Parse(Settings.voice.fx))); if (sg.Selected != fi) sg.Set(fi); }
+                    else if (sg.Text == "SPEECH") { int si = Settings.voice.speech == "clear" ? 1 : 0; if (sg.Selected != si) sg.Set(si); }
         }
 
         /// Closes every panel except the dock; returns how many were open.
@@ -1534,7 +1578,7 @@ namespace MetaCodex.Shell
         private void BuildVoice()
         {
             var t = UiTheme.Current;
-            var p = Panel<UiPanel>("voice", "VOICE · LOCAL AI", 0.74f, 0.60f);
+            var p = Panel<UiPanel>("voice", "VOICE · LOCAL AI", ControlPageW, ControlPageH);
             var c = p.Content;
             float leftW = 0.33f;
             var ls = new UiStack(new Rect(c.x, c.y, leftW, c.height), t.Gap);
@@ -1583,6 +1627,14 @@ namespace MetaCodex.Shell
                 Settings.voice.fx = VoiceFx.Names[i];
                 OnSettingsChanged();
                 if (SpeakForTest != null || Qvac != null && Qvac.IsRunning) VoiceSay(VoiceFxSample); // no service: no toast of the sample line
+            }) { Rect = rs.Next(0.032f), LabelWidth = pickLabel });
+            // speech quality: FAST (4 steps, sooner) or CLEAR (5 steps, every word exact); picking one says the sample line
+            p.Add(new UiSegmented("SPEECH", new[] { "FAST", "CLEAR" }, Settings.voice.speech == "clear" ? 1 : 0, i =>
+            {
+                Settings.voice.speech = i == 1 ? "clear" : "fast";
+                OnSettingsChanged();
+                PushVoiceConfig();
+                if (SpeakForTest != null || Qvac != null && Qvac.IsRunning) VoiceSay(VoiceFxSample);
             }) { Rect = rs.Next(0.032f), LabelWidth = pickLabel });
 
             p.Add(new UiLabel("COMMANDS (say them, or anything close)", t.SmallSize) { Rect = rs.Next(0.018f), UseDisplay = true, Color = t.TextDim });

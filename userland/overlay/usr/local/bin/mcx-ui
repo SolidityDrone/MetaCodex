@@ -4,7 +4,7 @@
 #   mcx-ui script list | script log <name> | script eval 'return 1+1' | script dir
 #   mcx-ui gesture clap        (simulates a recognised gesture: test a script without moving your hands)
 #   mcx-ui gesture list | gesture bindings | gesture bind thumbs-up open:git | gesture unbind thumbs-up
-#   mcx-ui plugin list | plugin log <id> | plugin new <id> | plugin enable|disable|delete <id> | plugin reload
+#   mcx-ui plugin list | plugin log <id> | plugin new <id> | plugin examples | plugin example <id> | plugin enable|disable|delete <id> | plugin reload
 #   mcx-ui action open:git     (any action: open/close/toggle:<panel>, toast:, run:, url:, layout:, spin:, voice:, ...)
 #   mcx-ui voice run "close all windows" | voice say "hello" | voice list | voice status | voice match "open git"
 #   mcx-ui voice listen | voice wav /mnt/quest/cmd.wav | voice install | voice threads 2 | voice lang en

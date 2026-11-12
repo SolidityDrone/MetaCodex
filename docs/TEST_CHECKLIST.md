@@ -82,17 +82,17 @@ Helpers on the PC: `tools/qterm` (control port), `adb logcat -s Unity`, `files/s
 
 ## 7. Gestures studio and plugins
 
-- [ ] GESTURE panel > GESTURES: built-ins + `thumbs-up thumbs-down victory horns call-me` (core-poses) + `swipe-left/right/up` (swipes)
+- [ ] MQH > GESTURES > ALL: YOURS, SYSTEM (7 built-ins), EXAMPLES folded; for the steps below + ADD `core-poses` and `swipes` first (since section 34 nothing is installed by itself)
 - [ ] LIVE tab: finger bars move with your fingers (1 = straight); palm / thumb direction text; active gestures listed
 - [ ] Make a thumbs up → LIVE shows `thumbs-up` (and `grab`); GESTURES list marks it ● ACTIVE
 - [ ] Thumbs down, victory (✌), horns (🤘), call-me (🤙) → each recognised (LIVE / toast via a binding)
 - [ ] Swipe an open hand fast left / right → swipe-left / swipe-right in LIVE's recent events
 - [ ] Detector cost (LIVE, right column) stays well under 1 ms
 - [ ] TEST ▶ on any gesture → simulated event (toast "Simulated …")
-- [ ] BIND: pick `victory`, action "Open vault", + ADD BINDING → making ✌ opens VAULT; ON/OFF and DELETE work
+- [ ] BIND: pick `victory`, action "GIT", + ADD BINDING → making ✌ opens GIT; ON/OFF and DELETE work
 - [ ] RECORD: name "finger-gun", RIGHT, hold a finger gun, RECORD IN 3 s → "saved" + summary; the pose then fires; it appears under plugin `my-poses`
-- [ ] + NEW PLUGIN… "test-plugin" → folder in /mnt/quest/plugins; both palms up toggles THREADS
-- [ ] PLUGINS tab: enable/disable/reload/delete; detail shows poses, detectors, log
+- [ ] MQH > PLUGINS > + NEW PLUGIN… "test-plugin" → folder in /mnt/quest/plugins; both palms up shows a toast
+- [ ] MQH > PLUGINS: enable/disable/reload/delete; detail shows poses, detectors, log
 - [ ] Ask an agent on the headset (claude or opencode in a terminal): "make me a gesture plugin: when I do a thumbs up with my right hand open git; push my palm away to close it" → plugin appears and works (the same request passed in the Editor test)
 - [ ] `mcx-ui plugin list`, `mcx-ui gesture list`, `mcx-ui gesture bind clap toggle:files`, `mcx-ui action open:git`
 
@@ -558,3 +558,16 @@ Work windows:
 - [ ] LOG: the window is titled LOG · MESSAGES; CLEAR ALL (red, as big as other buttons) asks "Clear all n messages?"; CANCEL keeps them, CLEAR ALL empties the list
 - [ ] Pinch the orb to a new place, let go; quit the app (with MQH sync on) and start it again: the orb is where you left it; menu > PLACE, restart: it chooses its own place
 - [ ] A thread whose host is not connected: its orb card and THREAD's header say OFFLINE (not NO HOST)
+
+## 36. Spoken replies and the voice effect (branch feat/polish)
+
+- [ ] Ask a session question with a 2-sentence answer: the first words come about 3-4 s after the text appears (was 8-10 s), with a short pause between sentences; only 2 sentences / about 200 characters are spoken and the full answer stays on the HUD.
+- [ ] While a reply speaks, press ■ STOP on the voice HUD (also try TALK, and a new question): the voice stops at once and no later sentence plays.
+- [ ] Ask "is it stuck?" on a working thread: durations are spoken as "3 minutes 20 seconds", not "three men". With VOICE > LANGUAGE IT an Italian reply says "3 minuti" with the Italian voice.
+- [ ] VOICE panel: the service button reads ▶ START or ■ STOP from the state; a tap on a COMMANDS row shows Say “…” first and at most one short line, never an id like open_panel.
+- [ ] VOICE > SOUND shows OFF / AI / SHIP / COMM with AI selected on a fresh install. Pick each one: it says "Systems online. All panels ready." in that sound. AI is the same voice, slightly computer-like with a small room; SHIP is clearly synthetic with a longer tail; COMM is a narrow radio with a squelch at the start and the end; OFF is the plain voice.
+- [ ] All four are equally loud, never crackle or clip, and the first word starts without the old half-second of silence.
+- [ ] Say "make your voice sound like a radio" -> COMM is selected and replies sound like a radio; say "give the assistant its normal voice back" -> OFF; "metti l'effetto vocale astronave" -> SHIP.
+- [ ] VOICE > SPEECH: FAST is selected on a fresh install. Ask the same question with FAST and with CLEAR: FAST starts a little sooner; say if FAST ever drops or swaps a word you notice (then CLEAR becomes the default).
+- [ ] Restart the app: the chosen SOUND and SPEECH are kept.
+- [ ] Watch fps during a long spoken reply with SHIP: 72 fps holds (the effect runs off the main thread).

@@ -20,7 +20,7 @@ namespace MetaCodex.Shell
     {
         public SecretVault Vault { get; private set; }
         public const string MqhTokenName = "mqh.api-token";
-        /// A developer's own MQH token (Settings > DAEMON > TOKEN): sealed here, never in settings.json.
+        /// A developer's own MQH token (MQH > STATUS > TOKEN): sealed here, never in settings.json.
         public const string MqhTokenOverrideName = "mqh.api-token.override";
         public const string MqhEnvKeyName = "mqh.machine-env-key";
 
@@ -31,13 +31,13 @@ namespace MetaCodex.Shell
         private static readonly Regex EnvName = new Regex("^[A-Z_][A-Z0-9_]*$");
         private string _vaultMqhToken;
 
-        /// The MQH token: the one typed in Settings > DAEMON wins (developer override, sealed in the vault), else the vault's.
+        /// The MQH token: the one typed in MQH > STATUS wins (developer override, sealed in the vault), else the vault's.
         private string MqhTokenNow() => !string.IsNullOrEmpty(_mqhTokenOverride) ? _mqhTokenOverride : _vaultMqhToken;
         private string _mqhTokenOverride;
         /// Tests: the settings file (to prove no secret is written there).
         public string SettingsPathForTest => _settingsPath;
 
-        /// Settings > DAEMON > TOKEN: sealed in the vault (deny: it never leaves the app), not written to settings.json.
+        /// MQH > STATUS > TOKEN: sealed in the vault (deny: it never leaves the app), not written to settings.json.
         public void SetMqhTokenOverride(string value)
         {
             value = (value ?? "").Trim();
@@ -45,7 +45,7 @@ namespace MetaCodex.Shell
             if (value.Length == 0) { Vault.Delete(MqhTokenOverrideName); _mqhTokenOverride = null; }
             else
             {
-                var err = Vault.Set(MqhTokenOverrideName, value, "token", "deny", "MQH token typed in Settings > DAEMON (developer override)");
+                var err = Vault.Set(MqhTokenOverrideName, value, "token", "deny", "MQH token typed in MQH > STATUS (developer override)");
                 if (err != null) { Toast("Not stored: " + err, "error"); return; }
                 _mqhTokenOverride = value;
             }
@@ -64,7 +64,7 @@ namespace MetaCodex.Shell
                 // a token typed in older versions sat in settings.json as plain text: seal it, blank it there
                 if (!string.IsNullOrEmpty(Settings.mqhToken) && Vault.Usable)
                 {
-                    if (Vault.Set(MqhTokenOverrideName, Settings.mqhToken.Trim(), "token", "deny", "MQH token typed in Settings > DAEMON (developer override)") == null)
+                    if (Vault.Set(MqhTokenOverrideName, Settings.mqhToken.Trim(), "token", "deny", "MQH token typed in MQH > STATUS (developer override)") == null)
                     {
                         Settings.mqhToken = "";
                         Settings.Save(_settingsPath);

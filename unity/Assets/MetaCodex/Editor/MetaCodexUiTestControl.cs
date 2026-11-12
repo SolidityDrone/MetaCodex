@@ -103,7 +103,7 @@ namespace MetaCodex.EditorTools
             // voice names
             var vm = shell.Voice.FastMatch("open the control panel");
             var vi = shell.Voice.FastMatch("apri il pannello di controllo");
-            Check((string)vm?.Args["panel"] == "settings" && (string)vi?.Args["panel"] == "settings", $"voice: “open the control panel” -> {(string)vm?.Args["panel"]}, “apri il pannello di controllo” -> {(string)vi?.Args["panel"]}");
+            Check((string)vm?.Args["panel"] == "control" && (string)vi?.Args["panel"] == "control", $"voice: “open the control panel” -> {(string)vm?.Args["panel"]}, “apri il pannello di controllo” -> {(string)vi?.Args["panel"]}");
             // a saved layout never holds the rail on its own
             shell.OpenControl("mqh");
             shell.SaveNamedLayout("control-test");
