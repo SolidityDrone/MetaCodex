@@ -30,3 +30,15 @@ MCX_UITEST_ONLY=decider,voicewords,spokenreplies,voicefx,control,sidebar,context
 ```
 
 and adds the table here: no drop in exact accuracy against 93 / 96 / 88 / 88 / 93.
+
+## Run with this branch's registry (feat/polish e8f0246, 2026-11-12)
+
+Editor sections `context,decider,voiceexport,voicedecide` (52 ok), dev AI service on the PC, scored with `score_app.py`:
+
+| pipeline | all | single | multi | noisy | none | ms / decision (PC) |
+|---|---|---|---|---|---|---|
+| app: fast path -> decision model (e5-small) | **93** | 95 | 88 | 88 | 100 | 18 (median), p90 37 |
+
+Routes: fast path 121, decision model 59. Same total as the baseline (93). The run before e8f0246 (3d26f63) scored 92 with
+none 87 ("What can you do for me?" -> show_keyboard, "never mind" -> set_focus): the Italian chit-chat removed from
+VoiceDecider.NoneExamples had also held those away; e8f0246 adds English chit-chat instead (none copied from eval.jsonl).
