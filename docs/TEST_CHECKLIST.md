@@ -583,3 +583,10 @@ Work windows:
 - [ ] VOICE has no LANGUAGE row; Italian phrases do nothing (English only)
 - [ ] "never mind", "what can you do for me?": nothing opens or toggles
 - [ ] SYSTEM > TOOLS: a grouped plain list (no logos, no gh); ABOUT > LICENCES opens /usr/share/doc/metacodex
+
+## 39. Stable frame rate: rendering options (branch perf/stable-fps, 0.7.18; docs/perf.md)
+
+- [ ] 72 fps (VrApi FPS, no stale frames) with 6+ windows open, during a long spoken reply, a native build in a terminal and a local-coder turn
+- [ ] Text at the edges of the view: sharp while nothing heavy runs; under load it may soften a little (dynamic foveation), never flickers
+- [ ] Ambient Focus, real things in front of windows (occlusion) and bent windows look as before (symmetric projection)
+- [ ] Move the head and hands fast: windows stay still in the room, the hand ray stays on the fingers (late latching)

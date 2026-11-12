@@ -149,12 +149,36 @@ namespace MetaCodex.EditorTools
                     "com.unity.openxr.feature.input.metaquestplus",
                     "com.unity.openxr.feature.input.handinteraction");
             }
+            ConfigureQuestRendering();
             // Ambient Focus reads the room's live depth (Meta's EnvironmentDepthManager): with the OpenXR loader the
             // depth comes through these two (com.unity.xr.meta-openxr; same setup as SandyBridge)
             SetFeatures(BuildTargetGroup.Android, true,
                 "com.unity.openxr.feature.arfoundation-meta-session",
                 "com.unity.openxr.feature.arfoundation-meta-occlusion");
             EditorUtility.SetDirty(perTarget);
+        }
+
+        /// GPU and latency options of Unity's Meta Quest feature (owner 2026-11-12: "stable fps even during the hardest
+        /// tasks"; docs/perf.md): Symmetric Projection (Meta: 5-15 % in GPU-bound scenes, no visible change, "enable for
+        /// most applications"), Multiview Render Regions on the final pass (skips the eye-buffer pixels symmetric
+        /// projection adds outside the view; Unity 6.1+), Late Latching (head and hand poses taken at the end of the
+        /// render thread: up to one frame less latency). All need Vulkan + multiview, which this project uses. Phase
+        /// Sync stays off: Meta warns it "might cause more stale frames" when the workload jumps, as ours does.
+        private static void ConfigureQuestRendering()
+        {
+            var feature = FeatureHelpers.GetFeatureWithIdForBuildTarget(BuildTargetGroup.Android, "com.unity.openxr.feature.metaquest");
+            if (feature == null) { Debug.LogWarning("[MetaCodex] Meta Quest OpenXR feature not found: rendering options unchanged"); return; }
+            var so = new SerializedObject(feature);
+            void Bool(string name, bool v) { var p = so.FindProperty(name); if (p != null) p.boolValue = v; else Debug.LogWarning("[MetaCodex] MetaQuestFeature has no " + name); }
+            Bool("m_symmetricProjection", true);
+            Bool("lateLatchingMode", true);
+            Bool("lateLatchingDebug", false);
+            Bool("m_optimizeBufferDiscards", true);
+            var mvrr = so.FindProperty("m_multiviewRenderRegionsOptimizationMode");
+            if (mvrr != null) mvrr.intValue = 1; // FinalPass (None 0, FinalPass 1, AllPasses 2)
+            so.ApplyModifiedPropertiesWithoutUndo();
+            EditorUtility.SetDirty(feature);
+            Debug.Log("[MetaCodex] Meta Quest rendering: symmetric projection, multiview render regions (final pass), late latching");
         }
 
         private static void SetFeatures(BuildTargetGroup group, bool enabled, params string[] ids)
