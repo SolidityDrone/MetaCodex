@@ -207,8 +207,8 @@ Shader "MetaCodex/SciFiUI"
             // our current UI", for panel frames and buttons only): dark slate with a fine grain, a worn lit bevel on the
             // edges that face up, a shadowed bevel on the ones that face down, energy in engraved channels.
             // Prototype: ~/mcxwork/proto/frame.py (owner's pick: frame-v4 / v5). Linear colours.
-            static const float3 kStoneLo = float3(0.0075, 0.0100, 0.0144);
-            static const float3 kStoneHi = float3(0.053, 0.069, 0.092);
+            static const float3 kStoneLo = float3(0.0070, 0.0110, 0.0185);   // slate with a cold blue cast
+            static const float3 kStoneHi = float3(0.046, 0.066, 0.098);
             float Hash21(float2 q) { return frac(sin(dot(q, float2(127.1, 311.7))) * 43758.5453); }
             float VNoise(float2 x)
             {
@@ -222,7 +222,7 @@ Shader "MetaCodex/SciFiUI"
                 float depth = saturate(-dd / max(halfW, 1e-6));             // 0 at the edge .. 1 in the middle
                 float facing = dot(n, float2(-0.45, 0.89));                 // +1: the edge faces the light (top-left)
                 float bevel = saturate(1.0 - depth / 0.30);
-                float3 c = lerp(kStoneLo, kStoneHi, 0.35 + 0.45 * StoneGrain(p) + 0.20 * depth);
+                float3 c = lerp(kStoneLo, kStoneHi, 0.42 + 0.28 * StoneGrain(p) + 0.20 * depth);   // a fine grain, not concrete
                 c *= 1.0 + bevel * facing * 0.9;
                 c += bevel * pow(saturate(facing), 3.0) * 0.12;             // a thin worn highlight
                 return lerp(c, kStoneLo * 0.4, bevel * saturate(-facing) * 0.6);
@@ -445,9 +445,10 @@ Shader "MetaCodex/SciFiUI"
                         float3 stone = Stone(p, d, min(h.x, h.y), ChamferNormal(p, h, cBig, cBig * 0.28)) * 0.80;
                         float cd = abs(d + 0.0026);
                         fill = lerp(stone, kStoneLo * 0.30, saturate(1.0 - cd / 0.0009) * 0.85);
-                        float energy = filled ? 0.95 + 0.25 * state : 0.30 + 0.70 * saturate(state * 1.2);
+                        float energy = filled ? 0.95 + 0.25 * state : 0.50 + 0.55 * saturate(state * 1.2);
                         float3 hot = lerp(tint, white, 0.35);
-                        fill += hot * saturate(1.0 - cd / 0.00042) * energy * 0.95 + tint * exp(-cd / 0.0014) * energy * 0.40;
+                        fill += hot * saturate(1.0 - cd / 0.00042) * energy * 0.95 + tint * exp(-cd / 0.0016) * energy * 0.50;
+                        fill += tint * exp(d / 0.008) * 0.05;                                       // a faint blue breath from the channel
                         if (filled) fill += tint * exp(-max(-d - 0.0026, 0.0) / 0.010) * 0.22;   // the charge fills it softly
                         fill += (tint * 0.6 + 0.4) * sheen * 0.10;
                         fillA = 0.97;
