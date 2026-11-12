@@ -237,7 +237,7 @@ async function completions (req, res, j) {
   const r = await engines.chat(j.messages, Array.isArray(j.tools) ? j.tools : [], { max_tokens: j.max_tokens, temperature: j.temperature, grammar: j.grammar, engine: compat.wantsCoder(j.model) ? 'coder' : 'llm' })
   const calls = r.tool_calls.map((c, i) => ({ id: 'call_' + Date.now().toString(36) + i, type: 'function', function: { name: c.name, arguments: JSON.stringify(c.arguments || {}) } }))
   const st = r.stats || {}
-  log(`llm ${r.ms} ms (first ${r.firstMs} ms): ${calls.length ? calls.map((c) => c.function.name + c.function.arguments).join(' ') : JSON.stringify(r.content).slice(0, 120)}`)
+  log(`llm ${r.ms} ms (first ${r.firstMs} ms, prompt ${st.promptTokens || '?'} tok): ${calls.length ? calls.map((c) => c.function.name + c.function.arguments).join(' ') : JSON.stringify(r.content).slice(0, 120)}`)
   send(res, 200, {
     id: 'chatcmpl-' + Date.now().toString(36),
     object: 'chat.completion',
@@ -281,7 +281,7 @@ async function completionsStream (req, res, j) {
   }
   const calls = r.tool_calls.map((c, i) => ({ index: i, id: 'call_' + Date.now().toString(36) + i, type: 'function', function: { name: c.name, arguments: JSON.stringify(c.arguments || {}) } }))
   const st = r.stats || {}
-  log(`llm stream ${r.ms} ms (first ${r.firstMs} ms)${r.cancelled ? ' cancelled' : ''}: ${JSON.stringify(r.content).slice(0, 120)}`)
+  log(`llm stream ${r.ms} ms (first ${r.firstMs} ms, prompt ${st.promptTokens || '?'} tok)${r.cancelled ? ' cancelled' : ''}: ${JSON.stringify(r.content).slice(0, 120)}`)
   chunk(calls.length ? { tool_calls: calls } : {}, calls.length ? 'tool_calls' : 'stop', {
     usage: { prompt_tokens: st.promptTokens || 0, completion_tokens: st.generatedTokens || 0 }, timings: { ms: r.ms, firstMs: r.firstMs, tps: st.TPS || null }
   })

@@ -72,7 +72,7 @@ async function responses (req, res, j, { engines, send, sse, log }) {
   const opts = { engine: 'coder', max_tokens: j.max_output_tokens, temperature: j.temperature }
   if (!j.stream) {
     const r = await engines.chat(messages, tools, opts)
-    log(`coder responses ${r.ms} ms: ${r.tool_calls.length ? r.tool_calls.map((c) => c.name).join(' ') : JSON.stringify(r.content).slice(0, 80)}`)
+    log(`coder responses ${r.ms} ms, prompt ${(r.stats || {}).promptTokens || '?'} tok: ${r.tool_calls.length ? r.tool_calls.map((c) => c.name).join(' ') : JSON.stringify(r.content).slice(0, 80)}`)
     return send(res, 200, responseObject(id, model, r))
   }
   const ev = sse(req, res)
@@ -110,7 +110,7 @@ async function responses (req, res, j, { engines, send, sse, log }) {
     index++
   }
   emit('response.completed', { response: final })
-  log(`coder responses stream ${r.ms} ms${r.cancelled ? ' cancelled' : ''}: ${final.output.map((o) => o.type === 'function_call' ? o.name : 'text').join(' ')}`)
+  log(`coder responses stream ${r.ms} ms, prompt ${(r.stats || {}).promptTokens || '?'} tok${r.cancelled ? ' cancelled' : ''}: ${final.output.map((o) => o.type === 'function_call' ? o.name : 'text').join(' ')}`)
   ev.end()
 }
 
@@ -159,7 +159,7 @@ async function messagesApi (req, res, j, { engines, send, sse, log }) {
     const r = await engines.chat(messages, tools, opts)
     const st = r.stats || {}
     const content = anthropicContent(r)
-    log(`coder messages ${r.ms} ms: ${content.map((b) => b.type === 'tool_use' ? b.name : 'text').join(' ')}`)
+    log(`coder messages ${r.ms} ms, prompt ${(r.stats || {}).promptTokens || '?'} tok: ${content.map((b) => b.type === 'tool_use' ? b.name : 'text').join(' ')}`)
     return send(res, 200, { id, type: 'message', role: 'assistant', model, content, stop_reason: content.some((b) => b.type === 'tool_use') ? 'tool_use' : 'end_turn', stop_sequence: null, usage: { input_tokens: st.promptTokens || 0, output_tokens: st.generatedTokens || 0 } })
   }
   const ev = sse(req, res)
@@ -184,7 +184,7 @@ async function messagesApi (req, res, j, { engines, send, sse, log }) {
   const st = r.stats || {}
   ev.event('message_delta', { type: 'message_delta', delta: { stop_reason: uses.length ? 'tool_use' : 'end_turn', stop_sequence: null }, usage: { output_tokens: st.generatedTokens || 0 } })
   ev.event('message_stop', { type: 'message_stop' })
-  log(`coder messages stream ${r.ms} ms${r.cancelled ? ' cancelled' : ''}: ${uses.length ? uses.map((b) => b.name).join(' ') : 'text'}`)
+  log(`coder messages stream ${r.ms} ms, prompt ${(r.stats || {}).promptTokens || '?'} tok${r.cancelled ? ' cancelled' : ''}: ${uses.length ? uses.map((b) => b.name).join(' ') : 'text'}`)
   ev.end()
 }
 
