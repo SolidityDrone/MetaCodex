@@ -170,3 +170,6 @@ Packages/packages-lock.json linguist-generated
 
 # Exceptions for .asset files such as lightning pre-baking
 LightingData.asset     binary
+
+# README images are normal git blobs, not LFS: LFS bandwidth would limit how often the README can load them
+docs/assets/diagrams/** -filter -diff -merge binary
