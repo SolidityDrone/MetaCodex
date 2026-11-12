@@ -221,8 +221,10 @@ namespace MetaCodex.Shell
                 var displays = new List<UnityEngine.XR.XRDisplaySubsystem>();
                 SubsystemManager.GetSubsystems(displays);
                 foreach (var d in displays) d.foveatedRenderingLevel = Settings.foveation ? 0.5f : 0f;
-                // the rig's OVRManager turns fixed foveation on (High) by itself; it is the switch that works
-                OVRManager.useDynamicFoveatedRendering = false;
+                // the rig's OVRManager turns fixed foveation on (High) by itself; it is the switch that works. Dynamic
+                // (owner 2026-11-12: stable fps even in the hardest tasks): Horizon OS raises foveation only as the GPU
+                // gets busy, up to High, and keeps the edges sharp while it is idle (docs: unity-fixed-foveated-rendering)
+                OVRManager.useDynamicFoveatedRendering = Settings.foveation;
                 OVRManager.foveatedRenderingLevel = Settings.foveation ? OVRManager.FoveatedRenderingLevel.High : OVRManager.FoveatedRenderingLevel.Off;
             }
             catch (Exception ex) { Log("display settings: " + ex.Message); }

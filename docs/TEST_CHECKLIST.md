@@ -591,3 +591,10 @@ Work windows:
 - [ ] The same with OpenCode, model "MetaCodex (this headset) / Local coder"; Codex does not offer the local coder
 - [ ] While a local-coder thread works: TALK shows "⏸ LOCAL CODER WORKING" and does not record; 15 s after the turn ends TALK works again; 72 fps all the time
 - [ ] Say "remove the local coder" (confirm): the tile says GET again, the model is gone from the threads' model lists after a restart of MQH
+
+## 39. Stable frame rate: rendering options (branch perf/stable-fps, 0.7.18; docs/perf.md)
+
+- [ ] 72 fps (VrApi FPS, no stale frames) with 6+ windows open, during a long spoken reply, a native build in a terminal and a local-coder turn
+- [ ] Text at the edges of the view: sharp while nothing heavy runs; under load it may soften a little (dynamic foveation), never flickers
+- [ ] Ambient Focus, real things in front of windows (occlusion) and bent windows look as before (symmetric projection)
+- [ ] Move the head and hands fast: windows stay still in the room, the hand ray stays on the fingers (late latching)
