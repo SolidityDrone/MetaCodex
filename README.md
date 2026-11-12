@@ -47,7 +47,7 @@ MetaCodex gives you the space and the controls that metacoding needs:
 | Run agents in parallel safely | Threads that work in the same folder wait for each other. A new thread can get its own git worktree. A dry run shows merge conflicts before you merge. |
 | Control without a keyboard | Hands and voice do the common actions: open, close, switch, approve, find a thread. A keyboard on the table is there for real typing. |
 | Close the loop on one device | An agent builds a native app on the headset. You launch it, test it and go back to the thread. One tap sends a picture and the logs back to the agent. |
-| Work offline and in private | Local models run the voice interface on the headset. Keys stay sealed in a vault, and the agents' sign-ins stay inside their own tools. |
+| Work offline and in private | Local models run the voice interface on the headset. An optional local coding model lets agents work with no network. Keys stay sealed in a vault, and the agents' sign-ins stay inside their own tools. |
 
 MetaCodex does not replace your coding agents.
 It is the place where you work with them: a desk that is always with you and as large as your room.
