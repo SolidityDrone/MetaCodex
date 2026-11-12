@@ -603,6 +603,8 @@ namespace MetaCodex.EditorTools
             AssetDatabase.Refresh(ImportAssetOptions.ForceUpdate);
             ConfigurePlayer();
             ConfigureMetaProjectConfig();
+            ConfigureQuestRendering(); // every build, not only BatchSetup: 0.7.18's first build missed them
+            AssetDatabase.SaveAssets();
             OVRManifestPreprocessor.GenerateOrUpdateAndroidManifest(silentMode: true);
             PatchManifest();
             ConfigureUrp(); // full resolution + 4x MSAA on the headset's quality level, every build
