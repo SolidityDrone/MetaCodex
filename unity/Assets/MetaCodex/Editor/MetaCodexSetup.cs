@@ -185,6 +185,13 @@ namespace MetaCodex.EditorTools
             Bool("lateLatchingMode", true);
             Bool("lateLatchingDebug", false);
             Bool("m_optimizeBufferDiscards", true);
+            // the first Quest has no symmetric projection: Unity's build check fails while it is a target device
+            var devices = so.FindProperty("targetDevices");
+            for (int i = 0; devices != null && i < devices.arraySize; i++)
+            {
+                var d = devices.GetArrayElementAtIndex(i);
+                if (d.FindPropertyRelative("manifestName")?.stringValue == "quest") d.FindPropertyRelative("enabled").boolValue = false;
+            }
             var mvrr = so.FindProperty("m_multiviewRenderRegionsOptimizationMode");
             if (mvrr != null) mvrr.intValue = 1; // FinalPass (None 0, FinalPass 1, AllPasses 2)
             so.ApplyModifiedPropertiesWithoutUndo();
