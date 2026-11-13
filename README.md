@@ -4,7 +4,7 @@
 
 **A coding-agent workstation inside a standalone mixed-reality headset.**
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/diagrams/hero-dark.webp"><img alt="MetaCodex at a glance: spatial panels, a Linux system, local AI models, a coding-agent harness and native app builds, all in one headset app." src="docs/assets/diagrams/hero-light.webp"></picture>
+<a href="docs/assets/diagrams/hero-light.webp"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/diagrams/hero-dark.webp"><img alt="MetaCodex at a glance: spatial panels, a Linux system, local AI models, a coding-agent harness and native app builds, all in one headset app." src="docs/assets/diagrams/hero-light.webp"></picture></a><br><sub>Full size: <a href="docs/assets/diagrams/hero-dark.webp">dark</a> · <a href="docs/assets/diagrams/hero-light.webp">light</a></sub>
 
 MetaCodex runs a real Debian Linux system inside one headset app.
 You work in spatial panels: terminals, threads, files, git and a web view.
@@ -95,7 +95,7 @@ The test headset has 6 cores and 7.9 GB RAM.
 
 ### One app, two processes
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/diagrams/platform-dark.webp"><img alt="One Android app with two processes: the main process draws the interface on cores 3-5, and the :ai service process runs the heavy services on cores 0-2." src="docs/assets/diagrams/platform-light.webp"></picture>
+<a href="docs/assets/diagrams/platform-light.webp"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/diagrams/platform-dark.webp"><img alt="One Android app with two processes: the main process draws the interface on cores 3-5, and the :ai service process runs the heavy services on cores 0-2." src="docs/assets/diagrams/platform-light.webp"></picture></a><br><sub>Full size: <a href="docs/assets/diagrams/platform-dark.webp">dark</a> · <a href="docs/assets/diagrams/platform-light.webp">light</a></sub>
 
 - MetaCodex is one Android app with two processes.
 - The main process holds the 3D engine, the shell, the terminals and the Java plugins. The headset OS puts it on cores 3-5.
@@ -127,7 +127,7 @@ The app checks the health of MQH and of the local AI every 5 s. Three missed che
 
 ### A real Linux inside the app
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/diagrams/userland-dark.webp"><img alt="A Debian arm64 root file system runs inside the app through proot, with an overlay of MetaCodex files, shared mounts, a pty bridge and separate process trees." src="docs/assets/diagrams/userland-light.webp"></picture>
+<a href="docs/assets/diagrams/userland-light.webp"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/diagrams/userland-dark.webp"><img alt="A Debian arm64 root file system runs inside the app through proot, with an overlay of MetaCodex files, shared mounts, a pty bridge and separate process trees." src="docs/assets/diagrams/userland-light.webp"></picture></a><br><sub>Full size: <a href="docs/assets/diagrams/userland-dark.webp">dark</a> · <a href="docs/assets/diagrams/userland-light.webp">light</a></sub>
 
 - The Linux is the official Debian 13 arm64 image. It is 30,214,037 bytes in the APK.
 - The app unpacks it on first launch.
@@ -157,7 +157,7 @@ The app checks the health of MQH and of the local AI every 5 s. Three missed che
 
 ### Two AI stacks, two jobs
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/diagrams/ai-stacks-dark.webp"><img alt="Two separate AI stacks: local models and the command registry run the interface, while MQH and wrapped agent CLIs write code." src="docs/assets/diagrams/ai-stacks-light.webp"></picture>
+<a href="docs/assets/diagrams/ai-stacks-light.webp"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/diagrams/ai-stacks-dark.webp"><img alt="Two separate AI stacks: local models and the command registry run the interface, while MQH and wrapped agent CLIs write code." src="docs/assets/diagrams/ai-stacks-light.webp"></picture></a><br><sub>Full size: <a href="docs/assets/diagrams/ai-stacks-dark.webp">dark</a> · <a href="docs/assets/diagrams/ai-stacks-light.webp">light</a></sub>
 
 MetaCodex has two AI stacks. They do different jobs and never merge.
 
@@ -216,7 +216,7 @@ Examples: "Is this build stuck?" and "What did this thread achieve?".
 
 ### From a spoken sentence to an action
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/diagrams/voice-path-dark.webp"><img alt="A spoken sentence passes speech-to-text, a fast path and an embedding decision router to a registry command, with an optional language model fallback and the session context for questions." src="docs/assets/diagrams/voice-path-light.webp"></picture>
+<a href="docs/assets/diagrams/voice-path-light.webp"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/diagrams/voice-path-dark.webp"><img alt="A spoken sentence passes speech-to-text, a fast path and an embedding decision router to a registry command, with an optional language model fallback and the session context for questions." src="docs/assets/diagrams/voice-path-light.webp"></picture></a><br><sub>Full size: <a href="docs/assets/diagrams/voice-path-dark.webp">dark</a> · <a href="docs/assets/diagrams/voice-path-light.webp">light</a></sub>
 
 Most commands run without the language model.
 
@@ -235,7 +235,7 @@ A reference such as "reopen it" or "close it" acts on the window you opened or c
 
 ### How MQH grows
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/diagrams/mqh-modules-dark.webp"><img alt="MQH grows without an APK rebuild through skills, MQH plugins, gesture plugins, Lua scripts, provider integrations and agent views." src="docs/assets/diagrams/mqh-modules-light.webp"></picture>
+<a href="docs/assets/diagrams/mqh-modules-light.webp"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/diagrams/mqh-modules-dark.webp"><img alt="MQH grows without an APK rebuild through skills, MQH plugins, gesture plugins, Lua scripts, provider integrations and agent views." src="docs/assets/diagrams/mqh-modules-light.webp"></picture></a><br><sub>Full size: <a href="docs/assets/diagrams/mqh-modules-dark.webp">dark</a> · <a href="docs/assets/diagrams/mqh-modules-light.webp">light</a></sub>
 
 MQH is the agent harness of the app. It is a trimmed fork of an open-source agent IDE backend.
 It runs in the Linux and keeps threads, plugins and skills.
@@ -263,7 +263,7 @@ None of them needs an APK rebuild.
 
 ### Secrets stay sealed
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/diagrams/vault-dark.webp"><img alt="The vault: a hardware-backed key seals secrets, policies and an approval in the headset decide each request, and mcx-secret, the MQH envelope key and the git credential helper hand out values." src="docs/assets/diagrams/vault-light.webp"></picture>
+<a href="docs/assets/diagrams/vault-light.webp"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/diagrams/vault-dark.webp"><img alt="The vault: a hardware-backed key seals secrets, policies and an approval in the headset decide each request, and mcx-secret, the MQH envelope key and the git credential helper hand out values." src="docs/assets/diagrams/vault-light.webp"></picture></a><br><sub>Full size: <a href="docs/assets/diagrams/vault-dark.webp">dark</a> · <a href="docs/assets/diagrams/vault-light.webp">light</a></sub>
 
 - One AES-256-GCM key lives in the hardware-backed Android Keystore. Nothing can read the key out of the Keystore. On the test headset it sits in the TEE.
 - The associated data of a sealed value holds its name. A value cannot move to another name.
@@ -279,7 +279,7 @@ None of them needs an APK rebuild.
 
 ### Native apps built on the headset
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/diagrams/native-pipeline-dark.webp"><img alt="The native app pipeline: an agent checks, builds and verifies an app on the headset, you tap to install and launch it, and its menu returns you to MetaCodex with an optional report." src="docs/assets/diagrams/native-pipeline-light.webp"></picture>
+<a href="docs/assets/diagrams/native-pipeline-light.webp"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/diagrams/native-pipeline-dark.webp"><img alt="The native app pipeline: an agent checks, builds and verifies an app on the headset, you tap to install and launch it, and its menu returns you to MetaCodex with an optional report." src="docs/assets/diagrams/native-pipeline-light.webp"></picture></a><br><sub>Full size: <a href="docs/assets/diagrams/native-pipeline-dark.webp">dark</a> · <a href="docs/assets/diagrams/native-pipeline-light.webp">light</a></sub>
 
 An agent in a native project builds a real headset app, on the headset, and you test it at once.
 Unless you ask for VR or controllers, a new native app uses hands only and mixed reality. A mandatory skill sets this rule for the agent.
@@ -304,7 +304,7 @@ Unless you ask for VR or controllers, a new native app uses hands only and mixed
 
 ### A workspace you can stand in
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/diagrams/spatial-ui-dark.webp"><img alt="The spatial interface: curved panels around you, an orb that casts and manages them, placement rules, layouts, and hands with gestures." src="docs/assets/diagrams/spatial-ui-light.webp"></picture>
+<a href="docs/assets/diagrams/spatial-ui-light.webp"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/diagrams/spatial-ui-dark.webp"><img alt="The spatial interface: curved panels around you, an orb that casts and manages them, placement rules, layouts, and hands with gestures." src="docs/assets/diagrams/spatial-ui-light.webp"></picture></a><br><sub>Full size: <a href="docs/assets/diagrams/spatial-ui-dark.webp">dark</a> · <a href="docs/assets/diagrams/spatial-ui-light.webp">light</a></sub>
 
 - Camera passthrough shows your room. The panels float in it, curved around you.
 - One shader draws a whole panel as one mesh with one draw call. The GPU bends the panel, so text that changes every frame bends with it.
