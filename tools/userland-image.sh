@@ -98,14 +98,21 @@ file "$R/usr/local/bin/node" | grep -q "ARM aarch64" || { echo "node is not arm6
 if [ "${MCX_IMAGE_EMULATE:-1}" = 1 ]; then
   T="$W/tools"
   mkdir -p "$T"
-  if [ ! -x "$T/proot" ] || [ ! -x "$T/qemu-aarch64-static" ]; then
-    say "tools: qemu-user-static, proot, libtalloc2 (apt-get download, unpacked here, not installed)"
-    ( cd "$T" && rm -f ./*.deb && apt-get download qemu-user-static proot libtalloc2 >/dev/null
-      for d in ./*.deb; do dpkg-deb -x "$d" x; done
-      cp x/usr/bin/qemu-aarch64-static x/usr/bin/proot . && mkdir -p lib && cp -P x/usr/lib/x86_64-linux-gnu/libtalloc.so* lib/ && rm -rf x ./*.deb )
+  # proot 5.5.0 (static, github.com/proot-me/proot, sha256 from its release's SHA256SUMS): 5.1 (Ubuntu's) does not
+  # translate faccessat2, so under qemu dpkg's access check reached this PC's own /var/lib/dpkg and failed
+  PROOT_URL=https://github.com/proot-me/proot/releases/download/v5.5.0/proot
+  PROOT_SHA=db185300a9daabbce86aca7632d8c7fdc4249f6f153171954013b70c5f491ec0
+  if ! echo "$PROOT_SHA  $T/proot-5.5.0" | sha256sum -c --quiet - 2>/dev/null; then
+    say "tools: proot 5.5.0 (static)"
+    curl -fsSL -o "$T/proot-5.5.0" "$PROOT_URL" && echo "$PROOT_SHA  $T/proot-5.5.0" | sha256sum -c --quiet - && chmod +x "$T/proot-5.5.0"
+  fi
+  if [ ! -x "$T/qemu-aarch64-static" ]; then
+    say "tools: qemu-user-static (apt-get download, unpacked here, not installed)"
+    ( cd "$T" && rm -f ./qemu-user-static*.deb && apt-get download qemu-user-static >/dev/null && dpkg-deb -x qemu-user-static*.deb x \
+      && cp x/usr/bin/qemu-aarch64-static . && rm -rf x qemu-user-static*.deb )
   fi
   P() {
-    LD_LIBRARY_PATH="$T/lib" PROOT_NO_SECCOMP=1 "$T/proot" -q "$T/qemu-aarch64-static" -0 -r "$R" -b /dev -b /proc -b /sys -w /root \
+    PROOT_NO_SECCOMP=1 "$T/proot-5.5.0" -q "$T/qemu-aarch64-static" -0 -r "$R" -b /dev -b /proc -b /sys -w /root \
       /usr/bin/env -i HOME=/root LANG=C.UTF-8 DEBIAN_FRONTEND=noninteractive PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin "$@"
   }
   say "dpkg in the image (emulated arm64): $n packages"
