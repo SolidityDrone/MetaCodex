@@ -27,9 +27,9 @@ namespace MetaCodex.EditorTools
             var outer = w.Outer.Select(x => x.Label).ToList();
             var dock = shell.PanelsById["dock"].Elements.OfType<UiButton>().Select(b => (b.Text ?? "").Split('\n').Last()).ToList();
             string[] setup = { "AGENTS", "MQH", "VAULT", "GIT", "VOICE", "SYSTEM", "SETUP" };
-            Check(inner.SequenceEqual(new[] { "TALK", "TERM", "FILES", "THREADS", "WEB", "CONTROL" }) && outer.Count == 6 && !inner.Concat(outer).Any(setup.Contains),
+            Check(inner.SequenceEqual(new[] { "TALK", "TERMS", "FILES", "THREADS", "WEB", "CONTROL" }) && outer.Count == 5 && !inner.Concat(outer).Any(setup.Contains),
                 $"the wrist menu: 6 + {outer.Count} tiles (was 6 + 13): {string.Join(" ", inner)} | {string.Join(" ", outer)}");
-            Check(dock.Count == 12 && dock.Contains("CONTROL") && !dock.Any(setup.Contains), $"the dock: the same {dock.Count}: {string.Join(" ", dock)}");
+            Check(dock.Count == 11 && dock.Contains("CONTROL") && dock.Count(x => x.StartsWith("TERM")) == 1 && !dock.Any(setup.Contains), $"the dock: the same {dock.Count}: {string.Join(" ", dock)}");
             // one table builds both (MainMenuItems): the dock is the wrist in the same order (no TABLE: the table keyboard is gone)
             var wristOrder = inner.Concat(outer).ToList();
             Check(dock.SequenceEqual(wristOrder) && !outer.Contains("TABLE") && shell.MainMenuItems().Count == inner.Count + outer.Count,

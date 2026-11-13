@@ -250,7 +250,7 @@ namespace MetaCodex.Shell
         public List<SavedLayout> layouts = new List<SavedLayout>();
         /// Voice control and the local AI service (VOICE panel).
         public VoiceSettings voice = new VoiceSettings();
-        /// Show the first terminal when the app starts (off: it runs hidden until TERM on the dock shows it).
+        /// Show the first terminal when the app starts (off: it runs hidden until TERMS on the menu shows it).
         public bool terminalAtStart = false;
         /// Agent views (charts, diagrams) open by themselves when a thread message brings one.
         public bool viewsAutoOpen = true;

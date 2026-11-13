@@ -46,7 +46,7 @@ namespace MetaCodex.Shell
             public bool Outer, WristOnly;
         }
 
-        /// The main menu: inner ring = what is used most (owner 2026-11-11: 19 tiles were too many; setup is in CONTROL),
+        /// The main menu (11 tiles): inner ring = what is used most (owner 2026-11-11: 19 tiles were too many; setup is in CONTROL),
         /// outer ring = quick actions and the smaller windows. The dock shows them in this order, without the wrist-only ones.
         public List<MainMenuItem> MainMenuItems()
         {
@@ -55,13 +55,14 @@ namespace MetaCodex.Shell
             void I(bool outer, string glyph, string icon, string label, Action act, Func<bool> lit = null, Color? tint = null, bool wristOnly = false) =>
                 list.Add(new MainMenuItem { Outer = outer, Glyph = glyph, Icon = icon, Label = label, Act = act, Lit = lit, Tint = tint, WristOnly = wristOnly });
             I(false, "◉", "mic", "TALK", () => VoiceToggle(), () => VoiceState == "listening" || VoiceState == "transcribing", t.Danger);
-            I(false, "▶", "terminal", "TERM", () => ShowOrNewTerminal());
+            // the terminals: one tile (owner 2026-11-13: TERM next to TERMS was redundant); TERMINALS lists them, hidden ones
+            // too (tap one to show it), + NEW opens another
+            I(false, "▤", "windows", "TERMS", () => TogglePanel("terminals"), () => IsPanelOpen("terminals"));
             I(false, "◫", "folder", "FILES", () => TogglePanel("files"), () => IsPanelOpen("files"));
             I(false, "☰", "threads", "THREADS", () => TogglePanel("threads"), () => IsPanelOpen("threads"));
             I(false, "◎", "globe", "WEB", () => TogglePanel("web"), () => IsPanelOpen("web"));
             // settings, voice, agents, MQH (skills, plugins, scripts, gestures, status), vault and git, system: one place
             I(false, "⚙", "gear", "CONTROL", () => ToggleControl(), () => ControlRailPage != null);
-            I(true, "▤", "windows", "TERMS", () => TogglePanel("terminals"), () => IsPanelOpen("terminals"));
             I(true, "▣", "photos", "CLIP", () => TogglePanel("clipboard"), () => IsPanelOpen("clipboard"));
             I(true, "◐", "aperture", "FOCUS", () => SetFocus(!Settings.focusEnabled), () => Settings.focusEnabled);
             I(true, "⌖", "select", "SELECT", () => SetSelectionMode(!Router.SelectionMode), () => Router.SelectionMode, t.Warn);

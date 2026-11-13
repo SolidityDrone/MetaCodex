@@ -552,7 +552,7 @@ namespace MetaCodex.Shell
             frame.Add(new UiHitArea(() => app?.Focus(inst)) { Rect = new Rect(bezel, t.HeaderHeight + bezel, v.Width, v.Height) });
             _frames[inst] = frame;
             Router.Register(frame);
-            if (_hideFirstTerminal) { _hideFirstTerminal = false; frame.gameObject.SetActive(false); } // runs hidden: TERM shows it
+            if (_hideFirstTerminal) { _hideFirstTerminal = false; frame.gameObject.SetActive(false); } // runs hidden: TERMS lists it, a tap shows it
             else frame.Open();
             OnFocusChanged(app != null ? app.Active : inst);
             RefreshTerminalsPanel();
@@ -577,11 +577,11 @@ namespace MetaCodex.Shell
         /// ✕ on a terminal: ends it, except the last one, which keeps running hidden.
         private void CloseOrHideTerminal(TerminalInstance inst)
         {
-            if (app == null || app.Terminals.Count <= 1) { HideTerminal(inst); Toast("The last terminal keeps running hidden · TERM on the menu shows it", "info"); return; }
+            if (app == null || app.Terminals.Count <= 1) { HideTerminal(inst); Toast("The last terminal keeps running hidden · TERMS on the menu shows it", "info"); return; }
             app.CloseTerminal(inst);
         }
 
-        /// TERM on the main menu (dock or wrist): a hidden terminal comes back; when all are shown, a new one opens.
+        /// A hidden terminal comes back; when all are shown, a new one opens (voice "show the terminal", the frame's actions).
         public void ShowOrNewTerminal()
         {
             if (app == null) return;

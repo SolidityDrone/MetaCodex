@@ -10,7 +10,7 @@ Helpers on the PC: `tools/qterm` (control port), `adb logcat -s Unity`, `files/s
 ## 0. Install and first start
 
 - [ ] `adb install -r unity/Builds/MetaCodex.apk` → installs (version 0.3.x)
-- [ ] Start from the Library → passthrough, no boundary prompt (boundaryless), the dock in front; the terminal runs hidden (TERM on the dock shows it)
+- [ ] Start from the Library → passthrough, no boundary prompt (boundaryless), the dock in front; the terminal runs hidden (TERMS on the menu lists it, a tap shows it)
 - [ ] First start installs the Linux userland (progress in the status line) → a shell prompt in the terminal
 - [ ] Frame rate: status line shows about 72 fps with the shell idle
 - [ ] `mcx-ui status` inside the terminal → host=Ready, fps, terminals=1
@@ -532,7 +532,7 @@ Main menu (dock: Settings > DISPLAY, main menu on the wrist off; wrist: on):
 - [ ] Dock: TALK TERM FILES THREADS WEB CONTROL / TERMS CLIP FOCUS SELECT KEYS CENTER, the wrist's order without TABLE; the wrist still has TABLE on the outer ring
 - [ ] Dock: open FILES, THREADS, WEB, TERMS, CLIP from it: each tile stays selected (lit) while its window is open and goes dark when it closes (within a quarter second); CONTROL lit while CONTROL shows; FOCUS and SELECT lit while on; KEYS lit while the terminal keyboard is up (also on the wrist); TALK lit while listening
 - [ ] Watch the fps overlay with the dock open for a minute: 72 fps, no hitch every quarter second
-- [ ] ✕ on the last terminal: the toast says "TERM on the menu shows it"
+- [ ] ✕ on the last terminal: the toast says "TERMS on the menu shows it"
 
 CONTROL:
 
