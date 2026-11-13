@@ -50,6 +50,7 @@ namespace MetaCodex.Shell
                 _splashT = 0f;
                 _splash.SetActive(true);
                 PlaceSplash(head, 1f);
+                RequestStartPermissions();
             }
             _splashT += Mathf.Min(dt, 0.1f); // a long first frame does not skip the transition
             float t = _splashT;
@@ -84,6 +85,28 @@ namespace MetaCodex.Shell
             if (_splashMat != null) Destroy(_splashMat);
             if (_splashTex != null) Resources.UnloadAsset(_splashTex);
             _splash = null; _splashMat = null; _splashTex = null;
+        }
+
+        /// Every runtime permission the app uses, asked once, together, while the splash shows (feat/ready-on-install,
+        /// owner 2026-11-13: "give all the permissions during startup"): the microphone (TALK), spatial data (the room's
+        /// depth: Ambient Focus, real things in front of windows, panels kept off walls) and the headset camera (BLUR,
+        /// the sharp depth). Horizon OS shows its dialogs one after another; a refused one is asked again by its feature
+        /// when used (VoiceRecorder, ShellAmbient), as before. Installing apps is a system setting, opened when a native
+        /// app is first installed.
+        private void RequestStartPermissions()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                var want = new System.Collections.Generic.List<string>();
+                foreach (var perm in new[] { UnityEngine.Android.Permission.Microphone, OVRPermissionsRequester.ScenePermission, OVRPermissionsRequester.PassthroughCameraAccessPermission })
+                    if (!UnityEngine.Android.Permission.HasUserAuthorizedPermission(perm)) want.Add(perm);
+                if (want.Count == 0) return;
+                Log("permissions asked at start: " + string.Join(", ", want));
+                UnityEngine.Android.Permission.RequestUserPermissions(want.ToArray());
+            }
+            catch (System.Exception ex) { Log("permissions at start: " + ex.Message); }
+#endif
         }
 
         /// The splash is up (self-tests and the control port's state).

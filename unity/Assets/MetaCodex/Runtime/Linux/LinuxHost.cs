@@ -167,9 +167,10 @@ namespace MetaCodex.Linux
         /// The proot command line of a login shell (`bash -l`, or `bash -l -c command`) as root in the rootfs, with
         /// `guestEnv` ("NAME=value") added inside, and the host environment proot itself needs. StartShell runs it
         /// in a pty; MqhHost hands it to the AI service process (no pty, off the frame loop's cores).
-        public string[] ProotArgv(string command, IEnumerable<string> guestEnv, out string[] hostEnv)
+        public string[] ProotArgv(string command, IEnumerable<string> guestEnv, out string[] hostEnv, string root = null)
         {
             if (State != HostState.Ready) throw new InvalidOperationException("Linux not ready: " + State);
+            root = root ?? RootfsDir; // another rootfs: the first-run bench's scratch copy
             string proot = Path.Combine(NativeLibDir, "libproot.so");
             string tmp = Path.Combine(LinuxDir, "tmp");
             Directory.CreateDirectory(tmp);
@@ -180,18 +181,18 @@ namespace MetaCodex.Linux
                 "--kill-on-exit",
                 "--link2symlink",
                 "-0",
-                "-r", RootfsDir,
+                "-r", root,
                 "-b", "/dev",
                 "-b", "/proc",
                 "-b", "/sys",
-                "-b", Path.Combine(RootfsDir, "tmp") + ":/dev/shm",
+                "-b", Path.Combine(root, "tmp") + ":/dev/shm",
                 "-b", "/dev/urandom:/dev/random",
                 "-b", "/proc/self/fd:/dev/fd",
                 "-b", "/proc/self/fd/0:/dev/stdin",
                 "-b", "/proc/self/fd/1:/dev/stdout",
                 "-b", "/proc/self/fd/2:/dev/stderr",
             };
-            argv.AddRange(RootfsSetup.ProcBinds(RootfsDir, CanRead));
+            argv.AddRange(RootfsSetup.ProcBinds(root, CanRead));
             if (!string.IsNullOrEmpty(SharedDir) && Directory.Exists(SharedDir))
             {
                 argv.Add("-b");
@@ -281,7 +282,63 @@ namespace MetaCodex.Linux
         /// Copies a StreamingAssets file out of the APK. Android's asset packaging stores "x.tar.gz" decompressed
         /// as "x.tar" (verified in the 0.3 APK: assets/linux/rootfs.tar, overlay.tar), so ".gz" names fall back
         /// to the name without it; the extractor reads both formats.
-        private IEnumerator CopyStreamingAsset(string rel, string dest, Action<float> progress)
+        /// The first start, measured without touching the installed userland (feat/ready-on-install): the shipped rootfs
+        /// copied out of the APK, unpacked and set up into a scratch folder, its shipped Debian packages installed there
+        /// with dpkg (offline) and Node and git run from it; then the folder is deleted. `report` gets one line per step
+        /// and a total. Control port: `system bench-first-run`.
+        public IEnumerator BenchFirstRun(Action<string> report)
+        {
+            if (State != HostState.Ready) { report("bench: Linux not ready"); yield break; }
+            string dir = Path.Combine(FilesDir, "bench-firstrun"), tar = Path.Combine(dir, "rootfs.tar.gz"), root = Path.Combine(dir, "rootfs");
+            var total = System.Diagnostics.Stopwatch.StartNew();
+            var step = System.Diagnostics.Stopwatch.StartNew();
+            var clean = Task.Run(() => { if (Directory.Exists(dir)) NativeFileOps.DeleteTree(dir); Directory.CreateDirectory(dir); });
+            while (!clean.IsCompleted) yield return null;
+            step.Restart();
+            yield return CopyStreamingAsset(rootfsAsset, tar, _ => { }, failHost: false);
+            if (!File.Exists(tar)) { report("bench: the rootfs did not copy out of the APK"); yield break; }
+            report($"rootfs out of the APK: {step.Elapsed.TotalSeconds:F1} s ({new FileInfo(tar).Length / 1048576} MB)");
+            step.Restart();
+            var unpack = Task.Run(() =>
+            {
+                var fs = new NativeFileOps();
+                fs.MakeDir(root, 0x1ED);
+                TarStats st;
+                using (var f = new FileStream(tar, FileMode.Open, FileAccess.Read, FileShare.Read, 256 * 1024)) st = TarGzExtractor.Extract(f, root, fs, null);
+                RootfsSetup.Apply(root, AppGroups(), Environment.ProcessorCount, fs);
+                File.Delete(tar);
+                return st;
+            });
+            while (!unpack.IsCompleted) yield return null;
+            if (unpack.IsFaulted) { report("bench: unpack failed: " + unpack.Exception?.GetBaseException().Message); yield break; }
+            report($"unpacked and set up: {step.Elapsed.TotalSeconds:F1} s ({unpack.Result})");
+            step.Restart();
+            string cmd = "if ls /var/cache/metacodex/base-debs/*.deb >/dev/null 2>&1; then nice -n 10 dpkg --force-confdef --force-confold -i /var/cache/metacodex/base-debs/*.deb >/dev/null 2>&1 && echo DPKG_OK || echo DPKG_FAILED; else echo NO_DEBS; fi; node -v; git --version; python3 --version";
+            string output = null;
+            var run = Task.Run(() =>
+            {
+                var argv = ProotArgv(cmd, null, out var env, root);
+                var sb = new System.Text.StringBuilder();
+                using (var s = PtySession.Start(argv[0], argv, env, FilesDir, 24, 200, null))
+                {
+                    var sw = System.Diagnostics.Stopwatch.StartNew();
+                    while (sw.Elapsed.TotalMinutes < 10)
+                    {
+                        while (s.TryRead(out var chunk)) sb.Append(System.Text.Encoding.UTF8.GetString(chunk));
+                        if (!s.IsRunning) { while (s.TryRead(out var chunk)) sb.Append(System.Text.Encoding.UTF8.GetString(chunk)); break; }
+                        System.Threading.Thread.Sleep(20);
+                    }
+                }
+                output = sb.ToString().Replace("\r", "").Trim();
+            });
+            while (!run.IsCompleted) yield return null;
+            report($"shipped packages (dpkg, offline) + node/git/python3: {step.Elapsed.TotalSeconds:F1} s: " + (output ?? run.Exception?.GetBaseException().Message ?? "").Replace("\n", " | "));
+            var del = Task.Run(() => NativeFileOps.DeleteTree(dir));
+            while (!del.IsCompleted) yield return null;
+            report($"first start of the Linux: {total.Elapsed.TotalSeconds:F1} s in all (scratch copy deleted)");
+        }
+
+        private IEnumerator CopyStreamingAsset(string rel, string dest, Action<float> progress, bool failHost = true)
         {
             var names = rel.EndsWith(".gz") ? new[] { rel, rel.Substring(0, rel.Length - 3) } : new[] { rel };
             string error = null;
@@ -300,7 +357,8 @@ namespace MetaCodex.Linux
                     error = req.error;
                 }
             }
-            Fail($"read {rel}: {error}");
+            if (failHost) Fail($"read {rel}: {error}");
+            else Say($"read {rel}: {error}");
         }
 
         private static string StreamingUrl(string rel)
