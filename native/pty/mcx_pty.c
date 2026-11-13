@@ -7,6 +7,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <poll.h>
+#include <pthread.h>
 #include <signal.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -102,17 +103,26 @@ EXPORT int mcx_pty_spawn(const char* path,
     else if (getrlimit(RLIMIT_NOFILE, &rl) == 0)
         maxfd = 65536;
 
-    pid_t pid = fork();
-    if (pid < 0) { err = -errno; close(ptm); goto out; }
+    // vfork, not fork (0.7.19, owner: "stuttering in the first 10 s"): fork() of the app copies the page tables of its
+    // whole address space (gigabytes on the headset) and marks every page copy-on-write, so the app's threads take a
+    // fault on each page they write next: a hitch of the frame loop for every git check or command the shell starts.
+    // vfork shares the memory until execve and stops only this calling thread for those microseconds. Signals stay
+    // blocked across it, so no handler of the app runs in the child before its handlers are reset.
+    sigset_t all, old;
+    sigfillset(&all);
+    pthread_sigmask(SIG_SETMASK, &all, &old);
+    pid_t pid = vfork();
     if (pid == 0) {
-        // Child: only async-signal-safe calls until execve.
-        sigset_t all;
-        sigfillset(&all);
-        sigprocmask(SIG_UNBLOCK, &all, NULL);
+        // Child (shares the parent's memory): only async-signal-safe calls, no allocation, until execve or _exit.
         struct sigaction dfl;
         memset(&dfl, 0, sizeof dfl);
         dfl.sa_handler = SIG_DFL;
         for (int s = 1; s < 65; s++) sigaction(s, &dfl, NULL); // the host app ignores SIGPIPE etc.
+        sigset_t none;
+        sigemptyset(&none);
+        sigprocmask(SIG_SETMASK, &none, NULL);
+        // below the frame loop: commands and terminals run at nice 10, the app's render and main threads come first
+        setpriority(PRIO_PROCESS, 0, 10);
 
         if (setsid() < 0) child_fail("setsid", errno);
         int pts = open(devname, O_RDWR); // a session leader opening a tty acquires it
@@ -127,6 +137,9 @@ EXPORT int mcx_pty_spawn(const char* path,
         execve(path, argv, envp);
         child_fail("execve", errno);
     }
+    int spawn_err = errno;
+    pthread_sigmask(SIG_SETMASK, &old, NULL);
+    if (pid < 0) { err = -spawn_err; close(ptm); goto out; }
     *out_pid = (int)pid;
     err = ptm;
 out:

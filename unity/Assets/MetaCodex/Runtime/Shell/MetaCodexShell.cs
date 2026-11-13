@@ -218,16 +218,38 @@ namespace MetaCodex.Shell
             {
                 if (UnityEngine.Rendering.GraphicsSettings.currentRenderPipeline is UnityEngine.Rendering.Universal.UniversalRenderPipelineAsset urp)
                     urp.renderScale = RenderScale;
+                _foveationOn = !WantFoveation;
+                ApplyFoveation();
+            }
+            catch (Exception ex) { Log("display settings: " + ex.Message); }
+        }
+
+        private bool _foveationOn;
+
+        /// Foveation is on with FOVEATED, and while Ambient Focus is shown (0.7.19, owner: "performance seems quite bad
+        /// during ambient focus"): its full-view pass shades every eye-buffer pixel at RenderScale, and the edges of the
+        /// view are dark or blurred by it then, so lower shading there costs nothing visible.
+        private bool WantFoveation => Settings.foveation || FocusShownNow;
+
+        /// Applies WantFoveation when it changed (called every frame by UpdateFocus; a no-op in the Editor).
+        private void ApplyFoveation()
+        {
+            bool on = WantFoveation;
+            if (Application.isEditor || on == _foveationOn) return;
+            _foveationOn = on;
+            try
+            {
                 var displays = new List<UnityEngine.XR.XRDisplaySubsystem>();
                 SubsystemManager.GetSubsystems(displays);
-                foreach (var d in displays) d.foveatedRenderingLevel = Settings.foveation ? 0.5f : 0f;
+                foreach (var d in displays) d.foveatedRenderingLevel = on ? 0.5f : 0f;
                 // the rig's OVRManager turns fixed foveation on (High) by itself; it is the switch that works. Dynamic
                 // (owner 2026-11-12: stable fps even in the hardest tasks): Horizon OS raises foveation only as the GPU
                 // gets busy, up to High, and keeps the edges sharp while it is idle (docs: unity-fixed-foveated-rendering)
-                OVRManager.useDynamicFoveatedRendering = Settings.foveation;
-                OVRManager.foveatedRenderingLevel = Settings.foveation ? OVRManager.FoveatedRenderingLevel.High : OVRManager.FoveatedRenderingLevel.Off;
+                OVRManager.useDynamicFoveatedRendering = on;
+                OVRManager.foveatedRenderingLevel = on ? OVRManager.FoveatedRenderingLevel.High : OVRManager.FoveatedRenderingLevel.Off;
+                Log("foveation " + (on ? "on (dynamic, up to High)" + (Settings.foveation ? "" : ": Ambient Focus") : "off"));
             }
-            catch (Exception ex) { Log("display settings: " + ex.Message); }
+            catch (Exception ex) { Log("foveation: " + ex.Message); }
         }
 
         /// Self-tests: one frame of the shell's own Update (voice, focus, layout, the orb...).
@@ -235,19 +257,70 @@ namespace MetaCodex.Shell
 
         private void Update()
         {
+            HitchCheck();
             while (_main.TryDequeue(out var a)) { try { a(); } catch (Exception ex) { Log("main-thread callback failed: " + ex.Message); } }
+            HitchMark(0);
             Scripts?.Tick(Time.unscaledTime);
+            HitchMark(1);
             MqhHost?.Tick();
+            HitchMark(2);
             TickVoice();
+            HitchMark(3);
             TickSessionContext();
+            HitchMark(4);
             UpdateFocus(Mathf.Min(Time.unscaledDeltaTime, 0.1f));
+            HitchMark(5);
             FlushPendingRebuild();
+            HitchMark(6);
             RunLater();
+            HitchMark(7);
             ScanTerminalLinks();
             PushSettingsWhenQuiet();
             if (Settings != null && Settings.mqhSync && Time.unscaledTime >= _nextMqhPoll) { _nextMqhPoll = Time.unscaledTime + 5f; PullRemoteSettings(); }
+            HitchMark(8);
             UpdateLayout();
+            HitchMark(9);
             TickOrb(Time.unscaledDeltaTime);
+            HitchMark(10);
+        }
+
+        // ---- hitches (0.7.19, owner: "stuttering in the first 10 s"): a frame that took more than 25 ms (72 Hz is 13.9)
+        // goes into the session log with what the shell's Update spent in that frame, per step, and whether the GC ran.
+        // At most 4 lines a second and 400 a session; the Update itself costs ~20 stopwatch reads a frame.
+        private static readonly string[] HitchSteps = { "callbacks", "scripts", "mqh", "voice", "context", "focus", "rebuild", "later", "sync", "layout", "orb" };
+        private readonly double[] _hitchMs = new double[11]; // the last frame's steps (HitchCheck reads them before this frame's)
+        private readonly System.Diagnostics.Stopwatch _hitchSw = System.Diagnostics.Stopwatch.StartNew();
+        private double _hitchAt;
+        private int _hitchLines, _hitchGc = -1;
+        private float _hitchLogAt;
+
+        private void HitchMark(int step)
+        {
+            double now = _hitchSw.Elapsed.TotalMilliseconds;
+            _hitchMs[step] = now - _hitchAt;
+            _hitchAt = now;
+        }
+
+        private void HitchCheck()
+        {
+            float dt = Time.unscaledDeltaTime;
+            int gc = GC.CollectionCount(0);
+            if (dt > 0.025f && Time.frameCount > 2 && _hitchLines < 400 && Time.unscaledTime - _hitchLogAt > 0.25f)
+            {
+                _hitchLines++;
+                _hitchLogAt = Time.unscaledTime;
+                var sb = new System.Text.StringBuilder(160);
+                double shell = 0;
+                for (int i = 0; i < _hitchMs.Length; i++) shell += _hitchMs[i];
+                sb.Append("[hitch] t=").Append(Time.realtimeSinceStartup.ToString("F1")).Append(" s, frame ").Append((dt * 1000f).ToString("F0"))
+                  .Append(" ms, shell ").Append(shell.ToString("F1")).Append(" ms");
+                for (int i = 0; i < _hitchMs.Length; i++)
+                    if (_hitchMs[i] >= 1.5) sb.Append(", ").Append(HitchSteps[i]).Append(' ').Append(_hitchMs[i].ToString("F1"));
+                if (_hitchGc >= 0 && gc != _hitchGc) sb.Append(", GC");
+                Log(sb.ToString());
+            }
+            _hitchGc = gc;
+            _hitchAt = _hitchSw.Elapsed.TotalMilliseconds;
         }
 
         // ------------------------------------------------------------------ panels
@@ -314,6 +387,7 @@ namespace MetaCodex.Shell
                 // beside the window it is opened from (or the one it belongs to), or in front (ShellPlacement)
                 if (swapFrom != null) TakePlaceOf(p, swapFrom);
                 else if (!_placed.Contains(id) || !OldPlaceStillGood(p)) PlaceSmart(id, p, OpenerNow() ?? ContextOpener(id));
+                else FaceUser(p); // back where it was, turned to where the user stands now
                 p.Open();
                 _placed.Add(id);
             }
@@ -379,6 +453,18 @@ namespace MetaCodex.Shell
                 }
             }
             return float.NaN;
+        }
+
+        /// Turns a window about the vertical so its face looks at the user (its tilt kept).
+        private void FaceUser(UiPanel p)
+        {
+            var head = Head;
+            if (head == null || p == null) return;
+            var d = p.transform.position - head.position;
+            d.y = 0f;
+            if (d.sqrMagnitude < 1e-4f) return;
+            var e = p.transform.rotation.eulerAngles;
+            p.transform.rotation = Quaternion.Euler(e.x, Quaternion.LookRotation(d.normalized, Vector3.up).eulerAngles.y, 0f);
         }
 
         private static void TiltTowards(UiPanel p, Transform head)
@@ -643,14 +729,16 @@ namespace MetaCodex.Shell
                 if (first && rev == 0) return;
                 try
                 {
-                    string before = JsonUtility.ToJson(Settings);
+                    string before = JsonUtility.ToJson(Settings), accent = Settings.accent;
                     JsonUtility.FromJsonOverwrite(value.ToString(), Settings);
                     if (JsonUtility.ToJson(Settings) != before)
                     {
-                        Settings.Save(_settingsPath);
-                        Router.Settings = Settings.gestures;
-                        Gestures.Settings = Settings.gestures;
-                        RebuildPanels();
+                        // applied in place: the controls show the new values. Rebuilding every panel (as before 0.7.19)
+                        // froze the frame loop for a moment, often a few seconds after start (owner: "stuttering in the
+                        // first 10 s"); only an accent change, baked into the shapes' tints, still needs it
+                        OnSettingsChanged(Settings.accent != accent);
+                        _settingsPushDue = -1; // MQH has these already
+                        SyncSettingsControls();
                         Toast("Settings updated from MQH", "info");
                     }
                 }

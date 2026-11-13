@@ -20,7 +20,7 @@ namespace MetaCodex.Shell
         private string SessionLogPath => Path.Combine(Application.persistentDataPath, "session-context.jsonl");
         private UiPanel _ctxPointed;
         private float _ctxPointedAt = -99f;
-        private float _ctxNextSave, _ctxNextSample;
+        private float _ctxNextSave, _ctxNextSample = 12f; // the first process sample after the start-up burst (0.7.19)
         private string _voiceUtterance = "";
         private readonly Dictionary<string, string> _ctxThreadStatus = new Dictionary<string, string>();
         private readonly HashSet<string> _ctxPending = new HashSet<string>();

@@ -2015,7 +2015,7 @@ end)
                 var all = ids.Concat(new[] { MetaCodexShell.ControlId }).ToArray();
                 int over = 0;
                 for (int i = 0; i < all.Length; i++) for (int j = i + 1; j < all.Length; j++) if (R(all[i]).Overlaps(R(all[j]), 0f)) over++;
-                bool reach = ids.All(id => Mathf.Abs(R(id).YawMid) <= MetaCodexShell.PlaceYawLimit + 1f);
+                bool reach = ids.All(id => R(id).Yaw0 >= -MetaCodexShell.ViewEdgeYaw - 1f && R(id).Yaw1 <= MetaCodexShell.ViewEdgeYaw + 1f); // every one in view
                 var second = R("settings");
                 var railR = R(MetaCodexShell.ControlId);
                 bool pair = railR.YawMid < second.YawMid && railR.Gap(second).yaw < 2f;
@@ -2024,17 +2024,25 @@ end)
                     $"five panels and the rail: none over another ({over} pairs), the second (with its rail on its left: {pair}) right beside the first ({Mathf.Min(railR.Gap(f).yaw, second.Gap(f).yaw):F1} deg apart, same height): " + string.Join(", ", all.Select(id => $"{id} {R(id).YawMid:F0}")));
                 Render(shell, "ui-placement.png", head.position - Vector3.forward * 0.1f, Quaternion.identity, 110f, 1800, 1000);
 
-                // opened from a window's button: right beside that window, not in front of the nose
+                // opened from a window's button: right beside that window (the user looks at it while pressing)
                 CloseAll();
                 shell.OpenPanel("threads"); // its + NEW THREAD… opens NEW THREAD
                 var thp = shell.PanelsById["threads"];
                 thp.ForceRefresh();
-                head.rotation = Quaternion.Euler(0f, 100f, 0f); // the user has turned away from it
                 var newBtn = thp.Elements.OfType<UiButton>().FirstOrDefault(b => b.Visible && b.Text != null && b.Text.Contains("NEW THREAD"));
                 if (newBtn != null) Click(shell.Router, thp, newBtn.Rect.center);
                 var tr = R("threads"); var nr = R("thread-new");
-                bool beside = shell.IsPanelOpen("thread-new") && !nr.Overlaps(tr, 0f) && nr.Gap(tr).yaw < 4f && Mathf.Abs(nr.YawMid - 100f) > 30f;
-                Check(newBtn != null && beside, $"NEW THREAD opened from THREADS' button opens right beside THREADS ({nr.Gap(tr).yaw:F1} deg apart; THREADS at {tr.YawMid:F0}, NEW THREAD at {nr.YawMid:F0}), not in front of the user who looks at 100");
+                bool beside = shell.IsPanelOpen("thread-new") && !nr.Overlaps(tr, 0f) && nr.Gap(tr).yaw < 4f
+                    && nr.Yaw0 >= -MetaCodexShell.ViewEdgeYaw - 1f && nr.Yaw1 <= MetaCodexShell.ViewEdgeYaw + 1f;
+                Check(newBtn != null && beside, $"NEW THREAD opened from THREADS' button opens right beside THREADS and in view ({nr.Gap(tr).yaw:F1} deg apart; THREADS at {tr.YawMid:F0}, NEW THREAD {nr.Yaw0:F0}..{nr.Yaw1:F0})");
+                // the user has turned away (100 deg) when it opens from that window: it opens in front of them, never out of view
+                shell.ClosePanel("thread-new");
+                shell.PanelsById["thread-new"].transform.position = Vector3.up * 50f;
+                head.rotation = Quaternion.Euler(0f, 100f, 0f);
+                if (newBtn != null) Click(shell.Router, thp, newBtn.Rect.center);
+                MetaCodexShell.ViewRectOf(shell.PanelsById["thread-new"], head.position, 100f, out var nr2);
+                Check(shell.IsPanelOpen("thread-new") && nr2.Yaw0 >= -MetaCodexShell.ViewEdgeYaw - 1f && nr2.Yaw1 <= MetaCodexShell.ViewEdgeYaw + 1f,
+                    $"opened while the user looks elsewhere (100 deg), NEW THREAD opens in their view ({nr2.Yaw0:F0}..{nr2.Yaw1:F0} deg of where they face)");
                 head.rotation = Quaternion.identity;
                 // in CONTROL a category opened from another one's button takes its place (SYSTEM > STORAGE > AI MODELS)
                 CloseAll();
@@ -3999,7 +4007,7 @@ end)
             UnityEngine.Object.DestroyImmediate(near);
             UnityEngine.Object.DestroyImmediate(far);
             // BLUR: outside the dome the camera's image, soft and darkened by INTENSITY, covers the passthrough;
-            // inside it the passthrough stays sharp; beyond the camera's narrower view, the plain darkness
+            // inside it the passthrough stays sharp; beyond what the camera has seen, the room's colours, frosted (never sharp)
             shell.Settings.focusBlur = 0.5f;
             shell.Settings.focusIntensity = 0.5f;
             var camImg = new Texture2D(64, 48, TextureFormat.RGBA32, true, false) { wrapMode = TextureWrapMode.Clamp };
@@ -4040,11 +4048,11 @@ end)
             shell.AddCameraFrameForTest(camImg, new Pose(head.position + new Vector3(2f, 0f, 0f), Quaternion.Euler(0f, 90f, 0f)), new Vector2(457f, 457f), new Vector2(320f, 240f), new Vector2Int(640, 480), new Vector2Int(640, 480), 1);
             float fwd3 = shell.BlurCoverageForTest(Vector3.forward);
             Check(fwd3 < 0.05f, $"BLUR: 2 m further on, a new panorama starts (what was ahead from the old spot is dropped: {fwd3:F2})");
-            // a narrow camera: the top of the view is beyond its image -> darkness only (alpha = intensity, no colour)
+            // a narrow camera: the top of the view is beyond its image -> the room's colours, frosted (covers the passthrough)
             shell.SetCameraForTest(camImg, camPose, new Vector2(1800f, 1800f), new Vector2(320f, 240f), new Vector2Int(640, 480), new Vector2Int(640, 480));
             var narrow = RenderWithDepth(shell, "ui-focus-blur-narrow.png", head.position, 4.0f, dw, dh);
             var cn = narrow.GetPixel(160, 215);
-            Check(Mathf.Abs(cn.a - 0.5f) < 0.06f && cn.r < 0.05f, $"BLUR: beyond the camera's view the plain darkness (alpha {cn.a:F2}, red {cn.r:F2})");
+            Check(cn.a > 0.95f && cn.r > 0.15f && cn.r > cn.b, $"BLUR: beyond what the camera has seen, the room's colours, frosted: it covers the passthrough there too (alpha {cn.a:F2}, red {cn.r:F2}, blue {cn.b:F2})");
             foreach (var g in windows) g.SetActive(true);
             foreach (var t in new[] { blurFar, blurNear, narrow }) UnityEngine.Object.DestroyImmediate(t);
             shell.SetCameraForTest(null, default, default, default, default, default);

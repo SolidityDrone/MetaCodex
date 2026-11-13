@@ -114,8 +114,10 @@ panels ... the source of the speech ... a billboard side notification system men
   brightens and turns its rings to that hand. It comes and goes with its own ignition (0.7 s / 0.4 s).
 - **Where it floats.** Up to the right of where you face (30 degrees right, 17 up, 0.52 m), in a frame that
   follows you lazily: it stays where it is in the room while you only glance round, and comes along when you
-  turn (more than 34 degrees for 0.7 s; sooner while it has something to say) or walk away (25 cm), moving round
-  you, never through your head. It never sits in front of a window: when one covers its place for half a second
+  turn (more than 34 degrees for 0.7 s) or walk away (25 cm), moving round you, never through your head. While it
+  shows something (a callout, the voice card, its menu; listening, thinking or speaking) and for 1.5 s after, it holds
+  still, so you can turn your head to read: it comes into view once when that starts, and only walking 80 cm moves
+  it then (0.7.19). It never sits in front of a window: when one covers its place for half a second
   it takes the next free one (ten candidates, both sides, higher up) and goes back three seconds after its place
   is free again (it looks at one candidate a frame, and stays put while it casts). Pinch it and put it anywhere:
   it keeps that place by you (`orbPinned`, `orbYaw`, `orbPitch`, `orbDist`); its menu's PLACE lets it choose again.
@@ -311,8 +313,10 @@ windows and your hands. No Space Setup scan is needed (branch `feat/spatial-dome
   30 fps; permission `horizonos.permission.HEADSET_CAMERA`, asked once). Each frame is copied into a 256 x 192
   mip-mapped texture; outside the dome the sphere draws it at a high mip (4 taps), projected per pixel through the
   camera's pose and intrinsics (depth gives the right parallax) and darkened by INTENSITY. The camera sees less
-  than the passthrough: beyond its image the plain darkness stays. Horizon OS composites the passthrough itself,
-  so an app cannot blur the passthrough directly.
+  than the passthrough: where it has not looked yet, the colours of that part of the room (or of all it has seen,
+  else a dim haze) cover the passthrough, frosted, so the whole room outside the dome is soft at once and detail
+  fills in as you look round (0.7.19; before, those parts stayed sharp and the blur seemed to grow as you moved).
+  Horizon OS composites the passthrough itself, so an app cannot blur the passthrough directly.
 - **Without depth** (permission not given yet, the Editor) the floor plane stands in: the floor near you stays,
   everything above the horizon fades.
 - **Hands** are cut out of everything (soft capsules along the tracked bones, `FocusMesh`, drawn after the windows and

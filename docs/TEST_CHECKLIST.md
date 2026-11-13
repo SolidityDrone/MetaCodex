@@ -232,7 +232,7 @@ Ambient Focus (branch feat/spatial-dome, no Space Setup needed):
 - [ ] FOCUS on → a dome standing on the floor around you: walls, furniture and your hands near you stay visible, far ones fade (no dome "starting above")
 - [ ] Walk around: the dome follows you; nothing flickers at its edge while you stand still
 - [ ] RADIUS changes the dome's size live; SOFTNESS its edge; INTENSITY the darkness
-- [ ] BLUR above 0 → the room outside the dome is a soft image (darker with INTENSITY); at the edges of your view (outside the camera's image) it is just dark; 0 → darkness only
+- [ ] BLUR above 0 → the room outside the dome is a soft image (darker with INTENSITY); at once all round you, also at the edges of your view and behind you (there frosted colours until the camera has looked, never the sharp room); 0 → darkness only
 - [ ] Hands always visible, also at BLACKOUT and with BLUR, and in front of a window
 - [ ] The cut-out around near things (your hands, a chair, a person) is clean and steady: no flicker, no blocky edge (FOCUS: "camera: live …")
 - [ ] Someone walks in front of a window, or you hold an object up → it stays visible in front of the window ("Real things in front of windows" on); off → the window covers it

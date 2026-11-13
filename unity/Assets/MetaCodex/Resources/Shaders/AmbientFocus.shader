@@ -9,7 +9,8 @@
 // ShellAmbient each frame). Walls, furniture and hands near you stay; far ones fade.
 // Without depth (or where it has none): the floor plane under the user; above the horizon there is no distance.
 //
-// Blur (MCX_BLUR): outside the dome, instead of black, the room as the passthrough camera saw it: a panorama around
+// Blur (MCX_BLUR): outside the dome, instead of black, the room as the passthrough camera saw it (where it has not
+// looked yet, that part's colours, frosted: the whole outside is soft at once): a panorama around
 // the user that each camera frame paints into (Resources/Shaders/FocusBlurPano: world-oriented, round mask, no
 // rectangle), read by view direction at a high mip (so soft) and darkened by _Intensity. It stays with the room when
 // the head turns; where the camera has not looked yet (coverage 0) it is the plain darkness.
@@ -157,9 +158,18 @@ Shader "MetaCodex/AmbientFocus"
                     half4 pano = SAMPLE_TEXTURE2D_LOD(_McxBlurPano, sampler_McxBlurPano, puv, _BlurMip);
                     float cover = saturate(pano.a * 1.1);
                     half3 c = pano.a > 1e-3 ? pano.rgb / pano.a : 0;
-                    // premultiplied: the blurred room shows through (1 - intensity), the passthrough is covered by m
-                    a = m * lerp(_Intensity, 1.0, cover);
-                    premul = (half3)(m * cover * (1.0 - _Intensity)) * c;
+                    // where the camera has not looked yet: frosted, never the sharp room (owner 2026-11-13: "it does not blur
+                    // in a radius, you need to move around and it progressively blurs"): the colours of that part of the room
+                    // (mip 7: 8 x 4 texels, 45 degrees each), else of all it has seen (mip 10, one texel), else a dim haze.
+                    // The whole room outside the dome is covered from the first camera frame; detail fills in as it is seen.
+                    half4 region = SAMPLE_TEXTURE2D_LOD(_McxBlurPano, sampler_McxBlurPano, puv, 7.0);
+                    half4 room = SAMPLE_TEXTURE2D_LOD(_McxBlurPano, sampler_McxBlurPano, float2(0.5, 0.5), 10.0);
+                    half3 haze = room.a > 1e-4 ? room.rgb / room.a : half3(0.045, 0.05, 0.06);
+                    half3 fill = lerp(haze, region.a > 1e-4 ? region.rgb / region.a : haze, (half)saturate(region.a * 4.0));
+                    c = lerp(fill, c, (half)cover);
+                    // premultiplied: the blurred room shows through (1 - intensity) and covers the passthrough outside the dome
+                    a = m;
+                    premul = (half3)(m * (1.0 - _Intensity)) * c;
                 }
                 #endif
                 // derivatives first (they must not sit in a branch): the contour's width and the surface's slope

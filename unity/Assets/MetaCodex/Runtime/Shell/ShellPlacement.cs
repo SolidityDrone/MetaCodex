@@ -77,6 +77,11 @@ namespace MetaCodex.Shell
         }
 
         public const float PlaceYawLimit = 112f, PlaceTop = 50f, PlaceBottom = -42f;
+        /// A window that opens stays in the user's view (owner 2026-11-13: "new panels shall spawn in front of us and
+        /// oriented toward us, now often panels spawn weirdly off my view"): its edges within this many degrees of where
+        /// the user faces, and between these pitches. When no free place is in view, it opens in front over the others
+        /// (a little nearer). Only RECENTER, which lays every window out again, searches the wide range above.
+        public const float ViewEdgeYaw = 52f, ViewTop = 32f, ViewBottom = -36f;
 
         // ---- the room: what the last depth reading saw (world points), for a few seconds
         private List<Vector3> _roomPts;
@@ -145,6 +150,7 @@ namespace MetaCodex.Shell
         /// cascades over the others: a window never covers another while some place is free.
         private void PlaceSmart(string id, UiPanel p, UiPanel opener = null, IEnumerable<UiPanel> obstacles = null)
         {
+            bool inView = obstacles == null; // RECENTER passes the windows laid out so far: it may use the wide range
             var head = Head;
             if (id == "dock") { p.PlaceInFront(head, 0.55f, 0.42f); TiltTowards(p, head); return; }
             Vector3 eye = head != null ? head.position : new Vector3(0f, 1.4f, 0f);
@@ -180,8 +186,10 @@ namespace MetaCodex.Shell
                     {
                         float pitch = level + pitchOff * ps;
                         if (pitch + halfPitch > PlaceTop || pitch - halfPitch < PlaceBottom) continue;
+                        if (inView && (pitch + halfPitch > ViewTop || pitch - halfPitch < ViewBottom)) continue;
                         bool tilted = pitchOff >= 1.5f;
-                        for (float yawOff = 0f; yawOff <= PlaceYawLimit; yawOff += 2f)
+                        float yawLimit = inView ? Mathf.Max(4f, ViewEdgeYaw - halfYaw - reserveYaw * 0.5f) : PlaceYawLimit;
+                        for (float yawOff = 0f; yawOff <= yawLimit; yawOff += 2f)
                         {
                             foreach (float ys in yawOff == 0f ? new[] { 1f } : new[] { 1f, -1f })
                             {
@@ -194,7 +202,7 @@ namespace MetaCodex.Shell
                                 if (clear - 0.08f < fd)
                                 {
                                     d = Mathf.Max(0.42f, clear - 0.08f);
-                                    wall = d < 0.5f ? 40f + (0.5f - (clear - 0.08f)) * 200f : (fd - d) * 20f;
+                                    wall = d < 0.5f ? 12f + (0.5f - (clear - 0.08f)) * 60f : (fd - d) * 12f;
                                     float hy = Mathf.Atan2(halfW, d) * Mathf.Rad2Deg, hp = Mathf.Atan2(halfH, d) * Mathf.Rad2Deg;
                                     c = new ViewRect { Yaw0 = yaw - hy - RailReserveYaw(halfW, d, reserveM), Yaw1 = yaw + hy, Pitch0 = pitch - hp, Pitch1 = pitch + hp };
                                 }
@@ -299,8 +307,8 @@ namespace MetaCodex.Shell
             r.Pitch0 = Mathf.Min(r.Pitch0, pitch); r.Pitch1 = Mathf.Max(r.Pitch1, pitch);
         }
 
-        /// A panel that was open before: its old place is still good when it is in view (within 70 degrees of where
-        /// the user faces, 3 m) and no open panel has taken it.
+        /// A panel that was open before: its old place is still good when it is in view (its edges within ViewEdgeYaw of
+        /// where the user faces, 3 m) and no open panel has taken it.
         private bool OldPlaceStillGood(UiPanel p)
         {
             var head = Head;
@@ -308,7 +316,7 @@ namespace MetaCodex.Shell
             if (Vector3.Distance(p.transform.position, head.position) > 3f) return false;
             float gaze = FrontYaw();
             if (!ViewRectOf(p, head.position, gaze, out var mine)) return false;
-            if (Mathf.Abs(mine.YawMid) > 70f) return false;
+            if (mine.Yaw0 < -ViewEdgeYaw - 6f || mine.Yaw1 > ViewEdgeYaw + 6f) return false; // out of view: placed anew, in front
             foreach (var q in PlacementObstacles(p))
                 if (q.Id != "dock" && ViewRectOf(q, head.position, gaze, out var r) && mine.Overlaps(r, -1f)) return false; // a degree of overlap is a touch, not a cover
             return true;

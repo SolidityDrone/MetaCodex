@@ -1483,6 +1483,7 @@ namespace MetaCodex.Shell
                 foreach (var sg in vp.Elements.OfType<UiSegmented>())
                     if (sg.Text == "SOUND") { int fi = Array.IndexOf(VoiceFx.Names, VoiceFx.Name(VoiceFx.Parse(Settings.voice.fx))); if (sg.Selected != fi) sg.Set(fi); }
                     else if (sg.Text == "SPEECH") { int si = Settings.voice.speech == "clear" ? 1 : 0; if (sg.Selected != si) sg.Set(si); }
+                    else if (sg.Text == "FEMALE" || sg.Text == "MALE") { int vi = Array.IndexOf(sg.Options, Settings.voice.voice); if (sg.Selected != vi) sg.Set(vi); } // one voice lit in both rows
         }
 
         /// Closes every panel except the dock; returns how many were open.

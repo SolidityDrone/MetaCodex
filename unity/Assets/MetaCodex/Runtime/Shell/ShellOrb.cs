@@ -34,7 +34,8 @@ namespace MetaCodex.Shell
         public const float OrbDistance = 0.52f;
         private static readonly Vector2[] OrbProbes = { Vector2.zero, Vector2.right, Vector2.left, Vector2.up, Vector2.down };
 
-        private float _orbYaw, _orbTurnSince = -1f, _orbClock, _orbTapAt = -10f;
+        private float _orbYaw, _orbTurnSince = -1f, _orbClock, _orbTapAt = -10f, _orbHoldUntil = -10f;
+        private bool _orbWasShowing;
         private Vector3 _orbAnchor;
         private bool _orbFramed, _orbApplied;
         private int _orbSpot, _orbSpotCursor, _orbUnread;
@@ -221,21 +222,31 @@ namespace MetaCodex.Shell
             var head = Head;
             if (head == null) return;
             if (!_orbFramed) { FrameOrb(true); Orb.Teleport(OrbHome()); }
-            // the frame follows the user: at once when they walk away, after a moment when they turn (a glance is not a turn);
-            // sooner while the orb has something to say
+            // the frame follows the user: at once when they walk away, after a moment when they turn (a glance is not a turn).
+            // While it shows something (a callout, the voice card, its menu, listening / thinking / speaking) it holds
+            // still, and 1.5 s after (owner 2026-11-13: "when displaying stuff it shall be still, otherwise we move the head
+            // to read and it moves away"): it comes into view once when that starts, then the user can turn to read.
             var f = head.forward;
             float headYaw = Mathf.Atan2(f.x, f.z) * Mathf.Rad2Deg;
             var d = head.position - _orbAnchor;
-            bool moved = new Vector2(d.x, d.z).magnitude > 0.25f || Mathf.Abs(d.y) > 0.18f;
-            bool busy = Orb.State != UiOrb.Mood.Idle || Toasts.Count > 0 || OrbMenuOpen;
-            bool turned = Mathf.Abs(Mathf.DeltaAngle(_orbYaw, headYaw)) > (busy ? 26f : 34f);
+            float walked = new Vector2(d.x, d.z).magnitude;
+            bool moved = walked > 0.25f || Mathf.Abs(d.y) > 0.18f;
+            bool showing = Orb.State != UiOrb.Mood.Idle || Toasts.Count > 0 || OrbMenuOpen;
+            bool turned = Mathf.Abs(Mathf.DeltaAngle(_orbYaw, headYaw)) > 34f;
+            if (showing && !_orbWasShowing && turned && _orbGrabHand < 0) FrameOrb(false); // something new to show: into view, once
+            _orbWasShowing = showing;
+            if (showing) _orbHoldUntil = _orbClock + 1.5f;
+            bool hold = _orbClock < _orbHoldUntil;
             if (turned) { if (_orbTurnSince < 0f) _orbTurnSince = _orbClock; } else _orbTurnSince = -1f;
-            if (_orbGrabHand < 0 && (moved || turned && _orbClock - _orbTurnSince > (busy ? 0.15f : 0.7f))) FrameOrb(false);
-            int spot = _orbSpot;
-            PickOrbSpot(false);
-            if (spot != _orbSpot) _avoidCheckAt = 0f; // a new place: is the watched window clear from there?
-            TickWatched();
-            TickOrbAvoid();
+            if (_orbGrabHand < 0 && (hold ? walked > 0.8f : moved || turned && _orbClock - _orbTurnSince > 0.7f)) FrameOrb(false);
+            if (!hold)
+            {
+                int spot = _orbSpot;
+                PickOrbSpot(false);
+                if (spot != _orbSpot) _avoidCheckAt = 0f; // a new place: is the watched window clear from there?
+                TickWatched();
+                TickOrbAvoid();
+            }
             if (_orbGrabHand >= 0) return; // in the user's fingers
             // ease round the user (never straight through their head) to its place in the frame; gliding aside from the
             // window being watched, a little slower (it never jumps)

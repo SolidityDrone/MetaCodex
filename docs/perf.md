@@ -23,3 +23,25 @@ Check on the headset (owner): 72 fps with many windows open, during a long spoke
 turn; text at the window edges while idle (dynamic foveation lowers itself) and under load; Ambient Focus / occlusion and
 bent windows look the same as before with symmetric projection (custom shaders read the per-eye matrices); hands and
 the ray stay glued to the real hands when moving fast (late latching). `adb logcat -s VrApi` shows FPS and stale frames.
+
+## Smooth start and Ambient Focus (0.7.19)
+
+Owner 2026-11-13: "performance seems quite bad during ambient focus", "at startup we have a little bit of stuttering ...
+the first 10 seconds shall be lag-free". No headset trace was taken for this change (the headset was not connected);
+these are the causes found in the code, fixed, and a log that measures what is left:
+
+| Cause | Fix |
+|---|---|
+| Every userland command (git checks, `ps`, `mcx-project`, terminals) started with `fork()` of the app: on the headset the app maps gigabytes, so fork copied its page tables and made every page copy-on-write; the app's threads then took a fault on each page they wrote | `native/pty/mcx_pty.c` uses `vfork()` (memory shared until `execve`, only the calling thread waits, microseconds); signals stay blocked across it; the child runs at nice 10, below the frame loop |
+| A settings change from MQH (often the first sync, a few seconds after start) rebuilt every panel: hundreds of text meshes at once | the values apply in place (`OnSettingsChanged` + `SyncSettingsControls`); only an accent change still rebuilds |
+| The first process sample (`ps` for the session context) ran in the first frame | first sample at 12 s |
+| The sharp depth (640 x 640 x 2) was computed every frame, with a new command buffer each time (garbage), although Meta's depth comes slower than 72 Hz | computed only for a new depth frame (its matrices change), one command buffer reused |
+| Ambient Focus draws a full-view pass on every eye-buffer pixel at RenderScale 1.6 | foveation (dynamic, up to High) is on while the focus is shown, also with FOVEATED off: the edges of the view are dark or blurred then |
+
+The hitch log: a frame that takes more than 25 ms writes `[hitch] t=<s since start> s, frame <ms>, shell <ms>, <step> <ms>...,
+GC` into the session log (`files/session_log.txt`; at most 4 lines a second, 400 a session). The steps are the shell's
+Update: callbacks (work queued from other threads), scripts, mqh, voice, context, focus, rebuild, later, sync, layout, orb.
+A long frame with a small "shell" time is the GPU, the render thread or a shader compiled at its first use.
+
+Next, if the log shows first-use shader hitches: record a `GraphicsStateCollection` on the headset and warm it up at
+start (Unity 6, Vulkan PSOs).

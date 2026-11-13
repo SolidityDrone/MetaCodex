@@ -31,6 +31,8 @@ namespace MetaCodex.Shell
         private UiSlider _focusRadius, _focusIntensity, _focusSoft, _focusBlur;
 
         public float FocusShownForTest => _focusShown;
+        /// The focus darkness or blur is (being) shown: foveation is on meanwhile (MetaCodexShell.ApplyFoveation).
+        private bool FocusShownNow => _focusShown > 0f && Settings.focusEnabled && (Settings.focusIntensity > 0.004f || Settings.focusBlur > 0.001f);
         public GameObject FocusSphereForTest => _focusSphere;
         /// What the dome knows: depth, floor, camera (shown in Settings > FOCUS).
         public string FocusStatus => _depthStatus + " · " + _floorStatus + (_camStatus.Length > 0 ? " · " + _camStatus : "");
@@ -143,6 +145,7 @@ namespace MetaCodex.Shell
             // on but drawing nothing (INTENSITY 0 and no BLUR): no sphere, no depth, no camera for it (0.7.7 kept all three
             // running for an invisible darkness; the owner's settings were exactly that)
             bool shown = _focusShown > 0f && (Settings.focusIntensity > 0.004f || Settings.focusBlur > 0.001f);
+            ApplyFoveation(); // on while the focus is shown (FocusShownNow)
             bool wantDepth = shown || Settings.occludeUi;
             EnsureDepth(wantDepth);
             // the camera pauses while speech is turned into text and the command decided (the AI service shares the
@@ -278,10 +281,16 @@ namespace MetaCodex.Shell
             for (int i = 0; i < 2; i++) _depthToWorld[i] = _reproj[i].inverse;
             Shader.SetGlobalMatrixArray(DepthToWorldId, _depthToWorld);
             _depthLive = true;
-            var cb = new CommandBuffer { name = "MetaCodex sharp depth" };
-            if (RecordSharpDepth(cb, Shader.GetGlobalTexture(DepthTexId), _reproj)) ctx.ExecuteCommandBuffer(cb);
-            cb.Release();
+            // a new sharp depth only for a new depth frame (its matrices change with it): Meta's depth comes slower than
+            // the 72 Hz frames, and the same input again only cost GPU time (0.7.19: before, every frame, with a new
+            // command buffer each time: garbage for the GC)
+            if (_sharpLive && _sharpHavePrev && _reproj[0] == _sharpPrevW2D[0] && _reproj[1] == _sharpPrevW2D[1]) return;
+            if (_sharpCb == null) _sharpCb = new CommandBuffer { name = "MetaCodex sharp depth" };
+            _sharpCb.Clear();
+            if (RecordSharpDepth(_sharpCb, Shader.GetGlobalTexture(DepthTexId), _reproj)) ctx.ExecuteCommandBuffer(_sharpCb);
         }
+
+        private CommandBuffer _sharpCb;
 
         /// Self-tests: Meta's depth inputs as EnvironmentDepthManager sets them (a depth Texture2DArray holding
         /// (ndc + 1) / 2 per eye, and world -> depth clip matrices); null goes back to the live depth.

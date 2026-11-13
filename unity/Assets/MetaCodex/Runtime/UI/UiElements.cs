@@ -305,13 +305,14 @@ namespace MetaCodex.UI
             Refresh();
         }
 
+        /// Selects option `index`; -1 selects none (the voice picker's other row: F2 picked leaves MALE with none lit).
         public void Set(int index, bool notify = false)
         {
-            index = Mathf.Clamp(index, 0, Options.Length - 1);
+            index = Mathf.Clamp(index, -1, Options.Length - 1);
             if (Selected == index) return;
             Selected = index;
             Refresh();
-            if (notify) OnChanged?.Invoke(index);
+            if (notify && index >= 0) OnChanged?.Invoke(index);
         }
 
         private int IndexAt(Vector2 p)
