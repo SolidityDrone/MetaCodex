@@ -1,19 +1,19 @@
 ---
 name: workflows
-description: "Author or run durable BB workflows when the user requests workflow execution or multi-agent orchestration."
+description: "Author or run durable MQH workflows when the user requests workflow execution or multi-agent orchestration."
 ---
 
-# BB workflows
+# MQH workflows
 
 Use a workflow when the user explicitly asks for multi-agent orchestration.
 Ordinary tasks do not authorize a workflow run.
 
-A workflow puts deterministic control flow around normal BB worker threads. The
+A workflow puts deterministic control flow around normal MQH worker threads. The
 script can fan out work, pipeline stages, verify results, and return structured
 data. Worker threads retain normal workspace tools and permissions.
 
 The plugin is disabled on fresh installations; `mqh plugin enable workflows`
-turns it on. `mqh workflows` commands must run from a BB project thread.
+turns it on. `mqh workflows` commands must run from a MQH project thread.
 
 ## Start safely
 

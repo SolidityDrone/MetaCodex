@@ -36,13 +36,8 @@ const REPO_PLUGINS_DIRECTORY_NAME = "plugins";
 
 export const BUILTIN_PLUGINS = [
   {
-    name: "storage-retention",
-    pluginId: "bb--storage-retention",
-    defaultEnabled: false,
-  },
-  {
-    name: "bb-guide",
-    pluginId: "bb-guide",
+    name: "metacodex-guide",
+    pluginId: "metacodex-guide",
     defaultEnabled: true,
   },
   {
@@ -86,16 +81,6 @@ export const BUILTIN_PLUGINS = [
     defaultEnabled: true,
   },
   {
-    name: "provider-pi",
-    pluginId: "provider-pi",
-    defaultEnabled: true,
-  },
-  {
-    name: "provider-usage",
-    pluginId: "bb--provider-usage",
-    defaultEnabled: true,
-  },
-  {
     name: "provider-acp",
     pluginId: "provider-acp",
     defaultEnabled: true,
@@ -109,21 +94,6 @@ export const BUILTIN_PLUGINS = [
     name: "git",
     pluginId: "bb--git",
     defaultEnabled: true,
-  },
-  {
-    name: "github-pr-status",
-    pluginId: "bb--github-pr-status",
-    defaultEnabled: true,
-  },
-  {
-    name: "secrets",
-    pluginId: "secrets",
-    defaultEnabled: true,
-  },
-  {
-    name: "mcp",
-    pluginId: "bb--mcp",
-    defaultEnabled: false,
   },
   {
     name: "concurrency-limit",
@@ -140,28 +110,11 @@ export const BUILTIN_PLUGINS = [
   autoInstall: true,
 }));
 
-export const OFFICIAL_PLUGINS = [
-  {
-    name: "github",
-    pluginId: "github",
-    defaultEnabled: true,
-  },
-  {
-    name: "docs",
-    pluginId: "simple-notes",
-    defaultEnabled: true,
-  },
-  {
-    name: "memory",
-    pluginId: "memory",
-    defaultEnabled: true,
-  },
-  {
-    name: "tasks",
-    pluginId: "tasks",
-    defaultEnabled: true,
-  },
-].map((plugin): BundledPluginDefinition => ({
+// MetaCodex: bb's optional catalog plugins (GitHub browser, docs editor, memory, tasks) are web-UI features the
+// app cannot show or install; none ship (docs/mqh.md, "Plugins").
+export const OFFICIAL_PLUGINS = (
+  [] as Omit<BundledPluginDefinition, "autoInstall">[]
+).map((plugin): BundledPluginDefinition => ({
   ...plugin,
   autoInstall: false,
 }));

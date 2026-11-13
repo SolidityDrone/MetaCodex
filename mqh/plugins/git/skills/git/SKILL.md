@@ -1,6 +1,6 @@
 ---
 name: git
-description: "Read an environment's git status, changed files, diffs and branches, or mark files Viewed, from the bb CLI; read git status from another plugin."
+description: "Read an environment's git status, changed files, diffs and branches, or mark files Viewed, from the MQH CLI; read git status from another plugin."
 ---
 
 # Git
@@ -9,16 +9,16 @@ The plugin runs git in the environment's workspace on its machine. The Diff
 tab, the composer's changed-files segment and the Info tab read from it.
 
 ```sh
-bb git status <environment-id> [--merge-base-branch <branch>] [--json]
-bb git branches <environment-id> [--query <text>] [--limit <n>] [--json]
-bb git diff <environment-id> --target <target> [--json]
-bb git files <environment-id> --target <target> [--ignore-whitespace] [--json]
-bb git file <environment-id> --target <target> --path <path> --side old|new [--json]
-bb git patch <environment-id> --target <target> --path <path>... [--json]
-bb git viewed list|mark|unmark|clear <environment-id> --target <target> ...
+mqh git status <environment-id> [--merge-base-branch <branch>] [--json]
+mqh git branches <environment-id> [--query <text>] [--limit <n>] [--json]
+mqh git diff <environment-id> --target <target> [--json]
+mqh git files <environment-id> --target <target> [--ignore-whitespace] [--json]
+mqh git file <environment-id> --target <target> --path <path> --side old|new [--json]
+mqh git patch <environment-id> --target <target> --path <path>... [--json]
+mqh git viewed list|mark|unmark|clear <environment-id> --target <target> ...
 ```
 
-- `bb git branches` lists the refs already in the repository and starts a
+- `mqh git branches` lists the refs already in the repository and starts a
   background fetch of `origin`, or of the only remote when there is no
   `origin` (at most once every 30 seconds per repository), so newly fetched
   remote branches show up on a later call. Branches on other remotes refresh
@@ -44,7 +44,7 @@ bb git viewed list|mark|unmark|clear <environment-id> --target <target> ...
   `--revision`; `viewed list --path` takes up to 500 paths. Mutations print
   `{ "ok": true }` with `--json`.
 - The old `mqh environment status|diff|diff-files|diff-file|diff-patch|branches|diff-viewed`
-  commands still run and print the `bb git` command that replaced them. So do
+  commands still run and print the `mqh git` command that replaced them. So do
   the deprecated `mqh thread show --work-status|--git-diff` flags.
 
 `showGitChanges` (default true) shows the composer's changed-files segment;

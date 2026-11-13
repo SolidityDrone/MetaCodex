@@ -17,7 +17,8 @@ import {
 } from "../hosts/online-rpc.js";
 import { resolveServerOwnedSkillCatalogEntries } from "./injected-skills.js";
 
-const GLOBAL_CLI_SKILL_NAMES: readonly string[] = ["bb-cli"];
+// MetaCodex: the skill every agent CLI on a machine gets (bb installed its CLI skill here)
+const GLOBAL_CLI_SKILL_NAMES: readonly string[] = ["metacodex-context"];
 
 const STATUS_TIMEOUT_MS = 5_000;
 
@@ -126,7 +127,7 @@ export async function readGlobalCliSkillStatus(
       } catch (error) {
         deps.logger.debug(
           { hostId: host.id, err: error },
-          "Could not read the bb CLI skill status from a machine",
+          "Could not read the built-in skill status from a machine",
         );
         return { ...base, status: "unknown" as const };
       }
@@ -161,7 +162,7 @@ export async function installGlobalCliSkills(
     throw new ApiError(
       500,
       "cli_skill_unavailable",
-      "The built-in bb CLI skill is unavailable on this server",
+      "The built-in metacodex-context skill is unavailable on this server",
     );
   }
 
@@ -182,7 +183,7 @@ export async function installGlobalCliSkills(
       } catch (error) {
         deps.logger.warn(
           { hostId: host.id, err: error },
-          "Failed to install the bb CLI skills on a machine",
+          "Failed to install the built-in skills on a machine",
         );
         return {
           ok: false as const,

@@ -1,8 +1,9 @@
 """Second half of tools/mqh-gut.sh: unregister what the gut step deleted, so the workspace still builds.
 
-Usage: python3 -I tools/mqh-gut-patch.py <mqh dir> <dropped plugin dir names...>
+Usage: python3 -I tools/mqh-gut-patch.py <mqh dir> <dropped or unregistered plugin dir names...>
 - removes their entries from the server's built-in plugin registry (BUILTIN_PLUGINS / OFFICIAL_PLUGINS),
-- removes their packages from @bb/bundled-plugins,
+- removes their packages from @bb/bundled-plugins and their blocks from plugins/bb-official.json (also for a named
+  plugin whose folder stays: it is never registered, bundled or installed),
 - drops the examples/ workspace glob (the folder is gone).
 Fails loudly when an expected entry is missing, so an upstream change cannot slip through silently.
 """
@@ -25,7 +26,7 @@ j = json.load(open(bp, encoding="utf-8"))
 names = {k for k in j.get("dependencies", {}) if k.startswith("bb-plugin-")}
 kept_dirs = set(os.listdir(os.path.join(mqh, "plugins")))
 kept_pkgs = set()
-for d in kept_dirs:
+for d in kept_dirs - set(dropped):
     p = os.path.join(mqh, "plugins", d, "package.json")
     if os.path.exists(p):
         kept_pkgs.add(json.load(open(p, encoding="utf-8"))["name"])
@@ -71,7 +72,7 @@ open(rp, "w", encoding="utf-8").write(json.dumps(rj, indent=2) + "\n")
 # getbb.app URLs; the headset never fetches bb's site).
 cat = os.path.join(mqh, "plugins", "bb-official.json")
 c = json.load(open(cat, encoding="utf-8"))
-c = {k: {**v, "screenshots": []} for k, v in c.items() if os.path.isdir(os.path.join(mqh, "plugins", k))}
+c = {k: {**v, "screenshots": []} for k, v in c.items() if os.path.isdir(os.path.join(mqh, "plugins", k)) and k not in dropped}
 open(cat, "w", encoding="utf-8").write(json.dumps(c, indent=2) + "\n")
 
 ws = os.path.join(mqh, "pnpm-workspace.yaml")

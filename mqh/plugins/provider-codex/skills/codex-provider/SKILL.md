@@ -59,7 +59,7 @@ Service tiers are `default`, `fast`, and `ultrafast`. Codex reports the tiers
 each model accepts for the signed-in account, so the model picker and
 `mqh provider models codex` (Service tiers column, `supportedServiceTiers` in
 `--json`) list Ultrafast only for eligible models and accounts. Pass the id to
-`--service-tier` on `mqh thread spawn` or `mqh thread tell`; bb sends an explicit
+`--service-tier` on `mqh thread spawn` or `mqh thread tell`; MQH sends an explicit
 tier to Codex as given. When the model does not list it, Codex runs the turn
 at its default tier and the thread shows its warning that the tier "is not
 advertised as supported" and was omitted.

@@ -67,7 +67,7 @@ richiede una nuova APK, come oggi i plugin dei gesti.
 | **Albero dei thread** | Gli agenti che lanciano sotto-agenti diventano un albero 3D da esplorare | parentThreadId da MQH; idea di bb Thread Tree | S |
 | **IDE completo quando serve** | code-server nel Linux del visore, in un pannello: per quando vuoi scrivere tu | WebView Android su texture (o plugin) → pannello; idea di bb VS Code Server | M |
 | **Il desktop del PC dentro il visore** | Usi le app Windows dal Quest, accanto ai thread | client VNC/RDP in Linux su texture; idea di bb Screen Sharing | M |
-| **Costi e parametri vitali** | Token e costo per thread, quote dei provider, fps, temperatura e batteria del visore in un widget | contextWindowUsage.cost, provider-usage; idea di bb Millivolt / Host Pulse | S |
+| **Costi e parametri vitali** | Token e costo per thread, quote dei provider, fps, temperatura e batteria del visore in un widget | contextWindowUsage.cost, /api/v1/system/usage-limits; idea di bb Millivolt / Host Pulse | S |
 
 ## Ergonomia che nessuno ha
 

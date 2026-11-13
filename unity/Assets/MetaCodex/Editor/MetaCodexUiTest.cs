@@ -3210,7 +3210,7 @@ end)
             {
                 ["skills"] = new JArray
                 {
-                    new JObject { ["id"] = Id('a'), ["name"] = "metacodex-context", ["description"] = "Where you are in MetaCodex", ["provider"] = null, ["scope"] = "plugin", ["pluginId"] = "bb-guide", ["filePath"] = "/root/.mqh/plugins/bb-guide/skills/metacodex-context/SKILL.md", ["manageable"] = false, ["registrySkillId"] = null },
+                    new JObject { ["id"] = Id('a'), ["name"] = "metacodex-context", ["description"] = "Where you are in MetaCodex", ["provider"] = null, ["scope"] = "plugin", ["pluginId"] = "metacodex-guide", ["filePath"] = "/root/.mqh/plugins/metacodex-guide/skills/metacodex-context/SKILL.md", ["manageable"] = false, ["registrySkillId"] = null },
                     new JObject { ["id"] = Id('b'), ["name"] = "metacodex-context", ["description"] = "Where you are in MetaCodex", ["provider"] = "claude-code", ["scope"] = "provider-user", ["pluginId"] = null, ["filePath"] = "/root/.claude/skills/metacodex-context/SKILL.md", ["manageable"] = true, ["registrySkillId"] = null },
                     new JObject { ["id"] = Id('c'), ["name"] = "my-notes", ["description"] = "How I like my commits", ["provider"] = null, ["scope"] = "bb-user", ["pluginId"] = null, ["filePath"] = "/root/.mqh/skills/my-notes/SKILL.md", ["manageable"] = true, ["registrySkillId"] = null },
                     new JObject { ["id"] = Id('d'), ["name"] = "skill-creator", ["description"] = "Create or improve MQH skills", ["provider"] = null, ["scope"] = "bb-builtin", ["pluginId"] = null, ["filePath"] = "/root/.mqh/builtin-skills/skill-creator/SKILL.md", ["manageable"] = false, ["registrySkillId"] = null },

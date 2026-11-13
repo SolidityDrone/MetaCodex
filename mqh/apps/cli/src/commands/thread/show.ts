@@ -232,7 +232,7 @@ function deprecatedGitFlagsNotice(args: {
   const commands: string[] = [];
   if (opts.workStatus) {
     commands.push(
-      `bb git status ${environmentId} --merge-base-branch ${args.environmentMergeBaseBranch ?? "<branch>"}${json}`,
+      `mqh git status ${environmentId} --merge-base-branch ${args.environmentMergeBaseBranch ?? "<branch>"}${json}`,
     );
   }
   if (usedFlags.some((flag) => flag !== "--work-status")) {
@@ -244,7 +244,7 @@ function deprecatedGitFlagsNotice(args: {
           ? ""
           : ` --merge-base-branch ${opts.diffMergeBase ?? args.environmentMergeBaseBranch ?? "<branch>"}`;
     commands.push(
-      `bb git diff ${environmentId} --target ${target}${targetArgs}${json}`,
+      `mqh git diff ${environmentId} --target ${target}${targetArgs}${json}`,
     );
   }
   return [

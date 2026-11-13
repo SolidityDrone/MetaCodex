@@ -28,7 +28,7 @@ with `mqh plugin config provider-claude-code set <key> <value>`.
   links and publishing pages. Claude Code withholds them from SDK sessions
   unless opted in. Claude may publish private pages to claude.ai without asking.
   The claude.ai account's plan and organization policy still decide whether the
-  tools load. When off, bb leaves an inherited `CLAUDE_CODE_ARTIFACT` (shell,
+  tools load. When off, MQH leaves an inherited `CLAUDE_CODE_ARTIFACT` (shell,
   environment, or `~/.claude/settings.json` `env`) untouched. A change restarts
   the thread's Claude process before its next turn, preserving context.
 - Select the Fast service tier in the model picker or pass `--service-tier fast`
@@ -39,7 +39,7 @@ with `mqh plugin config provider-claude-code set <key> <value>`.
   The provider passes the selection as a session-scoped SDK setting, so it
   does not change the user's Claude defaults.
 - `sandboxEnabled` defaults to `true`. In Accept Edits and Approve for me modes
-  bb runs Claude Code's Bash commands in its sandbox. Set it to `false` to use
+  MQH runs Claude Code's Bash commands in its sandbox. Set it to `false` to use
   Claude Code's own command approvals and sandbox settings instead. A change
   restarts the thread's Claude process before its next turn, preserving context.
 - `fullAccessApprovalsEnabled` defaults to `false`, so Full Access approves
@@ -47,14 +47,14 @@ with `mqh plugin config provider-claude-code set <key> <value>`.
   `true` to show Claude Code's own prompts in Full Access: `permissions.ask`
   rules, PreToolUse hooks that answer `ask`, and its built-in safety checks
   (such as `rm` on a possibly-empty variable). It applies from the thread's
-  next turn without a restart. When bb runs as root, Full Access always
+  next turn without a restart. When MQH runs as root, Full Access always
   approves, because Claude Code refuses `bypassPermissions` there.
 - `commandDescriptionsEnabled` defaults to `false`, so Bash command rows are
   titled with the command. Set it to `true` to title them with Claude's short
   description of the command instead; approval prompts and the expanded row
   still show the command. It takes effect from each thread's next message;
   existing rows keep their titles.
-- bb passes only `MQH_CLAUDE_CODE_EXECUTABLE` and `CLAUDE_CODE_OAUTH_TOKEN` to
+- MQH passes only `MQH_CLAUDE_CODE_EXECUTABLE` and `CLAUDE_CODE_OAUTH_TOKEN` to
   the CLI. Mint the token with `claude setup-token` for machines with no
   interactive login.
 - Claude Code's own slash commands, including bundled skills such as
@@ -63,9 +63,9 @@ with `mqh plugin config provider-claude-code set <key> <value>`.
   Claude Code for the project folder without sending a prompt. With **No project**
   selected, it uses an empty catalog folder on the selected machine so global
   commands appear before a workspace exists. Each thread refreshes them when a
-  turn starts. Commands for settings bb manages (such as
+  turn starts. Commands for settings MQH manages (such as
   `/model`, `/config`, `/fast`), terminal-only commands (such as `/doctor`),
-  and bb's own skills are left out.
+  and MQH's own skills are left out.
 - Structured plan, message editing, and compaction are supported through the
   corresponding `mqh thread` commands. Unlisted model IDs are accepted by the
   provider; verify actual availability on the target host.

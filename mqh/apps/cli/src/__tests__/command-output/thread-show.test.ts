@@ -210,7 +210,7 @@ describe("mqh thread show command output", () => {
       "Work status: Workspace is not a Git repository.",
     );
     expect(collectLogLines(vi.mocked(console.error))).toEqual([
-      "mqh thread show --work-status is deprecated and will be removed. Use:\n  bb git status env-work-status --merge-base-branch main",
+      "mqh thread show --work-status is deprecated and will be removed. Use:\n  mqh git status env-work-status --merge-base-branch main",
     ]);
   });
 
@@ -291,11 +291,11 @@ describe("mqh thread show command output", () => {
       },
     ]);
     expect(collectLogLines(vi.mocked(console.error))).toEqual([
-      "mqh thread show --git-diff is deprecated and will be removed. Use:\n  bb git diff env-diff-base --target all --merge-base-branch release",
+      "mqh thread show --git-diff is deprecated and will be removed. Use:\n  mqh git diff env-diff-base --target all --merge-base-branch release",
     ]);
   });
 
-  it("mqh thread show names the bb git commands for every deprecated git flag", async () => {
+  it("mqh thread show names the mqh git commands for every deprecated git flag", async () => {
     const thread: domain.Thread = fixtures.makeThread({
       id: "thread-show-deprecated",
       projectId: "proj-1",
@@ -343,8 +343,8 @@ describe("mqh thread show command output", () => {
     expect(collectLogLines(vi.mocked(console.error))).toEqual([
       [
         "mqh thread show --work-status, --git-diff, --diff-target, --diff-sha are deprecated and will be removed. Use:",
-        "  bb git status env-deprecated --merge-base-branch develop --json",
-        "  bb git diff env-deprecated --target commit --sha abc1234 --json",
+        "  mqh git status env-deprecated --merge-base-branch develop --json",
+        "  mqh git diff env-deprecated --target commit --sha abc1234 --json",
       ].join("\n"),
     ]);
     const payload: unknown = JSON.parse(

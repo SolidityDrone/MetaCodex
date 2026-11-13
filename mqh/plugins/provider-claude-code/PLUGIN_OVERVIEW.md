@@ -1,4 +1,4 @@
-Start a thread, pick Claude Code, and let it work in your repository from bb. The plugin drives the Claude Code CLI on the host machine. It streams the agent's work into the bb timeline.
+Start a thread, pick Claude Code, and let it work in your repository from bb. The plugin drives the Claude Code CLI on the host machine. It streams the agent's work into the MQH timeline.
 
 ## What you get
 
@@ -19,5 +19,5 @@ Start a thread, pick Claude Code, and let it work in your repository from bb. Th
 ## Requirements
 
 - Install the Claude Code CLI (`claude`) on the host machine. The plugin can run the installer for you.
-- Sign in with `claude` on that machine. bb reads the sign-in state to show account and plan.
+- Sign in with `claude` on that machine. MQH reads the sign-in state to show account and plan.
 - `Claude in Chrome` needs the Chrome extension and a claude.ai login on the host.

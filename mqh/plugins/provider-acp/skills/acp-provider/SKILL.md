@@ -12,12 +12,12 @@ host: `opencode`, `omp`, `grok`, and `hermes` appear as `acp-opencode`, `acp-omp
 or machine selector.
 
 Agents in the official ACP registry can be added without writing JSON.
-`bb acp registry [--refresh] [--json]` lists them with a status: `available`,
-`added`, `update available`, `built in` (bb already ships it), or
+`mqh acp registry [--refresh] [--json]` lists them with a status: `available`,
+`added`, `update available`, `built in` (MQH already ships it), or
 `manual install` (the agent ships only as a downloadable binary).
-`bb acp add <agent-id>` adds the agent as provider `acp-<agent-id>`, or moves an
+`mqh acp add <agent-id>` adds the agent as provider `acp-<agent-id>`, or moves an
 added agent to the registry's current version while keeping the fields edited
-by hand. `bb acp remove <agent-id>` removes it. The plugin's settings page shows
+by hand. `mqh acp remove <agent-id>` removes it. The plugin's settings page shows
 the same list. An added agent is an entry in the `Custom agents` setting that
 runs `npx -y <package>` or `uvx <package>` on the thread's host, so the host
 needs Node.js or uv. The list is cached for six hours; when the registry cannot
@@ -29,19 +29,19 @@ This leaves other ACP agents and the host CLI intact. Disabled agents skip
 background capability probing. `mqh provider list --all` includes disabled agents.
 
 Cursor project skills come from `.cursor/skills`, which can link to
-`.agents/skills`. BB lists these linked skills as read-only under `cursor-project`.
+`.agents/skills`. MQH lists these linked skills as read-only under `cursor-project`.
 
 ACP agents report their own models and may reject unlisted model IDs.
 For `acp-opencode` the list mirrors the OpenCode catalog, so add a model to
-the OpenCode config rather than bb's `customModels`:
+the OpenCode config rather than MQH's `customModels`:
 
 ```sh
 mqh provider models acp-opencode --environment "$MQH_ENVIRONMENT_ID"
 mqh thread spawn --provider acp-opencode --model <provider/model>
 ```
 
-OpenCode agents are session modes, not models selectable through BB's model
-field. OpenCode reports its primary agents as the `mode` session option. BB
+OpenCode agents are session modes, not models selectable through MQH's model
+field. OpenCode reports its primary agents as the `mode` session option. MQH
 asks OpenCode for its models and modes in the directory the thread will run
 in: the project's checkout for a new thread, the environment's directory
 otherwise. Custom agents from the OpenCode config directory and from the
@@ -56,7 +56,7 @@ A new agent file shows up once the stored list is ten minutes old and is read
 again. The same holds for a custom agent with `dialect: "opencode"`; every
 other ACP agent is asked once per machine.
 
-bb lists only the agents OpenCode itself loads, and OpenCode does not read
+MQH lists only the agents OpenCode itself loads, and OpenCode does not read
 agent files from other folders such as `.agents/agents/`. To use such a folder,
 set `OPENCODE_CONFIG_DIR` as a machine variable or in a custom agent's `env`; a
 relative value is resolved in each workspace, so `.agents` lists every
@@ -73,16 +73,16 @@ list.
 Grok Build advertises models and `thought_level` options over ACP, so the
 picker follows the connected agent (including `xhigh` on grok-4.6).
 
-BB launches OpenCode sessions with `OPENCODE_CLIENT=acp` and
+MQH launches OpenCode sessions with `OPENCODE_CLIENT=acp` and
 `OPENCODE_ENABLE_QUESTION_TOOL=false`, overriding inherited and custom launch
-values. Native questions have no ACP interaction handler in BB; agents use the
+values. Native questions have no ACP interaction handler in MQH; agents use the
 ask-user-question plugin’s `AskUserQuestion` tool instead. This also applies to
 custom agents with `dialect: "opencode"` and does not change OpenCode config files.
 
-BB also sets `OPENCODE_PERMISSION` from the thread's permission mode, which
+MQH also sets `OPENCODE_PERMISSION` from the thread's permission mode, which
 OpenCode merges over the `permission` keys of its own config. In `accept-edits`
 OpenCode edits files without asking and asks before shell commands, web fetches
-and paths outside the workspace; BB shows those requests as approvals. In `full`
+and paths outside the workspace; MQH shows those requests as approvals. In `full`
 all four are allowed. Changing a thread's permission mode restarts the OpenCode
 session with the new policy; the conversation is restored.
 
@@ -90,19 +90,19 @@ OpenCode and Grok ACP support the core `mqh thread compact` command; Cursor ACP
 does not expose compatible compaction. Check the actual agent's capabilities
 before attempting provider-specific recovery.
 
-BB reuses the initial model's advertised reasoning choices and probes other
+MQH reuses the initial model's advertised reasoning choices and probes other
 models within a five-second budget, trying configured priority models first.
 Selecting an unprobed model starts a separate discovery session that probes only
 that model, with a five-second timeout. Results are cached by model. While
-loading, or after failure or an unrecognized response, BB shows no reasoning
+loading, or after failure or an unrecognized response, MQH shows no reasoning
 selector. Sending never waits for discovery: when a model's catalog entry does
-not list the thread's reasoning level, BB leaves reasoning out of the request and
+not list the thread's reasoning level, MQH leaves reasoning out of the request and
 the agent keeps its own setting. CLI and SDK reasoning preferences stay stored.
 Failed probes have a 30-second server retry cooldown; a probe the agent answers
 without levels is not repeated until the catalog is refreshed. Discovered levels
 survive later catalog refreshes. Individual probe failures do not stop bulk
 discovery of other models. In `mqh provider models
-<provider-id> --json`, `reasoningDiscovery: "unknown"` means BB has not
+<provider-id> --json`, `reasoningDiscovery: "unknown"` means MQH has not
 discovered the model's levels yet; `"known"` with an empty
 `supportedReasoningEfforts` means the model has no selectable levels, not that
 it cannot reason. Use `mqh provider models <provider-id> --selected-model <model-id>
@@ -115,7 +115,7 @@ machine has OpenCode installed and a Go subscription. Sign in to Go in OpenCode
 on that machine, then refresh its OpenCode tab. Verify with
 `mqh settings usage --machine <id-or-name> --json`; the SDK equivalent is
 `bb.sdk.system.usageLimits({ hostId, providerId: "acp-opencode" })`.
-BB reports Go's five-hour, weekly, and monthly usage and reset times, not local
+MQH reports Go's five-hour, weekly, and monthly usage and reset times, not local
 session token totals or other OpenCode providers' subscriptions.
 
 The collector checks `OPENCODE_API_KEY` first. For an OpenCode 2 database at
@@ -143,7 +143,7 @@ states rather than zero usage. Never print API keys when diagnosing setup.
 Register another ACP agent in the ACP providers plugin's `customAgents`
 setting, a JSON array:
 `mqh plugin config provider-acp set customAgents '[...]'`. Agents from the
-official ACP registry are added to the same setting by `bb acp add <agent-id>`.
+official ACP registry are added to the same setting by `mqh acp add <agent-id>`.
 The plugin re-registers its providers as soon as the setting changes; no
 restart is needed.
 
@@ -157,7 +157,7 @@ restart is needed.
   `session/set_config_option` reasoning, and `permissionCli` for
   permission-mode launch flags.
 - `dialect` (`cursor`, `opencode`, `omp`, or `grok`) selects the vendor side
-  channels bb reads.
+  channels MQH reads.
 - `nativeSkillRoots` adds native skills to the composer: a `user` list resolved
   from the target host's home directory and a `project` list resolved from the
   workspace, each a relative path without dot segments.

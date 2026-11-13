@@ -30,7 +30,7 @@ and the submission.
   `plugin-build`, `skill-index`, `agent-runtime`, `provider-bridge-*`, and the plugins provider-claude-code,
   provider-codex, provider-acp, provider-pi, environment-project-checkout, environment-git-worktree,
   environment-personal-workspace, ask-user-question, mcp, custom-instructions, concurrency-limit,
-  prompt-library, automations, memory.
+  prompt-library, automations, memory. (Nov 13: the plugin list is shorter now; see "Plugins" below.)
 - **Add**: a spatial UI surface for plugins (below), a Quest settings namespace, a replay provider plugin
   (judge builds with no keys, ported from Core v0), later a local-model provider (QVAC).
 
@@ -62,6 +62,38 @@ teaches agents this format, so plugins written on the headset show up in VR with
 **Skills for the Unity side.** Agents need skills that describe the spatial surface (panel schema,
 gesture-binding format, appearance keys) so a skill or plugin they write is valid on the first try. They
 ship with MQH, next to bb's plugin-authoring and skill-creator skills.
+
+## Plugins (Nov 13): only what MetaCodex uses
+
+Owner: "many plugins reference bb or are stuff that only makes sense for bb". Each plugin was checked against three
+questions: does the server need it to start, do the three agents (Claude Code, Codex, OpenCode) need it, does the app
+call it (`MqhClient` calls only `/api/v1/plugins` and enable / disable, never a plugin route).
+
+| Plugin | | Why |
+|---|---|---|
+| provider-claude-code, provider-codex, provider-acp | KEEP | the three agents (OpenCode runs through ACP) |
+| environment-project-checkout, environment-git-worktree | KEEP | NEW THREAD's checkout and worktree modes |
+| environment-personal-workspace | KEEP | the server's built-in personal project (`kind: personal`) makes its threads through it |
+| git | KEEP | the server's environment routes and `mqh thread show` read status and diffs through it |
+| concurrency-limit | KEEP | MetaCodex's workspace guard (one working thread per folder, docs/workspaces.md) |
+| provider-retry | KEEP | retries turns after overload, server errors and limit resets; its retries are queued rows the app shows |
+| ask-user-question | KEEP | the question tool for Codex and OpenCode (Claude Code has its own); off by default |
+| custom-instructions | KEEP | the user's instructions for every agent (`mqh instructions`) |
+| automations, workflows | KEEP | scheduled and multi-step agent work through `mqh`; no bb product in them (workflows off by default) |
+| metacodex-guide | NEW | the agents' introduction (MetaCodex, MQH, `mqh`) and MetaCodex's skills (below) |
+| bb-guide | REMOVE | introduced "bb, an agentic IDE"; its bb CLI, bb plugin authoring and marketplace skills do not apply here |
+| provider-pi | REMOVE | Pi is not a MetaCodex agent (it was already left out of the APK) |
+| provider-usage | REMOVE | a settings page and sidebar card of bb's web UI; the app reads limits from `/api/v1/system/usage-limits` (core) |
+| secrets | REMOVE | its masked form has no renderer in the app (it answers approvals only); agents get secrets from `mcx-secret` and the machine environment |
+| mcp | REMOVE | lets outside MCP clients drive bb through a bb account / connect URL; the app has its own control port |
+| storage-retention | REMOVE | experimental, off by default; SYSTEM > STORAGE is the app's own; it carried an icon of unknown licence (G10) |
+| github-pr-status | REMOVE (source kept) | pull request badges for bb's web UI, polling GitHub; unregistered and not bundled, the folder stays because `mqh thread show` compiles against its contract |
+| github, docs, memory, tasks | REMOVE | bb's optional catalog plugins (issue browser, Markdown editor, memory, task boards) for its web UI; never installed by default and the app cannot install them |
+
+`metacodex-guide` gives every MQH thread `metacodex-context`, `quest-gesture-plugins`, `quest-scripting`,
+`quest-views` and `skill-creator` (Codex too, which does not read `~/.claude/skills`); the overlay still lays the first
+four in `/root/.claude/skills` for agents started in a terminal (Claude Code skips the duplicate copy). `bb-cli`,
+`bb-plugin-authoring` and `submit-a-plugin` are gone. Re-syncs reproduce the cut: the lists in `tools/mqh-gut.sh`.
 
 ## Wiring
 

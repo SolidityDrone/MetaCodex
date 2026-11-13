@@ -20,7 +20,9 @@ SKIP_FILES = {"pnpm-lock.yaml", "UPSTREAM.md"}
 COMMANDS = ("thread|threads|plugin|plugins|terminal|terminals|environment|environments|status|guide|project|projects|"
             "provider|providers|machine|machines|settings|skill|skills|voice|diagnostics|account|automation|automations|"
             "browser|marketplace|server|host-daemon|cli|help|login|logout|open|start|stop|restart|update|version|doctor|"
-            "secrets|section|queue|tell|spawn|config|files|file|attach|run|tunnel|mcp|memory|docs|tasks|workflow|workflows")
+            "secrets|section|queue|tell|spawn|config|files|file|attach|run|tunnel|mcp|memory|docs|tasks|workflow|workflows|"
+            # plugin commands (2026-11-13: their skills still said `bb git`, `bb concurrency-limit`, ...)
+            "git|pull-request|instructions|concurrency-limit|acp|retry|secret")
 cmd_re = re.compile(r"(?<![\w$./@-])bb (?=(?:" + COMMANDS + r")\b)")
 env_re = re.compile(r"\bBB_([A-Z0-9][A-Z0-9_]*)")
 tpl_re = re.compile(r"(?<![\w$./@-])bb \$\{")

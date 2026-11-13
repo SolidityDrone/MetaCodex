@@ -395,14 +395,14 @@ export function registerEnvironmentCommands(
   for (const name of RETIRED_GIT_COMMANDS) {
     environment
       .command(name, { hidden: true })
-      .description(`Moved to bb git ${GIT_COMMAND_REPLACEMENTS[name]}`)
+      .description(`Moved to mqh git ${GIT_COMMAND_REPLACEMENTS[name]}`)
       .helpOption(false)
       .allowUnknownOption()
       .allowExcessArguments()
       .argument("[args...]")
       .action(async (args: string[]) => {
         process.stderr.write(
-          `mqh environment ${name} moved to bb git ${GIT_COMMAND_REPLACEMENTS[name]}.\n`,
+          `mqh environment ${name} moved to mqh git ${GIT_COMMAND_REPLACEMENTS[name]}.\n`,
         );
         process.exit(
           await runPluginCliCommand(getUrl(), GIT_PLUGIN_ID, [name, ...args]),

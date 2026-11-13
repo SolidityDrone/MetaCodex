@@ -9,13 +9,13 @@ See each thread's git status where you work: the Diff tab, the changed-files seg
 
 ## How it works
 
-The plugin runs git in the environment's workspace on its own machine. One status read serves the Diff tab, the composer and Info. bb never wakes a sleeping machine for git status.
+The plugin runs git in the environment's workspace on its own machine. One status read serves the Diff tab, the composer and Info. MQH never wakes a sleeping machine for git status.
 
 Use the CLI from any thread:
 
-- `bb git status <environment-id>` prints the workspace status.
-- `bb git files <environment-id> --target uncommitted` lists changed files.
-- `bb git diff <environment-id> --target all` prints the diff.
-- `bb git viewed mark <environment-id> --path <path>` marks a file Viewed.
+- `mqh git status <environment-id>` prints the workspace status.
+- `mqh git files <environment-id> --target uncommitted` lists changed files.
+- `mqh git diff <environment-id> --target all` prints the diff.
+- `mqh git viewed mark <environment-id> --path <path>` marks a file Viewed.
 
 On this page, Show Git changes above the composer hides or shows the changed-files segment, and Show Commit button (off by default) adds Commit to the thread header.

@@ -1,4 +1,4 @@
-Start a thread, pick Codex, and let it write and review code in your repository from bb. The plugin drives the Codex CLI on the host machine. It streams the agent's work into the bb timeline.
+Start a thread, pick Codex, and let it write and review code in your repository from bb. The plugin drives the Codex CLI on the host machine. It streams the agent's work into the MQH timeline.
 
 ## What you get
 
@@ -10,7 +10,7 @@ Start a thread, pick Codex, and let it write and review code in your repository 
 - Question cards for the questions Codex asks while it keeps working. Your answer reaches Codex as a message.
 - Codex skills from your home directory and project, listed next to mqh skills.
 - Health, usage, and install status on each host, with an install or update action.
-- A Codex AI service for inference and voice that other bb features can use.
+- A Codex AI service for inference and voice that other MQH features can use.
 
 ## Settings
 

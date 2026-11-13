@@ -1,6 +1,6 @@
 ---
 name: provider-retry
-description: "Diagnose automatic retries of BB turns after provider overloads, server or connection errors, and subscription-window limits."
+description: "Diagnose automatic retries of MQH turns after provider overloads, server or connection errors, and subscription-window limits."
 ---
 
 # Provider retry

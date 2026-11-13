@@ -34,7 +34,7 @@ find "$DEST" -name '.DS_Store' -delete
   echo "# Agent skills bundled into the headset's Linux (/root/.claude/skills)"
   echo
   echo "Refreshed by \`tools/sync-agent-skills.sh\` on $(date -u +%Y-%m-%d). Do not edit these copies; MetaCodex's own"
-  echo "skills live in \`mqh/plugins/bb-guide/skills/\` (quest-gesture-plugins, quest-scripting, metacodex-context)."
+  echo "skills live in \`mqh/plugins/metacodex-guide/skills/\` (quest-gesture-plugins, quest-scripting, metacodex-context)."
   echo
   echo "| Set | Source | Version | Licence | Skills |"
   echo "|---|---|---|---|---|"

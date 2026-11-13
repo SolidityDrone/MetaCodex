@@ -14,7 +14,7 @@ REQUEST="${1:-Make me a gesture plugin: when I do a thumbs up with my right hand
 W=$(mktemp -d)
 trap 'rm -rf "$W"' EXIT
 mkdir -p "$W/.claude/skills" "$W/mnt/quest/plugins" "$W/mnt/quest/scripts"
-for s in quest-gesture-plugins quest-scripting metacodex-context; do cp -r "$ROOT/mqh/plugins/bb-guide/skills/$s" "$W/.claude/skills/"; done
+for s in quest-gesture-plugins quest-scripting metacodex-context; do cp -r "$ROOT/mqh/plugins/metacodex-guide/skills/$s" "$W/.claude/skills/"; done
 for g in unity meta; do cp -r "$ROOT/userland/agent-skills/$g/." "$W/.claude/skills/"; done
 cd "$W"
 NOTE="(Test sandbox: the headset's /mnt/quest is ./mnt/quest here, so write the plugin under ./mnt/quest/plugins/. mcx-ui is not available: skip the live test steps; the gesture list would show only the 7 built-ins: no examples are installed, so bring your own poses.)"

@@ -12,7 +12,7 @@ EXPECT="${2:-files}"
 W=$(mktemp -d)
 trap 'rm -rf "$W"' EXIT
 mkdir -p "$W/.claude/skills/quest-scripting" "$W/mnt/quest/scripts"
-cp "$ROOT/mqh/plugins/bb-guide/skills/quest-scripting/SKILL.md" "$W/.claude/skills/quest-scripting/"
+cp "$ROOT/mqh/plugins/metacodex-guide/skills/quest-scripting/SKILL.md" "$W/.claude/skills/quest-scripting/"
 cd "$W"
 NOTE="(Test sandbox: the app's /mnt/quest/scripts folder is ./mnt/quest/scripts here; mcx-ui is not available, so skip the live test step.)"
 timeout 300 claude -p "$REQUEST $NOTE" --allowedTools "Read,Write,Edit,Glob,Skill" --permission-mode acceptEdits --max-turns 10 > "$W/agent.log" 2>&1 || true

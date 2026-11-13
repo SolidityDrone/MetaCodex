@@ -1,6 +1,6 @@
 ---
 name: automations
-description: "Schedule or manage recurring and one-shot BB agent or script automations."
+description: "Schedule or manage recurring and one-shot MQH agent or script automations."
 ---
 
 # Automations

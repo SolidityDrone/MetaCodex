@@ -21,8 +21,7 @@ under `<bb-data-dir>/plugins/<id>/` (SQLite database, secrets, logs).
                                  Matches id, name, description, category, or
                                  tag; status shows installed, compatible,
                                  requires newer bb, or `id in use by <source>`
-  mqh plugin install <entry>      Install an official plugin by name (docs,
-                                 memory, tasks, github, ...),
+  mqh plugin install <entry>      Install an official plugin by name,
                                  <entry-id>@<marketplace>, a Git repository
                                  URL, a local path, builtin:<name>,
                                  git:<url>[@<ref|semver-range>], or
@@ -135,8 +134,8 @@ Each bundled plugin documents its commands and behavior in its own skill.
   behavior are documented in the `prompt-library` skill.
 - Custom instructions (builtin): up to 4,096 characters saved under
   Settings → Custom instructions are added to every agent task on this host.
-  `bb instructions get`, `bb instructions set <text...>`, and
-  `bb instructions clear`.
+  `mqh instructions get`, `mqh instructions set <text...>`, and
+  `mqh instructions clear`.
 - Account Pooler (builtin, off by default): pools Claude and Codex accounts
   behind the mqh server with quota-aware failover. Run
   `mqh plugin enable account-pool`, then `bb pool account add`,
@@ -148,7 +147,7 @@ Each bundled plugin documents its commands and behavior in its own skill.
 - GitHub Star (builtin): asks once for a GitHub star after more than five
   prompts. `mqh plugin disable bb--github-star` stops it from asking.
 - Concurrency limit (builtin): caps running threads overall and per host.
-  `bb concurrency-limit status|global|host`; see the `concurrency-limit`
+  `mqh concurrency-limit status|global|host`; see the `concurrency-limit`
   skill.
 - Provider retry (builtin): queues an automatic retry after provider
   overloads, server or connection errors, and subscription-window limits.
@@ -161,19 +160,9 @@ Each bundled plugin documents its commands and behavior in its own skill.
   when a thread needs attention.
   `bb push-notifications status|list|add|remove|test|thread`; see the
   `push-notifications` skill.
-- Secrets (builtin): `bb secret request <NAME...> --write-env <path>` collects
-  credentials through a secure form into a dotenv file without exposing them
-  to the agent; see the `secrets` skill.
 - Inline previews (builtin): shows an HTML page inline in a reply, from a
   fenced `inline-vis` code block or a `::inline-vis{file="demo.html"}`
   workspace or thread-storage file; see the `inline-vis` skill.
-- MCP server (builtin, disabled by default): `mqh plugin enable bb--mcp` lets
-  ChatGPT, Claude, or another MCP client control this bb; an approved app can
-  run any `mqh` command. `mqh mcp status|clients|revoke`; see the `mcp` skill.
-- Storage & retention (builtin, disabled by default): enable with
-  `mqh plugin enable bb--storage-retention`. Owns thread retention policies
-  and machine storage cleanup through its sidebar panel and `bb storage`
-  commands; see the `storage-retention` skill.
 - Automations (builtin): recurring or one-shot agent prompts and stored
   server scripts. `mqh automation create|list|show|update|pause|resume|run|runs|delete`;
   see the `automations` skill.
@@ -181,15 +170,6 @@ Each bundled plugin documents its commands and behavior in its own skill.
   worker threads. Run `mqh plugin enable workflows`, then
   `mqh workflows validate|run|status|history|list|stop`; see the `workflows`
   skill.
-- Memory (official, `mqh plugin install memory`): durable cross-provider
-  agent memory. `mqh memory catalog|search|get|add|update|forget|history`;
-  see the `memory` skill.
-- Docs (official, `mqh plugin install docs`): document vaults with a
-  pull/edit/push loop and reviewable proposals.
-  `mqh docs vaults|list|read|pull|status|push|propose`; see the `docs` skill.
-- Tasks (official, `mqh plugin install tasks`): a task tracker with agent
-  delegation. `mqh tasks show|list|comment|update|attach`, and
-  `mqh tasks --help` for the rest; see the `tasks` skill.
 - Modal sandboxes (official, `mqh plugin install environment-modal-sandbox`):
   reusable Modal cloud machines. `bb modal account inspect`,
   `mqh machine create --provider modal-sandbox`, and `bb modal image|sandbox`;
