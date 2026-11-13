@@ -14,7 +14,7 @@ MetaCodex runs `mcx-setup quest` by itself once per Linux install (log `/root/.m
 | the module template, the Runner and the module header `mcx_module.h` | `/opt/metacodex/quest-native/module-template`, `/opt/metacodex/quest-native/runner` |
 | the build pipeline / builder daemon | `mcx-build`, `mcx-buildd` (on PATH); shared cache `~/.cache/mcx-build` |
 | the signing key of every app built here | `~/.android/metacodex-debug.keystore` (never delete) |
-| your apps | `/root/apps/<name>` |
+| your apps | the Native app project's folder, `/root/metacodex-projects/native/<name>` (older apps: `/root/metacodex-projects/native/<name>`) |
 
 An app folder: `AndroidManifest.xml` (package, label, versionCode, permissions, features), `src/` (every `.cpp`,
 `.cc`, `.c` is compiled), optional `res/` (e.g. `res/drawable/icon.png`), `assets/` (packed into the APK), and

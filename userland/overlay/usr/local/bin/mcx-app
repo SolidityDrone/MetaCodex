@@ -94,10 +94,17 @@ new_app() {
     esac
   done
   [ -n "$dir" ] || die "usage: mcx-app new <dir> [--package com.metacodex.user.<name>] [--label \"Name\"]"
-  [ -e "$dir" ] && die "$dir exists already"
+  # an existing folder is fine when it holds no app yet: a Native app project made by MetaCodex
+  # (/root/metacodex-projects/native/<name>: .git, .metacodex, AGENTS.md, CLAUDE.md) gets the app in it, its files kept
+  local into=0
+  if [ -e "$dir" ]; then
+    [ -d "$dir" ] || die "$dir exists already (not a folder)"
+    { [ -e "$dir/AndroidManifest.xml" ] || [ -e "$dir/src" ]; } && die "$dir holds an app already"
+    into=1
+  fi
   [ -f "$tpl/AndroidManifest.xml" ] || die "no template in $tpl (update MetaCodex)"
   local base id
-  base=$(basename "$dir")
+  base=$(basename "$(readlink -f "$dir" 2>/dev/null || echo "$dir")")
   id=$(printf '%s' "$base" | tr 'A-Z' 'a-z' | tr -c 'a-z0-9' '_' | sed 's/^[^a-z]*//; s/_*$//')
   [ -n "$id" ] || id=app
   pkg=${pkg:-com.metacodex.user.$id}
@@ -107,7 +114,7 @@ new_app() {
   label=${label:-$base}
   [[ "$label" =~ ^[A-Za-z0-9\ _.,:!?()+-]+$ ]] || die "the label may use letters, digits, spaces and _ . , : ! ? ( ) + -"
   mkdir -p "$(dirname "$dir")"
-  cp -r "$tpl" "$dir" || die "copy failed"
+  if (( into )); then { cp -r --update=none "$tpl/." "$dir/" 2>/dev/null || cp -rn "$tpl/." "$dir/"; } || die "copy failed"; else cp -r "$tpl" "$dir" || die "copy failed"; fi
   rm -rf "$dir/build"
   sed -i -e "0,/package=\"[^\"]*\"/s|package=\"[^\"]*\"|package=\"$pkg\"|" -e "s|android:label=\"[^\"]*\"|android:label=\"$label\"|" \
     -e "s|android:name=\"android.app.lib_name\" android:value=\"hellonative\"|android:name=\"android.app.lib_name\" android:value=\"main\"|" "$dir/AndroidManifest.xml"

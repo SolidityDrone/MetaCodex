@@ -33,7 +33,10 @@ example and short recipes), **quest-native-dev-loop** (the Runner: seconds per e
 1. **Understand the request.** Ask only what you cannot decide (at most one short question). Decide yourself:
    mixed reality (the room visible: passthrough) or full VR; hands, controllers or both (support both unless told
    otherwise); which Quest features it needs (quest-native-xr). A Quest 3 / 3S app: depth and passthrough are there.
-2. **Name it.** Folder `/root/apps/<name>` (lower case, short), label = a short title, package
+2. **Name it.** The app's folder: the project folder itself when your thread works in a Native app project
+   (`/root/metacodex-projects/native/<name>`, made by MetaCodex's + PROJECT: `mcx-app new .` fills it and keeps its
+   `.git`, `AGENTS.md`, `CLAUDE.md`), else `/root/metacodex-projects/native/<name>` (lower case, short; never
+   `/root/apps`, the old place). Below, `<dir>` is that folder. Label = a short title, package
    `com.metacodex.user.<name>`. Never reuse another app's package; never `com.pnncl.metacodex`, `com.oculus.*`, `com.meta.*`.
 3. **`mcx-app doctor`.** `WAIT`: the first-use setup is running, wait for it. `MISSING`: `nice -n 10 mcx-setup quest`
    (400 MB download, 2.5 GB on disk). `warn no builder daemon`: MQH is not running; builds still work, slower for the
@@ -42,22 +45,22 @@ example and short recipes), **quest-native-dev-loop** (the Runner: seconds per e
 
    | The app | Start with |
    |---|---|
-   | uses passthrough, depth, hands, controllers, the room, anchors, text panels (almost everything) | `mcx-app new /root/apps/<name> --example nightvision --label "<Label>"`, then replace `src/main.cpp`'s scene (keep the `mcx::App` loop) and remove the manifest entries of features you drop |
-   | a plain VR scene, no Meta features | `mcx-app new /root/apps/<name> --label "<Label>"` (the template: three cubes) |
-   | visual experiments you want to see change every few seconds | `mcx-app new /root/apps/<name> --module --label "<Label>"`: quest-native-dev-loop |
+   | uses passthrough, depth, hands, controllers, the room, anchors, text panels (almost everything) | `mcx-app new <dir> --example nightvision --label "<Label>"`, then replace `src/main.cpp`'s scene (keep the `mcx::App` loop) and remove the manifest entries of features you drop |
+   | a plain VR scene, no Meta features | `mcx-app new <dir> --label "<Label>"` (the template: three cubes) |
+   | visual experiments you want to see change every few seconds | `mcx-app new <dir> --module --label "<Label>"`: quest-native-dev-loop |
 
 5. **Write it** on `mcx_xr.h`: whole small apps to adapt are in quest-native-recipes (a floating clock / text panel
    over passthrough, pinch and buttons, the room, anchors, the icon); every feature's calls and manifest entries are
    in quest-native-xr. Give it its own icon (recipe 6) and remove the example's features and manifest entries you do
    not use. Keep it small: one feature, then the next.
-6. **`mcx-app check /root/apps/<name>`** (about 1 s): fix every `file:line:col: error:` and check again.
-7. **`mcx-app build /root/apps/<name>`** (about 2 s after the first build): `RESULT: APK ...`.
-8. **`mcx-app verify /root/apps/<name>`**: every `PROBLEM:` is a missing manifest entry, an unresolved symbol, a
+6. **`mcx-app check <dir>`** (about 1 s): fix every `file:line:col: error:` and check again.
+7. **`mcx-app build <dir>`** (about 2 s after the first build): `RESULT: APK ...`.
+8. **`mcx-app verify <dir>`**: every `PROBLEM:` is a missing manifest entry, an unresolved symbol, a
    missing icon or a wrong device list: fix and build again until `RESULT: verify ok`.
-9. **Tell the user in one sentence what the app will do**, then `mcx-app install /root/apps/<name>`. A new app:
+9. **Tell the user in one sentence what the app will do**, then `mcx-app install <dir>`. A new app:
    `RESULT: requested install of ...`: MetaCodex offers INSTALL to the user, then Android's dialog, then LAUNCH; nothing
    more for you to run. An update of an app MetaCodex installed goes through silently (`RESULT: installed`).
-10. **`mcx-app launch /root/apps/<name>`**: `RESULT: requested launch of ...`: MetaCodex offers LAUNCH / LATER. Say "ready:
+10. **`mcx-app launch <dir>`**: `RESULT: requested launch of ...`: MetaCodex offers LAUNCH / LATER. Say "ready:
     tap LAUNCH in MetaCodex", what to look at and try (controls, what should appear), and how to come back: **"the left menu button (or look at
     your left palm and pinch) opens the app's menu: Back to MetaCodex closes it and brings you here, Report to
     MetaCodex also sends me a picture and its log"**. Every app on `mcx::App` has that menu built in. Opened from the
@@ -65,7 +68,7 @@ example and short recipes), **quest-native-dev-loop** (the Runner: seconds per e
 11. **When they are back**: MetaCodex brings this thread forward. A **report** arrives as a draft in this thread's
     composer, "Feedback on <Label> <version>:", with two attachments (a picture of the app, `log <Label>`): the user
     adds what they saw and sends it; read the picture and the log file, then fix. Without a report:
-    `mcx-app logs /root/apps/<name>` and ask what they saw. Then 6-10 again (`mcx-app run <dir>` = build + install +
+    `mcx-app logs <dir>` and ask what they saw. Then 6-10 again (`mcx-app run <dir>` = build + install +
     launch).
 
 **Done** = `verify ok`, installed, launched, the user saw it work, and you told them the app's name in the Library.

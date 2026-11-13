@@ -5,7 +5,7 @@ description: Worked examples and copy-ready recipes for native Quest apps built 
 
 # Recipes for native Quest apps (mcx_xr)
 
-Start the app with `mcx-app new /root/apps/<name> --example nightvision --label "<Label>"` (quest-native-apps), keep
+Start the app with `mcx-app new /root/metacodex-projects/native/<name> --example nightvision --label "<Label>"` (quest-native-apps), keep
 its `android_main` loop and replace its scene with a recipe. Every recipe runs on `mcx::App`, so every app has the
 app menu (Back to MetaCodex / Report / Quit): keep it, add items with `app.menuItems` (quest-native-apps, Always). Every recipe uses only `mcx_xr.h` (quest-native-xr) and
 GLES 3. After any change: `mcx-app check`, `mcx-app build`, `mcx-app verify`.

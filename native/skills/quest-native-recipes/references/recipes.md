@@ -5,7 +5,7 @@ are functions to paste above `android_main` and call from its loop.
 
 ## 1. A floating panel with text over passthrough: a clock
 
-Request: "a floating clock over passthrough". Start: `mcx-app new /root/apps/clock --example nightvision --label
+Request: "a floating clock over passthrough". Start: `mcx-app new /root/metacodex-projects/native/clock --example nightvision --label
 "Floating Clock"`, replace `src/main.cpp` with this, and in `AndroidManifest.xml` drop what it no longer uses
 (USE_SCENE, USE_ANCHOR_API) and set supportedDevices to `quest2|questpro|quest3|quest3s` (no depth needed). Keep
 PASSTHROUGH, HAND_TRACKING + handtracking, the icon.
@@ -236,5 +236,5 @@ png = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", S, S, 8, 6, 
 open(out, "wb").write(png)
 ```
 
-Save it as `/root/apps/<name>/make-icon.py` (outside `src/`), run `python3 -I make-icon.py res/drawable/icon.png
+Save it as `/root/metacodex-projects/native/<name>/make-icon.py` (outside `src/`), run `python3 -I make-icon.py res/drawable/icon.png
 3a7bd5`, keep `android:icon="@drawable/icon"`, build: `mcx-app verify` shows `icon res/drawable/icon.png`.

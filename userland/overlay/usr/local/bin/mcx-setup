@@ -121,7 +121,7 @@ case "$want" in quest|all)
     rm -rf $X && mv $X.part $X && rm -rf /tmp/openxr-aar /tmp/openxr-loader.aar
   fi
   { echo 'export ANDROID_JAR=/opt/android-sdk/platforms/android-34/android.jar'; echo 'export OPENXR_HOME=/opt/openxr'; } > /etc/profile.d/metacodex-quest.sh
-  mkdir -p /root/apps
+  mkdir -p /root/metacodex-projects/native /root/metacodex-projects/default /root/metacodex-projects/research
   say "quest: NDK $(sed -n 's/^Pkg.Revision = //p' /opt/android-ndk/source.properties), android.jar API 34, OpenXR $(cat $X/VERSION), $(aapt2 version 2>&1 | head -1), $(java -version 2>&1 | head -1). Next: mcx-app doctor"
   ;;
 esac

@@ -27,14 +27,14 @@ the command; reload 2.4 ms with the OpenXR session kept). Standalone apps on `mc
 
 ## The loop
 
-1. `mcx-app new /root/apps/<name> --module --label "<Label>"` (Hello Module: three cubes).
+1. `mcx-app new /root/metacodex-projects/native/<name> --module --label "<Label>"` (Hello Module: three cubes).
 2. Once per headset: `mcx-app runner` builds the Runner (`com.metacodex.runner`, signed with the same key) and
    installs it: the user taps Install.
-3. `mcx-app check /root/apps/<name>`, then `mcx-app dev /root/apps/<name>`: compiles only `libapp.so`
+3. `mcx-app check /root/metacodex-projects/native/<name>`, then `mcx-app dev /root/metacodex-projects/native/<name>`: compiles only `libapp.so`
    (`mcx-build --module-only`), hands it to the dev server in `mcx-buildd` (127.0.0.1:47951), starts the Runner when
    it is not polling, waits for the delivery: `RESULT: running in the Runner: module <sha> delivered N s after ...`.
 4. Tell the user what changed; repeat 3. Logs: `mcx-app logs com.metacodex.runner` (`module loaded: ... in N ms`).
-5. Ship it: `mcx-app build /root/apps/<name>` packs the same module with the same host into the app's own APK
+5. Ship it: `mcx-app build /root/metacodex-projects/native/<name>` packs the same module with the same host into the app's own APK
    (its package, label, icon); then `mcx-app install` / `launch` as for any app.
 
 ## Limits and failures
