@@ -1,0 +1,23 @@
+#!/bin/sh
+# mcx-install-debs <dir>: installs every .deb in <dir> with dpkg, offline, in passes as apt does (a package whose
+# Pre-Depends are not configured yet waits for the next pass; dpkg -i takes them in name order). Exit 0 when all are
+# installed. Used by tools/userland-image.sh (in the image, on the PC) and by mcx-setup (on the headset).
+set -u
+cd "${1:?dir}" || exit 2
+pending() {
+  for d in *.deb; do
+    [ -f "$d" ] || continue
+    p=$(dpkg-deb -f "$d" Package)
+    dpkg-query -W -f='${Status}' "$p" 2>/dev/null | grep -q "install ok installed" || echo "$d"
+  done
+}
+for pass in 1 2 3 4; do
+  set -- $(pending)
+  [ $# -eq 0 ] && break
+  echo "pass $pass: $# packages"
+  dpkg --force-confdef --force-confold -i "$@" || true
+done
+left=$(pending)
+[ -z "$left" ] && { dpkg --configure -a; exit 0; }
+echo "not installed: $left" >&2
+exit 1

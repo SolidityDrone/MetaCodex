@@ -8,7 +8,7 @@ request.
 
 | In the APK | Size | Before |
 |---|---|---|
-| The Linux userland ready for MQH: Debian trixie-slim + Node.js 24 (unpacked) + the base Debian packages as .deb files (ca-certificates curl git xz-utils python3 procps less nano and their dependencies, 54 files) | rootfs.tar.gz 116 MB (was 28 MB) | Node and the packages downloaded by `mcx-setup` at first use |
+| The Linux userland ready for MQH: Debian trixie-slim + Node.js 24.22.3 + the base Debian packages installed (ca-certificates curl git xz-utils python3 procps less nano and their dependencies: 54 packages; git 2.47.3, Python 3.13.5, curl 8.14.1) | rootfs.tar.gz 128 MB (was 28 MB) | Node and the packages downloaded by `mcx-setup` at first use |
 | The four core models of the local AI service: Whisper base, Qwen3 0.6B, multilingual-e5-small, Supertonic 3 | 649 MB | downloaded with VOICE > INSTALL MODELS |
 | MQH, the local AI runtime, the overlay | as before | as before |
 
@@ -39,10 +39,14 @@ python3 -I userland/build-overlay.py              # when userland/overlay/ chang
 tools/unity-batch.sh BatchBuild
 ```
 
-`tools/userland-image.sh` runs nothing arm64 on the PC (owner: no emulation): Node is a plain archive (pinned version
-and sha256); the PC's apt works out which arm64 packages the base layer lacks (the layer's own dpkg status), from
-Debian's index signed with the keyring in the layer, and each .deb is checked against that index's sha256. dpkg installs
-them on the headset.
+`tools/userland-image.sh`: Node is a plain archive (pinned version and sha256); the PC's apt works out which arm64
+packages the base layer lacks (the layer's own dpkg status), from Debian's index signed with the keyring in the layer,
+and each .deb is checked against that index's sha256; dpkg installs them inside the image under proot 5.5.0 + qemu-aarch64
+user mode (both fetched into the work folder, nothing installed on the PC), in passes as apt does
+(`mcx-install-debs`: a package whose Pre-Depends are not configured yet waits for the next pass), then node, npm, git,
+python3 and curl run in it. When emulation fails (or `MCX_IMAGE_EMULATE=0`) the .deb files stay in the image and
+`mcx-setup` installs them on the headset with the same `mcx-install-debs`, offline. About 6 minutes on this PC; memory
+stayed above 6 GB available.
 
 ## Install for judges
 

@@ -116,7 +116,10 @@ if [ "${MCX_IMAGE_EMULATE:-1}" = 1 ]; then
       /usr/bin/env -i HOME=/root LANG=C.UTF-8 DEBIAN_FRONTEND=noninteractive PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin "$@"
   }
   say "dpkg in the image (emulated arm64): $n packages"
-  if P /bin/sh -c "dpkg --force-confdef --force-confold -i /$DEBDIR/*.deb >/tmp/dpkg.log 2>&1 || { tail -20 /tmp/dpkg.log; exit 1; }" \
+  install -D -m 755 "$ROOT/userland/overlay/usr/local/sbin/mcx-install-debs" "$R/usr/local/sbin/mcx-install-debs"
+  # in passes, as apt does: a package whose Pre-Depends are not configured yet waits for the next pass (dpkg -i takes
+  # them in name order: python3-minimal came before python3.13-minimal, which it pre-depends on)
+  if P /bin/sh -c "/usr/local/sbin/mcx-install-debs /$DEBDIR >/tmp/dpkg.log 2>&1 || { tail -20 /tmp/dpkg.log; exit 1; }" \
      && P /bin/sh -c 'node -v && npm -v && git --version && python3 --version && curl --version | head -1'; then
     rm -rf "$R/$DEBDIR" "$R"/tmp/* "$R/var/log/dpkg.log" "$R"/var/cache/debconf/*-old
     INSTALLED=1

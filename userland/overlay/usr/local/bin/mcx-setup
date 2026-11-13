@@ -41,7 +41,7 @@ fetch() {
 SHIPPED=/var/cache/metacodex/base-debs
 if ls "$SHIPPED"/*.deb >/dev/null 2>&1; then
   say "base tools shipped with the app (offline): $(ls "$SHIPPED"/*.deb | wc -l) packages"
-  if nice -n 10 dpkg --force-confdef --force-confold -i "$SHIPPED"/*.deb >/dev/null; then rm -rf "$SHIPPED"
+  if nice -n 10 mcx-install-debs "$SHIPPED" >/dev/null; then rm -rf "$SHIPPED"
   else echo "mcx-setup: the shipped packages did not install: apt fetches them instead" >&2; fi
 fi
 if ! command -v curl >/dev/null || ! command -v git >/dev/null || ! command -v xz >/dev/null || ! command -v python3 >/dev/null; then
