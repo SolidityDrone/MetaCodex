@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
@@ -266,6 +267,11 @@ namespace MetaCodex.AI
                 Say("AI runtime " + hash + " unpacked");
             }
 
+            // the core models packed in the APK (tools/local-ai-models-pack.sh; feat/ready-on-install): copied into the
+            // service's models folder with their sha256 markers, once, so voice works offline from the first start
+            yield return SeedModels(gen);
+            if (gen != _gen) yield break;
+
             KillStale();
             string token = NewToken();
             try
@@ -395,6 +401,87 @@ namespace MetaCodex.AI
                 yield return req.SendWebRequest();
                 done(req.result == UnityWebRequest.Result.Success ? req.downloadHandler.text : null);
             }
+        }
+
+        /// Copies the models packed in the APK (StreamingAssets qvac/models.json + qvac/models/<file>) into DataDir/models
+        /// where they are missing, each with the `<file>.sha256` marker the service's catalogue checks (models.js
+        /// `installed`: right size + marker). The APK is signed: its files are trusted as packed (the pack script checked
+        /// every sha256), only the size is checked here. No pack (a development build): nothing to do, the models
+        /// download as before.
+        private IEnumerator SeedModels(int gen)
+        {
+            string manifest = null;
+            yield return ReadStreaming("qvac/models.json", t => manifest = t);
+            if (string.IsNullOrEmpty(manifest)) yield break;
+            JArray list;
+            try { list = JObject.Parse(manifest)["models"] as JArray; }
+            catch (Exception ex) { Say("models pack: " + ex.Message); yield break; }
+            if (list == null || list.Count == 0) yield break;
+            string dir = Path.Combine(DataDir, "models");
+            Directory.CreateDirectory(dir);
+            long total = 0, done = 0;
+            var todo = new List<(string file, long bytes, string sha)>();
+            foreach (var m in list)
+            {
+                string file = (string)m["file"], sha = (string)m["sha256"];
+                long bytes = m["bytes"]?.Value<long>() ?? 0;
+                if (string.IsNullOrEmpty(file) || string.IsNullOrEmpty(sha)) continue;
+                string dest = Path.Combine(dir, file), marker = dest + ".sha256";
+                bool have = false;
+                try { have = File.Exists(dest) && new FileInfo(dest).Length == bytes && File.Exists(marker) && File.ReadAllText(marker).Trim() == sha; }
+                catch (Exception) { }
+                if (!have) { todo.Add((file, bytes, sha)); total += bytes; }
+            }
+            if (todo.Count == 0) yield break;
+            var started = DateTime.UtcNow;
+            foreach (var (file, bytes, sha) in todo)
+            {
+                if (gen != _gen) yield break;
+                string dest = Path.Combine(dir, file), part = dest + ".part";
+                string err = null;
+                long before = done;
+                yield return CopyStreaming("qvac/models/" + file, part, p =>
+                {
+                    Progress = total > 0 ? (before + p * bytes) / (float)total : 1f;
+                    Status = $"installing the voice models {Progress * 100f:F0}%";
+                }, e => err = e);
+                if (err == null && (!File.Exists(part) || new FileInfo(part).Length != bytes)) err = "wrong size";
+                if (err != null) { Say($"models pack: {file}: {err} (it downloads instead)"); try { File.Delete(part); } catch (Exception) { } continue; }
+                try
+                {
+                    if (File.Exists(dest)) File.Delete(dest);
+                    File.Move(part, dest);
+                    File.WriteAllText(dest + ".sha256", sha + "\n");
+                }
+                catch (Exception ex) { Say($"models pack: {file}: {ex.Message}"); continue; }
+                done += bytes;
+            }
+            Say($"models from the APK: {todo.Count} in {(DateTime.UtcNow - started).TotalSeconds:F1} s ({total / 1048576} MB)");
+        }
+
+        /// The first start's model copy, measured without touching the installed models: every packed model copied
+        /// out of the APK into a scratch folder, timed, deleted. Control port: `system bench-first-run`.
+        public IEnumerator BenchModelCopy(Action<string> report)
+        {
+            string manifest = null;
+            yield return ReadStreaming("qvac/models.json", t => manifest = t);
+            if (string.IsNullOrEmpty(manifest)) { report("models: no pack in this APK (they download)"); yield break; }
+            var list = JObject.Parse(manifest)["models"] as JArray ?? new JArray();
+            string dir = Path.Combine(_filesDir, "bench-models");
+            Directory.CreateDirectory(dir);
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            long bytes = 0;
+            foreach (var m in list)
+            {
+                string file = (string)m["file"], dest = Path.Combine(dir, file);
+                string err = null;
+                yield return CopyStreaming("qvac/models/" + file, dest, _ => { }, e => err = e);
+                if (err != null) { report("models: " + file + ": " + err); continue; }
+                bytes += new FileInfo(dest).Length;
+                try { File.Delete(dest); } catch (Exception) { }
+            }
+            try { Directory.Delete(dir, true); } catch (Exception) { }
+            report($"models out of the APK: {sw.Elapsed.TotalSeconds:F1} s for {list.Count} ({bytes / 1048576} MB, {bytes / 1048576.0 / Math.Max(0.01, sw.Elapsed.TotalSeconds):F0} MB/s; scratch copy deleted)");
         }
 
         private static IEnumerator CopyStreaming(string rel, string dest, Action<float> progress, Action<string> error)

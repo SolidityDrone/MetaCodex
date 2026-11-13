@@ -431,7 +431,9 @@ namespace MetaCodex.Shell
                         kv.TryGetValue("version", out var vv) ? vv : null, kv.TryGetValue("thread", out var th) ? th : null, null);
                 }
                 case "first-use": return FirstUseStatus;
-                default: return "error: system tools [json] | refresh | storage | inventory | install-apk <apk> | install-status | can-install | app <package> | launch <package> [thread <id>] [label <w>] [version <v>] | launch-status <package> | first-use";
+                case "bench-first-run": return BenchFirstRun();
+                case "bench-first-run-result": return _benchFirstRun.Length > 0 ? _benchFirstRun.ToString() : "not run yet";
+                default: return "error: system bench-first-run | bench-first-run-result | tools [json] | refresh | storage | inventory | install-apk <apk> | install-status | can-install | app <package> | launch <package> [thread <id>] [label <w>] [version <v>] | launch-status <package> | first-use";
             }
         }
 
@@ -448,23 +450,57 @@ namespace MetaCodex.Shell
             return host != null ? host.RootfsDir + linuxPath : null;
         }
 
+        // ------------------------------------------------------------------ first start, measured
+
+        private readonly System.Text.StringBuilder _benchFirstRun = new System.Text.StringBuilder();
+        private bool _benchRunning;
+
+        /// `system bench-first-run` (feat/ready-on-install): what a new headset's first start costs, measured on this one
+        /// without touching its userland or its models (scratch copies, deleted): the rootfs out of the APK, unpacked and
+        /// set up, its shipped packages installed offline, then the models copied out. Results in the session log, in
+        /// `system bench-first-run-result` and in /mnt/quest/first-run-bench.txt.
+        private string BenchFirstRun()
+        {
+            if (_benchRunning) return "running";
+            if (app?.Host == null) return "error: no Linux host";
+            _benchRunning = true;
+            _benchFirstRun.Clear();
+            void Line(string l) { _benchFirstRun.AppendLine(l); Log("[bench first-run] " + l); }
+            System.Collections.IEnumerator Run()
+            {
+                Line($"MetaCodex {Application.version}, {SystemInfo.deviceModel}, {DateTime.Now:yyyy-MM-dd HH:mm}");
+                yield return app.Host.BenchFirstRun(Line);
+                if (Qvac != null) yield return Qvac.BenchModelCopy(Line);
+                try { File.WriteAllText(Path.Combine(app.Host.SharedDir ?? Application.persistentDataPath, "first-run-bench.txt"), _benchFirstRun.ToString()); } catch (Exception) { }
+                _benchRunning = false;
+            }
+            StartCoroutine(Run());
+            return "started (about a minute): system bench-first-run-result";
+        }
+
         // ------------------------------------------------------------------ first use
         /// Bump when the first-use setup installs more: headsets that ran an older one run it once more.
         public const int FirstUseVersion = 1;
         public const string FirstUseLog = "/root/.metacodex/first-use.log";
-        /// What the app installs in the Linux by itself, once, at low priority on cores 0-2: base tools, Node, and
-        /// everything to build native Quest apps (APK tools, JDK, NDK, android.jar, OpenXR; skill quest-native-apps).
+        /// What the app installs in the Linux by itself, once, at low priority on cores 0-2: only what MQH and the app need
+        /// (base tools, Node). The userland the APK ships has them already (tools/userland-image.sh): then nothing runs.
+        /// The native app toolchain (APK tools, JDK, NDK, android.jar, OpenXR: `mcx-setup quest`, 400 MB) installs the
+        /// first time a native app is made (mcx-app doctor says so; skill quest-native-apps) or from SYSTEM > TOOLS
+        /// (feat/ready-on-install, owner 2026-11-13: "even the NDK is not essential").
         public const string FirstUseCommand =
             "mkdir -p /root/.metacodex && T=; taskset -c 0-2 true 2>/dev/null && T='taskset -c 0-2'; " +
-            "nice -n 10 $T mcx-setup quest > " + FirstUseLog + " 2>&1; echo \"MCX_EXIT=$?\""; // taskset: only where cores 0-2 are allowed
+            "nice -n 10 $T mcx-setup > " + FirstUseLog + " 2>&1; echo \"MCX_EXIT=$?\""; // taskset: only where cores 0-2 are allowed
+        /// The base is there (the shipped userland): no setup, no toast.
+        public const string FirstUseReady = "if command -v node >/dev/null && command -v git >/dev/null && command -v curl >/dev/null && command -v python3 >/dev/null; then echo MCX_READY; " +
+            "elif ls /var/cache/metacodex/base-debs/*.deb >/dev/null 2>&1; then echo MCX_OFFLINE; fi"; // OFFLINE: shipped packages to install, no download
         public string FirstUseStatus { get; private set; } = "not started";
         private bool _firstUseRunning;
 
         /// The marker lives in the rootfs: a new Linux install runs the setup again.
         private string FirstUseMarker => app?.Host != null ? app.Host.RootfsDir + "/root/.metacodex/first-use.done" : null;
 
-        /// Once per Linux install (and once more when FirstUseVersion grows): `mcx-setup quest` in the background, so a
-        /// new headset is ready for agents and native apps without anyone running setup commands.
+        /// Once per Linux install (and once more when FirstUseVersion grows): `mcx-setup` in the background when the base is
+        /// missing (an older userland), so MQH and the agents' installers find Node; nothing when it is there.
         private void ScheduleFirstUse()
         {
             After(20f, () =>
@@ -476,11 +512,29 @@ namespace MetaCodex.Shell
                 try { if (File.Exists(marker) && File.ReadAllText(marker).Trim() == FirstUseVersion.ToString()) { FirstUseStatus = "done"; return; } }
                 catch (Exception ex) { Log("first use: " + ex.Message); }
                 _firstUseRunning = true;
-                FirstUseStatus = "running: mcx-setup quest (log " + FirstUseLog + ")";
-                Toast("Setting up Linux in the background: Node, the Android NDK and OpenXR for native apps (about 400 MB download)", "info");
+                FirstUseStatus = "checking the Linux";
                 var started = DateTime.Now;
                 Task.Run(async () =>
                 {
+                    var ready = await Git.Shell(FirstUseReady, 60 * 1000);
+                    if ((ready.output ?? "").Contains("MCX_READY"))
+                    {
+                        _main.Enqueue(() =>
+                        {
+                            _firstUseRunning = false;
+                            try { Directory.CreateDirectory(Path.GetDirectoryName(marker)); File.WriteAllText(marker, FirstUseVersion.ToString()); }
+                            catch (Exception ex) { Log("first use marker: " + ex.Message); }
+                            FirstUseStatus = "ready (shipped with the app)";
+                            RefreshTools(true);
+                        });
+                        return;
+                    }
+                    bool offline = (ready.output ?? "").Contains("MCX_OFFLINE");
+                    _main.Enqueue(() =>
+                    {
+                        FirstUseStatus = (offline ? "finishing the Linux setup, offline" : "running: mcx-setup") + " (log " + FirstUseLog + ")";
+                        if (!offline) Toast("Setting up Linux in the background: base tools and Node (about 60 MB)", "info");
+                    });
                     var r = await Git.Shell(FirstUseCommand, 90 * 60 * 1000);
                     bool ok = (r.output ?? "").Contains("MCX_EXIT=0");
                     _main.Enqueue(() =>
@@ -492,12 +546,12 @@ namespace MetaCodex.Shell
                             try { Directory.CreateDirectory(Path.GetDirectoryName(marker)); File.WriteAllText(marker, FirstUseVersion.ToString()); }
                             catch (Exception ex) { Log("first use marker: " + ex.Message); }
                             FirstUseStatus = $"done ({min} min)";
-                            Toast("Linux is set up: Node and the native Quest app tools are ready (mcx-app)", "ok");
+                            if (!offline) Toast("Linux is set up: base tools and Node are ready (native app tools install with the first native app)", "ok");
                             RefreshTools(true);
                         }
                         else
                         {
-                            FirstUseStatus = "failed: see " + FirstUseLog + " (tried again at the next start, or run mcx-setup quest in a terminal)";
+                            FirstUseStatus = "failed: see " + FirstUseLog + " (tried again at the next start, or run mcx-setup in a terminal)";
                             Toast("Linux setup did not finish (offline?): it runs again at the next start", "warn");
                         }
                         Log("first use: " + FirstUseStatus);
