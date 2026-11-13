@@ -220,15 +220,18 @@ namespace MetaCodex.Shell
             if (Application.isEditor) return;
             try
             {
-                if (UnityEngine.Rendering.GraphicsSettings.currentRenderPipeline is UnityEngine.Rendering.Universal.UniversalRenderPipelineAsset urp)
+                // only what changed (0.7.19 log: OnSettingsChanged re-applied the render scale and the foveation level at
+                // every settings change, several times a minute while talking)
+                if (UnityEngine.Rendering.GraphicsSettings.currentRenderPipeline is UnityEngine.Rendering.Universal.UniversalRenderPipelineAsset urp
+                    && !Mathf.Approximately(urp.renderScale, RenderScale))
                     urp.renderScale = RenderScale;
-                _foveationOn = !WantFoveation;
+                if (!_displayApplied) { _displayApplied = true; _foveationOn = !WantFoveation; } // the first time: apply it whatever it is
                 ApplyFoveation();
             }
             catch (Exception ex) { Log("display settings: " + ex.Message); }
         }
 
-        private bool _foveationOn;
+        private bool _foveationOn, _displayApplied;
 
         /// Foveation is on with FOVEATED, and while Ambient Focus is shown (0.7.19, owner: "performance seems quite bad
         /// during ambient focus"): its full-view pass shades every eye-buffer pixel at RenderScale, and the edges of the

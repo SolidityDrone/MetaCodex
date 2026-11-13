@@ -149,13 +149,36 @@ namespace MetaCodex.AI
 
         /// Embeds the examples not cached yet (batches of 64) and makes the router ready; again whenever the registry
         /// changes (a plugin added or removed a command, a command was disabled).
+        /// Runs work back on the caller's thread (the shell's main-thread queue). Set: Build makes its examples on a
+        /// worker thread (1809 strings from the phrase templates: about 0.9 s on the headset's main thread, a frozen frame
+        /// right as MQH came up, 0.7.19 log) and finishes on this. Null (tests): all on the caller's thread, as before.
+        public Action<Action> Post;
+
         public void Build(Action<string> done = null)
         {
             if (Building) { done?.Invoke("building"); return; }
-            int rev = _registry.Revision;
-            var ex = BuildExamples();
-            var missing = ex.Select(e => e.text).Distinct().Where(t => !_cache.ContainsKey(t)).ToList();
             Building = true;
+            Status = "building…";
+            int rev = _registry.Revision;
+            if (Post == null) { BuildWith(BuildExamples(), rev, done); return; }
+            var post = Post;
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                List<(string text, string command)> ex = null;
+                string err = null;
+                try { ex = BuildExamples(); }
+                catch (Exception e) { err = e.Message; } // the registry changed meanwhile: tried again later
+                post(() =>
+                {
+                    if (ex == null) { Building = false; Status = "decision model: " + err; done?.Invoke(Status); return; }
+                    BuildWith(ex, rev, done);
+                });
+            });
+        }
+
+        private void BuildWith(List<(string text, string command)> ex, int rev, Action<string> done)
+        {
+            var missing = ex.Select(e => e.text).Distinct().Where(t => !_cache.ContainsKey(t)).ToList();
             Status = missing.Count > 0 ? $"embedding {missing.Count} examples…" : "building…";
             int at = 0;
             void Next()

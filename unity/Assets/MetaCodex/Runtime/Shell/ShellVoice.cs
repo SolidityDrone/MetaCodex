@@ -160,6 +160,7 @@ namespace MetaCodex.Shell
                 if (Qvac == null || !Qvac.IsRunning) { done(null, "the AI service is not running"); return; }
                 Qvac.Client.Embed(texts, (r, e) => done(r?.Vectors, e));
             });
+            Decider.Post = a => _main.Enqueue(a); // its examples are made off the main thread (VoiceDecider.Build)
             LoadDeciderCache();
             Qvac = new GameObject("QvacHost").AddComponent<QvacHost>();
             Qvac.transform.SetParent(transform, false);
@@ -1824,14 +1825,24 @@ namespace MetaCodex.Shell
             {
                 var c = Decider.Cache;
                 if (c.Count == 0 || Decider.LastEmbedded == 0 && Decider.LastPruned == 0 && c.Count == _deciderSavedCount) return;
-                int dim = c.Values.First().Length;
-                using (var w = new System.IO.BinaryWriter(System.IO.File.Create(DeciderCachePath)))
+                // written off the main thread (2.8 MB, 0.7k floats a text)
+                var snapshot = c.ToList();
+                string path = DeciderCachePath;
+                System.Threading.Tasks.Task.Run(() =>
                 {
-                    w.Write(DeciderModelTag);
-                    w.Write(c.Count);
-                    w.Write(dim);
-                    foreach (var kv in c) { w.Write(kv.Key); foreach (var f in kv.Value) w.Write(f); }
-                }
+                    try
+                    {
+                        int dim = snapshot[0].Value.Length;
+                        using (var w = new System.IO.BinaryWriter(System.IO.File.Create(path)))
+                        {
+                            w.Write(DeciderModelTag);
+                            w.Write(snapshot.Count);
+                            w.Write(dim);
+                            foreach (var kv in snapshot) { w.Write(kv.Key); foreach (var f in kv.Value) w.Write(f); }
+                        }
+                    }
+                    catch (Exception ex) { _main.Enqueue(() => Log("voice decider cache: " + ex.Message)); }
+                });
                 _deciderSavedCount = c.Count;
             }
             catch (Exception ex) { Log("voice decider cache: " + ex.Message); }
