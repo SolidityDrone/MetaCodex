@@ -152,7 +152,7 @@ namespace MetaCodex.Shell
             // in view first (owner 2026-11-13: new windows in front of the user), the rest of the ring only when the view is full
             float half = GroupHalfArc(p, r);
             var occ = Occupied(p, RowHeight, r);
-            float a = FindFreeYaw(gaze, half, occ, Mathf.Max(4f, ViewEdgeYaw - half), RingGap);
+            float a = FindFreeYaw(gaze, half, occ, ViewYaw, RingGap);
             if (float.IsNaN(a)) a = FindFreeYaw(gaze, half, occ, 180f, RingGap);
             if (float.IsNaN(a)) { ArrangeRing(); return; }
             _slots[p.transform] = (PanelAngleInGroup(p, a, r), RowHeight);

@@ -78,10 +78,11 @@ namespace MetaCodex.Shell
 
         public const float PlaceYawLimit = 112f, PlaceTop = 50f, PlaceBottom = -42f;
         /// A window that opens stays in the user's view (owner 2026-11-13: "new panels shall spawn in front of us and
-        /// oriented toward us, now often panels spawn weirdly off my view"): its edges within this many degrees of where
-        /// the user faces, and between these pitches. When no free place is in view, it opens in front over the others
-        /// (a little nearer). Only RECENTER, which lays every window out again, searches the wide range above.
-        public const float ViewEdgeYaw = 52f, ViewTop = 32f, ViewBottom = -36f;
+        /// oriented toward us, now often panels spawn weirdly off my view"): its middle within ViewYaw degrees of where
+        /// the user faces and ViewPitch above or below eye level (two windows side by side fit: the second's middle is
+        /// about 46 degrees out). When no free place is in view, it opens in front over the others (a little nearer).
+        /// Only RECENTER, which lays every window out again, searches the wide range above.
+        public const float ViewYaw = 50f, ViewPitch = 36f;
 
         // ---- the room: what the last depth reading saw (world points), for a few seconds
         private List<Vector3> _roomPts;
@@ -186,9 +187,9 @@ namespace MetaCodex.Shell
                     {
                         float pitch = level + pitchOff * ps;
                         if (pitch + halfPitch > PlaceTop || pitch - halfPitch < PlaceBottom) continue;
-                        if (inView && (pitch + halfPitch > ViewTop || pitch - halfPitch < ViewBottom)) continue;
+                        if (inView && pitchOff > ViewPitch) continue;
                         bool tilted = pitchOff >= 1.5f;
-                        float yawLimit = inView ? Mathf.Max(4f, ViewEdgeYaw - halfYaw - reserveYaw * 0.5f) : PlaceYawLimit;
+                        float yawLimit = inView ? ViewYaw + reserveYaw * 0.5f : PlaceYawLimit; // the middle of the pair (window + rail) in view
                         for (float yawOff = 0f; yawOff <= yawLimit; yawOff += 2f)
                         {
                             foreach (float ys in yawOff == 0f ? new[] { 1f } : new[] { 1f, -1f })
@@ -307,7 +308,7 @@ namespace MetaCodex.Shell
             r.Pitch0 = Mathf.Min(r.Pitch0, pitch); r.Pitch1 = Mathf.Max(r.Pitch1, pitch);
         }
 
-        /// A panel that was open before: its old place is still good when it is in view (its edges within ViewEdgeYaw of
+        /// A panel that was open before: its old place is still good when it is in view (its middle within ViewYaw of
         /// where the user faces, 3 m) and no open panel has taken it.
         private bool OldPlaceStillGood(UiPanel p)
         {
@@ -316,7 +317,7 @@ namespace MetaCodex.Shell
             if (Vector3.Distance(p.transform.position, head.position) > 3f) return false;
             float gaze = FrontYaw();
             if (!ViewRectOf(p, head.position, gaze, out var mine)) return false;
-            if (mine.Yaw0 < -ViewEdgeYaw - 6f || mine.Yaw1 > ViewEdgeYaw + 6f) return false; // out of view: placed anew, in front
+            if (Mathf.Abs(mine.YawMid) > ViewYaw + 6f) return false; // out of view: placed anew, in front
             foreach (var q in PlacementObstacles(p))
                 if (q.Id != "dock" && ViewRectOf(q, head.position, gaze, out var r) && mine.Overlaps(r, -1f)) return false; // a degree of overlap is a touch, not a cover
             return true;

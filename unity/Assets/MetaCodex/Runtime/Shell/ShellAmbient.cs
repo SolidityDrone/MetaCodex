@@ -93,7 +93,7 @@ namespace MetaCodex.Shell
         private CommandBuffer _panoCb;
         private Vector3 _panoOrigin;
         private bool _panoReady;
-        /// 1024 x 512 over 360 x 180 degrees: ~2.8 texels per degree before the blur's mip level.
+        /// 1024 x 512 over 360 x 180 degrees (half floats, 5.3 MB with its mips): ~2.8 texels per degree before the blur's mip level.
         private const int PanoW = 1024, PanoH = 512;
         /// Walking further than this from where the panorama began starts a new one (another part of the room).
         private const float PanoResetMetres = 1.5f;
@@ -595,7 +595,9 @@ namespace MetaCodex.Shell
             bool fresh = _blurPano == null || (origin - _panoOrigin).sqrMagnitude > PanoResetMetres * PanoResetMetres;
             if (_blurPano == null)
             {
-                _blurPano = new RenderTexture(PanoW, PanoH, 0, RenderTextureFormat.ARGB32)
+                // half floats (0.7.19): the frosted fill reads the room's colours from the top mips, where what the camera
+                // has seen is a small average coverage; 8 bits rounded it to nothing there
+                _blurPano = new RenderTexture(PanoW, PanoH, 0, SystemInfo.SupportsRenderTextureFormat(RenderTextureFormat.ARGBHalf) ? RenderTextureFormat.ARGBHalf : RenderTextureFormat.ARGB32)
                 { name = "focus blur panorama", useMipMap = true, autoGenerateMips = false, filterMode = FilterMode.Trilinear, wrapModeU = TextureWrapMode.Repeat, wrapModeV = TextureWrapMode.Clamp };
                 _blurPano.Create();
             }

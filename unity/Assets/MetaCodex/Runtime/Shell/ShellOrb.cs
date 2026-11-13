@@ -232,21 +232,26 @@ namespace MetaCodex.Shell
             float walked = new Vector2(d.x, d.z).magnitude;
             bool moved = walked > 0.25f || Mathf.Abs(d.y) > 0.18f;
             bool showing = Orb.State != UiOrb.Mood.Idle || Toasts.Count > 0 || OrbMenuOpen;
-            bool turned = Mathf.Abs(Mathf.DeltaAngle(_orbYaw, headYaw)) > 34f;
+            float turn = Mathf.Abs(Mathf.DeltaAngle(_orbYaw, headYaw));
+            bool turned = turn > 34f;
             if (showing && !_orbWasShowing && turned && _orbGrabHand < 0) FrameOrb(false); // something new to show: into view, once
             _orbWasShowing = showing;
             if (showing) _orbHoldUntil = _orbClock + 1.5f;
             bool hold = _orbClock < _orbHoldUntil;
             if (turned) { if (_orbTurnSince < 0f) _orbTurnSince = _orbClock; } else _orbTurnSince = -1f;
-            if (_orbGrabHand < 0 && (hold ? walked > 0.8f : moved || turned && _orbClock - _orbTurnSince > 0.7f)) FrameOrb(false);
+            // holding, only a walk or a turn right away from it (70 degrees: not reading beside it any more) brings it along
+            bool follow = hold ? walked > 0.8f || turn > 70f && _orbClock - _orbTurnSince > 0.7f : moved || turned && _orbClock - _orbTurnSince > 0.7f;
+            if (_orbGrabHand < 0 && follow) FrameOrb(false);
             if (!hold)
             {
                 int spot = _orbSpot;
                 PickOrbSpot(false);
                 if (spot != _orbSpot) _avoidCheckAt = 0f; // a new place: is the watched window clear from there?
                 TickWatched();
-                TickOrbAvoid();
             }
+            // it still keeps its menu and callouts off the window watched when they appeared (that one is kept while it
+            // holds: a look at the callouts does not make another window "watched" and send the orb elsewhere)
+            TickOrbAvoid();
             if (_orbGrabHand >= 0) return; // in the user's fingers
             // ease round the user (never straight through their head) to its place in the frame; gliding aside from the
             // window being watched, a little slower (it never jumps)
