@@ -648,3 +648,14 @@ Work windows:
 - [ ] WEB: tap a text field on a page, ⌨, type, Done: the text is in the page's field once
 - [ ] The wrist menu has no TABLE tile; KEYS is lit while the keyboard is open for the terminal
 - [ ] A Bluetooth keyboard still types into the terminal and into a focused field; the key bar (Esc, Tab, arrows, Ctrl, Alt) works
+
+## 44. The orb speaks: status answers, thread alerts; "it"; the start splash (fix/fix-list, 2026-11-13)
+
+- [ ] TALK: "give me a status update on the ongoing threads" → the orb says the answer (not only the text); also "how are my threads doing"
+- [ ] A thread you are not looking at finishes → the orb says "The thread on <project> is done." with the callout; an approval asked → "An agent on <project> needs your approval."; a question → "... is asking you something."
+- [ ] An alert while you talk or while the orb speaks: said after, not over it
+- [ ] VOICE > "Say when a thread is done or needs you" off → callouts only, nothing said
+- [ ] "close the settings panel", then within 2 minutes "reopen it" → SETTINGS opens again; "close it" closes it; VOICE > LAST shows “reopen it” → “open settings”
+- [ ] Ask "what happened while I was away?": no orb placement, focus or menu settings in the answer; threads, approvals, builds are there
+- [ ] App start: the MetaCodex logo appears about a metre in front of you over the room (passthrough visible around it), comes in behind a scan line, follows your head gently, then breaks up into light after about 3 s; nothing of it stays
+

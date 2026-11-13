@@ -20,6 +20,8 @@ namespace MetaCodex.Shell
         public bool speak = false;
         /// Speak the answers to questions about the session ("is the build stuck?") even when replies are not spoken.
         public bool speakAnswers = true;
+        /// Say it when a thread is done, needs you (an approval or a question) or stops on an error (owner 2026-11-13).
+        public bool speakAlerts = true;
         /// When no phrase matches, ask the local LLM which command was meant (used when the decision model is off or
         /// not ready, and as its fallback when `llmFallback` is on).
         public bool useLlm = true;
@@ -282,6 +284,7 @@ namespace MetaCodex.Shell
         private void TickVoice()
         {
             TickSpeech(Time.unscaledTime);
+            TickThreadAlerts(); // "the thread on X is done" waits for a quiet moment (ShellThreadView)
             if (_cpuBoosted && Time.unscaledTime > _boostUntil && (Recorder == null || !Recorder.Recording))
             {
                 try { OVRManager.suggestedCpuPerfLevel = _cpuBefore; } catch (Exception) { }
@@ -467,6 +470,8 @@ namespace MetaCodex.Shell
         {
             var res = new VoiceResult { Transcript = (text ?? "").Trim(), AsrMs = asrMs, Started = t0 >= 0f ? t0 : Time.realtimeSinceStartup };
             if (res.Transcript.Length == 0) { res.Error = "heard nothing"; VoiceDone(res, done); return; }
+            res.Transcript = WithReference(res.Transcript, out var refNote); // "reopen it": the window acted on last (ShellContext)
+            if (refNote != null) res.Corrected = refNote;
             var fast = Voice.FastMatchAll(res.Transcript);
             // a question that names a panel ("how many captures...") is answered, not run (AskInsteadOf)
             if (fast != null && AskInsteadOf(fast, res.Transcript)) { res.Via = "fast+context"; VoiceAskSession(res, done); return; }
@@ -1402,6 +1407,7 @@ namespace MetaCodex.Shell
             new VoiceSetting { Id = "sounds", Key = "sounds", Kind = "bool", Label = "Sounds", Names = new[] { "sounds", "sound", "ui sounds", "clicks" } },
             new VoiceSetting { Id = "volume", Key = "soundVolume", Kind = "number", Min = 0f, Max = 1f, Unit = "%", Label = "Volume", Names = new[] { "volume", "sound volume" } },
             new VoiceSetting { Id = "speak", Key = "voice.speak", Kind = "bool", Label = "Spoken answers", Names = new[] { "spoken answers", "speak answers", "spoken replies", "voice replies", "talking back" } },
+            new VoiceSetting { Id = "speak_alerts", Key = "voice.speakAlerts", Kind = "bool", Label = "Spoken thread alerts", Names = new[] { "spoken alerts", "thread alerts", "spoken notifications", "voice alerts", "announcements" } },
             new VoiceSetting { Id = "clap", Key = "gestures.clapEnabled", Kind = "bool", Label = "Clap gesture", Names = new[] { "clap", "clap gesture", "clapping" } },
             new VoiceSetting { Id = "hand_rays", Key = "gestures.rayVisible", Kind = "bool", Label = "Hand rays", Names = new[] { "hand rays", "rays", "pointer rays", "lasers" } },
             new VoiceSetting { Id = "foveation", Key = "foveation", Kind = "bool", Label = "Foveated rendering", Names = new[] { "foveation", "foveated rendering" } },
@@ -1522,7 +1528,8 @@ namespace MetaCodex.Shell
                 { "PANEL OPACITY", "panelOpacity" }, { "VOLUME", "soundVolume" }, { "RADIUS", "focusRadius" }, { "INTENSITY", "focusIntensity" }, { "SOFTNESS", "focusSoftness" }, { "BLUR", "focusBlur" } };
             var toggles = new Dictionary<string, string> { { "Bend panels", "bendPanels" }, { "Sounds", "sounds" }, { "Clap gesture", "gestures.clapEnabled" }, { "Show hand rays", "gestures.rayVisible" },
                 { "Foveated", "foveation" }, { "Ambient focus", "focusEnabled" }, { "Speak answers", "voice.speak" },
-                { "Real things in front", "occludeUi" }, { "Sharp depth", "depthCamera" }, { "Main menu on the wrist", "wristMenu" }, { "Orb", "orb" } };
+                { "Real things in front", "occludeUi" }, { "Sharp depth", "depthCamera" }, { "Main menu on the wrist", "wristMenu" }, { "Orb", "orb" },
+                { "Say when a thread", "voice.speakAlerts" } };
             foreach (var p in _panels.Values)
                 foreach (var e in p.Elements)
                 {
@@ -1752,13 +1759,14 @@ namespace MetaCodex.Shell
                 PushVoiceConfig();
                 if (SpeakForTest != null || Qvac != null && Qvac.IsRunning) VoiceSay(VoiceFxSample);
             }) { Rect = rs.Next(0.032f), LabelWidth = pickLabel });
+            p.Add(new UiToggle("Say when a thread is done or needs you", Settings.voice.speakAlerts, v => { Settings.voice.speakAlerts = v; OnSettingsChanged(); }) { Rect = rs.Next(0.03f) });
 
             p.Add(new UiLabel("COMMANDS (say them, or anything close)", t.SmallSize) { Rect = rs.Next(0.018f), UseDisplay = true, Color = t.TextDim });
             _vCmdList = p.Add(new UiList(0.034f, (item, idx) =>
             {
                 var cmd = Voice.Find(item.Tag as string);
                 if (cmd != null) Toast(CommandHint(cmd), "info");
-            }) { Rect = rs.Next(0.21f - 0.032f - t.Gap) }); // one row less: SOUND sits above
+            }) { Rect = rs.Next(0.21f - 0.032f - 0.03f - t.Gap * 2) }); // rows less: SOUND and the alerts toggle sit above
             p.Add(new UiLabel("LAST", t.SmallSize) { Rect = rs.Next(0.018f), UseDisplay = true, Color = t.TextDim });
             _vHistory = p.Add(new UiLabel("", t.SmallSize) { Rect = rs.Rest(), Wrap = true, Align = TextAlignmentOptions.TopLeft, UseMono = true, Color = t.TextDim });
             RefreshVoicePanel();

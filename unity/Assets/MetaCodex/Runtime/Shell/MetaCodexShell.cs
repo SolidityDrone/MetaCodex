@@ -172,6 +172,7 @@ namespace MetaCodex.Shell
             BuildPanels();
             BuildWrist();
             BuildOrb();
+            BuildSplash(); // the logo over the room while the rest starts (ShellSplash)
             if (app != null) foreach (var t in app.Terminals) WrapTerminal(t);
             Log($"shell up: {_panels.Count} panels, scripts in {dir}");
         }
@@ -284,6 +285,7 @@ namespace MetaCodex.Shell
             UpdateLayout();
             HitchMark(9);
             TickOrb(Time.unscaledDeltaTime);
+            TickSplash(Time.unscaledDeltaTime);
             HitchMark(10);
         }
 
@@ -333,7 +335,7 @@ namespace MetaCodex.Shell
             var p = UiPanel.Create<T>(id, title, w, h, _root);
             _panels[id] = p;
             Router.Register(p);
-            p.Closed += _ => SaveLayout();
+            p.Closed += _ => { SaveLayout(); NoteClosedRef(id); };
             p.gameObject.SetActive(false);
             return p;
         }
@@ -373,6 +375,14 @@ namespace MetaCodex.Shell
 
         public bool OpenPanel(string id)
         {
+            NoteRef(id, "opened"); // what "it" means next (ShellContext)
+            _refDepth++;
+            try { return OpenPanelCore(id); }
+            finally { _refDepth--; }
+        }
+
+        private bool OpenPanelCore(string id)
+        {
             if (id == ControlId) return OpenControl(null); // the rail alone is not a window: CONTROL on its last category
             if (id == SidebarId) return SetSidebar(true); // it opens beside the open thread, never alone
             if (Alias(ref id, out int tab))
@@ -402,6 +412,14 @@ namespace MetaCodex.Shell
         }
 
         public bool ClosePanel(string id)
+        {
+            NoteRef(id, "closed");
+            _refDepth++;
+            try { return ClosePanelCore(id); }
+            finally { _refDepth--; }
+        }
+
+        private bool ClosePanelCore(string id)
         {
             if (id == ControlId)
             {

@@ -382,3 +382,13 @@ or `mcx-ui` / `mcx-secret` inside the userland).
 ## Stone-metal frames and buttons (2026-11-12, branch feat/stone-ui)
 
 Owner: "metallish-stone with blueish glowing, in the style of an RTS console, just an improvement to our current UI", "for panels wrapping and buttons only". In `Shaders/SciFiUI.shader` (no new meshes or textures): the panel's corner brackets became carved stone-metal pieces round each corner (the outline offset 3 mm, 9 mm thick, 45-degree tips, an engraved groove with energy, a node on the cut), slim stone rails between them and a carved plate with an energy gem over the top centre (windows wider than 0.24 m); the blue leaks inward only. Normal and filled buttons are carved slate plates with an engraved channel 2.6 mm inside the edge, energy in the button's colour (dim at rest, bright hovered, full when filled; red danger stays red). List rows and ghost buttons keep their look. Helpers `Stone`, `StoneGrain`, `ChamferNormal`; prototype `~/mcxwork/proto/frame.py` (frame-v4 / v5).
+
+## Start splash (0.7.19)
+
+Owner 2026-11-13: a splash at start, in passthrough so the user is not blind, that goes with a transition. `ShellSplash`:
+the logo (`Resources/Brand/splash.png`, 1280 x 721, transparent; the owner's PNG had its checkerboard drawn in, keyed
+out by texture with `tools/brand/key_checkerboard.py <src.png> <out.png>`, then resized to 1280 wide) 0.60 m wide, a metre in front of the eyes, on top of everything
+(`Resources/Shaders/Splash`, queue Overlay, no depth test). It waits for a tracked head (at most 1 s), comes in behind a
+scan line running down (0.7 s), holds 2.3 s while the shell starts, follows the head gently, then breaks up into light
+(0.9 s: a noise dissolve with an accent edge, growing 5 %), and is destroyed with its texture. Not in batch runs.
+

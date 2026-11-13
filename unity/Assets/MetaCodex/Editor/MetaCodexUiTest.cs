@@ -3404,6 +3404,58 @@ end)
             VoiceResult vo = null;
             shell.VoiceProcessText("open settings", x => vo = x);
             Check(vo != null && vo.Command == "open_panel" && shell.IsPanelOpen("settings"), $"“open settings” stays a command ({vo?.Command})");
+            // spoken back (owner 2026-11-13: "I see the text but it doesn't seem to speak"): status questions are session
+            // questions, answered aloud; a thread that ends or needs the user is said too (VOICE > "Say when a thread...")
+            var said2 = new List<string>();
+            var keepSpeak = shell.SpeakForTest;
+            shell.SpeakForTest = (text, cb) => said2.Add(text); // asked to speak is enough (never answered: nothing plays)
+            try
+            {
+                foreach (var q in new[] { "give me a status update on the ongoing threads", "how are my threads doing", "what's the status of the agents" })
+                {
+                    said2.Clear();
+                    shell.StopSpeaking();
+                    VoiceResult vs = null;
+                    shell.VoiceProcessText(q, x => vs = x);
+                    for (int k = 0; k < 4 && vs == null; k++) shell.UpdateForTest(); // a matched command answers on the next frame
+                    Check(vs != null && vs.Command == "ask_about_session" && vs.Answer && said2.Count > 0,
+                        $"“{q}” -> {vs?.Command} via {vs?.Via}, spoken ({said2.Count} sentence(s): “{Trim(said2.FirstOrDefault() ?? "", 60)}”)");
+                }
+                shell.StopSpeaking();
+                said2.Clear();
+                var tBefore = new ThreadPulse { State = "working", Title = "Docs pass" };
+                shell.ThreadPulseChangeForTest("thr_alert", tBefore, new ThreadPulse { State = "idle", Title = "Docs pass" });
+                string doneLine = shell.LastThreadAlertForTest;
+                bool doneSaid = said2.Any(x => x.Contains("is done"));
+                shell.StopSpeaking();
+                said2.Clear();
+                shell.ThreadPulseChangeForTest("thr_alert", tBefore, new ThreadPulse { State = "waiting", Title = "Docs pass", Doing = "waiting for your approval (bash)" });
+                string askLine = shell.LastThreadAlertForTest;
+                bool askSaid = said2.Any(x => x.Contains("approval"));
+                shell.StopSpeaking();
+                Check(doneLine == "The thread “Docs pass” is done." && doneSaid && askLine == "The agent in “Docs pass” needs your approval." && askSaid,
+                    $"thread alerts are spoken: “{doneLine}” ({doneSaid}), “{askLine}” ({askSaid})");
+            }
+            finally { shell.SpeakForTest = keepSpeak; shell.StopSpeaking(); }
+            // "it" (owner 2026-11-13: "close the settings panel", 5 s later "reopen it"): the window acted on last
+            var refCases = new (string said, string last, string want)[]
+            {
+                ("reopen it", "settings", "open settings"), ("open it again", "settings", "open settings"), ("bring it back", "files", "open files"),
+                ("Close it.", "voice", "close voice"), ("hide that one", "threads", "close threads"), ("reopen the files", null, "open the files"),
+                ("open settings", "files", null), ("close the terminal", "files", null), ("reopen it", null, null),
+            };
+            var refBad = refCases.Where(c => MetaCodexShell.ResolveReference(c.said, c.last) != c.want).Select(c => $"{c.said} [{c.last}] -> {MetaCodexShell.ResolveReference(c.said, c.last) ?? "null"}").ToList();
+            Check(refBad.Count == 0, $"“it” resolved to the window acted on last ({refCases.Length} cases" + (refBad.Count > 0 ? "; wrong: " + string.Join("; ", refBad) : ")"));
+            shell.OpenPanel("settings");
+            VoiceResult vc = null, vr2 = null;
+            shell.VoiceProcessText("close the settings panel", x => vc = x);
+            for (int k = 0; k < 4 && vc == null; k++) shell.UpdateForTest();
+            bool closedS = !shell.IsPanelOpen("settings");
+            shell.VoiceProcessText("reopen it", x => vr2 = x);
+            for (int k = 0; k < 4 && vr2 == null; k++) shell.UpdateForTest();
+            Check(closedS && vr2 != null && vr2.Command == "open_panel" && shell.IsPanelOpen("settings") && shell.LastRefForTest == "settings",
+                $"“close the settings panel”, then “reopen it”: {vr2?.Command} ({vr2?.Corrected}), SETTINGS open again ({shell.IsPanelOpen("settings")})");
+            shell.ClosePanel("settings");
             // “how many captures…” end to end (owner 2026-11-09): answered with the count, CLIPBOARD stays shut
             shell.ClosePanel("clipboard");
             int clipN = shell.Clipboard.Items.Count;

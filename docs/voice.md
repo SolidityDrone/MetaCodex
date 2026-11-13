@@ -296,6 +296,22 @@ What answers now:
 Expected first word on the headset (estimates from PC runs): recap 1.6-1.7 s (the acknowledgement), its first real
 sentence 3.7-4.5 s; a model answer about 4-6 s with the compact prompt still to come (open: the compact recap context).
 
+## Spoken alerts and status questions (fix/fix-list, 2026-11-13)
+
+Owner: "does the orb actually speak? If I ask a status update on ongoing threads I see the text but it doesn't seem to
+speak back", and "when some task is completed or requires action it could speak: 'Thread on <project> is done', 'An
+agent is requiring allowance'".
+
+- Status questions are session questions: `ask_about_session` has the phrases "[give me] [a|the] status [update] [on|of]
+  [the|my] [ongoing|running|open] threads|agents", "status update", "how are my threads|agents doing", "what are my
+  threads|agents doing" and samples like them. Session answers are spoken by default (`voice.speakAnswers`); before,
+  such a question could match another command, whose reply is only shown while "Speak answers" (`voice.speak`) is off.
+- Alerts (`voice.speakAlerts`, on; VOICE > "Say when a thread is done or needs you"; voice setting "thread alerts"): when a
+  thread the app follows changes, the orb says "The thread on <project> is done.", "... stopped on an error.", "An agent
+  on <project> needs your approval." or "... is asking you something." (without a known project: the thread's title).
+  The callout shows as before. An alert that comes while the user talks or the orb speaks waits (the newest two, a
+  minute at most) and is said after. Not without the local AI service (the callout alone then).
+
 ## Speech quality: FAST (4 steps) or CLEAR (5) (feat/polish, 2026-11-12)
 
 VOICE > SPEECH (setting `voice.speech`, voice `set_setting speech_quality fast|clear`) picks Supertonic's diffusion steps,

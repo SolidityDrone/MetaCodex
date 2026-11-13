@@ -28,8 +28,20 @@ can **ask** about it ("is this build stuck?", "what did this thread achieve?", "
 | processes | `ps` samples: notable processes (compilers, package managers, build tools, node, python, ...), elapsed, CPU seconds and when CPU last grew | cargo: no CPU for 4 min |
 | tools | SYSTEM > TOOLS inventory | rustc 1.91.0, node 24.11 |
 | extensions | Lua scripts and plugins (enabled, errors), MQH plugins | script double-clap: ERROR |
-| system | first-use setup, storage, captures, the AI service, layout | first use done |
-| events | the mid-term log: thread status changes, approvals asked / answered, tool installs, script errors, captures, panels opened, voice commands run | 14:02 approval asked in "Fix the build" |
+| system | first-use setup, storage, captures, the AI service, how many windows are open | first use done |
+| events | the mid-term log: thread status changes, approvals asked / answered, tool installs, script errors, captures, processes that ran 20 s or more, merges and removed worktrees | 14:02 approval asked in "Fix the build" |
+| focus (short-term) | the window the user last opened or closed, for 2 minutes: what "it" means | last acted on: the settings window (closed 5 s ago) |
+
+Not in the context (0.7.19, owner: "not stupid things like the user set focus"): what the user said (questions are not
+events), the orb's callouts and where it floats, the main menu's place, Ambient Focus on or off, and other UI settings.
+The model answers about the work, the threads and the windows the user acts on.
+
+## "It"
+
+The window the user last opened or closed (by voice, a button or its ✕) is kept for two minutes. Before a phrase is
+matched, "reopen it", "open it again", "bring it back", "show that", "close it", "hide that one" become that window's
+command ("open settings"); "reopen the files" becomes "open the files". VOICE > LAST shows the rewrite. Only windows
+voice can name count (`VoicePanels`); a CONTROL page keeps the name it was opened by (DISPLAY, not SETTINGS).
 
 ## Interpretation or command
 

@@ -81,22 +81,70 @@ namespace MetaCodex.Shell
             if (before == null || now == null || id == null) return;
             string title = "“" + ThreadPulse.Clip(now.Title, 38) + "”";
             bool open = id == _threadOpen && IsPanelOpen("thread");
+            string project = ThreadProjectName(id), name = "“" + ThreadPulse.Clip(now.Title, 40) + "”";
+            string thread = project != null ? "The thread on " + project : "The thread " + name;
+            string agent = project != null ? "An agent on " + project : "The agent in " + name;
             if (before.Working && now.State == "idle")
             {
                 string gist = now.AnswerGist.Length > 0 ? ": " + ThreadPulse.Clip(now.AnswerGist, 64) : "";
                 CastThreadNote(title + " answered" + gist, "ok", id);
                 if (open) { PulseThreadPanel(); FlashAnswer(); }
+                SayThreadAlert(thread + " is done.");
             }
             else if (now.State == "error" && before.State != "error")
             {
                 CastThreadNote(title + " stopped on an error" + (now.ErrorText.Length > 0 ? ": " + ThreadPulse.Clip(now.ErrorText, 60) : ""), "error", id);
                 if (open) PulseThreadPanel();
+                SayThreadAlert(thread + " stopped on an error.");
             }
             else if (now.State == "waiting" && before.State != "waiting")
             {
                 CastThreadNote(title + " needs you: " + ThreadPulse.Clip(now.Doing, 60), "warn", id);
                 if (open) PulseThreadPanel();
+                SayThreadAlert(agent + (now.Doing.StartsWith("waiting for your approval") ? " needs your approval."
+                    : now.Doing.StartsWith("waiting for your answer") ? " is asking you something." : " needs you."));
             }
+        }
+
+        // ---- spoken alerts (owner 2026-11-13: "when some task is completed, or requires action it could actually speak:
+        // 'Thread on <project> is done', 'An agent is requiring allowance'"): VOICE > "Say when a thread is done or needs
+        // you" (voice.speakAlerts, on). The orb says them while it is quiet; one that comes while the user talks or the
+        // orb speaks waits (the newest two are kept) and is said after, within a minute.
+        private readonly List<(string text, float at)> _alertQueue = new List<(string, float)>();
+        public string LastThreadAlertForTest { get; private set; }
+
+        /// The thread's project as MQH names it (null when not known yet).
+        private string ThreadProjectName(string id)
+        {
+            var row = _threads.FirstOrDefault(x => (string)x["id"] == id) ?? _ctxThreadRows?.FirstOrDefault(x => (string)x["id"] == id);
+            string pid = (string)row?["projectId"];
+            var proj = pid != null ? _projects.FirstOrDefault(x => (string)x["id"] == pid) : null;
+            string name = (string)proj?["name"] ?? (string)row?["projectName"];
+            return string.IsNullOrWhiteSpace(name) ? null : name;
+        }
+
+        /// Self-tests: a thread's pulse changed (as the background poll sees it).
+        public void ThreadPulseChangeForTest(string id, ThreadPulse before, ThreadPulse now) => NotifyThreadChange(id, before, now);
+
+        private void SayThreadAlert(string text)
+        {
+            if (Settings == null || !Settings.voice.speakAlerts || string.IsNullOrEmpty(text)) return;
+            LastThreadAlertForTest = text;
+            if (SpeakForTest == null && (Qvac == null || !Qvac.IsRunning)) return; // no voice: the callout says it
+            _alertQueue.Add((text, Time.unscaledTime));
+            while (_alertQueue.Count > 2) _alertQueue.RemoveAt(0);
+            TickThreadAlerts();
+        }
+
+        /// Called by TickVoice: says the waiting alerts once the user is not talking and the orb is quiet.
+        private void TickThreadAlerts()
+        {
+            if (_alertQueue.Count == 0) return;
+            _alertQueue.RemoveAll(a => Time.unscaledTime - a.at > 60f);
+            if (_alertQueue.Count == 0 || Speaking || VoiceState != "idle") return;
+            string text = string.Join(" ", _alertQueue.Select(a => a.text));
+            _alertQueue.Clear();
+            VoiceSay(text);
         }
 
         private void CastThreadNote(string text, string kind, string threadId)

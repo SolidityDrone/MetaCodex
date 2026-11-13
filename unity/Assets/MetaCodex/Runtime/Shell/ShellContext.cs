@@ -277,6 +277,8 @@ namespace MetaCodex.Shell
             string subject = SubjectThread(focus);
             if (focus != null) Line("focus", (Time.unscaledTime - _ctxPointedAt < 15f && focus == _ctxPointed ? "pointing at " : "looking at ") + focus.Title + " panel");
             if (subject != null) Line("focus", $"the thread in question: “{ThreadTitle(subject)}”");
+            if (_lastRef.id != null && Time.unscaledTime - _lastRef.at < RefSeconds)
+                Line("focus", $"last acted on: the {_lastRef.id} window ({_lastRef.verb} {(int)(Time.unscaledTime - _lastRef.at)} s ago; \"it\" means this)");
             data["subjectThread"] = subject;
 
             // the subject thread: what it is, what was asked, what it did
@@ -382,8 +384,8 @@ namespace MetaCodex.Shell
             }
             data["counts"] = counts;
             Line("system", $"{(int)counts["panels"]} windows open, {(int)counts["terminals"]} of them terminals");
-            Line("system", "ambient focus " + (Settings.focusEnabled ? "on" : "off") + "; main menu on the " + (Settings.wristMenu ? "wrist" : "dock")
-                + "; the orb " + (Settings.orb ? "on" + (Toasts != null && Toasts.History.Count > 0 ? ", its last message: " + Toasts.History[0].Text : "") : "off"));
+            // (no UI settings or the orb's last callout here, 0.7.19, owner: "not stupid things like the user set focus":
+            // the model answers about the work, the threads and what the user just did with a window)
             Line("system", "local AI service: " + (Qvac == null ? "off" : Qvac.State.ToString().ToLowerInvariant()));
             // the mid-term memory, newest first
             foreach (var e in SessionMemory.Recent(TimeSpan.FromMinutes(90), now).Reverse().Take(14))
@@ -416,6 +418,63 @@ namespace MetaCodex.Shell
             return lines;
         }
 
+        // ------------------------------------------------------------------ what "it" means
+
+        // owner 2026-11-13: "if I say 'close the settings panel' and 5 s later 'reopen it', it shall understand we talk of
+        // the settings panel". The window the user last opened or closed (by voice, a button or its ✕), for two minutes:
+        // "reopen it", "open it again", "bring it back", "close it", "hide that" are said as that window's command
+        // before matching; the model's context names it too. Short-term only: never in the session's event log.
+        public const float RefSeconds = 120f;
+        private (string id, string verb, float at) _lastRef;
+        private int _refDepth;
+
+        private void NoteRef(string id, string verb)
+        {
+            if (_refDepth > 0 || string.IsNullOrEmpty(id) || Array.IndexOf(VoicePanels, id) < 0) return;
+            _lastRef = (id, verb, Time.unscaledTime);
+        }
+
+        /// A panel's ✕ (or anything that closes it without ClosePanel): keeps the name it was opened by (DISPLAY, not
+        /// the SETTINGS window it is a page of).
+        private void NoteClosedRef(string panelId)
+        {
+            if (_refDepth > 0) return;
+            string id = _lastRef.id != null && (_lastRef.id == panelId || PanelAliases.TryGetValue(_lastRef.id, out var al) && al.panel == panelId) ? _lastRef.id : panelId;
+            NoteRef(id, "closed");
+        }
+
+        public string LastRefForTest => _lastRef.id;
+
+        private static readonly System.Text.RegularExpressions.Regex RefOpen = new System.Text.RegularExpressions.Regex(
+            @"^(?:please\s+)?(?:re-?open(?:\s+(?:it|that|this|that\s+one|this\s+one))?|(?:open|show)\s+(?:it|that|this|that\s+one|this\s+one)|(?:bring|put)\s+(?:it|that|this)\s+back)(?:\s+(?:again|back|up|please))*$");
+        private static readonly System.Text.RegularExpressions.Regex RefClose = new System.Text.RegularExpressions.Regex(
+            @"^(?:please\s+)?(?:close|hide|shut|dismiss)\s+(?:it|that|this|that\s+one|this\s+one)(?:\s+(?:again|down|please))*$");
+        private static readonly System.Text.RegularExpressions.Regex Reopen = new System.Text.RegularExpressions.Regex(@"^(?:please\s+)?re-?open\s+(.+)$");
+
+        /// "reopen it" -> "open settings" when the last window acted on is SETTINGS (null: nothing to resolve);
+        /// "reopen the files" -> "open the files". Pure (self-tests).
+        public static string ResolveReference(string said, string lastWindow)
+        {
+            string t = System.Text.RegularExpressions.Regex.Replace((said ?? "").ToLowerInvariant(), @"[.!?,]+", " ").Trim();
+            t = System.Text.RegularExpressions.Regex.Replace(t, @"\s+", " ");
+            if (lastWindow != null && RefOpen.IsMatch(t)) return "open " + lastWindow;
+            if (lastWindow != null && RefClose.IsMatch(t)) return "close " + lastWindow;
+            var m = Reopen.Match(t);
+            if (m.Success && !System.Text.RegularExpressions.Regex.IsMatch(m.Groups[1].Value, @"^(it|that|this)\b")) return "open " + m.Groups[1].Value;
+            return null;
+        }
+
+        /// What the voice pipeline matches: the utterance with "it" resolved (VoiceProcessText).
+        private string WithReference(string said, out string note)
+        {
+            note = null;
+            string last = _lastRef.id != null && Time.unscaledTime - _lastRef.at < RefSeconds ? _lastRef.id : null;
+            string r = ResolveReference(said, last);
+            if (r == null) return said;
+            note = "“" + said + "” → “" + r + "”";
+            return r;
+        }
+
         // ------------------------------------------------------------------ answering
 
         private System.Threading.CancellationTokenSource _answerCts; // the streamed answer being written (StopSpeaking cancels it)
@@ -434,7 +493,6 @@ namespace MetaCodex.Shell
             string exact = SessionContextText.ExactAnswer(snap, q);
             if (exact != null)
             {
-                SessionMemory.Add("voice", "ask", "asked: " + Cut(question, 80));
                 if (speak) { foreach (var x in SpokenText.Sentences(exact)) if (!SayStreamAppend(x)) break; SayStreamEnd(); }
                 done(exact);
                 return;
@@ -473,8 +531,7 @@ namespace MetaCodex.Shell
                     string a = e != null ? null : SessionContextText.CleanAnswer(all);
                     if (current && a != null) { text.Clear().Append(a); Feed(true); }
                     if (current) SayStreamEnd();
-                    SessionMemory.Add("voice", "ask", "asked: " + Cut(question, 80));
-                    if (e == "cancelled") { _sessionAnswerSpoken = false; done("Stopped."); return; }
+                        if (e == "cancelled") { _sessionAnswerSpoken = false; done("Stopped."); return; }
                     if (string.IsNullOrWhiteSpace(a)) _sessionAnswerSpoken = false; // the fallback text is spoken by VoiceDone
                     done(string.IsNullOrWhiteSpace(a) ? "I could not put that together. The facts: " + FirstFacts(snap, q) : a);
                 });
@@ -483,7 +540,6 @@ namespace MetaCodex.Shell
             Qvac.Client.Chat(body, (r, e) =>
             {
                 string a = e != null ? null : SessionContextText.CleanAnswer((string)r?["choices"]?[0]?["message"]?["content"]);
-                SessionMemory.Add("voice", "ask", "asked: " + Cut(question, 80));
                 done(string.IsNullOrWhiteSpace(a) ? "I could not put that together. The facts: " + FirstFacts(snap, q) : a);
             });
         }
@@ -530,7 +586,9 @@ namespace MetaCodex.Shell
                 Name = "ask_about_session",
                 Description = "Answer a question about what is going on in the workspace (threads, builds and processes, approvals asked, tools installed, scripts and plugins); not an action",
                 Phrases = new[] { "what's going on", "what is going on", "(what is|what's) (this|the) (thread|agent) doing", "what happened while i was away",
-                    "(recap|summarize|summarise) [the|this|that] thread", "(give me|i want|can i get) [a|the] (recap|summary) [of] [the|this|that] thread", "catch me up [on] [the|this] thread" },
+                    "(recap|summarize|summarise) [the|this|that] thread", "(give me|i want|can i get) [a|the] (recap|summary) [of] [the|this|that] thread", "catch me up [on] [the|this] thread",
+                    "[give me] [a|the] status [update] [on|of] [the|my] [ongoing|running|open] (threads|agents|thread|agent)", "status update",
+                    "how are [the|my] (threads|agents) (doing|going)", "what are [the|my] (threads|agents) doing" },
                 Samples = new[]
                 {
                     "is this build process stuck", "is the build still running", "did the build finish", "how is the install going", "is something running in the background",
@@ -538,6 +596,8 @@ namespace MetaCodex.Shell
                     "do we have the rust toolchain", "is node installed", "which python version do we have", "what is this command i'm asked to accept",
                     "is this command safe", "what is the agent asking me", "are my scripts working", "why did it fail", "what happened while i was away",
                     "give me a recap of the login thread", "summarize the thread about the parser", "catch me up on what the agent did", "a quick summary of the docs thread",
+                    "give me a status update on the ongoing threads", "how are my threads doing", "what's the status of the agents", "are the agents done yet",
+                    "does anything need my attention",
                 },
                 Llm = false,
                 SpeakReply = true,
