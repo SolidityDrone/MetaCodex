@@ -4107,9 +4107,10 @@ end)
                 crt.Release();
                 foreach (var o in new UnityEngine.Object[] { copyMat, arr, crt, back }) UnityEngine.Object.DestroyImmediate(o);
             }
-            // SHARP DEPTH (RGB-guided, SandyBridge docs/DEPTH_UPSCALE_PLAN.md option A): twice the sensor's resolution;
-            // the sensor puts a near object's edge between readings 29 and 30, the camera picture half a reading
-            // further: without the camera the sharp edge stays at the sensor's, with it it moves to the picture's
+            // SHARP DEPTH (RGB-guided, SandyBridge docs/DEPTH_UPSCALE_PLAN.md option A): 1.5 x the sensor's resolution
+            // (2 x 2 readings per texel, 2026-11-13); the sensor puts a near object's edge between readings 29 and 30, the
+            // camera picture half a reading further: without the camera the sharp edge stays at the sensor's, with it it
+            // moves to the picture's
             {
                 const int sw = 64, shh = 64;
                 var eyeP = head.position;
@@ -4132,9 +4133,11 @@ end)
                 shell.SetDepthForTest(edgeTex, new[] { mm, mm }, zp);
                 var guided = ReadSharp(shell, out int w2, out int h2);
                 int e1 = EdgeColumn(guided, w2, h2);
-                float nearV = guided.Length > 0 ? guided[(h2 / 2) * w2 + 20] : 0f, farV = guided.Length > 0 ? guided[(h2 / 2) * w2 + 100] : 0f;
-                Check(w1 == 128 && h1 == 128 && e0 == 60 && e1 == 61 && Mathf.Abs(nearV - 1f) < 0.02f && Mathf.Abs(farV - 3f) < 0.05f,
-                    $"sharp depth: {w1} x {h1} from 64 x 64; edge at column {e0} from the depth alone (sensor 60), {e1} with the picture (picture 61); flat parts kept ({nearV:F2} m, {farV:F2} m)");
+                float nearV = guided.Length > 0 ? guided[(h2 / 2) * w2 + w2 * 5 / 32] : 0f, farV = guided.Length > 0 ? guided[(h2 / 2) * w2 + w2 * 25 / 32] : 0f;
+                // 96 columns over 64 readings: reading x sits at column 1.5 x + 0.25; the sensor's edge (29.5) at 44.5, the
+                // picture's (30) at 45.25
+                Check(w1 == 96 && h1 == 96 && e0 == 45 && e1 == 46 && Mathf.Abs(nearV - 1f) < 0.02f && Mathf.Abs(farV - 3f) < 0.05f,
+                    $"sharp depth: {w1} x {h1} from 64 x 64; edge at column {e0} from the depth alone (sensor 45), {e1} with the picture (picture 46); flat parts kept ({nearV:F2} m, {farV:F2} m)");
                 // temporal: a wall 2 m away read with ±2 cm noise each frame: the noise drops frame after frame
                 var rnd = new System.Random(3);
                 float WallNoise() => (float)(rnd.NextDouble() - 0.5) * 0.04f;
@@ -4186,6 +4189,26 @@ end)
                 float aOff = off.GetPixel(160, 120).a;
                 shell.Settings.occludeUi = true;
                 Check(aThing < 0.05f && aPanel > 0.9f && aOff > 0.9f, $"real things in front of windows: the terminal is hidden where something real is 0.5 m away ({aThing:F2}), kept elsewhere ({aPanel:F2}); setting off: covered again ({aOff:F2})");
+                // a window marked clear (no room point in front of it) skips the per-pixel test: the same thing no longer
+                // cuts it (the shell marks it so only when readings show nothing in front); and the CPU rule itself
+                shell.PanelClearOverride = true;
+                shell.TickFocusForTest(0.1f);
+                UnityEngine.Object.DestroyImmediate(RenderRgba(null, eyeP, Quaternion.identity, 60f, 320, 240));
+                var skip = RenderRgba(null, eyeP, Quaternion.identity, 60f, 320, 240);
+                float aSkip = skip.GetPixel(160, 120).a;
+                UnityEngine.Object.DestroyImmediate(skip);
+                shell.PanelClearOverride = null;
+                shell.TickFocusForTest(0.1f);
+                bool clearAfter = frame != null && shell.PanelClearForTest(frame);
+                var toPanel = Matrix4x4.TRS(eyeP + Vector3.forward, Quaternion.identity, Vector3.one).inverse; // a 0.8 x 0.5 m window 1 m ahead
+                var inFront = new List<Vector3> { eyeP + new Vector3(0.1f, 0f, 0.5f) };                         // a thing 0.5 m away, in its view
+                var beside = new List<Vector3> { eyeP + new Vector3(0.6f, 0f, 0.5f) };                          // 0.5 m away, beside it (seen at 1.2 m)
+                var behind = new List<Vector3> { eyeP + new Vector3(0f, 0f, 1.6f) };                            // the wall behind it
+                bool rFront = MetaCodexShell.MayBeInFront(inFront, eyeP, toPanel, 0.8f, 0.5f, 0.15f);
+                bool rBeside = MetaCodexShell.MayBeInFront(beside, eyeP, toPanel, 0.8f, 0.5f, 0.15f);
+                bool rBehind = MetaCodexShell.MayBeInFront(behind, eyeP, toPanel, 0.8f, 0.5f, 0.15f);
+                Check(frame == null || (aSkip > 0.9f && !clearAfter && rFront && !rBeside && !rBehind),
+                    $"a window with nothing real in front skips the depth test (marked clear: {aSkip:F2} where the thing is; unmarked without room readings: {(clearAfter ? "clear" : "tested")}); in front {rFront}, beside {rBeside}, behind {rBehind}");
                 // the Horizon OS menu: while it is open (input focus lost / system gesture) the windows step aside
                 shell.UiStepAsideOverride = true;
                 shell.TickFocusForTest(0.5f);

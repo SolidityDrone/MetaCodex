@@ -70,3 +70,30 @@ element on a tab that is not shown is not visible (no `Update`).
 
 Check on the headset: a long coding thread open for 10 minutes. The session log must have no `[slow callback]` and no
 `[slow timeline]` above 40 ms from the chat, and no hitch with a GC above 100 ms.
+
+## Cheaper depth features (2026-11-13)
+
+Measured on the Quest 3S (VrApi, the owner's settings, Ambient Focus off): 61-63 of 72 fps, GPU 98-99 % busy.
+"Sharp depth" off: 65.8 fps. "Real things in front of windows" off too: 70.6 fps. So the camera-guided sharp depth
+cost ~0.9 ms a frame, the depth with the UI's depth test ~1.0 ms. Both on again: 17.7 fps for ~15 s (a restart of
+the depth and the camera). Both features stay; their cost goes down:
+
+| Cost | Before | Now | Expected GPU saving (estimate, not measured yet) |
+|---|---|---|---|
+| Sharp depth pass (`DepthSharp`, per new depth frame) | 640 x 640 x 2; 3 x 3 readings, a median (81 compares), 10 camera taps with 2 matrices each, temporal with 2 matrices | guided: 480 x 480 x 2 (0.56 x the texels); without the camera 320 x 320 x 2 (0.25 x). 2 x 2 readings, the nearest one as reference, 5 camera taps with one matrix each (depth clip -> camera, from the CPU), temporal with one matrix | ~80 % of the pass: ~0.4-0.5 ms a frame guided, ~0.2 ms without the camera |
+| Passthrough camera for the guide | 30 fps; a new component when the rate changed | 15 fps always (also for the blur) | about half the camera's frame work: ~0.1-0.2 ms |
+| UI depth test (`McxOcclusion.hlsl`) | every fragment of every window: a 4 x 4 matrix, a divide, one depth tap | per window: a window that nothing real can be in front of (`_McxPanelClear`, from the room's 48 x 48 points every 0.3 s) skips it; still one tap where it runs | most of the test, ~0.2-0.4 ms with several windows open; none for a window with something (or a hand) in front |
+| Restarts | the camera stopped during every voice command and started again after; the depth stopped when focus and occlusion were both off (also while the Horizon OS menu is open with occlusion off) | voice never stops the camera (its frames are not used meanwhile); the depth and the camera stay on, idle (no sharp depth drawn, no frames used), for 60 s after the last need | no 15 s at ~18 fps after each dictation |
+
+Total expected: ~1.0-1.3 ms of the ~1.9 ms these features cost, so ~67-70 fps with both on (to measure on the
+headset: VrApi FPS and GPU %, both settings on, then each off).
+
+What was traded:
+- Sharp depth edges: 480 x 480 instead of 640 x 640. The picture still moves an edge between two readings, but in
+  steps of 2/3 of a reading instead of 1/2. Without the camera: the sensor's own resolution, sampled bilinearly.
+- Noise: 2 x 2 readings instead of a 3 x 3 median, so one bad reading is not voted out; the temporal filter
+  (70 % history) still averages it.
+- The guide picture is up to 67 ms old (15 fps); its own pose is used, so this matters only for things that move.
+- A window marked clear shows a real thing behind it for up to ~0.4 s after the thing comes in front (one reading
+  and its read-back); a thing thinner than ~2 degrees can be missed. Hands always show (the hand cut-outs).
+- The depth and the camera run idle for 60 s after you turn both features off.

@@ -54,7 +54,7 @@ Shader "MetaCodex/ViewImage"
                 float bd = McxBehindScan(_PanelIndex, i.positionWS);
                 c.a *= (half)(McxBuilt(bd) * (1.0 - saturate(pfx.z)));
                 c.rgb = lerp(c.rgb, c.rgb + 0.3, saturate(saturate(pfx.y) * 0.5 + McxHeat(bd) * 0.8));
-                c.a *= (half)McxVisibility(i.positionWS); // something real in front of the image shows through
+                c.a *= (half)McxVisibilityIn(_PanelIndex, i.positionWS); // something real in front of the image shows through
                 return c;
             }
             ENDHLSL

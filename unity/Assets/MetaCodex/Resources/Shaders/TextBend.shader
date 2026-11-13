@@ -284,7 +284,7 @@ SubShader {
 
 			// premultiplied: the whole colour fades where something real is in front of the text
 			UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
-			c *= McxVisibility(input.worldPos);
+			c *= McxVisibilityIn(_PanelIndex, input.worldPos);
 
 			#if UNITY_UI_ALPHACLIP
 			clip(c.a - 0.001);

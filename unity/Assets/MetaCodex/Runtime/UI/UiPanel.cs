@@ -353,6 +353,8 @@ namespace MetaCodex.UI
         private static MaterialPropertyBlock _mpb;
         private static bool _hooked;
         public int Slot { get; private set; } = -1;
+        /// The panel in a shader slot (null: free).
+        public static UiPanel InSlot(int slot) => slot >= 0 && slot < MaxSlots ? Slots[slot] : null;
         private float _bendTarget, _bendCurrent;
 
         /// 0 = flat. The radius the layout asked for; BendNow is what is drawn (it eases towards this).
