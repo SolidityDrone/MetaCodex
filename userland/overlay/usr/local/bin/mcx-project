@@ -14,7 +14,7 @@
 set -uo pipefail
 S=/opt/metacodex/quest-native/skills
 T=/opt/metacodex/quest-native/project/AGENTS.md
-NAMES="quest-native-apps quest-native-xr quest-native-recipes quest-native-dev-loop quest-native-debug"
+NAMES="quest-native-hands-first quest-native-apps quest-native-xr quest-native-recipes quest-native-dev-loop quest-native-debug"
 RESEARCH='<!-- metacodex:research (written by mcx-project for a Research project; edits inside this block are replaced) -->
 # Research project (MetaCodex)
 

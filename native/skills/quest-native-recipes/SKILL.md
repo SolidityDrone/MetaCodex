@@ -44,4 +44,5 @@ GLES 3. After any change: `mcx-app check`, `mcx-app build`, `mcx-app verify`.
 
 For comfort, layout and interaction choices (distances, text sizes, locomotion, hands vs controllers) follow the
 bundled skill **hz-immersive-designer** (its guidance is engine-independent). Short rules: content 1-3 m away, text at least 2.5 cm tall at 1 m, nothing
-head-locked, no camera moves the user did not make, both hands and controllers work.
+head-locked, no camera moves the user did not make, everything works with the hands (quest-native-hands-first:
+controllers only when the user asks for them).

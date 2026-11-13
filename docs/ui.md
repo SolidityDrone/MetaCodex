@@ -386,9 +386,9 @@ Owner: "metallish-stone with blueish glowing, in the style of an RTS console, ju
 ## Start splash (0.7.19)
 
 Owner 2026-11-13: a splash at start, in passthrough so the user is not blind, that goes with a transition. `ShellSplash`:
-the logo (`Resources/Brand/splash.png`, 1280 x 721, transparent; the owner's PNG had its checkerboard drawn in, keyed
-out by texture with `tools/brand/key_checkerboard.py <src.png> <out.png>`, then resized to 1280 wide) 0.60 m wide, a metre in front of the eyes, on top of everything
+the owner's transparent logo (`Resources/Brand/splash.png`, 1280 x 722) 0.60 m wide, a metre ahead of where the user
+faces, at eye level, upright and facing them, fixed in the room (it does not follow the head), on top of everything
 (`Resources/Shaders/Splash`, queue Overlay, no depth test). It waits for a tracked head (at most 1 s), comes in behind a
-scan line running down (0.7 s), holds 2.3 s while the shell starts, follows the head gently, then breaks up into light
-(0.9 s: a noise dissolve with an accent edge, growing 5 %), and is destroyed with its texture. Not in batch runs.
+scan line running down (0.7 s), holds 2.3 s while the shell starts, then breaks up into light (0.9 s: a noise dissolve
+with an accent edge, growing 5 %), and is destroyed with its texture. Not in batch runs.
 

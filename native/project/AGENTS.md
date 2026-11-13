@@ -7,6 +7,9 @@ Before anything, read the skill **quest-native-apps** and follow its flow: `.cla
 examples: quest-native-recipes; problems: quest-native-debug; the Runner: quest-native-dev-loop.
 
 Always:
+- **Hands only, mixed reality** (skill quest-native-hands-first, mandatory): passthrough on, `cfg.controllers = false`,
+  every action done with the hands (pinch, poke, aim ray, grab). Controllers or full VR only when the user explicitly
+  asks for them; never ask the user which. List each action and its hand input before you say the app is done.
 - The app runs on `mcx::App` and keeps its app menu; Back to MetaCodex closes the app; Quit closes it. No own exit
   path or OpenXR loop; add menu items with `app.menuItems`. `mcx-app verify` must say `RESULT: verify ok`.
 - Check and build freely (`mcx-app check`, `mcx-app build`, `mcx-app verify`). To launch, or for a first install, use

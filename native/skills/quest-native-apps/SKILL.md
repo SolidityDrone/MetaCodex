@@ -30,9 +30,10 @@ example and short recipes), **quest-native-dev-loop** (the Runner: seconds per e
 
 ## The flow (do it in this order)
 
-1. **Understand the request.** Ask only what you cannot decide (at most one short question). Decide yourself:
-   mixed reality (the room visible: passthrough) or full VR; hands, controllers or both (support both unless told
-   otherwise); which Quest features it needs (quest-native-xr). A Quest 3 / 3S app: depth and passthrough are there.
+1. **Understand the request.** Ask only what you cannot decide (at most one short question). First read
+   **quest-native-hands-first** (mandatory): the app is mixed reality (passthrough) and hands only, unless the request
+   explicitly asks for full VR or for controllers; never ask the user about either. Decide yourself which Quest
+   features it needs (quest-native-xr). A Quest 3 / 3S app: depth and passthrough are there.
 2. **Name it.** The app's folder: the project folder itself when your thread works in a Native app project
    (`/root/metacodex-projects/native/<name>`, made by MetaCodex's + PROJECT: `mcx-app new .` fills it and keeps its
    `.git`, `AGENTS.md`, `CLAUDE.md`), else `/root/metacodex-projects/native/<name>` (lower case, short; never
@@ -45,7 +46,7 @@ example and short recipes), **quest-native-dev-loop** (the Runner: seconds per e
 
    | The app | Start with |
    |---|---|
-   | uses passthrough, depth, hands, controllers, the room, anchors, text panels (almost everything) | `mcx-app new <dir> --example nightvision --label "<Label>"`, then replace `src/main.cpp`'s scene (keep the `mcx::App` loop) and remove the manifest entries of features you drop |
+   | uses passthrough, depth, hands, the room, anchors, text panels (almost everything) | `mcx-app new <dir> --example nightvision --label "<Label>"`, then replace `src/main.cpp`'s scene (keep the `mcx::App` loop), set `cfg.controllers = false` and remove the controller code and the manifest entries of features you drop (quest-native-hands-first) |
    | a plain VR scene, no Meta features | `mcx-app new <dir> --label "<Label>"` (the template: three cubes) |
    | visual experiments you want to see change every few seconds | `mcx-app new <dir> --module --label "<Label>"`: quest-native-dev-loop |
 

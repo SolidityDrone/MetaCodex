@@ -657,5 +657,5 @@ Work windows:
 - [ ] VOICE > "Say when a thread is done or needs you" off → callouts only, nothing said
 - [ ] "close the settings panel", then within 2 minutes "reopen it" → SETTINGS opens again; "close it" closes it; VOICE > LAST shows “reopen it” → “open settings”
 - [ ] Ask "what happened while I was away?": no orb placement, focus or menu settings in the answer; threads, approvals, builds are there
-- [ ] App start: the MetaCodex logo appears about a metre in front of you over the room (passthrough visible around it), comes in behind a scan line, follows your head gently, then breaks up into light after about 3 s; nothing of it stays
+- [ ] App start: the MetaCodex logo appears about a metre in front of you over the room (passthrough visible around it), comes in behind a scan line, stays fixed in the room (upright, facing you; turn your head: it stays), then breaks up into light after about 3 s; nothing of it stays
 

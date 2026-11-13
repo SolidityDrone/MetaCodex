@@ -4,8 +4,8 @@ namespace MetaCodex.Shell
 {
     /// The start splash (owner 2026-11-13: "a splash when the app starts, in passthrough so the user is not blind, that
     /// disappears with a transition"): the MetaCodex logo (Resources/Brand/splash.png, transparent) about a metre in front
-    /// of the eyes, over the room, on top of everything (Resources/Shaders/Splash). It follows the head gently while it
-    /// shows, comes in behind a scan line (0.7 s), holds while the shell starts, then breaks up into light (0.9 s) and is
+    /// of the eyes, over the room, on top of everything (Resources/Shaders/Splash). It stays where it appeared, upright and
+    /// facing the user (owner 2026-11-13: "fixed, perpendicular to the ground, facing us; not following the camera"), comes in behind a scan line (0.7 s), holds while the shell starts, then breaks up into light (0.9 s) and is
     /// destroyed with its texture. Not in batch runs (self-tests, builds).
     public sealed partial class MetaCodexShell
     {
@@ -61,21 +61,19 @@ namespace MetaCodex.Shell
             _splashMat.SetFloat(SplashDissolveId, outT);
             float grow = 1f + 0.05f * Mathf.SmoothStep(0f, 1f, outT);
             _splash.transform.localScale = new Vector3(SplashWidth * grow, SplashWidth * grow * _splashTex.height / _splashTex.width, 1f);
-            PlaceSplash(head, 1f - Mathf.Exp(-dt * 5f));
             if (outT >= 1f) EndSplash();
         }
 
-        /// A metre ahead of the eyes, just below their level, facing them; eased by `k` (1 = at once).
+        /// Once, when it appears: a metre ahead of where the user faces (the yaw only), at eye level, upright (perpendicular
+        /// to the ground) and facing them; then it stays there in the room.
         private void PlaceSplash(Transform head, float k)
         {
             if (head == null) return;
             var f = head.forward;
+            f.y = 0f;
             if (f.sqrMagnitude < 1e-4f) f = Vector3.forward;
-            var target = head.position + f.normalized * SplashDistance + Vector3.down * 0.04f;
-            var tr = _splash.transform;
-            var pos = Vector3.Lerp(tr.position, target, Mathf.Clamp01(k));
-            var look = pos - head.position;
-            tr.SetPositionAndRotation(pos, look.sqrMagnitude > 1e-6f ? Quaternion.LookRotation(look.normalized, Vector3.up) : tr.rotation);
+            f.Normalize();
+            _splash.transform.SetPositionAndRotation(head.position + f * SplashDistance, Quaternion.LookRotation(f, Vector3.up));
         }
 
         private void EndSplash()
