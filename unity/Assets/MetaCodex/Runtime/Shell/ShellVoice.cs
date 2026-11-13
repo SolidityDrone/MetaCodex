@@ -91,7 +91,7 @@ namespace MetaCodex.Shell
         /// Tests: a decision model with its own embedder, used without the AI service (`on` false restores the normal rule).
         public void UseDeciderForTest(VoiceDecider d, bool on) { Decider = d; _deciderTest = on; }
         /// The vectors on disk belong to this model (local-ai/server/models.js `embed.id`) and prefix; other ones are ignored.
-        private const string DeciderModelTag = "multilingual-e5-small-q8_0|query: ";
+        public const string DeciderModelTag = "multilingual-e5-small-q8_0|query: ";
         /// idle | listening | transcribing | thinking | done | error
         public string VoiceState { get; private set; } = "idle";
         public readonly List<VoiceResult> VoiceRecent = new List<VoiceResult>();
@@ -1821,8 +1821,45 @@ namespace MetaCodex.Shell
 
         private string DeciderCachePath => System.IO.Path.Combine(Application.persistentDataPath, "voice-decider-vectors.bin");
 
-        /// Example vectors from the last run (text -> vector), so a start embeds only what changed.
+        /// Example vectors from the last run (text -> vector), so a start embeds only what changed. The first start has
+        /// none: it takes the APK's (StreamingAssets qvac/decider-vectors.bin, written by the Editor's decision bench
+        /// with the same model; feat/ready-on-install), so commands are decided by meaning from the first second instead
+        /// of after embedding every example on the AI cores (15-30 s). Examples changed since are embedded as before.
         private void LoadDeciderCache()
+        {
+            if (!System.IO.File.Exists(DeciderCachePath)) { StartCoroutine(SeedDeciderCacheFromApk()); return; }
+            ReadDeciderCache();
+        }
+
+        private System.Collections.IEnumerator SeedDeciderCacheFromApk()
+        {
+            string url = Application.streamingAssetsPath + "/qvac/decider-vectors.bin";
+            if (!url.Contains("://")) url = "file://" + url;
+            using (var req = UnityEngine.Networking.UnityWebRequest.Get(url))
+            {
+                yield return req.SendWebRequest();
+                if (req.result != UnityEngine.Networking.UnityWebRequest.Result.Success || req.downloadHandler.data == null) yield break;
+                try { System.IO.File.WriteAllBytes(DeciderCachePath, req.downloadHandler.data); }
+                catch (Exception ex) { Log("voice decider cache from the APK: " + ex.Message); yield break; }
+            }
+            ReadDeciderCache();
+            Log($"voice: {_deciderSavedCount} decision vectors from the APK");
+        }
+
+        /// Writes vectors in the cache's format (the shell's own cache, and the APK's copy made by the decision bench).
+        public static void WriteDeciderCache(string path, IReadOnlyDictionary<string, float[]> cache)
+        {
+            int dim = cache.Values.First().Length;
+            using (var w = new System.IO.BinaryWriter(System.IO.File.Create(path)))
+            {
+                w.Write(DeciderModelTag);
+                w.Write(cache.Count);
+                w.Write(dim);
+                foreach (var kv in cache) { w.Write(kv.Key); foreach (var f in kv.Value) w.Write(f); }
+            }
+        }
+
+        private void ReadDeciderCache()
         {
             try
             {
@@ -1852,21 +1889,11 @@ namespace MetaCodex.Shell
                 var c = Decider.Cache;
                 if (c.Count == 0 || Decider.LastEmbedded == 0 && Decider.LastPruned == 0 && c.Count == _deciderSavedCount) return;
                 // written off the main thread (2.8 MB, 0.7k floats a text)
-                var snapshot = c.ToList();
+                var snapshot = c.ToDictionary(kv => kv.Key, kv => kv.Value);
                 string path = DeciderCachePath;
                 System.Threading.Tasks.Task.Run(() =>
                 {
-                    try
-                    {
-                        int dim = snapshot[0].Value.Length;
-                        using (var w = new System.IO.BinaryWriter(System.IO.File.Create(path)))
-                        {
-                            w.Write(DeciderModelTag);
-                            w.Write(snapshot.Count);
-                            w.Write(dim);
-                            foreach (var kv in snapshot) { w.Write(kv.Key); foreach (var f in kv.Value) w.Write(f); }
-                        }
-                    }
+                    try { WriteDeciderCache(path, snapshot); }
                     catch (Exception ex) { _main.Enqueue(() => Log("voice decider cache: " + ex.Message)); }
                 });
                 _deciderSavedCount = c.Count;

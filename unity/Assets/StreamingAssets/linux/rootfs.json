@@ -2,9 +2,9 @@
   "distro": "debian",
   "tag": "trixie-slim+metacodex-base",
   "arch": "arm64",
-  "layerDigest": "sha256:2d6a9b0de2b52897687f200e159df4d7e4170fe1d8e35573625bfdedef7e69bd",
-  "sizeBytes": 135095660,
-  "entries": 14022,
+  "layerDigest": "sha256:3ab55608c2630f73abd5740e15a173733da301993dcd385ab17b076fb901c790",
+  "sizeBytes": 124776155,
+  "entries": 10594,
   "base": {
     "tag": "trixie-slim",
     "manifestDigest": "sha256:24a01011d10eba3a023bc8585b9650b8b29021240d4217c05b905e09ef4a5232",
@@ -24,5 +24,5 @@
   "debs": 54,
   "installed": true,
   "node": "24.22.3",
-  "built": "2026-11-13T05:02:49Z"
+  "built": "2026-11-13T05:38:46Z"
 }
