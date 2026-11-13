@@ -46,7 +46,9 @@ const DEFAULTS = {
   ctx: 2048, // LLM context: system prompt + command tools + the request
   voice: 'F1',
   ttsLanguage: 'en',
-  ttsSteps: 5, // Supertonic diffusion steps (model default): 3 and 2 are faster but garble words (measured)
+  // Supertonic diffusion steps, 1-10 (model default 5). 3 is faster; it garbles a few words a little (measured), and the
+  // app's voice effect hides that (owner, 2026-11-13). The app sends its own value (VOICE > speech quality)
+  ttsSteps: 3,
   minAudioCtx: 512, // smallest whisper encoder window (frames, 50 per second): 256 repeats and mishears (measured)
   idleMinutes: { asr: 30, llm: 30, tts: 10, embed: 60 }, // keep models loaded while voice is in use: a reload costs 1-4 s
   // threads per engine (null = `threads`). Measured 2026-11-12 (docs/voice.md "Streaming answers"): with the LLM
@@ -58,6 +60,12 @@ const DEFAULTS = {
   asrThreads: null,
   embedThreads: null,
   prefillYieldsToAsr: true, // a speculative prefill is cancelled when speech-to-text needs the cores
+  // speech has priority (engines.speechActive): while an answer is spoken, the warm-up, a speculative prefill and bulk
+  // sentence vectors wait (a running warm-up or prefill is cancelled and done again later); real requests never wait
+  backgroundYieldsToSpeech: true,
+  speechHoldMs: 3000, // speech counts as active this long after the last sentence (the app asks for the next one)
+  maxYieldMs: 60000, // a background request waits for speech at most this long in total, then runs anyway
+  llmPromptBatch: 128, // the voice LLM evaluates prompts 128 tokens at a time: a cancel stops it in ~0.1 s (engines.promptBatch)
   coderThreads: 3, // the local coding model (compat.js) may use the 3 AI cores: it runs when voice is idle
   coderCtx: 16384,
   coderSlim: true, // the slim agent profile for the local coder (compat.slim)
@@ -129,7 +137,7 @@ async function handle (req, res, body) {
       if (!Array.isArray(j.messages) || !j.messages.length) throw httpError(400, 'messages is required')
       engines.cancelSpeculative() // only the newest one is worth keeping
       const p = engines.prefill(j.messages)
-      p.then((r) => log(`prefill ${r.cancelled ? 'cancelled' : r.ms + ' ms'}`)).catch((e) => log('prefill: ' + (e.message || e)))
+      p.then((r) => log(`prefill ${r.cancelled ? 'cancelled' : r.ms + ' ms'}${yieldNote(r)}`)).catch((e) => log('prefill: ' + (e.message || e)))
       return send(res, 202, { ok: true }) // fire and forget: the next chat with the same prefix starts from it
     }
     case 'POST /v1/embeddings': { // OpenAI-style: { input: string | string[] } -> { data: [{ index, embedding }] }
@@ -142,7 +150,7 @@ async function handle (req, res, body) {
     case 'POST /v1/warmup': { // prefills system prompt + tools once (kept on disk), so commands decode only the user's words
       const j = parseJson(body)
       const r = await engines.warm(j.messages || [], Array.isArray(j.tools) ? j.tools : [])
-      log(`warmup ${r.cached ? 'already cached' : r.ms + ' ms'}`)
+      log(`warmup ${r.cached ? 'already cached' : r.ms + ' ms'}${yieldNote(r)}`)
       return send(res, 200, Object.assign({ ok: true }, r))
     }
     case 'POST /unload': {
@@ -225,7 +233,13 @@ async function speech (res, j) {
     return sendBytes(res, 200, 'audio/wav', wav)
   }
   const r = await engines.speak(text, { voice: j.voice })
-  log(`tts ${text.length} chars -> ${Math.round(r.pcm.length / r.rate * 1000)} ms audio in ${r.ms} ms`)
+  // "tts N chars -> X ms audio in Y ms" is parsed: new fields go after it. waited: from the request to the start;
+  // load: the voice model; beside: other jobs on the AI cores meanwhile; yielded: what waited or was cancelled for it
+  const extra = [`waited ${r.waitMs} ms`]
+  if (r.loadMs >= 50) extra.push(`load ${r.loadMs} ms`)
+  extra.push('beside ' + (r.beside.length ? r.beside.join('+') : 'none'))
+  extra.push('yielded ' + (r.yielded.length ? r.yielded.join('+') : 'none'))
+  log(`tts ${text.length} chars -> ${Math.round(r.pcm.length / r.rate * 1000)} ms audio in ${r.ms} ms (${extra.join(', ')})`)
   res.setHeader('X-Synthesis-Ms', String(r.ms))
   if (j.response_format === 'pcm') return sendBytes(res, 200, 'audio/pcm; rate=' + r.rate, Buffer.from(r.pcm.buffer, r.pcm.byteOffset, r.pcm.byteLength))
   const wav = audio.toWav(r.pcm, r.rate)
@@ -234,6 +248,11 @@ async function speech (res, j) {
     if (ttsCache.size > TTS_CACHE_MAX) ttsCache.delete(ttsCache.keys().next().value)
   }
   sendBytes(res, 200, 'audio/wav', wav)
+}
+
+/** ", yielded to speech Nx, done after T ms" for a warm-up or prefill that waited for spoken answers. */
+function yieldNote (r) {
+  return r.yields ? `, yielded to speech ${r.yields}x, done after ${r.totalMs} ms` : ''
 }
 
 async function completions (req, res, j) {
