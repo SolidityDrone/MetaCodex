@@ -31,6 +31,8 @@ namespace MetaCodex.EditorTools
         public const string ScenePath = "Assets/Scenes/MetaCodex.unity";
         public const string PackageId = "com.pnncl.metacodex";
         public const string ApkPath = "Builds/MetaCodex.apk";
+        /// Where Unity's Gradle project leaves its APK before copying it to ApkPath.
+        private const string GradleApkDir = "Library/Bee/Android/Prj/IL2CPP/Gradle/launcher/build/outputs/apk";
         public const string Version = "0.7.19";
         public const int VersionCode = 26;
         public const string PanelMaterialPath = "Assets/MetaCodex/Materials/Panel.mat";
@@ -613,6 +615,10 @@ namespace MetaCodex.EditorTools
             // set on the Windows side: WSLENV does not carry it into the Editor on this machine).
             PlayerSettings.SetAdditionalIl2CppArgs(Environment.GetEnvironmentVariable("MCX_IL2CPP_ARGS") ?? "--jobs=2 --bee-jobs=2");
             Directory.CreateDirectory("Builds");
+            // Gradle updates its APK in place: a replaced entry leaves its old bytes as a hole (0.7.19: a 1.0 GB APK was
+            // 1.14 GB, the old rootfs still in it). Its previous APK goes first, so every build packs a compact one.
+            foreach (var old in Directory.Exists(GradleApkDir) ? Directory.GetFiles(GradleApkDir, "*.apk", SearchOption.AllDirectories) : new string[0])
+                try { File.Delete(old); } catch (Exception ex) { Debug.LogWarning("[MetaCodex] old Gradle APK not deleted: " + ex.Message); }
             var report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
             {
                 scenes = new[] { ScenePath },

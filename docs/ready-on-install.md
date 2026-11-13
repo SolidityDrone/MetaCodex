@@ -48,7 +48,18 @@ python3 and curl run in it. When emulation fails (or `MCX_IMAGE_EMULATE=0`) the 
 `mcx-setup` installs them on the headset with the same `mcx-install-debs`, offline. About 6 minutes on this PC; memory
 stayed above 6 GB available.
 
+## Size
+
+The APK with the pack: 1,004,965,222 bytes (958 MiB): the models 649 MB (stored as they are), the ready userland 151 MB
+(deflated in the APK), the rest as before (about 205 MB). Gradle updates its APK in place and a replaced entry leaves a
+hole: BuildApk deletes Gradle's previous APK first (a build after an image change was 1.14 GB with the old rootfs still in
+it). `tools/local-ai-models-pack.sh --clean` gives a light APK for development.
+
 ## Install for judges
+
+`tools/release/make-release.sh` -> `release/MetaCodex-<version>/` (the APK, the install scripts, INSTALL.md, SHA256SUMS)
+and its zip.
+
 
 `tools/release/install-metacodex.sh` (or `.bat` on Windows) next to the APK: `adb install -r -g` (grants the runtime
 permissions at install), `pm grant` for each as a fallback, `appops set REQUEST_INSTALL_PACKAGES allow` (the apps it

@@ -18,3 +18,4 @@ node_modules/
 
 # README diagrams: the WebP files ship; the PNGs are render outputs (docs/diagrams/render.sh)
 docs/assets/diagrams/*.png
+/release/
