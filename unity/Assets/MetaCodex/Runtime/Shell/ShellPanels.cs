@@ -473,11 +473,10 @@ namespace MetaCodex.Shell
         }
 
         public const string ExampleScript =
-@"-- description: double clap opens the terminals list
+@"-- description: double clap shows a message
 -- An example behaviour. Edit or replace it: the app reloads it within a second.
 gesture.sequence({""clap"", ""clap""}, 0.8, function(e)
-  ui.toast(""Double clap: terminals"")
-  ui.toggle(""terminals"")
+  ui.toast(""Double clap"")
 end)
 ";
 

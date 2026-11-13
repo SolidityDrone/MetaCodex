@@ -164,6 +164,7 @@ namespace MetaCodex.Shell
             string dir = scriptsDir ?? DefaultScriptsDir(host);
             Scripts = new ScriptHost(this, dir);
             Scripts.Changed += () => { RefreshScriptsPanel(); RefreshGesturesPanel(); };
+            RetireWindowShortcuts(); // once: no gesture opens or closes a window by default (owner 2026-11-13)
             RetireStarterExamples(); // no seeding: gesture examples are opt-in (GESTURES > ALL > EXAMPLES); old untouched copies go once
             InitSessionContext(); // the session's context for the local model (docs/session-context.md)
             UiKeyboard.TerminalKeyboardRequested += () => app?.Input?.ToggleSystemKeyboard();

@@ -276,12 +276,12 @@ end)
         /// starter copies (core-poses, swipes) that are untouched (StarterV1, byte for byte) AND unused (no binding
         /// names one of their gestures, no other script or plugin's Lua quotes one). Edited or used copies stay
         /// (logged with the reason); my-poses and every other folder are never touched. Returns what it did.
-        public static List<string> RetireStarterCopies(string pluginsDir, string scriptsDir, IEnumerable<string> boundGestures)
+        public static List<string> RetireStarterCopies(string pluginsDir, string scriptsDir, IEnumerable<string> boundGestures, bool force = false)
         {
             var log = new List<string>();
             if (string.IsNullOrEmpty(pluginsDir) || !Directory.Exists(pluginsDir)) return log;
             var marker = Path.Combine(pluginsDir, ExamplesMarker);
-            if (File.Exists(marker)) return log;
+            if (File.Exists(marker) && !force) return log;
             var bound = new HashSet<string>(boundGestures ?? Enumerable.Empty<string>());
             foreach (var starter in StarterV1)
             {
@@ -332,6 +332,56 @@ end)
                 }
             }
             catch (Exception ex) { Log("gesture examples: cleanup skipped: " + ex.Message); }
+        }
+
+        /// The marker of the one-time removal of gesture shortcuts to windows (RetireWindowShortcuts).
+        public const string WindowShortcutsMarker = ".window-shortcuts-off";
+        private static readonly string[] WindowVerbs = { "open:", "close:", "toggle:", "view:" };
+        private static readonly string[] WindowLua = { "ui.open(", "ui.close(", "ui.toggle(" };
+
+        /// Once per plugins folder (owner 2026-11-13: "remove everything by default: only the pinch to select / drag /
+        /// scroll; everything that links to specific windows, remove it"): bindings that open, close or toggle a
+        /// window (or open a view) go; scripts and plugins whose Lua reacts to gestures with ui.open / close / toggle
+        /// are switched off (not deleted: GESTURES lists them, ENABLE brings one back); then the untouched starter
+        /// copies that nothing uses any more go (RetireStarterCopies again).
+        private void RetireWindowShortcuts()
+        {
+            try
+            {
+                string pdir = Scripts?.PluginsDir;
+                if (string.IsNullOrEmpty(pdir) || !Directory.Exists(pdir) || File.Exists(Path.Combine(pdir, WindowShortcutsMarker))) return;
+                var log = new List<string>();
+                if (Settings?.bindings != null)
+                {
+                    var gone = Settings.bindings.Where(b => b.action != null && WindowVerbs.Any(v => b.action.Trim().StartsWith(v, StringComparison.OrdinalIgnoreCase))).ToList();
+                    foreach (var b in gone) { Settings.bindings.Remove(b); log.Add($"binding removed: {b.gesture} -> {b.action}"); }
+                    if (gone.Count > 0) OnSettingsChanged();
+                }
+                void Check(string key, IEnumerable<string> luaFiles)
+                {
+                    foreach (var f in luaFiles)
+                    {
+                        string text;
+                        try { text = File.ReadAllText(f); } catch (Exception) { continue; }
+                        if (!text.Contains("gesture.") || !WindowLua.Any(text.Contains)) continue;
+                        Scripts.SetEnabled(key, false);
+                        log.Add($"switched off {key}: its gestures open or close windows");
+                        return;
+                    }
+                }
+                if (!string.IsNullOrEmpty(Scripts.Dir) && Directory.Exists(Scripts.Dir))
+                    foreach (var f in Directory.GetFiles(Scripts.Dir, "*.lua")) Check(Path.GetFileNameWithoutExtension(f), new[] { f });
+                foreach (var d in Directory.GetDirectories(pdir))
+                    if (File.Exists(Path.Combine(d, "plugin.json"))) Check("plugin/" + Path.GetFileName(d), Directory.GetFiles(d, "*.lua", SearchOption.AllDirectories));
+                foreach (var l in RetireStarterCopies(pdir, Scripts.Dir, Settings?.bindings?.Select(b => b.gesture), force: true))
+                {
+                    log.Add("gesture examples: " + l);
+                    if (l.StartsWith("removed ")) Scripts.ForgetState("plugin/" + l.Substring(8).Split(':')[0]);
+                }
+                foreach (var l in log) Log("gesture shortcuts: " + l);
+                File.WriteAllText(Path.Combine(pdir, WindowShortcutsMarker), "gesture shortcuts to windows were removed " + DateTime.UtcNow.ToString("o") + "\n" + string.Join("\n", log) + "\n");
+            }
+            catch (Exception ex) { Log("gesture shortcuts: cleanup skipped: " + ex.Message); }
         }
 
         /// Installed = the folder exists. Untouched = it still holds the shipped files (it shows under EXAMPLES, not
