@@ -584,23 +584,15 @@ describe("builtin plugin reconciliation", () => {
         ]),
       ),
     ).toMatchObject({
-      "prompt-library": false,
-      mcp: false,
-      "plugin-api-tester": false,
-      "monaco-editor": false,
-      "plugin-api-docs": false,
+      "ask-user-question": false,
       workflows: false,
-      "provider-usage": true,
+      "metacodex-guide": true,
       "concurrency-limit": true,
-      "scheduled-send": true,
-      drafts: true,
       "provider-retry": true,
-      "push-notifications": true,
     });
   });
 
   it.each([
-    ["provider-usage", "bb--provider-usage"],
     ["provider-retry", "provider-retry"],
   ])(
     "runs the real %s builtin on a fresh database",

@@ -33,19 +33,6 @@ const FIRST_PARTY_PROVIDER_DECLARATIONS = [
     hasLogo: true,
   },
   {
-    builtinName: "provider-pi",
-    pluginId: "provider-pi",
-    providerId: "pi",
-    displayName: "Pi",
-    supportsThreadArchive: false,
-    supportsThreadRename: false,
-    fork: "checkpoint",
-    supportsManualCompaction: true,
-    supportsUsage: false,
-    visibility: "always",
-    hasLogo: true,
-  },
-  {
     builtinName: "provider-acp",
     pluginId: "provider-acp",
     providerId: "acp-cursor",
@@ -284,24 +271,6 @@ describe("first-party provider plugins", () => {
           },
           composerActions: [skills, explicitSkills, plan],
         });
-        expect(clientFields("pi")).toStrictEqual({
-          id: "pi",
-          displayName: "Pi",
-          logoUrl: expectedLogoUrl(harness.deps.providerRegistry, "pi"),
-          available: true,
-          maintenance: { health: true, usage: false, installation: true },
-          capabilities: {
-            supportsThreadArchive: false,
-            supportsThreadRename: false,
-            supportsServiceTier: false,
-            supportsNativeUserQuestion: false,
-            permissionModes: ["full"],
-            supportsFork: true,
-            supportsSessionRewind: true,
-            modelCatalogScope: "workspace",
-          },
-          composerActions: [skills, explicitSkills],
-        });
         expect(clientFields("acp-cursor")).toStrictEqual({
           id: "acp-cursor",
           displayName: "Cursor",
@@ -345,33 +314,6 @@ describe("first-party provider plugins", () => {
             .get("codex")
             ?.info.serviceTiers?.map((tier) => tier.id),
         ).toEqual(["default", "fast", "ultrafast"]);
-
-        expect(registry.get("pi")?.pluginId).toBe("provider-pi");
-
-        await harness.pluginService.setEnabled("provider-pi", false);
-
-        expect(registry.get("pi")).toBeNull();
-        expect(registry.getServerCapabilities("pi")).toBeNull();
-        expect(registry.getSupportedPermissionModes("pi")).toBeNull();
-        expect(registry.supportsFork("pi")).toBe(false);
-        expect(registry.supportsManualCompaction("pi")).toBe(false);
-        expect(registry.list().map((entry) => entry.info.id)).toEqual([
-          "codex",
-          "claude-code",
-          "acp-cursor",
-          "acp-opencode",
-          "acp-omp",
-          "acp-grok",
-          "acp-hermes-agent",
-        ]);
-        const remainingInfos = await listSystemProviderInfos(harness.deps, {});
-        expect(remainingInfos.find((info) => info.id === "pi")).toBeUndefined();
-
-        await harness.pluginService.setEnabled("provider-pi", true);
-        expect(registry.get("pi")?.pluginId).toBe("provider-pi");
-        expect(registry.list().map((entry) => entry.info.id)).toEqual(
-          PROVIDER_IDS,
-        );
       },
     );
   }, 60_000);

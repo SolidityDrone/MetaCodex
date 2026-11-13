@@ -64,7 +64,7 @@ Android 10 and later forbids `exec()` of files an app writes. Only files in `nat
 | Path | What | Language |
 |---|---|---|
 | `unity/` | The headset app. Runtime code in `Assets/MetaCodex/Runtime` (36,432 lines in 78 files: `AI/ App/ Hands/ Linux/ Scripting/ Security/ Shell/ Terminal/ Typing/ UI/`). Editor tools and self-tests in `Assets/MetaCodex/Editor`. Java plugins in `Assets/Plugins/Android`. | C#, Java |
-| `mqh/` | `apps/{server,host-daemon,cli}`, `packages/*`, `plugins/*` (including the `bb-guide` skills). | TypeScript, Node.js 24 |
+| `mqh/` | `apps/{server,host-daemon,cli}`, `packages/*`, `plugins/*` (including the `metacodex-guide` skills). | TypeScript, Node.js 24 |
 | `local-ai/` | The local AI service: `server/{main,engines,models,audio}.js`, `package.json`. | JavaScript (Bare) |
 | `userland/` | The proot and Debian fetchers, the overlay (`overlay/usr/local/bin/mcx-*`, `overlay/opt/metacodex/*`), `agent-skills/` (bundled third-party skills), `mqh/mqh-run`, `g0-shell.sh`. | shell, Python |
 | `native/` | `pty/`, `xr/` (`mcx_xr`), `hello-native/` (template), `examples/nightvision`, `runner/`, `module-template/`, `skills/` (5 native-app skills), `project/AGENTS.md`. | C, C++ |
@@ -171,9 +171,8 @@ Sections include `decider`, `voiceexport,voicedecide`, `context`, `chat`, `sideb
 - `mqh-run` starts the server, waits up to 120 s for `/health`, runs `mcx-buildd ensure`, enrolls the local daemon once (key in `~/.mqh/auth.json`), then starts the daemon.
 - `tools/mqh-bundle.sh` packs 12.4 MB (70 MB unpacked, 7,481 files) into `StreamingAssets/linux/mqh.tar.gz`. The app lays it at `/opt/mqh`.
 - The API token is the vault entry `mqh.api-token`. `mqh-run` copies it to `~/.mqh/api-token` (umask 077) for the `mqh` CLI.
-- The provider plugins `provider-claude-code` and `provider-pi` are not in the bundle. The first holds a vendor SDK that the project never ships.
-- Plugin folders (24): `ask-user-question, automations, bb-guide, concurrency-limit, custom-instructions, docs, environment-git-worktree, environment-personal-workspace, environment-project-checkout, git, github, github-pr-status, mcp, memory, provider-acp, provider-claude-code, provider-codex, provider-pi, provider-retry, provider-usage, secrets, storage-retention, tasks, workflows`.
-- The text of the `mcp` plugin still describes the upstream remote MCP address. MQH removed remote access.
+- The provider plugin `provider-claude-code` is not in the bundle. It holds a vendor SDK that the project never ships.
+- Plugin folders (15): `ask-user-question, automations, concurrency-limit, custom-instructions, environment-git-worktree, environment-personal-workspace, environment-project-checkout, git, github-pr-status, metacodex-guide, provider-acp, provider-claude-code, provider-codex, provider-retry, workflows`. `github-pr-status` is source only (the CLI compiles against its contract): it is not registered or bundled. Why each plugin stays or went: `docs/mqh.md`, "Plugins".
 - Agent CLIs: Codex (provider `codex`) and OpenCode (provider `acp-opencode` through ACP) work in MQH threads. Claude Code runs in a terminal. Cursor, Pi and other agents are switched off.
 - The app polls MQH over HTTP: the open thread every 0.8 s while the agent works (2.5 s idle), thread metadata every 2 s or 3 s, other threads every 5 s or 15 s.
 - Per-project native-app skills: `mcx-project set <dir> native` links `quest-native-apps`, `-xr`, `-recipes`, `-dev-loop` and `-debug` into `<project>/.claude/skills`. It writes a managed block into `AGENTS.md` and `CLAUDE.md` between `<!-- metacodex:native-app -->` markers. `research` writes a research note between `<!-- metacodex:research -->` markers (notes in Markdown, sources cited, no app build); `default` (old name `general`) removes both. New projects live in `/root/metacodex-projects/{native,default,research}/<name>`, each a git repository.

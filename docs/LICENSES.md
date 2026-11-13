@@ -325,8 +325,9 @@ of bb (github.com/get-bb/bb) at `8e4208e` (2026-11-06): **MIT, Copyright (c) 202
 What is in the tar (read from `opt/mqh/`):
 
 - the server, host daemon and CLI bundles and the bundled plugins (esbuild output, `apps/*/dist`,
-  `packages/bundled-plugins/dist`), plus 8 builtin skills (`bb-cli`, `bb-plugin-authoring`, `skill-creator`,
-  `submit-a-plugin` from bb; `metacodex-context`, `quest-views`, `quest-scripting`, `quest-gesture-plugins` ours);
+  `packages/bundled-plugins/dist`), plus 5 builtin skills in the `metacodex-guide` plugin (`skill-creator`, adapted from
+  bb's; `metacodex-context`, `quest-views`, `quest-scripting`, `quest-gesture-plugins` ours). Since 2026-11-13 bb's
+  `bb-cli`, `bb-plugin-authoring` and `submit-a-plugin` skills and 10 bb plugins are out of `mqh/` (`docs/mqh.md`, "Plugins");
 - **97 npm packages bundled into those files** (found from the build's source maps and path comments; the files carry
   no licence comments, so their notices are in [npm-mqh-bundled-notices.txt](licenses/npm-mqh-bundled-notices.txt)):
   MIT 79, ISC 8, Apache-2.0 5 (`@modelcontextprotocol/core`, `@modelcontextprotocol/server`, `@opentelemetry/api`,
@@ -338,10 +339,10 @@ What is in the tar (read from `opt/mqh/`):
   its release build for Node 24, sha256-pinned in `tools/mqh-bundle.sh`; SQLite itself is public domain),
   `pty.node` (node-pty 1.2.0-beta.15, MIT, (c) 2012-2015 Christopher Jeffrey, (c) 2016 Daniel Imms), `watcher.node` twice
   (@parcel/watcher 2.6.0, MIT, (c) 2017-present Devon Govett; the glibc and the musl build).
-- **Not in the APK** (verified: no `claude-agent-sdk`, no `provider-claude-code`, no `provider-pi`): Anthropic's Agent
+- **Not in the APK** (verified: no `claude-agent-sdk`, no `provider-claude-code`; `provider-pi` is out of `mqh/`): Anthropic's Agent
   SDK, which carries a Claude Code binary (proprietary).
-- **50 SVG icons** inside the bundled plugins (47 in `provider-acp/icons`, 2 in `provider-codex/icons`, 1 in
-  `storage-retention/icons`): logos of third-party agents and generic icons inherited from bb, of **unknown licence and
+- **49 SVG icons** inside the bundled plugins (47 in `provider-acp/icons`, 2 in `provider-codex/icons`; the
+  `storage-retention` plugin and its icon are out of `mqh/` since 2026-11-13): logos of third-party agents and generic icons inherited from bb, of **unknown licence and
   provenance**, trademarks of their owners (gap G10).
 
 ### 3.9 The local AI runtime (`assets/qvac/runtime.tar`, 489 files, 62,791,511 bytes unpacked)
@@ -504,9 +505,9 @@ Status of the gaps of 2026-11-10 (G1-G9) and the new ones. "Owner" = a decision 
 | G5 | Launcher icon is Unity's logo (`res/mipmap*/app_icon.png`, `ic_launcher_foreground.png`, checked in APK 0.7.16) | **open** | **code**: set our own icon in `MetaCodexSetup` (drawn from the MetaCodex mark) |
 | G6 | android.jar is downloaded without asking for acceptance of the Android SDK License | **open** (the script prints the name and URL, it does not ask) | **code**: `mcx-setup quest` must show the terms and ask first |
 | G7 | No licence for our code; `local-ai/package.json` says Apache-2.0 | **closed**: MIT, `LICENSE` written; section 2 | **code**: change `local-ai/package.json` `license` to `MIT` at the next bundle |
-| G8 | MQH on the headset must not carry Anthropic's Agent SDK | **closed**: verified absent from `mqh.tar` (APK 0.7.16); MQH's MIT and npm notices are in `docs/licenses/` | keep `tools/mqh-bundle.sh` removing `provider-claude-code` and `provider-pi` |
+| G8 | MQH on the headset must not carry Anthropic's Agent SDK | **closed**: verified absent from `mqh.tar` (APK 0.7.16); MQH's MIT and npm notices are in `docs/licenses/` | keep `tools/mqh-bundle.sh` removing `provider-claude-code` (`provider-pi` is out of `mqh/` since 2026-11-13) |
 | G9 | `UiIcon` shader left without a user | open, tidiness only (still in `Resources/Shaders`, still named by the self-test) | **code**: delete when the orb branch has landed |
-| G10 | **New.** 50 third-party icons in the APK (52 in the repository): `mqh/plugins/provider-acp/icons` (47 in the APK: logos of other agents), `provider-codex/icons` (2), `storage-retention/icons` (1), plus `provider-claude-code` and `provider-pi` (1 each, repository only); licence and provenance unknown (came with bb), trademarks of their owners | **open**: conflicts with the no-logo rule and contest section 4, and the MIT notice of bb does not clearly cover them | **code**: delete the `icons` folders in `tools/mqh-bundle.sh` (the plugins show no icon in the VR terminal) and drop them from `mqh/`, or replace them with our own; **owner** decides |
+| G10 | **New.** 49 third-party icons in the APK (50 in the repository): `mqh/plugins/provider-acp/icons` (47 in the APK: logos of other agents), `provider-codex/icons` (2), plus `provider-claude-code` (1, repository only; `storage-retention` and `provider-pi` and their icons left `mqh/` on 2026-11-13); licence and provenance unknown (came with bb), trademarks of their owners | **open**: conflicts with the no-logo rule and contest section 4, and the MIT notice of bb does not clearly cover them | **code**: delete the `icons` folders in `tools/mqh-bundle.sh` (the plugins show no icon in the VR terminal) and drop them from `mqh/`, or replace them with our own; **owner** decides |
 | G11 | **New.** Unity-made and UCL files in the repository (TextMesh Pro resources, settings, 36 Unity skills): UCL section 1 allows use and distribution only with content made under a valid Unity engine licence | **noted**, not a block | **owner**: keep the proof of the Unity licence (plan, seat) with the submission; the `LICENSE` scope clause already names these files |
 | G12 | **New.** `native/xr/mcx_font.h` (a DejaVu Sans Mono atlas) gets copied into every app built on the headset from the template; the Bitstream Vera licence wants its notice with copies | **open**, small | **code**: put the licence text in the header (or ship `DejaVu-LICENSE.txt` in `quest-native/xr`) |
 | G13 | **New.** Four npm packages in the AI bundle publish no licence file (only a `license` field in `package.json`): `bare-stdio` 1.0.3 (Apache-2.0), `corestore` 7.16.1 (MIT), `noise-curve-ed` 2.1.0 (ISC), `varint` 5.0.0 (MIT) | **noted**: the declared licence is clear, the standard text is in `docs/licenses/`; copyright holders from package.json: Holepunch (Inc), Chris Dickinson | none for us; upstream omission |

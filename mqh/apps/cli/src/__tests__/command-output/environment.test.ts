@@ -559,7 +559,7 @@ describe("mqh environment command output", () => {
       JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0])),
     ).toEqual(environment);
   });
-  it("forwards retired git commands to bb git and names the new command", async () => {
+  it("forwards retired git commands to mqh git and names the new command", async () => {
     const bodies: unknown[] = [];
     const urls: string[] = [];
     vi.mocked(fetch).mockImplementation(async (input, init) => {
@@ -594,7 +594,7 @@ describe("mqh environment command output", () => {
       argv: ["diff-files", "env-1", "--target", "uncommitted", "--json"],
     });
     expect(stderr).toHaveBeenCalledWith(
-      "mqh environment diff-files moved to bb git files.\n",
+      "mqh environment diff-files moved to mqh git files.\n",
     );
     expect(stdout.mock.calls[0]?.[0]).toBe("State: clean\n");
     stderr.mockRestore();

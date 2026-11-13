@@ -15,8 +15,10 @@ export class MachineEnvironment {
     this.originalShell = { ...shell };
   }
 
-  replace(entries: readonly HostDaemonContributedEnvEntry[]): void {
+  /** Returns whether a value the daemon's processes inherit changed. */
+  replace(entries: readonly HostDaemonContributedEnvEntry[]): boolean {
     const resolved = operationEnvironment(entries, this.original);
+    const before = this.snapshot();
     this.values = {};
     for (const entry of entries) {
       this.managed.add(entry.name);
@@ -27,6 +29,13 @@ export class MachineEnvironment {
       if (value === undefined) delete this.target[name];
       else this.target[name] = value;
     }
+    return this.snapshot() !== before;
+  }
+
+  private snapshot(): string {
+    return JSON.stringify(
+      [...this.managed].sort().map((name) => [name, this.target[name] ?? null]),
+    );
   }
 
   shellEnvironment(shell: Record<string, string>): Record<string, string> {

@@ -79,3 +79,20 @@ it("resolves server-relative entries and preserves explicitly empty values", () 
     MACHINE_URL: "https://server.example/api/proxy",
   });
 });
+
+it("reports whether a replace changed what child processes inherit", () => {
+  const target: NodeJS.ProcessEnv = { KEEP: "original" };
+  const environment = new MachineEnvironment(target, {});
+  const entry = (name: string, value: string) => ({
+    name,
+    value,
+    source: { core: "machine-environment" } as const,
+    reason: "test",
+  });
+  expect(environment.replace([entry("OPENCODE_CONFIG", "/a.json")])).toBe(true);
+  expect(environment.replace([entry("OPENCODE_CONFIG", "/a.json")])).toBe(false);
+  expect(environment.replace([entry("OPENCODE_CONFIG", "/b.json")])).toBe(true);
+  expect(environment.replace([])).toBe(true);
+  expect(target.OPENCODE_CONFIG).toBeUndefined();
+  expect(environment.replace([])).toBe(false);
+});

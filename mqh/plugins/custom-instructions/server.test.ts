@@ -97,7 +97,7 @@ describe("custom instructions plugin", () => {
     await plugin(bb);
 
     const help = (await harness.runCli(["set", "--help"])).stdout;
-    expect(help).toContain("bb instructions set");
+    expect(help).toContain("mqh instructions set");
     expect(help).toContain("at most 4096 characters");
 
     const dashed = await harness.runCli(["set", "--", "-n", "no flags here"]);

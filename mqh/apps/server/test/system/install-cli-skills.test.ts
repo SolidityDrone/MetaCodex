@@ -14,12 +14,12 @@ import { resolveServerOwnedSkillCatalogEntries } from "../../src/services/skills
 async function writeBuiltinCliSkill(harness: TestAppHarness): Promise<void> {
   const skillDirectory = join(
     harness.deps.config.builtinSkillsRootPath,
-    "bb-cli",
+    "metacodex-context",
   );
   await mkdir(skillDirectory, { recursive: true });
   await writeFile(
     join(skillDirectory, "SKILL.md"),
-    "---\nname: bb-cli\ndescription: Control bb from the CLI.\n---\n",
+    "---\nname: metacodex-context\ndescription: Where agents run in MetaCodex.\n---\n",
   );
 }
 
@@ -33,9 +33,9 @@ async function expectedCliSkillTreeHash(
       logger: harness.deps.logger,
       skillTreeRegistry: harness.deps.skillTreeRegistry,
     })
-  ).find(({ runtimeSource }) => runtimeSource.name === "bb-cli");
+  ).find(({ runtimeSource }) => runtimeSource.name === "metacodex-context");
   if (entry?.runtimeSource.kind !== "tree") {
-    throw new Error("The built-in bb-cli skill did not resolve to a tree");
+    throw new Error("The built-in metacodex-context skill did not resolve to a tree");
   }
   return entry.runtimeSource.treeHash;
 }
@@ -49,7 +49,7 @@ function installRequest(hostIds: string[]): Request {
 }
 
 describe("install cli skills", () => {
-  it("installs the built-in bb-cli tree on every requested machine", async () => {
+  it("installs the built-in metacodex-context tree on every requested machine", async () => {
     await withTestHarness(async (harness) => {
       await writeBuiltinCliSkill(harness);
       const laptop = seedHostSession(harness.deps, { id: "host-laptop" });
@@ -61,13 +61,13 @@ describe("install cli skills", () => {
           handle: (request) => {
             expect(request.command).toMatchObject({
               type: "host.install_global_skills",
-              skills: [{ name: "bb-cli", entryPath: "SKILL.md" }],
+              skills: [{ name: "metacodex-context", entryPath: "SKILL.md" }],
             });
             return {
               ok: true,
               result: {
                 installations: [
-                  { name: "bb-cli", path: `/home/${host.id}/.agents/skills` },
+                  { name: "metacodex-context", path: `/home/${host.id}/.agents/skills` },
                 ],
               },
             };
@@ -103,7 +103,7 @@ describe("install cli skills", () => {
         handle: () => ({
           ok: true,
           result: {
-            installations: [{ name: "bb-cli", path: "/home/u/.agents/skills" }],
+            installations: [{ name: "metacodex-context", path: "/home/u/.agents/skills" }],
           },
         }),
       });
@@ -167,15 +167,15 @@ describe("install cli skills", () => {
           handle: (request) => {
             expect(request.command).toMatchObject({
               type: "host.global_skills_status",
-              names: ["bb-cli"],
+              names: ["metacodex-context"],
             });
             return {
               ok: true,
               result: {
                 entries: [
                   {
-                    name: "bb-cli",
-                    path: `/home/${host.id}/.agents/skills/bb-cli`,
+                    name: "metacodex-context",
+                    path: `/home/${host.id}/.agents/skills/metacodex-context`,
                     treeHash: hashByHostId[host.id] ?? null,
                   },
                 ],

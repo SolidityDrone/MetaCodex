@@ -594,21 +594,6 @@ importers:
       bb-plugin-bb--git:
         specifier: workspace:*
         version: link:../../plugins/git
-      bb-plugin-bb--github-pr-status:
-        specifier: workspace:*
-        version: link:../../plugins/github-pr-status
-      bb-plugin-bb--mcp:
-        specifier: workspace:*
-        version: link:../../plugins/mcp
-      bb-plugin-bb--provider-usage:
-        specifier: workspace:*
-        version: link:../../plugins/provider-usage
-      bb-plugin-bb--storage-retention:
-        specifier: workspace:*
-        version: link:../../plugins/storage-retention
-      bb-plugin-bb-guide:
-        specifier: workspace:*
-        version: link:../../plugins/bb-guide
       bb-plugin-concurrency-limit:
         specifier: workspace:*
         version: link:../../plugins/concurrency-limit
@@ -624,12 +609,9 @@ importers:
       bb-plugin-environment-project-checkout:
         specifier: workspace:*
         version: link:../../plugins/environment-project-checkout
-      bb-plugin-github:
+      bb-plugin-metacodex-guide:
         specifier: workspace:*
-        version: link:../../plugins/github
-      bb-plugin-memory:
-        specifier: workspace:*
-        version: link:../../plugins/memory
+        version: link:../../plugins/metacodex-guide
       bb-plugin-provider-acp:
         specifier: workspace:*
         version: link:../../plugins/provider-acp
@@ -639,21 +621,9 @@ importers:
       bb-plugin-provider-codex:
         specifier: workspace:*
         version: link:../../plugins/provider-codex
-      bb-plugin-provider-pi:
-        specifier: workspace:*
-        version: link:../../plugins/provider-pi
       bb-plugin-provider-retry:
         specifier: workspace:*
         version: link:../../plugins/provider-retry
-      bb-plugin-secrets:
-        specifier: workspace:*
-        version: link:../../plugins/secrets
-      bb-plugin-simple-notes:
-        specifier: workspace:*
-        version: link:../../plugins/docs
-      bb-plugin-tasks:
-        specifier: workspace:*
-        version: link:../../plugins/tasks
       bb-plugin-workflows:
         specifier: workspace:*
         version: link:../../plugins/workflows
@@ -1571,7 +1541,7 @@ importers:
         specifier: ^4.1.12
         version: 4.1.12(@opentelemetry/api@1.10.0)(@types/node@22.20.5)(@vitest/coverage-v8@4.1.12)(jsdom@29.1.1(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.20.5)(@typescript/typescript6@6.0.2))(vite@8.3.6(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
 
-  plugins/bb-guide:
+  plugins/metacodex-guide:
     devDependencies:
       '@bb/plugin-build':
         specifier: workspace:*
@@ -1643,52 +1613,6 @@ importers:
 
   plugins/custom-instructions:
     dependencies:
-      zod:
-        specifier: 4.6.7
-        version: 4.6.7
-    devDependencies:
-      '@bb/plugin-build':
-        specifier: workspace:*
-        version: link:../../packages/plugin-build
-      '@get-bb/plugin-sdk':
-        specifier: workspace:*
-        version: link:../../packages/plugin-sdk
-      '@types/better-sqlite3':
-        specifier: ^7.6.13
-        version: 7.6.13
-      '@types/node':
-        specifier: ^22.20.5
-        version: 22.20.5
-      better-sqlite3:
-        specifier: 12.11.1
-        version: 12.11.1
-      cron-parser:
-        specifier: ^5.10.3
-        version: 5.10.3
-      hono:
-        specifier: 4.13.16
-        version: 4.13.16
-      tsrs:
-        specifier: 0.18.0-ts7.1.0-dev.20260929
-        version: 0.18.0-ts7.1.0-dev.20260929
-      typescript:
-        specifier: npm:@typescript/typescript6@^6.0.2
-        version: '@typescript/typescript6@6.0.2'
-      vitest:
-        specifier: ^4.1.12
-        version: 4.1.12(@opentelemetry/api@1.10.0)(@types/node@22.20.5)(@vitest/coverage-v8@4.1.12)(jsdom@29.1.1(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.20.5)(@typescript/typescript6@6.0.2))(vite@8.3.6(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
-
-  plugins/docs:
-    dependencies:
-      diff:
-        specifier: ^8.0.4
-        version: 8.0.4
-      tiptap-markdown:
-        specifier: ^0.8.10
-        version: 0.8.10(@tiptap/core@3.32.3(@tiptap/pm@3.32.3))
-      yaml:
-        specifier: ^2.9.1
-        version: 2.9.1
       zod:
         specifier: 4.6.7
         version: 4.6.7
@@ -1875,43 +1799,6 @@ importers:
         specifier: ^4.1.12
         version: 4.1.12(@opentelemetry/api@1.10.0)(@types/node@22.20.5)(@vitest/coverage-v8@4.1.12)(jsdom@29.1.1(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.20.5)(@typescript/typescript6@6.0.2))(vite@8.3.6(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
 
-  plugins/github:
-    dependencies:
-      zod:
-        specifier: 4.6.7
-        version: 4.6.7
-    devDependencies:
-      '@bb/plugin-build':
-        specifier: workspace:*
-        version: link:../../packages/plugin-build
-      '@get-bb/plugin-sdk':
-        specifier: workspace:*
-        version: link:../../packages/plugin-sdk
-      '@types/better-sqlite3':
-        specifier: ^7.6.13
-        version: 7.6.13
-      '@types/node':
-        specifier: ^22.20.5
-        version: 22.20.5
-      better-sqlite3:
-        specifier: 12.11.1
-        version: 12.11.1
-      cron-parser:
-        specifier: ^5.10.3
-        version: 5.10.3
-      hono:
-        specifier: 4.13.16
-        version: 4.13.16
-      tsrs:
-        specifier: 0.18.0-ts7.1.0-dev.20260929
-        version: 0.18.0-ts7.1.0-dev.20260929
-      typescript:
-        specifier: npm:@typescript/typescript6@^6.0.2
-        version: '@typescript/typescript6@6.0.2'
-      vitest:
-        specifier: ^4.1.12
-        version: 4.1.12(@opentelemetry/api@1.10.0)(@types/node@22.20.5)(@vitest/coverage-v8@4.1.12)(jsdom@29.1.1(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.20.5)(@typescript/typescript6@6.0.2))(vite@8.3.6(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
-
   plugins/github-pr-status:
     dependencies:
       bb-environment-provider-host:
@@ -1930,92 +1817,6 @@ importers:
       '@types/node':
         specifier: ^22.20.5
         version: 22.20.5
-      tsrs:
-        specifier: 0.18.0-ts7.1.0-dev.20260929
-        version: 0.18.0-ts7.1.0-dev.20260929
-      typescript:
-        specifier: npm:@typescript/typescript6@^6.0.2
-        version: '@typescript/typescript6@6.0.2'
-      vitest:
-        specifier: ^4.1.12
-        version: 4.1.12(@opentelemetry/api@1.10.0)(@types/node@22.20.5)(@vitest/coverage-v8@4.1.12)(jsdom@29.1.1(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.20.5)(@typescript/typescript6@6.0.2))(vite@8.3.6(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
-
-  plugins/mcp:
-    dependencies:
-      '@jitl/quickjs-singlefile-cjs-release-sync':
-        specifier: ^0.32.0
-        version: 0.32.0
-      '@modelcontextprotocol/server':
-        specifier: ^2.4.0
-        version: 2.4.0
-      quickjs-emscripten-core:
-        specifier: ^0.32.0
-        version: 0.32.0
-      zod:
-        specifier: 4.6.7
-        version: 4.6.7
-    devDependencies:
-      '@bb/plugin-build':
-        specifier: workspace:*
-        version: link:../../packages/plugin-build
-      '@get-bb/plugin-sdk':
-        specifier: workspace:*
-        version: link:../../packages/plugin-sdk
-      '@modelcontextprotocol/client':
-        specifier: ^2.4.0
-        version: 2.4.0
-      '@types/better-sqlite3':
-        specifier: ^7.6.13
-        version: 7.6.13
-      '@types/node':
-        specifier: ^22.20.5
-        version: 22.20.5
-      better-sqlite3:
-        specifier: 12.11.1
-        version: 12.11.1
-      cron-parser:
-        specifier: ^5.10.3
-        version: 5.10.3
-      hono:
-        specifier: 4.13.16
-        version: 4.13.16
-      tsrs:
-        specifier: 0.18.0-ts7.1.0-dev.20260929
-        version: 0.18.0-ts7.1.0-dev.20260929
-      typescript:
-        specifier: npm:@typescript/typescript6@^6.0.2
-        version: '@typescript/typescript6@6.0.2'
-      vitest:
-        specifier: ^4.1.12
-        version: 4.1.12(@opentelemetry/api@1.10.0)(@types/node@22.20.5)(@vitest/coverage-v8@4.1.12)(jsdom@29.1.1(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.20.5)(@typescript/typescript6@6.0.2))(vite@8.3.6(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
-
-  plugins/memory:
-    dependencies:
-      zod:
-        specifier: 4.6.7
-        version: 4.6.7
-    devDependencies:
-      '@bb/plugin-build':
-        specifier: workspace:*
-        version: link:../../packages/plugin-build
-      '@get-bb/plugin-sdk':
-        specifier: workspace:*
-        version: link:../../packages/plugin-sdk
-      '@types/better-sqlite3':
-        specifier: ^7.6.13
-        version: 7.6.13
-      '@types/node':
-        specifier: ^22.20.5
-        version: 22.20.5
-      better-sqlite3:
-        specifier: 12.11.1
-        version: 12.11.1
-      cron-parser:
-        specifier: ^5.10.3
-        version: 5.10.3
-      hono:
-        specifier: 4.13.16
-        version: 4.13.16
       tsrs:
         specifier: 0.18.0-ts7.1.0-dev.20260929
         version: 0.18.0-ts7.1.0-dev.20260929
@@ -2152,199 +1953,8 @@ importers:
         specifier: ^4.1.12
         version: 4.1.12(@opentelemetry/api@1.10.0)(@types/node@22.20.5)(@vitest/coverage-v8@4.1.12)(jsdom@29.1.1(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.20.5)(@typescript/typescript6@6.0.2))(vite@8.3.6(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
 
-  plugins/provider-pi:
-    dependencies:
-      '@get-bb/plugin-sdk':
-        specifier: workspace:*
-        version: link:../../packages/plugin-sdk
-      zod:
-        specifier: 4.6.7
-        version: 4.6.7
-    devDependencies:
-      '@bb/plugin-build':
-        specifier: workspace:*
-        version: link:../../packages/plugin-build
-      '@earendil-works/pi-ai':
-        specifier: 0.84.4
-        version: 0.84.4(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))(ws@8.22.1)(zod@4.6.7)
-      '@earendil-works/pi-coding-agent':
-        specifier: 0.84.4
-        version: 0.84.4(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))(ws@8.22.1)(zod@4.6.7)
-      '@types/better-sqlite3':
-        specifier: ^7.6.13
-        version: 7.6.13
-      '@types/node':
-        specifier: ^22.20.5
-        version: 22.20.5
-      better-sqlite3:
-        specifier: 12.11.1
-        version: 12.11.1
-      cron-parser:
-        specifier: ^5.10.3
-        version: 5.10.3
-      hono:
-        specifier: 4.13.16
-        version: 4.13.16
-      tsrs:
-        specifier: 0.18.0-ts7.1.0-dev.20260929
-        version: 0.18.0-ts7.1.0-dev.20260929
-      typebox:
-        specifier: 1.4.4
-        version: 1.4.4
-      typescript:
-        specifier: npm:@typescript/typescript6@^6.0.2
-        version: '@typescript/typescript6@6.0.2'
-      vitest:
-        specifier: ^4.1.12
-        version: 4.1.12(@opentelemetry/api@1.10.0)(@types/node@22.20.5)(@vitest/coverage-v8@4.1.12)(jsdom@29.1.1(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.20.5)(@typescript/typescript6@6.0.2))(vite@8.3.6(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
-
   plugins/provider-retry:
     dependencies:
-      zod:
-        specifier: 4.6.7
-        version: 4.6.7
-    devDependencies:
-      '@bb/plugin-build':
-        specifier: workspace:*
-        version: link:../../packages/plugin-build
-      '@get-bb/plugin-sdk':
-        specifier: workspace:*
-        version: link:../../packages/plugin-sdk
-      '@types/better-sqlite3':
-        specifier: ^7.6.13
-        version: 7.6.13
-      '@types/node':
-        specifier: ^22.20.5
-        version: 22.20.5
-      better-sqlite3:
-        specifier: 12.11.1
-        version: 12.11.1
-      cron-parser:
-        specifier: ^5.10.3
-        version: 5.10.3
-      hono:
-        specifier: 4.13.16
-        version: 4.13.16
-      tsrs:
-        specifier: 0.18.0-ts7.1.0-dev.20260929
-        version: 0.18.0-ts7.1.0-dev.20260929
-      typescript:
-        specifier: npm:@typescript/typescript6@^6.0.2
-        version: '@typescript/typescript6@6.0.2'
-      vitest:
-        specifier: ^4.1.12
-        version: 4.1.12(@opentelemetry/api@1.10.0)(@types/node@22.20.5)(@vitest/coverage-v8@4.1.12)(jsdom@29.1.1(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.20.5)(@typescript/typescript6@6.0.2))(vite@8.3.6(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
-
-  plugins/provider-usage:
-    dependencies:
-      zod:
-        specifier: 4.6.7
-        version: 4.6.7
-    devDependencies:
-      '@bb/plugin-build':
-        specifier: workspace:*
-        version: link:../../packages/plugin-build
-      '@get-bb/plugin-sdk':
-        specifier: workspace:*
-        version: link:../../packages/plugin-sdk
-      '@types/better-sqlite3':
-        specifier: ^7.6.13
-        version: 7.6.13
-      '@types/node':
-        specifier: ^22.20.5
-        version: 22.20.5
-      better-sqlite3:
-        specifier: 12.11.1
-        version: 12.11.1
-      cron-parser:
-        specifier: ^5.10.3
-        version: 5.10.3
-      hono:
-        specifier: 4.13.16
-        version: 4.13.16
-      tsrs:
-        specifier: 0.18.0-ts7.1.0-dev.20260929
-        version: 0.18.0-ts7.1.0-dev.20260929
-      typescript:
-        specifier: npm:@typescript/typescript6@^6.0.2
-        version: '@typescript/typescript6@6.0.2'
-      vitest:
-        specifier: ^4.1.12
-        version: 4.1.12(@opentelemetry/api@1.10.0)(@types/node@22.20.5)(@vitest/coverage-v8@4.1.12)(jsdom@29.1.1(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.20.5)(@typescript/typescript6@6.0.2))(vite@8.3.6(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
-
-  plugins/secrets:
-    dependencies:
-      zod:
-        specifier: 4.6.7
-        version: 4.6.7
-    devDependencies:
-      '@bb/plugin-build':
-        specifier: workspace:*
-        version: link:../../packages/plugin-build
-      '@get-bb/plugin-sdk':
-        specifier: workspace:*
-        version: link:../../packages/plugin-sdk
-      '@types/better-sqlite3':
-        specifier: ^7.6.13
-        version: 7.6.13
-      '@types/node':
-        specifier: ^22.20.5
-        version: 22.20.5
-      better-sqlite3:
-        specifier: 12.11.1
-        version: 12.11.1
-      cron-parser:
-        specifier: ^5.10.3
-        version: 5.10.3
-      dotenv:
-        specifier: ^17.4.2
-        version: 17.4.2
-      hono:
-        specifier: 4.13.16
-        version: 4.13.16
-      tsrs:
-        specifier: 0.18.0-ts7.1.0-dev.20260929
-        version: 0.18.0-ts7.1.0-dev.20260929
-      typescript:
-        specifier: npm:@typescript/typescript6@^6.0.2
-        version: '@typescript/typescript6@6.0.2'
-      vitest:
-        specifier: ^4.1.12
-        version: 4.1.12(@opentelemetry/api@1.10.0)(@types/node@22.20.5)(@vitest/coverage-v8@4.1.12)(jsdom@29.1.1(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.20.5)(@typescript/typescript6@6.0.2))(vite@8.3.6(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
-
-  plugins/storage-retention:
-    dependencies:
-      '@bb/domain':
-        specifier: workspace:^
-        version: link:../../packages/domain
-      zod:
-        specifier: 4.6.7
-        version: 4.6.7
-    devDependencies:
-      '@bb/plugin-build':
-        specifier: workspace:*
-        version: link:../../packages/plugin-build
-      '@get-bb/plugin-sdk':
-        specifier: workspace:*
-        version: link:../../packages/plugin-sdk
-      '@types/node':
-        specifier: ^22.20.5
-        version: 22.20.5
-      tsrs:
-        specifier: 0.18.0-ts7.1.0-dev.20260929
-        version: 0.18.0-ts7.1.0-dev.20260929
-      typescript:
-        specifier: npm:@typescript/typescript6@^6.0.2
-        version: '@typescript/typescript6@6.0.2'
-      vitest:
-        specifier: ^4.1.12
-        version: 4.1.12(@opentelemetry/api@1.10.0)(@types/node@22.20.5)(@vitest/coverage-v8@4.1.12)(jsdom@29.1.1(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.20.5)(@typescript/typescript6@6.0.2))(vite@8.3.6(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
-
-  plugins/tasks:
-    dependencies:
-      tiptap-markdown:
-        specifier: ^0.8.10
-        version: 0.8.10(@tiptap/core@3.32.3(@tiptap/pm@3.32.3))
       zod:
         specifier: 4.6.7
         version: 4.6.7

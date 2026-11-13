@@ -142,7 +142,7 @@ function filesHost() {
   };
 }
 
-describe("bb git", () => {
+describe("mqh git", () => {
   it("prints status against the requested merge base and qualifies incomplete counts", async () => {
     const { fake } = setup(() => ({
       outcome: "available",
@@ -678,7 +678,7 @@ describe("bb git", () => {
   });
 });
 
-describe("bb git errors", () => {
+describe("mqh git errors", () => {
   it("reports a missing environment with the old mqh environment error envelope", async () => {
     const fake = createFakePluginHost({
       pluginId: "bb--git",

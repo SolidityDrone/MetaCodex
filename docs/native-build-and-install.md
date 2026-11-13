@@ -45,7 +45,7 @@ running with the headset off (risk R4).
 | Toolchain: NDK r27d (community arm64 build), android.jar 34, OpenXR 1.1.65 headers and Khronos loader, apt `aapt zipalign apksigner default-jdk-headless` | `mcx-setup quest` | ~400 MB download, 2.5 GB on disk, sha256-pinned |
 | Install (path B): PackageInstaller session; first install = one Install tap; updates of apps MetaCodex installed = no prompt (~2 s, proven by the owner) | `unity/Assets/Plugins/Android/MetaCodexInstaller.java` | works |
 | Launch: launcher intent; MetaCodex goes to the background | `MetaCodexInstaller.launch` | works |
-| Agent skill | `mqh/plugins/bb-guide/skills/quest-native-apps/SKILL.md` | written for the current flow |
+| Agent skill | `native/skills/quest-native-apps/SKILL.md` | written for the current flow |
 | `:ai` service process: named children (extras `argv` `env` `cwd` `log` `name`); MQH and the agents run under it | `MetaCodexAiService.java`, `MqhHost.cs` | **plain started service: no `startForeground`, no wake lock** |
 
 ## Facts that shape the design (LEARNINGS 2026-11-07, docs/local-ai.md)
@@ -291,7 +291,7 @@ toggled; right pinch / trigger = mode, left pinch / A = passthrough, stick = gai
   main.cpp gives both problems; the new template, Night Vision, the clock: verify ok).
 - **Shipped without an APK**: the fixed layer, mcx-build and the five skills were laid into the headset's rootfs
   (`/opt/metacodex/quest-native/xr`, `/usr/local/bin/mcx-build`, `/root/.claude/skills`, MQH's builtin-skills and
-  bb-guide copies); the XR layer's cache key is its source hash, so the next build of any app recompiles it. An app
+  guide-plugin copies); the XR layer's cache key is its source hash, so the next build of any app recompiles it. An app
   gets the fix when it is rebuilt and installed again.
 
 ## Launches by request and project types (owner 2026-11-11)

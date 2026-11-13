@@ -588,7 +588,11 @@ Work windows:
 
 - [ ] AGENTS: the GET row has LOCAL CODER · GET 1 GB; tap: it counts up to 100 %, then "✓ ON HEADSET"; tap again: a hint how to use it
 - [ ] NEW THREAD with Claude Code, model "Local coder (this headset, slow)": ask anything small (a script, a fix, a small native app in a NATIVE project): it works in minutes; a Claude Code thread on a normal model still uses your account as before
-- [ ] The same with OpenCode, model "MetaCodex (this headset) / Local coder"; Codex does not offer the local coder
+- [ ] Without restarting the app after GET: NEW THREAD > OpenCode lists "⌂ Local coder (this headset, slow)" as the first row
+  (LOCAL badge, "on this headset · offline · slow"), above OpenCode's own models; Claude Code the same. Reopen the list once
+  if the first look still shows the old list (MQH refreshes it in the background)
+- [ ] The same task with OpenCode on that row: the turn runs on the local model (the AI service log shows coder requests);
+  Codex does not offer the local coder
 - [ ] While a local-coder thread works: TALK shows "⏸ LOCAL CODER WORKING" and does not record; 15 s after the turn ends TALK works again; 72 fps all the time
 - [ ] Say "remove the local coder" (confirm): the tile says GET again, the model is gone from the threads' model lists after a restart of MQH
 

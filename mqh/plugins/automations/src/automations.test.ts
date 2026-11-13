@@ -2361,7 +2361,7 @@ describe("script project context", () => {
     output: string | null | undefined,
   ): string | null | undefined {
     return output?.replace(
-      /^\[bb\] warning: could not locate the bb CLI, so `mqh` is not on PATH for this script\.\n/u,
+      /^\[mqh\] warning: could not locate the mqh CLI, so `mqh` is not on PATH for this script\.\n/u,
       "",
     );
   }

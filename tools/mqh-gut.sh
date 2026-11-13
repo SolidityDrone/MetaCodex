@@ -19,7 +19,12 @@ DROP_PACKAGES=(connect-db connect-db-pg mobile-bridge provider-parity
 DROP_PLUGINS=(account-pool agent-annotations bb-ai browser-automation connect drafts environment-modal-sandbox
   github-star inline-vis keep-awake monaco-editor navigation pdf-preview plugin-api-tester push-notifications
   side-chat theme-preview thread-list
-  bb-account connect-next plugin-api-docs composer scheduled-send prompt-library)
+  bb-account connect-next plugin-api-docs composer scheduled-send prompt-library
+  # bb-only or web-UI features MetaCodex does not use (2026-11-13; docs/mqh.md "Plugins"); bb-guide's MetaCodex
+  # skills live in our own plugins/metacodex-guide
+  bb-guide docs github mcp memory provider-pi provider-usage secrets storage-retention tasks)
+# kept as source (the CLI's `thread show` compiles against its contract) but never registered, bundled or installed
+UNREGISTER_PLUGINS=(github-pr-status)
 DROP_TOP=(docs assets qa examples tests/integration tests/qa CHANGELOG.md changelog-metadata.ts changelog-parser.ts
   CONTRIBUTING.md SECURITY.md CLAUDE.md .github .bb .bb-env-setup.sh)
 # ours, never taken from upstream (upstream's AGENTS.md/README.md describe bb)
@@ -48,6 +53,6 @@ see LICENSE). Forked from commit \`$COMMIT\` by \`tools/mqh-gut.sh\`.
 
 Removed: apps ${DROP_APPS[*]}; packages ${DROP_PACKAGES[*]}; plugins ${DROP_PLUGINS[*]}; ${DROP_TOP[*]}.
 EOF
-python3 -I "$ROOT/tools/mqh-gut-patch.py" "$DEST" "${DROP_PLUGINS[@]}"
+python3 -I "$ROOT/tools/mqh-gut-patch.py" "$DEST" "${DROP_PLUGINS[@]}" "${UNREGISTER_PLUGINS[@]}"
 python3 -I "$ROOT/tools/mqh-strip-ui.py" "$DEST" --apply
 echo "mqh: $(find . -type f | wc -l) files from $COMMIT"

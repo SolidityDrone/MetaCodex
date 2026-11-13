@@ -67,10 +67,10 @@ Inspecting:
     --self                                 Target current thread
 
   Shows pull request status for the attached environment branch when available.
-  Read the thread's git status and diff with `bb git status|diff
+  Read the thread's git status and diff with `mqh git status|diff
   <environment-id>`; `--json` prints the environment ID as `environment.id`.
   The deprecated `--work-status`, `--git-diff`, `--diff-target`, `--diff-sha`
-  and `--diff-merge-base` flags still run and print the `bb git` command that
+  and `--diff-merge-base` flags still run and print the `mqh git` command that
   replaces them.
 
   `thread context` reads the latest stored context measurement without starting

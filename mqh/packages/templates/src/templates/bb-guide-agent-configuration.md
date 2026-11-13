@@ -88,19 +88,15 @@ Skills (.bb/skills/):
 
   Use the skill-creator skill to author and iterate on skills.
 
-BB guide plugin:
+MetaCodex guide plugin:
 
-  The enabled-by-default BB guide plugin owns the BB introduction and the
-  bb-cli, bb-plugin-authoring, skill-creator, and submit-a-plugin skills. Settings → Installed
-  plugins → BB guide exposes introduction, a master skills switch, and one
-  switch per skill. All default to true. Use:
+  The enabled-by-default MetaCodex guide plugin owns the MetaCodex introduction and
+  the metacodex-context, quest-gesture-plugins, quest-scripting, quest-views and
+  skill-creator skills. It has two settings, introduction and skills; both
+  default to true. Use:
 
-    mqh plugin config bb-guide set introduction false
-    mqh plugin config bb-guide set skills false
-    mqh plugin config bb-guide set bbCli false
-    mqh plugin config bb-guide set pluginAuthoring false
-    mqh plugin config bb-guide set skillCreator false
-    mqh plugin config bb-guide set submitPlugin false
+    mqh plugin config metacodex-guide set introduction false
+    mqh plugin config metacodex-guide set skills false
 
   Changes apply when agent configuration is next assembled. They do not erase
   existing conversation text or disable independently installed copies.

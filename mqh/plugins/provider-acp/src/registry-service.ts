@@ -236,7 +236,7 @@ export function registerAcpRegistry(deps: AcpRegistryServiceDeps): void {
     } catch (error) {
       throw new PluginCliError(errorMessage(error), {
         code: "acp_agent_change_failed",
-        hint: "Run `bb acp registry` to see the agents and their ids.",
+        hint: "Run `mqh acp registry` to see the agents and their ids.",
       });
     }
     return {

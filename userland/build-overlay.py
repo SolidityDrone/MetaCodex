@@ -41,7 +41,7 @@ with tarfile.open(fileobj=raw, mode="w", format=tarfile.PAX_FORMAT) as tf:
     # from the MQH guide plugin; third-party ones from userland/agent-skills (tools/sync-agent-skills.sh).
     skills_dst = "root/.claude/skills"
     trees = {}
-    mqh_skills = os.path.join(root, "mqh", "plugins", "bb-guide", "skills")
+    mqh_skills = os.path.join(root, "mqh", "plugins", "metacodex-guide", "skills")
     own = ["quest-scripting", "quest-gesture-plugins", "metacodex-context", "quest-views"]
     for name in own:
         trees[f"{skills_dst}/{name}"] = os.path.join(mqh_skills, name)

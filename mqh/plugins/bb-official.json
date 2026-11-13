@@ -19,24 +19,12 @@
     "category": "agents-and-providers",
     "screenshots": []
   },
-  "provider-pi": {
-    "category": "agents-and-providers",
-    "screenshots": []
-  },
   "provider-acp": {
     "category": "agents-and-providers",
     "screenshots": []
   },
   "provider-retry": {
     "category": "agents-and-providers",
-    "screenshots": []
-  },
-  "provider-usage": {
-    "category": "agents-and-providers",
-    "screenshots": []
-  },
-  "secrets": {
-    "category": "security",
     "screenshots": []
   },
   "concurrency-limit": {
@@ -47,28 +35,8 @@
     "category": "tasks-and-workflows",
     "screenshots": []
   },
-  "github": {
-    "category": "code-and-reviews",
-    "screenshots": []
-  },
   "git": {
     "category": "code-and-reviews",
-    "screenshots": []
-  },
-  "github-pr-status": {
-    "category": "code-and-reviews",
-    "screenshots": []
-  },
-  "docs": {
-    "category": "file-viewers-and-editors",
-    "screenshots": []
-  },
-  "memory": {
-    "category": "memory-and-context",
-    "screenshots": []
-  },
-  "tasks": {
-    "category": "tasks-and-workflows",
     "screenshots": []
   },
   "environment-project-checkout": {
@@ -83,16 +51,8 @@
     "category": "cloud-and-remote",
     "screenshots": []
   },
-  "bb-guide": {
+  "metacodex-guide": {
     "category": "memory-and-context",
-    "screenshots": []
-  },
-  "mcp": {
-    "category": "cloud-and-remote",
-    "screenshots": []
-  },
-  "storage-retention": {
-    "category": "tasks-and-workflows",
     "screenshots": []
   }
 }

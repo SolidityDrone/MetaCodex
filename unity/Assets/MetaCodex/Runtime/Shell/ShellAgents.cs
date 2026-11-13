@@ -1347,15 +1347,30 @@ namespace MetaCodex.Shell
             EnsureHost(() => Mqh.Models(prov, _hostId, m =>
             {
                 if (prov != _ntProvider) return;
-                _ntModels = m?["models"] as JArray ?? new JArray();
-                if (!_ntModels.Any(x => (string)x["id"] == _ntModel)) _ntModel = _ntModels.Any(x => (string)x["id"] == Settings.defaultModel) ? Settings.defaultModel : (string)_ntModels.FirstOrDefault()?["id"];
-                _ntModelList.SetItems(_ntModels.Select(x => new UiListItem
-                {
-                    Icon = "◇",
-                    Title = (string)x["displayName"] ?? (string)x["id"],
-                    Sub = Cut((string)x["description"], 60),
-                    Tag = (string)x["id"],
-                }));
+                // the local coder (docs/local-coder.md: "local-coder", OpenCode "metacodex/local-coder") is the first row, set apart
+                bool IsLocal(JToken x) { string mid = (string)x["id"] ?? ""; return mid == "local-coder" || mid.EndsWith("/local-coder", StringComparison.Ordinal); }
+                var all = m?["models"] as JArray ?? new JArray();
+                _ntModels = new JArray(all.Where(IsLocal).Concat(all.Where(x => !IsLocal(x))).Select(x => x.DeepClone()));
+                // never fall back to the slow local model: MQH's default, else the first other one
+                if (!_ntModels.Any(x => (string)x["id"] == _ntModel)) _ntModel = _ntModels.Any(x => (string)x["id"] == Settings.defaultModel) ? Settings.defaultModel
+                    : (string)(_ntModels.FirstOrDefault(x => x["isDefault"]?.Type == JTokenType.Boolean && (bool)x["isDefault"] && !IsLocal(x)) ?? _ntModels.FirstOrDefault(x => !IsLocal(x)) ?? _ntModels.FirstOrDefault())?["id"];
+                var t = UiTheme.Current;
+                _ntModelList.SetItems(_ntModels.Select(x => IsLocal(x)
+                    ? new UiListItem
+                    {
+                        Icon = "⌂", IconColor = t.Accent, TitleColor = t.Accent,
+                        Title = (string)x["displayName"] ?? (string)x["id"],
+                        Sub = "on this headset · offline · slow",
+                        Badge = "LOCAL", BadgeColor = t.Accent,
+                        Tag = (string)x["id"],
+                    }
+                    : new UiListItem
+                    {
+                        Icon = "◇",
+                        Title = (string)x["displayName"] ?? (string)x["id"],
+                        Sub = Cut((string)x["description"], 60),
+                        Tag = (string)x["id"],
+                    }));
                 int i = _ntModels.ToList().FindIndex(x => (string)x["id"] == _ntModel);
                 if (i >= 0) _ntModelList.SelectIndex(i, notify: false);
                 var err = m?["modelLoadError"];

@@ -17,7 +17,6 @@ const PROVIDER_BRIDGE_PLUGIN_IDS = [
   "provider-codex",
   "provider-claude-code",
   "provider-acp",
-  "provider-pi",
 ] as const;
 
 function wireCapabilities(

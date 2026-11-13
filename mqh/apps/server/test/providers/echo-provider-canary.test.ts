@@ -555,9 +555,9 @@ describe("echo-provider canary: plugin install → server command → runtime �
     });
   }, 120_000);
 
-  it("runs a turn with the BB guide skills staged and sends the bridge only the requests it handles", async () => {
-    const guideRoot = resolveBuiltinPluginRootPath("bb-guide");
-    const guide = await harness.pluginService.install("builtin:bb-guide", {
+  it("runs a turn with the MetaCodex guide skills staged and sends the bridge only the requests it handles", async () => {
+    const guideRoot = resolveBuiltinPluginRootPath("metacodex-guide");
+    const guide = await harness.pluginService.install("builtin:metacodex-guide", {
       kind: "root",
     });
     expect(guide.status, guide.statusDetail ?? "").toBe("running");
@@ -608,10 +608,11 @@ describe("echo-provider canary: plugin install → server command → runtime �
     expect(
       command.injectedSkillSources.map((source) => source.name).sort(),
     ).toEqual([
-      "bb-cli",
-      "bb-plugin-authoring",
+      "metacodex-context",
+      "quest-gesture-plugins",
+      "quest-scripting",
+      "quest-views",
       "skill-creator",
-      "submit-a-plugin",
     ]);
     expect(command.instructions).toContain("mqh status");
 

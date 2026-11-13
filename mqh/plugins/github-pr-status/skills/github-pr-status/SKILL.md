@@ -13,10 +13,10 @@ sidebars read their PR status from it. Pending checks re-check about every 30
 seconds in one batched GitHub request per machine.
 
 ```sh
-bb pull-request show <environment-id> [--json]
-bb pull-request ready <environment-id> [--json]
-bb pull-request draft <environment-id> [--json]
-bb pull-request merge <environment-id> [--method merge|squash|rebase] [--json]
+mqh pull-request show <environment-id> [--json]
+mqh pull-request ready <environment-id> [--json]
+mqh pull-request draft <environment-id> [--json]
+mqh pull-request merge <environment-id> [--method merge|squash|rebase] [--json]
 ```
 
 - `show` prints the PR number, state, branch, attention, checks, review and

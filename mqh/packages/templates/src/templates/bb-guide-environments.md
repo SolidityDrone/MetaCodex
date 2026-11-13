@@ -179,12 +179,8 @@ Making your repo work with bb:
   `sdk.environments.experimental_cleanup({ environmentId, recover: true })`.
   Inspect `mqh environment show <id>` after recovery to confirm removal.
 
-  Pull requests moved to the bundled GitHub PR Status plugin:
-  `bb pull-request show|ready|draft|merge <environment-id>`. See its
-  github-pr-status skill.
-
   Git status, branches, diffs and Viewed marks moved to the bundled Git
-  plugin: `bb git status|branches|diff|files|file|patch|viewed
+  plugin: `mqh git status|branches|diff|files|file|patch|viewed
   <environment-id>`. See its git skill. The old `mqh environment status`,
   `branches`, `diff`, `diff-files`, `diff-file`, `diff-patch` and
   `diff-viewed` commands still run and print the command that replaced them.

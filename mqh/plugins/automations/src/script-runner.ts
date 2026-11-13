@@ -28,7 +28,7 @@ const SCRIPT_INTERRUPTED_REASON =
 let verifiedBbPath: string | null = null;
 
 const MQH_NOT_INJECTED_WARNING =
-  "[bb] warning: could not locate the bb CLI, so `mqh` is not on PATH for this script.";
+  "[mqh] warning: could not locate the mqh CLI, so `mqh` is not on PATH for this script.";
 
 async function commandWorks(command: string, args: string[]): Promise<boolean> {
   try {

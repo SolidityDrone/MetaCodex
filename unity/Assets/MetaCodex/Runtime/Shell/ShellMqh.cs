@@ -57,8 +57,8 @@ namespace MetaCodex.Shell
 
         // ------------------------------------------------------------------ SKILLS
 
-        /// MetaCodex's own skills (mqh/plugins/bb-guide/skills, also laid into /root/.claude/skills): always read-only.
-        public static readonly string[] OwnSkills = { "metacodex-context", "quest-scripting", "quest-gesture-plugins", "quest-views", "skill-creator", "bb-plugin-authoring", "bb-cli", "submit-a-plugin" };
+        /// MetaCodex's own skills (mqh/plugins/metacodex-guide/skills, also laid into /root/.claude/skills): always read-only.
+        public static readonly string[] OwnSkills = { "metacodex-context", "quest-scripting", "quest-gesture-plugins", "quest-views", "skill-creator" };
 
         private sealed class SkillRow
         {
@@ -97,7 +97,7 @@ namespace MetaCodex.Shell
                     else if (Application.isEditor)
                     {
                         string repo = Path.GetFullPath(Path.Combine(Application.dataPath, "..", ".."));
-                        foreach (var dir in new[] { "userland/agent-skills/unity", "userland/agent-skills/meta", "mqh/plugins/bb-guide/skills" })
+                        foreach (var dir in new[] { "userland/agent-skills/unity", "userland/agent-skills/meta", "mqh/plugins/metacodex-guide/skills" })
                         {
                             var d = Path.Combine(repo, dir);
                             if (Directory.Exists(d)) foreach (var s in Directory.GetDirectories(d)) _shippedSkills.Add(Path.GetFileName(s));
@@ -427,8 +427,8 @@ namespace MetaCodex.Shell
         public static string NewPluginPrompt(string idea) =>
             "Make a plugin for MetaCodex: " + idea.Trim() + "\n\n" +
             "If it reacts to hands, gestures or the app's panels, make a gesture / behaviour plugin (skill quest-gesture-plugins: a folder " +
-            "in /mnt/quest/plugins, applies live). If it extends MQH itself (a server part, a spatial panel), make an MQH plugin (skill " +
-            "bb-plugin-authoring, `mqh plugin new`). Read metacodex-context first. Show me the plan before you write files.";
+            "in /mnt/quest/plugins, applies live). If it extends MQH itself (a server part, a spatial panel), make an MQH plugin " +
+            "(`mqh plugin new` makes its folder). Read metacodex-context first. Show me the plan before you write files.";
 
         private object SelectedPluginTag() =>
             _gPlugins != null && _gPlugins.SelectedIndex >= 0 && _gPlugins.SelectedIndex < _gPlugins.Items.Count ? _gPlugins.Items[_gPlugins.SelectedIndex].Tag : null;

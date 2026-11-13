@@ -30,7 +30,7 @@ Every script stores `execution.workingDirectory` as one of these policies:
   shares it; each automation's stored script lives in a subdirectory of it,
   not in the working directory itself.
 - `{"type":"project"}` uses the project's source on the mqh server host.
-- `{"type":"path","path":"/absolute/path"}` uses that directory on the bb
+- `{"type":"path","path":"/absolute/path"}` uses that directory on the MQH
   server host.
 
 New standard-project scripts default to `project` when that project has a
@@ -64,11 +64,11 @@ available unchanged in run output.
 The plugin injects these variables:
 
 ```text
-MQH_SERVER_URL          The BB server API base URL
+MQH_SERVER_URL          The MQH server API base URL
 MQH_PROJECT_ID          The automation project
 MQH_AUTOMATION_ID       The automation ID
 MQH_AUTOMATION_RUN_ID   The run ID
-MQH_CLI                 The absolute BB CLI path, when available
+MQH_CLI                 The absolute MQH CLI path, when available
 ```
 
 The plugin does not inject `MQH_ENVIRONMENT_ID` or `MQH_HOST_DAEMON_PORT`.
@@ -77,7 +77,7 @@ The plugin resolves `mqh` from `MQH_CLI`, `MQH_CLI_DIR`, `PATH`, and common macO
 install paths. It adds the selected directory to `PATH`.
 
 If the plugin cannot find `mqh`, the script still starts. Its output starts with
-a `[bb] warning:` line. A later `mqh` call then fails normally.
+a `[mqh] warning:` line. A later `mqh` call then fails normally.
 
 ## Execution safety
 
@@ -101,7 +101,7 @@ a `[bb] warning:` line. A later `mqh` call then fails normally.
 - Run completion, a timeout, or an output limit stops remaining processes in
   the script's process group. Scripts cannot leave background work running in
   that group after a run completes. On Windows, only the direct child is stopped.
-- Stopping bb or reloading, disabling, or updating the automations plugin sends
+- Stopping MQH or reloading, disabling, or updating the automations plugin sends
   `SIGTERM` to each running script's process group, then `SIGKILL` after one
   second. The run becomes skipped with an `interrupted` reason.
 - A process that starts its own session or process group, such as `setsid`,
