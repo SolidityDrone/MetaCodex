@@ -8,8 +8,9 @@ request.
 
 | In the APK | Size | Before |
 |---|---|---|
-| The Linux userland ready for MQH: Debian trixie-slim + Node.js 24.22.3 + the base Debian packages installed (ca-certificates curl git xz-utils python3 procps less nano and their dependencies: 54 packages; git 2.47.3, Python 3.13.5, curl 8.14.1) | rootfs.tar.gz 128 MB (was 28 MB) | Node and the packages downloaded by `mcx-setup` at first use |
+| The Linux userland ready for MQH: Debian trixie-slim + Node.js 24.22.3 + the base Debian packages installed (ca-certificates curl git xz-utils python3 procps less nano and their dependencies: 54 packages; git 2.47.3, Python 3.13.5, curl 8.14.1); Node's C headers left out (67 MB, only for building native Node add-ons: node-gyp downloads them) | rootfs.tar.gz 118 MB (was 28 MB) | Node and the packages downloaded by `mcx-setup` at first use |
 | The four core models of the local AI service: Whisper base, Qwen3 0.6B, multilingual-e5-small, Supertonic 3 | 649 MB | downloaded with VOICE > INSTALL MODELS |
+| The voice decision model's vectors of every command example (1809 texts, the same e5 model) | 2.8 MB | computed at the first start on the AI cores (14 s on the PC's 8 cores, far longer on the headset), meanwhile only exact phrases matched |
 | MQH, the local AI runtime, the overlay | as before | as before |
 
 On request, as before: the agents (AGENTS > GET: OpenCode, Codex, Claude Code; Claude Code is never bundled), the
@@ -28,12 +29,17 @@ is made, `mcx-app doctor` says so, or SYSTEM > TOOLS), the local coder (AGENTS >
    installs them with dpkg from `/var/cache/metacodex/base-debs`, offline, in the background, no toast; an older
    userland without them -> `mcx-setup` downloads as before. The native toolchain is no longer installed by itself.
 
+Also at the first start: every Linux process gets the headset's time zone (`TZ`, from Android's default zone; the zone
+files are in the image), so git commit times and an agent's "today" are local, not UTC.
+
 ## Building it
 
 ```
 userland/fetch-rootfs.sh                          # once: the official Debian layer (copy it to ~/mcxwork/readyinstall/base-trixie-slim.tar.gz + .json)
 tools/userland-image.sh                           # the ready userland -> StreamingAssets/linux/rootfs.tar.gz + rootfs.json
 tools/local-ai-models-pack.sh                     # the core models -> StreamingAssets/qvac/models + models.json (--clean: a lighter dev APK)
+tools/local-ai-dev.sh pc start && ~/mcxwork/tools/uirun.sh voicedecide && tools/local-ai-dev.sh pc stop
+                                                  # the decision vectors -> StreamingAssets/qvac/decider-vectors.bin (again when commands change)
 tools/mqh-build.sh all && tools/mqh-bundle.sh     # when mqh/ changed
 python3 -I userland/build-overlay.py              # when userland/overlay/ changed
 tools/unity-batch.sh BatchBuild
@@ -50,7 +56,7 @@ stayed above 6 GB available.
 
 ## Size
 
-The APK with the pack: 1,004,965,222 bytes (958 MiB): the models 649 MB (stored as they are), the ready userland 151 MB
+The APK with the pack: 994,868,919 bytes (949 MiB): the models 649 MB (stored as they are), the ready userland 138 MB
 (deflated in the APK), the rest as before (about 205 MB). Gradle updates its APK in place and a replaced entry leaves a
 hole: BuildApk deletes Gradle's previous APK first (a build after an image change was 1.14 GB with the old rootfs still in
 it). `tools/local-ai-models-pack.sh --clean` gives a light APK for development.

@@ -46,8 +46,30 @@ namespace MetaCodex.Linux
         public static bool Supported => PtyNative.IsAvailable;
 
         /// Resolves paths and installs the rootfs if missing. Ends in Ready, Failed or Unsupported.
+        /// The headset's time zone as an IANA id ("Europe/Rome"), read once on the main thread (Prepare); null when not
+        /// known. Passed to every Linux process as TZ.
+        public static string TimeZoneId { get; private set; }
+
+        private static void ReadTimeZone()
+        {
+            try
+            {
+#if UNITY_ANDROID && !UNITY_EDITOR
+                using (var tz = new AndroidJavaClass("java.util.TimeZone"))
+                using (var d = tz.CallStatic<AndroidJavaObject>("getDefault"))
+                    TimeZoneId = d.Call<string>("getID");
+#else
+                TimeZoneId = TimeZoneInfo.Local.Id;
+#endif
+                // an IANA id only (Area/City, letters, digits, + - _ /): anything else is left out
+                if (TimeZoneId != null && !System.Text.RegularExpressions.Regex.IsMatch(TimeZoneId, @"^[A-Za-z][A-Za-z0-9_+\-]*(/[A-Za-z0-9_+\-]+)*$")) TimeZoneId = null;
+            }
+            catch (Exception) { TimeZoneId = null; }
+        }
+
         public IEnumerator Prepare()
         {
+            ReadTimeZone();
             if (State == HostState.Ready) yield break;
             if (!Supported)
             {
@@ -207,6 +229,9 @@ namespace MetaCodex.Linux
                 "PATH=/root/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
                 "METACODEX=1",
             });
+            // the headset's time zone (feat/ready-on-install): without it the Linux clock reads UTC (git commit times, an
+            // agent's "today"); the zone files are in the image (/usr/share/zoneinfo)
+            if (!string.IsNullOrEmpty(TimeZoneId)) argv.Add("TZ=" + TimeZoneId);
             if (guestEnv != null) argv.AddRange(guestEnv);
             argv.AddRange(new[] { "/bin/bash", "-l" });
             if (!string.IsNullOrEmpty(command)) { argv.Add("-c"); argv.Add(command); }

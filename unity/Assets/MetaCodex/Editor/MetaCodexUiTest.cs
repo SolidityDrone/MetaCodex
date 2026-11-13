@@ -1669,6 +1669,12 @@ end)
             d.Build(e => err = e);
             Check(err == null && d.Ready, $"decision model built with the real model: {d.Status} in {sw.ElapsedMilliseconds} ms ({err ?? "ok"})");
             if (!d.Ready) return;
+            // the APK's copy of these vectors (feat/ready-on-install): a new headset decides by meaning from its first second
+            // (StreamingAssets/qvac is generated and gitignored, like the models pack)
+            string apkVectors = Path.Combine("Assets", "StreamingAssets", "qvac", "decider-vectors.bin");
+            Directory.CreateDirectory(Path.GetDirectoryName(apkVectors));
+            MetaCodexShell.WriteDeciderCache(apkVectors, d.Cache);
+            Check(new FileInfo(apkVectors).Length > 100000, $"decision vectors for the APK: {d.Cache.Count} texts, {new FileInfo(apkVectors).Length / 1024} KB -> {apkVectors}");
             string evalPath = Path.GetFullPath(Path.Combine("..", "tools", "voicebench", "eval.jsonl"));
             var sb = new StringBuilder();
             int n = 0, fast = 0, decided = 0, none = 0, errors = 0;

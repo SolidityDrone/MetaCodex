@@ -94,6 +94,8 @@ NF="node-v$NODE_VER-linux-arm64.tar.xz"
 echo "$NODE_SHA  $W/$NF" | sha256sum -c --quiet -
 tar -xJf "$W/$NF" -C "$R/usr/local" --strip-components=1 --no-same-owner
 file "$R/usr/local/bin/node" | grep -q "ARM aarch64" || { echo "node is not arm64" >&2; exit 1; }
+# its C headers (67 MB) only build native Node add-ons: node-gyp downloads them when one is built (LICENSE stays)
+rm -rf "$R/usr/local/include/node"
 
 if [ "${MCX_IMAGE_EMULATE:-1}" = 1 ]; then
   T="$W/tools"
