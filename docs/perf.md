@@ -45,3 +45,28 @@ A long frame with a small "shell" time is the GPU, the render thread or a shader
 
 Next, if the log shows first-use shader hitches: record a `GraphicsStateCollection` on the headset and warm it up at
 start (Unity 6, Vulkan PSOs).
+
+## Main-thread spikes and GC while coding (branch perf/gc-cpu)
+
+Owner 2026-11-13: "stable fps above all; the app stutters 1-3 s every ~10 s while coding". The 0.7.19 session log of a
+coding thread: main-thread callbacks of 2.0-2.9 s every 5-6 s, and a GC in every big hitch. The timeline's walks went
+to the pool thread first (Frame stability commit). This change cuts what stays on the main thread:
+
+| Before | Now |
+|---|---|
+| The GC stopped the frame for a full collection (the project setting was on, but no build step set it) | `ConfigurePlayer` sets `PlayerSettings.gcIncremental` for every build: the GC works in slices of a few ms across frames. The session log says `GC: incremental` at start |
+| Each timeline update (every 0.8 s while the agent works) laid out every block of the conversation again: a copy of each block's wrapped lines, a header string per step, a search over all lines per drawn prompt | `UiChatView` keeps each block's laid-out lines while its key, text and state stay the same; only new and changed blocks are wrapped again. First and last line, key and prompt are indexed per block; a draw walks only the lines on screen. `[slow timeline]` says how many blocks were laid out again |
+| A new chat rect (the approval row shows or goes) dropped all wrapped lines | the lines stay while the width is the same |
+| The open thread's rows (every 2 s while it works) were all copied again and the workspace map made again | a row that did not change is not copied; the map is made again only after a change |
+| CHANGES (each git refresh: every 4 s while the agent works) built all its rows and drew the list again | the rows are built only when a file, a count or the empty text changed (a hash over the fields) |
+| The sidebar of a thread without a folder merged and drew CHANGES every frame | only when the timeline shows a new file |
+| The orb's callouts were laid out every frame, also with no callout | nothing while no callout, no pinned panel and no rail shows |
+| "The thread answered" words (title, project, the alert) were built at every pulse, once a second | only when the state changed to answered, failed or waiting |
+| Scripts and plugins: the folder walk (every plugin file's time) ran on the main thread once a second (2-3 ms on the headset) | the walk runs on a pool thread; the main thread only loads what changed |
+| GESTURES > LIVE, SETTINGS > GESTURES and the local coder tile built their texts every frame | 10 times a second (the bars stay every frame); the tile 4 times a second |
+
+Closed windows already do nothing per frame: a closed panel is an inactive object (no `Update`, no `Tick`), and an
+element on a tab that is not shown is not visible (no `Update`).
+
+Check on the headset: a long coding thread open for 10 minutes. The session log must have no `[slow callback]` and no
+`[slow timeline]` above 40 ms from the chat, and no hitch with a GC above 100 ms.

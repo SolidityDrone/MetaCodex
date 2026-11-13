@@ -17,7 +17,8 @@ can answer short and fast without reading the conversation.
   MQH still knows that answer, else the whole timeline. The app polls every 0.8 s while the agent works, 2.5 s when
   idle, for the last 8 exchanges (`segmentLimit=8`); an unchanged timeline costs a few bytes. The merge, the parse and
   the chat blocks run on the request's pool thread (parse + pulse of 336 rows: 0.8 ms on the PC, a few ms on a Quest
-  core): a frame only lays out what changed.
+  core): a frame only lays out what changed. The chat keeps each block's laid-out lines while the block's text and state
+  stay the same: an update wraps only new and changed blocks (docs/perf.md).
 - `GET /api/v1/system/usage-limits?providerId=`: plan and windows (OpenCode Go on the headset: 5 hour 0 %, weekly 0 %,
   monthly 40 %). Asked once a minute while THREAD is open; the account e-mail is never shown.
 

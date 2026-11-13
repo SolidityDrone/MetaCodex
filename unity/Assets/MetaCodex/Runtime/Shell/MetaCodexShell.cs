@@ -233,6 +233,7 @@ namespace MetaCodex.Shell
                     // whole session: 61-63 of 72 fps). Without a request Horizon OS kept it low.
                     try { OVRManager.suggestedGpuPerfLevel = OVRManager.ProcessorPerformanceLevel.SustainedHigh; Log("GPU level: sustained high"); }
                     catch (Exception ex) { Log("GPU level: " + ex.Message); }
+                    Log("GC: " + (UnityEngine.Scripting.GarbageCollector.isIncremental ? "incremental" : "not incremental (PlayerSettings.gcIncremental is off)"));
                 }
                 ApplyFoveation();
             }

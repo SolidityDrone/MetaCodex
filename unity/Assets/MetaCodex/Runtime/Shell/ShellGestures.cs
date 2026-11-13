@@ -750,20 +750,27 @@ end)
             });
         }
 
+        private float _gLiveTextAt;
+
         /// LIVE tab: finger curls, palm and thumb directions, active gestures, recent events, detector cost.
         public void RefreshGestureLive()
         {
             if (_gHandText[0] == null || Gestures == null) return;
+            // the bars every frame; the texts (strings built, LINQ over the recent gestures) 10 times a second
+            bool texts = !Application.isPlaying || Time.unscaledTime >= _gLiveTextAt;
+            if (texts) _gLiveTextAt = Time.unscaledTime + 0.1f;
             for (int h = 0; h < 2; h++)
             {
                 var s = h == 0 ? Gestures.Left : Gestures.Right;
                 for (int i = 0; i < 5; i++) _gBars[h, i]?.Set(s.Tracked ? 1f - s.Fingers[i] : 0f);
                 _gBars[h, 5]?.Set(s.Tracked ? s.Pinch : 0f);
+                if (!texts) continue;
                 if (!s.Tracked) { _gHandText[h].Set("not tracked"); continue; }
                 var v = Gestures.ToHeadLocal(s.Velocity);
                 var act = Gestures.ActiveOn(s);
                 _gHandText[h].Set($"palm {Gestures.Nearest(s.PalmNormal, s.Frame.Palm)} · thumb {Gestures.Nearest(s.ThumbDir, s.Frame.Palm)}\nvel x{v.x:+0.0;-0.0} y{v.y:+0.0;-0.0} z{v.z:+0.0;-0.0} m/s\n<color=#4DFFA6>{string.Join(" ", act)}</color>");
             }
+            if (!texts) return;
             _gEvents?.Set("RECENT\n" + string.Join("\n", Gestures.Recent.Reverse().Take(7).Select(g => $"{g.Time,7:F2} {g.Name,-12} {g.Hand,-5} {g.Phase}")));
             _gCost?.Set($"bars: 1 = straight\nLua detectors: {Scripts.DetectorCount}\nlast pass {Scripts.DetectMs:F3} ms\n" +
                         string.Join("\n", Scripts.DetectorCosts().Take(5).Select(d => $"{d.name} {d.micros:F0} µs")));

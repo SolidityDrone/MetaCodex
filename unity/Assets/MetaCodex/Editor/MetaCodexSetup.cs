@@ -127,6 +127,9 @@ namespace MetaCodex.EditorTools
             PlayerSettings.SetGraphicsAPIs(BuildTarget.Android, new[] { GraphicsDeviceType.Vulkan });
             PlayerSettings.colorSpace = ColorSpace.Linear;
             PlayerSettings.enableFrameTimingStats = true;
+            // the incremental GC: a collection runs in slices of a few ms across frames instead of one pause that stops
+            // the whole frame (0.7.19: every hitch of the session log had a GC in it)
+            PlayerSettings.gcIncremental = true;
             EditorUserBuildSettings.androidBuildSubtarget = MobileTextureSubtarget.ASTC;
         }
 

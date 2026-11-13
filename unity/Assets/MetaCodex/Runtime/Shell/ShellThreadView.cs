@@ -79,6 +79,8 @@ namespace MetaCodex.Shell
         private void NotifyThreadChange(string id, ThreadPulse before, ThreadPulse now)
         {
             if (before == null || now == null || id == null) return;
+            // nothing to say: no words built (this runs at every pulse, once a second while THREAD is open)
+            if (!(before.Working && now.State == "idle") && !(now.State == "error" && before.State != "error") && !(now.State == "waiting" && before.State != "waiting")) return;
             string title = "“" + ThreadPulse.Clip(now.Title, 38) + "”";
             bool open = id == _threadOpen && IsPanelOpen("thread");
             string project = ThreadProjectName(id), name = "“" + ThreadPulse.Clip(now.Title, 40) + "”";
@@ -334,7 +336,7 @@ namespace MetaCodex.Shell
             ScanViews(_tlRaw, id, first);
             double tAll = sw.Elapsed.TotalMilliseconds;
             if (tAll > 40)
-                Log($"[slow timeline] {tAll:F0} ms ({_tlRaw.Count} rows, {u.Blocks?.Count ?? 0} blocks{(u.Full ? ", full" : "")}): take {tTake:F0}, pulse {tPulse - tTake:F0}, blocks {tBlocks - tPulse:F0}, files {tWs - tBlocks:F0}, views {tAll - tWs:F0}");
+                Log($"[slow timeline] {tAll:F0} ms ({_tlRaw.Count} rows, {u.Blocks?.Count ?? 0} blocks, {_thTimeline?.LastRelaid ?? 0} laid out again{(u.Full ? ", full" : "")}): take {tTake:F0}, pulse {tPulse - tTake:F0}, blocks {tBlocks - tPulse:F0}, files {tWs - tBlocks:F0}, views {tAll - tWs:F0}");
             // an approval step appeared: ask for the interactions now (the ALLOW / DENY row)
             if (_tlModel.Last != null && _tlModel.Last.Steps.Any(s => (s.Kind == StepKind.Approval || s.Kind == StepKind.Question) && s.Live) && !_askShown) _nextThreadMeta = 0f;
         }
