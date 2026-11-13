@@ -106,6 +106,11 @@ namespace MetaCodex.UI
         /// The panel under a hand's ray this frame (0 left, 1 right), or null.
         public UiPanel HandRayPanel(int hand) => hand >= 0 && hand < 2 && _hand[hand] != null && _hand[hand].Active && _hand[hand].HasHit ? _hand[hand].HitPanel : null;
 
+        /// A hand is on the UI: its ray or its fingertip on a panel, or it moves or holds something (gesture bindings
+        /// do not fire then: a pose made while poking or pointing at a window is not a command).
+        public bool HandOnUi(int hand) => HandBusy(hand) || HandRayPanel(hand) != null
+            || (hand >= 0 && hand < 2 && _hand[hand + 2] != null && _hand[hand + 2].Active && _hand[hand + 2].HasHit);
+
         /// A hand is moving a panel or holding an element.
         public bool HandBusy(int hand) => hand >= 0 && hand < 2 && _hand[hand] != null && (_hand[hand].DragPanel != null || _hand[hand].Captured != null || _hand[hand + 2].Captured != null);
         public void Unregister(UiPanel p)

@@ -104,18 +104,47 @@ namespace MetaCodex.Shell
             }
         }
 
+        /// A pose's start fires its bindings only once it is held this long (owner 2026-11-13: "panels open randomly";
+        /// the log: a victory binding opened VAULT 3 times in 40 s while the hands worked on windows).
+        public const float BindingHold = 0.35f;
+        private readonly Dictionary<string, (GestureEvent e, float at)> _bindingHeld = new Dictionary<string, (GestureEvent, float)>();
+
         private void ApplyBindings(GestureEvent e)
         {
             if (Settings?.bindings == null || Settings.bindings.Count == 0) return;
-            foreach (var b in Settings.bindings.ToList())
+            string key = e.Name + "/" + e.Hand;
+            if (e.Phase == "end") _bindingHeld.Remove(key);
+            // a pose's start waits until it is held (TickBindings); taps (swipes, the clap) and ends go at once
+            if (e.Phase == "start") { _bindingHeld[key] = (e, e.Time); return; }
+            FireBindings(e);
+        }
+
+        private void FireBindings(GestureEvent e)
+        {
+            var matches = Settings.bindings.Where(b => b.enabled && b.gesture == e.Name && (b.hand == "any" || b.hand == e.Hand)
+                && (b.phase == "any" || (b.phase == "end" ? e.Phase == "end" : e.Phase == "start" || e.Phase == "tap"))).ToList();
+            if (matches.Count == 0) return;
+            if (HandOnUiFor(e.Hand)) { Log($"binding {e.Name}: not run, the {e.Hand} hand is on a window"); return; }
+            foreach (var b in matches)
             {
-                if (!b.enabled || b.gesture != e.Name) continue;
-                if (b.hand != "any" && b.hand != e.Hand) continue;
-                bool phaseOk = b.phase == "any" || (b.phase == "end" ? e.Phase == "end" : e.Phase == "start" || e.Phase == "tap");
-                if (!phaseOk) continue;
                 var err = RunAction(b.action);
                 Log($"binding {b.gesture} -> {b.action}: {err ?? "ok"}");
                 if (err != null) Toast($"Binding {b.gesture}: {err}", "warn");
+            }
+        }
+
+        private bool HandOnUiFor(string hand) => Router != null && (hand == "left" ? Router.HandOnUi(0) : hand == "right" ? Router.HandOnUi(1) : Router.HandOnUi(0) || Router.HandOnUi(1));
+
+        /// Every frame (and every test gesture step), on the gestures' clock: the poses held long enough fire their
+        /// bindings (once each).
+        private void TickBindings(float now)
+        {
+            if (_bindingHeld.Count == 0) return;
+            foreach (var kv in _bindingHeld.ToList())
+            {
+                if (now - kv.Value.at < BindingHold) continue;
+                _bindingHeld.Remove(kv.Key);
+                FireBindings(kv.Value.e);
             }
         }
 

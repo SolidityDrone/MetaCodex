@@ -288,6 +288,7 @@ namespace MetaCodex.Shell
             MqhHost?.Tick();
             HitchMark(2);
             TickVoice();
+            TickBindings(Time.unscaledTime); // gesture bindings: poses held BindingHold (ShellGestures)
             SyncLocalCoder(); // the OpenCode config (no snapshots; the local coder when installed): at most every 5 s, once set
             HitchMark(3);
             TickSessionContext();
@@ -990,7 +991,7 @@ namespace MetaCodex.Shell
         public void TickGesturesForTest(float seconds, float step = 1f / 36f)
         {
             float t0 = _testClock;
-            for (float t = step; t <= seconds + 1e-4f; t += step) { _testClock = t0 + t; Gestures.Tick(_testClock, step); }
+            for (float t = step; t <= seconds + 1e-4f; t += step) { _testClock = t0 + t; Gestures.Tick(_testClock, step); TickBindings(_testClock); }
         }
 
         private float _testClock = 1000f;
