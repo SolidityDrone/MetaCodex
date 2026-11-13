@@ -55,6 +55,9 @@ namespace MetaCodex.EditorTools
             bool docked = railCorner.x < -st.Width * 0.5f && railCorner.x > -st.Width * 0.5f - MetaCodexShell.RailGap - 0.004f && Mathf.Abs(railCorner.y - st.Height * 0.5f) < 0.002f;
             Check(st.IsOpen && rail.IsOpen && shell.ControlCategoryNow() == "display" && tabs.Selected == 1 && docked,
                 $"CONTROL opens on DISPLAY with the rail on its left, top edges level ({railCorner.x + st.Width * 0.5f:F3} m, {railCorner.y - st.Height * 0.5f:F3} m from the window's corner)");
+            // as tall as the page: the bottom corners level too
+            var railBottom = st.transform.InverseTransformPoint(rail.transform.TransformPoint(new Vector3(rail.Width * 0.5f, -rail.Height * 0.5f, 0f)));
+            Check(Mathf.Abs(railBottom.y + st.Height * 0.5f) < 0.003f, $"the rail is as tall as its window: bottom edges level ({railBottom.y + st.Height * 0.5f:F3} m)");
             bool tabBarGone = !st.Elements.OfType<UiButton>().Any(b => b.Visible && b.Style == UiButtonStyle.Tab && tabs.Names.Contains(b.Text));
             var blurb = st.Elements.OfType<UiLabel>().FirstOrDefault(l => l.Visible && (l.Text ?? "").Contains("Where windows go"));
             Check(tabBarGone && blurb != null && st.Title.Contains("DISPLAY"), $"SETTINGS' tab bar is gone (the rail is the navigation); a line says what DISPLAY is for; its title: {st.Title}");

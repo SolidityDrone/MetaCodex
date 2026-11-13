@@ -19,7 +19,7 @@ never grows over a neighbour and the view does not jump.
 
 ## CONTROL (`Shell/ShellControl.cs`)
 
-- **The sidebar**: a narrow rail docked on the left of the category's window, top edges aligned, turned a little
+- **The sidebar**: a narrow rail docked on the left of the category's window, top edges aligned and as tall as the window (bottom edges level too, 0.7.19), turned a little
   towards the user. Ten categories in three groups, each with a live status on the right:
   - THIS HEADSET: ◧ DISPLAY (fixed / float), ◈ LOOK & SOUND (sound / muted), ◐ FOCUS (on / off; the same glyph as
     FOCUS on the menu), ✋ HANDS (pinch / poke / both)

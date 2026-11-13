@@ -89,6 +89,9 @@ namespace MetaCodex.Shell
             const float handle = 0.016f, pad = 0.008f, rowH = 0.034f, rowGap = 0.003f, capH = 0.017f, titleH = 0.026f;
             int groups = _categories.Select(c => c.Group).Distinct().Count();
             float h = handle + pad + titleH + groups * (capH + 0.004f) + _categories.Count * (rowH + rowGap) + pad * 1.5f;
+            // as tall as the page beside it (owner 2026-11-13: "the sidebar is shorter than the window we show content in");
+            // top edges are level (RailPose), so the bottoms are too; the rows stay at the top
+            h = Mathf.Max(h, ControlPageH);
             var rail = UiPanel.Create<UiPanel>(ControlId, "", RailW, h, _root, header: false);
             rail.Closable = false;
             rail.AddGrabHandle(handle); // pinch its bar to move the control center (its window comes along)
