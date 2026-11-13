@@ -571,7 +571,10 @@ Work windows:
 - [ ] VOICE > SOUND shows OFF / AI / SHIP / COMM with AI selected on a fresh install. Pick each one: it says "Systems online. All panels ready." in that sound. AI is the same voice, slightly computer-like with a small room; SHIP is clearly synthetic with a longer tail; COMM is a narrow radio with a squelch at the start and the end; OFF is the plain voice.
 - [ ] All four are equally loud, never crackle or clip, and the first word starts without the old half-second of silence.
 - [ ] Say "make your voice sound like a radio" -> COMM is selected and replies sound like a radio; say "give the assistant its normal voice back" -> OFF; "switch the voice effect to starship" -> SHIP (the Italian one removed: English only since 2026-11-12).
-- [ ] VOICE > SPEECH: FAST is selected on a fresh install. Ask the same question with FAST and with CLEAR: FAST starts a little sooner; say if FAST ever drops or swaps a word you notice (then CLEAR becomes the default).
+- [ ] VOICE > SPEECH: FAST (3 steps) is selected on a fresh install. Ask the same question with FAST and with CLEAR: FAST starts a little sooner; say if FAST ever drops or swaps a word you notice (then CLEAR becomes the default).
+- [ ] Faster voice (3 steps, shorter first clip, warm-up waits, agents at low priority): with an agent working, ask a session question. The first sound comes sooner than before (about 12 s measured before).
+- [ ] The same answer: no gap between the first clip and the next one (only the normal short pause).
+- [ ] With the voice effect on (AI, SHIP, COMM), FAST speech stays easy to understand; say if a word is lost.
 - [ ] Restart the app: the chosen SOUND and SPEECH are kept.
 - [ ] Watch fps during a long spoken reply with SHIP: 72 fps holds (the effect runs off the main thread).
 

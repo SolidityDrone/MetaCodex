@@ -312,11 +312,11 @@ agent is requiring allowance'".
   The callout shows as before. An alert that comes while the user talks or the orb speaks waits (the newest two, a
   minute at most) and is said after. Not without the local AI service (the callout alone then).
 
-## Speech quality: FAST (4 steps) or CLEAR (5) (feat/polish, 2026-11-12)
+## Speech quality: FAST (3 steps) or CLEAR (5) (feat/polish, 2026-11-12; FAST 3 since 2026-11-13)
 
 VOICE > SPEECH (setting `voice.speech`, voice `set_setting speech_quality fast|clear`) picks Supertonic's diffusion steps,
-sent to the service as `ttsSteps` (a change reloads the voice model once). FAST = 4 is the default, CLEAR = 5 (the model
-default). Measured on the PC, linux-x64 addon, 2 threads on 2 cores, warm, median of 3, two interleaved rounds:
+sent to the service as `ttsSteps` (a change reloads the voice model once). FAST = 3 is the default (it was 4 until
+2026-11-13), CLEAR = 5 (the model default). Measured on the PC, linux-x64 addon, 2 threads on 2 cores, warm, median of 3, two interleaved rounds:
 
 | Text | chars | audio | 5 steps | 4 steps | 4 vs 5 |
 |---|---|---|---|---|---|
@@ -331,6 +331,19 @@ nothing becomes unreadable. Synthesis on the PC runs at 55-70 characters a secon
 the headset is about 4-6x slower than this loaded PC, so there Supertonic makes speech about as fast as it plays
 (RTF ~1.0-1.3 at 5 steps, ~0.85-1.1 at 4). The 0.6B LLM writes about 14 tokens (~55 characters) a second on the same cores:
 the voice, not the LLM, is the slow part of a spoken answer.
+
+Why FAST is 3 (2026-11-13, owner): on the headset the voice made a sentence in 3 to 4 times its playing time
+(`tts 51 chars -> 3314 ms audio in 11439 ms`) while other AI jobs ran on the same 3 cores. Fewer steps is the
+biggest single cut in that time, and the voice effect (VOICE > SOUND, AI by default) hides the small loss. The values
+`fast` and `clear` are unchanged. Three more changes in the app keep the first sound near (the sentence cut is a pure
+function, `SpokenText.SplitFirstClause`):
+
+- The LLM warm-up (a prompt prefill of about 23 s) does not start while the user talks, while speech-to-text or the LLM
+  works, or while a reply is spoken or queued. A TALK press only asks for it; it starts after 5 s of quiet voice.
+- A first sentence longer than 45 characters is made as two clips, cut at its first `;`, `:`, `,`, " - " or " and "
+  that leaves 12 characters on each side. The first clip is short, so it is ready sooner; the next one is made while it
+  plays. No cut inside numbers, code in backticks or quotes. Only the first sentence of a reply.
+- The Linux userland (`userland/mqh/mqh-run`) runs at nice 5: MQH and the agents it starts (git, builds) yield to the voice.
 
 ## Voice effect (feat/polish, 2026-11-12)
 

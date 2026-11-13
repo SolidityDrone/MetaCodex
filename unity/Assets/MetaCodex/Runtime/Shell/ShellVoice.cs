@@ -42,9 +42,11 @@ namespace MetaCodex.Shell
         /// The voice effect of spoken replies (VoiceFx): off | adjutant | starship | comm (VOICE > SOUND: OFF, AI, SHIP,
         /// COMM). Every one trims the silence around the speech and levels it; off adds nothing else.
         public string fx = "adjutant";
-        /// Speech quality (VOICE > SPEECH): fast = Supertonic with 4 diffusion steps, clear = 5 (the model default).
+        /// Speech quality (VOICE > SPEECH): fast = Supertonic with 3 diffusion steps, clear = 5 (the model default).
         /// Measured 2026-11-12 (PC, 2 threads): 4 steps makes a sentence 10-18 % sooner; through speech-to-text it
         /// now and then slips a small word ("a login fix" for "the login fix", "most the project"); 5 is exact.
+        /// 2026-11-13 (owner): FAST is 3 steps, the voice effect hides the small loss; the headset runs the voice
+        /// at about 3x slower than it plays, so every step counts.
         public string speech = "fast";
     }
 
@@ -144,6 +146,11 @@ namespace MetaCodex.Shell
         private float _nextVoicePoll;
         private int _warmedRevision = -1;
         private bool _warming;
+        private bool _warmWanted;      // TALK asked for a warm-up: it runs once the voice has been quiet for WarmQuietSeconds
+        private float _voiceBusyAt;    // the last time a voice turn or a spoken reply was going on
+        /// The LLM warm-up (a ~23 s prompt prefill) takes the cores the voice needs: it starts only after this many
+        /// quiet seconds (no recording, no transcribing or thinking, nothing spoken or queued to be spoken).
+        public const float WarmQuietSeconds = 5f;
         private string _sentConfig;
 
         private void InitVoice()
@@ -225,8 +232,9 @@ namespace MetaCodex.Shell
                 ["ttsLanguage"] = "en",
                 // the voice model stays loaded 15 min (was 3): a reload costs 1-4 s before the first word on the headset
                 ["idleMinutes"] = new JObject { ["asr"] = 10, ["llm"] = 15, ["tts"] = 15 },
-                // VOICE > SPEECH: FAST = 4 diffusion steps, CLEAR = 5 (3 and 2 garble words); a change reloads the voice model once
-                ["ttsSteps"] = Settings.voice.speech == "clear" ? 5 : 4,
+                // VOICE > SPEECH: FAST = 3 diffusion steps (the voice effect hides the small loss), CLEAR = 5; a change
+                // reloads the voice model once
+                ["ttsSteps"] = Settings.voice.speech == "clear" ? 5 : 3,
             };
             // 3 threads on the 3 AI cores while an answer streams into speech (measured 2026-11-12, docs/voice.md
             // "Streaming answers"): the LLM decodes on 1 (it still writes ~2x faster than speech plays) and reads its
@@ -335,9 +343,16 @@ namespace MetaCodex.Shell
                     RefreshVoicePanel();
                 });
             }
-            // keep the LLM's prompt cache in step with the command set (only once the user uses voice)
-            if (Qvac != null && Qvac.IsRunning && Settings.voice.useLlm && !_warming && _warmedRevision >= 0 && _warmedRevision != Voice.Revision && VoiceState == "idle")
+            // keep the LLM's prompt cache in step with the command set (only once the user uses voice). The warm-up
+            // shares the 3 AI cores with speech-to-text and the voice (measured 2026-11-13: first sentence 12 s while it
+            // ran), so it waits until the voice is idle: a TALK press only sets _warmWanted.
+            if (VoiceState != "idle" || Speaking || Recorder != null && Recorder.Recording) _voiceBusyAt = Time.unscaledTime;
+            if (Qvac != null && Qvac.IsRunning && Settings.voice.useLlm && !_warming && (_warmWanted || _warmedRevision >= 0)
+                && _warmedRevision != Voice.Revision && Time.unscaledTime - _voiceBusyAt >= WarmQuietSeconds)
+            {
+                _warmWanted = false;
                 WarmVoiceLlm();
+            }
         }
 
         public void PollVoiceStatus()
@@ -416,9 +431,10 @@ namespace MetaCodex.Shell
             StopSpeaking(); // TALK interrupts a reply: nothing of it plays on top of the new question
             SetVoiceState("listening", "● LISTENING", "speak now");
             Sounds?.Play("open");
-            // load the LLM and its prompt cache while the user speaks (separate queue: never delays speech-to-text)
+            // load the LLM and its prompt cache once the voice is idle again (TickVoice), not while the user speaks:
+            // it would run through speech-to-text and the spoken answer
             bool llmMayAnswer = Settings.voice.useLlm && (Settings.voice.llmFallback || !Settings.voice.decide || Decider == null || !Decider.Usable);
-            if (llmMayAnswer && _warmedRevision != Voice.Revision && Qvac.IsRunning) WarmVoiceLlm();
+            if (llmMayAnswer && _warmedRevision != Voice.Revision && Qvac.IsRunning) _warmWanted = true;
         }
 
         public void VoiceStop()
@@ -625,6 +641,7 @@ namespace MetaCodex.Shell
 
         private readonly List<string> _sayParts = new List<string>(); // the sentences of the reply being spoken
         private int _sayNext;                                          // the next sentence to request
+        private int _saySplit;                                         // 1 when the first sentence was cut in two clips (the spoken cap counts it once)
         private bool _sayInFlight;                                     // one request at a time: Stop is quick, the service queue stays short
         private readonly Queue<AudioClip> _sayReady = new Queue<AudioClip>();
         private bool _sayPlaying;
@@ -688,7 +705,7 @@ namespace MetaCodex.Shell
             if (!_sayStreaming) return false;
             string sp = SpokenText.Speakable(sentence ?? "");
             if (sp.Length == 0) return true;
-            if (_sayParts.Count >= SpokenSentences || _sayParts.Count > 0 && _sayStreamChars + sp.Length > SpokenChars) return false;
+            if (_sayParts.Count - _saySplit >= SpokenSentences || _sayParts.Count > 0 && _sayStreamChars + sp.Length > SpokenChars) return false;
             _sayParts.Add(sp);
             _sayStreamChars += sp.Length;
             RequestNextSentence();
@@ -731,6 +748,7 @@ namespace MetaCodex.Shell
             try { cts?.Cancel(); } catch (Exception) { }
             _sayParts.Clear();
             _sayNext = 0;
+            _saySplit = 0;
             _sayInFlight = false;
             _sayNextAt = 0f; // the next reply starts at once
             while (_sayReady.Count > 0) DestroyClip(_sayReady.Dequeue());
@@ -753,6 +771,12 @@ namespace MetaCodex.Shell
             // one request at a time and at most two clips made ahead: a Stop never waits for a long queue in the service
             if (_sayInFlight || _sayNext >= _sayParts.Count || _sayReady.Count >= 2) return;
             int gen = _sayGen, i = _sayNext++;
+            if (i == 0)
+            {
+                // a long first sentence is made as two clips: the first one, short, decides when the answer starts
+                string head = SpokenText.SplitFirstClause(_sayParts[0], out string tail);
+                if (tail != null) { _sayParts[0] = head; _sayParts.Insert(1, tail); _saySplit = 1; }
+            }
             string text = _sayParts[i];
             _sayInFlight = true;
             float t0 = Time.realtimeSinceStartup;
@@ -1752,7 +1776,7 @@ namespace MetaCodex.Shell
                 OnSettingsChanged();
                 if (SpeakForTest != null || Qvac != null && Qvac.IsRunning) VoiceSay(VoiceFxSample); // no service: no toast of the sample line
             }) { Rect = rs.Next(0.032f), LabelWidth = pickLabel });
-            // speech quality: FAST (4 steps, sooner) or CLEAR (5 steps, every word exact); picking one says the sample line
+            // speech quality: FAST (3 steps, sooner) or CLEAR (5 steps, every word exact); picking one says the sample line
             p.Add(new UiSegmented("SPEECH", new[] { "FAST", "CLEAR" }, Settings.voice.speech == "clear" ? 1 : 0, i =>
             {
                 Settings.voice.speech = i == 1 ? "clear" : "fast";

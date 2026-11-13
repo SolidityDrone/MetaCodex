@@ -152,6 +152,48 @@ namespace MetaCodex.AI
             return Abbreviations.Contains(word) || numberNext && NumberAbbreviations.Contains(word);
         }
 
+        /// A first sentence longer than this is cut at its first clause boundary (SplitFirstClause).
+        public const int LongFirstSentence = 45;
+        /// Each part of such a cut keeps at least this many characters.
+        public const int MinClause = 12;
+
+        /// The first clip decides when the user hears anything, so a long first sentence is made in two clips. Cuts
+        /// `sentence` (longer than LongFirstSentence) at its first ; : , " - " or " and " that leaves at least MinClause
+        /// characters on each side: returns the head and puts the rest in `rest` (it starts with "and" for " and ").
+        /// Returns the sentence itself with `rest` null when there is no such place. Never cuts inside backticks,
+        /// double quotes or a number ("1,200", "3, 4, 5", "12:30").
+        public static string SplitFirstClause(string sentence, out string rest)
+        {
+            rest = null;
+            string s = (sentence ?? "").Trim();
+            if (s.Length <= LongFirstSentence) return s;
+            bool inCode = false, inQuote = false;
+            for (int i = 0; i < s.Length; i++)
+            {
+                char c = s[i];
+                if (c == '`') { inCode = !inCode; continue; }
+                if (c == '"') { inQuote = !inQuote; continue; }
+                if (c == '“') { inQuote = true; continue; }
+                if (c == '”') { inQuote = false; continue; }
+                if (inCode || inQuote) continue;
+                int headEnd, tailStart; // the head is s[0..headEnd), the rest s[tailStart..]
+                if ((c == ';' || c == ':' || c == ',') && i + 1 < s.Length && s[i + 1] == ' ')
+                {
+                    if (i > 0 && char.IsDigit(s[i - 1]) && i + 2 < s.Length && char.IsDigit(s[i + 2])) continue; // "3, 4, 5"
+                    headEnd = i + 1;
+                    tailStart = i + 2;
+                }
+                else if (c == ' ' && string.CompareOrdinal(s, i, " - ", 0, 3) == 0) { headEnd = i; tailStart = i + 3; }
+                else if (c == ' ' && string.Compare(s, i, " and ", 0, 5, StringComparison.OrdinalIgnoreCase) == 0) { headEnd = i; tailStart = i + 1; }
+                else continue;
+                string head = s.Substring(0, headEnd).Trim(), tail = s.Substring(tailStart).Trim();
+                if (head.Length < MinClause || tail.Length < MinClause) continue;
+                rest = tail;
+                return head;
+            }
+            return s;
+        }
+
         private static List<string> SplitLong(List<string> ss)
         {
             var o = new List<string>();

@@ -173,6 +173,23 @@ namespace MetaCodex.EditorTools
             Check(exact == recap && first.StartsWith("The Fix the login form thread is idle") && first.Length <= 60 && recap.Contains("You asked") && recap.Contains("4 commands"),
                 $"recap without the model: “{recap}” (first sentence {first.Length} chars)");
             Check(SessionContextText.ExactAnswer(snap, SessionQuestion.Parse("why did the login thread fail")) != recap, "a “why” question still goes to the model");
+
+            // a long first sentence is cut at its first clause boundary, so the first clip is short
+            string h1 = SpokenText.SplitFirstClause("The login fix is done, and the tests pass on every thread.", out string t1);
+            string h2 = SpokenText.SplitFirstClause("The build finished without any errors or warnings at all today.", out string t2);
+            string h3 = SpokenText.SplitFirstClause("It changed 1,200 lines in the login form and the settings panel.", out string t3);
+            string h4 = SpokenText.SplitFirstClause("I ran `git status, then git diff` in the project folder, and it was clean.", out string t4);
+            string h5 = SpokenText.SplitFirstClause("Yes, the login fix is done and every test passes on all threads.", out string t5);
+            string h6 = SpokenText.SplitFirstClause("Short one, fine.", out string t6);
+            string h7 = SpokenText.SplitFirstClause("The agent said \"wait, I am checking\" and then it changed the file list.", out string t7);
+            Check(h1 == "The login fix is done," && t1 == "and the tests pass on every thread."
+                  && t2 == null && h2.StartsWith("The build finished")
+                  && h3.StartsWith("It changed 1,200 lines") && t3 != null && t3.StartsWith("and the settings") && !h3.EndsWith("1")
+                  && h4 == "I ran `git status, then git diff` in the project folder," && t4 == "and it was clean."
+                  && h5.StartsWith("Yes, the login fix is done") && t5 != null && t5.StartsWith("and every test")
+                  && t6 == null && h6 == "Short one, fine."
+                  && t7 != null && t7.StartsWith("and then it changed"),
+                $"first clip: long first sentence cut at the first clause ({h1} | {t1}; {h3} | {t3}; {h4} | {t4}; {h5} | {t5}; {h7} | {t7})");
         }
 
         private static void VoiceFxSection(MetaCodexShell shell)
@@ -231,7 +248,7 @@ namespace MetaCodex.EditorTools
                 bool fits = set != null && set.Check != null && set.Check(new JObject { ["setting"] = "voice_effect", ["value"] = "ship" }) == null
                             && set.Check(new JObject { ["setting"] = "voice_effect", ["value"] = "banana" }) != null;
                 Check(fits, "set_setting's check: voice_effect takes ship, not banana");
-                // VOICE > SPEECH: FAST (4 diffusion steps) by default, CLEAR = 5; set_setting speech_quality moves it
+                // VOICE > SPEECH: FAST (3 diffusion steps) by default, CLEAR = 5; set_setting speech_quality moves it
                 var speech = vp.Elements.OfType<UiSegmented>().FirstOrDefault(x => x.Text == "SPEECH");
                 string sq0 = shell.Settings.voice.speech;
                 string q1 = shell.SetSettingByVoice("speech_quality", "clear"), w1 = shell.Settings.voice.speech;

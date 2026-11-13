@@ -4,6 +4,9 @@
 # loop), with MQH_API_TOKEN in the environment; when this script ends, proot ends everything it started and the
 # app starts it again. Logs: ~/.mqh/logs/{server,host-daemon}.log (and mqh-run.log, written by the app).
 set -u
+# The voice (speech-to-text, text-to-speech) runs on the same 3 cores. Spoken answers took 3x longer while an agent
+# worked (its git, builds), so MQH and everything it starts run at nice 5 and yield to the voice.
+renice -n 5 $$ >/dev/null 2>&1 || true
 M=/opt/mqh
 D="$HOME/.mqh"
 LOGS="$D/logs"
