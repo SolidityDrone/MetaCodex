@@ -89,7 +89,15 @@ namespace MetaCodex.UI
             base.Teardown();
         }
 
-        protected override void Relayout() { _wrapCache.Clear(); _mdCache.Clear(); Layout(); Redraw(); }
+        // a new rect: the wrapped lines stay good while the width is the same (the ask row only takes height away)
+        protected override void Relayout()
+        {
+            if (Mathf.Abs(Wide - _cachedWide) > 1e-5f) { ClearLayoutCaches(); _cachedWide = Wide; }
+            Layout();
+            Redraw();
+        }
+
+        private float _cachedWide = -1f;
 
         private TextMeshPro MakeMeasurer(TMP_FontAsset font)
         {
@@ -126,14 +134,14 @@ namespace MetaCodex.UI
         }
 
         /// Forgets which blocks were opened or closed by hand (another thread).
-        public void ResetState() { _toggled.Clear(); _scroll = 0; NewLines = 0; _wrapCache.Clear(); _mdCache.Clear(); }
+        public void ResetState() { _toggled.Clear(); _scroll = 0; NewLines = 0; ClearLayoutCaches(); }
 
         public bool IsExpanded(ChatBlock b) => b.Collapsible && (b.Expanded ^ _toggled.Contains(b.Key));
 
         /// Opens or closes a block as a tap would (self-tests, voice).
         public bool Toggle(string key)
         {
-            int i = _blocks.FindIndex(b => b.Key == key);
+            int i = KeyIndex(key);
             if (i < 0 || !_blocks[i].Collapsible) return false;
             ToggleBlock(i);
             return true;
@@ -142,13 +150,13 @@ namespace MetaCodex.UI
         private void ToggleBlock(int bi)
         {
             var b = _blocks[bi];
-            int head = _lines.FindIndex(l => l.Block == bi);
+            int head = FirstLine(bi);
             float fromBottom = head >= 0 ? DistanceFromBottom(head) : -1f;
             if (!_toggled.Remove(b.Key)) _toggled.Add(b.Key);
             Layout();
             // the header stays where it was tapped (opening pushes what follows down, not the header up); in the
             // lower half of a view that follows the end, it keeps following (the opened part shows)
-            int nh = _lines.FindIndex(l => l.Block == bi);
+            int nh = FirstLine(bi);
             if (nh >= 0 && fromBottom >= 0f && (_scroll > 0 || fromBottom > ViewHeight() * 0.5f) && ContentHeight() > ViewHeight()) KeepAt(nh, fromBottom);
             UiSounds.Fire("click");
             OnToggled?.Invoke(b, IsExpanded(b));
@@ -161,8 +169,7 @@ namespace MetaCodex.UI
         /// Scrolls so the block's first line is at the top of the view.
         public void ScrollToBlock(string key)
         {
-            int bi = _blocks.FindIndex(b => b.Key == key);
-            int li = _lines.FindIndex(l => l.Block == bi);
+            int li = FirstLine(KeyIndex(key));
             if (li < 0) return;
             // the last end of view that still shows the block's first line: then that line is the top one
             int best = Mathf.Min(_lines.Count, li + 1);
@@ -183,33 +190,126 @@ namespace MetaCodex.UI
         public int Scroll => _scroll;
         public void ClickLineForTest(int line) { var p = new Vector2(Rect.x + 0.02f, YOfLine(line)); var e = new UiPointerEvent { Point = p, PressPoint = p }; OnPress(e); OnRelease(e, true); }
         public void ClickStickyForTest() { var p = _band.center; var e = new UiPointerEvent { Point = p, PressPoint = p }; OnPress(e); OnRelease(e, true); }
-        public int FirstLineOf(string key) { int bi = _blocks.FindIndex(b => b.Key == key); return _lines.FindIndex(l => l.Block == bi); }
+        public int FirstLineOf(string key) => FirstLine(KeyIndex(key));
         private float YOfLine(int line) { foreach (var d in _drawn) if (d.line == line) return (d.y0 + d.y1) * 0.5f; return -1f; }
         private static string Strip(string s) => ChatText.Strip(s);
 
         // ---------------------------------------------------------------- layout
 
         private float ViewHeight() => Rect.height;
-        private float ContentHeight() { float h = 0f; foreach (var l in _lines) h += l.H; return h; }
+        private float ContentHeight() => _contentH;
+
+        // ---- incremental layout (0.7.19: every timeline update laid out every block of the conversation again): each
+        // block keeps the lines it was laid out as while what they are made of stays the same; only new and changed
+        // blocks are wrapped again. Indexes per block (first / last line, by key) save the walks over all lines.
+
+        private sealed class BlockLines
+        {
+            public ChatKind Kind;
+            public string Head, Body, Preview, Parent;
+            public bool Collapsible, Expanded, Live, MonoBody;
+            public int Indent, BodyMaxChars, Pass;
+            public float Pad, Wide;
+            public UiTheme Theme;
+            public readonly List<VLine> Lines = new List<VLine>();
+
+            public bool Same(ChatBlock b, bool expanded, float pad, float wide, UiTheme theme) =>
+                Kind == b.Kind && Expanded == expanded && Collapsible == b.Collapsible && Live == b.Live && MonoBody == b.MonoBody
+                && Indent == b.Indent && BodyMaxChars == b.BodyMaxChars && Pad == pad && Wide == wide && ReferenceEquals(Theme, theme)
+                && Parent == b.Parent && Head == b.Head && Preview == b.Preview && Body == b.Body;
+
+            public void Take(ChatBlock b, bool expanded, float pad, float wide, UiTheme theme)
+            {
+                Kind = b.Kind; Expanded = expanded; Collapsible = b.Collapsible; Live = b.Live; MonoBody = b.MonoBody;
+                Indent = b.Indent; BodyMaxChars = b.BodyMaxChars; Pad = pad; Wide = wide; Theme = theme;
+                Parent = b.Parent; Head = b.Head; Preview = b.Preview; Body = b.Body;
+            }
+        }
+
+        private readonly Dictionary<string, BlockLines> _blockLines = new Dictionary<string, BlockLines>();
+        private readonly List<int> _firstLine = new List<int>(), _lastLine = new List<int>(); // per block; -1 = hidden
+        private readonly Dictionary<string, int> _keyAt = new Dictionary<string, int>();     // a key's first block
+        private readonly Dictionary<string, int> _promptAt = new Dictionary<string, int>();  // a prompt key's first block
+        private readonly HashSet<string> _openWork = new HashSet<string>();
+        private readonly List<string> _staleKeys = new List<string>();
+        private float _contentH;
+        private int _layoutPass;
+        /// Blocks the last layout wrapped again (self-tests, logs): the others kept their lines.
+        public int LastRelaid { get; private set; }
+
+        private int KeyIndex(string key) => key != null && _keyAt.TryGetValue(key, out int i) ? i : -1;
+        private int FirstLine(int bi) => bi >= 0 && bi < _firstLine.Count ? _firstLine[bi] : -1;
+        private int LastLine(int bi) => bi >= 0 && bi < _lastLine.Count ? _lastLine[bi] : -1;
+
+        private void ClearLayoutCaches() { _wrapCache.Clear(); _mdCache.Clear(); _blockLines.Clear(); }
 
         private void Layout()
         {
             _lines.Clear();
             _drawn.Clear(); // line numbers change: hit-testing waits for the next draw
-            if (Panel == null || _mBody == null) return;
-            var t = Theme;
-            string lastExchange = null;
-            var open = new HashSet<string>();
-            foreach (var b in _blocks) if (b.Kind == ChatKind.Work && IsExpanded(b)) open.Add(b.Key);
+            _firstLine.Clear();
+            _lastLine.Clear();
+            _keyAt.Clear();
+            _promptAt.Clear();
+            _contentH = 0f;
+            LastRelaid = 0;
             for (int bi = 0; bi < _blocks.Count; bi++)
             {
                 var b = _blocks[bi];
-                if (b.Parent != null && !open.Contains(b.Parent)) continue;
-                float x = b.Indent * IndentStep;
+                _firstLine.Add(-1);
+                _lastLine.Add(-1);
+                string k = b.Key ?? "";
+                if (!_keyAt.ContainsKey(k)) _keyAt[k] = bi;
+                if (b.Kind == ChatKind.Prompt && !_promptAt.ContainsKey(k)) _promptAt[k] = bi;
+            }
+            if (Panel == null || _mBody == null) return;
+            var t = Theme;
+            float wide = Wide;
+            int pass = ++_layoutPass;
+            string lastExchange = null;
+            _openWork.Clear();
+            foreach (var b in _blocks) if (b.Kind == ChatKind.Work && IsExpanded(b)) _openWork.Add(b.Key);
+            for (int bi = 0; bi < _blocks.Count; bi++)
+            {
+                var b = _blocks[bi];
+                string k = b.Key ?? "";
+                _blockLines.TryGetValue(k, out var cached);
+                if (cached != null) cached.Pass = pass; // still in the conversation (shown or inside a closed group)
+                if (b.Parent != null && !_openWork.Contains(b.Parent)) continue;
                 bool newExchange = b.Kind == ChatKind.Prompt && lastExchange != null;
                 float pad = _lines.Count == 0 ? 0f : newExchange ? 0.016f : b.Kind == ChatKind.Answer ? 0.008f : b.Parent != null ? 0.001f : 0.005f;
                 lastExchange = b.Exchange;
-                Color tint = b.Tint ?? t.TextAccent;
+                bool expanded = IsExpanded(b);
+                int from = _lines.Count;
+                if (cached != null && cached.Same(b, expanded, pad, wide, t))
+                {
+                    foreach (var l in cached.Lines) { var c = l; c.Block = bi; _lines.Add(c); }
+                }
+                else
+                {
+                    LayoutBlock(bi, b, expanded, pad);
+                    LastRelaid++;
+                    if (cached == null) _blockLines[k] = cached = new BlockLines();
+                    cached.Take(b, expanded, pad, wide, t);
+                    cached.Pass = pass;
+                    cached.Lines.Clear();
+                    for (int i = from; i < _lines.Count; i++) cached.Lines.Add(_lines[i]);
+                }
+                if (_lines.Count > from) { _firstLine[bi] = from; _lastLine[bi] = _lines.Count - 1; }
+            }
+            for (int i = 0; i < _lines.Count; i++) _contentH += _lines[i].H;
+            // blocks that left the conversation drop their lines
+            _staleKeys.Clear();
+            foreach (var kv in _blockLines) if (kv.Value.Pass != pass) _staleKeys.Add(kv.Key);
+            foreach (var k in _staleKeys) _blockLines.Remove(k);
+        }
+
+        /// One block's lines, appended to _lines (its header, preview, body; markdown and wrapping are cached too).
+        private void LayoutBlock(int bi, ChatBlock b, bool expanded, float pad)
+        {
+            var t = Theme;
+            float x = b.Indent * IndentStep;
+            {
                 switch (b.Kind)
                 {
                     case ChatKind.Prompt:
@@ -228,14 +328,13 @@ namespace MetaCodex.UI
                         var baseCol = b.Kind == ChatKind.Answer ? t.Text : Color.Lerp(t.Text, t.TextDim, 0.45f);
                         var wrapped = Markdown(b.Body, baseCol, Wide - ax, b.Key, b.BodyMaxChars);
                         if (b.Live && wrapped.Count > 0) wrapped[wrapped.Count - 1] = (wrapped[wrapped.Count - 1].text + "<color=#8FEBFF>▌</color>", wrapped[wrapped.Count - 1].w, wrapped[wrapped.Count - 1].mono, wrapped[wrapped.Count - 1].color, wrapped[wrapped.Count - 1].code);
-                        if (b.Kind == ChatKind.Update && wrapped.Count > 6 && !IsExpanded(b)) wrapped = wrapped.Take(6).ToList();
+                        if (b.Kind == ChatKind.Update && wrapped.Count > 6 && !expanded) wrapped = wrapped.Take(6).ToList();
                         AddLines(bi, 2, wrapped, ax, Wide - ax, pad, 0f, false, false);
                         break;
                     }
                     default:
                     {
                         // a header line, then (open) the body or (closed, live) a preview line
-                        bool expanded = IsExpanded(b);
                         _lines.Add(new VLine { Block = bi, Part = 0, Index = 0, Text = b.Head + (b.Collapsible ? (expanded ? "  <color=#9DBDD2>▾</color>" : "  <color=#9DBDD2>▸</color>") : ""), Color = b.Kind == ChatKind.Error ? t.Danger : b.Kind == ChatKind.Notice ? t.TextDim : t.Text, H = _pitchBody + pad, PadTop = pad, X = x, W = Wide - x });
                         if (expanded && !string.IsNullOrEmpty(b.Body))
                         {
@@ -389,8 +488,9 @@ namespace MetaCodex.UI
 
         private void RestoreAnchor((string key, byte part, int index, float fromBottom) a, int linesBefore)
         {
-            int bi = _blocks.FindIndex(b => b.Key == a.key);
-            int li = _lines.FindIndex(l => l.Block == bi && l.Part == a.part && l.Index == a.index);
+            int bi = KeyIndex(a.key), li = -1;
+            for (int i = FirstLine(bi), last = LastLine(bi); i >= 0 && i <= last; i++)
+                if (_lines[i].Part == a.part && _lines[i].Index == a.index) { li = i; break; }
             if (li < 0) { _scroll = Mathf.Clamp(_scroll + _lines.Count - linesBefore, 0, MaxScroll()); return; }
             int newScroll = Mathf.Clamp(_lines.Count - (li + 1), 0, MaxScroll());
             NewLines += Mathf.Max(0, newScroll - _scroll);
@@ -462,9 +562,9 @@ namespace MetaCodex.UI
             if (start > 0)
             {
                 string ex = _blocks[_lines[start].Block].Exchange;
-                int pb = _blocks.FindIndex(b => b.Kind == ChatKind.Prompt && b.Key == ex);
-                int pl = pb >= 0 ? _lines.FindIndex(l => l.Block == pb) : -1;
-                int plEnd = pl >= 0 ? _lines.FindLastIndex(l => l.Block == pb) : -1;
+                int pb = ex != null && _promptAt.TryGetValue(ex, out int at) ? at : -1;
+                int pl = FirstLine(pb);
+                int plEnd = pl >= 0 ? LastLine(pb) : -1;
                 if (pl >= 0 && plEnd < start)
                 {
                     float bandH = _pitchBody * 2f + 0.010f;
@@ -522,8 +622,14 @@ namespace MetaCodex.UI
                 while (j < end && _lines[j].Block == l0.Block && _lines[j].Part == l0.Part && _lines[j].Mono == l0.Mono && _lines[j].Color == l0.Color
                        && _lines[j].PadTop == 0f && _lines[j - 1].PadBottom == 0f && Mathf.Abs(_lines[j].X - l0.X) < 1e-4f && _lines[j].Code == l0.Code)
                 { h += _lines[j].H; j++; }
-                var sb = new StringBuilder();
-                for (int k = i; k < j; k++) { if (k > i) sb.Append('\n'); sb.Append(LineText(k)); }
+                string text;
+                if (j == i + 1) text = LineText(i); // one line: its own string, nothing built
+                else
+                {
+                    _drawSb.Clear();
+                    for (int k = i; k < j; k++) { if (k > i) _drawSb.Append('\n'); _drawSb.Append(LineText(k)); }
+                    text = _drawSb.ToString();
+                }
                 float top = y + l0.PadTop;
                 var b = _blocks[l0.Block];
                 var r = new Rect(Rect.x + l0.X, top, l0.W, h - l0.PadTop - _lines[j - 1].PadBottom + 0.004f);
@@ -538,7 +644,7 @@ namespace MetaCodex.UI
                 // wrapped lines already fit: Overflow (Ellipsis would drop every line after one that is a hair too long);
                 // headers are single lines cut with …
                 if (!header) r.width += 0.006f;
-                var ut = Txt(r, sb.ToString(), TextSize, l0.Color, TextAlignmentOptions.TopLeft, l0.Mono ? Theme.Mono : Theme.Body);
+                var ut = Txt(r, text, TextSize, l0.Color, TextAlignmentOptions.TopLeft, l0.Mono ? Theme.Mono : Theme.Body);
                 ut.Tmp.overflowMode = header ? TextOverflowModes.Ellipsis : TextOverflowModes.Overflow;
                 float yy = y;
                 for (int k = i; k < j; k++) { _drawn.Add((k, yy + _lines[k].PadTop, yy + _lines[k].H)); yy += _lines[k].H; }
@@ -551,8 +657,7 @@ namespace MetaCodex.UI
                 var c = _blocks[_bandBlock].Tint ?? t.Accent;
                 Box(_band, Color.Lerp(new Color(0.02f, 0.06f, 0.1f, 0.97f), c, 0.16f), 0.006f, 1, 0f, 0.001f);
                 Pill(new Rect(_band.x + 0.004f, _band.y + 0.004f, 0.0026f, _band.height - 0.008f), c);
-                string pText = FlatPrompt(_blocks[_bandBlock].Body);
-                Txt(new Rect(_band.x + 0.012f, _band.y + 0.003f, _band.width - 0.05f, _band.height - 0.004f), "<color=#8FEBFF>▶ YOU</color>  " + Esc(pText), TextSize, t.Text, TextAlignmentOptions.TopLeft, Theme.Body, true).Tmp.overflowMode = TextOverflowModes.Ellipsis;
+                Txt(new Rect(_band.x + 0.012f, _band.y + 0.003f, _band.width - 0.05f, _band.height - 0.004f), BandText(_blocks[_bandBlock].Body), TextSize, t.Text, TextAlignmentOptions.TopLeft, Theme.Body, true).Tmp.overflowMode = TextOverflowModes.Ellipsis;
                 Txt(new Rect(_band.xMax - 0.04f, _band.y, 0.036f, _band.height), "▲", TextSize, t.TextDim, TextAlignmentOptions.Center).Tmp.overflowMode = TextOverflowModes.Ellipsis;
             }
             // scroll bar
@@ -574,7 +679,15 @@ namespace MetaCodex.UI
             return l.Text;
         }
 
-        private int FirstLine(int bi) => _lines.FindIndex(l => l.Block == bi);
+        private readonly StringBuilder _drawSb = new StringBuilder();
+        private string _bandSrc, _bandText;
+
+        // the sticky prompt's line, made again only when the prompt changes (a draw comes 4 times a second while a header spins)
+        private string BandText(string body)
+        {
+            if (_bandText == null || body != _bandSrc) { _bandSrc = body; _bandText = "<color=#8FEBFF>▶ YOU</color>  " + Esc(FlatPrompt(body)); }
+            return _bandText;
+        }
 
         private static string FlatPrompt(string s)
         {

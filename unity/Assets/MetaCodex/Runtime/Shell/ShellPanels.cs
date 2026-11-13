@@ -556,7 +556,8 @@ end)
             tabs.AddTo(0, new UiButton("GESTURE STUDIO ▸", () => OpenPanel("gestures")) { Rect = new Rect(gb.x + gbw + t.Gap, gb.y, gbw, gb.height) });
             tabs.AddTo(0, new UiButton("HORIZON HANDS ⚙", () => Toast(SystemBridge.OpenHandSettings() ? "Opening hand settings" : SystemBridge.LastResult)) { Rect = new Rect(gb.x + (gbw + t.Gap) * 2, gb.y, gbw, gb.height) });
             _gestureLive = tabs.AddTo(0, new UiLabel("", t.SmallSize) { Rect = g.Rest(), UseMono = true, Color = t.TextAccent, Wrap = true, Align = TextAlignmentOptions.TopLeft });
-            p.Tick += _ => { if (_gestureLive != null && _gestureLive.Visible && Gestures != null) _gestureLive.Set(HandLine(Gestures.Left, "L") + "\n" + HandLine(Gestures.Right, "R")); };
+            float nextLive = 0f; // 10 times a second (it built two strings every frame)
+            p.Tick += _ => { if (_gestureLive != null && _gestureLive.Visible && Gestures != null && (!Application.isPlaying || Time.unscaledTime >= nextLive)) { nextLive = Time.unscaledTime + 0.1f; _gestureLive.Set(HandLine(Gestures.Left, "L") + "\n" + HandLine(Gestures.Right, "R")); } };
 
             // DISPLAY: where panels go
             var d = new UiStack(area, t.Gap);
