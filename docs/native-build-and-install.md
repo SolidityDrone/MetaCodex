@@ -311,8 +311,10 @@ toggled; right pinch / trigger = mode, left pinch / A = passthrough, stick = gai
   `.metacodex/project.json`, links the five skills into the project's `.claude/skills` (Claude Code's project skills)
   and puts a managed block into AGENTS.md (Codex, OpenCode) and CLAUDE.md (Claude Code) that points at them and states
   the rules; `general` removes all of it and keeps the rest of those files. `mcx-app new` marks app folders native;
-  + PROJECT… asks NATIVE APP (QUEST) / GENERAL CODING; THREADS shows ◆ NATIVE. Existing projects: native when the
-  folder is an app (AndroidManifest.xml + src/), else general; `mcx-project set` changes it. `mqh-run` removes the old
+  + PROJECT… asks NATIVE APP / DEFAULT / RESEARCH (2026-11-13: `general` is now `default`, still read; RESEARCH adds a
+  research note instead of the native rules) and makes the project in `/root/metacodex-projects/<type>/`; THREADS
+  groups the projects under their type. Existing projects: native when the folder is an app (AndroidManifest.xml +
+  src/), else default; `mcx-project set` changes it. `mqh-run` removes the old
   global copies. metacodex-context (global) only says where native apps live.
 
 ## More decisions (evidence above)

@@ -336,7 +336,7 @@ namespace MetaCodex.Shell
                 {
                     var it = SelectedClip();
                     if (it == null) { Toast("Pick a capture", "warn"); return; }
-                    if (_threadOpen == null) { Toast("Open a thread first (THREADS): it goes with your next message there", "warn"); return; }
+                    if (ThreadKey == null) { Toast("Open a thread first (THREADS): it goes with your next message there", "warn"); return; }
                     AddAttachment(CaptureAttachment(it));
                     OpenPanel("thread");
                     Toast("Capture attached to the next message", "ok");
@@ -445,8 +445,9 @@ namespace MetaCodex.Shell
         {
             get
             {
-                if (_threadOpen == null) return null;
-                if (!_attach.TryGetValue(_threadOpen, out var l)) _attach[_threadOpen] = l = new List<Attachment>();
+                string key = ThreadKey; // the open thread, or the draft (its first message takes them)
+                if (key == null) return null;
+                if (!_attach.TryGetValue(key, out var l)) _attach[key] = l = new List<Attachment>();
                 return l;
             }
         }
@@ -622,10 +623,10 @@ namespace MetaCodex.Shell
 
         public void OpenAttachModal(string mode)
         {
-            if (_threadOpen == null) { Toast("Open a thread first", "warn"); return; }
+            if (ThreadKey == null) { Toast("Open a thread first", "warn"); return; }
             _amMode = mode;
             _amPicked.Clear();
-            if (mode == "files") _amDir = (string)_threadInfo?["environmentPath"] ?? _amDir ?? "/root";
+            if (mode == "files") _amDir = (string)_threadInfo?["environmentPath"] ?? (_threadOpen == null ? _draft?.ProjectPath : null) ?? _amDir ?? "/root";
             _amOpen = true;
             _attMenuOpen = false;
             _thPlus?.SetSelected(false);

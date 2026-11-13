@@ -40,7 +40,7 @@ can answer short and fast without reading the conversation.
   `✓ Answered 14:05 · took 4:31`.
 - The meta row: provider · project · path · branch, and on the right the plan and usage windows (amber ≥ 70 %, red
   ≥ 90 %). The CONTEXT ring stays in the chips; its picker lists the usage windows with their reset times.
-- `◉` beside SEND (and beside NEW THREAD's first message): speech to text into the field (a pause of 2 s or ◉ again
+- `◉` beside SEND (also in a draft, for its first message): speech to text into the field (a pause of 2 s or ◉ again
   ends it; up to 30 s); SEND stays yours.
 
 ## When a thread finishes (owner 2026-11-11)

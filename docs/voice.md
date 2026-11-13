@@ -50,6 +50,8 @@ tool), phrase templates for the fast path, and a run function. The shell registe
 | `new_terminal` | | "open a new terminal", "new shell" |
 | `find_thread` | `query` | "find the thread where {query}", "search threads for {query}" |
 | `switch_workspace` | `name` (optional) | "switch to the workspace called {name}", "change workspace" |
+| `new_thread` | `task` (optional) | "start a thread to {task}" (made at once, the task is its first message), "new thread" (a draft: your first message starts it) |
+| `new_project` | `type` (native, default, research; optional), `name` (optional) | "create a {type} project called {name}", "new project" (asks what is missing) |
 | `thread_sidebar` | `action` (open, close), `tab` (changes, files, git, status, views) | "open the sidebar on the git tab", "close the thread sidebar" (while a thread is open) |
 | `init_git` | none | "make this folder a git repository" (only while the open thread's folder is no repo) |
 | `set_layout` | `mode`: fixed float | "use the floating layout", "fixed mode" |

@@ -176,7 +176,7 @@ Sections include `decider`, `voiceexport,voicedecide`, `context`, `chat`, `sideb
 - The text of the `mcp` plugin still describes the upstream remote MCP address. MQH removed remote access.
 - Agent CLIs: Codex (provider `codex`) and OpenCode (provider `acp-opencode` through ACP) work in MQH threads. Claude Code runs in a terminal. Cursor, Pi and other agents are switched off.
 - The app polls MQH over HTTP: the open thread every 0.8 s while the agent works (2.5 s idle), thread metadata every 2 s or 3 s, other threads every 5 s or 15 s.
-- Per-project native-app skills: `mcx-project set <dir> native` links `quest-native-apps`, `-xr`, `-recipes`, `-dev-loop` and `-debug` into `<project>/.claude/skills`. It writes a managed block into `AGENTS.md` and `CLAUDE.md` between `<!-- metacodex:native-app -->` markers.
+- Per-project native-app skills: `mcx-project set <dir> native` links `quest-native-apps`, `-xr`, `-recipes`, `-dev-loop` and `-debug` into `<project>/.claude/skills`. It writes a managed block into `AGENTS.md` and `CLAUDE.md` between `<!-- metacodex:native-app -->` markers. `research` writes a research note between `<!-- metacodex:research -->` markers (notes in Markdown, sources cited, no app build); `default` (old name `general`) removes both. New projects live in `/root/metacodex-projects/{native,default,research}/<name>`, each a git repository.
 
 ## How the terminal works
 

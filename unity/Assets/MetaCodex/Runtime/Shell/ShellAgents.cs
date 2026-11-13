@@ -15,9 +15,9 @@ using UnityEngine;
 namespace MetaCodex.Shell
 {
     /// The harness side of the shell, all data from MQH's public API: AGENTS (providers, sign-in through the
-    /// provider's own CLI in a terminal, install, enable), THREADS (projects and their threads), THREAD (the
-    /// timeline, a composer, approvals, stop, and jumps to the workspace's files / git / terminal) and NEW
-    /// THREAD (provider, model, permissions, workspace, first prompt).
+    /// provider's own CLI in a terminal, install, enable), THREADS (project types, their projects and their threads),
+    /// THREAD (the timeline, a composer, approvals, stop, and jumps to the workspace's files / git / terminal; a draft
+    /// until its first message) and NEW THREAD (provider, model, permissions, workspace).
     public sealed partial class MetaCodexShell
     {
         private string _hostId;
@@ -32,7 +32,7 @@ namespace MetaCodex.Shell
 
         private UiList _agentList, _projectList, _threadList, _ntProviders, _ntModelList;
         private UiLabel _agentDetail, _agentHint, _threadsStatus, _thTitle, _thMeta, _thAsk, _ntSummary;
-        private UiTextField _thComposer, _ntPrompt;
+        private UiTextField _thComposer;
         private readonly List<UiButton> _thAskButtons = new List<UiButton>();
         private UiSegmented _ntPerm, _ntWork;
 
@@ -300,10 +300,12 @@ namespace MetaCodex.Shell
         // ------------------------------------------------------------------ THREADS
 
         private readonly HashSet<string> _collapsedProjects = new HashSet<string>();
+        private readonly HashSet<string> _collapsedTypes = new HashSet<string>(); // NATIVE, DEFAULT, RESEARCH, OTHER headers folded
         private string _threadOpenProject;
 
-        /// Threads grouped by project folder, like bb's sidebar: a project row (tap: fold / unfold) and its threads
-        /// under it, newest first; a tap on a thread opens it.
+        /// Threads grouped like bb's sidebar, under the project types (owner 2026-11-13): a dim type header (NATIVE,
+        /// DEFAULT, RESEARCH, then OTHER when there are any; tap: fold / unfold), its projects (tap: fold / unfold), and
+        /// each project's threads under it, newest first; a tap on a thread opens it.
         private void BuildThreads()
         {
             var t = UiTheme.Current;
@@ -326,6 +328,14 @@ namespace MetaCodex.Shell
         private void ThreadRowPicked(UiListItem item)
         {
             if (!(item.Tag is string tag)) return;
+            if (tag.StartsWith("g:"))
+            {
+                string type = tag.Substring(2);
+                if (!_collapsedTypes.Remove(type)) _collapsedTypes.Add(type);
+                RenderThreadGroups();
+                return;
+            }
+            if (tag.StartsWith("n:")) { NewProjectNamed(tag.Substring(2)); return; } // an empty type's row: a project of that type
             if (tag.StartsWith("p:"))
             {
                 string pid = tag.Substring(2);
@@ -372,31 +382,56 @@ namespace MetaCodex.Shell
         {
             if (_threadList == null) return;
             var t = UiTheme.Current;
-            if (_projects.Count == 0) { _threadsStatus.Set("No project yet: + PROJECT… adds a folder of the Linux userland (e.g. /root/myapp).", t.TextDim); _threadList.SetItems(new UiListItem[0]); return; }
             var byProject = _threads.GroupBy(x => (string)x["projectId"] ?? "").ToDictionary(g => g.Key, g => g.OrderByDescending(x => x["updatedAt"]?.Value<long>() ?? 0).ToList());
             var spaces = WorkspaceMap.Build(_threads, _environments);
             long Latest(JToken pr) => byProject.TryGetValue((string)pr["id"], out var l) && l.Count > 0 ? l[0]["updatedAt"]?.Value<long>() ?? 0 : 0;
+            List<JToken> ThreadsOf(JToken pr) => byProject.TryGetValue((string)pr["id"], out var l) ? l : new List<JToken>();
             var items = new List<UiListItem>();
-            foreach (var pr in _projects.OrderByDescending(Latest))
+            // the type of each project (its path under metacodex-projects/, else .metacodex/project.json, cached)
+            var byType = _projects.GroupBy(pr => ProjectType((string)pr["sources"]?.FirstOrDefault()?["path"]) ?? "other").ToDictionary(g => g.Key, g => g.OrderByDescending(Latest).ToList());
+            var order = ProjectKinds.Types.Concat(byType.ContainsKey("other") ? new[] { "other" } : new string[0]);
+            foreach (var type in order)
+            {
+                byType.TryGetValue(type, out var projects);
+                projects = projects ?? new List<JToken>();
+                var all = projects.SelectMany(ThreadsOf).ToList();
+                int tRun = all.Count(x => ThreadTimeline.IsWorking(ThreadStatus(x))), tAsk = all.Count(x => x["hasPendingInteraction"]?.Value<bool>() == true);
+                bool typeFolded = _collapsedTypes.Contains(type);
+                items.Add(new UiListItem
+                {
+                    Icon = typeFolded ? "▸" : "▾",
+                    IconColor = t.TextDim,
+                    Title = ProjectKinds.Header(type),
+                    TitleColor = t.TextDim,
+                    Sub = type == "other" ? "outside metacodex-projects/" : "",
+                    Badge = tAsk > 0 ? tAsk + " NEED YOU" : tRun > 0 ? tRun + " RUNNING" : projects.Count == 1 ? "1 project" : projects.Count + " projects",
+                    BadgeColor = tAsk > 0 ? t.Warn : tRun > 0 ? t.Ok : t.TextDim,
+                    Tag = "g:" + type,
+                });
+                if (typeFolded) continue;
+                if (projects.Count == 0)
+                    items.Add(new UiListItem { Indent = 1, Icon = "+", IconColor = t.TextDim, Title = "no " + ProjectKinds.Label(type).ToLowerInvariant() + " project yet: tap to make one", TitleColor = t.TextDim, Tag = "n:" + type });
+                foreach (var pr in projects) ProjectRows(pr, ThreadsOf(pr));
+            }
+            void ProjectRows(JToken pr, List<JToken> list)
             {
                 string pid = (string)pr["id"];
-                byProject.TryGetValue(pid, out var list);
-                list = list ?? new List<JToken>();
                 int running = list.Count(x => ThreadTimeline.IsWorking(ThreadStatus(x)));
                 int asks = list.Count(x => x["hasPendingInteraction"]?.Value<bool>() == true);
                 bool folded = _collapsedProjects.Contains(pid);
                 items.Add(new UiListItem
                 {
+                    Indent = 1,
                     Icon = folded ? "▸" : "▾",
                     IconColor = t.TextDim,
-                    Title = ((string)pr["name"] ?? "project").ToUpperInvariant() + (IsNativeProject((string)pr["sources"]?.FirstOrDefault()?["path"]) ? "  ◆ NATIVE" : ""),
+                    Title = ((string)pr["name"] ?? "project").ToUpperInvariant(),
                     TitleColor = pid == _projectSel ? t.TextAccent : t.TextDim,
-                    Sub = Cut((string)pr["sources"]?.FirstOrDefault()?["path"] ?? "", 34),
+                    Sub = Cut(ProjectKinds.ShortPath((string)pr["sources"]?.FirstOrDefault()?["path"] ?? ""), 34),
                     Badge = asks > 0 ? asks + " NEED YOU" : running > 0 ? running + " RUNNING" : list.Count.ToString(),
                     BadgeColor = asks > 0 ? t.Warn : running > 0 ? t.Ok : t.TextDim,
                     Tag = "p:" + pid,
                 });
-                if (folded) continue;
+                if (folded) return;
                 // the folders its threads work in: when there is more than the checkout (a worktree), each is a row
                 // with its threads under it, so who shares what (and two agents in one folder) is plain
                 spaces.TryGetValue(pid, out var groups);
@@ -422,13 +457,13 @@ namespace MetaCodex.Shell
                         Tag = "t:" + id,
                     });
                 }
-                if (!showSpaces) foreach (var x in list) ThreadRow(x, 1);
+                if (!showSpaces) foreach (var x in list) ThreadRow(x, 2);
                 else
                     foreach (var g in groups)
                     {
                         items.Add(new UiListItem
                         {
-                            Indent = 1,
+                            Indent = 2,
                             Icon = g.Starting ? "◌" : g.IsWorktree ? "⎇" : "▣",
                             IconColor = g.Clash ? t.Danger : t.TextDim,
                             Title = g.Starting ? "setting up" : g.IsWorktree ? (g.Branch.Length > 0 ? g.Branch : "worktree") : "checkout" + (g.Branch.Length > 0 ? " · " + g.Branch : ""),
@@ -438,12 +473,13 @@ namespace MetaCodex.Shell
                             BadgeColor = g.Clash ? t.Danger : t.Warn,
                             Tag = "w:" + pid + "|" + g.Key,
                         });
-                        foreach (var x in g.Threads) ThreadRow(x, 2);
+                        foreach (var x in g.Threads) ThreadRow(x, 3);
                     }
-                if (list.Count == 0) items.Add(new UiListItem { Indent = 1, Icon = "·", IconColor = t.TextDim, Title = "no threads yet: + NEW THREAD…", TitleColor = t.TextDim, Tag = "p:" + pid });
+                if (list.Count == 0) items.Add(new UiListItem { Indent = 2, Icon = "·", IconColor = t.TextDim, Title = "no threads yet: + NEW THREAD…", TitleColor = t.TextDim, Tag = "p:" + pid });
             }
             int total = _threads.Count, run = _threads.Count(x => ThreadTimeline.IsWorking(ThreadStatus(x))), need = _threads.Count(x => x["hasPendingInteraction"]?.Value<bool>() == true);
-            _threadsStatus.Set($"{_projects.Count} projects · {total} threads" + (run > 0 ? $" · <color=#{UiViz.Hex(t.Ok)}>{run} running</color>" : "") + (need > 0 ? $" · <color=#{UiViz.Hex(t.Warn)}>{need} need you</color>" : "") + " · tap a project to fold it", t.TextDim);
+            if (_projects.Count == 0) _threadsStatus.Set("No project yet: + PROJECT… makes one in " + ProjectKinds.Root + "/ (native, default or research).", t.TextDim);
+            else _threadsStatus.Set($"{_projects.Count} projects · {total} threads" + (run > 0 ? $" · <color=#{UiViz.Hex(t.Ok)}>{run} running</color>" : "") + (need > 0 ? $" · <color=#{UiViz.Hex(t.Warn)}>{need} need you</color>" : "") + " · tap a type or a project to fold it", t.TextDim);
             _threadList.SetItems(items, keepScroll: true);
             int sel = items.FindIndex(i => i.Tag as string == "t:" + _threadOpen);
             if (sel >= 0) _threadList.SelectIndex(sel, notify: false);
@@ -456,30 +492,103 @@ namespace MetaCodex.Shell
             return d.TotalMinutes < 1 ? "now" : d.TotalHours < 1 ? $"{(int)d.TotalMinutes} min" : d.TotalDays < 1 ? $"{(int)d.TotalHours} h" : $"{(int)d.TotalDays} d";
         }
 
-        // a project's type (mcx-project): .metacodex/project.json, else an app folder (AndroidManifest.xml + src/) is native
-        private readonly Dictionary<string, (bool native, float at)> _projectTypes = new Dictionary<string, (bool, float)>();
+        // a project's type (mcx-project): where it is (metacodex-projects/<type>/...), else .metacodex/project.json, else an
+        // app folder (AndroidManifest.xml + src/) is native; null (OTHER) when nothing says. Read at most every 30 s per
+        // folder: RenderThreadGroups runs often.
+        private readonly Dictionary<string, (string type, float at)> _projectTypes = new Dictionary<string, (string, float)>();
 
-        private bool IsNativeProject(string linuxPath)
+        private string ProjectType(string linuxPath)
         {
-            if (string.IsNullOrEmpty(linuxPath)) return false;
-            if (_projectTypes.TryGetValue(linuxPath, out var c) && Time.unscaledTime - c.at < 30f) return c.native;
-            bool native = false;
+            if (string.IsNullOrEmpty(linuxPath)) return null;
+            string byPath = ProjectKinds.TypeFromPath(linuxPath);
+            if (byPath != null) return byPath;
+            if (_projectTypes.TryGetValue(linuxPath, out var c) && Time.unscaledTime - c.at < 30f) return c.type;
+            string type = null;
             try
             {
                 string host = AndroidPathOf(linuxPath);
                 if (host != null)
                 {
                     string j = Path.Combine(host, ".metacodex", "project.json");
-                    native = File.Exists(j) ? File.ReadAllText(j).Contains("\"native\"")
-                        : File.Exists(Path.Combine(host, "AndroidManifest.xml")) && Directory.Exists(Path.Combine(host, "src"));
+                    type = File.Exists(j) ? ProjectKinds.TypeFromJson(File.ReadAllText(j))
+                        : File.Exists(Path.Combine(host, "AndroidManifest.xml")) && Directory.Exists(Path.Combine(host, "src")) ? "native" : null;
                 }
             }
             catch (Exception) { }
-            _projectTypes[linuxPath] = (native, Time.unscaledTime);
-            return native;
+            _projectTypes[linuxPath] = (type, Time.unscaledTime);
+            return type;
         }
 
-        private void NewProjectPrompt()
+        /// + PROJECT…: first the type (one dialog), then the name (the keyboard); the project is made in
+        /// metacodex-projects/<type>/<folder from the name> with git. EXISTING FOLDER… adds a folder that is there.
+        private void NewProjectPrompt() => NewProjectPrompt(null);
+
+        /// name: already known (voice): made as soon as the type is picked.
+        private void NewProjectPrompt(string name)
+        {
+            Modal("NEW PROJECT", (name != null ? "“" + name.Trim() + "”: what" : "What") + " will this project be? NATIVE APP: a Quest app (native skills and rules). DEFAULT: any other coding. RESEARCH: notes and findings, no app build.",
+                new[] { "NATIVE APP", "DEFAULT", "RESEARCH", "EXISTING…" }, choice =>
+                {
+                    if (choice >= 0 && choice < ProjectKinds.Types.Length) { if (name != null) CreateNewProject(ProjectKinds.Types[choice], name); else NewProjectNamed(ProjectKinds.Types[choice]); }
+                    else if (choice == 3) ExistingProjectPrompt();
+                });
+        }
+
+        /// The name of a new project of this type, on the keyboard (an empty field), then the project.
+        private void NewProjectNamed(string type)
+        {
+            UiKeyboard.Edit("", false, null, name =>
+            {
+                if (string.IsNullOrWhiteSpace(name)) return; // cancelled
+                CreateNewProject(type, name);
+            }, "NEW " + ProjectKinds.Header(type) + " PROJECT · its name (e.g. Weather app)");
+        }
+
+        /// Makes the folder metacodex-projects/<type>/<name as a folder>, starts git there (a local identity only when
+        /// there is no global one, so the first commit works offline), sets the type (mcx-project) and adds the project
+        /// to MQH. Refuses a folder that is there already. Returns what it does (voice) or an error.
+        public string CreateNewProject(string type, string name)
+        {
+            name = (name ?? "").Trim();
+            string path = ProjectKinds.PathFor(type, name);
+            if (path == null) { Toast("Name the project with letters or digits", "warn"); return "error: say a name with letters or digits"; }
+            if (_projects.Any(pr => (string)pr["sources"]?.FirstOrDefault()?["path"] == path)) { Toast("A project is there already: " + path, "warn"); return "error: a project is there already"; }
+            string host = AndroidPathOf(path);
+            if (host != null && (Directory.Exists(host) || File.Exists(host))) { Toast("That folder exists already: " + path + " (pick another name)", "warn"); return "error: the folder exists already"; }
+            void Add() => EnsureHost(() => Mqh.CreateProject(name, _hostId, path, r =>
+            {
+                if (r == null) { Toast("Project not added: " + Mqh.LastError, "error"); return; }
+                _projectSel = (string)r["id"];
+                Settings.lastProject = _projectSel;
+                _collapsedProjects.Remove(_projectSel);
+                _collapsedTypes.Remove(type);
+                Toast($"Project {r["name"]} made in {path} ({ProjectKinds.Label(type)})", "ok");
+                RefreshThreads();
+            }));
+            if (Git == null || !Git.InUserland) { Add(); return "Adding the project " + name; } // the Editor: MQH only
+            string q = GitService.Quote(path);
+            string cmd = $"if [ -e {q} ]; then echo 'MCX: the folder exists already'; exit 17; fi; " +
+                         $"mkdir -p {q} && git -c init.defaultBranch=main init -q {q} && " +
+                         $"{{ git -C {q} config --get user.name >/dev/null || git -C {q} config user.name MetaCodex; }} && " +
+                         $"{{ git -C {q} config --get user.email >/dev/null || git -C {q} config user.email metacodex@localhost; }} || exit 19; " +
+                         $"mcx-project set {q} {type} || exit 18";
+            System.Threading.Tasks.Task.Run(async () =>
+            {
+                var res = await Git.Shell(cmd, 30000);
+                _main.Enqueue(() =>
+                {
+                    if (res.code == 17) { Toast("That folder exists already: " + path + " (pick another name)", "warn"); return; }
+                    if (res.code == 18) Toast("Project type not set (its folder says it): " + Cut(res.output ?? "", 80), "warn");
+                    else if (res.code != 0) { Toast("Project folder not made: " + Cut(res.output ?? "", 90), "error"); return; }
+                    _projectTypes.Remove(path);
+                    Add();
+                });
+            });
+            return $"Making the {ProjectKinds.Label(type).ToLowerInvariant()} project {name}";
+        }
+
+        /// EXISTING FOLDER…: a folder of the Linux userland as it is (no git init), then its type.
+        private void ExistingProjectPrompt()
         {
             string start = !string.IsNullOrEmpty(_filesPath) && _filesPath != "/" ? _filesPath : "/root/";
             UiKeyboard.Edit(start, false, null, path =>
@@ -487,10 +596,11 @@ namespace MetaCodex.Shell
                 path = (path ?? "").Trim().TrimEnd('/');
                 if (path.Length < 2) return;
                 // the type decides what the project's agents get: a Native app project carries the quest-native skills and
-                // rules (mcx-project), a General one none of them (a website must not get native app rules)
-                Modal("PROJECT TYPE", path + "\nWhat will this project be?", new[] { "NATIVE APP (QUEST)", "GENERAL CODING" }, choice =>
+                // rules (mcx-project), a Research one a research note, a Default one none of them
+                Modal("PROJECT TYPE", path + "\nWhat is this project?", new[] { "NATIVE APP", "DEFAULT", "RESEARCH" }, choice =>
                 {
-                    string type = choice == 0 ? "native" : "general";
+                    if (choice < 0 || choice >= ProjectKinds.Types.Length) return;
+                    string type = ProjectKinds.Types[choice];
                     void Create() => EnsureHost(() => Mqh.CreateProject(path.Split('/').Last(), _hostId, path, r =>
                     {
                         if (r == null) { Toast("Project not added: " + Mqh.LastError, "error"); return; }
@@ -498,7 +608,7 @@ namespace MetaCodex.Shell
                         Settings.lastProject = _projectSel;
                         _collapsedProjects.Remove(_projectSel);
                         _projectTypes.Remove(path);
-                        Toast("Project " + r["name"] + " added (" + (type == "native" ? "Native app" : "General coding") + ")", "ok");
+                        Toast("Project " + r["name"] + " added (" + ProjectKinds.Label(type) + ")", "ok");
                         RefreshThreads();
                     }));
                     if (Git == null || !Git.InUserland) { Create(); return; }
@@ -508,7 +618,7 @@ namespace MetaCodex.Shell
                         _main.Enqueue(() => { if (res.code != 0) Toast("Project type not set: " + Cut(res.output ?? "", 80), "warn"); Create(); });
                     });
                 });
-            });
+            }, "NEW PROJECT · the folder that is there (Linux path)");
         }
 
         // ------------------------------------------------------------------ THREAD
@@ -587,7 +697,7 @@ namespace MetaCodex.Shell
                 if (_resyncAt > 0f && Time.unscaledTime >= _resyncAt) { _resyncAt = -1f; ResyncThread(); return; }
                 if (_threadOpen != null && Time.unscaledTime >= _nextThreadPoll) PollThread();
             };
-            p.Closed += _ => { if (_sb != null && _sb.IsOpen) _sb.Close(); CloseAttachModal(); SetAttachMenu(false); UpdateSidebarVoice(); };
+            p.Closed += _ => { if (_sb != null && _sb.IsOpen) _sb.Close(); CloseAttachModal(); SetAttachMenu(false); DiscardDraft(); UpdateSidebarVoice(); };
             p.Opened += _ => UpdateSidebarVoice();
             SetAskVisible(false);
             RefreshAttachRow();
@@ -619,6 +729,7 @@ namespace MetaCodex.Shell
         public void OpenThread(string id)
         {
             if (string.IsNullOrEmpty(id)) return;
+            DiscardDraft(); // a draft never sent is dropped (nothing was made in MQH)
             NoteThreadUsed(id); // first in the orb's quick list (ShellOrbThreads)
             if (id != _threadOpen) { _thExec = null; _thUsage = null; _tlRaw = new JArray(); CloseAttachModal(); SetAttachMenu(false); _threadOpen = id; ResetThreadChat(); }
             _threadOpen = id;
@@ -718,6 +829,7 @@ namespace MetaCodex.Shell
 
         private void ShowThreadHeader()
         {
+            if (_threadOpen == null && _draft != null) { ShowDraftHeader(); return; }
             var x = _threadInfo;
             var t = UiTheme.Current;
             if (x == null) { _thTitle.Set(_threadOpen ?? ""); return; }
@@ -754,9 +866,9 @@ namespace MetaCodex.Shell
 
         private (string model, string effort, string perm) Override(string id) => id != null && _thOverrides.TryGetValue(id, out var o) ? o : (null, null, null);
 
-        private string CurrentModel() => Override(_threadOpen).model ?? (string)_thExec?["model"];
-        private string CurrentEffort() => Override(_threadOpen).effort ?? (string)_thExec?["reasoningLevel"];
-        private string CurrentPerm() => Override(_threadOpen).perm ?? (string)_thExec?["permissionMode"] ?? Settings.permissionMode;
+        private string CurrentModel() => Override(ThreadKey).model ?? (string)_thExec?["model"];
+        private string CurrentEffort() => Override(ThreadKey).effort ?? (string)_thExec?["reasoningLevel"];
+        private string CurrentPerm() => Override(ThreadKey).perm ?? (string)_thExec?["permissionMode"] ?? Settings.permissionMode;
 
         private string ModelName(string provider, string modelId)
         {
@@ -793,7 +905,8 @@ namespace MetaCodex.Shell
 
         private void ModelPrompt()
         {
-            if (_threadOpen == null) return;
+            string key = ThreadKey; // the open thread, or the draft (its first message uses the choice)
+            if (key == null) return;
             string provider = (string)_threadInfo?["providerId"];
             if (provider == null || !_modelsByProvider.TryGetValue(provider, out var models) || models.Count == 0) { Toast("Models are still loading (or the provider lists none)", "warn"); UpdateChips(); return; }
             string cur = CurrentModel();
@@ -811,16 +924,16 @@ namespace MetaCodex.Shell
                 var m = item.Tag as JToken;
                 string id = (string)m?["id"];
                 var efforts = (m?["supportedReasoningEfforts"] as JArray ?? new JArray()).Select(e => e.Type == JTokenType.Object ? (string)e["reasoningEffort"] : (string)e).Where(e => !string.IsNullOrEmpty(e)).ToList();
-                var o = Override(_threadOpen);
-                _thOverrides[_threadOpen] = (id, efforts.Contains(o.effort ?? "") ? o.effort : null, o.perm);
+                var o = Override(key);
+                _thOverrides[key] = (id, efforts.Contains(o.effort ?? "") ? o.effort : null, o.perm);
                 UpdateChips();
                 if (efforts.Count > 1)
                 {
                     string curE = CurrentEffort();
                     ShowPicker("Effort", (string)m["displayName"] + ": how hard it thinks.", efforts.Select(e => new UiListItem { Icon = e == curE ? "◆" : "◇", Title = Cap(e), Tag = e }), it2 =>
                     {
-                        var o2 = Override(_threadOpen);
-                        _thOverrides[_threadOpen] = (o2.model, it2.Tag as string, o2.perm);
+                        var o2 = Override(key);
+                        _thOverrides[key] = (o2.model, it2.Tag as string, o2.perm);
                         UpdateChips();
                     }, PanelsById["thread"]);
                 }
@@ -829,7 +942,8 @@ namespace MetaCodex.Shell
 
         private void PermissionPrompt()
         {
-            if (_threadOpen == null) return;
+            string key = ThreadKey; // the open thread, or the draft (its first message uses the choice)
+            if (key == null) return;
             var modes = (AgentCatalog((string)_threadInfo?["providerId"])?["capabilities"]?["permissionModes"] as JArray)?.Select(m => (string)m).ToList()
                         ?? new List<string> { "accept-edits", "auto", "full" };
             string cur = CurrentPerm();
@@ -843,8 +957,8 @@ namespace MetaCodex.Shell
                 Tag = m,
             }), item =>
             {
-                var o = Override(_threadOpen);
-                _thOverrides[_threadOpen] = (o.model, o.effort, item.Tag as string);
+                var o = Override(key);
+                _thOverrides[key] = (o.model, o.effort, item.Tag as string);
                 Settings.permissionMode = item.Tag as string;
                 UpdateChips();
             }, PanelsById["thread"]);
@@ -1027,6 +1141,10 @@ namespace MetaCodex.Shell
         public void SetThreadsForTest(JArray projects, JArray threads) { _projects = projects; _threads = threads; RenderThreadGroups(); }
         public UiList ThreadListForTest => _threadList;
         public void PickThreadRowForTest(int index) => ThreadRowPicked(_threadList.Items[index]);
+        public void PickThreadRowForTest(string tag) => ThreadRowPicked(_threadList.Items.First(i => i.Tag as string == tag));
+        /// Self-tests: START in NEW THREAD (THREAD opens as a draft), and the draft's create request for a first message.
+        public void StartThreadForTest() => StartThread();
+        public JObject DraftBodyForTest(string prompt) => _draft == null ? null : NewThreadBody(_draft.ProjectId, _draft.Provider, Override(DraftKey).model ?? _draft.Model, prompt, _draft.Worktree, _draft.ReuseEnvId, Override(DraftKey).perm ?? _draft.Perm);
         public string TimelineTextForTest => _thTimeline?.PlainText ?? "";
         public string TimelineTagForTest { get => _tlTag; set => _tlTag = value; }
         public string ChipsForTest => $"{_thModelChip?.Text} | {_thPermChip?.Text} | {_thWsChip?.Text} | {_thContext?.Caption}";
@@ -1089,9 +1207,10 @@ namespace MetaCodex.Shell
         {
             var att = AttachList;
             bool hasAtt = att != null && att.Count > 0;
-            if ((string.IsNullOrWhiteSpace(text) && !hasAtt) || _threadOpen == null) return;
+            if ((string.IsNullOrWhiteSpace(text) && !hasAtt) || ThreadKey == null) return;
             string msg = string.IsNullOrWhiteSpace(text) ? AttachmentsOnlyText(att) : text.Trim();
             var sent = hasAtt ? att.ToList() : null;
+            if (_threadOpen == null) { SendDraft(msg, sent, att); return; } // the draft's first message makes the thread
             NoteThreadUsed(_threadOpen);
             var o = Override(_threadOpen);
             var extra = new JObject();
@@ -1129,13 +1248,8 @@ namespace MetaCodex.Shell
             int perm = Math.Max(0, Array.IndexOf(new[] { "accept-edits", "auto", "full" }, Settings.permissionMode));
             _ntPerm = p.Add(new UiSegmented("PERMISSIONS", new[] { "EDITS", "AUTO", "FULL" }, perm, i => { Settings.permissionMode = new[] { "accept-edits", "auto", "full" }[i]; ShowNewThreadSummary(); }) { Rect = r.Next(0.032f), LabelWidth = 0.1f });
             _ntWork = p.Add(new UiSegmented("WORKSPACE", new[] { "CHECKOUT", "WORKTREE" }, Settings.workspaceMode == "worktree" ? 1 : 0, i => { Settings.workspaceMode = i == 1 ? "worktree" : "local"; _ntForcedWorktree = false; _ntReuseEnv = default; ShowNewThreadSummary(); }) { Rect = r.Next(0.032f), LabelWidth = 0.1f });
-            p.Add(new UiLabel("FIRST MESSAGE", t.SmallSize) { Rect = r.Next(0.018f), UseDisplay = true, Color = t.TextDim });
-            var pr = r.Next(0.034f);
-            _ntPrompt = p.Add(new UiTextField("", "", null, "what should the agent do? (◉ to say it)") { Rect = new Rect(pr.x, pr.y, pr.width - 0.05f, pr.height), CaptionWidth = 0f });
-            _ntMic = p.Add(new UiButton("◉", () => DictateInto(_ntPrompt)) { Rect = new Rect(pr.xMax - 0.045f, pr.y, 0.045f, pr.height), TextSize = t.BodySize * 1.1f });
-            p.Tick += _ => { if (_thTimeline == null || !IsPanelOpen("thread")) TickThreadView(); };
-            p.Closed += _ => { _ntReuseEnv = default; _ntForcedWorktree = false; };
-            p.Add(new UiLabel("CHECKOUT works in the project folder itself; WORKTREE gives the thread its own git worktree and branch. EDITS asks before commands; FULL never asks.", t.SmallSize) { Rect = r.Next(0.06f), Wrap = true, Color = t.TextDim, Align = TextAlignmentOptions.TopLeft });
+            p.Closed += _ => { _ntReuseEnv = default; _ntForcedWorktree = false; _ntSeed = null; };
+            p.Add(new UiLabel("CHECKOUT works in the project folder itself; WORKTREE gives the thread its own git worktree and branch. EDITS asks before commands; FULL never asks. START opens the thread: your first message there (typed or ◉ said) starts it and names it; a thread closed before that is not kept.", t.SmallSize) { Rect = r.Next(0.112f), Wrap = true, Color = t.TextDim, Align = TextAlignmentOptions.TopLeft });
             var go = r.Next(t.ButtonHeight);
             p.Add(new UiButton("START ▶", StartThread, UiButtonStyle.Primary) { Rect = go });
         }
@@ -1217,10 +1331,15 @@ namespace MetaCodex.Shell
             _ntSummary?.Set($"<color=#7FA9BF>PROJECT</color> <b>{(string)proj?["name"] ?? "— pick one in THREADS"}</b>\n<color=#7FA9BF>AGENT</color> {_ntProvider ?? "—"} · {_ntModel ?? "default model"}\n<color=#7FA9BF>MODE</color> {Settings.permissionMode} · {UiChatView.Esc(where)}" + NewThreadWorkspaceNote());
         }
 
-        /// The create-thread request MQH expects (also used by tests).
-        public JObject NewThreadBody(string projectId, string providerId, string model, string prompt)
+        /// The create-thread request MQH expects (also used by tests), with NEW THREAD's choices as they are now.
+        public JObject NewThreadBody(string projectId, string providerId, string model, string prompt) =>
+            NewThreadBody(projectId, providerId, model, prompt, Settings.workspaceMode == "worktree" || _ntForcedWorktree, _ntReuseEnv.id, Settings.permissionMode);
+
+        /// The create-thread request: worktree = a new managed worktree (else the checkout); reuseEnvId = that workspace
+        /// (NEW THREAD HERE). MQH names the thread from the prompt (its titleFallback, then a generated title).
+        public JObject NewThreadBody(string projectId, string providerId, string model, string prompt, bool worktree, string reuseEnvId, string permissionMode)
         {
-            var workspace = Settings.workspaceMode == "worktree" || _ntForcedWorktree
+            var workspace = worktree
                 ? new JObject { ["type"] = "managed-worktree", ["baseBranch"] = new JObject { ["kind"] = "default" } }
                 : new JObject { ["type"] = "unmanaged", ["path"] = null };
             var body = new JObject
@@ -1229,34 +1348,181 @@ namespace MetaCodex.Shell
                 ["providerId"] = providerId,
                 ["origin"] = "app",
                 ["input"] = new JArray { MqhClient.TextInput(prompt) },
-                ["permissionMode"] = Settings.permissionMode,
+                ["permissionMode"] = permissionMode ?? Settings.permissionMode,
                 // NEW THREAD HERE (WORKSPACES): that workspace again; else the checkout or a new worktree on this host
-                ["environment"] = _ntReuseEnv.id != null ? new JObject { ["type"] = "reuse", ["environmentId"] = _ntReuseEnv.id }
+                ["environment"] = reuseEnvId != null ? new JObject { ["type"] = "reuse", ["environmentId"] = reuseEnvId }
                     : new JObject { ["type"] = "host", ["hostId"] = _hostId, ["workspace"] = workspace },
             };
             if (!string.IsNullOrEmpty(model)) body["model"] = model;
             return body;
         }
 
+        // ---- the draft: THREAD before its first message (owner 2026-11-13: no empty threads are kept)
+
+        /// What NEW THREAD chose, held until the first message makes the thread in MQH.
+        private sealed class ThreadDraft
+        {
+            public string ProjectId, ProjectName, ProjectPath, Provider, Model, Perm, ReuseEnvId, ReuseEnvLabel;
+            public bool Worktree, Sending;
+        }
+
+        private ThreadDraft _draft;
+        private string _ntSeed; // a first message prepared for the draft's composer (NEW SKILL, ASK AN AGENT)
+        private const string DraftKey = "draft:"; // the draft's attachments and chip choices until it is a thread
+        /// The open thread, or the draft (its attachments and chips); null when neither.
+        private string ThreadKey => _threadOpen ?? (_draft != null ? DraftKey : null);
+        public bool DraftOpenForTest => _draft != null && _threadOpen == null;
+        public string ThreadTitleForTest => _thTitle?.Text ?? "";
+
+        /// START: THREAD opens as a draft with NEW THREAD's choices; nothing is made in MQH until the first message.
         private void StartThread()
         {
-            string prompt = _ntPrompt?.Text?.Trim();
-            if (string.IsNullOrEmpty(prompt)) { Toast("Type the first message", "warn"); return; }
             if (_projectSel == null) { Toast("Pick or add a project in THREADS first", "warn"); OpenPanel("threads"); return; }
             if (_ntProvider == null) { Toast("Pick a provider", "warn"); return; }
-            EnsureHost(() => Mqh.CreateThread(NewThreadBody(_projectSel, _ntProvider, _ntModel, prompt), r =>
+            var proj = _projects.FirstOrDefault(x => (string)x["id"] == _projectSel);
+            var d = new ThreadDraft
             {
-                if (r == null) { Toast("Thread not started: " + Mqh.LastError, "error"); return; }
-                Settings.defaultProvider = _ntProvider;
-                Settings.defaultModel = _ntModel ?? "";
-                OnSettingsChanged();
-                _ntPrompt.Set("");
-                _ntReuseEnv = default;
-                _ntForcedWorktree = false;
-                ClosePanel("thread-new");
-                RefreshThreadList();
-                OpenThread((string)r["id"]);
-            }));
+                ProjectId = _projectSel,
+                ProjectName = (string)proj?["name"] ?? "project",
+                ProjectPath = (string)proj?["sources"]?.FirstOrDefault()?["path"],
+                Provider = _ntProvider,
+                Model = _ntModel,
+                Perm = Settings.permissionMode,
+                Worktree = Settings.workspaceMode == "worktree" || _ntForcedWorktree,
+                ReuseEnvId = _ntReuseEnv.id,
+                ReuseEnvLabel = _ntReuseEnv.label,
+            };
+            string seed = _ntSeed;
+            Settings.defaultProvider = _ntProvider;
+            Settings.defaultModel = _ntModel ?? "";
+            OnSettingsChanged();
+            ClosePanel("thread-new"); // its choices are in the draft now
+            OpenDraft(d, seed);
+        }
+
+        /// THREAD as a draft: the title says so, the chips show the choices, the composer waits for the first message.
+        private void OpenDraft(ThreadDraft d, string text, bool focus = true)
+        {
+            DiscardDraft();
+            CloseAttachModal();
+            SetAttachMenu(false);
+            _draft = d;
+            _threadOpen = null;
+            _threadOpenProject = d.ProjectId;
+            _threadInfo = new JObject { ["providerId"] = d.Provider, ["projectId"] = d.ProjectId, ["status"] = "draft" };
+            _thExec = new JObject { ["model"] = d.Model, ["permissionMode"] = d.Perm };
+            _thUsage = null;
+            _tlRaw = new JArray();
+            _tlMaxSeq = -1;
+            _tlOpenSeq = -1;
+            ResetThreadChat();
+            if (_sb != null && _sb.IsOpen) _sb.Close();
+            OpenPanel("thread");
+            _thContext?.Set(-1f, "context —");
+            ShowDraftHeader();
+            UpdateChips();
+            RefreshAttachRow();
+            RefreshUsageLimits(true);
+            RenderThreadGroups();
+            _thComposer?.Set(text ?? "");
+            // the composer focused: the keyboard opens on it (not in the Editor's self-tests, whose keyboard answers at once)
+            if (focus && _thComposer != null && UiKeyboard.Keyboard != null && UiKeyboard.EditorProvider == null) _thComposer.OnClick(default);
+        }
+
+        private void ShowDraftHeader()
+        {
+            var d = _draft;
+            if (d == null || _thTitle == null) return;
+            var t = UiTheme.Current;
+            _thTitle.Set($"<b>{Esc(ProjectKinds.DraftTitle(d.ProjectName))}</b>  <color=#{UiViz.Hex(t.TextDim)}>NOT STARTED</color>");
+            string where = d.ReuseEnvId != null ? "in " + d.ReuseEnvLabel : d.Worktree ? "a new worktree" : "the checkout";
+            _thMeta?.Set($"{d.Provider} · {d.ProjectName} · {where} · your first message starts it");
+            _thWsChip?.SetText("▣ " + Cut(d.ProjectName, 12) + " · " + (d.ReuseEnvId != null ? "here" : d.Worktree ? "worktree" : "checkout"));
+            ShowLimits();
+        }
+
+        /// Drops the draft (closed, another thread opened, a new draft): nothing was made, nothing is kept.
+        private void DiscardDraft()
+        {
+            if (_draft == null) return;
+            _draft = null;
+            _attach.Remove(DraftKey);
+            _thOverrides.Remove(DraftKey);
+            if (_threadOpen == null) { _threadInfo = null; _thExec = null; _thComposer?.Set(""); }
+        }
+
+        /// The draft's first message: the thread is made in MQH with it (and its attachments) as the first prompt, then
+        /// THREAD shows that thread. MQH names it from the prompt.
+        private void SendDraft(string msg, List<Attachment> sent, List<Attachment> att)
+        {
+            var d = _draft;
+            if (d == null) return;
+            if (d.Sending) { Toast("Starting the thread …", "info"); return; }
+            d.Sending = true;
+            var o = Override(DraftKey);
+            Toast("Starting the thread …", "info");
+            EnsureHost(() =>
+            {
+                var body = NewThreadBody(d.ProjectId, d.Provider, o.model ?? d.Model, msg, d.Worktree, d.ReuseEnvId, o.perm ?? d.Perm);
+                if (o.effort != null) body["reasoningLevel"] = o.effort;
+                if (sent != null) foreach (var a in AttachmentInputs(sent)) ((JArray)body["input"]).Add(a);
+                Mqh.CreateThread(body, r =>
+                {
+                    d.Sending = false;
+                    if (r == null)
+                    {
+                        Toast("Thread not started: " + Mqh.LastError, "error");
+                        if (_draft == d && _thComposer != null && string.IsNullOrWhiteSpace(_thComposer.Text)) _thComposer.Set(msg); // to send again
+                        return;
+                    }
+                    string id = (string)r["id"];
+                    bool still = _draft == d;
+                    if (still)
+                    {
+                        // the draft's chip choices and the attachments it did not send go on with the thread
+                        if (sent != null) foreach (var a in sent) att.Remove(a);
+                        if (_thOverrides.TryGetValue(DraftKey, out var ov)) _thOverrides[id] = ov;
+                        if (att.Count > 0) _attach[id] = att.ToList();
+                        _thComposer?.Set("");
+                    }
+                    RefreshThreadList();
+                    if (still) OpenThread(id); // drops the draft
+                    else Toast("Thread started: " + Cut(msg, 40), "ok");
+                });
+            });
+        }
+
+        /// Voice, a gesture or another panel: a thread in the current project with the last agent and model chosen.
+        /// With a task it is made at once (the task is its first message); without one THREAD opens as a draft. No
+        /// agent chosen yet: NEW THREAD opens (the task waits in the draft's composer).
+        public string NewThreadFromVoice(string task)
+        {
+            task = (task ?? "").Trim();
+            if (_projectSel == null) { OpenPanel("threads"); return "error: add or pick a project first (THREADS > + PROJECT…)"; }
+            string provider = string.IsNullOrEmpty(Settings.defaultProvider) ? null : Settings.defaultProvider;
+            if (provider == null)
+            {
+                OpenNewThread(null);
+                if (task.Length > 0) _ntSeed = task;
+                return "Pick the agent and START";
+            }
+            var proj = _projects.FirstOrDefault(x => (string)x["id"] == _projectSel);
+            _spaces = WorkspaceMap.Build(_threads, _environments);
+            var d = new ThreadDraft
+            {
+                ProjectId = _projectSel,
+                ProjectName = (string)proj?["name"] ?? "project",
+                ProjectPath = (string)proj?["sources"]?.FirstOrDefault()?["path"],
+                Provider = provider,
+                Model = string.IsNullOrEmpty(Settings.defaultModel) ? null : Settings.defaultModel,
+                Perm = Settings.permissionMode,
+                // a checkout another thread works in: a worktree for this one (as NEW THREAD chooses)
+                Worktree = Settings.workspaceMode == "worktree" || WorkspaceMap.CheckoutBusy(_spaces, _projectSel).Count > 0,
+            };
+            OpenDraft(d, null, focus: task.Length == 0);
+            if (task.Length == 0) return "New thread in " + d.ProjectName + ": say or type the first message";
+            SendDraft(task, null, new List<Attachment>());
+            return "Starting a thread in " + d.ProjectName + ": " + Cut(task, 50);
         }
 
         private static void AddButtons(UiPanel p, Rect row, (string label, Action act)[] items, int primary = -1, int danger = -1)
@@ -1300,6 +1566,68 @@ namespace MetaCodex.Shell
             if (inst != null && _links.TryGetValue(inst, out var url)) OpenBrowser(url);
             else Toast("No link on this terminal yet", "warn");
         }
+    }
+
+    /// Where MetaCodex makes projects and what type each is (owner 2026-11-13): /root/metacodex-projects/<type>/<folder>,
+    /// type native (a Quest app), default (any coding) or research (notes and findings). Pure: the self-tests check it.
+    public static class ProjectKinds
+    {
+        public const string Root = "/root/metacodex-projects";
+        /// The types in THREADS' order (and the NEW PROJECT dialog's).
+        public static readonly string[] Types = { "native", "default", "research" };
+
+        public static string Header(string type) => type == "native" ? "NATIVE" : type == "default" ? "DEFAULT" : type == "research" ? "RESEARCH" : "OTHER";
+        public static string Label(string type) => type == "native" ? "Native app" : type == "default" ? "Default" : type == "research" ? "Research" : "Other";
+
+        /// A project name as a folder: lower case, spaces -> '-', only a-z 0-9 . _ - (the rest dropped), no leading dot;
+        /// "" when nothing is left.
+        public static string FolderName(string name)
+        {
+            var sb = new StringBuilder();
+            foreach (char ch in (name ?? "").Trim().ToLowerInvariant())
+            {
+                if (ch >= 'a' && ch <= 'z' || ch >= '0' && ch <= '9' || ch == '.' || ch == '_' || ch == '-') sb.Append(ch);
+                else if (char.IsWhiteSpace(ch)) sb.Append('-');
+            }
+            string s = Regex.Replace(sb.ToString(), "-{2,}", "-").Trim('-', '.');
+            return s.Length > 64 ? s.Substring(0, 64).TrimEnd('-', '.') : s;
+        }
+
+        /// root/<type>/<folder>; null for an unknown type or a name with no letters or digits.
+        public static string PathFor(string type, string name)
+        {
+            string f = FolderName(name);
+            return f.Length == 0 || Array.IndexOf(Types, type) < 0 ? null : Root + "/" + type + "/" + f;
+        }
+
+        /// The type from where the folder is (root/<type>/<name>[/...]); null outside the root.
+        public static string TypeFromPath(string linuxPath)
+        {
+            if (string.IsNullOrEmpty(linuxPath) || !linuxPath.StartsWith(Root + "/", StringComparison.Ordinal)) return null;
+            var rest = linuxPath.Substring(Root.Length + 1).Split('/');
+            return rest.Length >= 2 && rest[1].Length > 0 && Array.IndexOf(Types, rest[0]) >= 0 ? rest[0] : null;
+        }
+
+        /// The type in .metacodex/project.json (mcx-project); "general" is the old name of default; null when none.
+        public static string TypeFromJson(string json)
+        {
+            var m = Regex.Match(json ?? "", "\"type\"\\s*:\\s*\"([a-z]+)\"");
+            if (!m.Success) return null;
+            string t = m.Groups[1].Value == "general" ? "default" : m.Groups[1].Value;
+            return Array.IndexOf(Types, t) >= 0 ? t : null;
+        }
+
+        /// A project's folder as THREADS shows it: …/<type>/<folder> under the root, ~/... in /root.
+        public static string ShortPath(string linuxPath)
+        {
+            if (string.IsNullOrEmpty(linuxPath)) return "";
+            if (linuxPath.StartsWith(Root + "/", StringComparison.Ordinal)) return "…/" + linuxPath.Substring(Root.Length + 1);
+            return linuxPath.StartsWith("/root/", StringComparison.Ordinal) ? "~/" + linuxPath.Substring(6) : linuxPath;
+        }
+
+        /// THREAD's title for a draft (before its first message).
+        public static string DraftTitle(string projectName) =>
+            "New thread · " + (string.IsNullOrWhiteSpace(projectName) ? "no project" : projectName.Trim());
     }
 
     /// Finds URLs on a terminal screen, joining rows the terminal wrapped (a full row continues on the next).
