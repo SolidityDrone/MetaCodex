@@ -9,6 +9,7 @@
 //                    and it for several readings), so its fragments skip the depth test; 0 (default) = test
 // McxVisibility(positionWS) multiplies a fragment's alpha (and so its premultiplied colour): 0 where a real surface
 // is 6 cm (+2 % of the distance) or more in front of it, 1 when it is not in front by more than 2 cm (+1 %).
+// McxOcclusionCoord (vertex) + McxVisibilityAt (fragment) give the same value with the matrix product per vertex.
 // McxVisibilityIn(slot, positionWS) is the same for a renderer of a window (its _PanelIndex): one uniform branch, and
 // no matrix, divide or depth tap at all for a window nothing can be in front of (2026-11-13: every UI fragment paid them).
 #ifndef MCX_OCCLUSION_INCLUDED
@@ -50,10 +51,40 @@ float McxVisibility(float3 positionWS)
     return shown * (1.0 - smoothstep(0.02 + 0.01 * zf, 0.06 + 0.02 * zf, d));
 }
 
+// The same test split in two for shaders that draw many pixels per vertex (SciFiUI, TextBend): the vertex shader
+// computes McxOcclusionCoord (the point in the depth's clip space; it is linear in the position, so it interpolates
+// exactly) and the fragment calls McxVisibilityAt with it. Same result, no 4x4 product per pixel.
+float4 McxOcclusionCoord(float3 positionWS)
+{
+    return mul(_EnvironmentDepthReprojectionMatrices[McxEyeIndex()], float4(positionWS, 1.0));
+}
+
+float McxVisibilityAt(float4 q)
+{
+    float shown = 1.0 - saturate(_McxUiHide);
+    if (_McxOcclusion < 0.5) return shown;
+    if (q.w <= 1e-5) return shown;
+    uint eye = McxEyeIndex();
+    float2 uv = (q.xy / q.w + 1.0) * 0.5;
+    if (any(uv < 0.0) || any(uv > 1.0)) return shown;
+    float zf = _EnvironmentDepthZBufferParams.x / (q.z / q.w + _EnvironmentDepthZBufferParams.y);
+    float zr = _McxDepthSharp.SampleLevel(sampler_McxDepthSharp, float3(uv, eye), 0).r;
+    if (zr <= 0.01) return shown;
+    float d = zf - zr;
+    return shown * (1.0 - smoothstep(0.02 + 0.01 * zf, 0.06 + 0.02 * zf, d));
+}
+
 float McxVisibilityIn(float slot, float3 positionWS)
 {
     if (_McxOcclusion < 0.5 || (slot >= 0.0 && _McxPanelClear[(int)max(slot, 0.0)] > 0.5)) return 1.0 - saturate(_McxUiHide);
     return McxVisibility(positionWS);
+}
+
+// McxVisibilityIn with the coordinate from the vertex shader (McxOcclusionCoord): what SciFiUI and TextBend call
+float McxVisibilityAtIn(float slot, float4 q)
+{
+    if (_McxOcclusion < 0.5 || (slot >= 0.0 && _McxPanelClear[(int)max(slot, 0.0)] > 0.5)) return 1.0 - saturate(_McxUiHide);
+    return McxVisibilityAt(q);
 }
 
 #endif

@@ -14,13 +14,18 @@
 // look deep), light pooling on the lattice under a fingertip or a ray's cursor, corner brackets, a ruler down the left
 // edge, a conduit of energy along the bottom, a stepped energy
 // bar under each title with a pulse running in it, command-card buttons with a bevel that charge up when hovered,
-// quiet list rows the accent floods into when chosen. Everything is computed per pixel from the vertex data.
+// quiet list rows the accent floods into when chosen. Everything is computed per pixel from the vertex data and two
+// small fields made once by UiShapeMesh (the lattice's distance, the stone's grain).
 // A panel is cast by a line of light (McxPanelFx.hlsl): behind the line the glass is a hot lattice whose cells close
 // one by one and cool into glass; controls come online just behind it.
-// Two passes: PanelDepth writes depth where a panel body is opaque (so text and images of windows behind it are
-// hidden, as they render later), then the colour pass. Alpha is blended with One OneMinusSrcAlpha: it only ever
-// grows, so a translucent button or row drawn over an opaque panel never opens a hole to the passthrough
-// (the eye buffer's alpha decides how much of the real world shows).
+// Two passes: PanelDepth writes depth where a panel body is opaque (so what is behind it is hidden), and the colour
+// pass. UiShapeMesh draws them with two copies of the material: every panel's depth first (queue 2989), then the
+// colour of all shapes (2990), so hidden pixels of windows behind fail the depth test before their fragment runs.
+// Alpha is blended with One OneMinusSrcAlpha: it only ever grows, so a translucent button or row drawn over an
+// opaque panel never opens a hole to the passthrough (the eye buffer's alpha decides how much of the real world shows).
+// Cost (perf/ui-shader): the expensive parts run only where they can show: the armour within 3 cm of the frame, the
+// stone only under a rail, corner piece, plate or button, the halo only outside the shape, nothing outside a shape
+// without a glow.
 Shader "MetaCodex/SciFiUI"
 {
     Properties
@@ -83,6 +88,8 @@ Shader "MetaCodex/SciFiUI"
             float3 positionWS : TEXCOORD3; // after the bend: what real things in front are compared with
             float3 scan : TEXCOORD5;       // xy = how the distance behind the scan line changes along the panel's x and
                                            // y (per metre of panel space), z = metres behind the scan line (10 at rest)
+            float4 occ : TEXCOORD6;        // the point in the room depth's clip space (McxOcclusionCoord): linear in
+                                           // positionWS, so it interpolates exactly and the fragment skips the 4x4 product
             UNITY_VERTEX_OUTPUT_STEREO
         };
 
@@ -95,6 +102,7 @@ Shader "MetaCodex/SciFiUI"
             float3 bent = BendPanel(v.positionOS.xyz, r);
             o.positionWS = TransformObjectToWorld(bent);
             o.positionCS = TransformWorldToHClip(o.positionWS);
+            o.occ = McxOcclusionCoord(o.positionWS);
             o.color = v.color;
             o.uv = v.uv;
             o.shape = v.shape;
@@ -159,7 +167,7 @@ Shader "MetaCodex/SciFiUI"
                 int kind = (int)round(i.shape.w);
                 float4 fx = McxPanelFx(_PanelIndex);
                 // a panel still being cast hides nothing where its glass is not closed yet
-                if (kind != 0 || _Opacity < 0.75 || i.scan.z < 0.06 || fx.z > 0.3 || McxVisibilityIn(_PanelIndex, i.positionWS) < 0.5) discard;
+                if (kind != 0 || _Opacity < 0.75 || i.scan.z < 0.06 || fx.z > 0.3 || McxVisibilityAtIn(_PanelIndex, i.occ) < 0.5) discard;
                 float2 h = i.shape.xy * 0.5;
                 float2 p = (i.uv - 0.5) * (i.shape.xy + 2.0 * i.shape.z);
                 if (sdChamfer(p, h, i.style.x, i.style.y) > 0.0) discard;
@@ -181,8 +189,18 @@ Shader "MetaCodex/SciFiUI"
             #pragma fragment frag
             #pragma multi_compile_instancing
 
+            // Precomputed fields (UiShapeMesh.EnsureShaderTextures makes them once at start, set as globals):
+            //   _McxHexField   one period of the hexagon lattice (1 x sqrt(3) cells, 128 x 222): HexCell's distance x 2
+            //   _McxStoneNoise StoneGrain, tiling every kStoneTile metres (512 x 512, mipmapped)
+            TEXTURE2D(_McxHexField);   SAMPLER(sampler_McxHexField);
+            TEXTURE2D(_McxStoneNoise); SAMPLER(sampler_McxStoneNoise);
+            static const float kHexCell = 0.022;                         // the glass's lattice cell (metres)
+            static const float kStoneTile = 0.132;                       // the stone grain's tile (metres)
+            static const float kStoneTexel = 0.132 / 512.0;
+
             // A hexagon lattice of cell size `cell` (metres): returns 0 at a cell's centre .. 0.5 at its border, and
-            // `toCentre`, the way from p to the centre of its cell (metres).
+            // `toCentre`, the way from p to the centre of its cell (metres). Only the cast needs toCentre; at rest the
+            // distance comes from the texture (HexDist).
             float HexCell(float2 p, float cell, out float2 toCentre)
             {
                 const float2 s = float2(1.0, 1.7320508);
@@ -193,6 +211,12 @@ Shader "MetaCodex/SciFiUI"
                 toCentre = -g * cell;
                 g = abs(g);
                 return max(dot(g, float2(0.5, 0.8660254)), g.x);
+            }
+
+            // HexCell(p, kHexCell)'s distance from the texture: one bilinear tap instead of ~30 ALU
+            float HexDist(float2 p)
+            {
+                return SAMPLE_TEXTURE2D_LOD(_McxHexField, sampler_McxHexField, p * (1.0 / (kHexCell * float2(1.0, 1.7320508))), 0).r * 0.5;
             }
 
             // the lattice's lines, `width` of a cell wide, from HexCell's distance; `fw` = one pixel in cells
@@ -207,31 +231,53 @@ Shader "MetaCodex/SciFiUI"
             // Prototype: ~/mcxwork/proto/frame.py (owner's pick: frame-v4 / v5). Linear colours.
             static const float3 kStoneLo = float3(0.0070, 0.0110, 0.0185);   // slate with a cold blue cast
             static const float3 kStoneHi = float3(0.046, 0.066, 0.098);
-            float Hash21(float2 q) { return frac(sin(dot(q, float2(127.1, 311.7))) * 43758.5453); }
-            float VNoise(float2 x)
+            // the grain: 0.5 x value noise of 6 mm cells + 0.3 x 2.2 mm + 0.2 x 0.9 mm (was three VNoise per pixel, twelve
+            // sin hashes); `lod` from StoneLod: filtered a little at a distance instead of shimmering
+            float StoneGrain(float2 p, float lod)
             {
-                float2 i = floor(x), f = frac(x), u = f * f * (3.0 - 2.0 * f);
-                return lerp(lerp(Hash21(i), Hash21(i + float2(1, 0)), u.x), lerp(Hash21(i + float2(0, 1)), Hash21(i + float2(1, 1)), u.x), u.y);
+                return SAMPLE_TEXTURE2D_LOD(_McxStoneNoise, sampler_McxStoneNoise, p * (1.0 / kStoneTile), lod).r;
             }
-            float StoneGrain(float2 p) { return 0.5 * VNoise(p / 0.0060) + 0.3 * VNoise((p + 3.1) / 0.0022) + 0.2 * VNoise((p + 7.7) / 0.0009); }
+            // `px` = one pixel in metres; one mip finer than the pixel so the grain stays as crisp as before
+            float StoneLod(float px) { return max(log2(px / kStoneTexel) - 1.0, 0.0); }
             // dd < 0 inside the piece, halfW its half width (metres), n the outward normal of its nearest edge (panel space)
-            float3 Stone(float2 p, float dd, float halfW, float2 n)
+            half3 Stone(float2 p, float dd, float halfW, float2 n, float lod)
             {
-                float depth = saturate(-dd / max(halfW, 1e-6));             // 0 at the edge .. 1 in the middle
-                float facing = dot(n, float2(-0.45, 0.89));                 // +1: the edge faces the light (top-left)
-                float bevel = saturate(1.0 - depth / 0.30);
-                float3 c = lerp(kStoneLo, kStoneHi, 0.42 + 0.28 * StoneGrain(p) + 0.20 * depth);   // a fine grain, not concrete
-                c *= 1.0 + bevel * facing * 0.9;
-                c += bevel * pow(saturate(facing), 3.0) * 0.12;             // a thin worn highlight
-                return lerp(c, kStoneLo * 0.4, bevel * saturate(-facing) * 0.6);
+                half depth = (half)saturate(-dd / max(halfW, 1e-6));        // 0 at the edge .. 1 in the middle
+                half facing = (half)dot(n, float2(-0.45, 0.89));            // +1: the edge faces the light (top-left)
+                half bevel = saturate((half)1.0 - depth / (half)0.30);
+                half3 c = lerp((half3)kStoneLo, (half3)kStoneHi, (half)0.42 + (half)0.28 * (half)StoneGrain(p, lod) + (half)0.20 * depth); // a fine grain, not concrete
+                c *= (half)1.0 + bevel * facing * (half)0.9;
+                half lit = saturate(facing);
+                c += bevel * lit * lit * lit * (half)0.12;                   // a thin worn highlight
+                return lerp(c, (half3)kStoneLo * (half)0.4, bevel * saturate(-facing) * (half)0.6);
             }
-            // the outward normal of sdChamfer at p (central differences, panel space)
+            // the outward normal of sdChamfer at p (panel space), analytic: the gradient of the side that sdChamfer's
+            // max picks (was four sdChamfer calls of central differences, 0.4 mm apart)
             float2 ChamferNormal(float2 p, float2 h, float cBig, float cSmall)
             {
-                const float e = 0.0004;
-                float2 g = float2(sdChamfer(p + float2(e, 0), h, cBig, cSmall) - sdChamfer(p - float2(e, 0), h, cBig, cSmall),
-                                  sdChamfer(p + float2(0, e), h, cBig, cSmall) - sdChamfer(p - float2(0, e), h, cBig, cSmall));
-                return g / max(length(g), 1e-9);
+                float2 sg = float2(p.x >= 0.0 ? 1.0 : -1.0, p.y >= 0.0 ? 1.0 : -1.0);
+                float2 q = abs(p);
+                float2 d = q - h;
+                float box = length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);
+                float c = (p.x * p.y < 0.0) ? cBig : cSmall;
+                c = min(c, min(h.x, h.y));
+                float cut = (q.x + q.y - (h.x + h.y - c)) * 0.70710678;
+                float2 n = cut > box ? float2(0.70710678, 0.70710678)
+                         : (d.x > 0.0 && d.y > 0.0) ? d * rsqrt(max(dot(d, d), 1e-18))
+                         : (d.x > d.y ? float2(1.0, 0.0) : float2(0.0, 1.0));
+                return n * sg;
+            }
+
+            // the halo of a shape outside it (kinds 1, 3, 4, 9: what fragBody's own branch would set as glowA)
+            float OutsideGlow(int kind, float style2, float state, bool pill)
+            {
+                if (kind == 1)
+                    return style2 > 2.5 ? 0.20 * smoothstep(0.45, 0.8, state)
+                         : style2 > 1.5 ? 0.25 * state
+                         : 0.30 * state + (style2 > 0.5 ? 0.20 : 0.0);
+                if (kind == 3) return 0.2;
+                if (kind == 4) return pill ? 0.0 : 0.10 * state;
+                return 0.0; // 9: flat
             }
 
             half4 fragBody(Varyings i);
@@ -241,6 +287,7 @@ Shader "MetaCodex/SciFiUI"
             {
                 UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
                 half4 c = fragBody(i);
+                if (c.a <= 0.0) return half4(0, 0, 0, 0); // nothing here (a margin without a halo): no depth tap
                 float4 fx = McxPanelFx(_PanelIndex);
                 if (fx.x > 0.5)
                 {
@@ -254,7 +301,7 @@ Shader "MetaCodex/SciFiUI"
                     }
                 }
                 c.a *= (half)(1.0 - saturate(fx.z));
-                c.a *= (half)McxVisibilityIn(_PanelIndex, i.positionWS);
+                c.a *= (half)McxVisibilityAtIn(_PanelIndex, i.occ);
                 return c;
             }
 
@@ -318,6 +365,15 @@ Shader "MetaCodex/SciFiUI"
                 float px = aa; // about one pixel, in metres (a distance field's gradient is 1: its fwidth is the pixel size)
                 float inside = saturate(0.5 - d / aa);
                 float ring = saturate(0.5 - (abs(d + border * 0.5) - border * 0.5) / aa);
+                // outside a button, selection, bar or flat (inside and ring are 0 there) only its halo can draw: skip the
+                // fill (the stone of a button) and return the halo as the composite below would (0 where it has none)
+                if ((kind == 1 || kind == 3 || kind == 4 || kind == 9) && d >= 0.5 * aa)
+                {
+                    float glowOut = OutsideGlow(kind, style2, state, pill);
+                    if (glowOut <= 0.0) return half4(0, 0, 0, 0);
+                    float haloOut = exp(-d / max(margin * 0.30, 1e-4)) * glowOut;
+                    return half4(tint * 1.2, saturate(haloOut * i.color.a));
+                }
 
                 float3 fill = 0;
                 float fillA = 0;
@@ -330,79 +386,88 @@ Shader "MetaCodex/SciFiUI"
 
                 if (kind == 0) // panel: holographic glass in a steel frame
                 {
-                    float3 lo = float3(0.0045, 0.0125, 0.0245), hi = float3(0.017, 0.042, 0.076);
-                    fill = lerp(lo, hi, smoothstep(-1.1, 1.0, yN));
-                    fill *= 1.0 - 0.30 * smoothstep(0.55, 1.35, length(float2(xN, yN)));  // darker into the corners
-                    float nearEdge = exp(d / 0.05);                                        // 1 at the frame, fading inwards
-                    // the hexagon lattice on the glass: strongest at the frame
-                    float2 toCentre;
-                    float hd = HexCell(p, 0.022, toCentre);
-                    float fw = px / 0.022;
-                    float farFade = saturate(1.3 - fw * 10.0);                               // lines thinner than a pixel fade out
-                    float lattice = HexLine(hd, 0.055, fw) * farFade;
-                    fill += tint * lattice * (0.030 + 0.11 * nearEdge);
-                    // a grid of points between the cells
-                    float2 g2 = frac(p / 0.011) - 0.5;
-                    float dots = saturate((0.085 - length(g2)) / (px / 0.011) + 0.5) * saturate(1.5 - px / 0.0014);
-                    fill += accent * dots * 0.050 * (0.35 + 0.65 * smoothstep(-0.2, 1.0, yN));
-                    fill += tint * 0.040 * smoothstep(0.55, 1.0, yN);                      // light from the top edge
-                    // a fingertip, or a ray's cursor, lights the lattice round it
-                    float3 dq0 = i.positionWS - _McxPointer0.xyz, dq1 = i.positionWS - _McxPointer1.xyz;
-                    float pl = _McxPointer0.w * 0.0009 / (dot(dq0, dq0) + 0.0009) + _McxPointer1.w * 0.0009 / (dot(dq1, dq1) + 0.0009);
-                    fill += accent * pl * (0.10 + 0.9 * lattice) * 0.55;
-                    // the glass sits in the frame: an inner inset line
-                    fill = lerp(fill, tint * 0.55, LineAt(d + 0.0032, 0.0009, aa) * 0.55);
-                    // a ruler down the left edge: a tick every 10 mm, a longer one every 50 mm
-                    if (p.x < -h.x + 0.011 && h.y > 0.12)
-                    {
-                        float ty = (h.y - p.y) / 0.010;
-                        float major = step(abs(frac(floor(ty + 0.5) / 5.0 + 0.5) - 0.5), 0.05);
-                        float xin = p.x + h.x - 0.0050;
-                        float tick = LineAt((frac(ty + 0.5) - 0.5) * 0.010, 0.00064, aa) * step(0.0, xin) * step(xin, lerp(0.0028, 0.0052, major));
-                        tick *= smoothstep(h.y - 0.034, h.y - 0.060, abs(p.y));
-                        fill = lerp(fill, tint * 1.1, tick * 0.50);
-                    }
-                    // a conduit along the bottom, from the right cut: an accent line fading to the left, a pulse in it
-                    if (p.y < -h.y + 0.016 && h.y > 0.05)
-                    {
-                        float cy = p.y + h.y - 0.0062;
-                        float cx = h.x - cBig - 0.004 - p.x;                               // metres from its right end
-                        float clen = min(0.22, h.x * 0.9);
-                        float on = step(0.0, cx) * step(cx, clen);
-                        float cfade = pow(saturate(1.0 - cx / clen), 1.5);
-                        float pulse = exp(-abs(cx - frac(t * 0.22) * clen * 1.3) / 0.012);
-                        fill = lerp(fill, accent * 1.1, LineAt(cy, 0.00064, aa) * on * saturate(0.25 + 0.55 * cfade + 0.9 * pulse * cfade));
-                        fill += accent * exp(-abs(cy) / 0.0022) * on * cfade * (0.05 + 0.30 * pulse);
-                    }
-                    fillA = _Opacity;
-                    if (pfx.x > 0.5)
-                    {
-                        // being cast: behind the scan line the glass is a hot lattice; each cell closes from its rim
-                        // inwards as the line leaves it behind, and cools into glass
-                        heat = bd > 0.0 ? exp(-bd / 0.045) : 0.0;
-                        float cb = bd - dot(toCentre, i.scan.xy);                          // the cell's centre behind the line
-                        float cf = saturate(cb / 0.040);                                   // 0 just born .. 1 closed
-                        float open = smoothstep(cf * 0.5, cf * 0.5 + 0.03, 0.5 - hd) * step(cf, 0.999);
-                        fill += accent * HexLine(hd, 0.075, fw) * heat * 1.5 + (accent * 0.6 + 0.4) * heat * heat * heat * 0.10;
-                        fillA *= (1.0 - open * 0.92) * step(0.0, bd);
-                    }
-                    fill += accent * lattice * saturate(pfx.y) * 0.5;                      // the flash is energy in the lattice
-                    float lit = smoothstep(-0.9, 1.0, yN);                                 // the frame is lit from above
-                    float3 steel = lerp(float3(0.16, 0.22, 0.30), float3(0.58, 0.68, 0.80), lit);
-                    // the frame glows in its colour near each corner
-                    float cx2 = smoothstep(h.x - 0.040, h.x - 0.030, abs(p.x)), cy2 = smoothstep(h.y - 0.040, h.y - 0.030, abs(p.y));
-                    float bracket = max(cx2, cy2);
-                    float sweep = 0.0;
-                    if (state > 0.01)
-                    {
-                        // a light running round the frame when the panel is lit (a toast, a focused window)
-                        float ang = atan2(p.y * h.x, p.x * h.y) / 6.2831853 + 0.5;
-                        sweep = exp(-frac(ang - t * 0.07) * 24.0) * state;
-                    }
-                    edgeCol = lerp(steel, tint * 1.25 + 0.12, saturate(bracket * 0.85 + state * 0.6 + sweep));
-                    edgeCol += accent * (heat * 1.6 + saturate(pfx.y) * 1.1) + accent * pl * 0.8; // the frame carries the cast's heat and flash
+                    if (pfx.x > 0.5) heat = bd > 0.0 ? exp(-bd / 0.045) : 0.0;             // being cast: hot behind the line
                     edgeA = 0.85 * step(0.0, bd);
                     glowA = 0.10 + 0.22 * state + 0.5 * heat;
+                    // outside the frame (inside and ring are 0) only the halo and the armour below draw: no glass there
+                    if (d < 0.5 * aa)
+                    {
+                        float3 lo = float3(0.0045, 0.0125, 0.0245), hi = float3(0.017, 0.042, 0.076);
+                        fill = lerp(lo, hi, smoothstep(-1.1, 1.0, yN));
+                        fill *= 1.0 - 0.30 * smoothstep(0.55, 1.35, length(float2(xN, yN)));  // darker into the corners
+                        float nearEdge = exp(d / 0.05);                                        // 1 at the frame, fading inwards
+                        // the hexagon lattice on the glass: strongest at the frame
+                        float hd = HexDist(p);
+                        float fw = px / kHexCell;
+                        float farFade = saturate(1.3 - fw * 10.0);                               // lines thinner than a pixel fade out
+                        float lattice = HexLine(hd, 0.055, fw) * farFade;
+                        fill += tint * lattice * (0.030 + 0.11 * nearEdge);
+                        // a grid of points between the cells
+                        float2 g2 = frac(p / 0.011) - 0.5;
+                        float dots = saturate((0.085 - length(g2)) / (px / 0.011) + 0.5) * saturate(1.5 - px / 0.0014);
+                        fill += accent * dots * 0.050 * (0.35 + 0.65 * smoothstep(-0.2, 1.0, yN));
+                        fill += tint * 0.040 * smoothstep(0.55, 1.0, yN);                      // light from the top edge
+                        // a fingertip, or a ray's cursor, lights the lattice round it (no hand near a window: nothing to add)
+                        float pl = 0.0;
+                        if (_McxPointer0.w > 0.0 || _McxPointer1.w > 0.0)
+                        {
+                            float3 dq0 = i.positionWS - _McxPointer0.xyz, dq1 = i.positionWS - _McxPointer1.xyz;
+                            pl = _McxPointer0.w * 0.0009 / (dot(dq0, dq0) + 0.0009) + _McxPointer1.w * 0.0009 / (dot(dq1, dq1) + 0.0009);
+                        }
+                        fill += accent * pl * (0.10 + 0.9 * lattice) * 0.55;
+                        // the glass sits in the frame: an inner inset line
+                        fill = lerp(fill, tint * 0.55, LineAt(d + 0.0032, 0.0009, aa) * 0.55);
+                        // a ruler down the left edge: a tick every 10 mm, a longer one every 50 mm
+                        if (p.x < -h.x + 0.011 && h.y > 0.12)
+                        {
+                            float ty = (h.y - p.y) / 0.010;
+                            float major = step(abs(frac(floor(ty + 0.5) / 5.0 + 0.5) - 0.5), 0.05);
+                            float xin = p.x + h.x - 0.0050;
+                            float tick = LineAt((frac(ty + 0.5) - 0.5) * 0.010, 0.00064, aa) * step(0.0, xin) * step(xin, lerp(0.0028, 0.0052, major));
+                            tick *= smoothstep(h.y - 0.034, h.y - 0.060, abs(p.y));
+                            fill = lerp(fill, tint * 1.1, tick * 0.50);
+                        }
+                        // a conduit along the bottom, from the right cut: an accent line fading to the left, a pulse in it
+                        if (p.y < -h.y + 0.016 && h.y > 0.05)
+                        {
+                            float cy = p.y + h.y - 0.0062;
+                            float cx = h.x - cBig - 0.004 - p.x;                               // metres from its right end
+                            float clen = min(0.22, h.x * 0.9);
+                            float on = step(0.0, cx) * step(cx, clen);
+                            float cfade = pow(saturate(1.0 - cx / clen), 1.5);
+                            float pulse = exp(-abs(cx - frac(t * 0.22) * clen * 1.3) / 0.012);
+                            fill = lerp(fill, accent * 1.1, LineAt(cy, 0.00064, aa) * on * saturate(0.25 + 0.55 * cfade + 0.9 * pulse * cfade));
+                            fill += accent * exp(-abs(cy) / 0.0022) * on * cfade * (0.05 + 0.30 * pulse);
+                        }
+                        fillA = _Opacity;
+                        if (pfx.x > 0.5)
+                        {
+                            // being cast: behind the scan line the glass is a hot lattice; each cell closes from its rim
+                            // inwards as the line leaves it behind, and cools into glass (the cell's centre: analytic)
+                            float2 toCentre;
+                            float hdC = HexCell(p, kHexCell, toCentre);
+                            float cb = bd - dot(toCentre, i.scan.xy);                          // the cell's centre behind the line
+                            float cf = saturate(cb / 0.040);                                   // 0 just born .. 1 closed
+                            float open = smoothstep(cf * 0.5, cf * 0.5 + 0.03, 0.5 - hdC) * step(cf, 0.999);
+                            fill += accent * HexLine(hdC, 0.075, fw) * heat * 1.5 + (accent * 0.6 + 0.4) * heat * heat * heat * 0.10;
+                            fillA *= (1.0 - open * 0.92) * step(0.0, bd);
+                        }
+                        fill += accent * lattice * saturate(pfx.y) * 0.5;                      // the flash is energy in the lattice
+                        float lit = smoothstep(-0.9, 1.0, yN);                                 // the frame is lit from above
+                        float3 steel = lerp(float3(0.16, 0.22, 0.30), float3(0.58, 0.68, 0.80), lit);
+                        // the frame glows in its colour near each corner
+                        float cx2 = smoothstep(h.x - 0.040, h.x - 0.030, abs(p.x)), cy2 = smoothstep(h.y - 0.040, h.y - 0.030, abs(p.y));
+                        float bracket = max(cx2, cy2);
+                        float sweep = 0.0;
+                        if (state > 0.01)
+                        {
+                            // a light running round the frame when the panel is lit (a toast, a focused window)
+                            float ang = atan2(p.y * h.x, p.x * h.y) / 6.2831853 + 0.5;
+                            sweep = exp(-frac(ang - t * 0.07) * 24.0) * state;
+                        }
+                        edgeCol = lerp(steel, tint * 1.25 + 0.12, saturate(bracket * 0.85 + state * 0.6 + sweep));
+                        edgeCol += accent * (heat * 1.6 + saturate(pfx.y) * 1.1) + accent * pl * 0.8; // the frame carries the cast's heat and flash
+                    }
                 }
                 else if (kind == 1) // button: a command-card plate
                 {
@@ -437,7 +502,7 @@ Shader "MetaCodex/SciFiUI"
                     else // normal and filled (primary / danger): a carved stone-metal plate with an engraved channel 2.6 mm
                     {    // inside its edge; energy in its colour runs in the channel: dim at rest, bright hovered, full when filled
                         bool filled = style2 > 0.5;
-                        float3 stone = Stone(p, d, min(h.x, h.y), ChamferNormal(p, h, cBig, cBig * 0.28)) * 0.80;
+                        float3 stone = Stone(p, d, min(h.x, h.y), ChamferNormal(p, h, cBig, cBig * 0.28), StoneLod(px)) * 0.80;
                         float cd = abs(d + 0.0026);
                         fill = lerp(stone, kStoneLo * 0.30, saturate(1.0 - cd / 0.0009) * 0.85);
                         float energy = filled ? 0.95 + 0.25 * state : 0.50 + 0.55 * saturate(state * 1.2);
@@ -507,12 +572,15 @@ Shader "MetaCodex/SciFiUI"
                 float a = fillA * inside;
                 col = lerp(col, edgeCol, ring * edgeA);
                 a = max(a, ring * edgeA);
-                // outside the shape: a soft accent halo (no dark contact shadow)
-                float halo = (1.0 - inside) * exp(-max(d, 0.0) / max(margin * 0.30, 1e-4)) * glowA;
-                float3 outCol = tint * 1.2;
-                float outA = halo;
-                col = lerp(col, outCol, saturate(outA * (1.0 - inside) / max(a + outA, 1e-4)));
-                a = max(a, outA);
+                // outside the shape: a soft accent halo (no dark contact shadow); nothing to do well inside or without glow
+                if (glowA > 0.0 && inside < 1.0)
+                {
+                    float halo = (1.0 - inside) * exp(-max(d, 0.0) / max(margin * 0.30, 1e-4)) * glowA;
+                    float3 outCol = tint * 1.2;
+                    float outA = halo;
+                    col = lerp(col, outCol, saturate(outA * (1.0 - inside) / max(a + outA, 1e-4)));
+                    a = max(a, outA);
+                }
                 if (kind == 0)
                 {
                     // stone-metal armour (owner 2026-11-12: "metallish-stone with blueish glowing", for panel frames and
@@ -522,14 +590,15 @@ Shader "MetaCodex/SciFiUI"
                     // carved plate with an energy gem over the top centre. The blue leaks inward onto the glass only.
                     // It takes over from the cast's corner brackets (UiPanelFx) once they have locked on (1 - pfx.w).
                     float keep = step(0.055, min(h.x, h.y)) * (1.0 - saturate(pfx.w)); // not on small cards (callouts, the HUD)
-                    if (keep > 0.0)
+                    // deeper than 3 cm inside the frame nothing of it reaches the glass (its glow there is below 1e-5):
+                    // most of a window's pixels skip all of it
+                    if (keep > 0.0 && d > -0.03)
                     {
                         const float off = 0.003, halfT = 0.0045, railW = 0.0009;
                         float cc = (p.x * p.y < 0.0) ? cBig : style2;
                         float2 hO = h + off;
                         float cBO = cBig + off * 0.6, cSO = style2 + off * 0.6;
                         float dO = sdChamfer(p, hO, cBO, cSO);                               // + outside the centre line
-                        float2 nO = ChamferNormal(p, hO, cBO, cSO);
                         float L = clamp(min(h.x, h.y) * 0.35, cc + 0.020, 0.075);             // arm length from the corner
                         float ex = hO.x - abs(p.x), ey = hO.y - abs(p.y);
                         float sAlong = (abs(p.y) - h.y > abs(p.x) - h.x) ? ex : ey;           // along the nearest edge
@@ -537,22 +606,36 @@ Shader "MetaCodex/SciFiUI"
                         float dRail = abs(dO) - railW;
                         float3 energy = lerp(accent, white, 0.30);
                         float inward = step(dO, 0.0);
-                        // rails
                         float rIn = saturate(0.5 - dRail / aa) * keep;
-                        float3 railCol = Stone(p, dRail, railW, nO * sign(dO + 1e-6));
-                        col = lerp(col, railCol, rIn);
-                        a = max(a, rIn * 0.95);
+                        float armIn = saturate(0.5 - dArm / aa) * keep;
+                        // the stone (normal, grain) only where a rail or a corner piece covers the pixel
+                        float2 nO = float2(0.0, 1.0);
+                        float lod = 0.0;
+                        if (rIn > 0.0 || armIn > 0.0)
+                        {
+                            nO = ChamferNormal(p, hO, cBO, cSO) * sign(dO + 1e-6);
+                            lod = StoneLod(px);
+                        }
+                        // rails
+                        if (rIn > 0.0)
+                        {
+                            float3 railCol = Stone(p, dRail, railW, nO, lod);
+                            col = lerp(col, railCol, rIn);
+                            a = max(a, rIn * 0.95);
+                        }
                         col += accent * (LineAt(dRail + railW * 0.4, 0.0005, aa) * 0.30 + exp(-max(dRail, 0.0) / 0.003) * 0.08 * inward) * keep;
                         // the corner pieces
-                        float armIn = saturate(0.5 - dArm / aa) * keep;
                         if (dArm < 0.012)
                         {
-                            float3 stone = Stone(p, dArm, halfT, nO * sign(dO + 1e-6));
-                            float gd = abs(dO);                                              // from the groove (the centre line)
-                            stone = lerp(stone, kStoneLo * 0.3, saturate(1.0 - gd / 0.0011) * 0.9);
-                            float3 groove = energy * saturate(1.0 - gd / 0.0005) * 0.9 + accent * exp(-gd / 0.0016) * 0.45;
-                            col = lerp(col, stone + groove, armIn);
-                            a = max(a, armIn);
+                            if (armIn > 0.0)
+                            {
+                                float3 stone = Stone(p, dArm, halfT, nO, lod);
+                                float gd = abs(dO);                                          // from the groove (the centre line)
+                                stone = lerp(stone, kStoneLo * 0.3, saturate(1.0 - gd / 0.0011) * 0.9);
+                                float3 groove = energy * saturate(1.0 - gd / 0.0005) * 0.9 + accent * exp(-gd / 0.0016) * 0.45;
+                                col = lerp(col, stone + groove, armIn);
+                                a = max(a, armIn);
+                            }
                             col += accent * (exp(-max(dArm, 0.0) / 0.003) * 0.40 + exp(-max(dArm, 0.0) / 0.012) * 0.08) * inward * (1.0 - armIn) * keep;
                             // a node of light on the cut
                             float2 sg = float2(p.x >= 0.0 ? 1.0 : -1.0, p.y >= 0.0 ? 1.0 : -1.0);
@@ -568,15 +651,18 @@ Shader "MetaCodex/SciFiUI"
                         {
                             float dPlate = sdChamfer(cq, float2(0.030, 0.0085), 0.008, 0.008);
                             float pIn = saturate(0.5 - dPlate / aa) * keep;
-                            float3 plate = Stone(p, dPlate, 0.006, ChamferNormal(cq, float2(0.030, 0.0085), 0.008, 0.008));
                             float dg = (abs(cq.x) / 0.0062 + abs(cq.y + 0.0004) / 0.0055) - 1.0;   // the gem, in its size
-                            float sock = saturate(0.5 - (dg - 0.14) * 0.0055 / aa);
-                            float gem = saturate(0.5 - dg * 0.0055 / aa);
-                            float facet = (cq.x < 0.0 ? 1.0 : 0.65) * (cq.y > -0.0004 ? 1.0 : 0.75);
-                            plate = lerp(plate, kStoneLo * 0.25, sock);
-                            plate += (accent * 0.9 + energy * 0.6 * facet) * gem;
-                            col = lerp(col, plate, pIn);
-                            a = max(a, pIn);
+                            if (pIn > 0.0)
+                            {
+                                float3 plate = Stone(p, dPlate, 0.006, ChamferNormal(cq, float2(0.030, 0.0085), 0.008, 0.008), StoneLod(px));
+                                float sock = saturate(0.5 - (dg - 0.14) * 0.0055 / aa);
+                                float gem = saturate(0.5 - dg * 0.0055 / aa);
+                                float facet = (cq.x < 0.0 ? 1.0 : 0.65) * (cq.y > -0.0004 ? 1.0 : 0.75);
+                                plate = lerp(plate, kStoneLo * 0.25, sock);
+                                plate += (accent * 0.9 + energy * 0.6 * facet) * gem;
+                                col = lerp(col, plate, pIn);
+                                a = max(a, pIn);
+                            }
                             col += accent * exp(-max(dPlate, 0.0) / 0.003) * 0.35 * step(cq.y, 0.0) * (1.0 - pIn) * keep;
                             col += accent * exp(-max(dg, 0.0) / 0.8) * 0.25 * keep;
                             float beam = exp(-abs(cq.x) / 0.0008) * saturate((cq.y - 0.0085) / 0.002) * exp(-max(cq.y - 0.0085, 0.0) / 0.004);
