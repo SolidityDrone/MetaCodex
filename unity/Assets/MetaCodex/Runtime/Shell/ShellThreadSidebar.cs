@@ -344,7 +344,9 @@ namespace MetaCodex.Shell
             if (!fresh) return;
             _sbTouchSeq = seq;
             if (_sbRoot == null || _sbSnap == null || !_sbSnap.Repo) { SbMergeFiles(); SbRenderChanges(); }
-            _sbChangesAt = Time.unscaledTime + 0.8f; // git again once the edit settled
+            // git again once the edit settled, at most every 2 s (an agent writing files kept it running back to back:
+            // every 1.6 s on the headset)
+            _sbChangesAt = Mathf.Max(Time.unscaledTime + 0.8f, _sbNextChanges - (SbWorking ? 2f : 18f));
         }
 
         /// git's view of the folder (one shell run) merged with the timeline's files; then the list and the open diff.
@@ -359,6 +361,10 @@ namespace MetaCodex.Shell
             int gen = _sbGen;
             string root = _sbRoot, baseBranch = SbBaseBranch;
             var files = Files;
+            // the merge (2000 entries: ~105 ms on the headset, every 4 s while the thread works) runs here too: _touched is
+            // replaced, never changed in place, so the dictionary taken now stays as it is
+            var touched = _touched;
+            bool own = SbOwnFolder;
             _sbPending++;
             Task.Run(async () =>
             {
@@ -373,6 +379,8 @@ namespace MetaCodex.Shell
                     snap.Numstat.Remove("");
                     foreach (var kv in counts) snap.Numstat[kv.Key] = (kv.Value.Item1, 0, kv.Value.Item2);
                 }
+                List<ChangedFile> merged = null;
+                try { merged = ThreadChanges.Merge(snap, touched, own); } catch (Exception) { merged = null; }
                 _main.Enqueue(() =>
                 {
                     _sbPending--;
@@ -381,7 +389,8 @@ namespace MetaCodex.Shell
                     // each step timed (0.7.19 on the headset: this callback took 4.8-6.8 s every ~13 s)
                     var sw = System.Diagnostics.Stopwatch.StartNew();
                     _sbSnap = snap;
-                    SbMergeFiles();
+                    if (merged != null && ReferenceEquals(touched, _touched) && own == SbOwnFolder) { _sbFiles = merged; UpdateSidebarHandle(); }
+                    else SbMergeFiles(); // the timeline brought new files meanwhile: merge again here
                     double tMerge = sw.Elapsed.TotalMilliseconds;
                     // the lists only while the sidebar shows (it rebuilt them every 4 s, hidden too); opening it renders them
                     bool shown = _sb != null && _sb.IsOpen;

@@ -69,7 +69,7 @@ namespace MetaCodex.AI
 
         public static string Q(string s) => "'" + (s ?? "").Replace("'", "'\\''") + "'";
 
-        public const int MaxStatus = 2000;
+        public const int MaxStatus = 500; // a folder with thousands of untracked files (no .gitignore): the list shows 500, the summary counts all
 
         public static GitSnapshot ParseScript(string output)
         {
@@ -273,7 +273,7 @@ namespace MetaCodex.AI
         /// One line for the CHANGES header: "5 files · +120 −12 · against HEAD" (outside git: "from the agent's edits").
         public static string Summary(List<ChangedFile> files, GitSnapshot g)
         {
-            int mine = files.Count(f => f.ByThread), others = files.Count - mine;
+            int mine = files.Count(f => f.ByThread), others = files.Count - mine + (g?.StatusCut ?? 0);
             int a = files.Where(f => f.ByThread).Sum(f => f.Added), r = files.Where(f => f.ByThread).Sum(f => f.Removed);
             string where = g != null && g.Repo ? (g.BaseLabel == "HEAD" ? "against HEAD" : g.BaseLabel == "no commits yet" ? "no commits yet" : "since " + g.BaseLabel) : "from the agent's edits (not a git repo)";
             return $"{mine} file{(mine == 1 ? "" : "s")} · +{a} −{r} · {where}" + (others > 0 ? $" · {others} other change{(others == 1 ? "" : "s")} in this folder" : "");
