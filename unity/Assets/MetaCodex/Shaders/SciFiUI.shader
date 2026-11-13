@@ -159,7 +159,7 @@ Shader "MetaCodex/SciFiUI"
                 int kind = (int)round(i.shape.w);
                 float4 fx = McxPanelFx(_PanelIndex);
                 // a panel still being cast hides nothing where its glass is not closed yet
-                if (kind != 0 || _Opacity < 0.75 || i.scan.z < 0.06 || fx.z > 0.3 || McxVisibility(i.positionWS) < 0.5) discard;
+                if (kind != 0 || _Opacity < 0.75 || i.scan.z < 0.06 || fx.z > 0.3 || McxVisibilityIn(_PanelIndex, i.positionWS) < 0.5) discard;
                 float2 h = i.shape.xy * 0.5;
                 float2 p = (i.uv - 0.5) * (i.shape.xy + 2.0 * i.shape.z);
                 if (sdChamfer(p, h, i.style.x, i.style.y) > 0.0) discard;
@@ -254,7 +254,7 @@ Shader "MetaCodex/SciFiUI"
                     }
                 }
                 c.a *= (half)(1.0 - saturate(fx.z));
-                c.a *= (half)McxVisibility(i.positionWS);
+                c.a *= (half)McxVisibilityIn(_PanelIndex, i.positionWS);
                 return c;
             }
 

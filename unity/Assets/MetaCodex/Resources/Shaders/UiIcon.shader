@@ -61,7 +61,7 @@ Shader "MetaCodex/UiIcon"
                 half4 c = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, i.uv);
                 half3 rgb = c.rgb * i.color.rgb;
                 rgb = lerp(rgb, rgb + 0.35, saturate(i.fx.y) * 0.6);
-                return half4(rgb, c.a * i.color.a * i.fx.x * (half)McxVisibility(i.positionWS));
+                return half4(rgb, c.a * i.color.a * i.fx.x * (half)McxVisibilityIn(_PanelIndex, i.positionWS));
             }
             ENDHLSL
         }
