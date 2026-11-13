@@ -25,7 +25,6 @@ Material:
     m_TexEnvs: []
     m_Ints: []
     m_Floats:
-    - _GlowBoost: 1
     - _Grid: 0
     - _Motion: 0
     - _Opacity: 1

@@ -47,7 +47,7 @@ Every call is limited to 200 000 instructions; going over stops the plugin (erro
 
 | Call | Does |
 |---|---|
-| `settings.get(key)` / `settings.set(key, value)` | the shell settings (`layout`, `accent`, `uiScale`, `glow`, `motion`, `gestures.clapDistance`, `gestures.pinchOn`, ...) |
+| `settings.get(key)` / `settings.set(key, value)` | the shell settings (`layout`, `accent`, `uiScale`, `panelOpacity`, `motion`, `gestures.clapDistance`, `gestures.pinchOn`, ...) |
 | `store.get(key)` / `store.set(key, value)` | strings that survive restarts, per plugin |
 | `app.time()` | seconds since the app started |
 | `app.after(seconds, fn)` / `app.every(seconds, fn)` | timers; return an id for `app.cancel(id)` |

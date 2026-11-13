@@ -33,7 +33,7 @@ namespace MetaCodex.UI
         public float CutBig = 0.020f;
         public float CutSmall = 0.005f;
         public float Border = 0.0014f;
-        /// Room around a shape for its contact shadow and accent halo.
+        /// Room around a shape for its accent halo.
         public float GlowMargin = 0.016f;
 
         /// TextMeshPro (3D) font size for a line height in metres: world text is ~0.1 m per 1 pt.

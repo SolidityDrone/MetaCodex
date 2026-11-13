@@ -77,7 +77,7 @@ Settings keys: `gestures.clickMode` (0 pinch, 1 poke, 2 both), `gestures.grabMod
 `gestures.pinchOn` (0.6-0.98), `gestures.clapEnabled`, `gestures.clapDistance` (m), `gestures.rayVisible`,
 `gestures.customEnabled` (plugin gestures on/off), `layout` (`fixed` | `float`), `carouselRadius`,
 `panelDistance`, `uiScale`, `accent` (`cyan` `amber` `green` `violet` `red` `ice` `magenta` `gold` `white`),
-`glow` (0-2), `panelOpacity` (0.3-1), `motion` (0-2), `grid`, `scanlines`, `sounds`, `soundVolume`, `bendPanels`.
+`panelOpacity` (0.3-1), `motion` (0-2), `grid`, `scanlines`, `sounds`, `soundVolume`, `bendPanels`.
 No-code links from a gesture to an action live in Settings too (Gestures panel > BIND, or
 `mcx-ui gesture bind <gesture> <action>`).
 Example: "move panels by closing my hand instead of pinching" = `settings.set("gestures.grabMode", "1")`

@@ -3997,8 +3997,8 @@ end)
             shell.ClosePanel("files");
             const int dw = 160, dh = 120;
             var near = RenderWithDepth(shell, "ui-focus-wall-near.png", head.position, 1.0f, dw, dh);
-            // in the band above the test terminal (it sits in front, opaque by design, and its shadow darkens around
-            // it); there the wall is 0.5 m above the eyes at 1 m, 1.8 m at 4 m (still on the 4 m wall)
+            // in the band above the test terminal (it sits in front, opaque by design); there the wall is 0.5 m above the
+            // eyes at 1 m, 1.8 m at 4 m (still on the 4 m wall)
             int[] xs = { 80, 160, 240 };
             float aNear = xs.Max(x => near.GetPixel(x, 215).a);
             var far = RenderWithDepth(shell, "ui-focus-wall-far.png", head.position, 4.0f, dw, dh);

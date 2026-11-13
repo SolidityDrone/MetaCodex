@@ -102,7 +102,6 @@ namespace MetaCodex.Shell
                 Settings.scanlines = false;
                 Settings.grid = false;
                 Settings.motion = 0f;
-                Settings.glow = 1f;
                 Settings.panelOpacity = Mathf.Max(Settings.panelOpacity, 0.92f);
                 Settings.foveation = false;
                 Settings.terminalAtStart = false;
@@ -200,7 +199,6 @@ namespace MetaCodex.Shell
             if (shapeMaterial != null)
             {
                 shapeMaterial.SetFloat("_Scanlines", Settings.scanlines ? 1f : 0f);
-                shapeMaterial.SetFloat("_GlowBoost", Mathf.Clamp(Settings.glow, 0f, 2f));
                 shapeMaterial.SetFloat("_Opacity", PanelOpacity);
                 shapeMaterial.SetFloat("_Motion", Mathf.Clamp(Settings.motion, 0f, 2f));
                 shapeMaterial.SetFloat("_Grid", Settings.grid ? 1f : 0f);
