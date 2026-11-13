@@ -616,10 +616,51 @@ namespace MetaCodex.Shell
             return path;
         }
 
+        // ---- recently used (moved here from the orb's thread list, which is gone: owner 2026-11-13)
+
+        // when the user last used each thread here (opened it, wrote to it), unix ms; kept in a small file of its own
+        // (not in the settings: MQH's copy of those would bring an old list back). Read by LastUsedThread (ShellReturn)
+        private readonly Dictionary<string, long> _threadUsedAt = new Dictionary<string, long>();
+        private bool _threadUseLoaded;
+
+        private static string ThreadUsePath => Path.Combine(Application.persistentDataPath, "recent-threads.txt");
+
+        private void LoadThreadUse()
+        {
+            if (_threadUseLoaded) return;
+            _threadUseLoaded = true;
+            if (!Application.isPlaying) return; // self-tests: in memory only
+            try
+            {
+                if (!File.Exists(ThreadUsePath)) return;
+                foreach (var line in File.ReadAllLines(ThreadUsePath))
+                {
+                    int sp = line.IndexOf(' ');
+                    if (sp <= 0 || !long.TryParse(line.Substring(0, sp), out long at)) continue;
+                    string id = line.Substring(sp + 1).Trim();
+                    if (id.Length > 0 && (!_threadUsedAt.TryGetValue(id, out var had) || had < at)) _threadUsedAt[id] = at;
+                }
+            }
+            catch (Exception ex) { Log("recent threads unreadable: " + ex.Message); }
+        }
+
+        /// The user used a thread here (opened it, wrote to it): it is the most recently used one.
+        private void NoteThreadUsed(string id)
+        {
+            if (string.IsNullOrEmpty(id)) return;
+            LoadThreadUse();
+            _threadUsedAt[id] = NowMs;
+            if (_threadUsedAt.Count > 24)
+                foreach (var old in _threadUsedAt.OrderBy(kv => kv.Value).Take(_threadUsedAt.Count - 24).Select(kv => kv.Key).ToList()) _threadUsedAt.Remove(old);
+            if (!Application.isPlaying) return;
+            try { File.WriteAllLines(ThreadUsePath, _threadUsedAt.OrderByDescending(kv => kv.Value).Select(kv => kv.Value + " " + kv.Key)); }
+            catch (Exception ex) { Log("recent threads not saved: " + ex.Message); }
+        }
+
         public void OpenThread(string id)
         {
             if (string.IsNullOrEmpty(id)) return;
-            NoteThreadUsed(id); // first in the orb's quick list (ShellOrbThreads)
+            NoteThreadUsed(id);
             if (id != _threadOpen) { _thExec = null; _thUsage = null; _tlRaw = new JArray(); CloseAttachModal(); SetAttachMenu(false); _threadOpen = id; ResetThreadChat(); }
             _threadOpen = id;
             RefreshAttachRow(); // each thread keeps its own attachments for its next message

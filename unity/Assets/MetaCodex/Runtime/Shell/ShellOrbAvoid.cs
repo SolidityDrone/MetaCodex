@@ -24,7 +24,7 @@ namespace MetaCodex.Shell
         /// The window the user is looking at now (null: none for 2 s).
         public UiPanel WatchedPanel => _watched;
 
-        /// The orb's own items: its menu's actions and cards, its callouts, the voice HUD.
+        /// The orb's own items: its menu's actions, its callouts, the voice HUD.
         private bool IsOrbItem(UiPanel p) =>
             p != null && (p.Id != null && (p.Id.StartsWith("orb-") || p.Id == "toast" || p.Id == "voice-hud") || p == Toasts.Pinned);
 
@@ -110,7 +110,6 @@ namespace MetaCodex.Shell
                 var on = Router.HandRayPanel(h);
                 if (on != null && IsOrbItem(on)) return true;
                 foreach (var a in _orbActs) if (a.IsOpen && Vector3.Distance(hand.tip, a.transform.position) < 0.10f) return true;
-                foreach (var c in _orbCards) if (c.Panel.IsOpen && Vector3.Distance(hand.tip, c.Panel.transform.position) < 0.12f) return true;
             }
             return false;
         }
@@ -187,8 +186,8 @@ namespace MetaCodex.Shell
 
         public float OrbFrameYawForTest => _orbYaw;
         public void CloseOrbMenuForTest() { if (OrbMenuOpen) CloseOrbMenu(); }
-        /// The menu's arc radii now (the actions' centres, the cards' nearest corners), metres.
-        public (float inner, float outer) OrbMenuRadiiForTest => OrbMenuRadii(OrbMenuScaleNow);
+        /// The menu's arc radius now (the squares' centres), metres.
+        public float OrbMenuRadiusForTest => OrbActRadius(OrbMenuScaleNow);
         /// The callouts' circle: each card's corner nearest the orb lies on it (UiToasts), metres.
         public float OrbOuterRadiusForTest => OrbOuterRadius;
     }

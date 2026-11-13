@@ -47,7 +47,6 @@ namespace MetaCodex.EditorTools
             {
                 var list = new List<MetaCodexShell.ViewRect>();
                 foreach (var a in shell.OrbActionsForTest) if (a.IsOpen) list.Add(RectOf(a));
-                foreach (var c in shell.OrbThreadCardsForTest) if (c.IsOpen) list.Add(RectOf(c));
                 foreach (var c in shell.Toasts.Panels) list.Add(RectOf(c));
                 var w = Where();
                 float r = Mathf.Atan2(shell.OrbOuterRadiusForTest, Vector3.Distance(orb.Position, head.position)) * Mathf.Rad2Deg;
@@ -66,7 +65,6 @@ namespace MetaCodex.EditorTools
                     ["id"] = id, ["projectId"] = "p1", ["title"] = title, ["providerId"] = "codex", ["status"] = st, ["runtime"] = new JObject { ["displayStatus"] = st },
                     ["updatedAt"] = now - ago, ["queuedWork"] = "none", ["hasPendingInteraction"] = false,
                 };
-                shell.ClearThreadUseForTest();
                 shell.SetWorkspacesForTest(projects, new JArray { T("w1", "Fix the build", "active", 5000), T("w2", "Docs pass", "idle", 60000), T("w3", "Shader fix", "error", 90000), T("w4", "Bench", "idle", 120000), T("w5", "Voice words", "idle", 150000) }, new JArray());
 
                 // a window straight ahead, the one being read: about 44 degrees wide, its top just below the orb's level
@@ -97,19 +95,18 @@ namespace MetaCodex.EditorTools
                 var all = cov.Aggregate((a, b) => new MetaCodexShell.ViewRect { Yaw0 = Mathf.Min(a.Yaw0, b.Yaw0), Yaw1 = Mathf.Max(a.Yaw1, b.Yaw1), Pitch0 = Mathf.Min(a.Pitch0, b.Pitch0), Pitch1 = Mathf.Max(a.Pitch1, b.Pitch1) });
                 bool inView = Mathf.Abs(moved.yaw) <= 61f && moved.pitch <= 41f && moved.pitch >= -35f;
                 Check(wouldCover && hit.Count == 0 && inView && maxStep < 0.03f && shell.OrbMenuOpen,
-                    $"the menu would cover the watched window at the orb's place ({wouldCover}); the orb glides to ({moved.yaw:F0}, {moved.pitch:F0} deg; offset {shell.OrbAvoidForTest.x:F0}, {shell.OrbAvoidForTest.y:F0}), never more than {maxStep * 100f:F1} cm a frame, and then the orb, its four tiles and five cards cover nothing of it ({hit.Count} overlap; the window {wr.Yaw0:F0}..{wr.Yaw1:F0} x {wr.Pitch0:F0}..{wr.Pitch1:F0} deg, the orb's items {all.Yaw0:F0}..{all.Yaw1:F0} x {all.Pitch0:F0}..{all.Pitch1:F0}); in view ({inView})");
+                    $"the menu would cover the watched window at the orb's place ({wouldCover}); the orb glides to ({moved.yaw:F0}, {moved.pitch:F0} deg; offset {shell.OrbAvoidForTest.x:F0}, {shell.OrbAvoidForTest.y:F0}), never more than {maxStep * 100f:F1} cm a frame, and then the orb and its four squares cover nothing of it ({hit.Count} overlap; the window {wr.Yaw0:F0}..{wr.Yaw1:F0} x {wr.Pitch0:F0}..{wr.Pitch1:F0} deg, the orb's items {all.Yaw0:F0}..{all.Yaw1:F0} x {all.Pitch0:F0}..{all.Pitch1:F0}); in view ({inView})");
                 foreach (var a in shell.OrbActionsForTest) a.ForceRefresh();
-                foreach (var c in shell.OrbThreadCardsForTest) if (c.IsOpen) c.ForceRefresh();
                 RenderAt("ui-orb-watched-menu.png", head.position - Vector3.forward * 0.05f, Quaternion.LookRotation(new Vector3(0.18f, 0.12f, 1f)), 100f, 1600, 1000);
 
                 // looking at the menu keeps the window watched (it does not count as looking elsewhere)
                 var keepHead = head.rotation;
-                head.rotation = Quaternion.LookRotation(shell.OrbThreadCardsForTest[2].transform.position - head.position);
+                head.rotation = Quaternion.LookRotation(shell.OrbActionsForTest[1].transform.position - head.position);
                 Step(8);
                 bool stillWatched = shell.WatchedPanel == win;
                 head.rotation = keepHead;
                 Step(4);
-                Check(stillWatched, $"looking at the orb's cards keeps the window watched ({stillWatched})");
+                Check(stillWatched, $"looking at the orb's menu keeps the window watched ({stillWatched})");
 
                 // messages while the menu is up: the callouts on the orb's right keep off the window too
                 shell.Toast("Build finished: 0 errors", "ok");
@@ -119,7 +116,6 @@ namespace MetaCodex.EditorTools
                 Check(shell.Toasts.Count == 2 && hit2 == 0, $"with two callouts as well, nothing of the orb covers the watched window ({hit2} overlaps)");
                 foreach (var c in shell.Toasts.Panels) c.ForceRefresh();
                 foreach (var a in shell.OrbActionsForTest) a.ForceRefresh();
-                foreach (var c in shell.OrbThreadCardsForTest) if (c.IsOpen) c.ForceRefresh();
                 RenderAt("ui-orb-watched.png", head.position - Vector3.forward * 0.05f, Quaternion.LookRotation(new Vector3(0.18f, 0.12f, 1f)), 100f, 1600, 1000);
                 foreach (var old in shell.Toasts.Panels.ToList()) old.CloseAndDestroy();
                 shell.Toasts.Tick(float.MaxValue);
@@ -220,10 +216,8 @@ namespace MetaCodex.EditorTools
                 UiPanel.AnimateInEditor = false;
                 shell.CloseOrbMenuForTest();
                 foreach (var a in shell.OrbActionsForTest) a.ForceRefresh();
-                foreach (var c in shell.OrbThreadCardsForTest) if (c != null && c.Transitioning) c.ForceRefresh();
                 foreach (var old in shell.Toasts.Panels.ToList()) old.CloseAndDestroy();
                 shell.Toasts.Tick(float.MaxValue);
-                shell.ClearThreadUseForTest();
                 shell.Settings.bendPanels = bend0;
                 if (shell.Settings.orb != orb0) shell.SetOrb(orb0);
                 if (shell.Floating) shell.SetLayout("fixed");

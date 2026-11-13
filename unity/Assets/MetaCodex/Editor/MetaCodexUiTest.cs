@@ -182,7 +182,6 @@ namespace MetaCodex.EditorTools
                 if (Want("chat")) ChatSection(shell, head); // MetaCodexUiTestChat.cs
                 if (Want("control")) ControlSection(shell, head, frame); // MetaCodexUiTestControl.cs
                 if (Want("workspaces")) WorkspacesSection(shell, head); // MetaCodexUiTestWorkspaces.cs
-                if (Want("orbthreads")) OrbThreadsSection(shell, head); // MetaCodexUiTestOrbThreads.cs
                 if (Want("sidebar")) SidebarSection(shell, head, hands); // MetaCodexUiTestSidebar.cs
                 if (Want("orbplace")) OrbPlaceSection(shell, head, hands); // MetaCodexUiTestOrbPlace.cs
                 if (WantNamed("voiceexport")) VoiceExport(shell);
@@ -2772,7 +2771,7 @@ end)
                 foreach (var cd in cards) cd.ForceRefresh();
                 RenderAt("ui-orb-callouts.png", head.position, Quaternion.LookRotation(orb.Position + head.right * 0.14f - head.position, Vector3.up), 46f, 1400, 900);
 
-                // a touch: its menu, an arc of four tiles round its left side (the callouts take its right), each turned to the user
+                // a touch: its menu, an arc of four squares round its left side (the callouts take its right), each turned to the user
                 var rest = head.position + head.forward * 0.3f + head.right * 0.25f - head.up * 0.3f;
                 void TipAt(Vector3 at, float pinch = 0f) => hands.SetOpen(Handedness.Right, at - head.forward * 0.12f, head.forward, -head.up, 0f, pinch);
                 void TipTo(Vector3 tip, float pinch = 0f) { TipAt(tip, pinch); hands.Frames[1].IndexTip = tip; if (pinch > 0.5f) hands.Frames[1].ThumbTip = tip; }
@@ -2781,9 +2780,26 @@ end)
                 var acts = shell.OrbActionsForTest;
                 bool opened = shell.OrbMenuOpen;
                 TipTo(rest); Step(14);
-                var ri = shell.OrbMenuRadiiForTest.inner;
+                var ri = shell.OrbMenuRadiusForTest;
                 var onArc = acts.Select(a => OrbPlaneNear(a, orb.Position, head.position)).ToList();
-                bool small = acts.Count == 4 && acts.All(a => a.Width <= MetaCodexShell.OrbActW + 1e-4f && a.Elements.OfType<UiButton>().Count() == 1 && !a.Elements.OfType<UiList>().Any());
+                // plain squares: no frame of their own, one button in each, filling it
+                bool small = acts.Count == 4 && acts.All(a => a.Frameless && a.Width <= MetaCodexShell.OrbActW + 1e-4f && a.Elements.OfType<UiButton>().Count() == 1 && !a.Elements.OfType<UiList>().Any()
+                    && a.Elements.OfType<UiButton>().All(b => b.Rect.size == new Vector2(MetaCodexShell.OrbActW, MetaCodexShell.OrbActH)));
+                // the gap between neighbours, measured between their edges: the same all round the arc
+                float GapBetween(int k)
+                {
+                    var p = onArc[k].centre; var q = onArc[k + 1].centre;
+                    float gx = Mathf.Max(0f, Mathf.Abs(p.x - q.x) - acts[k].Width * acts[k].transform.lossyScale.x);
+                    float gy = Mathf.Max(0f, Mathf.Abs(p.y - q.y) - acts[k].Height * acts[k].transform.lossyScale.y);
+                    return Mathf.Sqrt(gx * gx + gy * gy);
+                }
+                float wantGap = MetaCodexShell.OrbActGap * acts[0].transform.lossyScale.x;
+                var gaps = Enumerable.Range(0, 3).Select(k => GapBetween(k)).ToList();
+                bool even = acts.Count == 4 && gaps.All(g => Mathf.Abs(g - wantGap) < 0.0005f);
+                // the cast's light still runs on a square (no frame to light): posed half open, then whole again
+                acts[1].PoseTransitionForTest(true, 0.5f);
+                bool lit = acts[1].TransitionPhase == UiPanel.Phase.Opening && Mathf.Abs(acts[1].TransitionT - 0.5f) < 1e-4f;
+                acts[1].ForceRefresh();
                 bool concentric = onArc.All(x => Mathf.Abs(x.centre.magnitude - ri) < 0.002f);
                 bool leftSide = onArc.All(x => x.centre.x < -0.03f) && Enumerable.Range(1, 3).All(k => onArc[k].centre.y < onArc[k - 1].centre.y - 0.01f);
                 bool menuFacing = acts.All(a => Vector3.Angle(a.transform.forward, a.transform.position - head.position) < 3f);
@@ -2794,8 +2810,8 @@ end)
                 foreach (var a in acts) a.ForceRefresh();
                 foreach (var cd in shell.Toasts.Panels) cd.ForceRefresh();
                 RenderAt("ui-orb-menu.png", head.position, Quaternion.LookRotation(orb.Position - head.right * 0.03f - head.position, Vector3.up), 46f, 1400, 1000);
-                Check(opened && small && concentric && leftSide && menuFacing && clearOfOrb && counted && labelDeg >= 0.88f,
-                    $"a fingertip in the orb opens its menu ({opened}): four tiles, one button each ({small}), on an arc round its left side, TALK at the top ({leftSide}), every centre {ri * 100f:F1} cm from the orb's ({concentric}), clear of its rings ({clearOfOrb}), each turned to the user ({menuFacing}); labels {labelDeg:F2} deg high; LOG says 4 NEW ({counted})");
+                Check(opened && small && even && lit && concentric && leftSide && menuFacing && clearOfOrb && counted && labelDeg >= 0.88f,
+                    $"a fingertip in the orb opens its menu ({opened}): four plain squares, no frame, one button filling each ({small}); the gaps between neighbours {string.Join(" / ", gaps.Select(g => (g * 1000f).ToString("F1")))} mm, all {wantGap * 1000f:F1} mm ({even}); the light crosses a square ({lit}); on an arc round its left side, TALK at the top ({leftSide}), every centre {ri * 100f:F1} cm from the orb's ({concentric}), clear of its rings ({clearOfOrb}), each turned to the user ({menuFacing}); labels {labelDeg:F2} deg high; LOG says 4 NEW ({counted})");
                 log?.Click();
                 Step(2);
                 var msgs = shell.PanelsById.TryGetValue("messages", out var mp) ? mp : null;

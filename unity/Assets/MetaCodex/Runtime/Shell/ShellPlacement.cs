@@ -72,7 +72,7 @@ namespace MetaCodex.Shell
         private UiPanel OpenerNow()
         {
             var a = Router != null ? Router.ActivePanel : null;
-            if (a == null || !a.IsOpen || a.Id == "dock" || a.Id == "toast" || a.Id == "voice-hud" || (a.Id ?? "").StartsWith("orb-") || a.Id == "picker") return null; // the orb's billboard and cards
+            if (a == null || !a.IsOpen || a.Id == "dock" || a.Id == "toast" || a.Id == "voice-hud" || (a.Id ?? "").StartsWith("orb-") || a.Id == "picker") return null; // the orb's menu squares
             return a;
         }
 

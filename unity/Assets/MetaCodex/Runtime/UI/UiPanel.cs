@@ -17,6 +17,9 @@ namespace MetaCodex.UI
         public bool Closable { get; set; } = true;
         public bool Draggable { get; set; } = true;
         public bool HasHeader { get; private set; } = true;
+        /// No frame: the panel draws no body shape (so no frame, shadow or halo); only its elements show. Set at creation
+        /// (the orb's menu squares). Its frame calls (SetHighlight, SetPlainBody) do nothing.
+        public bool Frameless { get; private set; }
         /// Open as far as everything else is concerned: false as soon as Close() is called, while it may still be
         /// animating out (the router, layouts and toggles see it closed at once). Only "closing while still drawn" is
         /// kept as a flag: a panel turned on by its owner directly is open without any callback (the Editor calls no
@@ -49,11 +52,12 @@ namespace MetaCodex.UI
         /// squashed scale of a transition).
         public Vector3 RestLossyScale => transform.parent != null ? Vector3.Scale(transform.parent.lossyScale, _baseScale) : _baseScale;
 
-        public static T Create<T>(string id, string title, float width, float height, Transform parent = null, bool header = true) where T : UiPanel
+        public static T Create<T>(string id, string title, float width, float height, Transform parent = null, bool header = true, bool frameless = false) where T : UiPanel
         {
             var go = new GameObject("panel-" + id);
             if (parent != null) go.transform.SetParent(parent, false);
             var p = go.AddComponent<T>();
+            p.Frameless = frameless; // before Init: Init makes the frame (or not)
             p.Init(id, title, width, height, header);
             return p;
         }
@@ -68,7 +72,7 @@ namespace MetaCodex.UI
             Hook();
             ClaimSlot();
             TagRenderer(shapesGo.GetComponent<MeshRenderer>(), Vector3.zero);
-            _body = Shapes.Add(Shape(UiShapeKind.Panel, new Rect(0, 0, width, height), Theme.Frame, Theme.CutBig, Theme.CutSmall));
+            _body = Frameless ? -1 : Shapes.Add(Shape(UiShapeKind.Panel, new Rect(0, 0, width, height), Theme.Frame, Theme.CutBig, Theme.CutSmall));
             if (header)
             {
                 var hr = new Rect(0.004f, 0.004f, width - 0.008f, Theme.HeaderHeight - 0.004f);
@@ -329,17 +333,13 @@ namespace MetaCodex.UI
             transform.rotation = Quaternion.LookRotation(dir.normalized, Vector3.up);
         }
 
-        public void SetHighlight(float state) => Shapes.SetState(_body, state);
-
-        /// The frame's colour (Theme.Frame at rest): the orb's thread cards wear their thread's state.
-        public void SetFrameTint(Color tint) => Shapes.SetTint(_body, tint);
-        /// The frame's highlight and colour now (self-tests).
-        public float HighlightNow => Shapes.Get(_body).State;
-        public Color FrameTintNow => Shapes.Get(_body).Tint;
+        /// The frame's highlight (a frame has none when Frameless: nothing to light).
+        public void SetHighlight(float state) { if (_body >= 0) Shapes.SetState(_body, state); }
 
         /// A plain rounded slab instead of the console frame (the keyboard: the deck of a normal keyboard).
         public void SetPlainBody(float corner)
         {
+            if (_body < 0) return; // frameless: no frame to restyle
             var s = Shapes.Get(_body);
             s.Kind = UiShapeKind.Deck;
             s.CutBig = corner;
