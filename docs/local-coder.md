@@ -62,6 +62,12 @@ AGENTS.md, e.g. how native apps are built here), and only the core tools (read /
 their descriptions cut to one line. Claude Code's first turn: 11,071 -> 3,363 prompt tokens; the same task 340 s -> 78 s
 on the PC (headset estimate 5-10 min -> 1-3 min).
 
+The history is kept under about 9k tokens (36,000 characters, 2026-11-14), so a long thread still fits the 16k context
+with the tools and the answer: a tool result longer than 4,000 characters is cut, then the oldest turns after the task
+(the first user message) go, a turn at a time (an assistant message stays with its tool results), never the last two;
+a short note in their place says that earlier steps were left out. OpenCode lists the model as "Local coder (this
+headset, slow)", described as Qwen2.5-Coder 0.5B (the ACP bridge's `local-coder.ts`; it still said Qwen3 1.7B).
+
 ## Open (before 0.7.18)
 
 - Headset measurements; the voice bench after the two new commands (AGENTS.md rule 3).

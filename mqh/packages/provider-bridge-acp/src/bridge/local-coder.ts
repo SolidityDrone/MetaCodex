@@ -9,7 +9,7 @@ import type { AvailableModel } from "@bb/domain";
 export const OPENCODE_LOCAL_CODER_MODEL_ID = "metacodex/local-coder";
 export const LOCAL_CODER_DISPLAY_NAME = "Local coder (this headset, slow)";
 const LOCAL_CODER_DESCRIPTION =
-  "Qwen3 1.7B on the headset's AI cores: offline and free, but slow (minutes per turn) and only for small tasks; voice waits while it works.";
+  "Qwen2.5-Coder 0.5B on the headset's AI cores (16k context): offline and free, a demonstration model, slow and only for one small file at a time; voice waits while it works.";
 
 export function localCoderConfigured(
   env: Readonly<Record<string, string | undefined>>,

@@ -237,7 +237,44 @@ function slim ({ messages, tools }, on = true) {
     const f = t.function || t
     return { type: 'function', function: { name: f.name, description: cut((f.description || '').split('\n')[0], 200), parameters: f.parameters } }
   })
-  return { messages: msgs, tools: kept }
+  return { messages: fitHistory(msgs), tools: kept }
+}
+
+// The coder's context is 16k tokens (ShellLocalCoder's OpenCode config: 16384, 1024 out): the history is kept under
+// ~9k tokens (4 characters a token) so the prompt, the tools and the answer fit. A long tool result is cut; then the
+// oldest turns after the task (the first user message) go, a turn at a time (an assistant message with the tool
+// results that answer it stays together), never the last two turns.
+const SLIM_HISTORY_CHARS = 36000
+const SLIM_TOOL_RESULT_CHARS = 4000
+
+function msgSize (m) {
+  return (typeof m.content === 'string' ? m.content.length : JSON.stringify(m.content || '').length) + (m.tool_calls ? JSON.stringify(m.tool_calls).length : 0)
+}
+
+function fitHistory (msgs) {
+  msgs = msgs.map((m) => m.role === 'tool' && typeof m.content === 'string' && m.content.length > SLIM_TOOL_RESULT_CHARS
+    ? Object.assign({}, m, { content: m.content.slice(0, SLIM_TOOL_RESULT_CHARS) + '\n... (cut: the rest of this output is left out)' }) : m)
+  let total = msgs.reduce((a, m) => a + msgSize(m), 0)
+  if (total <= SLIM_HISTORY_CHARS) return msgs
+  const first = msgs.findIndex((m) => m.role === 'user')
+  if (first < 0) return msgs
+  // turns after the task: a user message, or an assistant message with the tool messages right after it
+  const turns = []
+  for (let i = first + 1; i < msgs.length;) {
+    let j = i + 1
+    if (msgs[i].role === 'assistant') while (j < msgs.length && msgs[j].role === 'tool') j++
+    turns.push([i, j])
+    i = j
+  }
+  const drop = new Set()
+  for (let t = 0; t < turns.length - 2 && total > SLIM_HISTORY_CHARS; t++) {
+    const [a, b] = turns[t]
+    for (let k = a; k < b; k++) { drop.add(k); total -= msgSize(msgs[k]) }
+  }
+  if (!drop.size) return msgs
+  const out = msgs.filter((m, k) => !drop.has(k))
+  out.splice(first + 1, 0, { role: 'user', content: '(Earlier steps of this task were left out to fit the context.)' })
+  return out
 }
 
 /** Qwen's template takes one system message, first: several (Codex: instructions + developer items) are joined. */
