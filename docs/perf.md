@@ -97,3 +97,17 @@ What was traded:
 - A window marked clear shows a real thing behind it for up to ~0.4 s after the thing comes in front (one reading
   and its read-back); a thing thinner than ~2 degrees can be missed. Hands always show (the hand cut-outs).
 - The depth and the camera run idle for 60 s after you turn both features off.
+
+## GPU level and the Quest rendering options (2026-11-13)
+
+Measured on the Quest 3S up to 0.7.19: VrApi `CPU4/GPU=3/1, 1651/350MHz`, GPU 91-99 % busy. Cause: the build traded one
+GPU level for one CPU level (`processorFavor = FavorCPU`, manifest `com.oculus.trade_cpu_for_gpu_amount = -1`). With
+passthrough the Quest 3/3S caps are CPU 3 and GPU 2 (Meta, "CPU and GPU levels"), so the trade gave the CPU nothing and
+held the GPU at level 1. Now: no trade (`FavorEqually`): GPU up to level 2, 456 MHz (+30 %).
+
+The Meta Quest Support OpenXR feature was off on Android, so the options `ConfigureQuestRendering` sets (symmetric
+projection, render regions, late latching, lazy MSAA buffers) never shipped. Now it is on, with Meta XR Foveation and
+Subsampled Layout, so the dynamic foveation the shell asks for works.
+
+Check: VrApi shows `GPU=.../2, .../456MHz`; `adb logcat | grep tradeCpuForGpu` shows 0; the Unity OpenXR diagnostic
+report at start says "Symmetric Projection: True". Battery Saver (VrApi `LP=1`) must be off for comparable numbers.
