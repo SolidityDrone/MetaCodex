@@ -207,6 +207,10 @@ namespace MetaCodex.App
 
         /// Raised by Recenter; the shell repositions its panels (or the carousel) around the new pose.
         public event Action<Vector3, Quaternion> Recentered;
+        /// The main window's place just before the recenter and its frame: the shell turns every window round the user by
+        /// the angle the main window turned (ShellPlacement.RecenterKeepLayout), so the layout keeps its shape.
+        public Vector3? RecenterFrom;
+        public Transform RecenterMain;
 
         /// Puts the main terminal in front of where the user looks now: level, slightly below the eyes.
         public void Recenter()
@@ -219,6 +223,8 @@ namespace MetaCodex.App
             var rot = Quaternion.LookRotation(fwd, Vector3.up); // panel +z points away from the user
             Vector3 center = eye + fwd * distance + Vector3.down * dropBelowEyes;
             var main = _terms.Count > 0 ? _terms[0] : null;
+            RecenterFrom = main != null && main.Frame != null ? main.Frame.position : (Vector3?)null;
+            RecenterMain = main != null ? main.Frame : null;
             if (main != null && main.Frame != null) main.Frame.SetPositionAndRotation(center, rot);
             else
             {

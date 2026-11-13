@@ -308,6 +308,64 @@ namespace MetaCodex.Shell
             r.Pitch0 = Mathf.Min(r.Pitch0, pitch); r.Pitch1 = Mathf.Max(r.Pitch1, pitch);
         }
 
+        /// RECENTER (owner 2026-11-13: "they are all scrambled on top of each other ... they don't retain older positions"):
+        /// every window turns round the user by the angle the main window turned (from its place before the recenter),
+        /// so the layout keeps its shape. Then only a window that covers an earlier one (nearest to where the user looks
+        /// first) takes the free place that costs least (PlaceSmart). Without a main window the group turns so its middle
+        /// faces where the user looks.
+        private void RecenterKeepLayout(Vector3? mainFrom, UiPanel main)
+        {
+            var head = Head;
+            if (head == null) return;
+            var eye = head.position;
+            var all = LayoutPanels().Where(p => p != null && p.IsOpen && !(p.Id ?? "").StartsWith("orb-")).ToList();
+            if (main != null && !main.IsOpen) main = null;
+            float dYaw;
+            if (mainFrom.HasValue && main != null) dYaw = Mathf.DeltaAngle(YawAround(eye, mainFrom.Value), YawAround(eye, main.transform.position));
+            else
+            {
+                var others = all.Where(p => p != main).ToList();
+                if (others.Count == 0) return;
+                dYaw = Mathf.DeltaAngle(MeanYawAround(eye, others), FrontYaw());
+            }
+            var turn = Quaternion.Euler(0f, dYaw, 0f);
+            var rest = all.Where(p => p != main).ToList();
+            foreach (var p in rest)
+            {
+                var t = p.transform;
+                t.SetPositionAndRotation(eye + turn * (t.position - eye), turn * t.rotation);
+            }
+            var settled = new List<UiPanel>();
+            if (main != null) settled.Add(main);
+            float gaze = FrontYaw();
+            foreach (var p in rest.OrderBy(p => Mathf.Abs(Mathf.DeltaAngle(gaze, YawAround(eye, p.transform.position)))))
+            {
+                bool covers = false;
+                if (ViewRectOf(p, eye, gaze, out var mine))
+                    foreach (var s in settled)
+                        if (ViewRectOf(s, eye, gaze, out var r) && mine.Overlaps(r, -1f)) { covers = true; break; } // a degree of touch is fine
+                if (covers) PlaceSmart(p.Id, p, null, settled.ToList());
+                settled.Add(p);
+            }
+        }
+
+        private static float YawAround(Vector3 eye, Vector3 at)
+        {
+            var d = at - eye;
+            return Mathf.Atan2(d.x, d.z) * Mathf.Rad2Deg;
+        }
+
+        private static float MeanYawAround(Vector3 eye, List<UiPanel> ps)
+        {
+            float s = 0f, c = 0f;
+            foreach (var p in ps)
+            {
+                float a = YawAround(eye, p.transform.position) * Mathf.Deg2Rad;
+                s += Mathf.Sin(a); c += Mathf.Cos(a);
+            }
+            return Mathf.Atan2(s, c) * Mathf.Rad2Deg;
+        }
+
         /// A panel that was open before: its old place is still good when it is in view (its middle within ViewYaw of
         /// where the user faces, 3 m) and no open panel has taken it.
         private bool OldPlaceStillGood(UiPanel p)

@@ -519,20 +519,19 @@ namespace MetaCodex.Shell
 
         private void OnRecentered(Vector3 center, Quaternion rot)
         {
-            var settled = new List<UiPanel>();
+            var from = app != null ? app.RecenterFrom : null;
+            var main = app != null ? app.RecenterMain : null;
+            if (app != null) { app.RecenterFrom = null; app.RecenterMain = null; }
             foreach (var kv in _panels)
             {
-                if (kv.Key == "dock")
-                {
-                    // the WRIST main menu replaces the dock
-                    if (Settings.wristMenu) { if (kv.Value.IsOpen) kv.Value.Close(); continue; }
-                    PlaceDefault("dock", kv.Value);
-                    if (!kv.Value.IsOpen) kv.Value.Open();
-                    continue;
-                }
-                if (kv.Key == ControlId) continue; // the rail follows its window
-                if (kv.Value.IsOpen) { PlaceSmart(kv.Key, kv.Value, null, settled.ToList()); settled.Add(kv.Value); } // one by one, clear of those already placed
+                if (kv.Key != "dock") continue;
+                // the WRIST main menu replaces the dock
+                if (Settings.wristMenu) { if (kv.Value.IsOpen) kv.Value.Close(); continue; }
+                PlaceDefault("dock", kv.Value);
+                if (!kv.Value.IsOpen) kv.Value.Open();
             }
+            // FIXED: the windows keep their places round the user (ShellPlacement); FLOAT lays its ring out again below
+            if (!Floating) RecenterKeepLayout(from, main != null ? main.GetComponent<UiPanel>() : null);
             if (Orb != null && Settings.orb) { FrameOrb(true); Orb.Teleport(OrbHome()); } // the orb comes along
             ResetCarousel();
         }

@@ -635,10 +635,16 @@ end)
             var after = shell.PanelsById["files"].transform.position;
             float turned = Vector2.SignedAngle(new Vector2(before.x - c.x, before.z - c.z), new Vector2(after.x - c.x, after.z - c.z));
             Check(Mathf.Abs(Mathf.Abs(turned) - 60f) < 3f, $"carousel spins without snapping ({turned:F1}°)");
-            head.position += new Vector3(0.5f, 0.15f, 0.3f); // walk and nod: follow x/z only
+            head.position += new Vector3(0.5f, 0.15f, 0.3f); // walk and nod: follow x/z only, past the dead zone
             shell.TickLayoutForTest(0.05f, 120);
             var c2 = shell.CarouselCenter;
-            Check(Mathf.Abs(c2.x - head.position.x) < 0.02f && Mathf.Abs(c2.z - head.position.z) < 0.02f && Mathf.Abs(c2.y - c.y) < 1e-4f, "carousel follows walking (x/z), not head height");
+            float gap = new Vector2(c2.x - head.position.x, c2.z - head.position.z).magnitude;
+            Check(gap <= MetaCodexShell.RigDeadZone + 0.02f && gap > MetaCodexShell.RigDeadZone - 0.05f && Mathf.Abs(c2.y - c.y) < 1e-4f,
+                $"carousel follows walking (x/z) past its {MetaCodexShell.RigDeadZone:F2} m dead zone, not head height ({gap:F2} m behind)");
+            var toRing = new Vector3(c2.x - head.position.x, 0f, c2.z - head.position.z).normalized * 0.08f;
+            head.position += toRing; // a small step (towards the ring): the windows stay
+            shell.TickLayoutForTest(0.05f, 120);
+            Check(Vector3.Distance(c2, shell.CarouselCenter) < 0.005f, "a step of a few centimetres does not move the ring");
             shell.Settings.bendPanels = false;
             shell.SetLayout("fixed");
             Check(shell.PanelsById["files"].BendRadius == 0f, "fixed layout with bend off flattens the panels");

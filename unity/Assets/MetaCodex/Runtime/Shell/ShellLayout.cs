@@ -73,6 +73,8 @@ namespace MetaCodex.Shell
             _dockYaw = _baseYaw;
             _slots.Clear();
             ArrangeRing();
+            EnsureRingBar();
+            if (!_ringBar.IsOpen) _ringBar.Open();
         }
 
         private const float RingGap = 4f;     // degrees between neighbours
@@ -161,8 +163,39 @@ namespace MetaCodex.Shell
         private void ExitFloat()
         {
             _slots.Clear();
+            if (_ringBar != null && _ringBar.IsOpen) _ringBar.Close();
             foreach (var p in LayoutPanels()) p.SetBend(0f);
             UpdateFixedBend();
+        }
+
+        // ---- FLOAT's TURN bar (owner 2026-11-13: "keep the stuff fixed in the rig, follow us, and add a scroll bar below to
+        // rotate the rig; the float should not rotate by itself"): a bar under the ring, fixed to the rig (it turns with the
+        // body, not with the ring); its slider turns the ring. No gesture turns the ring any more.
+        private UiPanel _ringBar;
+        private UiSlider _ringTurn;
+        /// The body may move this far (metres) before the ring follows it.
+        public const float RigDeadZone = 0.30f;
+
+        private void EnsureRingBar()
+        {
+            if (_ringBar != null) return;
+            _ringBar = UiPanel.Create<UiPanel>("ring-bar", "", 0.62f, 0.07f, _root, header: false);
+            _ringBar.Closable = false;
+            _ringBar.Draggable = false;
+            Router.Register(_ringBar); // like the dock: not in _panels, so the layout leaves it to this
+            _ringTurn = _ringBar.Add(new UiSlider("TURN", -360f, 360f, 0f, v => { _spin = v; _spinVel = 0f; }) { Rect = _ringBar.Content, Format = "0", LabelWidth = 0.09f });
+        }
+
+        /// The bar sits below the windows' row, at the front of the rig (its angle is the rig's, not the ring's); its
+        /// slider shows the turn (shown wrapped to -360..360: a full turn is the same ring).
+        private void UpdateRingBar(Vector3 c, float r)
+        {
+            if (_ringBar == null) return;
+            float a = _baseYaw * Mathf.Deg2Rad;
+            var dir = new Vector3(Mathf.Sin(a), 0f, Mathf.Cos(a));
+            _ringBar.transform.SetPositionAndRotation(new Vector3(c.x, _carouselY - 0.36f, c.z) + dir * r, Quaternion.LookRotation(dir, Vector3.up));
+            float shown = Mathf.Repeat(_spin + 360f, 720f) - 360f;
+            if (_ringTurn != null && !Router.IsDragging(_ringBar) && Mathf.Abs(shown - _ringTurn.Value) > 0.5f) _ringTurn.Set(shown);
         }
 
         /// Windows that never bend: terminals (their text grid cannot bend yet) and WEB (the page is one flat picture,
@@ -238,11 +271,13 @@ namespace MetaCodex.Shell
             var head = Head;
             if (head != null)
             {
-                // follow walking (x/z), never head nods (y) or tilts
-                var target = new Vector3(head.position.x, 0f, head.position.z);
-                _carousel.position = Vector3.Lerp(_carousel.position, target, 1f - Mathf.Exp(-dt * 2.5f));
+                // follow walking (x/z), never head nods or tilts; and only past a dead zone: a step of a few centimetres
+                // no longer slides every window (owner 2026-11-13: "float moves too much around")
+                var off = new Vector3(head.position.x - _carousel.position.x, 0f, head.position.z - _carousel.position.z);
+                float far = off.magnitude;
+                if (far > RigDeadZone) _carousel.position += off * ((far - RigDeadZone) / far) * (1f - Mathf.Exp(-dt * 2.5f));
             }
-            SpinInput(dt);
+            // no gesture turns the ring any more: the TURN bar does (a grab in empty space turned it by accident, and went on)
             if (!_spinning[0] && !_spinning[1])
             {
                 _spin += _spinVel * dt;
@@ -265,6 +300,7 @@ namespace MetaCodex.Shell
                 t.SetPositionAndRotation(Vector3.Lerp(t.position, pos, 1f - Mathf.Exp(-dt * 12f)), Quaternion.LookRotation(dir, Vector3.up));
                 p.SetBend(Settings.bendPanels && !StaysFlat(p) ? r : 0f);
             }
+            UpdateRingBar(_carousel.position, r); // the bar under the ring: fixed to the rig
             UpdateControlRail(); // after the ring moved its window
             UpdateSidebarLink(); // after the ring moved the thread
 

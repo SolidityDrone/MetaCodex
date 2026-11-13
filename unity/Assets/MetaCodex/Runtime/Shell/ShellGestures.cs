@@ -94,7 +94,7 @@ namespace MetaCodex.Shell
                 case "select": SetSelectionMode(arg.Trim() == "" ? !Router.SelectionMode : arg.Trim() != "off"); return null;
                 case "keyboard": OpenKeyboard(); return null;
                 case "terminal": if (arg.Trim() == "new") { TerminalNew(); return null; } return "terminal:new";
-                case "recenter": app?.Recenter(); OnRecentered(Vector3.zero, Quaternion.identity); return null;
+                case "recenter": app?.Recenter(); if (app == null) OnRecentered(Vector3.zero, Quaternion.identity); return null; // the app raises it
                 case "lua": { var r = Scripts.Eval(arg); return r.StartsWith("error:") ? r : null; }
                 case "gesture": Gestures.RaiseExternal(arg.Trim(), "both", "tap", Time.unscaledTime, Vector3.zero, "action"); return null;
                 case "voice": return VoiceAction(arg);
