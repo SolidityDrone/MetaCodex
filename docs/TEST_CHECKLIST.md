@@ -417,16 +417,17 @@ The in-app browser, WEB (same version):
 - [ ] REMOVE a finished worktree: its threads are archived and the folder goes; the branch is still in `git branch`
 - [ ] Voice "open the worktrees"; "what is this thread doing?" on a held thread says why it has not started
 
-## 28. The orb's threads (owner 2026-11-11)
+## 28. The orb's menu: plain squares, even gaps (owner 2026-11-13)
 
-- [ ] Touch the orb: under its billboard, up to five cards (PROJECT · title · state), the threads used last, turned to you with the billboard
-- [ ] A working thread's card pulses blue with its turn's clock; a finished one is green (`DONE · 4 MIN`); one that asks for an approval or an answer is orange; a failed one red
-- [ ] Long project names and titles end with … inside their card; nothing sticks out at any distance of the orb
-- [ ] Tap a card: its THREAD window opens and the card's title turns accent; tap it again: the window hides; the menu stays open and the rows do not move
-- [ ] A thread finishes while its window is closed: its card says `DONE · NEW`; after opening it, `DONE · n MIN`
-- [ ] Close and reopen the orb's menu: the thread you just used is first
-- [ ] Point at a card and ask "what is this thread doing?": the answer is about that thread
-- [ ] Frame rate with the menu open and two threads working: 72 fps
+The thread cards that stood beside the menu are gone. Their owner said they were bad UX.
+
+- [ ] Touch the orb: four squares on an arc round its left side, TALK, SPEAK, PLACE, LOG from the top; no cards beside them
+- [ ] The squares have no frame: no outline box and no shadow box round them, only each square with its label
+- [ ] The gap between two neighbouring squares is the same all round the arc, about 8 mm at the menu's size; no square touches the orb's rings
+- [ ] Each square works: TALK starts and stops listening, SPEAK toggles spoken answers, PLACE gives the orb its own place, LOG opens LOG · MESSAGES (`✉ n NEW` while messages are unread)
+- [ ] The menu opens and closes with the light: a line of light crosses each square (there is no frame to light)
+- [ ] The labels read at arm's length without leaning in, the same size as before
+- [ ] Frame rate with the menu open and the orb in view: 72 fps
 
 
 ## 29. Native apps: builds off the frame loop, `mcx-app check`, the Runner (branch feat/native-horizon-building-and-install)
@@ -480,12 +481,11 @@ docs/native-build-and-install.md.
 - [ ] A thread working; launch a built app, wait until the agent is done, Back: the thread says idle / done at once (no "WORKING", no "writing the answer")
 - [ ] A thread working: STOP: within 2 s the header leaves WORKING and the chat stops "writing"
 - [ ] The orb: messages always rise on its right; its menu (TALK, SPEAK, PLACE, LOG) always sits on its left, level with it, whichever way you look; never swapped
-- [ ] The threads under the orb's menu: title readable at arm's length, project and state under it
 - [ ] Idle, not looked at, no message: the orb is a little smaller; look at it or bring a hand close: it brightens and grows back; touching it still opens the menu
-- [ ] Touch the orb: TALK, SPEAK, PLACE, LOG sit on a small arc hugging its left side, the five thread cards on a wider arc outside them (the top and bottom cards curve in towards the orb); every tile and card faces you; labels and card titles readable at arm's length without leaning in
+- [ ] Touch the orb: TALK, SPEAK, PLACE, LOG sit on a small arc hugging its left side, as plain squares (see section 28); every square faces you; labels readable at arm's length without leaning in
 - [ ] Two or three messages in a row: they stack on an arc round the orb's right side, the newest lowest, the line of light runs along the arc; never on its left
 - [ ] Read a window straight ahead, the orb up to its right, and touch the orb: the orb and its menu glide (no jump) to a place where nothing of them covers that window, still in view and reachable; close the menu: a moment later the orb goes back to its own place
-- [ ] While the menu is up, reach for a card: nothing moves under the finger; look at the menu itself: the orb does not run away from it
+- [ ] While the menu is up, reach for a square: nothing moves under the finger; look at the menu itself: the orb does not run away from it
 - [ ] FIXED layout, a thread in front: tap the sidebar handle: the thread and its sidebar glide together until the pair is centred in front of you; fold it: the thread glides back. With another window just to its left: the pair moves only up to that window, never over it. Move the thread, then fold: it stays where you put it
 
 ## 33. THREAD's sidebar (branch fix/thread-sidebar-and-orb, next build; docs/thread-sidebar.md)
@@ -557,7 +557,7 @@ Work windows:
 - [ ] Orb menu: ✥ PLACE and ✉ LOG (no more ⌖ / ☰ there); with unread messages ✉ n NEW
 - [ ] LOG: the window is titled LOG · MESSAGES; CLEAR ALL (red, as big as other buttons) asks "Clear all n messages?"; CANCEL keeps them, CLEAR ALL empties the list
 - [ ] Pinch the orb to a new place, let go; quit the app (with MQH sync on) and start it again: the orb is where you left it; menu > PLACE, restart: it chooses its own place
-- [ ] A thread whose host is not connected: its orb card and THREAD's header say OFFLINE (not NO HOST)
+- [ ] A thread whose host is not connected: THREAD's header says OFFLINE (not NO HOST)
 
 ## 36. Spoken replies and the voice effect (branch feat/polish)
 

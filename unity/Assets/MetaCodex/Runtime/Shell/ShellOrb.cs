@@ -467,59 +467,56 @@ namespace MetaCodex.Shell
         // ------------------------------------------------------------------ its menu: an arc round its left side
 
         // owner 2026-11-11: "more like wrapped around the circle of the orb ... always on its left and notification on
-        // right". In the plane through the orb that faces the user: TALK, SPEAK, PLACE, LOG on an inner arc that hugs
-        // the orb's left side (from 10:30 to 7:30 on a clock), the threads used last on an outer arc, concentric with
-        // the orb (each card's corner nearest the orb on one circle), every item turned to the user. Text about a degree
-        // at the menu's half a metre (Meta's VR text guidance): labels 13.5 mm, card titles 14.5 mm, at a scale of ~0.9.
+        // right". In the plane through the orb that faces the user: TALK, SPEAK, PLACE, LOG, four plain squares (owner
+        // 2026-11-13: no frame round them) on one circle that hugs the orb's left side, from 10:30 to 7:30 on a clock,
+        // every square turned to the user. Text about a degree at the menu's half a metre (Meta's VR text guidance):
+        // labels 13.5 mm, at a scale of ~0.95.
         public const float OrbActW = 0.060f, OrbActH = 0.054f, OrbActText = 0.0135f;
-        private static readonly float[] OrbActAngles = { 135f, 165f, 195f, 225f };
+        /// The clear gap between two neighbouring squares, metres at scale 1: the same all round the arc (6 to 8 mm;
+        /// the squares' contact shadow takes a little of it, so 8 mm still reads as a gap).
+        public const float OrbActGap = 0.008f;
+        /// The top and bottom squares sit this far off the level (10:30 and 7:30 on a clock).
+        private const float OrbActOuterDeg = 45f;
+        private static readonly float OrbActSinOuter = Mathf.Sin(OrbActOuterDeg * Mathf.Deg2Rad), OrbActCosOuter = Mathf.Cos(OrbActOuterDeg * Mathf.Deg2Rad);
+        private static readonly float OrbActSinInner = OrbActSinOuter / 3f, OrbActCosInner = Mathf.Sqrt(1f - OrbActSinInner * OrbActSinInner);
         private readonly List<UiPanel> _orbActs = new List<UiPanel>();
 
-        /// The orb's menu is up (its four actions; the thread cards come and go with it).
+        /// The orb's menu is up (its four squares).
         public bool OrbMenuOpen => _orbActs.Count > 0 && _orbActs[0].IsOpen;
         private bool OrbMenuDrawn => _orbActs.Count > 0 && _orbActs.Any(a => a.gameObject.activeSelf);
 
         /// The orb's outer edge: its rings (1.75 radii), at its full size (it is smaller when idle).
         private float OrbOuterRadius => (_orbBaseRadius > 0f ? _orbBaseRadius : Orb != null ? Orb.Radius : 0.032f) * 1.75f;
 
-        /// The arc menu's two radii at scale `s` (metres in the orb's plane): the actions' centres, and the circle the
-        /// thread cards' nearest corners sit on. The actions clear the orb's rings and each other.
-        public (float inner, float outer) OrbMenuRadii(float s)
+        /// The radius of the circle the squares' centres sit on, at scale `s` (metres from the orb's centre). Each
+        /// neighbour pair is OrbActGap apart, measured straight across (the squares overlap in x). The inner pair sits
+        /// at sin(inner) = sin(outer) / 3, so the gap inside the inner pair, 2 r sin(inner) - h, and the gap between the
+        /// outer and an inner square, r (sin(outer) - sin(inner)) - h, both equal the gap: r = 3 (h + gap) / (2 sin(outer)).
+        /// Off the orb's rings: at scale 1 the nearest corner of the top square is about 3.5 cm clear of them (self-test).
+        private static float OrbActRadius(float s) => 3f * (OrbActH + OrbActGap) * s / (2f * OrbActSinOuter);
+
+        /// Square k's centre at scale `s` (metres in the orb's plane, x to the user's right, y up): 0 TALK (top) to
+        /// 3 LOG (bottom), all on the left of the orb.
+        private static Vector2 OrbActCentre(int k, float s)
         {
-            float w = OrbActW * s, h = OrbActH * s, ring = OrbOuterRadius + 0.008f * s;
-            float ri = ring + Mathf.Min(w, h) * 0.5f;
-            for (int it = 0; it < 80; it++, ri += 0.002f)
-            {
-                bool ok = true;
-                for (int k = 0; k < OrbActAngles.Length && ok; k++)
-                {
-                    float a = OrbActAngles[k] * Mathf.Deg2Rad;
-                    var c = new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * ri;
-                    // the corner nearest the orb stays off its rings
-                    var near = new Vector2(c.x - Mathf.Sign(c.x) * Mathf.Min(Mathf.Abs(c.x), w * 0.5f), c.y - Mathf.Sign(c.y) * Mathf.Min(Mathf.Abs(c.y), h * 0.5f));
-                    if (near.magnitude < ring) ok = false;
-                    if (k > 0)
-                    {
-                        float b = OrbActAngles[k - 1] * Mathf.Deg2Rad;
-                        var d = c - new Vector2(Mathf.Cos(b), Mathf.Sin(b)) * ri;
-                        if (Mathf.Abs(d.x) < w + 0.003f * s && Mathf.Abs(d.y) < h + 0.003f * s) ok = false; // neighbours apart
-                    }
-                }
-                if (ok) break;
-            }
-            float outer = ri + w * 0.5f + 0.010f * s;
-            return (ri, outer);
+            float r = OrbActRadius(s);
+            float y = k == 0 ? OrbActSinOuter : k == 1 ? OrbActSinInner : k == 2 ? -OrbActSinInner : -OrbActSinOuter;
+            float x = k == 0 || k == 3 ? OrbActCosOuter : OrbActCosInner;
+            return new Vector2(-x * r, y * r);
         }
 
-        /// What the open menu covers in the orb's plane (metres, x to the user's right, y up), at scale `s`.
+        /// What the open menu covers in the orb's plane (metres, x to the user's right, y up), at scale `s`: the four squares.
         private Rect OrbMenuExtent(float s)
         {
-            var (ri, ro) = OrbMenuRadii(s);
-            int n = Mathf.Max(1, _orbCardsShown);
-            float pitch = (OrbCardH + OrbCardGap) * s;
-            float half = Mathf.Max((n - 1) * 0.5f * pitch + OrbCardH * s * 0.5f, ri * 0.71f + OrbActH * s * 0.5f);
-            float left = _orbCardsShown > 0 ? ro + OrbCardW * s : ri + OrbActW * s * 0.5f;
-            return new Rect(-left, -half, left - OrbOuterRadius, half * 2f);
+            float hw = OrbActW * s * 0.5f, hh = OrbActH * s * 0.5f;
+            float x0 = float.MaxValue, x1 = float.MinValue, y0 = float.MaxValue, y1 = float.MinValue;
+            for (int k = 0; k < 4; k++)
+            {
+                var c = OrbActCentre(k, s);
+                x0 = Mathf.Min(x0, c.x - hw); x1 = Mathf.Max(x1, c.x + hw);
+                y0 = Mathf.Min(y0, c.y - hh); y1 = Mathf.Max(y1, c.y + hh);
+            }
+            return Rect.MinMaxRect(x0, y0, x1, y1);
         }
 
         /// The orb's plane: through it, facing the eye; `right` is the user's right (level), `up` across it.
@@ -550,17 +547,17 @@ namespace MetaCodex.Shell
         private void EnsureOrbMenu()
         {
             if (_orbActs.Count > 0) return;
-            const float pad = 0.004f;
             UiButton B(int k, string text, Action act, UiButtonStyle style = UiButtonStyle.Normal)
             {
-                var p = UiPanel.Create<UiPanel>("orb-act-" + k, "", OrbActW, OrbActH, _root, header: false);
+                // a plain square: no frame of its own (Frameless), the button fills it
+                var p = UiPanel.Create<UiPanel>("orb-act-" + k, "", OrbActW, OrbActH, _root, header: false, frameless: true);
                 p.Closable = false;
                 p.Draggable = false;
                 p.LightTransition = true;
                 Router.Register(p);
                 p.gameObject.SetActive(false);
                 _orbActs.Add(p);
-                return p.Add(new UiButton(text, act, style) { Rect = new Rect(pad, pad, OrbActW - pad * 2f, OrbActH - pad * 2f), TextSize = OrbActText });
+                return p.Add(new UiButton(text, act, style) { Rect = new Rect(0f, 0f, OrbActW, OrbActH), TextSize = OrbActText });
             }
             B(0, "◉\nTALK", () => VoiceToggle(), UiButtonStyle.Primary);
             _orbSpeakBtn = B(1, "♫\nSPEAK", () => { Settings.voice.speak = !Settings.voice.speak; OnSettingsChanged(); SyncSettingsControls(); RefreshOrbMenu(); });
@@ -606,7 +603,7 @@ namespace MetaCodex.Shell
             RefreshOrbMenu();
         }
 
-        /// The menu's four action tiles (TALK, SPEAK, PLACE, LOG), top to bottom on the inner arc.
+        /// The menu's four squares (TALK, SPEAK, PLACE, LOG), top to bottom on its arc.
         public IReadOnlyList<UiPanel> OrbActionsForTest => _orbActs;
 
         /// A touch on the orb: its menu opens round its left side, or closes.
@@ -622,14 +619,12 @@ namespace MetaCodex.Shell
             RefreshOrbMenu();
             PlaceOrbMenu(true);
             foreach (var a in _orbActs) a.Open();
-            OpenOrbThreads(); // the threads used last, on the outer arc
             _avoidCheckAt = 0f; // look again at once: the menu may cover the window being watched
         }
 
         private void CloseOrbMenu()
         {
             foreach (var a in _orbActs) if (a.IsOpen) a.Close();
-            CloseOrbThreads();
             _avoidCheckAt = 0f;
         }
 
@@ -642,17 +637,15 @@ namespace MetaCodex.Shell
 
         private float OrbMenuScaleNow => _orbActs.Count > 0 ? _orbActs[0].BaseScale.x : OrbMenuScale();
 
-        /// The actions on the inner arc round the orb's left side (TALK at the top), every one turned to the user.
+        /// The squares round the orb's left side (TALK at the top), every one turned to the user.
         private void PlaceOrbMenu(bool snap)
         {
             if (_orbActs.Count == 0 || Orb == null) return;
             float s = OrbMenuScaleNow;
-            var (ri, _) = OrbMenuRadii(s);
             for (int k = 0; k < _orbActs.Count; k++)
             {
                 if (!snap && !_orbActs[k].gameObject.activeSelf) continue;
-                float a = OrbActAngles[k] * Mathf.Deg2Rad;
-                PutOnOrbPlane(_orbActs[k], new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * ri, snap);
+                PutOnOrbPlane(_orbActs[k], OrbActCentre(k, s), snap);
             }
         }
 
@@ -698,7 +691,7 @@ namespace MetaCodex.Shell
             TickOrbPlace(dt);
             if (Gestures != null) TickOrbHands(dt);
             TickOrbVoice(dt);
-            if (OrbMenuDrawn) { PlaceOrbMenu(false); TickOrbThreads(); }
+            if (OrbMenuDrawn) PlaceOrbMenu(false);
         }
 
         /// Self-tests: one frame of the orb (the Editor has no frame loop).

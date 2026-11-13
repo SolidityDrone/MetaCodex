@@ -125,17 +125,23 @@ panels ... the source of the speech ... a billboard side notification system men
   one circle round it (so the ends bow round it), every card turned to you, joined to the orb by a rail of light that
   runs out of its rings and along the arc; the voice HUD is the first card while it is shown. Touch the orb with a
   fingertip, or point at it and pinch: its menu opens round its **left** side (owner 2026-11-11: "more like wrapped
-  around the circle of the orb"): four small tiles on an inner arc that hugs the orb (from half past ten to half past
+  around the circle of the orb"): four plain squares on one arc that hugs the orb (from half past ten to half past
   seven on a clock, clear of its rings), each turned to you, cast with the quick variant: ◉ TALK, ♫ SPEAK (spoken
   answers on or off), ✥ PLACE, and ✉ LOG ("✉ n NEW" while there are unread messages), which opens LOG · MESSAGES, a
   window like the others (placed where there is room; also "open messages"): the last 40 messages (kind, text, how
   long ago) and CLEAR ALL (red; asks first, as CLIPBOARD's does). Pinning it (let go) and PLACE save its place once, on
   release, through the settings path (`OnSettingsChanged`: pushed to MQH when quiet, so MQH's copy does not bring an
   old place back).
-  Labels 12.5 mm: about a degree at the menu's half a metre (Meta's VR text guidance). A message not read yet rides
+  Labels 13.5 mm: about a degree at the menu's half a metre (Meta's VR text guidance). A message not read yet rides
   round the orb as a larger gold spark (four at most) until MESSAGES is opened. A hand that is at the orb or points at
   it does not also click the window behind it (`UiInputRouter.HandBlocked`). The first time the app runs with the
   orb, one message says what it is (`orbTipShown`).
+- **The menu's squares** (owner 2026-11-13: "remove the outer box and leave the square"). Each item is a `UiPanel`
+  made `frameless`: it has no frame, shadow or halo of its own. Only its button shows, and the button fills the
+  square (60 × 54 mm at scale 1: `OrbActW`, `OrbActH`). The squares are 8 mm apart, the same all round (`OrbActGap`).
+  The top and bottom ones sit 45 degrees off the level. The two between them sit where the gap is even
+  (`OrbActRadius`, `OrbActCentre`: sin(inner) = sin(outer) / 3). The light still crosses a frameless panel, because
+  `UiPanelFx` reads the panel's size, not its frame. `UiPanel.SetHighlight` and `SetPlainBody` do nothing on one.
 - **It keeps off the window you watch** (owner 2026-11-11: "avoid any weird position ... cover my view on the panels
   i'm watching ... less invasive but always available"; `Shell/ShellOrbAvoid.cs`). The watched window is the first
   one your gaze meets (looking at the orb, its menu or a callout keeps the one before), for 2 s after your gaze
@@ -145,22 +151,11 @@ panels ... the source of the speech ... a billboard side notification system men
   window, within 60 degrees of where you look; slowly (0.4 s), never while a hand is at it or at its items (nothing
   moves under a finger), and back to its own place 1.5 s after that is free again. Idle and not looked at it is
   80 % of its size and dimmer; a look or a hand brings it back.
-- **Its threads** (owner 2026-11-11: "a quick menu with threads going on ... only the 5 most recently used").
-  On the menu's outer arc, outside the four tiles and concentric with the orb (each card's corner nearest it on one
-  circle, the stack centred on its level), each turned to you, one small card per thread (24 × 5 cm, at the menu's
-  scale), the five used last: opened or written to here (kept in `recent-threads.txt` beside the settings, not in them: MQH's copy
-  of the settings would bring an old list back), or worked on by their agent (the row's `updatedAt`), whichever
-  is later. Each card has two rows: the title on top (13.5 mm, 1.1 degrees), PROJECT and the state under it (11.5 mm, 0.9
-  degrees), each cut with … at its edge (nothing leaves the card). Colour by state, on the dot, the frame and the state word: **working** blue, the card pulses
-  (`WORKING 3:12`, the turn's clock; `STARTING`), **done** green (`DONE · 4 MIN`; `DONE · NEW` while an answer that
-  came with its window closed has not been seen), **needs you** orange (`NEEDS YOU`: a question or an approval;
-  `WAITING`: a turn MQH holds in the queue; `OFFLINE`: MQH waits for a host to run it), **error** red (`ERROR`; `NOT SENT`: a queued message
-  failed); `STOPPED` (by you) grey. A tap shows that thread's window (THREAD on it), or hides it when it is the one
-  shown; the menu stays up and the rows keep their places while it is (nothing moves under the finger; a thread that joins
-  while it is up takes the next place under the others); the next
-  time it opens, the threads used last come first. MQH is asked when it opens and every 4 s while it is up.
-  Pointing at a card, "this thread" (voice questions) is its thread. `Shell/ShellOrbThreads.cs`,
-  `AI/QuickThreads.cs` (the order and the words, pure). Self-test sections `orbthreads` (the cards) and `orbplace` (keeping off the watched window, the thread + sidebar pair in FIXED).
+- **No thread list on the orb.** Its menu had cards beside the squares, one per recently used thread (owner
+  2026-11-11). Owner 2026-11-13: "remove open thread dials next to the orb, they are bad ux". They are removed, with
+  their code and their checks. The threads used last stay in `recent-threads.txt` (beside the settings, not in them:
+  MQH's copy of the settings would bring an old list back): `LastUsedThread` (`Shell/ShellReturn.cs`) reads them for
+  the way back from an app. The self-test `orbplace` keeps off the watched window and tests the thread + sidebar pair in FIXED.
 - Control port: `orb on | off | menu | place | status`.
 
 ## Code map (`unity/Assets/MetaCodex/Runtime`)
@@ -171,8 +166,8 @@ panels ... the source of the speech ... a billboard side notification system men
 | `Hands/` | `GestureEngine` (built-ins, pose templates, custom gestures with hold/cooldown, head-relative directions), `PoseSpec`, `OvrHandSource` (OVRHand/OVRSkeleton), `SimulatedHands` (any pose, for tests) |
 | `Scripting/` | `ScriptHost`: Lua (MoonSharp) scripts and plugin folders, hot reload, sandbox, instruction budget, detectors as persistent coroutines, persisted state; `PoseJson` |
 | `Security/` | `SecretVault` (Android Keystore sealer, Editor dev sealer, policies, access log) |
-| `AI/` | `QvacHost` (starts the local AI service process, token, restarts), `QvacClient` (HTTP), `VoiceRecorder` (microphone, end of speech), `VoiceCommands` (registry, phrase templates, tool specs), `ThreadPulse` (a thread's timeline and state, docs/thread-view.md), `WorkspaceMap` (checkouts and worktrees, docs/workspaces.md), `QuickThreads` (the orb's thread list) |
-| `Shell/` | `MetaCodexShell` (wiring, panels by id and aliases, control-port commands), `ShellPanels` (dock, terminals, files, git logic, LINKS (id browser), MQH's SCRIPTS tab, SETTINGS' pages, saved layouts), `ShellControl` (CONTROL's rail and categories, the one size of its windows), `ShellWrist` (the main menu table `MainMenuItems`, the wrist menu), `ShellGestures` (Gestures studio, bindings, actions, recording, the gesture examples and the one-time cleanup of the old starter copies), `ShellAgents` (agents, threads grouped by project, thread with composer chips and fork, new thread, terminal links), `ShellWorkspace` (the thread's linked workspace module, the picker), `ShellViews` + `ViewStage` (agent views, the physics stage), `ShellVault` (vault: secrets and GIT with the GitHub account; secret broker), `ShellVoice` (voice pipeline, shell commands, VOICE panel, HUD), `ShellAmbient` (Ambient Focus), `ShellSystem` (installed tools, storage), `ShellLayout` (fixed / float carousel, the thread + workspace pair), `ShellPlacement` (where a panel opens), `ShellOrb` (the orb: where it floats, hands, the voice, callouts, its menu), `ShellOrbThreads` (the five thread cards under its menu), `Services` (system deep links, settings, MQH client, git, files) |
+| `AI/` | `QvacHost` (starts the local AI service process, token, restarts), `QvacClient` (HTTP), `VoiceRecorder` (microphone, end of speech), `VoiceCommands` (registry, phrase templates, tool specs), `ThreadPulse` (a thread's timeline and state, docs/thread-view.md), `WorkspaceMap` (checkouts and worktrees, docs/workspaces.md) |
+| `Shell/` | `MetaCodexShell` (wiring, panels by id and aliases, control-port commands), `ShellPanels` (dock, terminals, files, git logic, LINKS (id browser), MQH's SCRIPTS tab, SETTINGS' pages, saved layouts), `ShellControl` (CONTROL's rail and categories, the one size of its windows), `ShellWrist` (the main menu table `MainMenuItems`, the wrist menu), `ShellGestures` (Gestures studio, bindings, actions, recording, the gesture examples and the one-time cleanup of the old starter copies), `ShellAgents` (agents, threads grouped by project, thread with composer chips and fork, new thread, terminal links, the threads used last), `ShellWorkspace` (the thread's linked workspace module, the picker), `ShellViews` + `ViewStage` (agent views, the physics stage), `ShellVault` (vault: secrets and GIT with the GitHub account; secret broker), `ShellVoice` (voice pipeline, shell commands, VOICE panel, HUD), `ShellAmbient` (Ambient Focus), `ShellSystem` (installed tools, storage), `ShellLayout` (fixed / float carousel, the thread + workspace pair), `ShellPlacement` (where a panel opens), `ShellOrb` (the orb: where it floats, hands, the voice, callouts, its menu of squares), `Services` (system deep links, settings, MQH client, git, files) |
 | `../Resources/Shaders/` | `AmbientFocus` (the dome: depth, floor plane, blur), `FocusMesh` (hand cut-outs), `FocusDepthCopy` (floor readback), `TextBend` (TMP SDF + bend), `UiIcon` (textured quads + bend; no tool logos any more), `StageLit` (physics bodies), `ViewImage` (images in views), `Orb` (the orb), `WristArt` (the wrist menu and the cast's light): in Resources so they ship without material assets; `../Shaders/McxPanelFx.hlsl` (the cast's scan plane, shared by every shader that draws inside a window) |
 | `../Plugins/Android/MetaCodexVault.java` | the Keystore bridge (AES-256-GCM, StrongBox or TEE) |
 
@@ -245,7 +240,7 @@ Skills for agents (bundled into the userland at `/root/.claude/skills` and into 
 (mirrored to MQH as the UI preference `quest.settings`, which agents can edit through the MQH API; the MQH
 token is not synced). Note: at the first sync after a start the app takes MQH's copy when its revision is not 0, so a
 setting saved without `OnSettingsChanged` (which pushes) comes back old after a restart; state that changes on its
-own (the orb's recently used threads) lives in its own file instead.
+own (the threads used last, `recent-threads.txt`) lives in its own file instead.
 
 ## Agents and threads (MQH)
 
