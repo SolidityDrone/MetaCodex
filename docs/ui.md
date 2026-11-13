@@ -339,10 +339,14 @@ windows and your hands. No Space Setup scan is needed (branch `feat/spatial-dome
   takes the free place that costs least: in front of where you face, just below eye level, when that is free; else
   the nearest free place round it, to the side or, when that is nearer than a far turn of the head, above a window
   (below only as a last resort: the hands and the dock are there; never higher than 50 degrees or lower than 42),
-  tilted to face you. A panel opened from a window's button (a thread from THREADS, VOICE from SYSTEM, a view from
+  tilted to face you. It always opens in view (0.7.19, owner: "panels spawn weirdly off my view"): its middle within
+  50 degrees of where you face and 36 degrees above or below eye level (before: up to 112 degrees to the side); when
+  nothing is free there it opens in front, a little nearer, over the others. Only RECENTER uses the wide range. A
+  real thing close in front (a desk, a monitor) now weighs about like a 12-degree turn: the panel opens nearer, in
+  front, instead of far to the side. A panel opened from a window's button (a thread from THREADS, VOICE from SYSTEM, a view from
   a thread) opens right beside that window, to its right when there is room. A panel that was open before comes
-  back where you left it when that place is still free and within 70 degrees of where you face; else it is placed
-  anew. "In front" is where your body faces when you look down at the wrist menu or the dock to press (the frame
+  back where you left it when that place is still free and in view (its middle within 56 degrees of where you face),
+  turned to face where you stand now; else it is placed anew. "In front" is where your body faces when you look down at the wrist menu or the dock to press (the frame
   the orb floats in), not where your nose points. And never inside a wall: while the room's depth runs, its last
   reading (the 48 x 48 points the floor is found from, every 0.3 s) says how far the real things are in each
   direction; a panel opens at least 8 cm in front of them, and a direction where something real is nearer than
