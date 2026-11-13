@@ -68,7 +68,7 @@ namespace MetaCodex.UI
             var shapesGo = new GameObject("shapes", typeof(MeshFilter), typeof(MeshRenderer));
             shapesGo.transform.SetParent(transform, false);
             Shapes = shapesGo.AddComponent<UiShapeMesh>();
-            Shapes.Init(Theme.ShapeMaterial);
+            Shapes.Init(Theme.ShapeMaterial, !Frameless); // a frame: its body also writes depth first (UiShapeMesh.DepthFirstQueue)
             Hook();
             ClaimSlot();
             TagRenderer(shapesGo.GetComponent<MeshRenderer>(), Vector3.zero);

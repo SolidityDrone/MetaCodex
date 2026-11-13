@@ -45,3 +45,26 @@ A long frame with a small "shell" time is the GPU, the render thread or a shader
 
 Next, if the log shows first-use shader hitches: record a `GraphicsStateCollection` on the headset and warm it up at
 start (Unity 6, Vulkan PSOs).
+
+## Cheaper UI shader (branch perf/ui-shader)
+
+The app was GPU-bound (98-99 % busy at idle with a few windows). Every UI pixel runs `SciFiUI`. Changes, same look:
+
+| Change | Saved per pixel |
+|---|---|
+| Stone armour of a window (rails, corner pieces, crest) only within 3 cm of its frame; stone and normal only where a piece covers the pixel | ~290 ALU + ~20 transcendentals on most body pixels |
+| Stone grain from a tiling texture (`_McxStoneNoise`, 512 x 512, 13.2 cm) | 12 `sin` hashes + ~100 ALU -> 1 tap, per stone pixel |
+| Hexagon lattice distance from a texture (`_McxHexField`, one period) | ~30 ALU -> 1 tap; the formula stays for the cast |
+| `ChamferNormal` analytic | 4 SDF calls -> 1 |
+| Halo only outside a shape; outside a button, selection, bar or flat only the halo (none: transparent, no depth tap) | ~15 ALU, or the whole fill |
+| Pointer light only while a hand is near | ~16 ALU |
+| Occlusion's 4x4 product per vertex (`McxOcclusionCoord` / `McxVisibilityAt`), also in `TextBend` | ~20 ALU per UI and text pixel |
+| Body depth of all windows first (queue 2989) | the hidden pixels of windows behind are rejected by the depth test |
+| Quads of lines and solid pills keep 0.8 mm (AA) instead of 1-2 mm | fewer margin pixels |
+
+What looks different: the grain has other random values (same scale and contrast) and repeats every 13.2 cm; at a
+distance its finest octave is filtered instead of shimmering; the bevel's mitre lines are sharp (they were blended over
+0.4 mm). Where a window overlaps another at PANEL OPACITY below 100 %, the room shows through the front window's
+missing opacity there, not the window behind (as everywhere else on the window). Check: `~/mcxwork/perf-ui/verify.py`
+(CPU port of the old and new code: gates and early-outs differ by at most 0.05/255).
+

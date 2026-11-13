@@ -88,7 +88,7 @@ namespace MetaCodex.UI
                 var rg = new GameObject("reticle-" + i, typeof(MeshFilter), typeof(MeshRenderer));
                 rg.transform.SetParent(transform, false);
                 _reticles[i] = rg.AddComponent<UiShapeMesh>();
-                _reticles[i].Init(UiTheme.Current.ShapeMaterial);
+                _reticles[i].Init(UiTheme.Current.ShapeMaterial, false);
                 _reticles[i].Add(new UiShape { Kind = UiShapeKind.Dot, Size = new Vector2(0.012f, 0.012f), Margin = 0.004f, Tint = UiTheme.Current.Accent, Visible = true });
                 rg.SetActive(false);
             }

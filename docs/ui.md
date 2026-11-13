@@ -46,6 +46,8 @@ foveated rendering (off by default; it blurs the edges of the view), sounds and 
 shader blends its alpha as `One OneMinusSrcAlpha` (coverage only adds), so a glow over a window
 can never cut a see-through fissure. At PANEL OPACITY 75 % and above, a depth-only pass writes the panel's
 body (1.5 mm behind its face), so text, icons and buttons of windows behind it are hidden, not shown through.
+All windows write this depth before any shape draws its colour (`UiShapeMesh`: a depth-only copy of the material
+at queue 2989), so the GPU skips the hidden pixels of windows behind.
 The wrist menu's glass follows PANEL OPACITY too: its tiles and watch face take the same value (`WristArt`
 `_Opacity`); its lines, icons and sparks stay as bright as before.
 
@@ -382,6 +384,8 @@ or `mcx-ui` / `mcx-secret` inside the userland).
 ## Stone-metal frames and buttons (2026-11-12, branch feat/stone-ui)
 
 Owner: "metallish-stone with blueish glowing, in the style of an RTS console, just an improvement to our current UI", "for panels wrapping and buttons only". In `Shaders/SciFiUI.shader` (no new meshes or textures): the panel's corner brackets became carved stone-metal pieces round each corner (the outline offset 3 mm, 9 mm thick, 45-degree tips, an engraved groove with energy, a node on the cut), slim stone rails between them and a carved plate with an energy gem over the top centre (windows wider than 0.24 m); the blue leaks inward only. Normal and filled buttons are carved slate plates with an engraved channel 2.6 mm inside the edge, energy in the button's colour (dim at rest, bright hovered, full when filled; red danger stays red). List rows and ghost buttons keep their look. Helpers `Stone`, `StoneGrain`, `ChamferNormal`; prototype `~/mcxwork/proto/frame.py` (frame-v4 / v5).
+Since perf/ui-shader the grain and the glass's lattice come from two small textures that `UiShapeMesh` makes at start
+(`_McxStoneNoise`, `_McxHexField`), and `ChamferNormal` is analytic (see docs/perf.md).
 
 ## Start splash (0.7.19)
 

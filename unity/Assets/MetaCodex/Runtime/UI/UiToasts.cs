@@ -172,7 +172,7 @@ namespace MetaCodex.UI
                 var go = new GameObject("callout rail", typeof(MeshFilter), typeof(MeshRenderer));
                 go.transform.SetParent(transform, false);
                 _rail = go.AddComponent<UiShapeMesh>();
-                _rail.Init(t.ShapeMaterial);
+                _rail.Init(t.ShapeMaterial, false);
                 var faint = t.Accent; faint.a = 0.55f;
                 for (int i = 0; i < 1 + ArcSegments; i++) _rail.Add(new UiShape { Kind = UiShapeKind.Line, Tint = faint, Margin = 0.002f, State = 0.3f, Visible = true });
                 _rail.Add(new UiShape { Kind = UiShapeKind.Dot, Size = new Vector2(0.006f, 0.006f), Margin = 0.003f, Tint = t.Accent, State = 0.6f, Visible = true });

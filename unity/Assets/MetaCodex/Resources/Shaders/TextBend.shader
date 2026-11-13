@@ -129,7 +129,7 @@ SubShader {
 			float4	texcoord1		: TEXCOORD3;			// Texture UV, alpha, reserved
 			half2	underlayParam	: TEXCOORD4;			// Scale(x), Bias(y)
 			#endif
-			float3	worldPos		: TEXCOORD5;			// after the bend: compared with real things in front
+			float4	occ				: TEXCOORD5;			// after the bend, in the room depth's clip space (McxOcclusionCoord)
 			half4	panelFx			: TEXCOORD6;			// cast: how much of it is there (0..1), light added, flicker seed, 0 = at rest / 1 + heat
 		};
 
@@ -163,11 +163,12 @@ SubShader {
 				vert.xyz = p - _TextOffset.xyz;
 			}
 			float4 vPosition = UnityObjectToClipPos(vert);
-			output.worldPos = mul(unity_ObjectToWorld, float4(vert.xyz, 1.0)).xyz;
+			float3 worldPos = mul(unity_ObjectToWorld, float4(vert.xyz, 1.0)).xyz;
+			output.occ = McxOcclusionCoord(worldPos); // per vertex: the fragment skips the 4x4 product (McxVisibilityAt)
 			// its panel being cast: a text is there once the scan line has passed it, hot and flickering for a moment
 			if (pfx.x > 0.5 || pfx.y > 0.0005 || pfx.z > 0.0005)
 			{
-				float bd = McxBehindScan(_PanelIndex, output.worldPos);
+				float bd = McxBehindScan(_PanelIndex, worldPos);
 				float heat = McxHeat(bd - 0.004);
 				float lineId = floor(lineY / 0.011) + floor(_TextOffset.x * 97.0);
 				output.panelFx = half4(McxBuilt(bd - 0.004) * (1.0 - saturate(pfx.z)), saturate(pfx.y) + heat * 1.2, McxHash(lineId * 1.37 + 0.5), 1.0 + heat);
@@ -284,7 +285,7 @@ SubShader {
 
 			// premultiplied: the whole colour fades where something real is in front of the text
 			UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
-			c *= McxVisibility(input.worldPos);
+			c *= McxVisibilityAt(input.occ);
 
 			#if UNITY_UI_ALPHACLIP
 			clip(c.a - 0.001);
