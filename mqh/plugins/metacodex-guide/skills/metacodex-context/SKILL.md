@@ -19,7 +19,8 @@ description: Where you are when you run inside MetaCodex - a Meta Quest headset 
 
 | Path | What |
 |---|---|
-| `/root` | home; projects usually live here (`/root/<project>`) |
+| `/root` | home |
+| `/root/metacodex-projects/{native,default,research}/<name>` | the user's projects, by type (MetaCodex's + PROJECT makes them: git init, `mcx-project` type); THREADS groups them the same way |
 | `/mnt/quest` | the app's shared folder (the user and adb can reach it) |
 | `/mnt/quest/plugins/<id>/` | gesture / behaviour plugins (skill `quest-gesture-plugins`) |
 | `/mnt/quest/scripts/*.lua` | single-file Lua behaviours (skill `quest-scripting`) |
@@ -27,7 +28,7 @@ description: Where you are when you run inside MetaCodex - a Meta Quest headset 
 | `/mnt/quest/qvac.token` | token for the local AI service (new at every start of the service) |
 | `~/.mqh` | MQH data (database, logs, plugin data) |
 | `~/.claude/skills` | skills for agents (this one, quest-*, Unity and Meta skills) |
-| `/root/apps/<name>` | native Quest apps (Native app projects: `mcx-app`, `mcx-project`, their own skills) |
+| `/root/metacodex-projects/native/<name>` | native Quest apps (Native app projects: `mcx-app`, `mcx-project`, their own skills; older apps: `/root/apps/<name>`) |
 | `/opt/android-ndk`, `/opt/android-sdk`, `/opt/openxr` | native app tools (NDK r27d, android.jar 34, OpenXR 1.1.65) |
 | `/root/.metacodex/first-use.log` | what MetaCodex installed by itself at first use (`mcx-setup quest`) |
 | `/root/.metacodex/captures/` | the user's captures (image clipboard): PNGs of windows, newest 20 by default |
@@ -60,7 +61,7 @@ description: Where you are when you run inside MetaCodex - a Meta Quest headset 
 - Native apps (a separate Quest app with its own Library icon) live in **Native app projects**: their folder has
   `.metacodex/project.json` with `"type": "native"`, the quest-native-* skills in `.claude/skills` and a native block
   in AGENTS.md / CLAUDE.md; follow those there. In any other project, none of the native rules apply. When the user
-  asks for a native app here, make the project: `mcx-app new /root/apps/<name> --label "<Label>"` (it marks the
+  asks for a native app here, make the project: `mcx-app new /root/metacodex-projects/native/<name> --label "<Label>"` (it marks the
   folder native; skills at /opt/metacodex/quest-native/skills/quest-native-apps/SKILL.md), then tell the user to
   start the app's thread in that project (MetaCodex: + PROJECT, type Native app). `mcx-project type|set <dir>`
   reads or changes a folder's type.
