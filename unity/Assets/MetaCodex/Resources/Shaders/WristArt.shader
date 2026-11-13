@@ -3,6 +3,8 @@
 // its core. URP, single-pass instanced stereo, premultiplied: light is added with alpha 0 over the passthrough, and the
 // glass darkens what is behind it a little (alpha), so icons and labels read on any room. Every edge is anti-aliased
 // from its own distance (fwidth), so it stays crisp at the wrist's 30 cm and when the hand comes close.
+// _Opacity (PANEL OPACITY, set by UiWristMenu.GlassOpacity) scales the alpha of the glass only: the tiles (kind 0) and
+// the watch face (kind 5). The light on them, the lines, icons, scan lines and sparks keep their brightness.
 // Vertex data: colour (linear rgb, a = strength), uv0, uv1 = (x, y, kind, state), uv2 = extra, per kind:
 //   0 tile    uv0 = (metres from the inner edge, metres along the arc from its start); x = radial width, y = arc length
 //             at this radius; extra = (corner radius m, fingertip proximity 0..1, lit 0..1, press flash 0..1)
@@ -26,6 +28,7 @@ Shader "MetaCodex/WristArt"
     {
         _IconAtlas ("Icons (signed distance)", 2D) = "black" {}
         _IconRange ("Icon distance range", Float) = 0.42
+        _Opacity ("Glass opacity (PANEL OPACITY)", Range(0.3, 1)) = 1
     }
     SubShader
     {
@@ -48,6 +51,7 @@ Shader "MetaCodex/WristArt"
             TEXTURE2D(_IconAtlas);
             SAMPLER(sampler_IconAtlas);
             float _IconRange;
+            float _Opacity;
 
             struct Attributes
             {
@@ -109,7 +113,7 @@ Shader "MetaCodex/WristArt"
                 float lift = max(state, lit * 0.6);
                 // the glass: deep and clear, lighter towards the outer edge, fine lines along the arc
                 float scan = 0.5 + 0.5 * sin(i.uv.x * 2900.0);
-                half fillA = s * cov * (0.40 + 0.20 * state + 0.08 * lit + 0.25 * flash) * (0.94 + 0.06 * scan);
+                half fillA = s * cov * (0.40 + 0.20 * state + 0.08 * lit + 0.25 * flash) * (0.94 + 0.06 * scan) * _Opacity;
                 half3 deep = half3(0.006, 0.014, 0.026);
                 half3 fill = lerp(deep, c * 0.20, (0.18 + 0.82 * radial * radial) * (0.30 + 0.70 * lift));
                 // the light: a hair-thin rim (brighter on the outer edge, where the light catches it), a glow bleeding
@@ -231,7 +235,7 @@ Shader "MetaCodex/WristArt"
                 float fillCov = saturate(-dh / aa + 0.5);
                 half3 deep = half3(0.006, 0.016, 0.030);
                 float lens = exp(-length(p - float2(-0.22, 0.30)) * 3.6);
-                half fillA = s * fillCov * glass * (0.55 + 0.15 * state);
+                half fillA = s * fillCov * glass * (0.55 + 0.15 * state) * _Opacity;
                 half3 fill = lerp(deep, c * 0.22, saturate(0.15 + 0.35 * (1.0 - r) + 0.25 * lens + 0.3 * state));
                 float reveal = saturate((drawn - a01) / max(aaA * 2.0, 0.004));
                 float outline = LineAt(dh, 0.026, aa) * reveal;

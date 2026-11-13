@@ -1269,6 +1269,14 @@ end)
             Click(shell.Router, st, new Vector2(orr.xMax - 0.02f, orr.center.y));
             var mat = UiTheme.Current.ShapeMaterial;
             Check(mat != null && mat.GetFloat("_Opacity") > 0.9f && mat.GetFloat("_Scanlines") < 0.01f && mat.GetFloat("_Grid") < 0.01f, $"panel opacity follows its slider ({mat?.GetFloat("_Opacity"):F2}); scanlines and grid off");
+            // the wrist menu's glass follows the same value (its own material): read at 60 %, then the setting goes back
+            string opNow = shell.GetSetting("panelOpacity");
+            shell.SetSetting("panelOpacity", "0.6");
+            var wristMat = shell.Wrist.GetComponent<MeshRenderer>().sharedMaterial;
+            float panelAt60 = mat.GetFloat("_Opacity"), wristAt60 = wristMat.GetFloat("_Opacity");
+            shell.SetSetting("panelOpacity", opNow);
+            Check(Mathf.Abs(panelAt60 - 0.6f) < 1e-3f && Mathf.Abs(wristAt60 - 0.6f) < 1e-3f,
+                $"the wrist menu's glass follows PANEL OPACITY too: at 60 % the panels take {panelAt60:F2}, the wrist glass {wristAt60:F2}");
             foreach (var id in new[] { "files", "git", "dock" }) shell.OpenPanel(id);
             foreach (var p in shell.PanelsById.Values) p.ForceRefresh();
             Render(shell, "ui-look.png", head.position, Quaternion.identity, 100f, 1600, 900);
@@ -4013,8 +4021,8 @@ end)
             shell.ClosePanel("files");
             const int dw = 160, dh = 120;
             var near = RenderWithDepth(shell, "ui-focus-wall-near.png", head.position, 1.0f, dw, dh);
-            // in the band above the test terminal (it sits in front, opaque by design, and its shadow darkens around
-            // it); there the wall is 0.5 m above the eyes at 1 m, 1.8 m at 4 m (still on the 4 m wall)
+            // in the band above the test terminal (it sits in front, opaque by design); there the wall is 0.5 m above the
+            // eyes at 1 m, 1.8 m at 4 m (still on the 4 m wall)
             int[] xs = { 80, 160, 240 };
             float aNear = xs.Max(x => near.GetPixel(x, 215).a);
             var far = RenderWithDepth(shell, "ui-focus-wall-far.png", head.position, 4.0f, dw, dh);

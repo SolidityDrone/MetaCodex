@@ -604,7 +604,6 @@ end)
             // LOOK: one standard appearance; what is left are comfort settings
             var k = new UiStack(area, t.Gap);
             tabs.AddTo(TabLook, new UiSlider("PANEL OPACITY", 0.5f, 1f, s.panelOpacity, v => { s.panelOpacity = v; OnSettingsChanged(); }) { Rect = k.Next(rowH), Format = "0.00" });
-            tabs.AddTo(TabLook, new UiSlider("SHADOWS", 0f, 2f, s.glow, v => { s.glow = v; OnSettingsChanged(); }) { Rect = k.Next(rowH), Format = "0.00" });
             tabs.AddTo(TabLook, new UiToggle("Foveated rendering (saves GPU, blurs the edges of the view)", s.foveation, v => { s.foveation = v; OnSettingsChanged(); }) { Rect = k.Next(rowH) });
             var sg = k.NextSplit(rowH, 0.4f, out var sg2);
             tabs.AddTo(TabLook, new UiToggle("Sounds", s.sounds, v => { s.sounds = v; OnSettingsChanged(); if (v) Sounds?.Play("toast"); }) { Rect = sg });

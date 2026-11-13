@@ -102,7 +102,6 @@ namespace MetaCodex.Shell
                 Settings.scanlines = false;
                 Settings.grid = false;
                 Settings.motion = 0f;
-                Settings.glow = 1f;
                 Settings.panelOpacity = Mathf.Max(Settings.panelOpacity, 0.92f);
                 Settings.foveation = false;
                 Settings.terminalAtStart = false;
@@ -192,17 +191,20 @@ namespace MetaCodex.Shell
             return Path.Combine(shared, "scripts");
         }
 
+        /// PANEL OPACITY as the shaders get it: the panels' `_Opacity` and the wrist menu's glass (ShellWrist).
+        private float PanelOpacity => Mathf.Clamp(Settings.panelOpacity, 0.3f, 1f);
+
         private void ApplyMaterialSettings()
         {
             if (shapeMaterial != null)
             {
                 shapeMaterial.SetFloat("_Scanlines", Settings.scanlines ? 1f : 0f);
-                shapeMaterial.SetFloat("_GlowBoost", Mathf.Clamp(Settings.glow, 0f, 2f));
-                shapeMaterial.SetFloat("_Opacity", Mathf.Clamp(Settings.panelOpacity, 0.3f, 1f));
+                shapeMaterial.SetFloat("_Opacity", PanelOpacity);
                 shapeMaterial.SetFloat("_Motion", Mathf.Clamp(Settings.motion, 0f, 2f));
                 shapeMaterial.SetFloat("_Grid", Settings.grid ? 1f : 0f);
                 if (UiTheme.Current != null) shapeMaterial.SetVector("_Accent", UiTheme.Lin(UiTheme.Current.Accent)); // conduits, the cast's heat, the pointers' light
             }
+            if (Wrist != null) Wrist.GlassOpacity = PanelOpacity; // the wrist menu's glass has its own material: the same value
             if (Sounds != null) { Sounds.Enabled = Settings.sounds; Sounds.Volume = Mathf.Clamp01(Settings.soundVolume); }
             ApplyDisplaySettings();
         }

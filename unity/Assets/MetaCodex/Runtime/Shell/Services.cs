@@ -233,7 +233,6 @@ namespace MetaCodex.Shell
         /// Gesture -> action links (Gestures panel > BIND).
         public List<GestureBinding> bindings = new List<GestureBinding>();
         // look and feel
-        public float glow = 1f;
         public float panelOpacity = 0.92f;
         /// The image clipboard keeps this many captures (the newest); one more deletes the oldest from the Linux.
         public int clipboardMax = 20;

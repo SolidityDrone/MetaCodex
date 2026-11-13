@@ -19,14 +19,13 @@
 // one by one and cool into glass; controls come online just behind it.
 // Two passes: PanelDepth writes depth where a panel body is opaque (so text and images of windows behind it are
 // hidden, as they render later), then the colour pass. Alpha is blended with One OneMinusSrcAlpha: it only ever
-// grows, so a translucent button, row or shadow drawn over an opaque panel never opens a hole to the passthrough
+// grows, so a translucent button or row drawn over an opaque panel never opens a hole to the passthrough
 // (the eye buffer's alpha decides how much of the real world shows).
 Shader "MetaCodex/SciFiUI"
 {
     Properties
     {
         _Scanlines ("Scanlines (unused)", Range(0, 1)) = 1
-        _GlowBoost ("Shadow", Range(0, 2)) = 1
         _Opacity ("Panel opacity", Range(0.3, 1)) = 0.9
         _Motion ("Motion speed (unused)", Range(0, 2)) = 1
         _Grid ("Grid (unused)", Range(0, 1)) = 1
@@ -56,7 +55,6 @@ Shader "MetaCodex/SciFiUI"
         CBUFFER_START(UnityPerMaterial)
             float _PanelIndex;
             float _Scanlines;
-            float _GlowBoost;
             float _Opacity;
             float _Motion;
             float _Grid;
@@ -320,14 +318,12 @@ Shader "MetaCodex/SciFiUI"
                 float px = aa; // about one pixel, in metres (a distance field's gradient is 1: its fwidth is the pixel size)
                 float inside = saturate(0.5 - d / aa);
                 float ring = saturate(0.5 - (abs(d + border * 0.5) - border * 0.5) / aa);
-                float outsideFall = (1.0 - inside) * exp(-max(d, 0.0) / max(margin * 0.42, 1e-4));
 
                 float3 fill = 0;
                 float fillA = 0;
                 float3 edgeCol = tint;
                 float edgeA = 0.0;
                 float glowA = 0.0;      // accent halo outside the shape
-                float shadeA = 0.0;     // dark contact shadow just outside
                 float4 pfx = McxPanelFx(_PanelIndex);
                 float bd = i.scan.z;    // metres behind the scan line while the panel is cast (10 at rest)
                 float heat = 0.0;
@@ -407,7 +403,6 @@ Shader "MetaCodex/SciFiUI"
                     edgeCol += accent * (heat * 1.6 + saturate(pfx.y) * 1.1) + accent * pl * 0.8; // the frame carries the cast's heat and flash
                     edgeA = 0.85 * step(0.0, bd);
                     glowA = 0.10 + 0.22 * state + 0.5 * heat;
-                    shadeA = 0.30 * step(0.0, bd);
                 }
                 else if (kind == 1) // button: a command-card plate
                 {
@@ -456,7 +451,6 @@ Shader "MetaCodex/SciFiUI"
                         edgeA = 0.55;
                         glowA = 0.30 * state + (filled ? 0.20 : 0.0);
                     }
-                    shadeA = style2 > 1.5 ? 0.0 : 0.12;
                 }
                 else if (kind == 2) // header: a stepped energy bar under the title, a lead block before it, hatched at the right
                 {
@@ -501,7 +495,6 @@ Shader "MetaCodex/SciFiUI"
                     edgeCol = lerp(float3(0.085, 0.092, 0.105), tint * 1.2, saturate(over * 0.8 + on));
                     edgeA = 0.9;
                     glowA = 0.10 * on;
-                    shadeA = 0.22;
                 }
                 else if (kind == 8) // deck: the keyboard's body, a plain dark slab
                 {
@@ -510,7 +503,6 @@ Shader "MetaCodex/SciFiUI"
                     edgeCol = float3(0.075, 0.082, 0.095) + tint * 0.25 * state;
                     edgeA = 0.85;
                     glowA = 0.10 * state;
-                    shadeA = 0.30;
                 }
                 else if (kind == 9) // flat: the tint as it is (the sidebar's code and diff views)
                 {
@@ -518,7 +510,6 @@ Shader "MetaCodex/SciFiUI"
                     fillA = i.color.a;
                     edgeA = 0.0;
                     glowA = 0.0;
-                    shadeA = 0.0;
                 }
                 else // kind 4: bar (state = how full); energy bars are segmented
                 {
@@ -536,11 +527,10 @@ Shader "MetaCodex/SciFiUI"
                 float a = fillA * inside;
                 col = lerp(col, edgeCol, ring * edgeA);
                 a = max(a, ring * edgeA);
-                // outside the shape: a dark contact shadow close in, a soft accent halo further out
-                float shade = outsideFall * shadeA * _GlowBoost;
+                // outside the shape: a soft accent halo (no dark contact shadow)
                 float halo = (1.0 - inside) * exp(-max(d, 0.0) / max(margin * 0.30, 1e-4)) * glowA;
-                float3 outCol = lerp(float3(0.0, 0.0, 0.0), tint * 1.2, saturate(halo / max(halo + shade, 1e-4)));
-                float outA = max(shade, halo);
+                float3 outCol = tint * 1.2;
+                float outA = halo;
                 col = lerp(col, outCol, saturate(outA * (1.0 - inside) / max(a + outA, 1e-4)));
                 a = max(a, outA);
                 if (kind == 0)

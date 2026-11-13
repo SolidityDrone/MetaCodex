@@ -59,7 +59,7 @@ Helpers on the PC: `tools/qterm` (control port), `adb logcat -s Unity`, `files/s
 - [ ] GESTURES: PINCH AT slider, clap on/off, clap distance, "Custom gestures from plugins" on/off
 - [ ] DISPLAY: distance, carousel radius, UI scale; "Bend panels around you" bends panels in FIXED too (terminals stay flat)
 - [ ] FLOAT with 10+ panels open → evenly spaced around you, none overlapping (the circle grows); drop a panel on another → it slides to a free place
-- [ ] LOOK: Sharpness, Panel Opacity, Shadows, Foveated rendering, Sounds, Volume (no themes, accents, scanlines or grid)
+- [ ] LOOK: Sharpness, Panel Opacity, Foveated rendering, Sounds, Volume (no themes, accents, scanlines or grid)
 - [ ] Foveated rendering ON → the edges of the view get softer (VrApi `Fov=`); OFF (default) → sharp everywhere
 - [ ] Settings survive an app restart
 
@@ -605,3 +605,13 @@ Work windows:
 - [ ] Buttons are dark blue slate plates with an engraved channel: dim blue at rest, bright when a finger or the ray is on them, full for the primary (CD HERE) and red for a danger button; list rows and ghost buttons look as before; text stays easy to read
 - [ ] A window opening: the cast's brackets hand over to the stone corners without a jump; bent windows: the pieces bend with them
 - [ ] 72 fps with many windows open (the look is computed in the existing UI shader, no textures)
+
+## 41. Wrist menu glass follows PANEL OPACITY; no SHADOWS (branch fix/look-shadows)
+
+- [ ] Settings > LOOK: PANEL OPACITY at 50 % → the wrist menu's tiles and watch face are clearly more see-through than at 100 %; its lines, icons, ticks and sparks look as bright as before
+- [ ] PANEL OPACITY at 100 % → the wrist menu looks as it did before this change
+- [ ] PANEL OPACITY at 50 %: a hand behind the wrist menu is still hidden by its glass (the depth is unchanged)
+- [ ] Change PANEL OPACITY (the slider, or voice: "set the opacity to 60 percent") with the wrist menu open: its glass changes at once, the panels too, no restart
+- [ ] Settings > LOOK: the rows are PANEL OPACITY, FOVEATED, SOUNDS, VOLUME, the orb; no SHADOWS slider and no gap where it was
+- [ ] Windows and buttons have no dark band round their edges; the accent glow round a window's edge looks as before
+- [ ] An old settings file that still has "glow" loads: the app starts with its other settings (PANEL OPACITY keeps its value)
