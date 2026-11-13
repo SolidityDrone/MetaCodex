@@ -66,11 +66,17 @@ namespace MetaCodex.Shell
         private RenderTexture _sharpA, _sharpB;
         private bool _sharpFlip, _sharpHavePrev, _sharpLive;
         private readonly Matrix4x4[] _sharpPrevW2D = { Matrix4x4.identity, Matrix4x4.identity };
+        // one matrix per eye each for DepthSharp: depth clip -> the camera's space, depth clip -> last frame's depth clip
+        private readonly Matrix4x4[] _sharpD2C = { Matrix4x4.identity, Matrix4x4.identity }, _sharpD2P = { Matrix4x4.identity, Matrix4x4.identity };
+        private Matrix4x4 _camW2C = Matrix4x4.identity;
+        /// The sharp depth is drawn (focus shown or occlusion on); false while the depth only idles in its hold time.
+        private bool _sharpWanted;
         private Texture2DArray _noDepth;
         private float _uiHide;
         private static readonly int SharpId = Shader.PropertyToID("_McxDepthSharp"), SharpPrevId = Shader.PropertyToID("_McxSharpPrev"),
-            SharpPrevW2DId = Shader.PropertyToID("_McxPrevWorldToDepth"), SharpSliceId = Shader.PropertyToID("_McxSlice"),
+            SharpSliceId = Shader.PropertyToID("_McxSlice"),
             SharpSizeId = Shader.PropertyToID("_McxDepthSize"), SharpHistoryId = Shader.PropertyToID("_McxHistory"),
+            SharpD2CId = Shader.PropertyToID("_McxDepthToCam"), SharpD2PId = Shader.PropertyToID("_McxDepthToPrev"),
             OcclusionId = Shader.PropertyToID("_McxOcclusion"), UiHideId = Shader.PropertyToID("_McxUiHide"),
             ZParamsId = Shader.PropertyToID("_EnvironmentDepthZBufferParams");
         /// The sharp depth's last output (self-tests read it back).
@@ -132,8 +138,9 @@ namespace MetaCodex.Shell
         }
 
         /// Every frame: the UI steps aside for the Horizon OS menu; the depth runs while focus or "real things in front
-        /// of windows" needs it, the camera while the blur or the sharp depth does; the sphere fades in / out and stays
-        /// on the head; the hands are cut out of everything.
+        /// of windows" needs it, the camera while the blur or the sharp depth does (both kept running, idle, for
+        /// DepthCamHold seconds after the last need: a restart costs the headset seconds of low frame rate); the sphere
+        /// fades in / out and stays on the head; the hands are cut out of everything.
         private void UpdateFocus(float dt)
         {
             if (Settings == null) return;
@@ -147,18 +154,27 @@ namespace MetaCodex.Shell
             bool shown = _focusShown > 0f && (Settings.focusIntensity > 0.004f || Settings.focusBlur > 0.001f);
             ApplyFoveation(); // on while the focus is shown (FocusShownNow)
             bool wantDepth = shown || Settings.occludeUi;
-            EnsureDepth(wantDepth);
-            // the camera pauses while speech is turned into text and the command decided (the AI service shares the
-            // cores the camera pipeline uses); the blur keeps the room it has, the sharp depth goes unguided meanwhile
+            _sharpWanted = wantDepth;
+            EnsureDepth(Held(wantDepth, _depth != null && _depth.enabled, ref _depthUnwantedSince));
+            if (_depthLive) _depthSeen = true;
+            // the camera is never stopped for a voice command (2026-11-13: it was stopped while speech was turned into text
+            // and the command decided, and started again after; each restart cost the headset seconds of low frame rate,
+            // the owner's hard lag at every dictation). While the voice is busy it keeps running and only its frames are
+            // not used (the blur keeps the room it has, the sharp depth the last picture).
             bool voiceBusy = VoiceState == "transcribing" || VoiceState == "thinking";
-            EnsureCamera(((shown && Settings.focusBlur > 0.001f) || (wantDepth && Settings.depthCamera && _depthLive)) && !voiceBusy);
+            bool wantCam = (shown && Settings.focusBlur > 0.001f) || (wantDepth && Settings.depthCamera && _depthSeen);
+            _camUseFrames = wantCam && !voiceBusy;
+            EnsureCamera(Held(wantCam, _cam != null && _cam.gameObject.activeSelf, ref _camUnwantedSince));
             Shader.SetGlobalFloat(OcclusionId, Settings.occludeUi && _sharpLive ? 1f : 0f);
+            UpdatePanelOcclusionFlags();
             // your hands always show in front of windows (owner 2026-11-10: with "Real things in front of windows" off the
             // windows covered them); that setting is only the room's depth: people and things
             if (HandCutoutsForTest) UpdateHandCutouts(); else HideHandCutouts();
             if (!shown)
             {
                 if (_focusSphere != null && _focusSphere.activeSelf) _focusSphere.SetActive(false);
+                // the room's points still tell which windows something real can be in front of (and where the floor is)
+                if (Settings.occludeUi) UpdateFloorFromDepth(Head);
                 return;
             }
             if (!EnsureFocusSphere()) return;
@@ -226,6 +242,20 @@ namespace MetaCodex.Shell
 
         // ---- live depth
 
+        /// Once started, the depth and the camera stay on (idle) until they have not been needed for this long: turning
+        /// either on again costs the headset seconds of low frame rate (measured 2026-11-13: 17.7 fps for ~15 s).
+        private const float DepthCamHold = 60f;
+        private float _depthUnwantedSince = -1f, _camUnwantedSince = -1f;
+        private bool _depthSeen, _camUseFrames = true;
+
+        /// `want`, kept true for DepthCamHold seconds after it turned false while the thing is running.
+        private static bool Held(bool want, bool running, ref float unwantedSince)
+        {
+            if (want || !running) { unwantedSince = -1f; return want; }
+            if (unwantedSince < 0f) unwantedSince = Time.unscaledTime;
+            return Time.unscaledTime - unwantedSince < DepthCamHold;
+        }
+
         private void EnsureDepth(bool want)
         {
             if (_depthTest) return;
@@ -281,6 +311,7 @@ namespace MetaCodex.Shell
             for (int i = 0; i < 2; i++) _depthToWorld[i] = _reproj[i].inverse;
             Shader.SetGlobalMatrixArray(DepthToWorldId, _depthToWorld);
             _depthLive = true;
+            if (!_sharpWanted) return; // the depth idles in its hold time: no sharp depth drawn
             // a new sharp depth only for a new depth frame (its matrices change with it): Meta's depth comes slower than
             // the 72 Hz frames, and the same input again only cost GPU time (0.7.19: before, every frame, with a new
             // command buffer each time: garbage for the GC)
@@ -324,7 +355,11 @@ namespace MetaCodex.Shell
                 if (sh == null) { SetFocusStatus(ref _depthStatus, "depth: sharp-depth shader missing"); return false; }
                 _sharpMat = new Material(sh) { name = "sharp depth" };
             }
-            int w = Mathf.Min(depth.width * 2, 640), h = Mathf.Min(depth.height * 2, 640);
+            // 1.5 x the sensor when the camera guides it (the picture moves edges between readings), the sensor's own
+            // resolution without it (2026-11-13: always 2 x, 640 x 640 x 2: 1.8 x the pixels of 480 x 480, 4 x of 320 x 320)
+            bool guide = Settings == null || Settings.depthCamera;
+            float scale = guide ? 1.5f : 1f;
+            int w = Mathf.Min(Mathf.RoundToInt(depth.width * scale), 480), h = Mathf.Min(Mathf.RoundToInt(depth.height * scale), 480);
             if (_sharpA == null || _sharpA.width != w || _sharpA.height != h)
             {
                 foreach (var old in new[] { _sharpA, _sharpB }) if (old != null) { old.Release(); if (Application.isPlaying) Destroy(old); else DestroyImmediate(old); }
@@ -337,9 +372,15 @@ namespace MetaCodex.Shell
             var cur = _sharpFlip ? _sharpA : _sharpB;
             _sharpMat.SetVector(SharpSizeId, new Vector4(depth.width, depth.height, 1f / depth.width, 1f / depth.height));
             _sharpMat.SetTexture(SharpPrevId, prev);
-            _sharpMat.SetMatrixArray(SharpPrevW2DId, _sharpPrevW2D);
+            for (int i = 0; i < 2; i++)
+            {
+                _sharpD2C[i] = _camW2C * _depthToWorld[i];
+                _sharpD2P[i] = _sharpPrevW2D[i] * _depthToWorld[i];
+            }
+            _sharpMat.SetMatrixArray(SharpD2CId, _sharpD2C);
+            _sharpMat.SetMatrixArray(SharpD2PId, _sharpD2P);
             _sharpMat.SetFloat(SharpHistoryId, _sharpHavePrev ? 0.7f : 0f);
-            SetKeyword(_sharpMat, "MCX_GUIDE", _camLive);
+            SetKeyword(_sharpMat, "MCX_GUIDE", _camLive && guide);
             for (int slice = 0; slice < 2; slice++)
             {
                 cb.SetRenderTarget(new RenderTargetIdentifier(cur, 0, CubemapFace.Unknown, slice));
@@ -394,7 +435,123 @@ namespace MetaCodex.Shell
                 }
                 AcceptFloor(EstimateFloor(pts, headPos, track), track);
                 SetRoomPoints(pts); // the same reading tells a panel that opens where the walls and the furniture are (ShellPlacement)
+                UpdatePanelOcclusion(pts, headPos, toWorld.inverse); // ... and which windows something real can be in front of
             });
+        }
+
+        // ---- per window: can something real be in front of it? (McxOcclusion.hlsl: McxVisibilityIn)
+
+        /// _McxPanelClear[slot] = 1: no real thing can be in front of that window, its shaders skip the per-pixel depth
+        /// test; 0 (the default of every slot, and of a window that opens, moves or was not seen yet): the test runs.
+        private static readonly int PanelClearId = Shader.PropertyToID("_McxPanelClear");
+        private readonly float[] _panelClear = new float[UiPanel.MaxSlots];
+        private readonly UiPanel[] _panelClearOwner = new UiPanel[UiPanel.MaxSlots];
+        private readonly int[] _panelClearReads = new int[UiPanel.MaxSlots];
+        private readonly float[] _panelHitAt = new float[UiPanel.MaxSlots];
+        private readonly Vector3[] _panelClearPos = new Vector3[UiPanel.MaxSlots];
+        private readonly Quaternion[] _panelClearRot = new Quaternion[UiPanel.MaxSlots];
+        private bool _panelClearDirty = true;
+        private float _panelReadAt = -100f;
+        /// A window counts as clear after this many room readings in a row (0.3 s apart) that see all of it with nothing
+        /// in front, and no sooner than this many seconds after the last thing seen in front of it.
+        private const int PanelClearReads = 6;
+        private const float PanelHitHold = 4f;
+        /// What counts as in front: inside the window's rectangle grown by this much (metres) as seen from the eye
+        /// (the 48 x 48 points are ~2 degrees apart, the head and people move between readings).
+        private const float PanelMargin = 0.15f;
+        /// Self-tests: true = every window is clear (no per-pixel test), false = every window is tested; null = the room.
+        public bool? PanelClearOverride;
+        public bool PanelClearForTest(UiPanel p) => p != null && p.Slot >= 0 && _panelClear[p.Slot] > 0.5f;
+
+        /// Every frame: a window that opened, closed, moved or turned is tested again until readings clear it; without a
+        /// room reading for 2 s every window is tested.
+        private void UpdatePanelOcclusionFlags()
+        {
+            bool stale = Time.unscaledTime - _panelReadAt > 2f || !Settings.occludeUi;
+            for (int i = 0; i < UiPanel.MaxSlots; i++)
+            {
+                var p = UiPanel.InSlot(i);
+                bool reset = stale || p != _panelClearOwner[i] || p == null || !p.IsOpen;
+                if (!reset)
+                {
+                    var tr = p.transform;
+                    reset = (tr.position - _panelClearPos[i]).sqrMagnitude > 0.03f * 0.03f || Quaternion.Angle(tr.rotation, _panelClearRot[i]) > 3f;
+                }
+                if (reset)
+                {
+                    _panelClearOwner[i] = p;
+                    _panelClearReads[i] = 0;
+                    if (p != null) { _panelClearPos[i] = p.transform.position; _panelClearRot[i] = p.transform.rotation; }
+                    SetPanelClear(i, false);
+                }
+                if (PanelClearOverride.HasValue) SetPanelClear(i, PanelClearOverride.Value);
+            }
+            if (_panelClearDirty) { Shader.SetGlobalFloatArray(PanelClearId, _panelClear); _panelClearDirty = false; }
+        }
+
+        private void SetPanelClear(int slot, bool clear)
+        {
+            float v = clear ? 1f : 0f;
+            if (_panelClear[slot] == v) return;
+            _panelClear[slot] = v;
+            _panelClearDirty = true;
+        }
+
+        /// One room reading (left eye's depth, world points, the head when it was taken): each open window with a point in
+        /// front of it is tested for PanelHitHold s at least; one seen whole and clear PanelClearReads times is not.
+        private void UpdatePanelOcclusion(List<Vector3> pts, Vector3 eye, Matrix4x4 worldToDepth)
+        {
+            if (pts == null || pts.Count < 40) return;
+            _panelReadAt = Time.unscaledTime;
+            for (int i = 0; i < UiPanel.MaxSlots; i++)
+            {
+                var p = _panelClearOwner[i];
+                if (p == null || !p.IsOpen || p != UiPanel.InSlot(i)) continue;
+                var tr = p.transform;
+                var toPanel = Matrix4x4.TRS(tr.position, tr.rotation, Vector3.one).inverse;
+                Vector3 sc = tr.lossyScale;
+                float w = p.Width * Mathf.Abs(sc.x), h = p.Height * Mathf.Abs(sc.y);
+                if (MayBeInFront(pts, eye, toPanel, w, h, PanelMargin))
+                {
+                    _panelHitAt[i] = Time.unscaledTime;
+                    _panelClearReads[i] = 0;
+                    SetPanelClear(i, false);
+                    continue;
+                }
+                if (!WholeInView(worldToDepth, tr, w, h)) continue; // not seen: no change
+                if (++_panelClearReads[i] >= PanelClearReads && Time.unscaledTime - _panelHitAt[i] > PanelHitHold) SetPanelClear(i, true);
+            }
+        }
+
+        /// The window's rectangle (its four corners) inside the depth's view.
+        private static bool WholeInView(Matrix4x4 worldToDepth, Transform tr, float w, float h)
+        {
+            for (int k = 0; k < 4; k++)
+            {
+                var corner = tr.position + tr.rotation * new Vector3((k & 1) == 0 ? -w * 0.5f : w * 0.5f, (k & 2) == 0 ? -h * 0.5f : h * 0.5f, 0f);
+                var c = worldToDepth * new Vector4(corner.x, corner.y, corner.z, 1f);
+                if (c.w <= 1e-5f || Mathf.Abs(c.x / c.w) > 0.98f || Mathf.Abs(c.y / c.w) > 0.98f) return false;
+            }
+            return true;
+        }
+
+        /// True when a room point lies between the eye and a window (more than 2 cm in front of its plane) and, seen from
+        /// the eye, inside its rectangle grown by `margin`. `worldToPanel`: rigid, the window's centre at 0, its plane z = 0.
+        public static bool MayBeInFront(List<Vector3> pts, Vector3 eye, Matrix4x4 worldToPanel, float width, float height, float margin)
+        {
+            Vector3 e = worldToPanel.MultiplyPoint3x4(eye);
+            if (Mathf.Abs(e.z) < 0.05f) return true; // the eye in the window's plane: anything can be in front
+            float hw = width * 0.5f + margin, hh = height * 0.5f + margin;
+            foreach (var wp in pts)
+            {
+                Vector3 p = worldToPanel.MultiplyPoint3x4(wp);
+                // on the eye's side of the plane, more than 2 cm off it and nearer than the eye
+                if (p.z * e.z <= 0f || Mathf.Abs(p.z) < 0.02f || Mathf.Abs(p.z) >= Mathf.Abs(e.z)) continue;
+                float s = e.z / (e.z - p.z); // eye -> point, continued to the plane (> 1)
+                float x = e.x + (p.x - e.x) * s, y = e.y + (p.y - e.y) * s;
+                if (Mathf.Abs(x) <= hw && Mathf.Abs(y) <= hh) return true;
+            }
+            return false;
         }
 
         /// The floor under the user from depth points (world space): those within 1.5 m of the head horizontally,
@@ -493,9 +650,10 @@ namespace MetaCodex.Shell
                 UnityEngine.Android.Permission.RequestUserPermission(OVRPermissionsRequester.PassthroughCameraAccessPermission);
             }
 #endif
-            // 30 fps when it guides the sharp depth, 15 when only the blur needs it (half the camera work): a different
-            // rate means a new component (MaxFramerate cannot change while it runs)
-            int fps = Settings.depthCamera ? 30 : 15;
+            // 15 fps for the blur and the sharp depth's guide (2026-11-13: 30 for the guide; the picture only moves depth edges
+            // onto the picture's edges, and its pose is its own, so a still room needs no more). One rate: a different
+            // rate meant a new component (MaxFramerate cannot change while it runs), a camera restart.
+            const int fps = 15;
             if (_cam != null && _camFps != fps) { Object.Destroy(_cam.gameObject); _cam = null; _camLive = false; }
             if (_cam == null)
             {
@@ -530,6 +688,8 @@ namespace MetaCodex.Shell
             }
             _camDisabledAt = -1f;
             if (!_cam.IsPlaying) { _camLive = false; SetFocusStatus(ref _camStatus, "camera: starting…"); return; }
+            // idle (the voice is busy, or nothing needs it in its hold time): running, its frames not used
+            if (!_camUseFrames) return;
             // a new picture (its time stamp moved): copy it after the camera's own Update issued the native update
             if (_cam.Timestamp != _camStamp || !_camLive)
             {
@@ -568,6 +728,7 @@ namespace MetaCodex.Shell
             var space = trackingSpace ? TrackingSpace() : null;
             if (space != null) camToWorld = space.localToWorldMatrix * camToWorld;
             var w2c = camToWorld.inverse;
+            _camW2C = w2c;
             Shader.SetGlobalTexture(CamTexId, tex);
             Shader.SetGlobalMatrix(CamW2CId, w2c);
             Shader.SetGlobalVector(CamIntrId, new Vector4(focal.x, focal.y, principal.x, principal.y));

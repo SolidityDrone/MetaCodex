@@ -236,6 +236,9 @@ Ambient Focus (branch feat/spatial-dome, no Space Setup needed):
 - [ ] Hands always visible, also at BLACKOUT and with BLUR, and in front of a window
 - [ ] The cut-out around near things (your hands, a chair, a person) is clean and steady: no flicker, no blocky edge (FOCUS: "camera: live …")
 - [ ] Someone walks in front of a window, or you hold an object up → it stays visible in front of the window ("Real things in front of windows" on); off → the window covers it
+- [ ] Same with a window that has stood alone for 3 s or more (it is then marked clear): the person or object shows in front of it within about half a second
+- [ ] Both FOCUS depth settings on (Sharp depth, Real things in front): VrApi FPS near 72 with a few windows open; dictate into a thread chat several times → no lag during or after speech-to-text (the camera keeps running)
+- [ ] Turn Ambient Focus off and on again within a minute → no seconds of low frame rate (the depth and the camera stay on, idle, for 60 s)
 - [ ] Palm towards you + pinch (Horizon OS quick actions, left-hand settings) → the windows stay where they are (0.7.3: the gesture hides nothing); when a system menu has opened and taken the app's focus they step aside, and come back when it closes
 - [ ] Without the "spatial data" permission → the old floor-plane darkening still works
 - [ ] Frame rate with focus + blur on stays about 72 fps (Perf menu)
@@ -659,3 +662,12 @@ Work windows:
 - [ ] Ask "what happened while I was away?": no orb placement, focus or menu settings in the answer; threads, approvals, builds are there
 - [ ] App start: the MetaCodex logo appears about a metre in front of you over the room (passthrough visible around it), comes in behind a scan line, stays fixed in the room (upright, facing you; turn your head: it stays), then breaks up into light after about 3 s; nothing of it stays
 
+
+## 45. No stutter while an agent codes (branch perf/gc-cpu)
+
+- [ ] Open a thread with a long conversation and let the agent work for 10 minutes: no stop of 1-3 s, 72 fps (Perf menu Snapshot)
+- [ ] The session log: `GC: incremental` at start; no `[slow callback]` line from the chat; no `[slow timeline]` above 40 ms
+- [ ] Scrolled up in the chat while it works: the view holds still, ↓ NEW shows; a tap on a header opens and closes it as before
+- [ ] An approval row shows and goes: the chat keeps its place and text
+- [ ] The sidebar on CHANGES while it works: new files and counts show within a few seconds
+- [ ] A script saved in the terminal still applies within about a second

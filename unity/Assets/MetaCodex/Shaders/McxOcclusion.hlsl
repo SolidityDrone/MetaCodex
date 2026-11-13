@@ -5,9 +5,13 @@
 //   _EnvironmentDepthReprojectionMatrices[2], _EnvironmentDepthZBufferParams: Meta's (world -> depth clip, ndc -> linear)
 //   _McxOcclusion    1 = hide UI where something real is in front of it
 //   _McxUiHide       0..1: the UI steps aside (the Horizon OS menu is open, or a hand does the system gesture)
+//   _McxPanelClear[slot] 1 = no real thing can be in front of that window (ShellAmbient: no room point between the eye
+//                    and it for several readings), so its fragments skip the depth test; 0 (default) = test
 // McxVisibility(positionWS) multiplies a fragment's alpha (and so its premultiplied colour): 0 where a real surface
 // is 6 cm (+2 % of the distance) or more in front of it, 1 when it is not in front by more than 2 cm (+1 %).
 // McxOcclusionCoord (vertex) + McxVisibilityAt (fragment) give the same value with the matrix product per vertex.
+// McxVisibilityIn(slot, positionWS) is the same for a renderer of a window (its _PanelIndex): one uniform branch, and
+// no matrix, divide or depth tap at all for a window nothing can be in front of (2026-11-13: every UI fragment paid them).
 #ifndef MCX_OCCLUSION_INCLUDED
 #define MCX_OCCLUSION_INCLUDED
 
@@ -20,6 +24,7 @@ float4 _EnvironmentDepthZBufferParams;
 #endif
 float _McxOcclusion;
 float _McxUiHide;
+float _McxPanelClear[128];
 
 uint McxEyeIndex()
 {
@@ -67,6 +72,19 @@ float McxVisibilityAt(float4 q)
     if (zr <= 0.01) return shown;
     float d = zf - zr;
     return shown * (1.0 - smoothstep(0.02 + 0.01 * zf, 0.06 + 0.02 * zf, d));
+}
+
+float McxVisibilityIn(float slot, float3 positionWS)
+{
+    if (_McxOcclusion < 0.5 || (slot >= 0.0 && _McxPanelClear[(int)max(slot, 0.0)] > 0.5)) return 1.0 - saturate(_McxUiHide);
+    return McxVisibility(positionWS);
+}
+
+// McxVisibilityIn with the coordinate from the vertex shader (McxOcclusionCoord): what SciFiUI and TextBend call
+float McxVisibilityAtIn(float slot, float4 q)
+{
+    if (_McxOcclusion < 0.5 || (slot >= 0.0 && _McxPanelClear[(int)max(slot, 0.0)] > 0.5)) return 1.0 - saturate(_McxUiHide);
+    return McxVisibilityAt(q);
 }
 
 #endif

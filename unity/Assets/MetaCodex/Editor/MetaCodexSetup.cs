@@ -127,6 +127,9 @@ namespace MetaCodex.EditorTools
             PlayerSettings.SetGraphicsAPIs(BuildTarget.Android, new[] { GraphicsDeviceType.Vulkan });
             PlayerSettings.colorSpace = ColorSpace.Linear;
             PlayerSettings.enableFrameTimingStats = true;
+            // the incremental GC: a collection runs in slices of a few ms across frames instead of one pause that stops
+            // the whole frame (0.7.19: every hitch of the session log had a GC in it)
+            PlayerSettings.gcIncremental = true;
             EditorUserBuildSettings.androidBuildSubtarget = MobileTextureSubtarget.ASTC;
         }
 
@@ -166,6 +169,14 @@ namespace MetaCodex.EditorTools
         /// Sync stays off: Meta warns it "might cause more stale frames" when the workload jumps, as ours does.
         private static void ConfigureQuestRendering()
         {
+            // every build (BuildApk), not only BatchSetup. Unity copies the Meta Quest feature's rendering options (ConfigureQuestRendering) into the build only while
+            // the feature is on: up to 0.7.19 it was off, so symmetric projection, render regions, late latching and
+            // lazy MSAA buffers never shipped (boot.config had no late-latching key). The foveation the shell asks for
+            // (OVRManager.foveatedRenderingLevel, dynamic) goes through Meta XR Foveation; Subsampled Layout makes it cheaper.
+            SetFeatures(BuildTargetGroup.Android, true,
+                "com.unity.openxr.feature.metaquest",
+                "com.meta.openxr.feature.foveation",
+                "com.meta.openxr.feature.subsampledLayout");
             var feature = FeatureHelpers.GetFeatureWithIdForBuildTarget(BuildTargetGroup.Android, "com.unity.openxr.feature.metaquest");
             if (feature == null) { Debug.LogWarning("[MetaCodex] Meta Quest OpenXR feature not found: rendering options unchanged"); return; }
             var so = new SerializedObject(feature);
@@ -210,8 +221,10 @@ namespace MetaCodex.EditorTools
             config.isPassthroughCameraAccessEnabled = true;
             // TouchScreenKeyboard -> the headset's system keyboard over the immersive app
             config.requiresSystemKeyboard = true;
-            // the Linux userland (compilers, node, agents) is CPU work; the scene is a few flat panels
-            config.processorFavor = OVRProjectConfig.ProcessorFavor.FavorCPU;
+            // no CPU/GPU level trade: with passthrough Quest 3/3S cap the CPU at level 3 and the GPU at 2, so FavorCPU
+            // (-1 GPU level, +1 CPU level) gave the CPU nothing and held the GPU at level 1, 350 MHz, 91-99 % busy
+            // (VrApi CPU4/GPU=3/1 up to 0.7.19). Equal: GPU level 2, 456 MHz (+30 %); the CPU stays at level 3.
+            config.processorFavor = OVRProjectConfig.ProcessorFavor.FavorEqually;
             OVRProjectConfig.CommitProjectConfig(config);
         }
 

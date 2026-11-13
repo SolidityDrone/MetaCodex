@@ -141,7 +141,27 @@ namespace MetaCodex.Scripting
         {
             Now = now;
             _ = Engine; // keeps the detector hook on the current engine
-            if (now >= _nextScan) { _nextScan = now + 1f; Scan(); }
+            if (now >= _nextScan && !_scanOut)
+            {
+                _nextScan = now + 1f;
+                if (!Application.isPlaying) Scan(); // edit-mode self-tests: at once
+                else
+                {
+                    // the folder walk (every plugin file's time: 2-3 ms each second on the headset in 0.7.19) on a pool
+                    // thread; this thread only loads what changed
+                    _scanOut = true;
+                    string dir = Dir, plugins = PluginsDir;
+                    int gen = _scanGen;
+                    System.Threading.Tasks.Task.Run(() =>
+                    {
+                        var r = new ScanResult { Gen = gen };
+                        try { r.Found = Gather(dir, plugins); } catch (Exception) { r.Found = null; }
+                        System.Threading.Volatile.Write(ref _scanReady, r);
+                    });
+                }
+            }
+            var ready = System.Threading.Interlocked.Exchange(ref _scanReady, null);
+            if (ready != null) { _scanOut = false; if (ready.Found != null && ready.Gen == _scanGen) Apply(ready.Found); }
             for (int i = 0; i < _timers.Count; i++)
             {
                 var t = _timers[i];
@@ -151,33 +171,45 @@ namespace MetaCodex.Scripting
             }
         }
 
-        /// Loads new and changed scripts and plugins, drops deleted ones.
+        private sealed class ScanResult { public int Gen; public List<(string kind, string name, string path, DateTime mtime)> Found; }
+        private ScanResult _scanReady; // written by the pool thread, taken by Tick
+        private bool _scanOut;
+        private int _scanGen;          // a scan done at once makes the one still out stale
+
+        /// Loads new and changed scripts and plugins, drops deleted ones (at once).
         public void Scan()
+        {
+            _scanGen++;
+            Apply(Gather(Dir, PluginsDir));
+        }
+
+        /// What is in the folders: scripts, then plugins (with the newest time of any of their files), in name order.
+        private static List<(string kind, string name, string path, DateTime mtime)> Gather(string dir, string pluginsDir)
+        {
+            var found = new List<(string, string, string, DateTime)>();
+            var files = Directory.Exists(dir) ? Directory.GetFiles(dir, "*.lua") : new string[0];
+            Array.Sort(files, StringComparer.Ordinal);
+            foreach (var f in files) found.Add(("script", System.IO.Path.GetFileNameWithoutExtension(f), f, File.GetLastWriteTimeUtc(f)));
+            var dirs = Directory.Exists(pluginsDir) ? Directory.GetDirectories(pluginsDir) : new string[0];
+            Array.Sort(dirs, StringComparer.Ordinal);
+            foreach (var d in dirs)
+            {
+                if (!File.Exists(System.IO.Path.Combine(d, "plugin.json"))) continue;
+                found.Add(("plugin", Sanitize(System.IO.Path.GetFileName(d)), d, PluginMtime(d)));
+            }
+            return found;
+        }
+
+        private void Apply(List<(string kind, string name, string path, DateTime mtime)> found)
         {
             var seen = new HashSet<string>();
             bool changed = false;
-            var files = Directory.Exists(Dir) ? Directory.GetFiles(Dir, "*.lua") : new string[0];
-            foreach (var f in files.OrderBy(x => x, StringComparer.Ordinal))
+            foreach (var (kind, name, path, mtime) in found)
             {
-                string name = System.IO.Path.GetFileNameWithoutExtension(f);
-                seen.Add(name);
-                var mtime = File.GetLastWriteTimeUtc(f);
-                var e = _entries.FirstOrDefault(x => x.Kind == "script" && x.Name == name);
+                seen.Add(kind == "plugin" ? "plugin/" + name : name);
+                var e = _entries.FirstOrDefault(x => x.Kind == kind && x.Name == name);
                 if (e != null && e.Mtime == mtime) continue;
-                Load(e ?? NewEntry("script", name, f), mtime);
-                changed = true;
-            }
-            var dirs = Directory.Exists(PluginsDir) ? Directory.GetDirectories(PluginsDir) : new string[0];
-            foreach (var d in dirs.OrderBy(x => x, StringComparer.Ordinal))
-            {
-                var manifest = System.IO.Path.Combine(d, "plugin.json");
-                if (!File.Exists(manifest)) continue;
-                string name = Sanitize(System.IO.Path.GetFileName(d));
-                seen.Add("plugin/" + name);
-                var mtime = PluginMtime(d);
-                var e = _entries.FirstOrDefault(x => x.Kind == "plugin" && x.Name == name);
-                if (e != null && e.Mtime == mtime) continue;
-                Load(e ?? NewEntry("plugin", name, d), mtime);
+                Load(e ?? NewEntry(kind, name, path), mtime);
                 changed = true;
             }
             foreach (var e in _entries.Where(x => !seen.Contains(x.Key)).ToList())

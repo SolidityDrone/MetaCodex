@@ -61,7 +61,7 @@ Shader "MetaCodex/PanelUnlit"
                 float4 pfx = McxPanelFx(_PanelIndex);
                 float bd = McxBehindScan(_PanelIndex, i.positionWS);
                 clip(min(bd - 0.012, 0.5 - pfx.z)); // not cast yet, or already gone: the glass of its panel shows instead
-                half v = (half)McxVisibility(i.positionWS);
+                half v = (half)McxVisibilityIn(_PanelIndex, i.positionWS);
                 half3 rgb = i.color.rgb + half3(0.04, 0.63, 1.0) * (half)(McxHeat(bd) * 0.5 + saturate(pfx.y) * 0.12);
                 return half4(rgb * v, v);
             }

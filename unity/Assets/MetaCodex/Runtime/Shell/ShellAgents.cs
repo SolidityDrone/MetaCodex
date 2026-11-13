@@ -827,14 +827,19 @@ namespace MetaCodex.Shell
                     bool statusChanged = StatusOfRow(row) != StatusOfRow(_threadInfo);
                     _threadInfo = row;
                     _threadOpenProject = (string)row["projectId"];
-                    // the project's rows update the workspace map (who else works in this folder)
+                    // the project's rows update the workspace map (who else works in this folder); every 2 s while it
+                    // works: a row that did not change is not copied again, and the map is made again only after a change
+                    bool rowsChanged = false;
                     foreach (var pr in (th as JArray).OfType<JObject>())
                     {
+                        string prId = (string)pr["id"];
                         int at = -1;
-                        for (int k = 0; k < _threads.Count; k++) if ((string)_threads[k]["id"] == (string)pr["id"]) { at = k; break; }
+                        for (int k = 0; k < _threads.Count; k++) if ((string)_threads[k]["id"] == prId) { at = k; break; }
+                        if (at >= 0 && JToken.DeepEquals(_threads[at], pr)) continue;
                         if (at >= 0) _threads[at] = pr.DeepClone(); else _threads.Add(pr.DeepClone());
+                        rowsChanged = true;
                     }
-                    _spaces = WorkspaceMap.Build(_threads, _environments);
+                    if (rowsChanged) _spaces = WorkspaceMap.Build(_threads, _environments);
                     ShowThreadHeader();
                     PollThreadQueue(id); // a turn MQH holds (the workspace guard): its reason, SEND NOW
                     // working <-> idle: parse the whole timeline again with the new status (a delta may say "no change")

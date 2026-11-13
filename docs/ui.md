@@ -281,8 +281,10 @@ inside it the room stays visible, outside it the passthrough darkens or, with BL
 itself. The soft image is a panorama of the room (`Resources/Shaders/FocusBlurPano`, 1024 x 512, world-oriented):
 each camera frame is painted into it through a round mask, so it has no rectangle, stays with the room when you
 turn your head (what was seen is kept; what was never seen is the plain darkness), and starts over after you walk
-1.5 m away. The camera runs at 15 fps when only the blur needs it (30 with sharp depth) and pauses while a voice
-command is transcribed and decided, so speech-to-text keeps its cores. RADIUS is the dome's size (from the floor under your head), SOFTNESS the width of its edge, INTENSITY
+1.5 m away. The camera runs at 15 fps (for the blur and for the sharp depth). A voice command does not stop it:
+while speech is turned into text and the command decided, the camera keeps running and its frames are not used.
+The depth and the camera stay on, idle, for 60 s after nothing needs them any more (a restart costs seconds of low
+frame rate: measured 17.7 fps for ~15 s on the Quest 3S). RADIUS is the dome's size (from the floor under your head), SOFTNESS the width of its edge, INTENSITY
 the darkness, BLUR how soft the room outside gets (0 = darkened only); BLACKOUT (radius 0, 100 %) leaves only the
 windows and your hands. No Space Setup scan is needed (branch `feat/spatial-dome`, `docs/SPATIAL_DOME_PLAN.md`).
 
@@ -294,13 +296,15 @@ windows and your hands. No Space Setup scan is needed (branch `feat/spatial-dome
   the grid and the contour, over the blurred room. All of it is skipped inside the dome, where most of the picture is.
 - **Live depth.** Meta's Depth API (`EnvironmentDepthManager`, via `com.unity.xr.meta-openxr` and the OpenXR
   features "Meta Quest: Session" + "Occlusion"; permission "spatial data", `USE_SCENE`) runs while focus or "real
-  things in front of windows" is on. Meta's occlusion shaders stay off (no extra depth pass).
-- **Sharp depth** (`Resources/Shaders/DepthSharp`, every frame, both eyes): the sensor's 320 x 320 depth at twice the
-  resolution, guided by the passthrough camera's picture where the camera sees (joint bilateral upsampling: each of
-  the 3 x 3 readings around a texel weighs by distance and by how alike its colour is, so depth edges follow the
-  picture's edges; SandyBridge `docs/DEPTH_UPSCALE_PLAN.md`, option A), an edge-preserving depth-only filter
-  elsewhere, and a temporal filter (last frame's result reprojected, kept where it agrees within 2 cm + 2 %), so the
-  cut-out stops flickering and its edge is cleaner. "Sharp depth (camera)" in FOCUS (on).
+  things in front of windows" is on (and 60 s more, idle). Meta's occlusion shaders stay off (no extra depth pass).
+- **Sharp depth** (`Resources/Shaders/DepthSharp`, once per new depth frame, both eyes): the sensor's 320 x 320 depth
+  at 1.5 x the resolution (480 x 480) when the camera guides it, at the sensor's resolution without the camera. Each
+  texel uses the 2 x 2 readings around it. Where the camera sees, its picture guides the result (joint bilateral
+  upsampling: each reading weighs by distance and by how alike its colour is, so depth edges follow the picture's
+  edges; SandyBridge `docs/DEPTH_UPSCALE_PLAN.md`, option A). Elsewhere an edge-preserving depth-only filter. Then a
+  temporal filter (last frame's result reprojected, kept where it agrees within 2 cm + 2 %), so the cut-out stops
+  flickering and its edge is cleaner. "Sharp depth (camera)" in FOCUS (on): off, the camera does not guide the depth
+  (it still runs for BLUR). Until 2026-11-13: 640 x 640, 3 x 3 readings and a median, camera at 30 fps (docs/perf.md).
 - **The dome**: the focus sphere (`Resources/Shaders/AmbientFocus`) reads the sharp depth along each pixel's view ray
   and rebuilds the real surface's world position (inverse of `_EnvironmentDepthReprojectionMatrices`), so walls,
   furniture and hands near you stay and far ones fade.
@@ -309,7 +313,7 @@ windows and your hands. No Space Setup scan is needed (branch `feat/spatial-dome
   (`FocusDepthCopy`) read back, the lowest level near you with enough points (not a table, not a patch read too
   high). FOCUS shows depth, floor and camera status.
 - **Blur.** BLUR above 0 starts the left passthrough camera (MR Utility Kit's `PassthroughCameraAccess`, 640 x 480,
-  30 fps; permission `horizonos.permission.HEADSET_CAMERA`, asked once). Each frame is copied into a 256 x 192
+  15 fps; permission `horizonos.permission.HEADSET_CAMERA`, asked once). Each frame is copied into a 256 x 192
   mip-mapped texture; outside the dome the sphere draws it at a high mip (4 taps), projected per pixel through the
   camera's pose and intrinsics (depth gives the right parallax) and darkened by INTENSITY. The camera sees less
   than the passthrough: where it has not looked yet, the colours of that part of the room (or of all it has seen,
@@ -327,7 +331,14 @@ windows and your hands. No Space Setup scan is needed (branch `feat/spatial-dome
   every UI shader (`Shaders/McxOcclusion.hlsl` in SciFiUI,
   TextBend, UiIcon, ViewImage, PanelUnlit, StageLit; the terminal's glyphs use TextBend now) fades where the sharp
   depth puts a real surface 2-6 cm or more in front of it, so people and objects in front of a window stay visible.
-  It runs the depth sensor and a sharpening pass every frame; off saves that GPU work, and the hands still show.
+  Only windows that something real can be in front of pay for this test: every 0.3 s the room's 48 x 48 depth points
+  are checked against each open window (a point between the eye and the window, inside its rectangle grown by 15 cm).
+  A window is "clear" after 6 readings in a row that see all of it with nothing in front, and at least 4 s after the
+  last thing seen in front. Its shaders then skip the depth test (`_McxPanelClear`, `McxVisibilityIn`). A window that
+  opens, moves or turns is tested again until readings clear it; without readings for 2 s every window is tested.
+  A thing thinner than ~2 degrees (the points' spacing) can be missed; a thing that comes in front of a clear window
+  shows behind it for up to ~0.4 s (the hands always show: the cut-outs). The setting runs the depth sensor and the
+  sharp depth; off saves that GPU work, and the hands still show.
 - **The Horizon OS menu**: while the app has lost input focus (a system menu is open), the windows and the focus
   darkness fade out (`_McxUiHide`), so the system menu shows; they come back after. The system gesture itself (palm
   towards you, pinch) hides nothing (0.7.3: Horizon OS reports it while the palm faces you, and the windows used to

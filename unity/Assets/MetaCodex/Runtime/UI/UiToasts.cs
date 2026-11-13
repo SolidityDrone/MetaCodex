@@ -78,6 +78,8 @@ namespace MetaCodex.UI
                 if (_toasts[i].Panel != null) { Unregister?.Invoke(_toasts[i].Panel); _toasts[i].Panel.CloseAndDestroy(); } // and goes with it
                 _toasts.RemoveAt(i);
             }
+            // nothing shown and nothing left to put away (the rail, the extent): no layout this frame
+            if (_toasts.Count == 0 && (Pinned == null || !Pinned.gameObject.activeSelf) && !RailShown && Extent == default) return;
             Layout(false);
         }
 

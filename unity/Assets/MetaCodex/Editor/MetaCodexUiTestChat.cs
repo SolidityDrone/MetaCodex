@@ -103,6 +103,8 @@ namespace MetaCodex.EditorTools
             Check(chat.Scroll > s0 && chat.VisibleText.Split('\n').FirstOrDefault() == top0 && chat.NewLines > 0 && shell.PanelsById["thread"].Elements.OfType<UiButton>().Any(b => b.Visible && b.Text.StartsWith("↓")),
                 $"a delta from MQH (one changed turn): applied; scrolled up, the view holds still ({s0} -> {chat.Scroll}), {chat.NewLines} new lines, ↓ NEW shown");
             Check(chat.PlainText.Contains("$ npm run lint") && shell.OpenThreadPulse.Doing.Contains("npm run lint") && shell.TimelineTagForTest == "tag-b", "the delta's rows are in: now running `npm run lint`; the next poll asks after tag-b");
+            int shownBlocks = chat.Blocks.Count(b => chat.FirstLineOf(b.Key) >= 0);
+            Check(chat.LastRelaid > 0 && chat.LastRelaid < shownBlocks, $"the update laid out only what changed: {chat.LastRelaid} of {shownBlocks} shown blocks wrapped again, the others kept their lines");
             // the answer streams in at the end, with a caret
             chat.ScrollToBottom();
             var stream = (JArray)more.DeepClone();

@@ -126,9 +126,12 @@ namespace MetaCodex.Shell
             if (err != null) Toast("Local coder: " + err, "warn");
         }
 
+        private float _coderTileAt;
+
         private void TickLocalCoderTile()
         {
-            if (_coderTile == null) return;
+            if (_coderTile == null || Application.isPlaying && Time.unscaledTime < _coderTileAt) return;
+            _coderTileAt = Time.unscaledTime + 0.25f; // 4 times a second (status lookups and the % text were every frame)
             bool downloading = LocalCoderInstallState == "downloading" || LocalCoderInstallState == "verifying";
             if (Time.unscaledTime >= _coderPollAt) { _coderPollAt = Time.unscaledTime + (downloading ? 2f : 10f); PollVoiceStatus(); }
             string text = LocalCoderTileText();

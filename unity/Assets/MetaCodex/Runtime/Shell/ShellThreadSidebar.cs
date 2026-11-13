@@ -378,14 +378,26 @@ namespace MetaCodex.Shell
                     _sbPending--;
                     _sbChBusy = false;
                     if (gen != _sbGen) return; // another thread or folder by now
+                    // each step timed (0.7.19 on the headset: this callback took 4.8-6.8 s every ~13 s)
+                    var sw = System.Diagnostics.Stopwatch.StartNew();
                     _sbSnap = snap;
                     SbMergeFiles();
-                    SbRenderChanges();
-                    SbShowGit();
+                    double tMerge = sw.Elapsed.TotalMilliseconds;
+                    // the lists only while the sidebar shows (it rebuilt them every 4 s, hidden too); opening it renders them
+                    bool shown = _sb != null && _sb.IsOpen;
+                    if (shown) SbRenderChanges();
+                    double tRender = sw.Elapsed.TotalMilliseconds;
+                    if (shown) SbShowGit();
+                    double tGit = sw.Elapsed.TotalMilliseconds;
                     UpdateSidebarVoice();
-                    if (_sbDiffPath != null) SbRefreshOpenDiff();
+                    double tVoice = sw.Elapsed.TotalMilliseconds;
+                    if (shown && _sbDiffPath != null) SbRefreshOpenDiff();
+                    double tDiff = sw.Elapsed.TotalMilliseconds;
                     if (_sbTabs != null && _sbTabs.Selected == TabGit && _sb.IsOpen) SbRefreshGit();
                     if (_sbChAgain) SbRefreshChanges(true);
+                    double tAll = sw.Elapsed.TotalMilliseconds;
+                    if (tAll > 40)
+                        Log($"[slow sidebar] {tAll:F0} ms ({snap?.Status?.Count ?? 0} status, {_sbFiles.Count} files, {_touched.Count} by the thread): merge {tMerge:F0}, render {tRender - tMerge:F0}, git {tGit - tRender:F0}, voice {tVoice - tGit:F0}, diff {tDiff - tVoice:F0}, rest {tAll - tDiff:F0}");
                 });
             });
         }
@@ -439,7 +451,24 @@ namespace MetaCodex.Shell
         {
             if (_sbChList == null) return;
             var t = UiTheme.Current;
-            var rows = new List<UiRows.Row>();
+            bool repo = _sbSnap != null && _sbSnap.Repo;
+            string empty = _sbRoot == null ? "This thread has no folder yet: MQH makes it when the first turn starts." :
+                _sbSnap == null && _sbChBusy ? "Reading the folder …" :
+                _sbSnap?.Error != null ? "⚠ " + _sbSnap.Error :
+                repo ? "No changes against " + (_sbSnap.BaseLabel == "HEAD" ? "the last commit" : _sbSnap.BaseLabel) + ": files the agent edits show up here, live." :
+                "No edits yet: files the agent changes show up here, live (this folder is not a git repository).";
+            string summary = _sbRoot == null ? "no folder yet" : _sbSnap == null && _sbChBusy && _sbFiles.Count == 0 ? "reading git …" : ThreadChanges.Summary(_sbFiles, _sbRoot == null ? null : _sbSnap);
+            // the rows again only when what they show changed (each git refresh came here: every 4 s while the agent works)
+            int sig = ChangesSig(_sbFiles, empty, out int nMine, out int nOthers);
+            int expect = nMine + nOthers + (nMine > 0 && nOthers > 0 ? 1 : 0) + (nOthers > 0 ? 1 : 0);
+            if (ReferenceEquals(_sbChSigList, _sbChList) && sig == _sbChSig && _sbChList.Items.Count == expect && _sbChList.Empty == empty)
+            {
+                _sbChSummary?.Set(summary, t.TextDim);
+                return;
+            }
+            _sbChSigList = _sbChList;
+            _sbChSig = sig;
+            var rows = new List<UiRows.Row>(expect);
             var mine = _sbFiles.Where(f => f.ByThread).ToList();
             var others = _sbFiles.Where(f => !f.ByThread).ToList();
             UiRows.Row R(ChangedFile f) => new UiRows.Row
@@ -454,17 +483,40 @@ namespace MetaCodex.Shell
                 Dim = !f.ByThread || f.Committed && !f.InGit,
                 Tag = f,
             };
-            bool repo = _sbSnap != null && _sbSnap.Repo;
             if (mine.Count > 0 && others.Count > 0) rows.Add(new UiRows.Row { Header = true, Name = "THIS THREAD" });
             rows.AddRange(mine.Select(R));
             if (others.Count > 0) { rows.Add(new UiRows.Row { Header = true, Name = "ALSO CHANGED IN THIS FOLDER" }); rows.AddRange(others.Select(R)); }
-            _sbChList.Empty = _sbRoot == null ? "This thread has no folder yet: MQH makes it when the first turn starts." :
-                _sbSnap == null && _sbChBusy ? "Reading the folder …" :
-                _sbSnap?.Error != null ? "⚠ " + _sbSnap.Error :
-                repo ? "No changes against " + (_sbSnap.BaseLabel == "HEAD" ? "the last commit" : _sbSnap.BaseLabel) + ": files the agent edits show up here, live." :
-                "No edits yet: files the agent changes show up here, live (this folder is not a git repository).";
+            _sbChList.Empty = empty;
             _sbChList.SetRows(rows, keepScroll: true);
-            _sbChSummary?.Set(_sbRoot == null ? "no folder yet" : _sbSnap == null && _sbChBusy && _sbFiles.Count == 0 ? "reading git …" : ThreadChanges.Summary(_sbFiles, _sbRoot == null ? null : _sbSnap), t.TextDim);
+            _sbChSummary?.Set(summary, t.TextDim);
+        }
+
+        private UiRows _sbChSigList;
+        private int _sbChSig;
+
+        /// Every field a row of CHANGES shows or opens (a hash: no strings built).
+        private static int ChangesSig(List<ChangedFile> files, string empty, out int mine, out int others)
+        {
+            mine = others = 0;
+            unchecked
+            {
+                int h = 17 * 31 + (empty?.GetHashCode() ?? 0);
+                foreach (var f in files)
+                {
+                    if (f.ByThread) mine++; else others++;
+                    h = h * 31 + (f.Path?.GetHashCode() ?? 0);
+                    h = h * 31 + (f.RepoPath?.GetHashCode() ?? 0);
+                    h = h * 31 + (f.Kind?.GetHashCode() ?? 0);
+                    h = h * 31 + (f.GitCode?.GetHashCode() ?? 0);
+                    h = h * 31 + (f.TimelineDiff?.GetHashCode() ?? 0);
+                    h = h * 31 + f.Added;
+                    h = h * 31 + f.Removed;
+                    h = h * 31 + f.Seq.GetHashCode();
+                    h = h * 31 + f.Size.GetHashCode();
+                    h = h * 31 + (f.Binary ? 1 : 0) + (f.ByThread ? 2 : 0) + (f.InGit ? 4 : 0) + (f.Committed ? 8 : 0);
+                }
+                return h;
+            }
         }
 
         private void SbOpenDiff(ChangedFile f)
@@ -940,7 +992,8 @@ namespace MetaCodex.Shell
             if (_sb == null || !_sb.IsOpen) return;
             float now = Time.unscaledTime;
             if (_sbChangesAt > 0f && now >= _sbChangesAt) { _sbChangesAt = -1f; SbRefreshChanges(true); }
-            else SbRefreshChanges();
+            else if (_sbRoot != null) SbRefreshChanges(); // no folder: nothing to ask git (it merged and drew the list every frame);
+                                                          // the timeline's files come through WsTrackFound
             int tab = _sbTabs.Selected;
             if (tab == TabStatus && now >= _sbNextStatus) SbRenderStatus();
             if (tab == TabGit) SbRefreshGit();

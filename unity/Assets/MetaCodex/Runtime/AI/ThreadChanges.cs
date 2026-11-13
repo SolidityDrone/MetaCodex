@@ -34,6 +34,7 @@ namespace MetaCodex.AI
 
     public sealed class GitSnapshot
     {
+        public int StatusCut; // status lines left out above ThreadChanges.MaxStatus
         public bool Repo;
         public string Error;           // the folder is missing, git is not installed, ...
         public string Top = "", Prefix = "", Branch = "", Base = "HEAD", BaseLabel = "HEAD";
@@ -68,6 +69,8 @@ namespace MetaCodex.AI
 
         public static string Q(string s) => "'" + (s ?? "").Replace("'", "'\\''") + "'";
 
+        public const int MaxStatus = 2000;
+
         public static GitSnapshot ParseScript(string output)
         {
             var g = new GitSnapshot();
@@ -91,7 +94,9 @@ namespace MetaCodex.AI
                     case "@@BRANCH": if (line.Length > 0) g.Branch = line.Trim(); break;
                     case "@@BASE": if (line.Length > 0) baseLines.Add(line.Trim()); break;
                     case "@@STATUS":
-                        if (line.Length > 3 && line[2] == ' ') g.Status.Add((line.Substring(0, 2), Unquote(line.Substring(3))));
+                        // at most MaxStatus entries (a folder with thousands of untracked files, e.g. node_modules
+                        // without a .gitignore, made every refresh walk them all on the main thread); StatusCut says so
+                        if (line.Length > 3 && line[2] == ' ') { if (g.Status.Count < MaxStatus) g.Status.Add((line.Substring(0, 2), Unquote(line.Substring(3)))); else g.StatusCut++; }
                         break;
                     case "@@NUMSTAT":
                     {
