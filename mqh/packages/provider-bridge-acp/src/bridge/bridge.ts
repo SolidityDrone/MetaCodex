@@ -165,6 +165,7 @@ import {
   type AcpNativeModelSupport,
   type AgentModelCatalog,
 } from "./model-catalog.js";
+import { withLocalCoderFirst } from "./local-coder.js";
 import {
   ACP_BRIDGE_MCP_SERVER_NAME,
   buildAcpMcpServerConfig,
@@ -3651,7 +3652,11 @@ async function handleModelList(
       splitPrimaryModels(
         withDeclaredOptions(
           applyConfiguredReasoningToModels(
-            models.map((model) => dialect.presentModel?.(model) ?? model),
+            withLocalCoderFirst(
+              models.map((model) => dialect.presentModel?.(model) ?? model),
+              resolvedDialectId,
+              { ...process.env, ...(params.optionsAgent?.envVars ?? {}) },
+            ),
             {
               reasoningCli: params.reasoningCli,
               nativeReasoning: params.nativeReasoning,

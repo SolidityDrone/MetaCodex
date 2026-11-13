@@ -869,8 +869,13 @@ export async function createHostDaemonApp(
     onInteractiveRequestsEnded: ({ reason, requests }) =>
       interactiveRequestRegistry.endRequests(requests, reason),
     onServerMoved: (notice) => serverMove.handleServerMoved(notice),
-    onMachineEnvironment: (environment) =>
-      machineEnvironment.replace(environment.entries),
+    onMachineEnvironment: (environment) => {
+      // MetaCodex: provider bridges inherit the daemon's environment when they start, and the long-lived maintenance
+      // runtime serves model lists; a changed variable (the app sets OPENCODE_CONFIG and MCX_LOCAL_CODER_* once the
+      // local coder is installed) must reach the next model list, so that runtime starts again
+      if (machineEnvironment.replace(environment.entries))
+        void runtimeManager.invalidateProviderMaintenanceRuntime();
+    },
     onIdleProviderSessionTimeout: (value) =>
       idleProviderSessionReaper.setTimeoutMinutes(value),
     createWebSocket: options.createWebSocket,

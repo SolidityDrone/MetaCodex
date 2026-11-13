@@ -19,7 +19,17 @@ stupid, just to try it", for judges who want to try coding fully offline. Branch
 
 - **The key**: `<data>/coder.key`, made once by the app, shared as `/mnt/quest/local-coder.key`, given to MQH as
   `MCX_LOCAL_CODER_KEY`; it opens only the coder's routes (the per-start token still guards the rest). MQH also gets
-  `MCX_LOCAL_CODER_URL`; with both set, Claude Code's model list shows "Local coder (this headset, slow)".
+  `MCX_LOCAL_CODER_URL`; with both set, Claude Code's model list shows "Local coder (this headset, slow)", and so does
+  OpenCode's (with `OPENCODE_CONFIG`; MQH's ACP bridge puts `metacodex/local-coder` first under that name). NEW THREAD
+  shows the local model as the first row of any agent's list (⌂, LOCAL).
+- **Why OpenCode first showed only its own models** (fixed 2026-11-13): model lists come from MQH's provider bridges in
+  the host daemon's long-lived maintenance runtime, which inherits the daemon's environment when it starts. The app sets
+  the three variables after the install, so `opencode acp` (started by the bridge to read its models) never had
+  `OPENCODE_CONFIG`; MQH marked its cached list stale, but the refresh asked the same bridge. Now a machine environment
+  change restarts that runtime (`apps/host-daemon/src/app.ts`). Checked with OpenCode 2.1.4: `opencode acp`
+  `session/new` lists `metacodex/local-coder` only when `OPENCODE_CONFIG` is in its environment, and
+  `session/set_config_option` selects it. (Its background service, used by `opencode models`, keeps the config it
+  started with: `opencode service restart` after a change, or `--standalone`.)
 
 ## Voice waits while it codes
 
