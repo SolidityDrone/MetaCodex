@@ -225,7 +225,15 @@ namespace MetaCodex.Shell
                 if (UnityEngine.Rendering.GraphicsSettings.currentRenderPipeline is UnityEngine.Rendering.Universal.UniversalRenderPipelineAsset urp
                     && !Mathf.Approximately(urp.renderScale, RenderScale))
                     urp.renderScale = RenderScale;
-                if (!_displayApplied) { _displayApplied = true; _foveationOn = !WantFoveation; } // the first time: apply it whatever it is
+                if (!_displayApplied)
+                {
+                    _displayApplied = true;
+                    _foveationOn = !WantFoveation; // the first time: apply it whatever it is
+                    // the GPU at its sustained high level (0.7.19, measured with VrApi: 98-99 % busy at level 1, 350 MHz, the
+                    // whole session: 61-63 of 72 fps). Without a request Horizon OS kept it low.
+                    try { OVRManager.suggestedGpuPerfLevel = OVRManager.ProcessorPerformanceLevel.SustainedHigh; Log("GPU level: sustained high"); }
+                    catch (Exception ex) { Log("GPU level: " + ex.Message); }
+                }
                 ApplyFoveation();
             }
             catch (Exception ex) { Log("display settings: " + ex.Message); }
@@ -265,7 +273,14 @@ namespace MetaCodex.Shell
         private void Update()
         {
             HitchCheck();
-            while (_main.TryDequeue(out var a)) { try { a(); } catch (Exception ex) { Log("main-thread callback failed: " + ex.Message); } }
+            while (_main.TryDequeue(out var a))
+            {
+                double c0 = _hitchSw.Elapsed.TotalMilliseconds;
+                try { a(); } catch (Exception ex) { Log("main-thread callback failed: " + ex.Message); }
+                double cms = _hitchSw.Elapsed.TotalMilliseconds - c0;
+                // a slow one says where it comes from (the compiler's name of a lambda carries its method's name)
+                if (cms > 50 && _slowCallbackLines < 300) { _slowCallbackLines++; Log($"[slow callback] {cms:F0} ms {a.Method.DeclaringType?.Name}.{a.Method.Name}"); }
+            }
             HitchMark(0);
             Scripts?.Tick(Time.unscaledTime);
             HitchMark(1);
@@ -299,7 +314,7 @@ namespace MetaCodex.Shell
         private readonly double[] _hitchMs = new double[11]; // the last frame's steps (HitchCheck reads them before this frame's)
         private readonly System.Diagnostics.Stopwatch _hitchSw = System.Diagnostics.Stopwatch.StartNew();
         private double _hitchAt;
-        private int _hitchLines, _hitchGc = -1;
+        private int _hitchLines, _hitchGc = -1, _slowCallbackLines;
         private float _hitchLogAt;
 
         private void HitchMark(int step)

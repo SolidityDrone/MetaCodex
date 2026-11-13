@@ -852,15 +852,24 @@ namespace MetaCodex.Shell
         }
 
         /// Agent views in the thread's messages: registered; the ones that arrive while it is open also open.
+        // the last message ScanViews looked at, per thread: an update looks only at newer ones (0.7.19: every agent
+        // message with a code block was parsed again at every update of a working thread)
+        private string _viewsScanThread;
+        private long _viewsScanSeq = -1;
+
         private void ScanViews(JArray rows, string threadId, bool first)
         {
+            if (first || _viewsScanThread != threadId) { _viewsScanThread = threadId; _viewsScanSeq = -1; }
+            long upTo = _viewsScanSeq;
             void Walk(JToken r)
             {
                 if ((string)r["kind"] == "turn") { foreach (var ch in r["children"] as JArray ?? new JArray()) Walk(ch); return; }
                 if ((string)r["kind"] != "conversation" || (string)r["role"] == "user") return;
+                long seq = r["sourceSeqEnd"]?.Type == JTokenType.Integer ? (long)r["sourceSeqEnd"] : 0;
+                if (seq > 0 && seq <= upTo) return; // looked at already (a message still being written keeps its end seq growing)
+                if (seq > _viewsScanSeq && (string)r["status"] != "pending" && (string)r["status"] != "streaming") _viewsScanSeq = seq;
                 string text = (string)r["text"];
                 if (string.IsNullOrEmpty(text) || text.IndexOf("```", StringComparison.Ordinal) < 0) return;
-                long seq = r["sourceSeqEnd"]?.Type == JTokenType.Integer ? (long)r["sourceSeqEnd"] : 0;
                 bool fresh = !first && seq > _tlOpenSeq;
                 ViewsFromMessage(threadId, seq, text, fresh);
             }

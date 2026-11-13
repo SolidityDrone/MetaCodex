@@ -157,7 +157,7 @@ namespace MetaCodex.AI
 
         /// The files the timeline shows the agent changing (file-change rows, also inside turns, and edit / write tool
         /// calls), keyed by their path relative to `root`.
-        public static Dictionary<string, ChangedFile> FromTimeline(JArray rows, string root)
+        public static Dictionary<string, ChangedFile> FromTimeline(IEnumerable<JToken> rows, string root)
         {
             var found = new Dictionary<string, ChangedFile>();
             void Touch(string raw, string kind, int a, int r, string diff, long seq)

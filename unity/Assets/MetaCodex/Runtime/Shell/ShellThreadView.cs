@@ -232,6 +232,9 @@ namespace MetaCodex.Shell
             public JToken Usage;
             public ThreadTimeline Model;
             public List<ChatBlock> Blocks;
+            public ThreadPulse Pulse;                          // made on the pool thread with the blocks
+            public Dictionary<string, ChangedFile> Touched;     // the files the timeline shows changing (pool thread)
+            public string TouchedRoot;
         }
 
         /// Asks for the timeline (a delta when MQH still has the last answer); one request at a time.
@@ -245,13 +248,14 @@ namespace MetaCodex.Shell
             var baseFields = _tlFields;
             var row = _threadInfo;
             long now = NowMs;
+            string touchRoot = _sbRoot;
             Mqh.CallThen(System.Net.Http.HttpMethod.Get, MqhClient.TimelinePath(id, tag, ChatSegments), null,
-                r => PrepareTimeline(r as JObject, tag, baseRows, baseFields, row, now),
+                r => PrepareTimeline(r as JObject, tag, baseRows, baseFields, row, now, touchRoot),
                 u => { _tlInFlight = false; ApplyTimeline(id, u); });
         }
 
         /// Pool thread: reads the old rows and fields (the main thread does not change them while a request is out).
-        private TimelineUpdate PrepareTimeline(JObject resp, string baseTag, JArray baseRows, JObject baseFields, JObject threadRow, long now)
+        private TimelineUpdate PrepareTimeline(JObject resp, string baseTag, JArray baseRows, JObject baseFields, JObject threadRow, long now, string touchRoot = null)
         {
             var u = new TimelineUpdate { BaseTag = baseTag, BaseRows = baseRows };
             if (resp == null) return u;
@@ -292,7 +296,11 @@ namespace MetaCodex.Shell
             }
             u.Fields = fields;
             u.Model = ThreadTimeline.Parse(rows, fields, StatusOfRow(threadRow));
-            u.Blocks = ChatBlocks(u.Model, ThreadPulse.From(u.Model, threadRow, now));
+            u.Pulse = ThreadPulse.From(u.Model, threadRow, now);
+            u.Blocks = ChatBlocks(u.Model, u.Pulse);
+            // the files it changed, here too (0.7.19: walked over the whole timeline on the main thread at every update)
+            u.TouchedRoot = touchRoot;
+            u.Touched = ThreadChanges.FromTimeline(rows, touchRoot);
             u.Ok = true;
             return u;
         }
@@ -309,14 +317,24 @@ namespace MetaCodex.Shell
             bool first = _tlMaxSeq < 0;
             _tlMaxSeq = u.MaxSeq;
             if (_tlOpenSeq < 0) _tlOpenSeq = u.MaxSeq;
+            // each step timed: a slow update says which part (0.7.19: 2-3 s main-thread callbacks every 5-6 s while a
+            // thread worked, growing with the conversation)
+            var sw = System.Diagnostics.Stopwatch.StartNew();
             _tlRaw = u.Full ? u.FullRows : ThreadTimeline.TakeRows(u.Merged, _tlRaw, u.Delta);
             _tlFields = u.Fields;
             _tlModel = u.Model;
-            RefreshThreadPulse();
+            double tTake = sw.Elapsed.TotalMilliseconds;
+            RefreshThreadPulse(u.Pulse);
+            double tPulse = sw.Elapsed.TotalMilliseconds;
             _thTimeline?.SetBlocks(u.Blocks);
+            double tBlocks = sw.Elapsed.TotalMilliseconds;
             RefreshNewButton();
-            WsTrackRows(_tlRaw);
+            if (u.Touched != null && u.TouchedRoot == _sbRoot) WsTrackFound(u.Touched); else WsTrackRows(_tlRaw);
+            double tWs = sw.Elapsed.TotalMilliseconds;
             ScanViews(_tlRaw, id, first);
+            double tAll = sw.Elapsed.TotalMilliseconds;
+            if (tAll > 40)
+                Log($"[slow timeline] {tAll:F0} ms ({_tlRaw.Count} rows, {u.Blocks?.Count ?? 0} blocks{(u.Full ? ", full" : "")}): take {tTake:F0}, pulse {tPulse - tTake:F0}, blocks {tBlocks - tPulse:F0}, files {tWs - tBlocks:F0}, views {tAll - tWs:F0}");
             // an approval step appeared: ask for the interactions now (the ALLOW / DENY row)
             if (_tlModel.Last != null && _tlModel.Last.Steps.Any(s => (s.Kind == StepKind.Approval || s.Kind == StepKind.Question) && s.Live) && !_askShown) _nextThreadMeta = 0f;
         }
@@ -334,10 +352,10 @@ namespace MetaCodex.Shell
             RefreshNewButton();
         }
 
-        private void RefreshThreadPulse()
+        private void RefreshThreadPulse(ThreadPulse ready = null)
         {
             if (_threadOpen == null || _tlModel == null) return;
-            _thPulse = ThreadPulse.From(_tlModel, _threadInfo, NowMs);
+            _thPulse = ready ?? ThreadPulse.From(_tlModel, _threadInfo, NowMs);
             CtxPulse(_threadOpen, _thPulse);
             ShowThreadStatus();
         }

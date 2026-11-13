@@ -333,9 +333,11 @@ namespace MetaCodex.Shell
         // ------------------------------------------------------------------ CHANGES
 
         /// The timeline's file-change and edit rows: the thread's own files. New edits refresh the list (and the open diff) soon.
-        private void WsTrackRows(JArray rows)
+        private void WsTrackRows(JArray rows) => WsTrackFound(ThreadChanges.FromTimeline(rows, _sbRoot));
+
+        /// The files the timeline shows changing (made on the pool thread with the timeline, PrepareTimeline).
+        private void WsTrackFound(Dictionary<string, ChangedFile> found)
         {
-            var found = ThreadChanges.FromTimeline(rows, _sbRoot);
             long seq = found.Values.Select(f => f.Seq).DefaultIfEmpty(0).Max();
             bool fresh = seq > _sbTouchSeq || found.Count != _touched.Count;
             _touched = found;
