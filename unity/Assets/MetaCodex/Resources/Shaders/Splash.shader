@@ -64,18 +64,18 @@ Shader "MetaCodex/Splash"
             {
                 UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
                 half4 c = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, i.uv);
-                // coming in: shown above the scan line (it runs from the top down), the line itself a band of light
+                // coming in: shown above the scan line (it runs from the top down), the line itself a band of light ("line" is an HLSL keyword on Vulkan)
                 float front = 1.0 - _Scan * 1.08;              // runs a little past the bottom, so the line leaves the logo
                 float d = i.uv.y - front;
                 float shown = smoothstep(-0.004, 0.004, d);
-                float line = _Scan < 1.0 ? exp(-abs(d) / 0.010) : 0.0;
+                float band = _Scan < 1.0 ? exp(-abs(d) / 0.010) : 0.0;
                 // going: small cells break up in noise order; each one flares in the accent just before it goes
                 float n = Noise(i.uv * float2(64.0, 36.0)) * 0.75 + Noise(i.uv * float2(9.0, 5.0)) * 0.25;
                 float keep = smoothstep(_Dissolve - 0.02, _Dissolve + 0.02, n);
                 float edge = _Dissolve > 0.0 ? saturate(1.0 - abs(n - _Dissolve) / 0.06) * c.a : 0.0;
-                float3 rgb = c.rgb + _Accent.rgb * (line * 0.9 * c.a + edge * 1.4);
+                float3 rgb = c.rgb + _Accent.rgb * (band * 0.9 * c.a + edge * 1.4);
                 float a = c.a * shown * keep;
-                a = max(a, line * 0.55 * saturate(c.a * 4.0 + 0.15)); // the line shows across the logo's width, faint off it
+                a = max(a, band * 0.55 * saturate(c.a * 4.0 + 0.15)); // the line shows across the logo's width, faint off it
                 a = max(a, edge * 0.8);
                 return half4(rgb, saturate(a * _Fade));
             }
