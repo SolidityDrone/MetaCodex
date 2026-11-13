@@ -1003,6 +1003,10 @@ end)
                 ("Find the thread where we fixed the keyboard.", "find_thread", "{\"query\":\"we fixed the keyboard\"}"),
                 ("Switch to the workspace called MetaCodex.", "switch_workspace", "{\"name\":\"metacodex\"}"),
                 ("change workspace", "switch_workspace", "{}"),
+                ("Start a thread to fix the login page.", "new_thread", "{\"task\":\"fix the login page\"}"),
+                ("new thread", "new_thread", "{}"),
+                ("Create a research project called solar panels.", "new_project", "{\"type\":\"research\",\"name\":\"solar panels\"}"),
+                ("new project", "new_project", "{}"),
                 ("use the floating layout", "set_layout", "{\"mode\":\"float\"}"),
                 ("show me the source control", "open_panel", "{\"panel\":\"git\"}"),
                 ("recenter", "recenter", "{}"),
@@ -1333,8 +1337,9 @@ end)
             Check(models.Items.Count >= 1, "NEW THREAD lists the provider's models: " + string.Join(", ", models.Items.Take(4).Select(i => i.Title)));
             np.ForceRefresh();
             RenderPanel(np, "ui-thread-new.png");
-            if (projects.Items.Count == 0) { Line("skip thread start: no project in MQH (add one: + PROJECT…)"); return; }
-            string projectId = (string)projects.Items[0].Tag;
+            var firstProject = projects.Items.FirstOrDefault(i => (i.Tag as string ?? "").StartsWith("p:")); // the rows under the type headers
+            if (firstProject == null) { Line("skip thread start: no project in MQH (add one: + PROJECT…)"); return; }
+            string projectId = ((string)firstProject.Tag).Substring(2);
             string model = models.Items.Count > 0 ? (string)models.Items[models.Items.Count - 1].Tag : null;
             JToken created = null;
             shell.Mqh.CreateThread(shell.NewThreadBody(projectId, "claude-code", model, "MetaCodex self-test: reply with OK"), r => created = r);
@@ -3910,10 +3915,24 @@ end)
         {
             foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
             long now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            // projects and their folder names, the type from a path, the draft title (pure)
+            string R = ProjectKinds.Root;
+            Check(ProjectKinds.FolderName("My Weather App!") == "my-weather-app" && ProjectKinds.FolderName("  Notes  2.0 ") == "notes-2.0" && ProjectKinds.FolderName("../etc") == "etc"
+                  && ProjectKinds.FolderName("!!!") == "" && ProjectKinds.FolderName("Café  Menu") == "caf-menu",
+                "a project name as a folder: lower case, spaces -> '-', only a-z 0-9 . _ -, no leading dot");
+            Check(ProjectKinds.PathFor("research", "Solar Panels") == R + "/research/solar-panels" && ProjectKinds.PathFor("native", "Weather") == R + "/native/weather"
+                  && ProjectKinds.PathFor("bogus", "x") == null && ProjectKinds.PathFor("default", "???") == null,
+                "a new project's folder: metacodex-projects/<type>/<folder name>");
+            Check(ProjectKinds.TypeFromPath(R + "/native/app") == "native" && ProjectKinds.TypeFromPath(R + "/research/notes/sub") == "research" && ProjectKinds.TypeFromPath(R + "/default/site") == "default"
+                  && ProjectKinds.TypeFromPath(R + "/native") == null && ProjectKinds.TypeFromPath(R + "/other/x") == null && ProjectKinds.TypeFromPath("/root/app") == null,
+                "a project's type from its path under metacodex-projects/ (else none: OTHER)");
+            Check(ProjectKinds.TypeFromJson("{\n  \"type\": \"general\"\n}") == "default" && ProjectKinds.TypeFromJson("{\"type\": \"research\"}") == "research" && ProjectKinds.TypeFromJson("{}") == null,
+                "a project's type from .metacodex/project.json (the old “general” is DEFAULT)");
+            Check(ProjectKinds.DraftTitle("atlas") == "New thread · atlas" && ProjectKinds.DraftTitle(null) == "New thread · no project", "a draft thread's title: New thread · <project>");
             var projects = new JArray
             {
-                new JObject { ["id"] = "p1", ["name"] = "metacodex", ["sources"] = new JArray { new JObject { ["path"] = "/root/metacodex" } } },
-                new JObject { ["id"] = "p2", ["name"] = "sandbox", ["sources"] = new JArray { new JObject { ["path"] = "/root/sandbox" } } },
+                new JObject { ["id"] = "p1", ["name"] = "metacodex", ["sources"] = new JArray { new JObject { ["path"] = R + "/native/metacodex" } } },
+                new JObject { ["id"] = "p2", ["name"] = "sandbox", ["sources"] = new JArray { new JObject { ["path"] = R + "/research/sandbox" } } },
                 new JObject { ["id"] = "p3", ["name"] = "empty", ["sources"] = new JArray() },
             };
             JObject T(string id, string pid, string title, string st, long ago, bool ask = false) => new JObject { ["id"] = id, ["projectId"] = pid, ["title"] = title, ["providerId"] = "claude-code", ["status"] = st, ["runtime"] = new JObject { ["displayStatus"] = st }, ["updatedAt"] = now - ago, ["hasPendingInteraction"] = ask, ["environmentIsWorktree"] = id == "t2", ["environmentBranchName"] = "feat/x" };
@@ -3922,13 +3941,25 @@ end)
             shell.SetThreadsForTest(projects, threads);
             var list = shell.ThreadListForTest;
             var tags = list.Items.Select(i => i.Tag as string).ToList();
+            // the types NATIVE, DEFAULT, RESEARCH (each shown; an empty one offers a project), then OTHER (p3: no folder);
             // p1 has a worktree: its folders are rows (the checkout first), the threads under them; p2 only its checkout
-            Check(tags.SequenceEqual(new[] { "p:p1", "w:p1|checkout", "t:t1", "w:p1|wt:feat/x", "t:t2", "p:p2", "t:t3", "p:p3", "p:p3" }) && list.Items[1].Indent == 1 && list.Items[2].Indent == 2
-                  && list.Items[0].Badge == "1 RUNNING" && list.Items[5].Badge == "1 NEED YOU" && list.Items[6].Indent == 1 && list.Items[3].Title == "feat/x",
-                "THREADS grouped by project, then by folder (checkout, worktrees) when a project has a worktree, newest first, with running / needs-you badges: " + string.Join(" ", tags));
-            shell.PickThreadRowForTest(0);
-            Check(shell.ThreadListForTest.Items.Count == 5 && shell.ThreadListForTest.Items[0].Icon == "▸", "tapping a project folds it");
-            shell.PickThreadRowForTest(0);
+            Check(tags.SequenceEqual(new[] { "g:native", "p:p1", "w:p1|checkout", "t:t1", "w:p1|wt:feat/x", "t:t2", "g:default", "n:default", "g:research", "p:p2", "t:t3", "g:other", "p:p3", "p:p3" })
+                  && list.Items[0].Title == "NATIVE" && list.Items[0].Badge == "1 RUNNING" && list.Items[8].Badge == "1 NEED YOU" && list.Items[11].Title == "OTHER"
+                  && list.Items[1].Indent == 1 && list.Items[2].Indent == 2 && list.Items[3].Indent == 3 && list.Items[10].Indent == 2
+                  && list.Items[1].Badge == "1 RUNNING" && list.Items[9].Badge == "1 NEED YOU" && list.Items[4].Title == "feat/x" && list.Items[1].Sub == "…/native/metacodex",
+                "THREADS grouped by type, then project, then folder (checkout, worktrees) when a project has a worktree, newest first, with running / needs-you badges: " + string.Join(" ", tags));
+            shell.PickThreadRowForTest("p:p1");
+            Check(shell.ThreadListForTest.Items.Count == 10 && shell.ThreadListForTest.Items[1].Icon == "▸", "tapping a project folds it");
+            shell.PickThreadRowForTest("p:p1");
+            shell.PickThreadRowForTest("g:research");
+            Check(shell.ThreadListForTest.Items.Count == 12 && shell.ThreadListForTest.Items[8].Icon == "▸" && shell.ThreadListForTest.Items[9].Tag as string == "g:other", "tapping a type header folds its projects");
+            shell.PickThreadRowForTest("g:research");
+            shell.SetThreadsForTest(new JArray { projects[2] }, new JArray());
+            var other = shell.ThreadListForTest.Items.Select(i => i.Tag as string).ToList();
+            Check(other.SequenceEqual(new[] { "g:native", "n:native", "g:default", "n:default", "g:research", "n:research", "g:other", "p:p3", "p:p3" }), "OTHER only when a project is outside the types: " + string.Join(" ", other));
+            shell.SetThreadsForTest(new JArray { projects[0] }, new JArray());
+            Check(!shell.ThreadListForTest.Items.Any(i => i.Tag as string == "g:other"), "no OTHER header when every project has a type");
+            shell.SetThreadsForTest(projects, threads);
             shell.PanelsById["threads"].ForceRefresh();
             RenderPanel(shell.PanelsById["threads"], "ui-threads-grouped.png");
         }

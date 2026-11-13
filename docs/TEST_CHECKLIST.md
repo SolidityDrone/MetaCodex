@@ -108,9 +108,9 @@ Helpers on the PC: `tools/qterm` (control port), `adb logcat -s Unity`, `files/s
 
 ## 9. Threads (MQH)
 
-- [ ] THREADS: + PROJECT… `/root/MetaCodex` (or another folder) → project listed
-- [ ] + NEW THREAD…: providers, then models for the chosen provider; PERMISSIONS EDITS/AUTO/FULL; WORKSPACE CHECKOUT/WORKTREE
-- [ ] First message "list the files and summarise the README" → START → THREAD opens, timeline fills (you, agent, commands, tools)
+- [ ] THREADS: + PROJECT… → DEFAULT → name "My Test" → the project is listed under DEFAULT (`…/default/my-test`)
+- [ ] + NEW THREAD…: providers, then models for the chosen provider; PERMISSIONS EDITS/AUTO/FULL; WORKSPACE CHECKOUT/WORKTREE; no FIRST MESSAGE field
+- [ ] START → THREAD opens as "New thread · <project>" (NOT STARTED), the keyboard on the composer; first message "list the files and summarise the README" → SEND → the thread is made, its title is the start of that message, the timeline fills (you, agent, commands, tools)
 - [ ] Composer: type with the keyboard → SEND → message appears; agent answers
 - [ ] With EDITS, a command needing approval → ALLOW ONCE / ALLOW SESSION / DENY buttons appear and work
 - [ ] ■ STOP stops a running turn
@@ -270,7 +270,7 @@ Voice:
 - [ ] Native apps: in a terminal `mcx-app doctor` → all ok; `mcx-app run /root/apps/x` → Install asked once, the app opens; again → no prompt
 - [ ] Wrist menu: hold the left wrist as a watch; the rings stay whole, the hand behind them never cuts them; the right fingertip shows over a blade while pressing; windows still let hands and things in front show
 - [ ] Dock / wrist: one MQH entry (no SCRIPTS / GESTURE); MQH opens on SKILLS; the tabs PLUGINS, SCRIPTS, GESTURES, DAEMON work; Settings has no DAEMON tab
-- [ ] MQH > SKILLS: the shipped skills say READ-ONLY and REMOVE refuses them; + NEW SKILL opens NEW THREAD with the brief; ⌕ FIND finds skills, ⇣ INSTALL adds one under YOURS, REMOVE removes it
+- [ ] MQH > SKILLS: the shipped skills say READ-ONLY and REMOVE refuses them; + NEW SKILL opens NEW THREAD, START puts the brief in the draft's composer (SEND starts it); ⌕ FIND finds skills, ⇣ INSTALL adds one under YOURS, REMOVE removes it
 - [ ] SELECT, then pinch-drag over a window at low PANEL OPACITY: CLIPBOARD has the capture, opaque, nothing of the room or the hands; no hitch at the moment of the capture (72 fps)
 - [ ] CLIPBOARD from the wrist (CLIP), the dock and by voice ("open the clipboard", "show the screenshots"; Italian removed: English only since 2026-11-12); 21 captures with CLIPBOARD's KEEP at 20 → the oldest is gone
 - [ ] A thread: + → REFERENCE CAPTURE → the list inside the thread panel; pick two → two chips; + → ATTACH FILES → a Linux file; SEND: the agent sees the images and the file
@@ -387,7 +387,7 @@ The in-app browser, WEB (same version):
 - [ ] Ask for something long (several commands): when the steps push your prompt off the top, it stays pinned there; a tap on it scrolls back to it
 - [ ] Scroll up while it works: the view holds still, `↓ NEW` shows; a tap goes back to the end
 - [ ] The meta row shows the plan and the usage windows (OpenCode Go: 5h · week · month); the CONTEXT ring's picker lists them with their resets
-- [ ] ◉ beside SEND: say a message, pause: the words are typed into the composer (not sent); SEND sends them. The same ◉ in NEW THREAD
+- [ ] ◉ beside SEND: say a message, pause: the words are typed into the composer (not sent); SEND sends them. The same ◉ in a new thread's draft (the first message)
 - [ ] TALK: "what is this thread doing?" / "is it stuck?" (the Italian one removed: English only since 2026-11-12): a short spoken answer at once (no waiting for the model)
 - [ ] Stop a thread's provider mid-turn or wait on a silent step: after ~2 min the status line turns amber ("may be stuck")
 - [ ] A thread finishes while its window is open: the frame pulses three times and the answer glows; the orb casts “✓ … answered: …”
@@ -468,7 +468,7 @@ docs/native-build-and-install.md.
 
 ## 31. Launches by request, Native / General projects (0.7.16)
 
-- [ ] THREADS > + PROJECT…: a folder, then PROJECT TYPE: NATIVE APP (QUEST) or GENERAL CODING; the project's row in THREADS says ◆ NATIVE for a native one
+- [ ] THREADS > + PROJECT… > EXISTING…: a folder, then PROJECT TYPE: NATIVE APP, DEFAULT or RESEARCH; the project is listed under that type (§ 41)
 - [ ] A Native project's folder has `.metacodex/project.json`, `.claude/skills/quest-native-*` (links) and AGENTS.md / CLAUDE.md with the native block; a General one has none of them (`ls -la <folder> <folder>/.claude 2>&1` in a terminal)
 - [ ] In a General project ask an agent "what are your rules for apps?": no word about launch requests or the app menu
 - [ ] In a Native project, with the thread in its most permissive approval mode, ask for a small app: the agent builds and verifies, then a dialog APP READY: <app>: LAUNCH / LATER appears in front of you (and a toast in MESSAGES); nothing opens by itself
@@ -615,3 +615,21 @@ Work windows:
 - [ ] Settings > LOOK: the rows are PANEL OPACITY, FOVEATED, SOUNDS, VOLUME, the orb; no SHADOWS slider and no gap where it was
 - [ ] Windows and buttons have no dark band round their edges; the accent glow round a window's edge looks as before
 - [ ] An old settings file that still has "glow" loads: the app starts with its other settings (PANEL OPACITY keeps its value)
+
+## 42. Projects by type, threads made by their first message (branch fix/projects-threads)
+
+- [ ] THREADS shows NATIVE, DEFAULT, RESEARCH (dim headers, in that order); OTHER only when a project is outside `/root/metacodex-projects/` and has no type; a tap on a header folds it, a tap on a project folds it; threads stay under their project (and its worktree rows)
+- [ ] An empty type says "no … project yet: tap to make one"; the tap asks the name of a project of that type
+- [ ] + PROJECT… asks NATIVE APP / DEFAULT / RESEARCH / EXISTING…, then the name on the keyboard (empty field, the hint in its caption); "Weather App" makes `/root/metacodex-projects/native/weather-app`
+- [ ] In a terminal: `cd /root/metacodex-projects/native/weather-app && git status && git config user.name && cat .metacodex/project.json && ls -la .claude/skills`: a git repository on `main`, an identity (yours when a global one is set, else MetaCodex), type native, the quest-native links
+- [ ] A RESEARCH project: AGENTS.md and CLAUDE.md hold the research note (notes in Markdown, sources cited, no app build), no `.claude/skills`; ask its agent "what are your rules here?": it names those rules, nothing about apps
+- [ ] The same name again in the same type: a toast says the folder exists; nothing is made
+- [ ] Offline, never signed in to git: in a new project ask the agent to commit a file: the commit works
+- [ ] An old project with `"type": "general"` in `.metacodex/project.json` shows under DEFAULT
+- [ ] NEW THREAD > START, then close THREAD (✕) without a message: no new thread in THREADS, also not after ⟳ or a restart
+- [ ] NEW THREAD > START, then open another thread, or NEW THREAD > START again: the first draft is gone, nothing made
+- [ ] In the draft: attach a capture (+ or CLIPBOARD > TO THE THREAD) and send the first message: the thread has the text and the capture
+- [ ] In the draft: change the model or the access on the chips before the first message: the new thread uses them
+- [ ] WORKSPACES > a worktree > NEW THREAD HERE… > START > first message: the thread works in that worktree
+- [ ] Voice: "start a thread to fix the login page": a thread is made at once with that message (last agent and model chosen); "new thread": the draft opens and waits
+- [ ] Voice: "create a research project called solar panels": made under RESEARCH; "new project": the type dialog; "make a native app project": the name keyboard

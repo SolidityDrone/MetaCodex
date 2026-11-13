@@ -20,7 +20,7 @@ namespace MetaCodex.Shell
     {
         private UiChatView _thTimeline; // the chat (the attach modal hides it, ShellCaptures)
         private UiLabel _thStatus, _thLimits;
-        private UiButton _thNewBtn, _thMic, _ntMic;
+        private UiButton _thNewBtn, _thMic;
         private ThreadTimeline _tlModel = new ThreadTimeline();
         private ThreadPulse _thPulse;
         private JObject _tlFields = new JObject();
@@ -152,7 +152,6 @@ namespace MetaCodex.Shell
                 _thMic.SetText(Dictating && _dictField == _thComposer ? "■" : "◉");
                 _thMic.SetSelected(Dictating && _dictField == _thComposer);
             }
-            if (_ntMic != null) { _ntMic.SetText(Dictating && _dictField == _ntPrompt ? "■" : "◉"); _ntMic.SetSelected(Dictating && _dictField == _ntPrompt); }
             if (_threadOpen != null) RefreshUsageLimits(false);
             RefreshNewButton();
         }
@@ -588,7 +587,7 @@ namespace MetaCodex.Shell
         private (float silence, float max, bool auto, float noSpeech) _recBefore;
         public bool Dictating => _dictateTo != null;
 
-        /// ◉: speech to text into the field (the composer, NEW THREAD's first message); ◉ again (or a pause of
+        /// ◉: speech to text into the field (the composer, also a draft's first message); ◉ again (or a pause of
         /// ~2 s) ends it. The text is only typed in: SEND stays the user's.
         public void DictateInto(UiTextField field)
         {

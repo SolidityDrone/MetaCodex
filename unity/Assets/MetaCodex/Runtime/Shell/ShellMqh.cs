@@ -300,7 +300,8 @@ namespace MetaCodex.Shell
                                  "The skills that came with MetaCodex and MQH (writing skills, plugins, scripts, native apps, this headset) are read-only.", t.TextDim);
         }
 
-        /// The first message of the thread that writes a new skill (the user picks the agent and model in NEW THREAD).
+        /// The first message of the thread that writes a new skill (the user picks the agent and model in NEW THREAD; it waits in
+        /// the draft's composer).
         public static string NewSkillPrompt(string idea) =>
             "Create a new skill for the agents in MetaCodex (Claude Code, Codex and opencode, through MQH): " + idea.Trim() + "\n\n" +
             "Follow the skill-creator skill. Save it as ~/.mqh/skills/<short-name>/SKILL.md: MQH gives user skills to every agent, " +
@@ -313,8 +314,8 @@ namespace MetaCodex.Shell
             {
                 if (string.IsNullOrWhiteSpace(idea)) return;
                 OpenNewThread(null);
-                _ntPrompt?.Set(NewSkillPrompt(idea));
-                Toast("Pick the agent and START: it writes the skill with you", "info");
+                _ntSeed = NewSkillPrompt(idea); // in the thread's composer after START: SEND starts it
+                Toast("Pick the agent and START, then SEND the brief: it writes the skill with you", "info");
             });
         }
 
@@ -409,7 +410,7 @@ namespace MetaCodex.Shell
             AddRow(_mqhTabs, page, pr.Next(t.ButtonHeight), new (string, Action)[]
             {
                 ("+ NEW PLUGIN…", () => UiKeyboard.Edit("my-gestures", false, null, id => { if (string.IsNullOrWhiteSpace(id)) return; var e = NewPlugin(id); Toast($"Plugin {e.Name} created in /mnt/quest/plugins/{e.Name}", "ok"); RefreshPluginList(); })),
-                ("ASK AN AGENT…", () => UiKeyboard.Edit("", false, null, idea => { if (string.IsNullOrWhiteSpace(idea)) return; OpenNewThread(null); _ntPrompt?.Set(NewPluginPrompt(idea)); Toast("Pick the agent and START", "info"); })),
+                ("ASK AN AGENT…", () => UiKeyboard.Edit("", false, null, idea => { if (string.IsNullOrWhiteSpace(idea)) return; OpenNewThread(null); _ntSeed = NewPluginPrompt(idea); Toast("Pick the agent and START, then SEND the brief", "info"); })),
             }, primary: 0);
             AddRow(_mqhTabs, page, pr.Next(t.ButtonHeight), new (string, Action)[]
             {

@@ -1,34 +1,55 @@
 #!/bin/bash
-# mcx-project: the type of a project folder in MetaCodex: Native app (Quest) or General coding.
-#   mcx-project type <dir>                 native | general (stored in <dir>/.metacodex/project.json; without it: native
-#                                          when the folder is an app, AndroidManifest.xml + src/, else general)
-#   mcx-project set <dir> native|general   store it and lay / remove what the type brings
+# mcx-project: the type of a project folder in MetaCodex: native (a Quest app), default (any coding) or research.
+#   mcx-project type <dir>                         native | default | research (stored in <dir>/.metacodex/project.json;
+#                                                  without it: native when the folder is an app, AndroidManifest.xml +
+#                                                  src/, else default; an old "general" reads as default)
+#   mcx-project set <dir> native|default|research  store it and lay / remove what the type brings ("general" = default)
+# New projects live in /root/metacodex-projects/<type>/<name> (the app makes them there, with git init).
 # Native: the quest-native-* skills linked into <dir>/.claude/skills (Claude Code reads project skills there; the other
 # agents read the AGENTS.md block that points at them) and the native block in AGENTS.md and CLAUDE.md (between
-# <!-- metacodex:native-app --> markers; the rest of those files stays the user's). General: none of it.
+# <!-- metacodex:native-app --> markers; the rest of those files stays the user's). Research: no native skills or rules;
+# a short research block in AGENTS.md and CLAUDE.md (<!-- metacodex:research --> markers): notes and findings in
+# Markdown, sources cited, no app build. Default: none of it.
 # Shipped by the app (overlay); edits are overwritten.
 set -uo pipefail
 S=/opt/metacodex/quest-native/skills
 T=/opt/metacodex/quest-native/project/AGENTS.md
 NAMES="quest-native-apps quest-native-xr quest-native-recipes quest-native-dev-loop quest-native-debug"
+RESEARCH='<!-- metacodex:research (written by mcx-project for a Research project; edits inside this block are replaced) -->
+# Research project (MetaCodex)
+
+This folder is a research project, not an app. The work here is reading, testing ideas and writing down what you find.
+
+- Keep notes and findings in Markdown files in this folder (for example `notes/<topic>.md`, `FINDINGS.md`). Short,
+  plain sentences; say what is known, what is not, and how sure you are.
+- Cite every source: a link, a file path or a command, next to the claim it supports. Do not state facts from memory
+  without a source; say so when you cannot find one.
+- Do not build, install or launch apps here, and do not use the native app skills. Small scripts to test an idea are
+  fine; keep them in the folder and say what they showed.
+- Commit the notes with git when a piece of work is done (the folder is a git repository).
+<!-- /metacodex:research -->'
 die() { echo "mcx-project: $*" >&2; exit 1; }
 
 type_of() {
-  local f="$1/.metacodex/project.json"
-  if [ -f "$f" ]; then sed -n 's/.*"type": *"\([a-z]*\)".*/\1/p' "$f" | head -1
+  local f="$1/.metacodex/project.json" t
+  if [ -f "$f" ]; then
+    t=$(sed -n 's/.*"type": *"\([a-z]*\)".*/\1/p' "$f" | head -1)
+    [ "$t" = general ] && t=default
+    echo "${t:-default}"
   elif [ -f "$1/AndroidManifest.xml" ] && [ -d "$1/src" ]; then echo native
-  else echo general; fi
+  else echo default; fi
 }
 
-# block <file> in|out: put the native block in (replacing an older one) or take it out
+# block <file> <marker> in|out [text]: put a managed block in (replacing an older one) or take it out
 block() {
-  python3 -I - "$1" "$2" "$T" <<'PY'
+  python3 -I - "$1" "$2" "$3" "${4:-}" <<'PY'
 import os, re, sys
-path, mode, tpl = sys.argv[1], sys.argv[2], sys.argv[3]
+path, marker, mode, block = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
 text = open(path, encoding="utf-8").read() if os.path.exists(path) else ""
-text = re.sub(r"\n*<!-- metacodex:native-app.*?<!-- /metacodex:native-app -->\n?", "\n", text, flags=re.S).strip("\n")
+m = re.escape(marker)
+text = re.sub(r"\n*<!-- " + m + r".*?<!-- /" + m + r" -->\n?", "\n", text, flags=re.S).strip("\n")
 if mode == "in":
-    block = open(tpl, encoding="utf-8").read().strip("\n")
+    block = block.strip("\n")
     text = (text + "\n\n" + block if text else block) + "\n"
 elif text:
     text += "\n"
@@ -43,14 +64,16 @@ set_type() {
   local dir t n
   [ -d "${1:-}" ] || die "no folder ${1:-}"
   dir=$(readlink -f "$1"); t=${2:-}
-  [[ "$t" == native || "$t" == general ]] || die "type: native or general"
+  [ "$t" = general ] && t=default
+  [[ "$t" == native || "$t" == default || "$t" == research ]] || die "type: native, default or research"
   mkdir -p "$dir/.metacodex"
   printf '{\n  "type": "%s"\n}\n' "$t" > "$dir/.metacodex/project.json"
   if [ "$t" = native ]; then
     [ -d "$S/quest-native-apps" ] || die "no native skills in $S (update MetaCodex)"
     mkdir -p "$dir/.claude/skills"
     for n in $NAMES; do ln -sfn "$S/$n" "$dir/.claude/skills/$n"; done
-    block "$dir/AGENTS.md" in; block "$dir/CLAUDE.md" in
+    block "$dir/AGENTS.md" metacodex:research out; block "$dir/CLAUDE.md" metacodex:research out
+    block "$dir/AGENTS.md" metacodex:native-app in "$(cat "$T")"; block "$dir/CLAUDE.md" metacodex:native-app in "$(cat "$T")"
     # the links are this headset's: keep them out of the project's git history
     if [ -d "$dir/.git" ] && ! grep -qs "quest-native-" "$dir/.git/info/exclude"; then
       mkdir -p "$dir/.git/info"; echo ".claude/skills/quest-native-*" >> "$dir/.git/info/exclude"
@@ -58,13 +81,18 @@ set_type() {
   else
     for n in $NAMES; do [ -L "$dir/.claude/skills/$n" ] && rm -f "$dir/.claude/skills/$n"; done
     rmdir "$dir/.claude/skills" "$dir/.claude" 2>/dev/null || true
-    block "$dir/AGENTS.md" out; block "$dir/CLAUDE.md" out
+    block "$dir/AGENTS.md" metacodex:native-app out; block "$dir/CLAUDE.md" metacodex:native-app out
+    if [ "$t" = research ]; then
+      block "$dir/AGENTS.md" metacodex:research in "$RESEARCH"; block "$dir/CLAUDE.md" metacodex:research in "$RESEARCH"
+    else
+      block "$dir/AGENTS.md" metacodex:research out; block "$dir/CLAUDE.md" metacodex:research out
+    fi
   fi
-  echo "RESULT: $dir is a $( [ "$t" = native ] && echo 'Native app (Quest)' || echo 'General coding') project"
+  echo "RESULT: $dir is a $(case "$t" in native) echo 'Native app (Quest)';; research) echo 'Research';; *) echo 'Default';; esac) project"
 }
 
 case "${1:-}" in
   type) [ -d "${2:-}" ] || die "no folder ${2:-}"; type_of "$(readlink -f "$2")" ;;
   set) set_type "${2:-}" "${3:-}" ;;
-  *) sed -n 2,9p "$0"; exit 2 ;;
+  *) sed -n 2,13p "$0"; exit 2 ;;
 esac

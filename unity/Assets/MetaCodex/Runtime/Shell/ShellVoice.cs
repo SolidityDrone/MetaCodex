@@ -988,6 +988,62 @@ namespace MetaCodex.Shell
             });
             Voice.Register(new VoiceCommand
             {
+                Name = "new_thread",
+                Description = "Start a new agent thread in the current project with the last agent and model chosen. With a task it starts at once (the task is its first message); without one an empty thread opens and your first message starts it",
+                Parameters = VoiceCommands.Schema(("task", "string", null, "what the agent should do: the thread's first message", false)),
+                Phrases = new[]
+                {
+                    "(start|begin|create|make) [me] [a|an] [new] (thread|conversation|chat) [with an agent] (to|that|for|about|and) {task}",
+                    "(new|another) (thread|conversation|chat) (to|for|about|that) {task}",
+                    "(have|get) an agent [to] {task}",
+                    "(start|begin|create|make|open) [me] [a|an] new (thread|conversation|chat)",
+                    "(start|begin|create|make) [me] [a|an] (thread|conversation|chat)",
+                    "new (thread|conversation|chat)",
+                },
+                Samples = new[]
+                {
+                    "start a thread to fix the login page", "I want a fresh conversation with an agent", "begin a chat that writes the readme",
+                    "make a new thread for the settings screen", "get an agent to clean up the css",
+                },
+                Examples = new List<(string, string)> { ("kick off a thread that adds dark mode", "new_thread adds dark mode"), ("give me an empty thread", "new_thread") },
+                Run = a => NewThreadFromVoice((string)a["task"]),
+            });
+            Voice.Register(new VoiceCommand
+            {
+                Name = "new_project",
+                Description = "Make a new project in metacodex-projects with git: type native (a Quest app), default (any other coding) or research (notes and findings); the name becomes its folder. What is not said is asked",
+                Parameters = VoiceCommands.Schema(("type", "string", ProjectKinds.Types, "the project type", false), ("name", "string", null, "the project name", false)),
+                Synonyms = new Dictionary<string, Dictionary<string, string>>
+                {
+                    ["type"] = new Dictionary<string, string>
+                    {
+                        ["native app"] = "native", ["app"] = "native", ["quest"] = "native", ["quest app"] = "native", ["headset app"] = "native", ["vr app"] = "native", ["vr"] = "native",
+                        ["general"] = "default", ["coding"] = "default", ["code"] = "default", ["normal"] = "default", ["standard"] = "default", ["regular"] = "default", ["plain"] = "default",
+                        ["study"] = "research", ["notes"] = "research", ["investigation"] = "research", ["reading"] = "research",
+                    },
+                },
+                Phrases = new[]
+                {
+                    "(create|make|add|start|set up) [me] [a|an] [new] {type} project [called|named] {name}",
+                    "(create|make|add|start|set up) [me] [a|an] [new] project (called|named) {name}",
+                    "(create|make|add|start|set up) [me] [a|an] [new] {type} project",
+                    "(create|make|add|start|set up) [me] [a|an] [new] project",
+                    "new {type} project [called|named] {name}",
+                    "new project (called|named) {name}",
+                    "new project",
+                },
+                Samples = new[]
+                {
+                    "create a research project called solar panels", "make a new native app project named weather", "I need a new project",
+                    "set up a default project named website", "start a project called notes app",
+                },
+                Examples = new List<(string, string)> { ("set up a research project about battery chemistry", "new_project research battery chemistry"), ("I want to begin a fresh quest app project", "new_project native") },
+                Vocabulary = new[] { "metacodex-projects" },
+                Check = a => a["name"] != null && ProjectKinds.FolderName((string)a["name"]).Length == 0 ? "say a name with letters or digits" : null,
+                Run = a => VoiceNewProject((string)a["type"], (string)a["name"]),
+            });
+            Voice.Register(new VoiceCommand
+            {
                 Name = "set_layout",
                 Description = "Panel layout: fixed (world-locked) or float (a carousel that follows you)",
                 Parameters = VoiceCommands.Schema(("mode", "string", new[] { "fixed", "float" }, "the layout", true)),
@@ -1536,6 +1592,16 @@ namespace MetaCodex.Shell
                 OpenThread((string)best.x["id"]);
                 reply("Opened “" + Short(best.title, 50) + "”");
             });
+        }
+
+        /// new_project: both parts said -> made at once; the type only -> its name on the keyboard; else NEW PROJECT asks.
+        private string VoiceNewProject(string type, string name)
+        {
+            type = Array.IndexOf(ProjectKinds.Types, type ?? "") >= 0 ? type : null;
+            if (type == null) { OpenPanel("threads"); NewProjectPrompt(string.IsNullOrWhiteSpace(name) ? null : name); return "Native app, default or research?"; }
+            if (string.IsNullOrWhiteSpace(name)) { OpenPanel("threads"); NewProjectNamed(type); return "Name the " + ProjectKinds.Label(type).ToLowerInvariant() + " project on the keyboard"; }
+            OpenPanel("threads");
+            return CreateNewProject(type, name);
         }
 
         private void VoiceSwitchWorkspace(string name, Action<string> reply)

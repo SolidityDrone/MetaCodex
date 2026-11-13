@@ -47,8 +47,9 @@ namespace MetaCodex.EditorTools
             shell.SetThreadsForTest(projects, threads);
             var rows = shell.ThreadListForTest.Items;
             var tags = rows.Select(i => i.Tag as string).ToList();
-            Check(tags.SequenceEqual(new[] { "p:p1", "w:p1|dir:/root/app", "t:a1", "t:a2", "w:p1|env:env-wt", "t:a3", "w:p1|env:env-old" })
-                  && rows[1].Badge == "1 WAITING" && rows[1].Sub == "shared folder" && rows[3].Badge == "WAITING" && rows[4].Title == "feat/menu" && rows[4].Sub == "from main",
+            int o = tags.IndexOf("p:p1"); // under OTHER: /root/app is outside metacodex-projects/
+            Check(o > 0 && tags[o - 1] == "g:other" && tags.Skip(o).SequenceEqual(new[] { "p:p1", "w:p1|dir:/root/app", "t:a1", "t:a2", "w:p1|env:env-wt", "t:a3", "w:p1|env:env-old" })
+                  && rows[o + 1].Badge == "1 WAITING" && rows[o + 1].Sub == "shared folder" && rows[o + 3].Badge == "WAITING" && rows[o + 4].Title == "feat/menu" && rows[o + 4].Sub == "from main",
                 "THREADS: app's checkout (shared: one works, one waits), the worktree feat/menu with its thread, a worktree left behind: " + string.Join(" ", tags));
             shell.PanelsById["threads"].ForceRefresh();
             RenderPanel(shell.PanelsById["threads"], "ui-threads-workspaces.png");
@@ -71,12 +72,21 @@ namespace MetaCodex.EditorTools
 
             // NEW THREAD: the checkout is busy -> WORKTREE for this thread (said why); the saved choice stays
             shell.SetThreadsForTest(projects, threads);
-            shell.PickThreadRowForTest(0); shell.PickThreadRowForTest(0); // p1 chosen (folded and back)
+            shell.PickThreadRowForTest("p:p1"); shell.PickThreadRowForTest("p:p1"); // p1 chosen (folded and back)
             shell.OpenNewThread("codex");
             var body = shell.NewThreadBodyForTest("add a settings page");
             Check(shell.NewThreadForcedWorktreeForTest && shell.NewThreadSummaryForTest.Contains("is working in the checkout") && (string)body["environment"]?["workspace"]?["type"] == "managed-worktree"
                   && shell.Settings.workspaceMode == "local",
                 "NEW THREAD while “Fix the build” works in the checkout: WORKTREE for this thread (its own folder and branch), the summary says why; the saved choice stays CHECKOUT");
+            // START: THREAD opens as a draft (nothing made in MQH); its first message would make the thread with those choices
+            string provBefore = shell.Settings.defaultProvider, modelBefore = shell.Settings.defaultModel;
+            shell.StartThreadForTest();
+            var draft = shell.DraftBodyForTest("add a settings page");
+            Check(shell.DraftOpenForTest && shell.IsPanelOpen("thread") && !shell.IsPanelOpen("thread-new") && shell.ThreadTitleForTest.Contains("New thread · app")
+                  && (string)draft?["environment"]?["workspace"]?["type"] == "managed-worktree" && (string)draft?["providerId"] == "codex" && (string)draft?["input"]?[0]?["text"] == "add a settings page",
+                "START opens THREAD as a draft “New thread · app”: no thread yet; the first message makes it in a new worktree (the choice NEW THREAD made)");
+            shell.ClosePanel("thread");
+            Check(!shell.DraftOpenForTest && shell.DraftBodyForTest("x") == null, "closing the draft keeps nothing (no empty thread)");
             shell.ClosePanel("thread-new");
             // NEW THREAD HERE: that workspace again
             shell.OpenWorkspacesOn("p1|env:env-wt");
@@ -84,6 +94,12 @@ namespace MetaCodex.EditorTools
             var here = shell.NewThreadBodyForTest("polish the menu");
             Check((string)here["environment"]?["type"] == "reuse" && (string)here["environment"]?["environmentId"] == "env-wt" && shell.NewThreadSummaryForTest.Contains("feat/menu"),
                 "NEW THREAD HERE: the new thread works in feat/menu's worktree (MQH holds its turn while “Menu rework” works there)");
+            shell.StartThreadForTest();
+            var hereDraft = shell.DraftBodyForTest("polish the menu");
+            Check(shell.DraftOpenForTest && (string)hereDraft?["environment"]?["type"] == "reuse" && (string)hereDraft?["environment"]?["environmentId"] == "env-wt",
+                "NEW THREAD HERE > START: the draft's first message still goes to feat/menu's worktree");
+            shell.ClosePanel("thread");
+            shell.Settings.defaultProvider = provBefore; shell.Settings.defaultModel = modelBefore;
             shell.ClosePanel("thread-new");
             shell.ClosePanel("workspaces");
 

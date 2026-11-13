@@ -37,7 +37,8 @@ two agents on different tasks conflict? Wanted in the daemon (MQH) and in the UI
     works there; first `git merge-tree --write-tree` (a dry run: nothing is touched). Clean: MERGE (`--no-ff`; on
     any failure `merge --abort`). Conflicts: the files are listed and **ASK ITS AGENT** sends the worktree's thread
     "rebase on <base> and resolve the conflicts in …".
-  - **NEW THREAD HERE…**: a thread in that workspace (MQH holds its turn while another one works there).
+  - **NEW THREAD HERE…**: a thread in that workspace (MQH holds its turn while another one works there). START opens
+    the draft; its first message makes the thread in that workspace.
   - **REMOVE…** (worktrees, nobody working): archives its threads, then MQH deletes the folder; the branch stays in git.
   - OPEN THREAD, FILES, TERMINAL HERE.
 - **NEW THREAD**: when a thread works in the project's checkout, WORKTREE is chosen for the new one (the summary says
