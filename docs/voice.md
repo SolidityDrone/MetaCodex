@@ -461,3 +461,61 @@ vocabulary prompt fixes names ("MetaCodex", not "MedicoDex").
 | Spoken text (sentences, units), voice effect | `Runtime/AI/SpokenText.cs`, `Runtime/AI/VoiceFx.cs`; tests `tests/voicefx/`; retuning `tools/voicefx/` |
 | Lua API | `Runtime/Scripting/ScriptHost.cs` (`voice.*`) |
 | Userland | `userland/overlay/usr/local/bin/mcx-ai`, `mcx-ui voice ...` |
+
+## Speech has priority (voice/server, 2026-11-13)
+
+Measured on the headset: a spoken answer took 3x longer to make than to play ("tts 51 chars -> 3314 ms audio in
+11439 ms"). In the same seconds the service ran its own background work on the same 3 AI cores: the LLM warm-up
+(23 s) and the decision model's example vectors (about 1900, in requests of 64).
+
+What changed in the service (`local-ai/server/engines.js`, `main.js`):
+
+- While a spoken answer is queued or being made, and for `speechHoldMs` (3000) after the last one, three background
+  jobs wait: the warm-up, a speculative prefill and bulk sentence vectors (a request with more than 8 texts). A
+  warm-up or prefill that runs is cancelled when speech comes. It runs again from the start when speech is over.
+  The warm-up still replies once it is done, with `cached: false`; the next call replies `cached: true`.
+- A cancelled warm-up never saves its part-made state: the prefix file is written only by a complete run.
+- Bulk vectors run one pass of 64 at a time, each as its own job. The few vectors of a spoken command never wait.
+- Real requests never wait for speech: chat answers, speech-to-text, a spoken command's vectors.
+- A background request waits at most `maxYieldMs` (60000) in total, then it runs anyway (the app's HTTP timeouts
+  are 120 s and 180 s).
+- The voice LLM reads prompts in pieces of 128 tokens (`llmPromptBatch`). A cancel takes effect only between
+  pieces. Measured on the PC (3 cores, a 1549-token prefill): with the old single piece the cancel took 11.6 s,
+  with 128 it took 0.11 s. The prefill speed did not change (12.9 s, before 13.3 s). This also makes the old rule
+  "speech-to-text cancels a speculative prefill" act at once.
+- Config: `backgroundYieldsToSpeech` (default true) turns it all off; `speechHoldMs`, `maxYieldMs`, `llmPromptBatch`.
+- The service's default `ttsSteps` is now 3 (owner: the voice effect hides the small loss). 1-10 is accepted.
+  The app still sends its own value.
+
+Measured on the PC (`tools/local-ai-dev.sh pc start` under `taskset -c 0-2`, threads 2, ttsThreads 2, llmThreads 1,
+llmBatchThreads 2, ttsSteps 4). The same 56-character sentence, solo 1.0 s:
+
+| Speech sent while ... | before | after |
+|---|---|---|
+| a warm-up runs (1549 tokens) | 6347 ms | 1022 ms |
+| a speculative prefill runs | 1545 ms | 1517 ms |
+| bulk vectors run (12 requests of 64) | 10703 ms | 1142 ms |
+
+The prefill slowed the speech less than the warm-up on the PC (not explained). Before, it ran on for 14 s; now it
+stops and runs again after the speech. After the change the warm-up still finished (13.2 s run, 18.2 s with the wait), a second call replied `cached`, and a
+chat on that prompt started from the cache (22 prompt tokens to read, first token in 0.8 s).
+
+How to check on the headset, in `files/qvac/data/service.log`:
+
+- Each `tts` line now ends with `(waited W ms, load L ms, beside JOBS, yielded WHAT)`. `waited`: from the request to
+  the start of the job. `load`: the voice model loaded first (only when 50 ms or more). `beside`: other jobs that ran
+  on the AI cores during it (`llm-stream` is normal: the answer streams while it is spoken). `yielded`: what waited or
+  was cancelled for it (`warmup cancelled`, `warmup paused`, `prefill cancelled`, `embed paused`; `none`).
+  Example: `tts 56 chars -> 4663 ms audio in 1022 ms (waited 1 ms, beside warmup, yielded warmup cancelled+warmup paused)`.
+- `warmup N ms, yielded to speech Kx, done after T ms` and the same for `prefill`: the job was cancelled K times.
+- `GET /status` has `speech: { active, yields: { warmup, prefill, embed } }` (counts since the start).
+
+Not changed (same cores, by design or out of the service's reach):
+
+- A chat answer streams while it is spoken (LLM on 1 thread, the voice on 2: "Streaming answers").
+- Speech-to-text does not wait for speech: the user may talk while the orb speaks.
+- The local coder never shares the cores with the voice: a spoken answer waits for a coder job that runs
+  (`coderHolds`, up to `coderHoldMs` after its last request).
+- A model that loads cannot be stopped. The vector model load (about 2 s on the PC) also blocks the service's
+  request loop, so a speech request that comes during it starts after it.
+- The Linux userland (MQH, agents, their git and builds) runs on the same 3 cores, outside the service.

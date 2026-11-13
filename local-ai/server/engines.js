@@ -8,6 +8,7 @@ const { CATALOGUE } = require('./models')
 
 const KINDS = ['asr', 'llm', 'tts', 'embed', 'coder']
 const INTERFACE = ['asr', 'llm', 'tts', 'embed'] // the app's own voice / UI AI
+const BULK_EMBED = 8 // more texts than this in one request: background work (a spoken command has a few clauses)
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 class Engines {
@@ -34,6 +35,14 @@ class Engines {
     this.last = {}
     this.asrWant = { actx: 512, language: null }
     this.ttsWant = { voice: null }
+    // speech first (speechActive): spoken answers waiting or being made, the end of the last one, the background LLM
+    // run that a new one cancels (warm-up or speculative prefill), and what yielded to speech (for the tts log lines)
+    this.speechPending = 0
+    this.speechLastEnd = 0
+    this._bgLlm = null
+    this._yields = []
+    this._ttsBeside = null
+    this.speechYields = { warmup: 0, prefill: 0, embed: 0 }
     this.idleTimer = setInterval(() => this._unloadIdle(), 15000)
   }
 
@@ -46,7 +55,79 @@ class Engines {
       if (this.loadMs[k]) engines[k].loadMs = this.loadMs[k]
     }
     const busy = KINDS.map((k) => this.busy[k]).filter(Boolean)
-    return { coderHold: this.coderHolds(), busy: busy.length ? busy.join(',') : null, queued: KINDS.reduce((n, k) => n + this.queued[k], 0), paused: this.paused, jobs: this.jobs, lastMs: this.last, engines }
+    return { coderHold: this.coderHolds(), speech: { active: this.speechActive(), yields: this.speechYields }, busy: busy.length ? busy.join(',') : null, queued: KINDS.reduce((n, k) => n + this.queued[k], 0), paused: this.paused, jobs: this.jobs, lastMs: this.last, engines }
+  }
+
+  /**
+   * Speech has priority (cfg.backgroundYieldsToSpeech, default on; docs/voice.md "Speech has priority"): measured on
+   * the headset, a 23 s warm-up and the decision model's example vectors ran beside the spoken answer on the same 3
+   * cores and made it 3x slower than it plays. While a spoken answer is queued or being made, and for speechHoldMs
+   * after the last one (the app asks for the next sentence when one is done or played), our own background jobs wait:
+   * the warm-up, a speculative prefill and bulk sentence vectors (more than BULK_EMBED texts) do not start, and a
+   * warm-up or prefill that runs is cancelled and done again afterwards. Each request yields for at most
+   * maxYieldMs in total (the app's HTTP timeouts), then runs anyway. Real requests (chat, speech-to-text, the
+   * vectors of a spoken command) never wait for speech.
+   */
+  speechActive () {
+    if (this.cfg.backgroundYieldsToSpeech === false) return false
+    const hold = this.cfg.speechHoldMs != null ? Number(this.cfg.speechHoldMs) : 3000
+    return this.speechPending > 0 || Date.now() - this.speechLastEnd < hold
+  }
+
+  _yieldBudget () { return { left: this.cfg.maxYieldMs != null ? Number(this.cfg.maxYieldMs) : 60000 } }
+
+  /** Waits while speech is active (within the budget; `stop()` true ends it early) -> ms waited. */
+  async _awaitSpeech (what, budget, stop) {
+    if (budget.left <= 0 || !this.speechActive() || (stop && stop())) return 0
+    const y = this._noteYield(what + ' paused', null)
+    while (this.speechActive() && Date.now() - y.t0 < budget.left && !(stop && stop())) await sleep(50)
+    y.t1 = Date.now()
+    budget.left -= y.t1 - y.t0
+    return y.t1 - y.t0
+  }
+
+  /** Records that `what` yielded to speech (t1 null: still yielding); kept 2 minutes, for the tts log lines. */
+  _noteYield (what, t1) {
+    const now = Date.now()
+    const y = { what, t0: now, t1 }
+    this._yields = this._yields.filter((e) => e.t1 == null || now - e.t1 < 120000)
+    this._yields.push(y)
+    this.speechYields[what.split(' ')[0]]++
+    return y
+  }
+
+  /** A spoken answer arrived: the background LLM run (warm-up or speculative prefill) stops now and runs again later. */
+  _yieldLlmToSpeech () {
+    const h = this._bgLlm
+    if (!h || h.yielded || h.budget.left <= 0) return
+    h.yielded = true
+    this._noteYield(h.what + ' cancelled', Date.now())
+    if (h.r) h.r.cancel().catch(() => {})
+  }
+
+  /**
+   * One background LLM prefill (`what`: warmup | prefill), cancellable for speech: -> { again: true } when speech
+   * came (wait, then call again), else { ms, cancelled, stats }. A run cancelled by speech-to-text (opts.abort)
+   * ends for good.
+   */
+  async _bgPrefill (what, llm, prompt, runOpts, budget, abort) {
+    const h = { what, r: null, yielded: false, budget }
+    this._bgLlm = h
+    const t0 = Date.now()
+    try {
+      h.r = await llm.run(prompt, runOpts)
+      if (abort) abort.onabort = () => { h.r.cancel().catch(() => {}) }
+      if (h.yielded || (abort && abort.aborted)) h.r.cancel().catch(() => {})
+      try {
+        for await (const _ of h.r.iterate()) {} // eslint-disable-line no-unused-vars
+      } catch (e) { if (!h.yielded && !(abort && abort.aborted)) throw e } // a cancelled run may end with an error
+    } finally {
+      if (this._bgLlm === h) this._bgLlm = null // before anything else: a later speech request no longer marks this run
+      if (abort) abort.onabort = null
+    }
+    if (abort && abort.aborted) return { ms: Date.now() - t0, cancelled: true, stats: h.r.stats || null }
+    if (h.yielded) return { again: true }
+    return { ms: Date.now() - t0, cancelled: false, stats: h.r.stats || null }
   }
 
   /**
@@ -85,6 +166,7 @@ class Engines {
       this.queued[kind]--
       while (this.paused) await new Promise((resolve) => this.waiters.push(resolve))
       this.busy[kind] = label
+      if (kind !== 'tts' && label !== 'unload' && this._ttsBeside) this._ttsBeside.add(label) // shares the cores with speech
       const t0 = Date.now()
       try { return await fn() } finally {
         if (kind === 'coder') this.coderLastEnd = Date.now()
@@ -181,26 +263,33 @@ class Engines {
    * Speculative prefill (POST /v1/prefill): the session question's system prompt + context, without the question,
    * evaluated while the user still speaks, keyless (the addon keeps it in memory), so the real request decodes only
    * the question's ~17 tokens. Speech-to-text has priority: a transcription that arrives while it runs cancels it
-   * (`cancelSpeculative`), the real request then prefills what is missing.
+   * (`cancelSpeculative`), the real request then prefills what is missing. Speech too (speechActive): it waits while
+   * an answer is spoken, and a spoken answer cancels it while it runs; it then runs again once speech is over.
    */
   prefill (messages) {
     const abort = { aborted: false, onabort: null }
     this._spec = abort
-    return this.job('llm', 'prefill', async () => {
-      if (abort.aborted) return { ms: 0, cancelled: true, skipped: true }
-      const llm = await this._ensure('llm')
-      if (abort.aborted) return { ms: 0, cancelled: true, skipped: true }
-      const t0 = Date.now()
-      const r = await llm.run((messages || []).map(toQvacMessage), { prefill: true })
-      abort.onabort = () => { r.cancel().catch(() => {}) }
-      try {
-        for await (const _ of r.iterate()) {} // eslint-disable-line no-unused-vars
-      } finally {
-        abort.onabort = null
-        if (this._spec === abort) this._spec = null
+    const budget = this._yieldBudget()
+    const skipped = { ms: 0, cancelled: true, skipped: true }
+    const t0 = Date.now()
+    let yields = 0
+    const run = async () => {
+      for (;;) {
+        await this._awaitSpeech('prefill', budget, () => abort.aborted)
+        if (abort.aborted) return skipped
+        const r = await this.job('llm', 'prefill', async () => {
+          if (abort.aborted) return skipped
+          if (budget.left > 0 && this.speechActive()) return { again: true } // speech came while it was queued
+          const llm = await this._ensure('llm')
+          if (abort.aborted) return skipped
+          if (budget.left > 0 && this.speechActive()) return { again: true }
+          return this._bgPrefill('prefill', llm, (messages || []).map(toQvacMessage), { prefill: true }, budget, abort)
+        })
+        if (!r.again) return Object.assign(r, { yields, totalMs: Date.now() - t0 })
+        yields++
       }
-      return { ms: Date.now() - t0, cancelled: abort.aborted, stats: r.stats || null }
-    })
+    }
+    return run().finally(() => { if (this._spec === abort) this._spec = null })
   }
 
   /** Cancels a speculative prefill that is queued or running (speech-to-text needs the cores now). */
@@ -217,21 +306,41 @@ class Engines {
    * Prefills the system prompt + tools once and saves that state to a file; later requests with the same
    * system prompt and tools start from it (in memory, or from the file after a reload) and only decode the
    * user's words. Without it the first command after a load prefills ~700 tokens (~7 s on 2 cores).
+   * Speech has priority (speechActive): the warm-up waits while an answer is spoken; a spoken answer cancels a running
+   * one, its part-made state is dropped (never saved as the prefix file) and it runs again from the start afterwards.
+   * The reply comes once it is done: { ms (the run that completed), cached, yields, totalMs }.
    */
   warm (messages, tools) {
-    return this.job('llm', 'warmup', async () => {
-      const llm = await this._ensure('llm')
-      const base = this._prefixFile(tools, messages) // the stable prefix: system prompt, example turns
-      if (fs.existsSync(base)) return { ms: 0, cached: true }
-      const prefix = (messages || []).filter((m) => m && m.role).map(toQvacMessage)
-      const prompt = [...(tools || []).map(toQvacTool), ...(prefix.length ? prefix : [{ role: 'system', content: '' }])]
-      const t0 = Date.now()
-      const r = await llm.run(prompt, { prefill: true, cacheKey: base })
-      for await (const _ of r.iterate()) {} // eslint-disable-line no-unused-vars
-      await llm.saveCache(base)
-      this._pruneCache(base)
-      return { ms: Date.now() - t0, cached: false }
-    })
+    const base = this._prefixFile(tools, messages) // the stable prefix: system prompt, example turns
+    const ready = () => !!this.inst.llm && fs.existsSync(base) // loaded and cached: nothing to do, no wait
+    const budget = this._yieldBudget()
+    const t0 = Date.now()
+    let yields = 0
+    const run = async () => {
+      for (;;) {
+        if (!ready()) await this._awaitSpeech('warmup', budget)
+        const r = await this.job('llm', 'warmup', async () => {
+          if (budget.left > 0 && this.speechActive() && !ready()) return { again: true } // speech came while queued
+          const llm = await this._ensure('llm')
+          if (fs.existsSync(base)) return { ms: 0, cached: true }
+          if (budget.left > 0 && this.speechActive()) return { again: true }
+          const prefix = (messages || []).filter((m) => m && m.role).map(toQvacMessage)
+          const prompt = [...(tools || []).map(toQvacTool), ...(prefix.length ? prefix : [{ role: 'system', content: '' }])]
+          const p = await this._bgPrefill('warmup', llm, prompt, { prefill: true, cacheKey: base }, budget, null)
+          if (p.again) { // cancelled part-way: drop that state, so no later eviction writes it as the prefix file
+            try { await llm.discardCache(base) } catch (e) { this.log('warmup discard: ' + (e.message || e)) }
+            try { if (fs.existsSync(base)) fs.unlinkSync(base) } catch {}
+            return p
+          }
+          await llm.saveCache(base)
+          this._pruneCache(base)
+          return { ms: p.ms, cached: false }
+        })
+        if (!r.again) return Object.assign(r, { yields, totalMs: Date.now() - t0 })
+        yields++
+      }
+    }
+    return run()
   }
 
   /** The cache file for a stable prompt prefix (tools + the messages before the new user turn). */
@@ -249,55 +358,81 @@ class Engines {
     } catch (e) { this.log('cache prune: ' + (e.message || e)) }
   }
 
-  /** Speech for `text` -> { pcm: Int16Array, rate, ms }. */
+  /**
+   * Speech for `text` -> { pcm: Int16Array, rate, ms, waitMs, loadMs, beside, yielded }. Speech has priority
+   * (speechActive): a background warm-up or prefill that runs is cancelled now. For the log: waitMs from the request
+   * to the start of the job, loadMs for the model (0 when loaded), `beside` the other jobs that ran on the AI cores
+   * meanwhile, `yielded` what waited or was cancelled for it.
+   */
   speak (text, opts = {}) {
-    return this.job('tts', 'tts', async () => {
-      this.ttsWant = { voice: opts.voice || null }
-      const tts = await this._ensure('tts')
-      const t0 = Date.now()
-      const r = await tts.run({ input: text, type: 'text' })
-      const parts = []
-      let n = 0
-      let rate = 44100
-      await r.onUpdate((d) => {
-        if (!d) return
-        if (d.sampleRate) rate = d.sampleRate
-        if (d.outputArray) {
-          const a = Int16Array.from(d.outputArray)
-          parts.push(a)
-          n += a.length
-        }
-      }).await()
-      const pcm = new Int16Array(n)
-      let o = 0
-      for (const p of parts) { pcm.set(p, o); o += p.length }
-      return { pcm, rate, ms: Date.now() - t0 }
+    const tq = Date.now()
+    this.speechPending++
+    if (this.cfg.backgroundYieldsToSpeech !== false) this._yieldLlmToSpeech()
+    const p = this.job('tts', 'tts', async () => {
+      const start = Date.now()
+      this._ttsBeside = new Set(KINDS.filter((k) => k !== 'tts' && this.busy[k] && this.busy[k] !== 'unload').map((k) => this.busy[k]))
+      try {
+        const out = await this._speak(text, opts)
+        const end = Date.now()
+        const yielded = [...new Set(this._yields.filter((y) => y.t0 <= end && (y.t1 == null || y.t1 >= tq)).map((y) => y.what))]
+        return Object.assign(out, { waitMs: start - tq, loadMs: out.t0 - start, beside: [...this._ttsBeside], yielded })
+      } finally { this._ttsBeside = null }
     })
+    const done = () => { this.speechPending--; this.speechLastEnd = Date.now() }
+    p.then(done, done)
+    return p
+  }
+
+  async _speak (text, opts) {
+    this.ttsWant = { voice: opts.voice || null }
+    const tts = await this._ensure('tts')
+    const t0 = Date.now()
+    const r = await tts.run({ input: text, type: 'text' })
+    const parts = []
+    let n = 0
+    let rate = 44100
+    await r.onUpdate((d) => {
+      if (!d) return
+      if (d.sampleRate) rate = d.sampleRate
+      if (d.outputArray) {
+        const a = Int16Array.from(d.outputArray)
+        parts.push(a)
+        n += a.length
+      }
+    }).await()
+    const pcm = new Int16Array(n)
+    let o = 0
+    for (const p of parts) { pcm.set(p, o); o += p.length }
+    return { pcm, rate, ms: Date.now() - t0, t0 }
   }
 
   /** Sentence vectors (multilingual-e5-small, mean pooled; L2-normalised here): texts -> { vectors: number[][], ms }.
-   * Batches of 64 per pass. Texts are used as given (e5 wants "query: " in front; the app adds it). */
-  embed (texts) {
-    return this.job('embed', 'embed', async () => {
-      const m = await this._ensure('embed')
-      const t0 = Date.now()
-      const vectors = []
-      for (let i = 0; i < texts.length; i += 64) {
-        const r = await m.run(texts.slice(i, i + 64))
-        let out = await r.await()
-        const isVec = (x) => ArrayBuffer.isView(x) || (Array.isArray(x) && typeof x[0] === 'number')
-        while (Array.isArray(out) && out.length && !isVec(out[0])) out = out[0]
-        for (const v of out) {
-          let n = 0
-          for (let k = 0; k < v.length; k++) n += v[k] * v[k]
-          n = Math.sqrt(n) || 1
-          const a = new Array(v.length)
-          for (let k = 0; k < v.length; k++) a[k] = Math.round((v[k] / n) * 1e5) / 1e5
-          vectors.push(a)
-        }
+   * Batches of 64 per pass. Texts are used as given (e5 wants "query: " in front; the app adds it).
+   * Bulk work (more than BULK_EMBED texts: the decision model's examples, sent 64 at a time) yields to speech
+   * (speechActive): each pass is its own job and starts only when no answer is spoken, so a spoken command's few
+   * vectors still go first. ms: the passes' own time; waitMs: the time it waited for speech. */
+  async embed (texts) {
+    const bulk = texts.length > BULK_EMBED
+    const budget = this._yieldBudget()
+    const vectors = []
+    let ms = 0
+    let waitMs = 0
+    for (let i = 0; i < texts.length; i += 64) {
+      for (;;) {
+        if (bulk) waitMs += await this._awaitSpeech('embed', budget)
+        const r = await this.job('embed', 'embed', async () => {
+          if (bulk && budget.left > 0 && this.speechActive()) return null // speech came while it was queued
+          const m = await this._ensure('embed')
+          if (bulk && budget.left > 0 && this.speechActive()) return null
+          const t0 = Date.now()
+          const out = await embedPass(m, texts.slice(i, i + 64))
+          ms += Date.now() - t0
+          return out
+        })
+        if (r) { for (const v of r) vectors.push(v); break }
       }
-      return { vectors, ms: Date.now() - t0 }
-    })
+    }
+    return { vectors, ms, waitMs }
   }
 
   /**
@@ -315,11 +450,22 @@ class Engines {
     return v >= 1 ? Math.min(6, Math.floor(v)) : this.threadsFor('llm')
   }
 
+  /**
+   * The voice LLM evaluates a prompt in pieces of llmPromptBatch tokens (llama.cpp batch-size = ubatch-size; 0 = the
+   * addon's default). A cancel takes effect only between pieces: measured 2026-11-13 on the PC (3 cores, a 1549-token
+   * prefill), the default (one piece) stopped 11.6 s after the cancel, 128 stopped after 114 ms, at the same speed
+   * (12.9 s vs 13.3 s for the whole prompt). So speech can stop a warm-up or a prefill at once.
+   */
+  promptBatch () {
+    const v = Number(this.cfg.llmPromptBatch)
+    return v >= 1 ? Math.max(32, Math.min(2048, Math.floor(v))) : 0
+  }
+
   _key (kind) {
     const c = Object.assign({}, this.cfg, { threads: this.threadsFor(kind) })
     if (kind === 'embed') return JSON.stringify([c.threads])
     if (kind === 'asr') return JSON.stringify([c.threads, this.asrWant.language || c.language, c.prompt, this.asrWant.actx])
-    if (kind === 'llm') return JSON.stringify([c.threads, this.batchThreads(), c.ctx])
+    if (kind === 'llm') return JSON.stringify([c.threads, this.batchThreads(), c.ctx, this.promptBatch()])
     if (kind === 'coder') return JSON.stringify([c.threads, c.coderCtx])
     return JSON.stringify([c.threads, this.ttsWant.voice || c.voice, c.ttsLanguage, c.ttsSteps])
   }
@@ -369,11 +515,10 @@ class Engines {
       m = new ASRGgml({ files: { model: file }, config: { engine: 'whisper', whisperConfig, contextParams: { use_gpu: false } } })
     } else if (kind === 'llm') {
       const Llm = require('@qvac/llm-llamacpp')
-      m = new Llm({
-        files: { model: [file] },
-        config: { device: 'cpu', ctx_size: String(c.ctx), threads: String(c.threads), 'threads-batch': String(this.batchThreads()), tools: 'true', reasoning_budget: '0', temp: '0', predict: '256' },
-        opts: { stats: true }
-      })
+      const config = { device: 'cpu', ctx_size: String(c.ctx), threads: String(c.threads), 'threads-batch': String(this.batchThreads()), tools: 'true', reasoning_budget: '0', temp: '0', predict: '256' }
+      const pb = this.promptBatch()
+      if (pb) { config['batch-size'] = String(pb); config['ubatch-size'] = String(pb) }
+      m = new Llm({ files: { model: [file] }, config, opts: { stats: true } })
     } else if (kind === 'coder') {
       // an agent harness's system prompt + tools are 6-20k tokens (3-4k once slimmed, compat.js): a 16k context (KV
       // ~190 MB at f16 for Qwen2.5-Coder 0.5B: 2 KV heads of 64); thinking off (reasoning_budget 0) keeps turns short
@@ -393,7 +538,7 @@ class Engines {
         files: { supertonicModel: file },
         voice: this.ttsWant.voice || c.voice,
         threads: c.threads,
-        steps: Math.max(1, Math.min(10, Number(c.ttsSteps) || 5)), // diffusion steps: time grows with them (model default 5)
+        steps: Math.max(1, Math.min(10, Number(c.ttsSteps) || 3)), // diffusion steps 1-10: time grows with them (model default 5, ours 3)
         config: { language: c.ttsLanguage, useGPU: false },
         opts: { stats: true }
       })
@@ -426,6 +571,24 @@ class Engines {
       }
     }
   }
+}
+
+/** One pass of sentence vectors (up to 64 texts), L2-normalised. */
+async function embedPass (m, texts) {
+  const r = await m.run(texts)
+  let out = await r.await()
+  const isVec = (x) => ArrayBuffer.isView(x) || (Array.isArray(x) && typeof x[0] === 'number')
+  while (Array.isArray(out) && out.length && !isVec(out[0])) out = out[0]
+  const vectors = []
+  for (const v of out) {
+    let n = 0
+    for (let k = 0; k < v.length; k++) n += v[k] * v[k]
+    n = Math.sqrt(n) || 1
+    const a = new Array(v.length)
+    for (let k = 0; k < v.length; k++) a[k] = Math.round((v[k] / n) * 1e5) / 1e5
+    vectors.push(a)
+  }
+  return vectors
 }
 
 /** Forwards streamed text without a leading <think>...</think> block (Qwen3 may write an empty one even with
