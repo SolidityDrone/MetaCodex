@@ -78,10 +78,9 @@ namespace MetaCodex.Shell
         public void RemoveLocalCoder()
         {
             Qvac?.Client.Remove(new[] { "coder" }, (r, e) => { if (e != null) Log("[coder] remove: " + e); PollVoiceStatus(); });
-            foreach (var name in new[] { "MCX_LOCAL_CODER_URL", "MCX_LOCAL_CODER_KEY", "OPENCODE_CONFIG" })
+            foreach (var name in new[] { "MCX_LOCAL_CODER_URL", "MCX_LOCAL_CODER_KEY" })
                 Mqh?.DeleteMachineEnvironment(name, _ => { });
-            try { File.Delete(SharedPath("local-coder.opencode.json")); } catch (Exception) { }
-            _coderEnvSynced = false;
+            _coderEnvSynced = false; // the OpenCode config stays (no snapshots), written again without the provider
             Toast("Local coder removed", "ok");
         }
 
@@ -91,18 +90,23 @@ namespace MetaCodex.Shell
         {
             if (!force && (_coderEnvSynced || Time.unscaledTime < _coderNextCheck)) return;
             _coderNextCheck = Time.unscaledTime + 5f;
-            if (!LocalCoderInstalled || Mqh == null || !Mqh.Online) return;
-            string key;
-            try { key = File.ReadAllText(SharedPath("local-coder.key")).Trim(); }
-            catch (Exception) { return; } // written when the AI service starts
-            if (key.Length == 0) return;
+            if (Mqh == null || !Mqh.Online) return;
+            // every OpenCode thread reads this config: no snapshots (2026-11-13 on the headset: before each step OpenCode
+            // snapshotted the thread's folder with its own git; a thread in /root ran git over the whole home for
+            // minutes at 70 % CPU and looked idle). The local coder's provider joins it once installed.
+            string key = null;
+            if (LocalCoderInstalled)
+            {
+                try { key = File.ReadAllText(SharedPath("local-coder.key")).Trim(); }
+                catch (Exception) { return; } // written when the AI service starts
+                if (key.Length == 0) return;
+            }
             string config = SharedPath("local-coder.opencode.json");
             try
             {
-                var cfg = new JObject
-                {
-                    ["$schema"] = "https://opencode.ai/config.json",
-                    ["provider"] = new JObject
+                var cfg = new JObject { ["$schema"] = "https://opencode.ai/config.json", ["snapshot"] = false };
+                if (key != null)
+                    cfg["provider"] = new JObject
                     {
                         ["metacodex"] = new JObject
                         {
@@ -111,17 +115,19 @@ namespace MetaCodex.Shell
                             ["options"] = new JObject { ["baseURL"] = LocalCoderUrl + "/v1", ["apiKey"] = "{env:MCX_LOCAL_CODER_KEY}" },
                             ["models"] = new JObject { ["local-coder"] = new JObject { ["name"] = "Local coder (this headset, slow)", ["limit"] = new JObject { ["context"] = 16384, ["output"] = 1024 } } },
                         },
-                    },
-                };
+                    };
                 File.WriteAllText(config, cfg.ToString());
             }
             catch (Exception ex) { Log("[coder] opencode config: " + ex.Message); return; }
-            int pending = 3;
+            int pending = key != null ? 3 : 1;
             bool ok = true;
-            void Done(JToken r) { if (r == null) ok = false; if (--pending == 0) { _coderEnvSynced = ok; if (ok) Log("[coder] MQH environment set: Claude Code, Codex and OpenCode list the local coder"); } }
-            Mqh.SetMachineEnvironment("MCX_LOCAL_CODER_URL", LocalCoderUrl, "MetaCodex local coder (AI service on this headset)", Done);
-            Mqh.SetMachineEnvironment("MCX_LOCAL_CODER_KEY", key, "MetaCodex local coder key (opens only the coder's routes)", Done);
-            Mqh.SetMachineEnvironment("OPENCODE_CONFIG", "/mnt/quest/local-coder.opencode.json", "OpenCode provider 'MetaCodex (this headset)'", Done);
+            void Done(JToken r) { if (r == null) ok = false; if (--pending == 0) { _coderEnvSynced = ok; if (ok) Log(key != null ? "[coder] MQH environment set: Claude Code, Codex and OpenCode list the local coder" : "[coder] OpenCode config set (no snapshots)"); } }
+            if (key != null)
+            {
+                Mqh.SetMachineEnvironment("MCX_LOCAL_CODER_URL", LocalCoderUrl, "MetaCodex local coder (AI service on this headset)", Done);
+                Mqh.SetMachineEnvironment("MCX_LOCAL_CODER_KEY", key, "MetaCodex local coder key (opens only the coder's routes)", Done);
+            }
+            Mqh.SetMachineEnvironment("OPENCODE_CONFIG", "/mnt/quest/local-coder.opencode.json", "MetaCodex OpenCode config: no snapshots, the local coder's provider", Done);
         }
     }
 }

@@ -123,12 +123,14 @@ namespace MetaCodex.AI
             return NotableNames.Contains(p.Comm ?? "");
         }
 
+        private static readonly char[] PsSeparators = { ' ', '\t', '\r' };
+
         public void Update(string psOutput, DateTime now)
         {
             var seen = new HashSet<int>();
             foreach (var raw in (psOutput ?? "").Split('\n'))
             {
-                var f = Regex.Split(raw.Trim(), @"\s+", RegexOptions.None);
+                var f = raw.Split(PsSeparators, StringSplitOptions.RemoveEmptyEntries); // not Regex.Split: 88-148 ms a sample on the headset (IL2CPP), every 20 s
                 if (f.Length < 6 || !int.TryParse(f[0], out int pid)) continue;
                 int.TryParse(f[1], out int ppid);
                 long.TryParse(f[2], out long el);

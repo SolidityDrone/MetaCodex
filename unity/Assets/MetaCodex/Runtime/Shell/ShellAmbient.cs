@@ -591,7 +591,9 @@ namespace MetaCodex.Shell
             if (!float.IsNaN(_feetFloor) && Mathf.Abs(y - _feetFloor) < 0.05f) { _feetFloor = Mathf.Lerp(_feetFloor, y, 0.3f); _feetAgree++; }
             else { _feetFloor = y; _feetAgree = 1; }
             _feetStable = _feetAgree >= 3;
-            if (_feetStable) SetFocusStatus(ref _floorStatus, $"floor: measured under your feet ({(_feetFloor - track) * 100f:+0;-0;0} cm from the Guardian floor)");
+            // in 5 cm steps: each 1 cm wobble was a log line and a Focus panel refresh, several a second (2026-11-13)
+            float cm = Mathf.Round((_feetFloor - track) * 20f) * 5f;
+            if (_feetStable) SetFocusStatus(ref _floorStatus, $"floor: measured under your feet ({cm:+0;-0;0} cm from the Guardian floor)");
         }
 
         public float FeetFloorForTest => _feetStable ? _feetFloor : float.NaN;

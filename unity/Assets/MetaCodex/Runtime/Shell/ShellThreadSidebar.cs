@@ -340,8 +340,8 @@ namespace MetaCodex.Shell
         {
             long seq = found.Values.Select(f => f.Seq).DefaultIfEmpty(0).Max();
             bool fresh = seq > _sbTouchSeq || found.Count != _touched.Count;
+            if (!fresh) return; // the same files: _touched stays the same dictionary (the CHANGES merge off the main thread checks it)
             _touched = found;
-            if (!fresh) return;
             _sbTouchSeq = seq;
             if (_sbRoot == null || _sbSnap == null || !_sbSnap.Repo) { SbMergeFiles(); SbRenderChanges(); }
             // git again once the edit settled, at most every 2 s (an agent writing files kept it running back to back:

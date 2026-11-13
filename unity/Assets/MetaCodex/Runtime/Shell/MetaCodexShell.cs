@@ -288,6 +288,7 @@ namespace MetaCodex.Shell
             MqhHost?.Tick();
             HitchMark(2);
             TickVoice();
+            SyncLocalCoder(); // the OpenCode config (no snapshots; the local coder when installed): at most every 5 s, once set
             HitchMark(3);
             TickSessionContext();
             HitchMark(4);
