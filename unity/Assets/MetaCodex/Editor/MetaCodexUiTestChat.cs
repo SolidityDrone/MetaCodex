@@ -81,7 +81,7 @@ namespace MetaCodex.EditorTools
             // the sticky prompt: at the bottom the live exchange fills the view, its prompt scrolled away above
             Check(chat.StickyShown && chat.StickyText.StartsWith("Now write the docs for the chat view"), "the prompt of what is on screen stays pinned at the top: “" + Trim(chat.StickyText, 50) + "”");
             chat.ClickStickyForTest();
-            Check(!chat.StickyShown && chat.VisibleText.Contains("Now write the docs") && chat.Scroll > 0, $"a tap on it scrolls back to the prompt (scrolled {chat.Scroll} lines)");
+            Check(!chat.StickyShown && chat.VisibleText.Contains("Now write the docs") && chat.Scroll > 0, $"a tap on it scrolls back to the prompt (scrolled {chat.Scroll} lines; sticky {(chat.StickyShown ? "“" + Trim(chat.StickyText, 30) + "”" : "gone")}; top line “{Trim(chat.VisibleText.Split('\n').FirstOrDefault() ?? "", 40)}”)");
             // open the finished work and a thought
             chat.ScrollToBottom();
             Check(chat.Toggle("u1:work") && chat.PlainText.Contains("$ npm test") && chat.PlainText.Contains("Thought 3 s"), "a tap opens the finished work: its thought and commands");

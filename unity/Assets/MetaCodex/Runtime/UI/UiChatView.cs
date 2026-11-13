@@ -568,9 +568,21 @@ namespace MetaCodex.UI
                 if (pl >= 0 && plEnd < start)
                 {
                     float bandH = _pitchBody * 2f + 0.010f;
-                    while (start < end && used > view - bandH) { used -= _lines[start].H; start++; }
-                    _band = new Rect(Rect.x, Rect.y, Rect.width - 0.006f, bandH - 0.004f);
-                    _bandBlock = pb;
+                    int s2 = start;
+                    float u2 = used;
+                    while (s2 < end && u2 > view - bandH) { u2 -= _lines[s2].H; s2++; }
+                    // never push a prompt's first line out of view: near the end (a tap on the pinned prompt scrolls
+                    // there, and the last exchange is shorter than the view) the next prompt is on screen already
+                    bool hidesPrompt = false;
+                    for (int k = start; k < s2 && !hidesPrompt; k++)
+                        hidesPrompt = _blocks[_lines[k].Block].Kind == ChatKind.Prompt && FirstLine(_lines[k].Block) == k;
+                    if (!hidesPrompt)
+                    {
+                        start = s2;
+                        used = u2;
+                        _band = new Rect(Rect.x, Rect.y, Rect.width - 0.006f, bandH - 0.004f);
+                        _bandBlock = pb;
+                    }
                 }
             }
             bool overflow = start > 0 || _scroll > 0;
