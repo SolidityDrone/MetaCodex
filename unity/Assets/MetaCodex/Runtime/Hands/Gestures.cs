@@ -154,10 +154,6 @@ namespace MetaCodex.Hands
         /// After the built-in gestures and poses of a frame: the script host runs Lua detectors here.
         public event Action<float, float> CustomTick;
         public IHandSource Source;
-        /// A hand that is busy with something that takes all of it (typing on the table keyboard): it is tracked and
-        /// drawn, but it points at nothing, pinches nothing and makes no gesture; what it was doing ends at once.
-        public Func<Handedness, bool> Muted;
-        public bool IsMuted(Handedness h) => Muted != null && Muted(h);
         /// The user's head (for "palm facing me", left/right and head-relative motion); null = origin looking +Z.
         public Func<Pose> HeadPose;
         public float LastClapTime { get; private set; } = -10f;
@@ -287,7 +283,7 @@ namespace MetaCodex.Hands
         private void UpdateHand(HandState s, float time, float dt)
         {
             string hn = s.Side;
-            bool tracked = Source != null && Source.TryGet(s.Hand, out s.Frame) && s.Frame.Tracked && !s.Frame.SystemGesture && !IsMuted(s.Hand);
+            bool tracked = Source != null && Source.TryGet(s.Hand, out s.Frame) && s.Frame.Tracked && !s.Frame.SystemGesture;
             if (!tracked)
             {
                 if (s.Tracked) EndAll(s, hn, time);

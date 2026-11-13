@@ -265,7 +265,7 @@ namespace MetaCodex.Shell
         public float focusBlur = 0f;
         /// Real things (hands, people, objects) in front of a window are shown, from the room's live depth.
         public bool occludeUi = true;
-        /// The tip for the system's Surface Keyboard and Touchpad, the first time the keyboard is asked for in a session.
+        /// The tip for the system's Surface keyboard (Settings > Experimental), the first time the keyboard opens in a session.
         public bool surfaceKeyboardTip = true;
         /// The depth is sharpened with the passthrough camera's picture (cleaner cut-outs; the camera runs).
         public bool depthCamera = true;

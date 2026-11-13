@@ -63,7 +63,7 @@ Android 10 and later forbids `exec()` of files an app writes. Only files in `nat
 
 | Path | What | Language |
 |---|---|---|
-| `unity/` | The headset app. Runtime code in `Assets/MetaCodex/Runtime` (36,432 lines in 78 files: `AI/ App/ Hands/ Linux/ Scripting/ Security/ Shell/ Terminal/ Typing/ UI/`). Editor tools and self-tests in `Assets/MetaCodex/Editor`. Java plugins in `Assets/Plugins/Android`. | C#, Java |
+| `unity/` | The headset app. Runtime code in `Assets/MetaCodex/Runtime` (36,432 lines in 78 files: `AI/ App/ Hands/ Linux/ Scripting/ Security/ Shell/ Terminal/ UI/`). Editor tools and self-tests in `Assets/MetaCodex/Editor`. Java plugins in `Assets/Plugins/Android`. | C#, Java |
 | `mqh/` | `apps/{server,host-daemon,cli}`, `packages/*`, `plugins/*` (including the `metacodex-guide` skills). | TypeScript, Node.js 24 |
 | `local-ai/` | The local AI service: `server/{main,engines,models,audio}.js`, `package.json`. | JavaScript (Bare) |
 | `userland/` | The proot and Debian fetchers, the overlay (`overlay/usr/local/bin/mcx-*`, `overlay/opt/metacodex/*`), `agent-skills/` (bundled third-party skills), `mqh/mqh-run`, `g0-shell.sh`. | shell, Python |
@@ -128,7 +128,6 @@ Inside the headset, in a terminal:
 | Suite | Command | Count |
 |---|---|---|
 | Terminal core (emulator vs tmux on 7 programs) | `tests/terminal/run-core-tests.sh` | 62 core checks |
-| Typing engine | `tests/typing/run-typing-tests.sh` (about 15 s) | 60 checks |
 | Side bar | `tests/sidebar/run-sidebar-tests.sh` | not counted here |
 | Thread view, pure checks | see `thread-view.md` | 30 |
 | MQH type check | in `mqh/` | 61/61 |
@@ -137,7 +136,7 @@ Inside the headset, in a terminal:
 | Native-app skills | `python3 tools/check-native-skills.py` | every command, flag, path and code block |
 
 Run one UI section: `MCX_UITEST_ONLY=voice tools/unity-batch.sh BatchUiTest`.
-Sections include `decider`, `voiceexport,voicedecide`, `context`, `chat`, `sidebar`, `workspaces`, `control` and `keyboard`.
+Sections include `decider`, `voiceexport,voicedecide`, `context`, `chat`, `sidebar`, `workspaces`, `control` and `syskeyboard`.
 
 ## Voice bench
 
@@ -216,7 +215,6 @@ App: TerminalView (TMP rows + cell mesh) <- VtTerminal (xterm emulator) <- pty b
 | [session-context.md](session-context.md) | The session context (CSCP). |
 | [native-build-and-install.md](native-build-and-install.md) | The native app pipeline, background behaviour and guards. |
 | [thread-view.md](thread-view.md), [thread-sidebar.md](thread-sidebar.md), [workspaces.md](workspaces.md), [control-center.md](control-center.md) | Thread view, side bar, workspaces, control center. |
-| [keyboard.md](keyboard.md) | The table keyboard (under rework). |
 | [VOICE_DECISION_RESEARCH.md](VOICE_DECISION_RESEARCH.md) | Research behind the decision model. |
 | [core-v0-spec.md](core-v0-spec.md) | Core v0, the superseded prototype. |
 | [LICENSES.md](LICENSES.md) | Licence inventory. |

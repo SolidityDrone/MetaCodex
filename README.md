@@ -47,7 +47,7 @@ MetaCodex gives you the space and the controls that metacoding needs:
 | See many agents at once | Each thread has its own panel. The panels stand around you in the room, so the status of all your work is in view. |
 | Know what an agent did | Ask "give me a recap of the login thread". A spoken answer starts in seconds. The thread panel shows a live map of the changed files and their diffs. |
 | Run agents in parallel safely | Threads that work in the same folder wait for each other. A new thread can get its own git worktree. A dry run shows merge conflicts before you merge. |
-| Control without a keyboard | Hands and voice do the common actions: open, close, switch, approve, find a thread. A keyboard on the table is there for real typing. |
+| Control without a keyboard | Hands and voice do the common actions: open, close, switch, approve, find a thread. The headset's system keyboard is there for real typing. |
 | Close the loop on one device | An agent builds a native app on the headset. You launch it, test it and go back to the thread. One tap sends a picture and the logs back to the agent. |
 | Work offline and in private | Local models run the voice interface on the headset. An optional local coding model lets agents work with no network. Keys stay sealed in a vault, and the agents' sign-ins stay inside their own tools. |
 
@@ -422,7 +422,6 @@ The repository does not hold the 30 MB Debian layer.
 | [docs/secrets.md](docs/secrets.md) | The vault and the threat model. |
 | [docs/native-build-and-install.md](docs/native-build-and-install.md) | Native app pipeline, background behaviour, guards. |
 | [docs/session-context.md](docs/session-context.md) | The session context. |
-| [docs/keyboard.md](docs/keyboard.md) | The table keyboard (under rework). |
 
 ## Build and run
 
@@ -455,7 +454,6 @@ The version is in `ProjectSettings/ProjectVersion.txt` inside the app project fo
 |---|---|---|
 | `tests/terminal/run-core-tests.sh` | about 10 s | The terminal emulator against a terminal multiplexer, and the archive extractor. No editor. |
 | `tools/cscheck.sh` | about 10 s | A compile check with the editor and device defines. No editor. |
-| `tests/typing/run-typing-tests.sh` | about 15 s | The typing engine of the table keyboard (60 checks). |
 | `tests/sidebar/run-sidebar-tests.sh` | not timed | The side bar logic. |
 | `python3 tools/check-native-skills.py` | not timed | Every command, flag, path and code block in the native-app skills. |
 
@@ -470,7 +468,6 @@ This README describes the app at version 0.7.16, as of 2026-11-12.
 
 **Under rework or not built**
 
-- **Table keyboard.** It is under rework. The owner reports it unusable on the device. Nobody has measured it with a person. Its error rates come from a simulated typist, so this README does not quote them.
 - **Plugin panels.** The `spatial.json` format, the server route and the scaffold exist. The app has no renderer, and no shipped plugin has a panel. Gesture plugins and Lua scripts are the working path.
 - **One agent CLI runs in a terminal.** MQH threads work with two of the three supported agent CLIs. The third runs in a terminal for now.
 - **Runner.** The no-build path works. The project has parked it. A native host app loads a module and reloads it in 2.2 s. Classic native apps are the default.
@@ -483,7 +480,7 @@ This README describes the app at version 0.7.16, as of 2026-11-12.
 - Built apps with passthrough ran on the headset (owner test, 2026-11-11). The Night Vision example builds and passes `verify`. Its depth view is not confirmed in a recorded test.
 - Camera passthrough, depth, hand and controller features of the native layer build on the headset. Their runtime proof is pending.
 - The decision model has no headset benchmark.
-- Many items in the device checklist (control center, orb arcs, side bar, table keyboard) await a test on the headset.
+- Many items in the device checklist (control center, orb arcs, side bar, system keyboard) await a test on the headset.
 
 **Known problems and limits**
 

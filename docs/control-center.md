@@ -47,10 +47,9 @@ never grows over a neighbour and the view does not jump.
 
 - One table builds both (`MainMenuItems`, `Shell/ShellWrist.cs`): glyph, line icon, label, action, lit state.
 - Inner ring (most used): TALK, TERM, FILES, THREADS, WEB, CONTROL
-- Outer ring: TERMS, CLIP, FOCUS (on / off), SELECT, KEYS, TABLE, CENTER (TABLE: the keyboard laid on a table, owner
-  2026-11-10)
-- The dock (when the wrist menu is off): the same in the same order, two rows of six, without TABLE (a wrist and
-  voice command). Its tiles show what is on as the wrist's do (selected while TALK listens, FILES / THREADS / WEB /
+- Outer ring: TERMS, CLIP, FOCUS (on / off), SELECT, KEYS, CENTER (TABLE is gone with the table keyboard,
+  2026-11-13; KEYS opens the system keyboard)
+- The dock (when the wrist menu is off): the same in the same order, two rows of six. Its tiles show what is on as the wrist's do (selected while TALK listens, FILES / THREADS / WEB /
   TERMS / CLIP are open, CONTROL shows, FOCUS and SELECT are on, the keyboard is up): a state-only change, 4 times a
   second.
 - Gone from the menu (inside CONTROL): AGENTS, MQH, SYSTEM, VOICE, VAULT, GIT, SETUP. THREADS gets a ◆ AGENTS button

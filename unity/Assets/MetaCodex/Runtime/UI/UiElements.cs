@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using MetaCodex.Typing;
 using TMPro;
 using UnityEngine;
 
@@ -158,9 +157,6 @@ namespace MetaCodex.UI
         {
             if (_flash > 0f) { _flash = Mathf.Max(0f, _flash - Time.unscaledDeltaTime * 3f); Refresh(); }
         }
-
-        /// The click's flash without the click (the table keyboard presses its keys itself).
-        public void Flash() { _flash = 1f; Refresh(); }
 
         public override void OnClick(UiPointerEvent e)
         {
@@ -475,7 +471,7 @@ namespace MetaCodex.UI
         }
     }
 
-    /// A one-line text field. A tap opens MetaCodex's own keyboard (UiKeyboard -> UiSurfaceKeyboard);
+    /// A one-line text field. A tap opens the headset's system keyboard (UiKeyboard -> SystemKeyboard);
     /// a Bluetooth keyboard types into it while it has focus.
     public sealed class UiTextField : UiElement
     {
@@ -483,6 +479,8 @@ namespace MetaCodex.UI
         public string Placeholder;
         public string Caption;
         public bool Secure;
+        /// The system keyboard opens with Enter for new lines (a text that can hold several lines).
+        public bool Multiline;
         public Action<string> OnSubmit;
         public Action<string> OnChanged;
         public float CaptionWidth = 0.17f;
@@ -535,7 +533,7 @@ namespace MetaCodex.UI
                 _editing = false;
                 Refresh();
                 OnSubmit?.Invoke(t);
-            }, (Panel != null && !string.IsNullOrEmpty(Panel.Title) ? Panel.Title + " · " : "") + what);
+            }, (Panel != null && !string.IsNullOrEmpty(Panel.Title) ? Panel.Title + " · " : "") + what, Multiline);
         }
 
         protected override void OnVisibility(bool v)
@@ -826,52 +824,128 @@ namespace MetaCodex.UI
         public void Skip(float h) => _y += h;
     }
 
-    /// The keyboard for UI text fields and the terminal: MetaCodex's own (UiSurfaceKeyboard: on a table under the
-    /// hands, or floating in front), never Horizon OS's system keyboard (owner 2026-11-10: "I don't ever wanna see
-    /// the default one"). In the Editor a test hook (EditorProvider) supplies a field's text at once.
+    /// Horizon OS's system keyboard (TouchScreenKeyboard; the manifest asks for it: oculus.software.overlay_keyboard,
+    /// "Require System Keyboard"). One helper for every user (UI text fields, the terminal): one keyboard is open at a
+    /// time and the user that opened it is its owner. Horizon OS decides how it shows it (with Settings > Experimental >
+    /// Surface keyboard on, it can lie on a table); an app cannot place it or turn that mode on.
+    public static class SystemKeyboard
+    {
+        private static TouchScreenKeyboard _kb;
+        private static object _owner;
+        private static bool _fakeOpen;
+        private static float _closedAt = -10f;
+
+        /// Each time it opens (the shell shows its tip, once a session).
+        public static event Action Opened;
+        /// Self-tests: stands in for the headset's keyboard in the Editor; the test sets FakeText and FakeStatus.
+        public static bool FakeForTest;
+        public static string FakeText = "";
+        public static TouchScreenKeyboard.Status FakeStatus = TouchScreenKeyboard.Status.Visible;
+
+        public static bool Supported => FakeForTest || (TouchScreenKeyboard.isSupported && Application.platform == RuntimePlatform.Android);
+        public static bool IsOpen => _kb != null || _fakeOpen;
+        public static bool IsOpenFor(object owner) => IsOpen && ReferenceEquals(_owner, owner);
+        /// The headset keyboard delivers its text twice: in its text box (read by Poll) and again as text input / key
+        /// events on Keyboard.current (seen on Quest 3S: "ls" arrived as "lsls"). While it is open, and for a moment
+        /// after it closes, only the text box counts.
+        public static bool Busy => IsOpen || Time.unscaledTime - _closedAt < 1f;
+
+        /// Opens it for `owner` with `text` in its box (an open one closes first). False: there is no system keyboard here.
+        public static bool Open(object owner, string text, bool secure, bool multiline, string placeholder)
+        {
+            Close();
+            if (!Supported) return false;
+            _owner = owner;
+            if (FakeForTest) { _fakeOpen = true; FakeText = text ?? ""; FakeStatus = TouchScreenKeyboard.Status.Visible; }
+            else _kb = TouchScreenKeyboard.Open(text ?? "", TouchScreenKeyboardType.Default, false, multiline, secure, false, placeholder ?? "");
+            Opened?.Invoke();
+            return true;
+        }
+
+        public static void Close()
+        {
+            if (!IsOpen) return;
+            if (_kb != null) _kb.active = false;
+            Closed();
+        }
+
+        private static void Closed()
+        {
+            _kb = null;
+            _fakeOpen = false;
+            _owner = null;
+            _closedAt = Time.unscaledTime;
+        }
+
+        /// Once a frame, by its owner: the text in its box now (null when it is not this owner's) and its status.
+        /// Done, Canceled or LostFocus: it is closed now. Taken by another owner: LostFocus.
+        public static TouchScreenKeyboard.Status Poll(object owner, out string text)
+        {
+            text = null;
+            if (!IsOpenFor(owner)) return TouchScreenKeyboard.Status.LostFocus;
+            text = (_fakeOpen ? FakeText : _kb.text) ?? "";
+            var status = _fakeOpen ? FakeStatus : _kb.status;
+            if (status != TouchScreenKeyboard.Status.Visible) Closed();
+            return status;
+        }
+    }
+
+    /// The keyboard for UI text fields: Horizon OS's system keyboard (SystemKeyboard), opened with the field's text
+    /// (masked for secret fields). Done keeps what was typed, Cancel puts the old text back. In the Editor a test hook
+    /// (EditorProvider) supplies a field's text at once.
     public static class UiKeyboard
     {
         public static bool Active => _onDone != null;
-        /// Kept for the terminal input's old checks: there is no system keyboard any more, nothing types twice.
-        public static bool SystemKeyboardBusy => false;
+        /// The system keyboard is open (or just closed): its text box is the only source then; the same text also
+        /// arrives as key/text events, which must not be typed a second time.
+        public static bool SystemKeyboardBusy => SystemKeyboard.Busy;
         /// Editor / self-test: returns what the "user" types for a given initial text (null: keep it).
         public static Func<string, string> EditorProvider;
-        /// The terminal asked for the keyboard (dock KEYS, the frame's ⌨, the key bar): the shell opens it for the terminal.
+        /// The terminal asked for the keyboard (dock KEYS, the frame's ⌨, the key bar): the terminal input owns that one.
         public static event Action TerminalKeyboardRequested;
-        /// Kept so older callers compile; nothing is shown before the keyboard now.
-        public static Func<Action, bool> BeforeSystemKeyboard;
-        /// The keyboard itself (the shell sets it at start).
-        public static UiSurfaceKeyboard Keyboard;
+        private static readonly object Owner = new object();
         private static Action<string> _onChanged, _onDone;
-        private static string _last, _initial, _caption;
-        private static bool _secure;
+        private static string _last, _initial;
+        private static bool _sys;
 
-        /// Edits a field: the keyboard opens for it; Enter keeps the text, Escape puts the old one back.
         public static void Edit(string initial, bool secure, Action<string> onChanged, Action<string> onDone) =>
             Edit(initial, secure, onChanged, onDone, null);
 
-        public static void Edit(string initial, bool secure, Action<string> onChanged, Action<string> onDone, string caption)
+        /// Edits a field: the system keyboard opens with its text (`caption` is the hint in its empty box).
+        public static void Edit(string initial, bool secure, Action<string> onChanged, Action<string> onDone, string caption, bool multiline = false)
         {
             Finish(_last); // one field at a time
             _onChanged = onChanged;
             _onDone = onDone;
             _last = _initial = initial ?? "";
-            _secure = secure;
-            _caption = string.IsNullOrEmpty(caption) ? "TEXT" : caption;
-            if (EditorProvider != null || Keyboard == null)
-            {
-                var typed = EditorProvider?.Invoke(_last);
-                if (typed != null) { _last = typed; _onChanged?.Invoke(typed); }
-                Finish(_last);
-                return;
-            }
-            Keyboard.Show(FieldSink.Instance);
+            if (EditorProvider == null && SystemKeyboard.Open(Owner, _last, secure, multiline, caption ?? "")) { _sys = true; return; }
+            var typed = EditorProvider?.Invoke(_last);
+            if (typed != null) { _last = typed; _onChanged?.Invoke(typed); }
+            Finish(_last);
         }
 
         public static void OpenForTerminal() => TerminalKeyboardRequested?.Invoke();
 
-        /// Called every frame (by the input router): nothing to poll now (kept for the call site).
-        public static void Pump() { }
+        /// Called every frame (by the input router): the system keyboard's text into the field, and its end.
+        public static void Pump()
+        {
+            if (!_sys || !Active) return;
+            var status = SystemKeyboard.Poll(Owner, out var text);
+            if (text != null && text != _last) { _last = text; _onChanged?.Invoke(_last); }
+            switch (status)
+            {
+                case TouchScreenKeyboard.Status.Visible: return;
+                case TouchScreenKeyboard.Status.Canceled: // Cancel: the old text back
+                    _sys = false;
+                    if (_last != _initial) { _last = _initial; _onChanged?.Invoke(_last); }
+                    Finish(_last);
+                    return;
+                default: // Done, or it closed otherwise: what was typed
+                    _sys = false;
+                    Finish(_last);
+                    return;
+            }
+        }
 
         /// A physical keyboard typed while a field is focused.
         public static void TypePhysical(string text)
@@ -880,54 +954,19 @@ namespace MetaCodex.UI
             foreach (char c in text)
             {
                 if (c == '\b') { if (_last.Length > 0) _last = _last.Substring(0, _last.Length - 1); }
-                else if (c == '\r' || c == '\n') { Finish(_last); Keyboard?.Hide(); return; }
+                else if (c == '\r' || c == '\n') { Finish(_last); return; }
                 else if (!char.IsControl(c)) _last += c;
             }
             _onChanged?.Invoke(_last);
-            Keyboard?.RefreshStrip();
         }
 
         private static void Finish(string text)
         {
+            if (_sys) { _sys = false; if (SystemKeyboard.IsOpenFor(Owner)) SystemKeyboard.Close(); }
             var done = _onDone;
             _onDone = null;
             _onChanged = null;
             done?.Invoke(text ?? "");
-        }
-
-        /// The keys of the keyboard, into the field being edited.
-        private sealed class FieldSink : IKeySink
-        {
-            public static readonly FieldSink Instance = new FieldSink();
-            public string Title => _caption ?? "TEXT";
-            public string Preview => _last == null ? "" : _secure ? new string('•', Mathf.Min(_last.Length, 32)) : _last;
-            public bool KeepsKeyboard => false;
-            /// A masked field holds a password, a token, an API key: its keys are chosen by place alone.
-            public KeyContext Context => _secure ? KeyContext.Secret : KeyContext.Text;
-
-            public void Type(string text, bool ctrl, bool alt)
-            {
-                if (!Active || string.IsNullOrEmpty(text)) return;
-                _last += text;
-                _onChanged?.Invoke(_last);
-            }
-
-            public void Key(KbKind key, bool ctrl, bool alt, bool shift, int fn)
-            {
-                if (!Active) return;
-                switch (key)
-                {
-                    case KbKind.Backspace:
-                        if (_last.Length > 0) { _last = _last.Substring(0, _last.Length - 1); _onChanged?.Invoke(_last); }
-                        break;
-                    case KbKind.Enter: Finish(_last); break;
-                    case KbKind.Escape: _last = _initial; _onChanged?.Invoke(_last); Finish(_last); break;
-                    case KbKind.Paste:
-                        string clip = GUIUtility.systemCopyBuffer ?? "";
-                        if (clip.Length > 0) { _last += clip.Replace("\r", "").Replace("\n", " "); _onChanged?.Invoke(_last); }
-                        break;
-                }
-            }
         }
 
         /// Self-tests: the field being edited now ("" when none).

@@ -84,7 +84,7 @@ namespace MetaCodex.Shell
         private void BuildDock()
         {
             // the same table as the wrist menu (MainMenuItems, owner 2026-11-11: 19 was too many): work windows and quick
-            // actions, without the wrist-only TABLE; setup (agents, MQH, vault, voice, system, settings) is in CONTROL
+            // actions, without wrist-only entries; setup (agents, MQH, vault, voice, system, settings) is in CONTROL
             var items = MainMenuItems().Where(m => !m.WristOnly).ToList();
             const int perRow = 6;
             int rows = (items.Count + perRow - 1) / perRow;
