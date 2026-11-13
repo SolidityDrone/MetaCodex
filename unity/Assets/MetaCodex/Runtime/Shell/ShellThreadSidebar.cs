@@ -378,14 +378,26 @@ namespace MetaCodex.Shell
                     _sbPending--;
                     _sbChBusy = false;
                     if (gen != _sbGen) return; // another thread or folder by now
+                    // each step timed (0.7.19 on the headset: this callback took 4.8-6.8 s every ~13 s)
+                    var sw = System.Diagnostics.Stopwatch.StartNew();
                     _sbSnap = snap;
                     SbMergeFiles();
-                    SbRenderChanges();
-                    SbShowGit();
+                    double tMerge = sw.Elapsed.TotalMilliseconds;
+                    // the lists only while the sidebar shows (it rebuilt them every 4 s, hidden too); opening it renders them
+                    bool shown = _sb != null && _sb.IsOpen;
+                    if (shown) SbRenderChanges();
+                    double tRender = sw.Elapsed.TotalMilliseconds;
+                    if (shown) SbShowGit();
+                    double tGit = sw.Elapsed.TotalMilliseconds;
                     UpdateSidebarVoice();
-                    if (_sbDiffPath != null) SbRefreshOpenDiff();
+                    double tVoice = sw.Elapsed.TotalMilliseconds;
+                    if (shown && _sbDiffPath != null) SbRefreshOpenDiff();
+                    double tDiff = sw.Elapsed.TotalMilliseconds;
                     if (_sbTabs != null && _sbTabs.Selected == TabGit && _sb.IsOpen) SbRefreshGit();
                     if (_sbChAgain) SbRefreshChanges(true);
+                    double tAll = sw.Elapsed.TotalMilliseconds;
+                    if (tAll > 40)
+                        Log($"[slow sidebar] {tAll:F0} ms ({snap?.Status?.Count ?? 0} status, {_sbFiles.Count} files, {_touched.Count} by the thread): merge {tMerge:F0}, render {tRender - tMerge:F0}, git {tGit - tRender:F0}, voice {tVoice - tGit:F0}, diff {tDiff - tVoice:F0}, rest {tAll - tDiff:F0}");
                 });
             });
         }
