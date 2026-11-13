@@ -25,7 +25,6 @@ namespace MetaCodex.UI
             _src.playOnAwake = false;
             _src.spatialBlend = 0f;
             _src.priority = 200;
-            Make("key", 0.03f, (t, d) => Tone(t, 2700f, 2100f, d) * Env(t, d, 0.001f, 0.022f) * 0.32f);
             Make("click", 0.045f, (t, d) => Tone(t, 1850f, 2400f, d) * Env(t, d, 0.002f, 0.035f) * 0.55f);
             Make("hover", 0.018f, (t, d) => Tone(t, 3200f, 3200f, d) * Env(t, d, 0.001f, 0.015f) * 0.12f);
             Make("open", 0.66f, (t, d) =>

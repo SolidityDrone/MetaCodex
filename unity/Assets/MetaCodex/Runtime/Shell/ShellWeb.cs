@@ -1,7 +1,6 @@
 using System;
 using System.Linq;
 using System.Text;
-using MetaCodex.Typing;
 using MetaCodex.UI;
 using TMPro;
 using UnityEngine;
@@ -215,49 +214,8 @@ namespace MetaCodex.Shell
 
         private static string Escape(string s) => (s ?? "").Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;").Replace("\"", "&quot;");
 
-        /// ⌨: the keyboard types straight into the page's focused field (tap the field first), key by key.
-        private void WebType()
-        {
-            if (Keyboard == null) return;
-            _webSink ??= new WebSink(this);
-            if (Keyboard.Visible && Keyboard.Sink == _webSink) { Keyboard.Hide(); return; }
-            Keyboard.Show(_webSink);
-        }
-
-        private WebSink _webSink;
-
-        /// The keyboard's keys into the page (Android key codes for the special keys).
-        private sealed class WebSink : IKeySink
-        {
-            private readonly MetaCodexShell _s;
-            public WebSink(MetaCodexShell s) { _s = s; }
-            public string Title => "WEB PAGE";
-            public string Preview => null;
-            public bool KeepsKeyboard => true;
-            public KeyContext Context => KeyContext.Code;
-            public void Type(string text, bool ctrl, bool alt) { if (!string.IsNullOrEmpty(text)) _s.WebCall("text", text); }
-            public void Key(KbKind key, bool ctrl, bool alt, bool shift, int fn)
-            {
-                switch (key)
-                {
-                    case KbKind.Backspace: _s.WebKey(67); break;
-                    case KbKind.Enter: _s.WebKey(66); break;
-                    case KbKind.Tab: _s.WebKey(61); break;
-                    case KbKind.Escape: _s.WebKey(111); break;
-                    case KbKind.Left: _s.WebKey(21); break;
-                    case KbKind.Right: _s.WebKey(22); break;
-                    case KbKind.Up: _s.WebKey(19); break;
-                    case KbKind.Down: _s.WebKey(20); break;
-                    case KbKind.Delete: _s.WebKey(112); break;
-                    case KbKind.Home: _s.WebKey(122); break;
-                    case KbKind.End: _s.WebKey(123); break;
-                    case KbKind.PageUp: _s.WebKey(92); break;
-                    case KbKind.PageDown: _s.WebKey(93); break;
-                    case KbKind.Function: if (fn >= 1 && fn <= 12) _s.WebKey(130 + fn); break;
-                    case KbKind.Paste: _s.WebCall("text", GUIUtility.systemCopyBuffer ?? ""); break;
-                }
-            }
-        }
+        /// ⌨: what is typed on the system keyboard goes into the page's focused field (tap the field first).
+        private void WebType() => UiKeyboard.Edit("", false, null, text => { if (!string.IsNullOrEmpty(text)) WebCall("text", text); }, "Type into the page");
 
         private void WebKey(int code) => WebCallInt("key", code);
 

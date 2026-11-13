@@ -18,7 +18,7 @@ namespace MetaCodex.UI
         public bool Draggable { get; set; } = true;
         public bool HasHeader { get; private set; } = true;
         /// No frame: the panel draws no body shape (so no frame, shadow or halo); only its elements show. Set at creation
-        /// (the orb's menu squares). Its frame calls (SetHighlight, SetPlainBody) do nothing.
+        /// (the orb's menu squares). Its frame calls (SetHighlight) do nothing.
         public bool Frameless { get; private set; }
         /// Open as far as everything else is concerned: false as soon as Close() is called, while it may still be
         /// animating out (the router, layouts and toggles see it closed at once). Only "closing while still drawn" is
@@ -335,18 +335,6 @@ namespace MetaCodex.UI
 
         /// The frame's highlight (a frame has none when Frameless: nothing to light).
         public void SetHighlight(float state) { if (_body >= 0) Shapes.SetState(_body, state); }
-
-        /// A plain rounded slab instead of the console frame (the keyboard: the deck of a normal keyboard).
-        public void SetPlainBody(float corner)
-        {
-            if (_body < 0) return; // frameless: no frame to restyle
-            var s = Shapes.Get(_body);
-            s.Kind = UiShapeKind.Deck;
-            s.CutBig = corner;
-            s.CutSmall = 0f;
-            s.Margin = 0.008f;
-            Shapes.Set(_body, s);
-        }
 
         // ------------------------------------------------------------------ bending (GPU)
 

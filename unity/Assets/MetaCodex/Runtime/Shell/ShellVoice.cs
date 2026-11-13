@@ -1183,9 +1183,14 @@ namespace MetaCodex.Shell
             Voice.Register(new VoiceCommand
             {
                 Name = "show_keyboard",
-                Description = "Show the keyboard to type into the terminal",
-                Phrases = new[] { "(open|show|bring up) [the] keyboard", "keyboard", "(open|show) [the] keys" },
-                Samples = new[] { "can i have the keyboard", "pull up the keyboard", "i need to type something", "bring up the keys for me" },
+                Description = "Show the headset's system keyboard to type into the terminal (to lay it on a table, the user turns on Settings > Experimental > Surface keyboard; the app cannot)",
+                Phrases = new[]
+                {
+                    "(open|show|bring up) [the] keyboard", "keyboard", "(open|show) [the] keys",
+                    "(open|show|bring up) [the] (table|surface|desk) keyboard", "[the] keyboard on [the] (table|desk)", "(turn on|enable|activate) [the] (table|surface) keyboard",
+                },
+                Samples = new[] { "can i have the keyboard", "pull up the keyboard", "i need to type something", "bring up the keys for me", "i want to type on the table", "can i use the surface keyboard" },
+                Vocabulary = new[] { "surface keyboard" },
                 Run = a => { ShowTerminalKeyboard(); return "Keyboard"; },
             });
             var agentSyn = new Dictionary<string, Dictionary<string, string>>
@@ -1217,15 +1222,6 @@ namespace MetaCodex.Shell
                 Phrases = new[] { "(add|set|paste|enter) [an|the|my] [api] key (for|to) {agent}", "{agent} [api] key" },
                 Samples = new[] { "i have a key for opencode", "let me paste my openai key for codex", "where do i put the anthropic key", "save my api key for claude" },
                 Run = a => { OpenAgentKey((string)a["agent"]); return "API key for " + (string)a["agent"]; },
-            });
-            Voice.Register(new VoiceCommand
-            {
-                Name = "table_keyboard",
-                Description = "MetaCodex's keyboard for the terminal laid on a table, with the touchpad on its right: rest both hands flat on the table and it lies down under them",
-                Phrases = new[] { "(open|show|bring up) [the] (table|surface|desk) keyboard", "[the] keyboard on [the] (table|desk)", "(turn on|enable|activate) [the] (table|surface) keyboard" },
-                Samples = new[] { "i want to type on the table", "put the keyboard on my desk", "can i use the surface keyboard", "lay the keyboard down on the table" },
-                Vocabulary = new[] { "surface keyboard", "touchpad" },
-                Run = a => { OpenTableKeyboard(); return "Table keyboard"; },
             });
             Voice.Register(new VoiceCommand
             {

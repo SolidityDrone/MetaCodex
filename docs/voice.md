@@ -58,7 +58,7 @@ tool), phrase templates for the fast path, and a run function. The shell registe
 | `recenter` | | "recenter", "bring the panels back" |
 | `type_text` | `text` | "type {text}" |
 | `run_in_terminal` | `command` (confirmed in VR) | "run {command}" |
-| `show_keyboard` | | "show the keyboard" |
+| `show_keyboard` | | "show the keyboard", "open the table keyboard" (the system keyboard; the table version is Settings > Experimental > Surface keyboard) |
 | `set_focus` | `state`: on off | "focus mode on", "turn off the focus", "darken the room" (Ambient Focus) |
 | `set_setting` | `setting` (see below), `value`: on, off, toggle, a number, + or - | "set the dome radius to two meters", "intensity 30", "turn off the sounds", "make the windows bigger", "volume a bit less" |
 | `focus_preset` | `preset`: subtle focus blackout | "use the subtle preset", "blackout preset", "apply the normal focus preset" |

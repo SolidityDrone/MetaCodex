@@ -24,8 +24,7 @@ namespace MetaCodex.Shell
             Wrist.Hand = h =>
             {
                 var st = Gestures?.Get(h);
-                // a hand over the table keyboard types: it neither carries the menu nor presses it
-                return st != null && st.Frame.Tracked && !Gestures.IsMuted(h) ? (true, st.Frame) : (false, default(HandFrame));
+                return st != null && st.Frame.Tracked ? (true, st.Frame) : (false, default(HandFrame));
             };
             // one table for the dock and the wrist menu (MainMenuItems): the same labels, order and lit states
             foreach (var m in MainMenuItems())
@@ -66,10 +65,8 @@ namespace MetaCodex.Shell
             I(true, "▣", "photos", "CLIP", () => TogglePanel("clipboard"), () => IsPanelOpen("clipboard"));
             I(true, "◐", "aperture", "FOCUS", () => SetFocus(!Settings.focusEnabled), () => Settings.focusEnabled);
             I(true, "⌖", "select", "SELECT", () => SetSelectionMode(!Router.SelectionMode), () => Router.SelectionMode, t.Warn);
-            I(true, "⌨", "keyboard", "KEYS", () => OpenKeyboard(), () => Keyboard != null && Keyboard.Visible && Keyboard.Sink == _terminalSink);
-            // MetaCodex's own keyboard laid on a table (OpenTableKeyboard: it says how when it is not on one); the wrist
-            // keeps it (owner 2026-11-10), the dock does not
-            I(true, "⌨", "tablekeys", "TABLE", () => OpenTableKeyboard(), wristOnly: true);
+            // the system keyboard for the terminal (Horizon OS can lay it on a table: Settings > Experimental > Surface keyboard)
+            I(true, "⌨", "keyboard", "KEYS", () => OpenKeyboard(), () => app?.Input != null && app.Input.SystemKeyboardOpen);
             I(true, "⟲", "recenter", "CENTER", () => app?.Recenter());
             return list;
         }

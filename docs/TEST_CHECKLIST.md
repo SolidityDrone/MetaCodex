@@ -349,10 +349,10 @@ Section 19's transition lines (the spark, the collapse into a line) are replaced
 - [ ] Hovering and pressing buttons in a big window (MQH, SETTINGS): no stutter; the light on a button still follows the hover and the click
 - [ ] Frame rate (Perf menu Snapshot) with five windows open and the orb in view: 72 fps
 
-The orb's billboard and the table keyboard (same version):
+The orb's billboard (same version):
 
 - [ ] The orb: touch it → a small billboard next to it (TALK, SPEAK, PLACE, LOG); LOG shows "n NEW" when messages came; it opens LOG · MESSAGES (the list, CLEAR ALL asks first)
-- [ ] Wrist menu > TABLE: OPEN KEYBOARD shows the keyboard; TURN ON opens Settings (Experimental > Surface Keyboard and Touchpad)
+- [ ] ~~Wrist menu > TABLE: OPEN KEYBOARD shows the keyboard; TURN ON opens Settings~~ (TABLE removed 2026-11-13, section 43)
 
 The in-app browser, WEB (same version):
 
@@ -364,19 +364,19 @@ The in-app browser, WEB (same version):
 - [ ] Moving the WEB window, closing and reopening it: the page is still there; with "Bend panels" on it stays flat
 - [ ] Frame rate with WEB open on a scrolling page: 72 fps; closed: no cost
 
-## 24. 0.7.11: MQH by itself, agents to GET, an API key pasted, MetaCodex's own keyboard (owner 2026-11-10)
+## 24. 0.7.11: MQH by itself, agents to GET, an API key pasted, MetaCodex's own keyboard (owner 2026-11-10; keyboard checks struck: removed 2026-11-13, section 43)
 
 - [ ] Start the app and wait half a minute: MQH > DAEMON says "running in this headset's Linux", a message says "MQH is running in this headset", AGENTS fills in by itself (nothing to connect)
 - [ ] AGENTS > GET OPENCODE: a terminal installs it (about a minute); the tile turns into "✓ 1.19.x"; opencode shows in the providers
 - [ ] ⚿ API KEY: pick your provider, copy your key (in WEB or Horizon's browser), ⎘ PASTE, SAVE: "✓ … set for the agents"
 - [ ] NEW THREAD with opencode: it answers (with your key, no terminal login)
 - [ ] GET CLAUDE CODE and GET CODEX install the same way; MORE · COMING SOON cannot be pressed
-- [ ] Any text field (the WEB address, a search, the API key): MetaCodex's keyboard floats in front of you; Horizon's keyboard never shows
-- [ ] Rest both hands flat on a table for a second: the keyboard lies down under them (F and J under the index fingers), the touchpad on its right
-- [ ] Type on the table: lift a finger and tap; resting fingers type nothing; putting a whole hand down types nothing; ⇧, ⇧⇧ (caps), ⌫ held repeats, ⎘ pastes, ⏎ ends a field, ⌨↓ puts it away
-- [ ] KEYS on the dock or TABLE on the wrist: the keyboard types into the terminal (`ls` ⏎, CTRL then c, the arrows)
-- [ ] Touchpad: look at a window, slide a finger on the pad: the cursor moves over that window; a tap clicks; two fingers scroll a list
-- [ ] Frame rate while typing on the table and with MQH running: 72 fps
+- [ ] ~~Any text field: MetaCodex's keyboard floats in front of you~~ (removed)
+- [ ] ~~Rest both hands flat on a table: the keyboard lies down under them, the touchpad on its right~~ (removed)
+- [ ] ~~Type on the table: lift a finger and tap ...~~ (removed)
+- [ ] ~~KEYS on the dock or TABLE on the wrist: the keyboard types into the terminal~~ (removed; see section 43)
+- [ ] ~~Touchpad: the cursor moves over that window~~ (removed)
+- [ ] Frame rate with MQH running: 72 fps
 
 ## 25. THREAD as a chat, the agent's state, voice into the composer (owner 2026-11-11)
 
@@ -633,3 +633,14 @@ Work windows:
 - [ ] WORKSPACES > a worktree > NEW THREAD HERE… > START > first message: the thread works in that worktree
 - [ ] Voice: "start a thread to fix the login page": a thread is made at once with that message (last agent and model chosen); "new thread": the draft opens and waits
 - [ ] Voice: "create a research project called solar panels": made under RESEARCH; "new project": the type dialog; "make a native app project": the name keyboard
+
+## 43. The system keyboard again; our table keyboard removed (branch fix/system-keyboard)
+
+- [ ] A text field (the WEB address, a search, an API key in VAULT): the headset's system keyboard opens with the field's text; what you type shows in the field once (no doubled letters); Done keeps it; Cancel puts the old text back; a secret field shows dots
+- [ ] The first time the keyboard opens in a session, a toast: "the headset can lay this keyboard on a table. Settings > Experimental > Surface keyboard"; it does not show again until the app restarts
+- [ ] With Settings > Experimental > Surface keyboard on: rest both hands on a table when the keyboard opens; note where Horizon OS shows it (on the table or floating)
+- [ ] Terminal: KEYS on the dock or the wrist, the frame's ⌨, the key bar's ⌨: the keyboard opens; type `ls`: the terminal shows `ls` once (not `lsls`), each letter at once; a Backspace deletes one letter; Done runs the command; the same button again closes the keyboard
+- [ ] Voice "show the keyboard" opens it; said again, it stays open; "open the table keyboard" opens the same keyboard
+- [ ] WEB: tap a text field on a page, ⌨, type, Done: the text is in the page's field once
+- [ ] The wrist menu has no TABLE tile; KEYS is lit while the keyboard is open for the terminal
+- [ ] A Bluetooth keyboard still types into the terminal and into a focused field; the key bar (Esc, Tab, arrows, Ctrl, Alt) works

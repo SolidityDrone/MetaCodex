@@ -6,8 +6,8 @@
 //   TEXCOORD2  x = chamfer (corner cut), y = small cut (panels) or fill style (buttons: 0 normal, 1 filled, 2 ghost,
 //              3 list row), z = border width, w = state 0..1
 // Kinds: 0 panel body, 1 button, 2 header bar, 3 selection frame, 4 bar (state = fill), 5 line, 6 dot,
-//        7 keycap and 8 deck (the keyboard: plain rounded shapes like a real one's, x of TEXCOORD2 = corner radius),
-//        9 flat (a plain fill of its tint and alpha, no edge or glow: code editors' backgrounds and line marks).
+//        9 flat (a plain fill of its tint and alpha, no edge or glow: code editors' backgrounds and line marks; a rounded
+//        box, x of TEXCOORD2 = corner radius).
 // The look: a sci-fi command console in the spirit of RTS game interfaces (an original design, no game assets):
 // angular chamfered frames of steel lit from above, holographic glass with a hexagon lattice and a grid of points
 // printed on its surface (flat: 0.7.9 drew them behind the surface with parallax and the owner did not want windows to
@@ -159,10 +159,10 @@ Shader "MetaCodex/SciFiUI"
                 int kind = (int)round(i.shape.w);
                 float4 fx = McxPanelFx(_PanelIndex);
                 // a panel still being cast hides nothing where its glass is not closed yet
-                if ((kind != 0 && kind != 8) || _Opacity < 0.75 || i.scan.z < 0.06 || fx.z > 0.3 || McxVisibility(i.positionWS) < 0.5) discard;
+                if (kind != 0 || _Opacity < 0.75 || i.scan.z < 0.06 || fx.z > 0.3 || McxVisibility(i.positionWS) < 0.5) discard;
                 float2 h = i.shape.xy * 0.5;
                 float2 p = (i.uv - 0.5) * (i.shape.xy + 2.0 * i.shape.z);
-                if ((kind == 8 ? sdRound(p, h, i.style.x) : sdChamfer(p, h, i.style.x, i.style.y)) > 0.0) discard;
+                if (sdChamfer(p, h, i.style.x, i.style.y) > 0.0) discard;
                 return 0;
             }
             ENDHLSL
@@ -305,7 +305,7 @@ Shader "MetaCodex/SciFiUI"
                        : pill ? length(max(q + h.y, 0.0)) + min(max(q.x + h.y, q.y + h.y), 0.0) - h.y
                        : sdChamfer(p, h, min(h.y, 0.004), min(h.y, 0.004) * 0.3);
                 }
-                else if (kind >= 7)
+                else if (kind == 9)
                 {
                     d = sdRound(p, h, cBig);
                 }
@@ -483,26 +483,6 @@ Shader "MetaCodex/SciFiUI"
                     edgeCol = tint * 1.2;
                     edgeA = 0.25 + 0.75 * dash;
                     glowA = 0.2;
-                }
-                else if (kind == 7) // keycap: a plain dark cap like a real keyboard's; lit a little when a finger is over it, in the accent when latched or pressed
-                {
-                    float3 cap = lerp(float3(0.018, 0.020, 0.024), float3(0.034, 0.037, 0.043), smoothstep(-1.0, 1.0, yN));
-                    float over = smoothstep(0.0, 0.38, state);
-                    float on = smoothstep(0.45, 1.0, state);
-                    fill = cap * (1.0 + 0.9 * over) + tint * (0.05 * over + 0.55 * on);
-                    fill += white * LineAt(d + 0.0011, 0.0005, aa) * smoothstep(0.2, 1.0, yN) * 0.05; // a hair of light under the top edge
-                    fillA = 0.97;
-                    edgeCol = lerp(float3(0.085, 0.092, 0.105), tint * 1.2, saturate(over * 0.8 + on));
-                    edgeA = 0.9;
-                    glowA = 0.10 * on;
-                }
-                else if (kind == 8) // deck: the keyboard's body, a plain dark slab
-                {
-                    fill = lerp(float3(0.0055, 0.0062, 0.0075), float3(0.011, 0.012, 0.0145), smoothstep(-1.0, 1.0, yN));
-                    fillA = max(_Opacity, 0.94);
-                    edgeCol = float3(0.075, 0.082, 0.095) + tint * 0.25 * state;
-                    edgeA = 0.85;
-                    glowA = 0.10 * state;
                 }
                 else if (kind == 9) // flat: the tint as it is (the sidebar's code and diff views)
                 {

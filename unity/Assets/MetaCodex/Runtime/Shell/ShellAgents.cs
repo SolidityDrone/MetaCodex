@@ -1467,7 +1467,7 @@ namespace MetaCodex.Shell
             RenderThreadGroups();
             _thComposer?.Set(text ?? "");
             // the composer focused: the keyboard opens on it (not in the Editor's self-tests, whose keyboard answers at once)
-            if (focus && _thComposer != null && UiKeyboard.Keyboard != null && UiKeyboard.EditorProvider == null) _thComposer.OnClick(default);
+            if (focus && _thComposer != null && SystemKeyboard.Supported && UiKeyboard.EditorProvider == null) _thComposer.OnClick(default);
         }
 
         private void ShowDraftHeader()

@@ -166,7 +166,8 @@ namespace MetaCodex.Shell
             Scripts.Changed += () => { RefreshScriptsPanel(); RefreshGesturesPanel(); };
             RetireStarterExamples(); // no seeding: gesture examples are opt-in (GESTURES > ALL > EXAMPLES); old untouched copies go once
             InitSessionContext(); // the session's context for the local model (docs/session-context.md)
-            InitKeyboard(); // MetaCodex's own keyboard, on a table or in the air (ShellKeyboard)
+            UiKeyboard.TerminalKeyboardRequested += () => app?.Input?.ToggleSystemKeyboard();
+            SystemKeyboard.Opened += KeyboardTip;
 
             BuildPanels();
             BuildWrist();
@@ -645,6 +646,30 @@ namespace MetaCodex.Shell
         public void TerminalNew() => app?.NewTerminal();
 
         public void OpenKeyboard() => UiKeyboard.OpenForTerminal();
+
+        /// "Show the keyboard" (voice): the system keyboard for the focused terminal; it stays when it is already up
+        /// (never a toggle: said twice, it must not go away).
+        public void ShowTerminalKeyboard() => app?.Input?.ShowSystemKeyboard();
+
+        private bool _keyboardTipShown;
+
+        /// The first time in a session the system keyboard opens: Horizon OS can lay it on a table (Settings >
+        /// Experimental > Surface keyboard). Apps can neither place the system keyboard nor turn that mode on.
+        private void KeyboardTip()
+        {
+            if (_keyboardTipShown || !Settings.surfaceKeyboardTip) return;
+            _keyboardTipShown = true;
+            KeyboardTipCountForTest++;
+            Toast(KeyboardTipText, "info");
+        }
+
+        /// Self-tests: how many times the tip was shown.
+        public int KeyboardTipCountForTest { get; private set; }
+
+        public const string KeyboardTipText = "Tip: the headset can lay this keyboard on a table. Settings > Experimental > Surface keyboard";
+
+        /// Self-tests: the tip as at the start of a session.
+        public void ResetKeyboardTipForTest() => _keyboardTipShown = false;
 
 
         public string GetSetting(string key) => Settings.Get(key);
