@@ -31,6 +31,7 @@ namespace MetaCodex.Shell
             foreach (var m in MainMenuItems())
                 (m.Outer ? Wrist.Outer : Wrist.Inner).Add(new UiWristMenu.Item { Glyph = m.Glyph, Icon = m.Icon, Label = m.Label, Act = m.Act, Lit = m.Lit, LitTint = m.Tint ?? t.Ok });
             Wrist.Build();
+            Wrist.GlassOpacity = PanelOpacity; // created after ApplyMaterialSettings ran: the glass takes the setting now
             _wristModeApplied = !Settings.wristMenu; // applied below
             ApplyMainMenuMode();
         }

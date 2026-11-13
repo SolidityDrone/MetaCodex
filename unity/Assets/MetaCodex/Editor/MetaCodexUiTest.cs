@@ -1270,6 +1270,14 @@ end)
             Click(shell.Router, st, new Vector2(orr.xMax - 0.02f, orr.center.y));
             var mat = UiTheme.Current.ShapeMaterial;
             Check(mat != null && mat.GetFloat("_Opacity") > 0.9f && mat.GetFloat("_Scanlines") < 0.01f && mat.GetFloat("_Grid") < 0.01f, $"panel opacity follows its slider ({mat?.GetFloat("_Opacity"):F2}); scanlines and grid off");
+            // the wrist menu's glass follows the same value (its own material): read at 60 %, then the setting goes back
+            string opNow = shell.GetSetting("panelOpacity");
+            shell.SetSetting("panelOpacity", "0.6");
+            var wristMat = shell.Wrist.GetComponent<MeshRenderer>().sharedMaterial;
+            float panelAt60 = mat.GetFloat("_Opacity"), wristAt60 = wristMat.GetFloat("_Opacity");
+            shell.SetSetting("panelOpacity", opNow);
+            Check(Mathf.Abs(panelAt60 - 0.6f) < 1e-3f && Mathf.Abs(wristAt60 - 0.6f) < 1e-3f,
+                $"the wrist menu's glass follows PANEL OPACITY too: at 60 % the panels take {panelAt60:F2}, the wrist glass {wristAt60:F2}");
             foreach (var id in new[] { "files", "git", "dock" }) shell.OpenPanel(id);
             foreach (var p in shell.PanelsById.Values) p.ForceRefresh();
             Render(shell, "ui-look.png", head.position, Quaternion.identity, 100f, 1600, 900);

@@ -605,3 +605,10 @@ Work windows:
 - [ ] Buttons are dark blue slate plates with an engraved channel: dim blue at rest, bright when a finger or the ray is on them, full for the primary (CD HERE) and red for a danger button; list rows and ghost buttons look as before; text stays easy to read
 - [ ] A window opening: the cast's brackets hand over to the stone corners without a jump; bent windows: the pieces bend with them
 - [ ] 72 fps with many windows open (the look is computed in the existing UI shader, no textures)
+
+## 41. Wrist menu glass follows PANEL OPACITY; no SHADOWS (branch fix/look-shadows)
+
+- [ ] Settings > LOOK: PANEL OPACITY at 50 % → the wrist menu's tiles and watch face are clearly more see-through than at 100 %; its lines, icons, ticks and sparks look as bright as before
+- [ ] PANEL OPACITY at 100 % → the wrist menu looks as it did before this change
+- [ ] PANEL OPACITY at 50 %: a hand behind the wrist menu is still hidden by its glass (the depth is unchanged)
+- [ ] Change PANEL OPACITY (the slider, or voice: "set the opacity to 60 percent") with the wrist menu open: its glass changes at once, the panels too, no restart

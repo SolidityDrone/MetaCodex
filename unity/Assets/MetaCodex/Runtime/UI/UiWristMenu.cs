@@ -54,6 +54,17 @@ namespace MetaCodex.UI
         /// The right hand is at the menu (or over the left hand): it holds still and does not close.
         public bool Engaged { get; private set; }
         public event Action<int> Pressed;
+        /// PANEL OPACITY (the value the panels get, MetaCodexShell.PanelOpacity): scales the alpha of the glass, the tiles
+        /// and the watch face (WristArt `_Opacity`). Lines, icons and sparks keep their brightness; WristDepth does not change.
+        public float GlassOpacity
+        {
+            get => _glassOpacity;
+            set
+            {
+                _glassOpacity = Mathf.Clamp01(value);
+                if (_mat != null) _mat.SetFloat("_Opacity", _glassOpacity);
+            }
+        }
 
         // geometry, metres before Scale: the face, the two rings of tiles, the bezel and the arcs
         private const float FaceR = 0.0205f, CoreHit = 0.0175f;
@@ -66,6 +77,7 @@ namespace MetaCodex.UI
         private Mesh _mesh;
         private Material _mat, _sparkMat;
         private MeshRenderer _mr, _depthMr;
+        private float _glassOpacity = 1f;
         private ParticleSystem _burst, _motes;
         private TextMeshPro _faceText, _hint;
         private readonly List<TextMeshPro> _labels = new List<TextMeshPro>();
@@ -112,6 +124,7 @@ namespace MetaCodex.UI
             _mat = new Material(sh) { name = "wrist menu" };
             _mat.SetTexture("_IconAtlas", UiIconAtlas.Texture);
             _mat.SetFloat("_IconRange", UiIconAtlas.Range);
+            _mat.SetFloat("_Opacity", _glassOpacity);
             _sparkMat = ssh != null ? new Material(ssh) { name = "wrist sparks" } : null;
             _mesh = new Mesh { name = "wrist menu" };
             _mesh.MarkDynamic();
