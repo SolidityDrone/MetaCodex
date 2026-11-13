@@ -6,7 +6,7 @@ using UnityEngine;
 
 namespace MetaCodex.Shell
 {
-    /// The local coder (docs/local-coder.md): a small coding model (Qwen3 1.7B, 1 GB, optional) in the local AI service,
+    /// The local coder (docs/local-coder.md): a small coding model (Qwen2.5 Coder 0.5B, 430 MB, optional; a demonstration that agents run offline) in the local AI service,
     /// usable by the agent harnesses MQH runs. Installing it sets three variables in MQH's machine environment:
     /// MCX_LOCAL_CODER_URL + MCX_LOCAL_CODER_KEY (Claude Code and Codex then list "Local coder (this headset, slow)",
     /// and only a thread on that model uses it) and OPENCODE_CONFIG (an extra OpenCode config with the provider
@@ -34,7 +34,7 @@ namespace MetaCodex.Shell
             Voice.Register(new VoiceCommand
             {
                 Name = "install_local_coder",
-                Description = "Download the local coding model (Qwen3 1.7B, 1 GB) so Claude Code, Codex and OpenCode threads can run offline on this headset (slow); the user confirms first",
+                Description = "Download the local coding model (Qwen2.5 Coder 0.5B, 430 MB) so Claude Code, Codex and OpenCode threads can run offline on this headset (slow); the user confirms first",
                 Phrases = new[] { "(install|download|get|add) [the] local (coder|coding model|model)", "(use|set up) [a] local model for (coding|the agents)" },
                 Samples = new[] { "i want an offline coding model", "put a coding model on the headset", "can the agents run without internet", "get me the small local coder" },
                 Vocabulary = new[] { "local coder" },
@@ -44,7 +44,7 @@ namespace MetaCodex.Shell
             Voice.Register(new VoiceCommand
             {
                 Name = "remove_local_coder",
-                Description = "Remove the local coding model and its set-up from the agents (frees 1 GB); the user confirms first",
+                Description = "Remove the local coding model and its set-up from the agents (frees 430 MB); the user confirms first",
                 Phrases = new[] { "(remove|delete|uninstall) [the] local (coder|coding model|model)" },
                 Samples = new[] { "get rid of the offline coding model", "free the space of the local coder", "i don't need the local model any more", "drop the small coding model" },
                 Confirm = true,
@@ -57,7 +57,7 @@ namespace MetaCodex.Shell
         {
             if (LocalCoderInstalled) return "LOCAL CODER\n✓ ON HEADSET";
             if (LocalCoderInstallState == "downloading" || LocalCoderInstallState == "verifying") return $"LOCAL CODER\n{LocalCoderProgress * 100f:F0} %";
-            return "LOCAL CODER\nGET 1 GB ⇣";
+            return "LOCAL CODER\nGET 430 MB ⇣";
         }
 
         /// GET: downloads the model into the AI service (it checks the sha256), then sets the harnesses up.
@@ -68,7 +68,7 @@ namespace MetaCodex.Shell
             Qvac.Client.Install(new[] { "coder" }, (r, e) =>
             {
                 if (e != null) { Toast("Local coder: " + e, "error"); return; }
-                Toast("Downloading the local coder (Qwen3 1.7B, 1 GB). Its threads are slow and voice waits while it works.", "info");
+                Toast("Downloading the local coder (Qwen2.5 Coder 0.5B, 430 MB): a small demonstration model. Its threads are slow and voice waits while it works.", "info");
             });
             _coderEnvSynced = false;
             return null;

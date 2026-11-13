@@ -31,7 +31,7 @@ export function localCoderModel(): AvailableModel {
     model: LOCAL_CODER_MODEL,
     displayName: "Local coder (this headset, slow)",
     description:
-      "Qwen3 1.7B on the headset's AI cores: offline and free, but slow (minutes per turn) and only for small tasks; voice waits while it works.",
+      "Qwen2.5 Coder 0.5B on the headset's AI cores: offline and free, a demonstration: slow (minutes per turn) and only for very small tasks; voice waits while it works.",
     reasoningDiscovery: "unknown",
     supportedReasoningEfforts: [],
     defaultReasoningEffort: "medium",

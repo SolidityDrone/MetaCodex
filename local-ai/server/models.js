@@ -34,15 +34,18 @@ const CATALOGUE = {
   },
   // the local coding model for the agent harnesses (OpenCode, Codex, Claude Code) through the OpenAI / Anthropic
   // compatible endpoints (compat.js): optional, installed only on request (POST /v1/models/install {kinds:["coder"]}).
-  // Apache-2.0. Slow on the headset's 3 AI cores, but fully offline.
+  // Qwen2.5-Coder 0.5B (Apache-2.0, Qwen's own GGUF): a demonstration that agents can run offline, not quality. Chosen
+  // for memory (owner 2026-11-13: Qwen3 1.7B froze the headset): 2 KV heads of 64 over 24 layers = 12 KB a token, so a
+  // 16k context takes ~190 MB (Qwen3 1.7B: 112 KB a token, 1.8 GB) next to its 0.43 GB of weights.
   coder: {
-    id: 'qwen3-1.7b-q4_0',
-    name: 'Qwen3 1.7B instruct, local coding model (q4_0)',
-    file: 'Qwen3-1.7B-Q4_0.gguf',
-    bytes: 1056782912,
-    sha256: 'c876f159707a4e4f70e045106c69db15bfc935a4981706fd4f65c6e7ea1e81c5',
-    url: 'https://huggingface.co/unsloth/Qwen3-1.7B-GGUF/resolve/d7f544eead698dbd1f15126ef60b45a1e1933222/Qwen3-1.7B-Q4_0.gguf',
-    optional: true
+    id: 'qwen2.5-coder-0.5b-q4_0',
+    name: 'Qwen2.5 Coder 0.5B instruct, local coding model (q4_0)',
+    file: 'qwen2.5-coder-0.5b-instruct-q4_0.gguf',
+    bytes: 428730240,
+    sha256: '9739055e046d62a937e5b7879012209ef40ebea8a1569a96028de491f3f091d5',
+    url: 'https://huggingface.co/Qwen/Qwen2.5-Coder-0.5B-Instruct-GGUF/resolve/ebb2015119c907b064c512bf053e945850b5875f/qwen2.5-coder-0.5b-instruct-q4_0.gguf',
+    optional: true,
+    legacy: ['Qwen3-1.7B-Q4_0.gguf'] // the earlier coder (1 GB): deleted when the service starts
   },
   tts: {
     id: 'supertonic3-q4_0',
@@ -61,6 +64,15 @@ class Models {
     this.log = log
     this.jobs = {} // kind -> { state, received, total, error }
     fs.mkdirSync(dir, { recursive: true })
+    // files of models the catalogue replaced (a 1 GB coder before 2026-11-13): their space back
+    for (const m of Object.values(CATALOGUE)) {
+      for (const old of m.legacy || []) {
+        for (const suffix of ['', '.sha256', '.part']) {
+          const f = path.join(dir, old + suffix)
+          try { if (fs.existsSync(f)) { fs.unlinkSync(f); if (!suffix) this.log('deleted the replaced model ' + old) } } catch (e) { this.log('could not delete ' + old + ': ' + (e.message || e)) }
+        }
+      }
+    }
   }
 
   file (kind) { return path.join(this.dir, CATALOGUE[kind].file) }

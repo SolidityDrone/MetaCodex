@@ -61,7 +61,16 @@ class Engines {
   }
 
   async _gate (kind) {
-    if (kind === 'coder') { while (INTERFACE.some((k) => this.busy[k])) await sleep(100); return }
+    if (kind === 'coder') {
+      while (INTERFACE.some((k) => this.busy[k])) await sleep(100)
+      // the coder gets the memory and the cores while it works (owner 2026-11-13: the headset froze with the coder and
+      // the voice models loaded together): the interface models are unloaded; each loads again at its next use, after
+      // the hold (TALK says "local coder working" meanwhile)
+      if (this.cfg.coderUnloadsInterface !== false) {
+        for (const k of INTERFACE) if (this.inst[k] && !this.busy[k]) await this._unload(k)
+      }
+      return
+    }
     if (!INTERFACE.includes(kind)) return
     let waited = 0
     while (this.coderHolds()) { await sleep(250); waited += 250 }
@@ -161,7 +170,10 @@ class Engines {
           if (strip && !(abort && abort.aborted)) strip(tok)
         }
       } finally { if (abort) abort.onabort = null }
-      return Object.assign(parseAssistant(out), { ms: Date.now() - t0, firstMs: first, stats: r.stats || null, cancelled: !!(abort && abort.aborted) })
+      const names = (tools || []).map((t) => (t && t.function && t.function.name) || (t && t.name)).filter(Boolean)
+      const res = parseAssistant(out, names)
+      if (kind === 'coder') stopRepeat(messages, res)
+      return Object.assign(res, { ms: Date.now() - t0, firstMs: first, stats: r.stats || null, cancelled: !!(abort && abort.aborted) })
     })
   }
 
@@ -363,8 +375,8 @@ class Engines {
         opts: { stats: true }
       })
     } else if (kind === 'coder') {
-      // an agent harness's system prompt + tools are 6-20k tokens: a 16k context (KV about 1.8 GB at f16 for 1.7B;
-      // q8_0 halves it); thinking off (reasoning_budget 0) keeps turns short
+      // an agent harness's system prompt + tools are 6-20k tokens (3-4k once slimmed, compat.js): a 16k context (KV
+      // ~190 MB at f16 for Qwen2.5-Coder 0.5B: 2 KV heads of 64); thinking off (reasoning_budget 0) keeps turns short
       const Llm = require('@qvac/llm-llamacpp')
       m = new Llm({
         files: { model: [file] },
@@ -484,7 +496,7 @@ function toQvacMessage (m) {
 }
 
 /** Qwen-style output: optional <think>, then text and/or <tool_call>{json}</tool_call> blocks. */
-function parseAssistant (raw) {
+function parseAssistant (raw, toolNames) {
   let text = String(raw || '').replace(/<think>[\s\S]*?<\/think>/g, '')
   const calls = []
   text = text.replace(/<tool_call>\s*([\s\S]*?)\s*(<\/tool_call>|$)/g, (_, body) => {
@@ -497,17 +509,63 @@ function parseAssistant (raw) {
     return ''
   })
   text = text.trim()
-  // small models sometimes write the call as bare JSON instead of a <tool_call> block
-  if (!calls.length && /^\{[\s\S]*"name"[\s\S]*\}$/.test(text)) {
-    try {
-      const j = JSON.parse(text)
-      if (typeof j.name === 'string') {
-        calls.push({ name: j.name, arguments: typeof j.arguments === 'string' ? safeJson(j.arguments) : (j.arguments || {}) })
-        text = ''
-      }
-    } catch {}
+  // small models write calls as bare JSON instead of <tool_call> blocks, one or several (Qwen2.5-Coder 0.5B:
+  // {"name": "bash", "arguments": {...}} then a made-up second one): every top-level JSON object with a name and
+  // arguments is a call when that name is one of the request's tools (any name when the tools are not known)
+  if (!calls.length && text.includes('"name"')) {
+    const found = []
+    for (const body of jsonObjects(text)) {
+      const j = safeJson(body)
+      if (!j || typeof j.name !== 'string' || !('arguments' in j || 'parameters' in j)) continue
+      if (toolNames && toolNames.length && !toolNames.includes(j.name)) continue
+      const a = 'arguments' in j ? j.arguments : j.parameters
+      found.push({ body, call: { name: j.name, arguments: typeof a === 'string' ? safeJson(a) : (a || {}) } })
+    }
+    if (found.length) {
+      for (const f of found) { calls.push(f.call); text = text.replace(f.body, '') }
+      // and the call-shaped objects naming no tool of the request (made up next to a real one)
+      for (const body of jsonObjects(text)) { const j = safeJson(body); if (j && typeof j.name === 'string' && ('arguments' in j || 'parameters' in j)) text = text.replace(body, '') }
+      text = text.replace(/^[\s,;]+|[\s,;]+$/g, '')
+    }
   }
   return { content: text, tool_calls: calls.filter((c) => c.name), raw }
+}
+
+/**
+ * A small coder repeats the call that just worked (Qwen2.5-Coder 0.5B wrote hello.txt 29 times, 2026-11-13): when the
+ * new tool calls are exactly the previous assistant turn's (names and arguments) and that turn's results were no
+ * error, the turn ends with a short answer instead, so the harness stops.
+ */
+function stopRepeat (messages, res) {
+  if (!res.tool_calls.length || !Array.isArray(messages)) return
+  let i = messages.length - 1
+  const results = []
+  while (i >= 0 && messages[i].role === 'tool') { results.push(String(messages[i].content || '')); i-- }
+  const prev = i >= 0 ? messages[i] : null
+  if (!prev || prev.role !== 'assistant' || !Array.isArray(prev.tool_calls) || !results.length) return
+  const sig = (name, args) => name + ' ' + JSON.stringify(typeof args === 'string' ? safeJson(args) : (args || {}))
+  const before = prev.tool_calls.map((c) => sig((c.function || c).name, (c.function || c).arguments)).sort().join('\n')
+  const now = res.tool_calls.map((c) => sig(c.name, c.arguments)).sort().join('\n')
+  if (before !== now || results.some((r) => /^\s*(error|ERROR)\b|failed|not found/i.test(r))) return
+  res.content = (res.content ? res.content + '\n' : '') + 'Done.'
+  res.tool_calls = []
+  res.repeatStopped = true
+}
+
+/** The top-level {...} spans of a text (strings and escapes respected). */
+function jsonObjects (text) {
+  const out = []
+  let depth = 0
+  let start = -1
+  let inStr = false
+  let esc = false
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]
+    if (inStr) { if (esc) esc = false; else if (ch === '\\') esc = true; else if (ch === '"') inStr = false; continue }
+    if (ch === '"') { if (depth > 0) inStr = true; continue }
+    if (ch === '{') { if (depth === 0) start = i; depth++ } else if (ch === '}' && depth > 0) { depth--; if (depth === 0 && start >= 0) { out.push(text.slice(start, i + 1)); start = -1 } }
+  }
+  return out
 }
 
 function safeJson (s) { try { return JSON.parse(s) } catch { return {} } }

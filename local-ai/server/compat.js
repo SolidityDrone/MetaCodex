@@ -198,13 +198,15 @@ function countTokens (j) {
 // ---------------------------------------------------------------- the slim profile
 
 // Owner 2026-11-12: "if using local shall use slim agent profiles". A harness sends a long system prompt and many
-// tools (Claude Code's first turn: 11,071 prompt tokens, 300 s to read on the PC, 10-20 min on the headset); a 1.7B
+// tools (Claude Code's first turn: 11,071 prompt tokens, 300 s to read on the PC, 10-20 min on the headset); a small
 // model gets lost in it anyway. For the local coder the system prompt becomes a short one plus the harness's own
 // environment facts (working folder, platform, date), and only the core file / shell tools go, their descriptions cut.
-const SLIM_TOOLS = /^(read|write|edit|multiedit|bash|glob|grep|ls|list|read_file|write_file|edit_file|apply_patch|shell|exec_command)$/i
+// The 0.5B coder (2026-11-13) picked "edit" for a file that did not exist and looped on the error: only three tools
+// now, shell, read and write (a whole file), so every task has one obvious way.
+const SLIM_TOOLS = /^(read|write|bash|read_file|write_file|shell|exec_command)$/i
 const SLIM_SYSTEM = [
   'You are a coding agent running on a small local model on a VR headset. Work in small steps.',
-  'Use the tools: read files before you change them, write or edit files to make changes, run shell commands to check them.',
+  'Tools: bash runs a shell command; read reads a file; write writes a whole file (new or changed). To create or change a file, use write with its full content.',
   'Call one tool at a time. Use paths inside the working directory. When the task is done, say in one or two sentences what you did.'
 ].join('\n')
 

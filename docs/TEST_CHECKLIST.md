@@ -586,7 +586,7 @@ Work windows:
 
 ## 38. The local coder (branch local-coder, 0.7.18)
 
-- [ ] AGENTS: the GET row has LOCAL CODER · GET 1 GB; tap: it counts up to 100 %, then "✓ ON HEADSET"; tap again: a hint how to use it
+- [ ] AGENTS: the GET row has LOCAL CODER · GET 430 MB; tap: it counts up to 100 %, then "✓ ON HEADSET"; tap again: a hint how to use it
 - [ ] NEW THREAD with Claude Code, model "Local coder (this headset, slow)": ask anything small (a script, a fix, a small native app in a NATIVE project): it works in minutes; a Claude Code thread on a normal model still uses your account as before
 - [ ] Without restarting the app after GET: NEW THREAD > OpenCode lists "⌂ Local coder (this headset, slow)" as the first row
   (LOCAL badge, "on this headset · offline · slow"), above OpenCode's own models; Claude Code the same. Reopen the list once

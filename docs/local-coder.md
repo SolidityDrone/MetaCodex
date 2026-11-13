@@ -5,16 +5,18 @@ stupid, just to try it", for judges who want to try coding fully offline. Branch
 
 ## What it is
 
-- **The model**: Qwen3 1.7B instruct, GGUF q4_0 (1 GB, Apache-2.0, docs/LICENSES.md), engine `coder` in the local AI
-  service (`local-ai/server`): its own instance next to the voice LLM (Qwen3 0.6B), 16k context, f16 KV cache, thinking
-  off, 3 threads on the AI cores 0-2, unloaded after 10 idle minutes. Optional: installed only from AGENTS > LOCAL CODER
+- **The model**: Qwen2.5-Coder 0.5B Instruct, GGUF q4_0 by the Qwen team (430 MB, Apache-2.0, docs/LICENSES.md):
+  a demonstration that agents can run offline, not a useful coder. Engine `coder` in the local AI service
+  (`local-ai/server`): 16k context, f16 KV cache, 3 threads on the AI cores 0-2, unloaded after 10 idle minutes; while
+  it works the voice models are unloaded (they load again at their next use). Until 2026-11-13 it was Qwen3 1.7B: see
+  "Memory" below. Optional: installed only from AGENTS > LOCAL CODER
   (or "install the local coder"), never by the default model install.
 - **The APIs the harnesses speak** (`local-ai/server/compat.js`, all streaming, tool calls both ways):
 
   | Harness | API | Endpoint | How it is pointed there |
   |---|---|---|---|
   | OpenCode | OpenAI chat completions | `/v1/chat/completions`, model `local-coder` | `OPENCODE_CONFIG=/mnt/quest/local-coder.opencode.json` (provider "MetaCodex (this headset)") |
-  | (Codex) | OpenAI Responses | `/v1/responses` stays in the service, but Codex is not offered the local coder (owner: "we can ignore codex"; the 1.7B model loops on its tools) | - |
+  | (Codex) | OpenAI Responses | `/v1/responses` stays in the service, but Codex is not offered the local coder (owner: "we can ignore codex"; small models loop on its tools) | - |
   | Claude Code | Anthropic Messages | `/v1/messages`, `/v1/messages/count_tokens` | MQH gives only a `local-coder` thread `ANTHROPIC_BASE_URL` / `ANTHROPIC_AUTH_TOKEN` / `ANTHROPIC_MODEL` |
 
 - **The key**: `<data>/coder.key`, made once by the app, shared as `/mnt/quest/local-coder.key`, given to MQH as
@@ -63,3 +65,31 @@ on the PC (headset estimate 5-10 min -> 1-3 min).
 ## Open (before 0.7.18)
 
 - Headset measurements; the voice bench after the two new commands (AGENTS.md rule 3).
+
+## Memory: why the coder is 0.5B now (2026-11-13)
+
+Owner, on 0.7.19: a thread on the local provider "starts, but after a few seconds the frame rate drops until Horizon OS
+does not refresh frames any more, weird artifacts, then the app crashes or needs a hard restart". The session log: the
+AI service stopped answering ("restarting (1/3)") and MQH's host daemon dropped ("Thread interrupted because the host
+daemon disconnected"), as when the system kills processes for memory. The numbers:
+
+| | Qwen3 1.7B (before) | Qwen2.5-Coder 0.5B (now) |
+|---|---|---|
+| Weights (q4_0) | 1.0 GB | 0.43 GB |
+| KV cache per token (f16) | 28 layers x 8 KV heads x 128 x 2 = 112 KB | 24 layers x 2 KV heads x 64 x 2 = 12 KB |
+| KV cache at 16k | 1.8 GB | 0.19 GB |
+| Voice models beside it | loaded (about 1.2 GB) | unloaded while it works |
+| The service's memory with the coder loaded (PC, measured) | - | 1,044 MB RSS |
+
+With the app (about 2 GB), Horizon OS and MQH with an agent CLI, the 1.7B coder with its 16k context did not fit in the
+Quest 3S's 8 GB. The old 1.7B file is deleted when the service starts (`legacy` in models.js), 1 GB back.
+
+For the small model, the slim profile (compat.js) offers only three tools, bash, read and write (it chose `edit` for
+a file that did not exist and looped on the error), and a turn whose tool calls repeat the previous successful ones
+exactly ends with "Done." (`stopRepeat` in engines.js: it wrote hello.txt 29 times). Bare JSON calls in the text
+(`{"name": "bash", "arguments": {...}}`, no `<tool_call>` tags) count when they name one of the request's tools.
+
+Checked on the PC (OpenCode 2.1.4 in a throwaway home, provider as the app writes it): "Create a file named hello.txt
+that contains the word hi." -> `write hello.txt` with "hi"; prompt 741 tokens with the three tools (1,990 with seven).
+Not checked on the headset yet: the frame rate while it works, and the time per turn (the PC is 6-9x the Quest).
+
