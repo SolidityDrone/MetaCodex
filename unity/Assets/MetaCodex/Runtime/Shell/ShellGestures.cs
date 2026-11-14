@@ -100,7 +100,9 @@ namespace MetaCodex.Shell
                 case "voice": return VoiceAction(arg);
                 case "focus": { string a = arg.Trim().ToLowerInvariant(); SetFocus(a == "on" ? true : a == "off" ? false : !Settings.focusEnabled); return null; }
                 case "view": return OpenView(MetaCodexShell.SafeViewId(arg.Trim())) ? null : "no view " + arg;
-                default: return "unknown action '" + verb + "' (open/close/toggle/toast/run/type/url/layout/spin/select/keyboard/terminal/recenter/lua/gesture/voice/focus/view)";
+                // the guided tour (ShellTour): tour | tour:start | tour:stop (voice: start_tour)
+                case "tour": { string a = arg.Trim().ToLowerInvariant(); if (a == "stop" || a == "skip" || a == "end") EndTour("stopped"); else StartTour(); return null; }
+                default: return "unknown action '" + verb + "' (open/close/toggle/toast/run/type/url/layout/spin/select/keyboard/terminal/recenter/lua/gesture/voice/focus/view/tour)";
             }
         }
 

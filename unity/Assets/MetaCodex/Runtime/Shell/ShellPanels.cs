@@ -624,6 +624,10 @@ end)
             var ab = a2.NextSplit(t.ButtonHeight, 0.5f, out var ab2);
             tabs.AddTo(TabAbout, new UiButton("LICENCES ▸", () => { _filesPath = LicencesDir; OpenPanel("files"); }) { Rect = ab });
             tabs.AddTo(TabAbout, new UiButton("APP PERMISSIONS ⚙", () => Toast(SystemBridge.OpenAppSettings() ? "Opening app settings" : SystemBridge.LastResult)) { Rect = ab2 });
+            // the guided tour of the first start, again (ShellTour; voice "start the tour")
+            var tr = a2.NextSplit(t.ButtonHeight, 0.5f, out var trText);
+            tabs.AddTo(TabAbout, new UiButton("TOUR ▸", () => StartTour()) { Rect = tr });
+            tabs.AddTo(TabAbout, new UiLabel("A one-minute guided tour: the main menu, the orb, moving windows, CONTROL.", t.SmallSize) { Rect = trText, Wrap = true, Color = t.TextDim });
         }
 
         /// Where docs/LICENSES.md and the licence texts are in the Linux (the overlay ships them).
