@@ -55,6 +55,7 @@ namespace MetaCodex.Shell
             }
             if (Time.unscaledTime >= _ctxNextSample) { _ctxNextSample = Time.unscaledTime + 20f; SampleProcesses(); }
             TickReturn(); // back from an app MetaCodex launched (ShellReturn)
+            TickRoomAnchor(); // the panels stay in the room across it (ShellRoomAnchor)
             if (Time.unscaledTime >= _ctxNextPulses)
             {
                 // every 5 s while another thread works (its "answered" callout comes soon), else every 15 s
@@ -68,6 +69,7 @@ namespace MetaCodex.Shell
 
         private void OnApplicationPause(bool paused)
         {
+            RoomAnchorPaused(paused); // the room reference before the pause, and the move back on resume (ShellRoomAnchor)
             if (paused && SessionMemory.Dirty) SessionMemory.Save(SessionLogPath);
             if (!paused) { _returnCheckAt = 0f; ResyncThread(); } // a return at once; the threads as MQH has them now
         }

@@ -381,6 +381,31 @@ windows and your hands. No Space Setup scan is needed (branch `feat/spatial-dome
   sits at the thread's right edge, on its curve.
 - Boundaryless: the app declares `com.oculus.feature.BOUNDARYLESS_APP` (passthrough only).
 
+## Back from a native app: the panels stay in the room (2026-11-14, `Shell/ShellRoomAnchor.cs`)
+
+- Owner: after "Back to MetaCodex" the panels were not where they were.
+- Cause (code): the app is resumed, not rebuilt (the activity is `singleTask`), and no code places panels on resume.
+  The tracking space is set up again when the app resumes. The panels keep their Unity coordinates, so the room
+  moves under them.
+- Meta docs: a Floor Level or local space is not an app-independent reference; Meta recommends spatial anchors for it
+  (`documentation/unity/unity-ovrcamerarig`, Tracking Origin Type). The Stage space is not changed by the user's
+  re-centre; the boundary docs say to check it "when the app returns from a paused state"
+  (`documentation/unity/unity-ovrboundary`). Boundaryless apps: Stage is "ill-defined" (`documentation/unity/unity-boundaryless`,
+  World-locked contents). The Stationary origin is stable across sessions, but experimental: it needs the manifest flag
+  `com.oculus.experimental.enabled` and a device property (`documentation/unity/unity-experimental-features`).
+  Spatial anchors need the permission `com.oculus.permission.USE_ANCHOR_API` and OVRManager Anchor Support
+  (`documentation/unity/unity-spatial-anchors-persist-content`).
+- Fix: while the app is live, the shell reads the Stage origin (the room reference) every 0.25 s. On resume, once the
+  head is tracked again (two frames later, at most 10 s), the whole shell (`_root`: every window, the orb, the wrist
+  menu, the toasts) moves by the change of that reference. Each panel keeps its place relative to the room. No
+  permission, no manifest flag, no PlaceSmart on a normal resume.
+- Refused, nothing moves (logged): a reference move over 3 m, a turn over 120 deg, or no reference on resume.
+- The log line on resume: `room anchor: back in the room after the native app: panels moved X cm (most Y cm), turned Z deg, N open`.
+- The system's own re-centre does not change the Stage reference, so it is not undone.
+- Not tested on a headset yet (`docs/TEST_CHECKLIST.md`, section 47). If Stage is not stable here, switch
+  `RoomReferenceOrigin` to `OVRPlugin.TrackingOrigin.Stationary` (then the manifest flag above) or use spatial anchors.
+- Self-test: section `roomanchor` (`MetaCodexUiTestRoomAnchor.cs`).
+
 ## Testing without a headset
 
 `tools/unity-batch.sh BatchCheck` = scene rebuild + terminal self-test + UI self-test
