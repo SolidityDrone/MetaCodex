@@ -782,8 +782,10 @@ end)
             hands.Hide(Handedness.Right);
             shell.TickGesturesForTest(0.2f);
             shell.PoseHand(Handedness.Right, 1, 0, 0, 1, 1);
-            shell.TickGesturesForTest(0.4f);
-            Check(shell.PanelsById["vault"].IsOpen, "binding victory → open:vault works");
+            shell.TickGesturesForTest(1.0f);
+            bool early = shell.PanelsById["vault"].IsOpen;
+            shell.TickGesturesForTest(1.3f);
+            Check(!early && shell.PanelsById["vault"].IsOpen, $"binding victory → open:vault works only once the pose is held {MetaCodexShell.BindingHold:F0} s (open after 1 s: {early})");
             Check(File.ReadAllText(Path.Combine("Temp", "mcx-uitest", "settings.json")).Contains("open:vault"), "binding persisted in the settings");
 
             // record a pose from the hand and recognise it

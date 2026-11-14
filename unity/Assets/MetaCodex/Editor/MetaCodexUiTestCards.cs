@@ -78,7 +78,8 @@ namespace MetaCodex.EditorTools
             string lit = shell.CardDropTargetForTest;
             ptr.Down = false; shell.Router.Inject(ptr);
             var merged = shell.CardThreadsForTest(gA);
-            Check(dragging && lit == gA && merged.SequenceEqual(new[] { "thr_cA", "thr_cB" }) && shell.CardGroupIdsForTest.Count == 1 && !shell.PanelsById.ContainsKey(gB)
+            // (Router.IsDragging counts the hands and the mouse, not injected test pointers: the merge itself shows the drag)
+            Check(lit == gA && merged.SequenceEqual(new[] { "thr_cA", "thr_cB" }) && shell.CardGroupIdsForTest.Count == 1 && !shell.PanelsById.ContainsKey(gB)
                   && (shell.PanelsById[gA].transform.position - posA).magnitude < 0.001f && shell.CardDropTargetForTest == null,
                 $"drop a group on another: the header press moves {gB} ({dragging}, hit {pressed}), {gA} lit while over it ({lit}), they merge into {gA} ({string.Join(", ", merged)}), the target kept its place");
 

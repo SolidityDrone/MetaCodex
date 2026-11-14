@@ -104,9 +104,37 @@ namespace MetaCodex.Shell
             }
         }
 
-        /// A pose's start fires its bindings only once it is held this long (owner 2026-11-13: "panels open randomly";
-        /// the log: a victory binding opened VAULT 3 times in 40 s while the hands worked on windows).
-        public const float BindingHold = 0.35f;
+        /// A pose's start fires its bindings only once it is held this long without a break (owner 2026-11-13: "panels open
+        /// randomly", a victory binding opened VAULT 3 times in 40 s; 2026-11-14: "poses like the V or the horns fire as
+        /// soon as they are seen: they shall be held at least 2 seconds in a row").
+        public const float BindingHold = 2.0f;
+
+        /// The marker of the one-time V -> Ambient Focus binding (EnsureVictoryFocus).
+        public const string VictoryFocusMarker = ".victory-focus";
+
+        /// Once per plugins folder (owner 2026-11-14: "V activates focus; leave the others disabled for now"): the victory
+        /// pose (index and middle up; the core-poses example, installed when missing) toggles Ambient Focus, held 2 s.
+        /// Runs after RetireWindowShortcuts and before the starter cleanup (which keeps core-poses: it is used now).
+        private void EnsureVictoryFocus()
+        {
+            try
+            {
+                string pdir = Scripts?.PluginsDir;
+                if (string.IsNullOrEmpty(pdir) || Settings == null) return;
+                Directory.CreateDirectory(pdir);
+                var marker = Path.Combine(pdir, VictoryFocusMarker);
+                if (File.Exists(marker)) return;
+                if (!Directory.Exists(Path.Combine(pdir, "core-poses")))
+                {
+                    var err = InstallGestureExample("core-poses");
+                    if (err != null) { Log("gesture V -> focus: " + err); return; }
+                }
+                if (!Settings.bindings.Any(b => b.gesture == "victory" && b.action == "focus")) AddBinding("victory", "focus");
+                File.WriteAllText(marker, "victory -> focus (Ambient Focus on/off) " + DateTime.UtcNow.ToString("o") + "\n");
+                Log("gesture shortcuts: the V (index and middle up), held 2 s, turns Ambient Focus on or off");
+            }
+            catch (Exception ex) { Log("gesture V -> focus: " + ex.Message); }
+        }
         private readonly Dictionary<string, (GestureEvent e, float at)> _bindingHeld = new Dictionary<string, (GestureEvent, float)>();
 
         private void ApplyBindings(GestureEvent e)

@@ -236,6 +236,12 @@ used copies stay, my-poses and other folders are never touched. New plugins: MQH
 `view:`. BIND offers 12 of them as presets; bindings saved with older presets (`toggle:browser`, `spin:40`, …)
 keep working.
 
+Since 2026-11-14 a pose fires its bindings only after it is held for 2 s in a row (`BindingHold`); taps (clap,
+swipes) fire at once; a binding never fires while that hand is on a window. No binding opens or closes a window by
+default (`RetireWindowShortcuts`, once); one binding is made once by default (`EnsureVictoryFocus`, marker
+`.victory-focus` in the plugins folder): the V (`victory`, from the core-poses example, installed when missing) turns
+Ambient Focus on or off. The other poses have no binding.
+
 Skills for agents (bundled into the userland at `/root/.claude/skills` and into MQH threads):
 `quest-gesture-plugins` (procedure, formats, hand model, API, recipes, testing), `quest-scripting`,
 `metacodex-context`, plus 36 Unity skills (github.com/Unity-Technologies/skills, refreshed by

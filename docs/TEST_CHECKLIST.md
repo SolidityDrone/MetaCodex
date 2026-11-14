@@ -690,3 +690,10 @@ Work windows:
 - [ ] Restart the app → the groups come back with their names and threads in order (open ones open again, placed anew)
 - [ ] Voice: "pin this thread as a card", "open the card <title words>", "remove the card for <title words>", "hide the thread cards" / "show the thread cards", "allow it on the card"
 - [ ] Four cards open, two of them working, for 5 minutes: 72 fps (Perf menu Snapshot), no stutter
+
+## 47. Pose hold and the V (2026-11-14)
+
+- [ ] Make a V (index and middle up) for about 1 s and drop it: nothing happens.
+- [ ] Hold the V for 2 s: Ambient Focus turns on; hold it again 2 s: it turns off.
+- [ ] Horns, thumbs up, call-me held for 3 s: nothing opens.
+- [ ] A V made while the ray or the fingertip is on a window does nothing.
