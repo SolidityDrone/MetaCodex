@@ -29,6 +29,11 @@ namespace MetaCodex.AI
         public HostState State { get; private set; } = HostState.Idle;
         public string Status { get; private set; } = "not started";
         public float Progress { get; private set; }
+        /// The first start's SETUP panel (ShellFirstRun), step 1: the packed models' copy, 0..1 of their bytes; -1 before it
+        /// starts (the runtime is unpacked first, with `Progress`).
+        public float ModelsProgress { get; private set; } = -1f;
+        /// The packed models are in place (copied now, there already, or none packed): step 1 of the SETUP panel is done.
+        public bool ModelsSeeded { get; private set; }
         public QvacClient Client { get; private set; }
         /// Editor: a service started by tools/local-ai-dev.sh (in WSL or on the headset over adb).
         public bool IsDev { get; private set; }
@@ -271,6 +276,7 @@ namespace MetaCodex.AI
             // service's models folder with their sha256 markers, once, so voice works offline from the first start
             yield return SeedModels(gen);
             if (gen != _gen) yield break;
+            ModelsSeeded = true; ModelsProgress = 1f; // the SETUP panel's step 1 (ShellFirstRun)
 
             KillStale();
             string token = NewToken();
@@ -443,6 +449,7 @@ namespace MetaCodex.AI
                 yield return CopyStreaming("qvac/models/" + file, part, p =>
                 {
                     Progress = total > 0 ? (before + p * bytes) / (float)total : 1f;
+                    ModelsProgress = Progress;
                     Status = $"installing the voice models {Progress * 100f:F0}%";
                 }, e => err = e);
                 if (err == null && (!File.Exists(part) || new FileInfo(part).Length != bytes)) err = "wrong size";
