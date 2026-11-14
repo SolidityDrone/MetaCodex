@@ -734,3 +734,26 @@ Setup: two projects in THREADS, project1 with 3 threads, project2 with 1 thread.
 - [ ] Voice: "put the open threads side by side", "break up the group", "switch to the other thread window", "close this thread window", "open the thread about <topic> in a new window"
 - [ ] 6 windows open: the 7th thread opens in the focused window (a message says so)
 - [ ] 72 fps with 4 windows open, 2 of them working (Perf menu Snapshot)
+
+## 50. Held turns IN A WORKTREE, archive / restore / delete (branch feat/held-turn-archive; docs/thread-view.md "Held turns and archive")
+
+Held turn (two threads in one project checkout):
+- [ ] Thread A works in the checkout (a long task). Send a message to thread B in the same checkout: B shows ⏸ Not started and ▶ SEND NOW
+- [ ] ▶ SEND NOW: the question "Start it now?" has SEND NOW, IN A WORKTREE and CANCEL, and its text says what IN A WORKTREE does
+- [ ] CANCEL: B keeps waiting. SEND NOW (on another try): B starts in the checkout, the toast says it shares the folder
+- [ ] IN A WORKTREE: the toast says "Sent: the agent moves to its own worktree first"; B's first message in the chat starts with "This project's folder is busy with another agent..." and then your text
+- [ ] B's agent runs `git worktree list` / `git worktree add` (worktree-per-thread skill), works in `<checkout>-wt-<name>` on `agent/<name>`, and ends with the path, the branch, the base and how to merge
+- [ ] A's files in the checkout did not change because of B (`git status` in the checkout shows only A's work)
+- [ ] `ls ~/.claude/skills` has worktree-per-thread; MQH > SKILLS shows it read-only
+
+Archive / restore / delete:
+- [ ] A thread window shows ARCHIVE… and DELETE… at the top; a NEW THREAD draft and an empty window do not
+- [ ] Two windows open, focus window 1, press ARCHIVE… in window 2: the question names window 2's thread; ARCHIVE: window 2 closes, window 1 stays; THREADS no longer lists it
+- [ ] A thread with a child thread (a sub-thread an agent spawned): ARCHIVE… archives both; both windows close if open
+- [ ] THREADS > ▤ ARCHIVED: the archived threads, newest first, each with RESTORE ▸; ◂ ACTIVE goes back
+- [ ] Tap an archived row > RESTORE: it is back in THREADS and opens normally
+- [ ] DELETE… on a thread with no child: the question says it has no child threads; DELETE: the window closes, it is in neither list
+- [ ] DELETE… on a thread with child threads: the question says how many go too; DELETE removes them all
+- [ ] Archive a thread from another client (the MQH CLI: `mqh thread archive <id>` or a second app) while its window is open: the window closes within about 10 s with a toast
+- [ ] Voice: "archive this chat" (the focused window's thread), "archive the thread about <topic>", "bring back the chat about <topic>", "show my archived chats"
+- [ ] An archived thread that was working: the RUNNING count in THREADS drops, the orb does not report it as working

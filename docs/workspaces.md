@@ -45,7 +45,8 @@ two agents on different tasks conflict? Wanted in the daemon (MQH) and in the UI
   who works there and why; the saved choice is not changed). CHECKOUT stays possible: its turn then waits.
 - **THREAD**: the workspace chip names the branch (`⎇ feat/x`, `▣ checkout · main`) and gets ⚠ when another thread
   works in the same folder. A held turn: the status line says `⏸ Not started: “…” is working in this checkout` with
-  **▶ SEND NOW** beside it (asks first: both agents would edit the same files).
+  **▶ SEND NOW** beside it (asks first: both agents would edit the same files; or IN A WORKTREE: the agent makes
+  its own worktree first, skill `worktree-per-thread`, docs/thread-view.md "Held turns and archive").
 - **Session context**: `workspace: in the project checkout (main), shared with “Fix the build” working there now` /
   `in its worktree feat/x (from main): its own folder and branch`; a held thread's state is `not started: …`.
 

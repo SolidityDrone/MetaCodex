@@ -161,6 +161,46 @@ The thread cards of before are gone. Each thread now has a full window, and wind
 - A group's windows are children of the group's panel. They are not in the layout lists (`IsGroupedPanel`).
 - Self-test section `threadwindows` (`Editor/MetaCodexUiTestThreadWindows.cs`). It was not run on the owner's PC.
 
+## Held turns and archive (owner 2026-11-14)
+
+### A held turn: SEND NOW, IN A WORKTREE, CANCEL (`Shell/ShellWorkspaces.cs`)
+
+- MQH holds a turn while another thread works in the same folder (docs/workspaces.md). The window shows
+  **▶ SEND NOW**. It asks "Start it now?" with three choices:
+  - **SEND NOW**: the turn starts in the shared folder. Both agents then edit the same files.
+  - **IN A WORKTREE**: the app reads the held message (`GET /threads/:id/queued-messages`), puts the worktree
+    instruction in front of its text, saves it (`PATCH .../queued-messages/:qid` with the row's `updatedAt` as
+    `expectedUpdatedAt`), and only then sends it (`POST .../send`). The agent makes or picks its own git worktree and
+    branch with the skill `worktree-per-thread` and works there. The shared folder stays as it is.
+  - **CANCEL**: the turn keeps waiting.
+- The message's text items become one text item (the instruction, then the texts; their mentions move with them).
+  Images and files stay as they are. If any step fails, a toast shows MQH's error and nothing is sent.
+- The skill (`mqh/plugins/metacodex-guide/skills/worktree-per-thread`) tells the agent: never edit the shared
+  checkout, reuse a worktree whose branch fits or `git worktree add -b agent/<name> <checkout>-wt-<name> <base>`,
+  commit there, and report the path, the branch, the base and "MERGE in WORKSPACES when done".
+- Limit: a worktree that an agent makes with git is not an MQH environment. WORKSPACES may not list it, and MQH
+  still counts the thread in the checkout. The skill then tells the user to ask the agent to merge.
+
+### Archive and delete (`Shell/ShellThreadArchive.cs`)
+
+- Each thread window has **ARCHIVE…** and **DELETE…** at the top. They act on the thread of that window (not on the
+  focused one). They show only while the window shows a thread.
+  - ARCHIVE… asks first, then archives the thread and its child threads (`POST /threads/:id/archive-all`). Every
+    window that shows one of them closes.
+  - DELETE… reads the child count (`GET /threads/:id/child-summary`), asks with that count, then deletes
+    (`DELETE /threads/:id`, `childThreadsConfirmed` true only when the question named child threads). The window
+    closes.
+- **THREADS > ▤ ARCHIVED** shows the archived threads (`GET /threads?archived=true`, one request when it is switched
+  on, after a change and on ⟳). Tap a row: **RESTORE** (`POST /threads/:id/unarchive`, that thread only) or
+  **DELETE…**. **◂ ACTIVE** goes back to the normal list.
+- A thread archived or deleted elsewhere (another client, an agent): when it is missing from MQH's list, the window
+  asks MQH for that thread (at most every 10 s). If it is archived or deleted, the window closes. Archived threads are
+  not in MQH's normal list, so they never count as working and are not in the session context's open windows.
+- Voice: `archive_thread` ("archive this chat", "archive the thread about <topic>") and `restore_thread`
+  ("bring back the chat about <topic>", "show my archived chats"). There is no delete by voice.
+- Self-test section `archive` (`Editor/MetaCodexUiTestThreadArchive.cs`) and three checks in `workspaces` (the
+  worktree instruction). Not run on the owner's PC.
+
 ## Tests
 
 - Pure checks (no Unity, Unity's own .NET 8 and Roslyn): `C:\Users\pnncl\mcxcheck-chat\test\build.sh` on the
