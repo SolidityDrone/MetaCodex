@@ -284,6 +284,31 @@ None of them needs an APK rebuild.
 An agent in a native project builds a real headset app, on the headset, and you test it at once.
 Unless you ask for VR or controllers, a new native app uses hands only and mixed reality. A mandatory skill sets this rule for the agent.
 
+> [!WARNING]
+> **Before you try native apps, check these four things.**
+>
+> 1. **Developer mode must be on.** It is also what lets you install MetaCodex, so keep it on. A built app is a sideloaded app like MetaCodex. MetaCodex installs it with Android's own installer, not with `adb`, and its code does not need developer mode for that step. Nobody has tested this with developer mode off. Turn developer mode on in the headset's companion app on your phone.
+> 2. **Allow MetaCodex to install apps, once.** At the first install, MetaCodex opens Android's "Install unknown apps" page. Turn on "Allow from this source" for MetaCodex, then come back. `mcx-app install` waits up to 5 minutes for you.
+> 3. **Tap INSTALL.** Nothing installs without your tap in the APP READY dialog. Android asks once more at the first install of each app.
+> 4. **Keep free storage.** The first use of native apps downloads about 400 MB and the toolchain takes about 2.5 GB.
+>
+> There is no way to switch on developer mode from inside the app, and the app cannot read its state reliably. If an install fails, check items 1 and 2 first.
+
+Permissions MetaCodex uses:
+
+| Permission | What for | When you see a prompt |
+|---|---|---|
+| Microphone | Push-to-talk speech to text. | At the first TALK. |
+| Spatial data | The live depth of the room for Ambient Focus. | At the first use of Ambient Focus. |
+| Headset camera | The passthrough camera, for the Ambient Focus blur. | At the first use of Ambient Focus. |
+| Hand tracking | Hands as the main input. | No prompt. Granted at install. Hand tracking must be on in the headset settings. |
+| Spatial anchors | Anchors in the room, for the app and for the native apps it builds. | No prompt. Granted at install. |
+| Install apps | Install the apps an agent builds. | The "Install unknown apps" page, once. Then one tap on INSTALL for each new app. |
+| Install updates silently | Update an app that MetaCodex installed, without a new tap. | None. Android decides. |
+| Foreground service, wake lock | Keep the agents, the local AI and a build running while a built app is in front, or the headset is off. | None. |
+
+A built app declares its own permissions. `mcx-app verify` lists them. The headset asks for them when the app first uses them.
+
 | Step | Command | What happens |
 |---|---|---|
 | Check | `mcx-app check` | Syntax and type check only. |
