@@ -489,6 +489,19 @@ namespace MetaCodex.Shell
         // ---- threads
         public void Threads(string projectId, Action<JToken> cb) => Call(HttpMethod.Get, "/api/v1/threads" + (string.IsNullOrEmpty(projectId) ? "" : "?projectId=" + E(projectId)), null, cb);
         public void Thread(string id, Action<JToken> cb) => Call(HttpMethod.Get, $"/api/v1/threads/{E(id)}", null, cb);
+        // archive and delete (owner 2026-11-14, ShellThreadArchive): MQH's list leaves archived threads out unless asked
+        /// The archived threads only (`archived=true`; deleted ones are never listed).
+        public void ThreadsArchived(Action<JToken> cb) => Call(HttpMethod.Get, "/api/v1/threads?archived=true", null, cb);
+        /// Archives the thread and its child threads; answers `{ ok, archivedThreadIds }`.
+        public void ArchiveThread(string id, Action<JToken> cb) => Call(HttpMethod.Post, $"/api/v1/threads/{E(id)}/archive-all", null, cb);
+        /// Brings an archived thread back (only that thread; 409 while its lifecycle owner is still archived).
+        public void UnarchiveThread(string id, Action<JToken> cb) => Call(HttpMethod.Post, $"/api/v1/threads/{E(id)}/unarchive", null, cb);
+        /// `{ nonDeletedChildCount, unarchivedDescendantCount }`: what a delete or an archive takes along.
+        public void ThreadChildSummary(string id, Action<JToken> cb) => Call(HttpMethod.Get, $"/api/v1/threads/{E(id)}/child-summary", null, cb);
+        /// Deletes the thread for good; `childThreadsConfirmed` true when the user agreed to its child threads going too
+        /// (MQH answers 409 child_threads_confirmation_required when it has some and this is false).
+        public void DeleteThread(string id, bool childThreadsConfirmed, Action<JToken> cb) =>
+            Call(HttpMethod.Delete, $"/api/v1/threads/{E(id)}", new JObject { ["childThreadsConfirmed"] = childThreadsConfirmed }, cb);
         public void CreateThread(JObject body, Action<JToken> cb) => Call(HttpMethod.Post, "/api/v1/threads", body, cb);
         public void Timeline(string id, Action<JToken> cb) => Call(HttpMethod.Get, $"/api/v1/threads/{E(id)}/timeline", null, cb);
         /// The timeline with every turn's steps (thinking, commands, edits); with afterTag (the last answer's `tag`)

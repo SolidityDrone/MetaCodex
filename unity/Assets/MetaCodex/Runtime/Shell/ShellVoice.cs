@@ -164,6 +164,7 @@ namespace MetaCodex.Shell
             RegisterSidebarVoiceCommands(); // THREAD's sidebar and INIT GIT (ShellThreadSidebar)
             RegisterComposerVoiceCommand(); // THREAD's message box: bigger, smaller, reset (ShellThreadComposer)
             RegisterThreadWindowVoiceCommand(); // several thread windows and their groups (ShellThreadGroups)
+            RegisterArchiveVoiceCommands(); // archive_thread, restore_thread (ShellThreadArchive)
             Decider = new VoiceDecider(Voice, (texts, done) =>
             {
                 if (Qvac == null || !Qvac.IsRunning) { done(null, "the AI service is not running"); return; }

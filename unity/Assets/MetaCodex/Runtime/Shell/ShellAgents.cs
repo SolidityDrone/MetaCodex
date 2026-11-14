@@ -305,8 +305,13 @@ namespace MetaCodex.Shell
             var p = Panel<UiPanel>("threads", "Threads", 0.60f, 0.60f);
             var c = p.Content;
             var st = new UiStack(c, t.Gap);
-            _threadsStatus = p.Add(new UiLabel("", t.SmallSize) { Rect = st.Next(0.02f), Color = t.TextDim });
-            _threadList = p.Add(new UiList(0.034f, (item, idx) => ThreadRowPicked(item)) { Rect = st.Next(c.height - 0.02f - t.ButtonHeight - t.Gap * 2) });
+            // the status line, and on its right the ARCHIVED toggle (owner 2026-11-14: archived threads, RESTORE / DELETE)
+            var sr = st.Next(0.03f);
+            float abw = 0.13f;
+            _threadsStatus = p.Add(new UiLabel("", t.SmallSize) { Rect = new Rect(sr.x, sr.y, sr.width - abw - t.Gap, sr.height), Color = t.TextDim });
+            _threadsArchBtn = p.Add(new UiButton(_threadsArchived ? "◂ ACTIVE" : "▤ ARCHIVED", ToggleArchivedThreads) { Rect = new Rect(sr.xMax - abw, sr.y, abw, sr.height), TextSize = t.SmallSize * 1.02f });
+            _threadsArchBtn.SetSelected(_threadsArchived);
+            _threadList = p.Add(new UiList(0.034f, (item, idx) => ThreadRowPicked(item)) { Rect = st.Next(c.height - 0.03f - t.ButtonHeight - t.Gap * 2) });
             _projectList = _threadList; // one list now (projects are its group rows)
             AddButtons(p, st.Next(t.ButtonHeight), new (string, Action)[]
             {
@@ -338,6 +343,7 @@ namespace MetaCodex.Shell
                 RenderThreadGroups();
                 return;
             }
+            if (tag.StartsWith("a:")) { ArchivedRowPicked(tag.Substring(2)); return; } // an archived thread: RESTORE or DELETE
             if (tag.StartsWith("t:")) { _threadSel = tag.Substring(2); OpenThread(_threadSel); }
             if (tag.StartsWith("w:")) OpenWorkspacesOn(tag.Substring(2)); // a workspace row: the WORKSPACES window on it
         }
@@ -353,6 +359,7 @@ namespace MetaCodex.Shell
                 if (_projectSel == null || !_projects.Any(x => (string)x["id"] == _projectSel))
                     _projectSel = _projects.Any(x => (string)x["id"] == Settings.lastProject) ? Settings.lastProject : (string)_projects.FirstOrDefault()?["id"];
                 RefreshThreadList();
+                if (_threadsArchived) RefreshArchivedThreads();
             });
         }
 
@@ -374,6 +381,7 @@ namespace MetaCodex.Shell
         private void RenderThreadGroups()
         {
             if (_threadList == null) return;
+            if (_threadsArchived) { RenderArchivedThreads(); return; } // ARCHIVED is on: the archived list instead
             var t = UiTheme.Current;
             var byProject = _threads.GroupBy(x => (string)x["projectId"] ?? "").ToDictionary(g => g.Key, g => g.OrderByDescending(x => x["updatedAt"]?.Value<long>() ?? 0).ToList());
             var spaces = WorkspaceMap.Build(_threads, _environments);
@@ -651,8 +659,11 @@ namespace MetaCodex.Shell
             _thHandle = p.Add(new UiEdgeHandle { Rect = new Rect(c.xMax + t.Gap * 0.6f, c.y + 0.06f, ThreadW - c.xMax - t.Gap * 0.6f - 0.004f, c.height - 0.06f - 0.12f), OnClickAction = Bind(ToggleSidebar) });
             var st = new UiStack(c, t.Gap);
             var top = st.Next(0.03f);
-            float bw = 0.082f;
-            _thTitle = p.Add(new UiLabel("", t.BodySize * 1.1f) { Rect = new Rect(top.x, top.y, top.width - bw * 2 - t.Gap * 2, top.height) });
+            float bw = 0.082f, aw0 = 0.088f;
+            _thTitle = p.Add(new UiLabel("", t.BodySize * 1.1f) { Rect = new Rect(top.x, top.y, top.width - bw * 3 - aw0 - t.Gap * 4, top.height) });
+            // ARCHIVE… and DELETE… for this window's own thread (ShellThreadArchive; hidden while it shows no thread)
+            w.thArchive = p.Add(new UiButton("ARCHIVE…", Bind(ArchiveThreadPrompt)) { Rect = new Rect(top.xMax - bw * 3 - aw0 - t.Gap * 3, top.y, aw0, top.height), TextSize = t.SmallSize * 1.05f });
+            w.thDelete = p.Add(new UiButton("DELETE…", Bind(DeleteThreadPrompt), UiButtonStyle.Danger) { Rect = new Rect(top.xMax - bw * 3 - t.Gap * 2, top.y, bw, top.height), TextSize = t.SmallSize * 1.05f });
             p.Add(new UiButton("⑂ FORK…", Bind(ForkPrompt)) { Rect = new Rect(top.xMax - bw * 2 - t.Gap, top.y, bw, top.height), TextSize = t.SmallSize * 1.05f });
             p.Add(new UiButton("⟳", Bind(() => { _tlMaxSeq = -1; _tlTag = null; _tlInFlight = false; _nextThreadMeta = 0f; PollThread(); })) { Rect = new Rect(top.xMax - bw, top.y, bw, top.height), TextSize = t.SmallSize * 1.05f });
             // the meta row: where it works (left), the provider's plan and usage limits (right)
@@ -715,6 +726,7 @@ namespace MetaCodex.Shell
             p.Opened += _ => { UpdateSidebarVoice(); UpdateThreadWindowVoice(); RefreshWindowTitles(); };
             SetAskVisible(false);
             RefreshAttachRow();
+            UpdateThreadActions();
         }
 
         private Rect TimelineRect(bool ask)
@@ -811,6 +823,7 @@ namespace MetaCodex.Shell
             NoteThreadUsed(id); // the thread used last (the way back from an app, ShellReturn)
             if (id != _threadOpen) { if (_threadOpen != null) _pulledOut.Remove(_threadOpen); _thExec = null; _thUsage = null; _threadInfo = null; _tlRaw = new JArray(); CloseAttachModal(); SetAttachMenu(false); _threadOpen = id; ResetThreadChat(); }
             _threadOpen = id;
+            UpdateThreadActions();
             RefreshAttachRow(); // each thread keeps its own attachments for its next message
             var row = _threads.FirstOrDefault(x => (string)x["id"] == id) as JObject;
             if (row != null) { _threadInfo = row; _threadOpenProject = (string)row["projectId"]; }
@@ -864,7 +877,9 @@ namespace MetaCodex.Shell
                 Mqh.Threads(_threadOpenProject, Bind<JToken>(th =>
                 {
                     var row = (th as JArray)?.FirstOrDefault(x => (string)x["id"] == id) as JObject;
-                    if (row == null || id != _threadOpen) return;
+                    if (id != _threadOpen) return;
+                    if (row == null) { if (th is JArray) CheckThreadGone(id); return; } // archived or deleted elsewhere: its window closes
+                    _tw.goneCheckAt = 0f;
                     bool statusChanged = StatusOfRow(row) != StatusOfRow(_threadInfo);
                     _threadInfo = row;
                     _threadOpenProject = (string)row["projectId"];
@@ -923,6 +938,7 @@ namespace MetaCodex.Shell
 
         private void ShowThreadHeader()
         {
+            UpdateThreadActions();
             if (_threadOpen == null && _draft != null) { ShowDraftHeader(); return; }
             var x = _threadInfo;
             var t = UiTheme.Current;
@@ -1556,6 +1572,7 @@ namespace MetaCodex.Shell
 
         private void ShowDraftHeader()
         {
+            UpdateThreadActions();
             var d = _draft;
             if (d == null || _thTitle == null) return;
             var t = UiTheme.Current;

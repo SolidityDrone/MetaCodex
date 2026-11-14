@@ -110,6 +110,9 @@ namespace MetaCodex.Shell
             public UiButton thSendNow;
             public Rect thStatusFull;
             public (string id, string reason) thWait;
+            public UiButton thArchive;        // ARCHIVE… / DELETE… for this window's thread (ShellThreadArchive)
+            public UiButton thDelete;
+            public float goneCheckAt;         // its thread was missing from MQH's list: when it was last asked whether it is archived
         }
 
         // ---- the per-window state: properties of the current window (they were fields before)
