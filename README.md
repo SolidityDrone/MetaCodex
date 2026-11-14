@@ -61,6 +61,7 @@ It is the place where you work with them: a desk that is always with you and as 
 - [Highlights](#highlights)
 - [How it works](#how-it-works)
   - [One app, two processes](#one-app-two-processes)
+  - [First start](#first-start)
   - [A real Linux inside the app](#a-real-linux-inside-the-app)
   - [Two AI stacks, two jobs](#two-ai-stacks-two-jobs)
   - [From a spoken sentence to an action](#from-a-spoken-sentence-to-an-action)
@@ -124,6 +125,16 @@ It also holds a wake lock while a build runs.
 Neither change is proven on the device yet (see [Status and limits](#status-and-limits)).
 
 The app checks the health of MQH and of the local AI every 5 s. Three missed checks restart the process.
+
+### First start
+
+- The very first start lays out what the APK carries. It takes about a minute. Nothing is downloaded.
+- A panel in front of you, "FIRST START · ONE-TIME SETUP", shows the five steps in turn: the AI models, the local AI service, the Linux, MQH and the voice's decision model.
+- Each step has a name, one line on what it does, its own bar and a spinner. A step that is done stays in the list with ✓ and its time.
+- Until its step is done, a feature is dimmed and shows 🔒. TALK waits for step 5. THREADS and AGENTS wait for step 4. TERMINALS and FILES wait for step 3. A tap gives one short message, nothing else.
+- A guided tour of about a minute runs at the same time: the main menu, the orb, moving a window, CONTROL. Each card waits for you to do it. You can skip a step or the whole tour.
+- The panel closes itself at the end. It never shows again. CONTROL > ABOUT > TOUR, or the voice command "start the tour", plays the tour again.
+- [docs/ready-on-install.md](docs/ready-on-install.md#first-start) has the details.
 
 ### A real Linux inside the app
 
