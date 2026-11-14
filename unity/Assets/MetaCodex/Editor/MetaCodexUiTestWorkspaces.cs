@@ -119,6 +119,21 @@ namespace MetaCodex.EditorTools
             RenderPanel(shell.PanelsById["thread"], "ui-thread-held.png");
             shell.SetThreadWaitForTest(null, null);
             Check(!shell.SendNowForTest.Visible, "no wait: SEND NOW goes");
+
+            // IN A WORKTREE (held turn): the instruction goes in front of the held text, mentions move with it, images stay
+            var heldInput = new JArray
+            {
+                new JObject { ["type"] = "text", ["text"] = "fix @menu", ["mentions"] = new JArray { new JObject { ["start"] = 4, ["end"] = 9, ["resource"] = new JObject() } } },
+                new JObject { ["type"] = "image", ["url"] = "https://example.invalid/a.png" },
+            };
+            var wtInput = MetaCodexShell.WorktreeInput(heldInput);
+            string wtText = (string)wtInput?[0]?["text"] ?? "";
+            int shift = MetaCodexShell.WorktreeInstruction.Length + 2;
+            Check(wtInput != null && wtInput.Count == 2 && wtText.StartsWith(MetaCodexShell.WorktreeInstruction) && wtText.EndsWith("\n\nfix @menu")
+                  && (int)wtInput[0]["mentions"][0]["start"] == 4 + shift && (string)wtInput[1]["type"] == "image",
+                "IN A WORKTREE: one text item (instruction, then the held text; its mention moved), the image kept");
+            Check(MetaCodexShell.WorktreeInput(wtInput)?[0]?["text"]?.ToString() == wtText, "IN A WORKTREE twice: the instruction is not added again");
+            Check(MetaCodexShell.HeldModalText.Contains("IN A WORKTREE: the agent makes or picks its own git worktree and branch"), "the held modal says what IN A WORKTREE does");
             shell.Settings.workspaceMode = mode0;
             foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
         }

@@ -524,6 +524,10 @@ namespace MetaCodex.Shell
         /// The user's Send now on a queued row: it skips the plugins' holds (MQH's workspace guard, the limits).
         public void SendQueuedNow(string threadId, string queuedId, Action<JToken> cb) =>
             Call(HttpMethod.Post, $"/api/v1/threads/{E(threadId)}/queued-messages/{E(queuedId)}/send", new JObject { ["mode"] = "auto" }, cb);
+        /// Rewrites a queued row (MQH `PATCH /threads/:id/queued-messages/:qid`): body `{ expectedUpdatedAt, input }`,
+        /// `expectedUpdatedAt` the row's `updatedAt` as read (a row changed meanwhile answers 409).
+        public void UpdateQueuedMessage(string threadId, string queuedId, JObject body, Action<JToken> cb) =>
+            Call(new HttpMethod("PATCH"), $"/api/v1/threads/{E(threadId)}/queued-messages/{E(queuedId)}", body, cb);
         public void DeleteQueuedMessage(string threadId, string queuedId, Action<JToken> cb) =>
             Call(HttpMethod.Delete, $"/api/v1/threads/{E(threadId)}/queued-messages/{E(queuedId)}", null, cb);
         public void ExecOptions(string id, Action<JToken> cb) => Call(HttpMethod.Get, $"/api/v1/threads/{E(id)}/default-execution-options", null, cb);

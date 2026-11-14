@@ -398,13 +398,16 @@ namespace MetaCodex.Shell
             if (_thStatus.Rect != want) _thStatus.SetRect(want);
         }
 
-        /// SEND NOW on a held turn: the user overrides the hold (both threads then work in one folder).
+        /// SEND NOW on a held turn: the user overrides the hold (both threads then work in one folder). IN A WORKTREE
+        /// (owner 2026-11-14): the held message gets the worktree instruction in front (the agent makes or picks its own
+        /// worktree with the worktree-per-thread skill), then it is sent now. CANCEL: it keeps waiting.
         private void SendHeldNow()
         {
             if (_threadOpen == null || _thWait.id == null) return;
             string id = _threadOpen, qid = _thWait.id;
-            Modal("Start it now?", "Another thread is working in this folder: both agents will edit the same files at once. A WORKTREE thread avoids that.", new[] { "SEND NOW", "CANCEL" }, Bind<int>(i =>
+            Modal("Start it now?", HeldModalText, new[] { "SEND NOW", "IN A WORKTREE", "CANCEL" }, Bind<int>(i =>
             {
+                if (i == 1) { SendHeldInWorktree(id, qid); return; }
                 if (i != 0) return;
                 Mqh.SendQueuedNow(id, qid, Bind<JToken>(r =>
                 {
@@ -415,6 +418,80 @@ namespace MetaCodex.Shell
                     PollThread();
                 }));
             }));
+        }
+
+        public const string HeldModalText = "Another thread is working in this folder. SEND NOW: both agents edit the same files at once. " +
+            "IN A WORKTREE: the agent makes or picks its own git worktree and branch and works there; the shared folder stays as it is.";
+
+        /// What IN A WORKTREE puts in front of the held message (the skill worktree-per-thread does the rest).
+        public const string WorktreeInstruction = "This project's folder is busy with another agent. Before you change any file, use the " +
+            "worktree-per-thread skill: choose the worktree that fits this task, or create one, and do all edits there. Then do this task:";
+
+        /// IN A WORKTREE: read the held row (its content and updatedAt), rewrite it with the instruction in front (PATCH,
+        /// expectedUpdatedAt = the row's updatedAt), then send it now. Any failure: a toast with MQH's error, nothing sent.
+        private void SendHeldInWorktree(string id, string qid)
+        {
+            Mqh.QueuedMessages(id, Bind<JToken>(q =>
+            {
+                if (q == null) { Toast("Not sent: " + Mqh.LastError, "error"); return; }
+                var row = (q as JArray)?.OfType<JObject>().FirstOrDefault(x => (string)x["id"] == qid);
+                if (row == null) { Toast("Not sent: the held message is no longer in the queue (it may have started)", "error"); AfterHeldSent(id); return; }
+                if (row["editable"]?.Type == JTokenType.Boolean && !(bool)row["editable"]) { Toast("Not sent: this queued message cannot be changed now", "error"); return; }
+                var input = WorktreeInput((row["content"] ?? row["input"]) as JArray);
+                if (input == null) { Toast("Not sent: the held message has no content", "error"); return; }
+                long updatedAt;
+                try { updatedAt = (long)Math.Round((double)row["updatedAt"]); } catch (Exception) { Toast("Not sent: the queued message has no updatedAt", "error"); return; }
+                Mqh.UpdateQueuedMessage(id, qid, new JObject { ["expectedUpdatedAt"] = updatedAt, ["input"] = input }, Bind<JToken>(p =>
+                {
+                    if (p == null) { Toast("Not sent: " + Mqh.LastError, "error"); return; }
+                    Mqh.SendQueuedNow(id, qid, Bind<JToken>(r =>
+                    {
+                        Toast(r != null ? "Sent: the agent moves to its own worktree first" : "Not sent: " + Mqh.LastError, r != null ? "info" : "error");
+                        AfterHeldSent(id);
+                    }));
+                }));
+            }));
+        }
+
+        /// After a held turn was sent (or left the queue): the window that still shows that thread drops SEND NOW and reads it again.
+        private void AfterHeldSent(string id)
+        {
+            if (_threadOpen != id) return;
+            _thWait = default;
+            SetSendNowVisible(false);
+            _nextThreadMeta = 0f;
+            PollThread();
+        }
+
+        /// The held row's input with the worktree instruction in front: its text items become ONE text item (the
+        /// instruction, then each text; their mentions move with them), the other items (images, files) stay as they are.
+        /// Already rewritten (the instruction is there): the same items again. Null: nothing to send.
+        public static JArray WorktreeInput(JArray content)
+        {
+            if (content == null || content.Count == 0) return null;
+            var items = content.OfType<JObject>().ToList();
+            var text = new System.Text.StringBuilder();
+            var mentions = new JArray();
+            bool already = items.Any(x => (string)x["type"] == "text" && ((string)x["text"] ?? "").StartsWith(WorktreeInstruction, StringComparison.Ordinal));
+            if (!already) text.Append(WorktreeInstruction);
+            var rest = new JArray();
+            foreach (var item in items)
+            {
+                if ((string)item["type"] != "text") { rest.Add(item.DeepClone()); continue; }
+                if (text.Length > 0) text.Append("\n\n");
+                int at = text.Length;
+                text.Append((string)item["text"] ?? "");
+                foreach (var m in (item["mentions"] as JArray)?.OfType<JObject>() ?? Enumerable.Empty<JObject>())
+                {
+                    var c = (JObject)m.DeepClone();
+                    if (c["start"] != null) c["start"] = (int)c["start"] + at;
+                    if (c["end"] != null) c["end"] = (int)c["end"] + at;
+                    mentions.Add(c);
+                }
+            }
+            var result = new JArray { new JObject { ["type"] = "text", ["text"] = text.ToString(), ["mentions"] = mentions } };
+            foreach (var r in rest) result.Add(r);
+            return result;
         }
 
         public void SetThreadWaitForTest(string queuedId, string reason)
