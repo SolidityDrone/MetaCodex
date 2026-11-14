@@ -312,10 +312,13 @@ Our files laid over the image (scripts `mcx`, `mcx-setup`, `mcx-ui`, `mcx-secret
 |---|---|---|---|
 | 36 Unity agent skills | github.com/Unity-Technologies/skills @ `60f95e6d4beaeacf4dfdff7829ec9b35008a0be0` (2026-11-06) | Unity Companion License ("Unity Skills (c) 2026 Unity Technologies") | `/root/.claude/skills/THIRD-PARTY/LICENSE-unity-skills.md` ([copy](licenses/Unity-skills-LICENSE.md)) |
 | 7 Meta agent skills (hz-*) | github.com/meta-quest/agentic-tools (via the skill set's vendor lock) | Apache-2.0 | `/root/.claude/skills/THIRD-PARTY/LICENSE-meta-agentic-tools` ([copy](licenses/Meta-agentic-tools-Apache-2.0-LICENSE.txt)) |
+| cgltf 1.15 (`/opt/metacodex/quest-native/xr/third_party/cgltf.h`, used by the native kit `mcx_model.h`; compiled into a native app only when the app loads glTF models) | github.com/jkuhlmann/cgltf, tag `v1.15`, commit `360db1a95480fe102ae9c69b27c5d101167ff5ba`, sha256 `e378a21c...c6ec` | MIT ("Copyright (c) 2018-2021 Johannes Kuhlmann") | the notice at the end of the file; versions in `third_party/README.md` |
+| stb_image 2.32 (`/opt/metacodex/quest-native/xr/third_party/stb_image.h`, the same use) | github.com/nothings/stb, commit `9f755b604db3492df2cbeb39bf84b81e3e3932e3`, sha256 `deb4f18c...6e91` | public domain or MIT (the file's ALTERNATIVE A / B) | the licence text at the end of the file |
 | this file and the texts in `docs/licenses/` | this repository | | `/usr/share/doc/metacodex/` |
 
 `userland/agent-skills/SOURCES.md` lists every skill. Our own skills (`metacodex-context`, `quest-gesture-plugins`,
-`quest-scripting`, `quest-views`) are MIT.
+`quest-scripting`, `quest-views`) are MIT, and so are the quest-native-* skills and the native kits (`mcx_gfx.h`,
+`mcx_ui.h`, `mcx_physics.h`, `mcx_model.h`, 2026-11-14).
 
 ### 3.8 MQH, the Meta Quest Harness (`assets/linux/mqh.tar`, 7,481 files, 70,174,720 bytes unpacked)
 

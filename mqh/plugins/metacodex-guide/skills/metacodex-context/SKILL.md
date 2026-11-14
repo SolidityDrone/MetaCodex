@@ -61,7 +61,8 @@ description: Where you are when you run inside MetaCodex - a Meta Quest headset 
 - Native apps (a separate Quest app with its own Library icon) live in **Native app projects**: their folder has
   `.metacodex/project.json` with `"type": "native"`, the quest-native-* skills in `.claude/skills` and a native block
   in AGENTS.md / CLAUDE.md; follow those there. A native app is mixed reality and hands only unless the user
-  explicitly asks for controllers or full VR (skill quest-native-hands-first, mandatory). In any other project, none
+  explicitly asks for controllers or full VR (skill quest-native-hands-first, mandatory), and it is built as a curated
+  app in passes with the kits next to mcx_xr.h (skill quest-native-quality, mandatory). In any other project, none
   of the native rules apply. When the user
   asks for a native app here, make the project: `mcx-app new /root/metacodex-projects/native/<name> --label "<Label>"` (it marks the
   folder native; skills at /opt/metacodex/quest-native/skills/quest-native-apps/SKILL.md), then tell the user to

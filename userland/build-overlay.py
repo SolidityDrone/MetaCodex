@@ -79,6 +79,16 @@ with tarfile.open(fileobj=raw, mode="w", format=tarfile.PAX_FORMAT) as tf:
     # the native XR layer (mcx-build compiles it once per toolchain) and its worked example
     for f in ("mcx_xr.h", "mcx_xr.cpp", "mcx_font.h"):
         extra[f"opt/metacodex/quest-native/xr/{f}"] = os.path.join(native, "xr", f)
+    # the header-only kits next to it (mcx_gfx.h, mcx_ui.h, mcx_physics.h, mcx_model.h, ...) and the single-header
+    # libraries mcx_model.h uses (third_party/: cgltf, stb_image; versions and licences in its README.md)
+    for f in sorted(os.listdir(os.path.join(native, "xr"))):
+        if f.startswith("mcx_") and f.endswith(".h") and f not in ("mcx_xr.h", "mcx_font.h"):
+            extra[f"opt/metacodex/quest-native/xr/{f}"] = os.path.join(native, "xr", f)
+    tp = os.path.join(native, "xr", "third_party")
+    if os.path.isdir(tp):
+        for f in sorted(os.listdir(tp)):
+            if not junk(f):
+                extra[f"opt/metacodex/quest-native/xr/third_party/{f}"] = os.path.join(tp, f)
     for f in ("AndroidManifest.xml", "src/main.cpp", "res/drawable/icon.png"):
         extra[f"opt/metacodex/quest-native/examples/nightvision/{f}"] = os.path.join(native, "examples", "nightvision", f)
     for dst, srcdir in trees.items():
