@@ -24,7 +24,8 @@ bin_ = os.path.join(root, "userland/overlay/usr/local/bin")
 mcx_app = open(os.path.join(bin_, "mcx-app")).read()
 mcx_build = open(os.path.join(bin_, "mcx-build")).read()
 mcx_buildd = open(os.path.join(bin_, "mcx-buildd")).read()
-xr_h = open(os.path.join(root, "native/xr/mcx_xr.h")).read()
+# the native layer: mcx_xr.h and the header-only kits next to it (mcx_gfx.h, mcx_ui.h, mcx_physics.h, mcx_model.h, ...)
+xr_h = "\n".join(open(p, encoding="utf-8").read() for p in sorted(glob.glob(os.path.join(root, "native/xr/mcx_*.h"))))
 mod_h = open(os.path.join(root, "native/runner/mcx_module.h")).read()
 sources = "\n".join(open(p, encoding="utf-8", errors="replace").read() for p in
                     [os.path.join(root, "native/xr/mcx_xr.cpp"), os.path.join(root, "native/runner/host.cpp"),
@@ -94,7 +95,7 @@ known = set(re.findall(r"\b([A-Za-z_]\w*)\b", xr_h + mod_h + oxr))
 # names the sources define outside the headers: env variables, dlsym'ed entry points, manifest attributes
 manifests = "".join(open(p).read() for p in glob.glob(os.path.join(root, "native/**/AndroidManifest.xml"), recursive=True))
 source_words = set(re.findall(r"\b([A-Za-z_]\w*)\b", sources + manifests))
-std_ok = {"find", "npos", "c_str", "size", "push_back", "empty", "data", "x", "y", "z", "w", "m", "first", "second", "r", "g", "b", "a"}
+std_ok = {"find", "npos", "c_str", "size", "push_back", "empty", "data", "x", "y", "z", "w", "m", "first", "second", "r", "g", "b", "a", "activity", "assetManager", "internalDataPath", "externalDataPath", "vm", "clazz"}  # + the NDK glue's ANativeActivity
 for doc, text in docs.items():
     code = re.findall(r"`([^`\n]+)`", text) + re.findall(r"```cpp\n(.*?)```", text, re.S)
     # what the document's own code declares (a recipe's struct fields, locals)
@@ -103,14 +104,14 @@ for doc, text in docs.items():
         for n in re.findall(r"\bmcx::(\w+)", c):
             checked["names"] += 1
             if n not in known:
-                bad(doc, f"mcx::{n}: not in mcx_xr.h")
+                bad(doc, f"mcx::{n}: not in mcx_xr.h or the kits next to it (native/xr/mcx_*.h)")
         for n in re.findall(r"\b(mcx_app_\w+|Mcx[A-Z]\w+|MCX_\w+)\b", c):
             checked["names"] += 1
             if n not in known and n not in source_words:
                 bad(doc, f"{n}: not in mcx_module.h / mcx_xr.h")
         if re.search(r"[;{}()=]|\bmcx::|\bapp\.|\bf\.|\bcfg\.|\bhost->", c):  # looks like code
             for n in re.findall(r"(?:\.|->)([A-Za-z_]\w*)\b", c):
-                if n in ("h", "cpp", "so", "apk", "md", "png", "pem", "keystore", "conf", "xml", "log", "txt", "c", "cc"):
+                if n in ("h", "cpp", "so", "apk", "md", "png", "pem", "keystore", "conf", "xml", "log", "txt", "c", "cc", "glb", "gltf", "bin", "jpg", "ktx2"):
                     continue
                 checked["names"] += 1
                 if n not in known and n not in std_ok and n not in own and n not in manifests:
