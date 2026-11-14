@@ -135,3 +135,16 @@ missing opacity there, not the window behind (as everywhere else on the window).
 per-window skip of "Cheaper depth features" (`McxVisibilityAtIn(slot, q)`). Check: `~/mcxwork/perf-ui/verify.py`
 (CPU port of the old and new code: gates and early-outs differ by at most 0.05/255).
 
+
+## First start: no stall while the userland unpacks (branch perf/first-run)
+
+Measured on the Quest 3S after a clean install of the packed APK (log of 2026-11-14, launch 08:08:09): the app unpacks the
+Linux userland (8,393 files, 362 MB, 9.4 s), copies 649 MB of models and starts the AI service and MQH while the user
+takes the guided tour. Frames must stay at 72 fps with no stall over 50 ms. Everything below is "to measure on the
+headset" (no device run was made for these changes). Compare with `grep -E '\[hitch\]|\[slow|installing the Linux|Linux installed|shell up' files/session_log.txt`.
+
+| What it was | What changed | Measured |
+|---|---|---|
+| The Linux unpack (`Task.Run`: untar, chmod, symlinks, the overlay and the MQH bundle) and the AI runtime unpack ran on thread-pool threads at normal priority, on the app's cores 3-5, next to the main and render threads | `LowPriority.Run`: each is a dedicated background thread that sets itself to nice 10 (`setpriority` on its own thread id) before it starts; a pool thread would keep the lowered priority for the next job. The copies out of the APK stay on Unity's web-request thread (0.9 s for the 649 MB of models, ~2 s for the 118 MB rootfs) | to measure: `Linux installed in N s` was 9.4 s; expect a few seconds more while a core is busy, and no `[hitch]` between `installing the Linux userland 10%` and `Linux installed` |
+| The install loop wrote a log line and built a string every frame (the log has ~700 `installing the Linux userland N%` lines, 13 ms apart, many with the same N; in a development build each line carries a stack trace) | one line and one string per percent (at most 100); the AI runtime's and the models' status text the same | to measure: ~100 `installing the Linux userland` lines instead of ~700 |
+| `MqhHost.Tick` (every frame) read `mqh.applied` from the disk through `LinuxHost.MqhApplied`: a file read and a string per frame for the whole session | `LinuxHost.MqhApplied` keeps the text once read (reset when a bundle is laid or the userland is deleted; an empty result is not kept) | no per-frame file read |

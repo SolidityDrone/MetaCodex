@@ -35,7 +35,19 @@ namespace MetaCodex.Linux
         /// MQH for this Linux (tools/mqh-bundle.sh): /opt/mqh, replaced whole when its sha256 changes.
         public const string MqhAsset = "linux/mqh.tar.gz", MqhInfoAsset = "linux/mqh.json";
         /// The MQH bundle on disk now (its mqh.json, "" when none was laid yet: MqhHost waits for it).
-        public string MqhApplied => File.Exists(Path.Combine(LinuxDir, "mqh.applied")) ? File.ReadAllText(Path.Combine(LinuxDir, "mqh.applied")) : "";
+        /// MqhHost.Tick reads it every frame: the file is read once and kept (it only changes when a bundle is laid, below,
+        /// or the userland is deleted); "" is not kept, so a bundle laid by something else is still seen.
+        public string MqhApplied
+        {
+            get
+            {
+                if (_mqhApplied != null) return _mqhApplied;
+                string f = Path.Combine(LinuxDir, "mqh.applied");
+                if (!File.Exists(f)) return "";
+                return _mqhApplied = File.ReadAllText(f);
+            }
+        }
+        private string _mqhApplied;
 
         private void Say(string s)
         {
@@ -106,7 +118,8 @@ namespace MetaCodex.Linux
 
             string staging = Path.Combine(LinuxDir, "rootfs.new");
             var started = DateTime.UtcNow;
-            var task = Task.Run(() =>
+            // on its own thread at nice 10 (LowPriority): the unpack shares cores 3-5 with the main and render threads
+            var task = LowPriority.Run(() =>
             {
                 var fs = new NativeFileOps();
                 // a rootfs without the marker is an interrupted install (the marker is written right after the move)
@@ -118,8 +131,16 @@ namespace MetaCodex.Linux
                     stats = TarGzExtractor.Extract(f, staging, fs, p => Progress = 0.1f + p * 0.85f);
                 RootfsSetup.Apply(staging, AppGroups(), Environment.ProcessorCount, fs);
                 return stats;
-            });
-            while (!task.IsCompleted) { Say($"installing the Linux userland {Progress * 100f:F0}%"); yield return null; }
+            }, "mcx-linux-unpack");
+            // one log line and one string per percent, not per frame (the 0.7.19 first start logged ~700 lines, each with a
+            // stack trace in a development build)
+            int shownPct = -1;
+            while (!task.IsCompleted)
+            {
+                int pct = (int)(Progress * 100f);
+                if (pct != shownPct) { shownPct = pct; Say($"installing the Linux userland {pct}%"); }
+                yield return null;
+            }
             if (task.IsFaulted) { Fail("install: " + task.Exception?.GetBaseException().Message); yield break; }
 
             Directory.Move(staging, RootfsDir);
@@ -162,7 +183,7 @@ namespace MetaCodex.Linux
             yield return CopyStreamingAsset(asset, tarPath, _ => { });
             if (State == HostState.Failed) yield break;
             Say("laying " + Path.GetFileName(asset) + " over the Linux");
-            var task = Task.Run(() =>
+            var task = LowPriority.Run(() =>
             {
                 if (replaceDir != null)
                 {
@@ -171,11 +192,12 @@ namespace MetaCodex.Linux
                 }
                 using (var f = new FileStream(tarPath, FileMode.Open, FileAccess.Read))
                     return TarGzExtractor.Extract(f, RootfsDir, new NativeFileOps());
-            });
+            }, "mcx-linux-bundle");
             while (!task.IsCompleted) yield return null;
             try { File.Delete(tarPath); } catch (Exception) { }
             if (task.IsFaulted) { Say(Path.GetFileName(asset) + " failed: " + task.Exception?.GetBaseException().Message); yield break; }
             File.WriteAllText(applied, info);
+            if (appliedName == "mqh.applied") _mqhApplied = null;
             Say(Path.GetFileName(asset) + " applied: " + task.Result);
         }
 
@@ -252,6 +274,7 @@ namespace MetaCodex.Linux
         public void DeleteUserland()
         {
             if (Directory.Exists(LinuxDir)) NativeFileOps.DeleteTree(LinuxDir);
+            _mqhApplied = null;
             State = HostState.Idle;
             Say("Linux userland deleted");
         }

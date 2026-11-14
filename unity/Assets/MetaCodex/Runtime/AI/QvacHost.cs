@@ -250,7 +250,8 @@ namespace MetaCodex.AI
                 }
                 if (!copied) { Fail("could not read qvac/runtime.tar(.gz) from the APK"); yield break; }
                 string staging = RuntimeDir + ".new";
-                var task = Task.Run(() =>
+                // its own thread at nice 10 (LowPriority): the app's cores 3-5 are the frame loop's
+                var task = LowPriority.Run(() =>
                 {
                     var fs = new NativeFileOps();
                     if (Directory.Exists(staging)) NativeFileOps.DeleteTree(staging);
@@ -261,8 +262,14 @@ namespace MetaCodex.AI
                     Directory.Move(staging, RuntimeDir);
                     File.WriteAllText(hashFile, hash);
                     File.Delete(tar);
-                });
-                while (!task.IsCompleted) { Status = $"unpacking the AI runtime {Progress * 100f:F0}%"; yield return null; }
+                }, "mcx-ai-unpack");
+                int shownPct = -1;
+                while (!task.IsCompleted)
+                {
+                    int pct = (int)(Progress * 100f);
+                    if (pct != shownPct) { shownPct = pct; Status = $"unpacking the AI runtime {pct}%"; } // a string per percent, not per frame
+                    yield return null;
+                }
                 if (task.IsFaulted) { Fail("unpack: " + task.Exception?.GetBaseException().Message); yield break; }
                 Say("AI runtime " + hash + " unpacked");
             }
@@ -440,10 +447,12 @@ namespace MetaCodex.AI
                 string dest = Path.Combine(dir, file), part = dest + ".part";
                 string err = null;
                 long before = done;
+                int shownPct = -1;
                 yield return CopyStreaming("qvac/models/" + file, part, p =>
                 {
                     Progress = total > 0 ? (before + p * bytes) / (float)total : 1f;
-                    Status = $"installing the voice models {Progress * 100f:F0}%";
+                    int pct = (int)(Progress * 100f);
+                    if (pct != shownPct) { shownPct = pct; Status = $"installing the voice models {pct}%"; } // a string per percent, not per frame
                 }, e => err = e);
                 if (err == null && (!File.Exists(part) || new FileInfo(part).Length != bytes)) err = "wrong size";
                 if (err != null) { Say($"models pack: {file}: {err} (it downloads instead)"); try { File.Delete(part); } catch (Exception) { } continue; }
