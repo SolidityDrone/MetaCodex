@@ -59,9 +59,11 @@ namespace MetaCodex.EditorTools
             shell.SetCardPulseForTest("thr_cA", new ThreadPulse { State = "working", Doing = "editing login.ts", TurnStart = now - 5000 });
 
             // merge: B's window moved by its header and let go on A's: A keeps its place, B's card is appended
+            // 0.6 m away: in front of every other window (the test's terminal frame stands 0.85 m ahead, across the middle;
+            // at 0.9 m it took the press, so the drag never started)
             var pa = shell.PanelsById[gA]; var pb = shell.PanelsById[gB];
-            pa.transform.SetPositionAndRotation(head.position + new Vector3(-0.22f, -0.05f, 0.9f), Quaternion.identity);
-            pb.transform.SetPositionAndRotation(head.position + new Vector3(0.22f, -0.05f, 0.9f), Quaternion.identity);
+            pa.transform.SetPositionAndRotation(head.position + new Vector3(-0.22f, -0.05f, 0.6f), Quaternion.identity);
+            pb.transform.SetPositionAndRotation(head.position + new Vector3(0.22f, -0.05f, 0.6f), Quaternion.identity);
             var posA = pa.transform.position;
             var dir = Vector3.forward;
             var hp = pb.transform.TransformPoint(pb.PanelToLocal(new Vector2(0.08f, UiTheme.Current.HeaderHeight * 0.5f)));
@@ -69,6 +71,7 @@ namespace MetaCodex.EditorTools
             shell.Router.Inject(ptr);
             ptr.Down = true; shell.Router.Inject(ptr);
             bool dragging = shell.Router.IsDragging(pb);
+            string pressed = ptr.HitPanel != null ? ptr.HitPanel.Id : "nothing";
             var onA = pa.transform.TransformPoint(pa.PanelToLocal(new Vector2(pa.Width * 0.5f, pa.Height * 0.6f)));
             ptr.Ray = new Ray(onA - dir * 0.4f, dir); shell.Router.Inject(ptr);
             shell.Router.Inject(ptr);
@@ -77,7 +80,7 @@ namespace MetaCodex.EditorTools
             var merged = shell.CardThreadsForTest(gA);
             Check(dragging && lit == gA && merged.SequenceEqual(new[] { "thr_cA", "thr_cB" }) && shell.CardGroupIdsForTest.Count == 1 && !shell.PanelsById.ContainsKey(gB)
                   && (shell.PanelsById[gA].transform.position - posA).magnitude < 0.001f && shell.CardDropTargetForTest == null,
-                $"drop a group on another: lit while over it ({lit}), they merge into {gA} ({string.Join(", ", merged)}), the target kept its place");
+                $"drop a group on another: the header press moves {gB} ({dragging}, hit {pressed}), {gA} lit while over it ({lit}), they merge into {gA} ({string.Join(", ", merged)}), the target kept its place");
 
             // one panel, two cards side by side, moving as one
             pa = shell.PanelsById[gA];
@@ -95,14 +98,14 @@ namespace MetaCodex.EditorTools
             // pull B out by its grip past the right edge: a group of one there; A's window narrows and stays
             var grip = shell.CardElementForTest("thr_cB", "grip");
             var posA2 = pa.transform.position;
-            Click(shell.Router, pa, grip.Rect.center, new Vector2(pa.Width + 0.10f, grip.Rect.center.y));
+            if (grip != null) Click(shell.Router, pa, grip.Rect.center, new Vector2(pa.Width + 0.10f, grip.Rect.center.y));
             string gB2 = shell.CardGroupOfForTest("thr_cB");
             var pb2 = gB2 != null && shell.PanelsById.TryGetValue(gB2, out var q) ? q : null;
             pa = shell.PanelsById[gA];
             float side = pb2 != null ? pa.transform.InverseTransformPoint(pb2.transform.position).x : 0f;
-            Check(gB2 != null && gB2 != gA && shell.CardThreadsForTest(gA).SequenceEqual(new[] { "thr_cA" }) && pb2 != null && pb2.IsOpen
+            Check(grip != null && gB2 != null && gB2 != gA && shell.CardThreadsForTest(gA).SequenceEqual(new[] { "thr_cA" }) && pb2 != null && pb2.IsOpen
                   && side > pa.Width * 0.5f && (pa.transform.position - posA2).magnitude < 0.001f && pa.Width < 1.5f * MetaCodexShell.CardW,
-                $"pull a card out by its grip: a group of one ({gB2}) right of the old one ({side:F2} m), the old one keeps its place with one card");
+                $"pull a card out by its grip ({(grip != null ? "grip found" : "no grip: B is not in A's group")}): a group of one ({gB2}) right of the old one ({side:F2} m), the old one keeps its place with one card");
 
             // OPEN: the card's thread in the THREAD window; REPLY: the system keyboard sends to that thread
             (shell.CardElementForTest("thr_cB", "open") as UiButton)?.Click();
