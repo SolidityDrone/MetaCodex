@@ -153,7 +153,8 @@ namespace MetaCodex.Shell
             // running for an invisible darkness; the owner's settings were exactly that)
             bool shown = _focusShown > 0f && (Settings.focusIntensity > 0.004f || Settings.focusBlur > 0.001f);
             ApplyFoveation(); // on while the focus is shown (FocusShownNow)
-            bool wantDepth = shown || Settings.occludeUi;
+            bool mayStart = FocusInitMayStart(); // the native starts of the depth and the camera wait for a first start's install
+            bool wantDepth = mayStart && (shown || Settings.occludeUi);
             _sharpWanted = wantDepth;
             EnsureDepth(Held(wantDepth, _depth != null && _depth.enabled, ref _depthUnwantedSince));
             if (_depthLive) _depthSeen = true;
@@ -162,7 +163,7 @@ namespace MetaCodex.Shell
             // the owner's hard lag at every dictation). While the voice is busy it keeps running and only its frames are
             // not used (the blur keeps the room it has, the sharp depth the last picture).
             bool voiceBusy = VoiceState == "transcribing" || VoiceState == "thinking";
-            bool wantCam = (shown && Settings.focusBlur > 0.001f) || (wantDepth && Settings.depthCamera && _depthSeen);
+            bool wantCam = mayStart && ((shown && Settings.focusBlur > 0.001f) || (wantDepth && Settings.depthCamera && _depthSeen));
             _camUseFrames = wantCam && !voiceBusy;
             EnsureCamera(Held(wantCam, _cam != null && _cam.gameObject.activeSelf, ref _camUnwantedSince));
             Shader.SetGlobalFloat(OcclusionId, Settings.occludeUi && _sharpLive ? 1f : 0f);
@@ -197,6 +198,33 @@ namespace MetaCodex.Shell
             if (blur) _focusMat.SetFloat(BlurMipId, Mathf.Lerp(1.6f, 5.1f, Mathf.Clamp01(Settings.focusBlur)));
             UpdateVoid();
             UpdateFloorFromDepth(head);
+        }
+
+        // ---- the first start (perf/first-run, 0.7.19 log): starting the environment depth and the passthrough camera each stop
+        // the main thread for a while (frame 403 ms at the depth's first frame, 278 ms with 158 ms in this step at the
+        // camera's start, both within 1 s of the 5.9 s start freeze and right as the Linux began to install). They are
+        // native calls: they cannot be spread over frames, so they wait for a quiet moment: until the Linux is ready (or
+        // failed) and, when it was installed in this session, 1.5 s more so they do not land on the install's last frames,
+        // the overlay and MQH starting. A start with the Linux already there waits for nothing but its Prepare (a few
+        // frames). Not on the Editor. Gives up after 180 s.
+        private const float FocusInitAfterInstall = 1.5f, FocusInitMaxWait = 180f;
+        private bool _focusInitOpen, _focusInitSawInstall;
+        private float _focusInitReadyAt = -1f;
+
+        private bool FocusInitMayStart()
+        {
+            if (_focusInitOpen) return true;
+            if (Application.isEditor || Application.platform != RuntimePlatform.Android) return _focusInitOpen = true;
+            var host = app != null ? app.Host : null;
+            float now = Time.unscaledTime;
+            if (host == null || now >= FocusInitMaxWait) return _focusInitOpen = true;
+            var st = host.State;
+            if (st == MetaCodex.Linux.LinuxHost.HostState.Installing) _focusInitSawInstall = true;
+            if (st != MetaCodex.Linux.LinuxHost.HostState.Ready && st != MetaCodex.Linux.LinuxHost.HostState.Failed && st != MetaCodex.Linux.LinuxHost.HostState.Unsupported) return false;
+            if (_focusInitReadyAt < 0f) _focusInitReadyAt = now;
+            if (_focusInitSawInstall && now - _focusInitReadyAt < FocusInitAfterInstall) return false;
+            Log($"ambient focus: depth and camera may start now (t={now:F1} s, Linux {st}{(_focusInitSawInstall ? ", installed this session" : "")})");
+            return _focusInitOpen = true;
         }
 
         /// The Horizon OS menu: while a hand does the system gesture (palm up, pinch) or the app has lost input focus
