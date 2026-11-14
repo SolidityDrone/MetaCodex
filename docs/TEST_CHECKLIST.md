@@ -711,3 +711,13 @@ Work windows:
 - [ ] Grow the box, then + → ATTACH FILES: one row; the grip does nothing while the attach window is open; CANCEL leaves one row
 - [ ] Voice: "make the text box bigger" (one step), "shrink the composer" (one step), "reset the text box" (one row); "expand the message box" and "put the message box back to the default size" work
 - [ ] While dragging the chat changes a few times a second, no stutter; 72 fps with a working thread open (Perf menu Snapshot)
+## 49. Back from a native app: the panels stay in the room (branch feat/return-anchor; docs/ui.md "Back from a native app")
+
+Setup: open the dock, THREAD and one more window in FIXED layout. Note where they are against a wall, the desk or a door.
+
+- [ ] Launch a native app from MetaCodex (LAUNCH), use it, close it with "Back to MetaCodex": every panel is in the same place in the room (a few cm)
+- [ ] Same, but turn your head 90 degrees before coming back: the panels still stay in the room
+- [ ] files/session_log.txt has one line `room anchor: back in the room after the native app: panels moved X cm (most Y cm), turned Z deg, N open`. Write X, Y, Z down. X near 0 while the panels still moved: the cause is not the room origin; send the log
+- [ ] A line `room anchor: ... too far` or `no room reference` shows: the Stage origin does not hold here; send the log (next step: Stationary or anchors, see docs/ui.md)
+- [ ] Pause and resume with the Home button, no native app: the panels stay where they were, no line about a move
+- [ ] RECENTER (wrist or ⟲) still puts the panels in front of you as before
