@@ -576,7 +576,8 @@ namespace MetaCodex.Shell
                 _orbActs.Add(p);
                 return p.Add(new UiButton(text, act, style) { Rect = new Rect(0f, 0f, OrbActW, OrbActH), TextSize = OrbActText });
             }
-            B(0, "◉\nTALK", () => VoiceToggle(), UiButtonStyle.Primary);
+            _orbTalkBtn = B(0, "◉\nTALK", () => VoiceToggle(), UiButtonStyle.Primary);
+            ApplyOrbTalkLock(); // the first start's setup (ShellSetupLocks)
             _orbSpeakBtn = B(1, "♫\nSPEAK", () => { Settings.voice.speak = !Settings.voice.speak; OnSettingsChanged(); SyncSettingsControls(); RefreshOrbMenu(); });
             B(2, "✥\nPLACE", () => { ResetOrbPlace(); Toast("The orb chooses its own place again · pinch it to put it anywhere", "info"); });
             _orbLogBtn = B(3, "✉\nLOG", () => { if (OrbMenuOpen) CloseOrbMenu(); OpenPanel("messages"); });

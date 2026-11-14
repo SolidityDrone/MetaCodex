@@ -169,9 +169,12 @@ namespace MetaCodex.Shell
             {
                 bool sel = cat.Key == now;
                 button.SetSelected(sel);
-                name.Set(cat.Glyph + "  " + cat.Label, sel ? UiTheme.Current.Text : Color.Lerp(UiTheme.Current.Text, UiTheme.Current.TextDim, 0.3f));
+                int need = PanelNeedsStep(cat.Panel);
+                bool locked = need > 0 && SetupLocked(need); // the first start's setup (ShellSetupLocks)
+                button.SetDimmed(locked);
+                name.Set(cat.Glyph + "  " + cat.Label, sel ? UiTheme.Current.Text : Color.Lerp(UiTheme.Current.Text, UiTheme.Current.TextDim, locked ? 0.7f : 0.3f));
                 string s = "";
-                try { s = cat.Status?.Invoke() ?? ""; } catch (Exception) { }
+                try { s = locked ? "🔒 step " + need : cat.Status?.Invoke() ?? ""; } catch (Exception) { }
                 status.Set(UiChatView.Esc(s.Length > 12 ? s.Substring(0, 11) + "…" : s));
             }
         }
@@ -183,6 +186,9 @@ namespace MetaCodex.Shell
         {
             var cat = _categories.FirstOrDefault(c => c.Key == (key ?? _controlLast)) ?? _categories.FirstOrDefault();
             if (cat == null) return false;
+            // the first start's setup (ShellSetupLocks): AGENTS waits for MQH; CONTROL keeps its last category
+            int need = PanelNeedsStep(cat.Panel);
+            if (need > 0 && SetupBlocks(need, cat.Label)) return false;
             _controlLast = cat.Key;
             if (cat.Tab >= 0) _settingsShown = true; // a chosen SETTINGS page wins over the first-time DISPLAY
             // a page of the window already shown (DISPLAY -> LOOK): only its page changes, no new cast

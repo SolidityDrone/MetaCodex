@@ -88,6 +88,7 @@ namespace MetaCodex.Shell
             if (_built) return;
             _built = true;
             Settings = ShellSettings.Load(_settingsPath);
+            InitFirstRun(); // the very first start: the one-time SETUP panel, its locks and the tour (ShellFirstRun)
             _hideFirstTerminal = !Settings.terminalAtStart;
             if (Settings.settingsVersion < 2)
             {
@@ -314,6 +315,7 @@ namespace MetaCodex.Shell
             HitchMark(9);
             TickOrb(Time.unscaledDeltaTime);
             TickSplash(Time.unscaledDeltaTime);
+            TickFirstRun(Time.unscaledDeltaTime); // the first start's SETUP panel, locks and tour (one test when none runs)
             HitchMark(10);
         }
 
@@ -412,6 +414,9 @@ namespace MetaCodex.Shell
 
         private bool OpenPanelCore(string id)
         {
+            // the first start's setup (ShellSetupLocks): a window whose step is not over says when it is ready instead
+            int need = PanelNeedsStep(id);
+            if (need > 0 && SetupBlocks(need, PanelLockName(id))) return true;
             if (id == ControlId) return OpenControl(null); // the rail alone is not a window: CONTROL on its last category
             if (id == SidebarId) return SetSidebar(true); // it opens beside the open thread, never alone
             if (Alias(ref id, out int tab))
@@ -591,6 +596,7 @@ namespace MetaCodex.Shell
         /// Shows a hidden terminal where the user looks (and focuses it).
         public void ShowTerminal(TerminalInstance inst)
         {
+            if (SetupBlocks(3, "TERMINALS")) return; // the first start's setup (ShellSetupLocks)
             if (inst == null || !_frames.TryGetValue(inst, out var f)) return;
             if (!f.IsOpen) { PlaceDefault(f.Id, f); f.Open(); OnOpenedFloating(f); }
             app?.Focus(inst);
@@ -689,7 +695,11 @@ namespace MetaCodex.Shell
         void IScriptServices.VoiceRun(string text) => VoiceProcessText(text, null);
 
         public void TerminalSend(string text) => app?.SendText(text);
-        public void TerminalNew() => app?.NewTerminal();
+        public void TerminalNew()
+        {
+            if (SetupBlocks(3, "TERMINALS")) return; // the first start's setup (ShellSetupLocks)
+            app?.NewTerminal();
+        }
 
         public void OpenKeyboard() => UiKeyboard.OpenForTerminal();
 
@@ -848,8 +858,9 @@ namespace MetaCodex.Shell
                         case "toast": Toast(arg.Length > 6 ? arg.Substring(6) : "", "info"); return "ok";
                         case "select": SetSelectionMode(id != "off"); return "ok";
                         case "layout": SetLayout(id); return "ok, layout=" + Settings.layout;
+                        case "setup": return SetupStatusLine(); // the first start's steps (ShellFirstRun)
                         case "spin": Spin(float.TryParse(id, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var deg) ? deg : 30f, 0f); return "ok, spin=" + CarouselSpin.ToString("F1");
-                        default: return "error: ui list | open <id> | close <id> | click <id> <button> | toast <text> | select on|off | layout fixed|float | spin <deg>";
+                        default: return "error: ui list | open <id> | close <id> | click <id> <button> | toast <text> | select on|off | layout fixed|float | spin <deg> | setup";
                     }
                 }
                 case "orb":

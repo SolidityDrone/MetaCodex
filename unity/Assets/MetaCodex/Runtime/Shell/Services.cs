@@ -282,6 +282,9 @@ namespace MetaCodex.Shell
         public float orbYaw = 32f, orbPitch = 16f, orbDist = 0.52f;
         /// The one-time message that says what the orb is (touch it, pinch it) has been shown.
         public bool orbTipShown = false;
+        /// The first start's one-time SETUP (ShellFirstRun: its panel, the locks, the tour) is over, or was never needed (the
+        /// Linux was there already). Never shown again once set, also not after an app update or a new Linux install.
+        public bool firstStartDone = false;
 
         public static string PathOnDisk => Path.Combine(Application.persistentDataPath, "metacodex-settings.json");
 

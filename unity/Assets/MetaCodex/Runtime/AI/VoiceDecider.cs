@@ -39,6 +39,10 @@ namespace MetaCodex.AI
         public bool Building { get; private set; }
         /// What the last build changed in the cache (the shell saves it to disk when either is above 0).
         public int LastEmbedded { get; private set; }
+        /// The build running now: examples it has to embed and how many are done (0 and 0 when none were missing). The
+        /// first start's SETUP panel shows them (ShellFirstRun, step 5).
+        public int EmbedTotal { get; private set; }
+        public int EmbedDone { get; private set; }
         public int LastPruned { get; private set; }
 
         private readonly VoiceCommands _registry;
@@ -183,6 +187,7 @@ namespace MetaCodex.AI
         {
             var missing = ex.Select(e => e.text).Distinct().Where(t => !_cache.ContainsKey(t)).ToList();
             Status = missing.Count > 0 ? $"embedding {missing.Count} examples…" : "building…";
+            EmbedTotal = missing.Count; EmbedDone = 0;
             int at = 0;
             void Next()
             {
@@ -193,6 +198,7 @@ namespace MetaCodex.AI
                     if (err != null || vecs == null || vecs.Length != batch.Count) { Building = false; Status = "decision model: " + (err ?? "no vectors"); done?.Invoke(Status); return; }
                     for (int i = 0; i < batch.Count; i++) _cache[batch[i]] = vecs[i];
                     at += batch.Count;
+                    EmbedDone = at;
                     Status = $"embedding examples {at}/{missing.Count}…";
                     Next();
                 });

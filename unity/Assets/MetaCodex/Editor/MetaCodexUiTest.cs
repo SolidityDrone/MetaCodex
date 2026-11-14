@@ -185,6 +185,7 @@ namespace MetaCodex.EditorTools
                 if (Want("orbplace")) OrbPlaceSection(shell, head, hands); // MetaCodexUiTestOrbPlace.cs
                 if (Want("cards")) CardsSection(shell, head); // MetaCodexUiTestCards.cs
                 if (Want("roomanchor")) RoomAnchorSection(shell); // MetaCodexUiTestRoomAnchor.cs
+                if (Want("firstrun")) FirstRunSection(shell, head); // MetaCodexUiTestFirstRun.cs
                 if (WantNamed("voiceexport")) VoiceExport(shell);
                 if (WantNamed("voicedecide")) VoiceDecideBench(shell);
             }

@@ -110,6 +110,8 @@ namespace MetaCodex.UI
         public Action OnClickAction;
         public UiButtonStyle Style;
         public bool Selected;
+        /// Looks disabled but still takes the press (a feature locked for a moment: the press says why, ShellSetupLocks).
+        public bool Dimmed;
         public float TextSize;
         public override bool Interactive => true;
         protected int _shape = -1;
@@ -119,7 +121,7 @@ namespace MetaCodex.UI
         public UiButton(string text, Action onClick = null, UiButtonStyle style = UiButtonStyle.Normal)
         { Text = text; OnClickAction = onClick; Style = style; }
 
-        protected Color Tint => !Enabled ? Theme.TextDim * 0.6f
+        protected Color Tint => !Enabled || Dimmed ? Theme.TextDim * 0.6f
             : Style == UiButtonStyle.Primary ? Theme.Accent
             : Style == UiButtonStyle.Danger ? Theme.Danger
             : Style == UiButtonStyle.Ghost ? Theme.Frame
@@ -142,6 +144,8 @@ namespace MetaCodex.UI
 
         public void SetEnabled(bool e) { if (Enabled == e) return; Enabled = e; Refresh(); }
 
+        public void SetDimmed(bool d) { if (Dimmed == d) return; Dimmed = d; Refresh(); }
+
         protected override void OnInteractionChanged() => Refresh();
 
         protected void Refresh()
@@ -150,7 +154,7 @@ namespace MetaCodex.UI
             Panel.Shapes.SetTint(_shape, Tint);
             float s = Pressed ? 1f : Selected ? 0.7f : Hover ? 0.38f : 0f;
             Panel.Shapes.SetState(_shape, Mathf.Max(s, _flash));
-            _label.Color = Enabled ? (Selected || Style == UiButtonStyle.Primary ? Theme.Text : Color.Lerp(Theme.Text, Theme.TextDim, 0.25f)) : Theme.TextDim * 0.8f;
+            _label.Color = Enabled && !Dimmed ? (Selected || Style == UiButtonStyle.Primary ? Theme.Text : Color.Lerp(Theme.Text, Theme.TextDim, 0.25f)) : Theme.TextDim * 0.8f;
         }
 
         public override void Update()

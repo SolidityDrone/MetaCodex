@@ -721,3 +721,21 @@ Setup: open the dock, THREAD and one more window in FIXED layout. Note where the
 - [ ] A line `room anchor: ... too far` or `no room reference` shows: the Stage origin does not hold here; send the log (next step: Stationary or anchors, see docs/ui.md)
 - [ ] Pause and resume with the Home button, no native app: the panels stay where they were, no line about a move
 - [ ] RECENTER (wrist or ⟲) still puts the panels in front of you as before
+
+## 50. First start: the one-time SETUP panel, the locks, the tour (branch feat/first-run-tour; docs/ready-on-install.md)
+
+Uninstall first (`adb uninstall com.pnncl.metacodex`), then install and start: a clean first start.
+
+- [ ] After the splash, "FIRST START · ONE-TIME SETUP" in front at head height (not head-locked: turn away, it stays); the header says once, about a minute, nothing downloaded, stays on this headset
+- [ ] The steps come one at a time: STEP 1 OF 5 … 5 OF 5; each name an action while it runs, its line, its own bar from empty, a spinner that never stops while a step runs; steps 1 and 2 (done long before) each still show for a moment and get their ✓
+- [ ] Done steps listed with ✓ and a sane time (Linux about 9-12 s, MQH about 4 s); step 5 shows "N of 1,9xx examples" while it counts
+- [ ] Tap TALK on the dock (or the wrist menu, or the orb's menu) during the setup → one callout "🔒 TALK is ready after step 5 of 5 · one-time setup", no listening, no error; tapping again at once gives no second callout
+- [ ] THREADS / TERMS / FILES tiles show 🔒 dimmed; tapped → their callout (step 4 / 3); CONTROL > AGENTS dimmed with "🔒 step 4" and does not open; CONTROL, WEB, CLIP work
+- [ ] The locks lift by themselves: TERMS and FILES when the Linux is ready, THREADS and AGENTS when MQH runs, TALK at the end; TALK then listens
+- [ ] The end: "Setup done in N s" and "Ready now: …"; the panel closes itself about 6 s later
+- [ ] The tour starts with the panel: 1 open the main menu (dock: CLIP; wrist: the wrist menu) → ✓ and the next card; 2 the orb's menu; 3 move the SETUP window by its top bar; 4 CONTROL; 5 what comes next, FINISH ✓
+- [ ] A ring of light round CLIP / CONTROL on the dock (or the wrist), round the orb; the SETUP window's frame breathes on card 3; the cards sit beside their targets and come back if you turn away
+- [ ] SKIP STEP moves on; SKIP TOUR ends it; the tour never asks for a 🔒 feature
+- [ ] Frame rate during the setup and the tour: steady (perf lane: no stall > 50 ms; `[hitch]` lines in session_log.txt)
+- [ ] Quit and start again → no SETUP panel, no tour, nothing locked; CONTROL > ABOUT > TOUR plays the tour; voice "start the tour" too
+- [ ] `ui setup` on the control port lists the five steps with their times

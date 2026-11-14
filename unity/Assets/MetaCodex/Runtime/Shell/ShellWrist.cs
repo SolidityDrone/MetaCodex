@@ -29,7 +29,14 @@ namespace MetaCodex.Shell
             };
             // one table for the dock and the wrist menu (MainMenuItems): the same labels, order and lit states
             foreach (var m in MainMenuItems())
-                (m.Outer ? Wrist.Outer : Wrist.Inner).Add(new UiWristMenu.Item { Glyph = m.Glyph, Icon = m.Icon, Label = m.Label, Act = m.Act, Lit = m.Lit, LitTint = m.Tint ?? t.Ok });
+            {
+                int step = m.LockStep;
+                (m.Outer ? Wrist.Outer : Wrist.Inner).Add(new UiWristMenu.Item
+                {
+                    Glyph = m.Glyph, Icon = m.Icon, Label = m.Label, Act = m.Act, Lit = m.Lit, LitTint = m.Tint ?? t.Ok,
+                    Locked = step > 0 ? () => SetupLocked(step) : (Func<bool>)null, // the first start's setup (ShellSetupLocks)
+                });
+            }
             Wrist.Build();
             Wrist.GlassOpacity = PanelOpacity; // created after ApplyMaterialSettings ran: the glass takes the setting now
             _wristModeApplied = !Settings.wristMenu; // applied below
@@ -45,6 +52,8 @@ namespace MetaCodex.Shell
             public Func<bool> Lit;              // lit (wrist) / selected (dock) while this is true
             public Color? Tint;                 // the wrist's lit colour (default: ok green)
             public bool Outer, WristOnly;
+            /// The first start's setup step it waits for (ShellSetupLocks; 0: none): dimmed with 🔒 until that step is over.
+            public int LockStep;
         }
 
         /// The main menu (11 tiles): inner ring = what is used most (owner 2026-11-11: 19 tiles were too many; setup is in CONTROL),
@@ -53,14 +62,15 @@ namespace MetaCodex.Shell
         {
             var t = UiTheme.Current;
             var list = new List<MainMenuItem>();
-            void I(bool outer, string glyph, string icon, string label, Action act, Func<bool> lit = null, Color? tint = null, bool wristOnly = false) =>
-                list.Add(new MainMenuItem { Outer = outer, Glyph = glyph, Icon = icon, Label = label, Act = act, Lit = lit, Tint = tint, WristOnly = wristOnly });
-            I(false, "◉", "mic", "TALK", () => VoiceToggle(), () => VoiceState == "listening" || VoiceState == "transcribing", t.Danger);
+            void I(bool outer, string glyph, string icon, string label, Action act, Func<bool> lit = null, Color? tint = null, bool wristOnly = false, int lockStep = 0) =>
+                list.Add(new MainMenuItem { Outer = outer, Glyph = glyph, Icon = icon, Label = label, Act = act, Lit = lit, Tint = tint, WristOnly = wristOnly, LockStep = lockStep });
+            // lockStep: the first start's setup step each waits for (ShellSetupLocks): voice 5, MQH 4, the Linux 3
+            I(false, "◉", "mic", "TALK", () => VoiceToggle(), () => VoiceState == "listening" || VoiceState == "transcribing", t.Danger, lockStep: 5);
             // the terminals: one tile (owner 2026-11-13: TERM next to TERMS was redundant); TERMINALS lists them, hidden ones
             // too (tap one to show it), + NEW opens another
-            I(false, "▤", "windows", "TERMS", () => TogglePanel("terminals"), () => IsPanelOpen("terminals"));
-            I(false, "◫", "folder", "FILES", () => TogglePanel("files"), () => IsPanelOpen("files"));
-            I(false, "☰", "threads", "THREADS", () => TogglePanel("threads"), () => IsPanelOpen("threads"));
+            I(false, "▤", "windows", "TERMS", () => TogglePanel("terminals"), () => IsPanelOpen("terminals"), lockStep: 3);
+            I(false, "◫", "folder", "FILES", () => TogglePanel("files"), () => IsPanelOpen("files"), lockStep: 3);
+            I(false, "☰", "threads", "THREADS", () => TogglePanel("threads"), () => IsPanelOpen("threads"), lockStep: 4);
             I(false, "◎", "globe", "WEB", () => TogglePanel("web"), () => IsPanelOpen("web"));
             // settings, voice, agents, MQH (skills, plugins, scripts, gestures, status), vault and git, system: one place
             I(false, "⚙", "gear", "CONTROL", () => ToggleControl(), () => ControlRailPage != null);

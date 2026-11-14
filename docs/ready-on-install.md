@@ -29,6 +29,60 @@ is made, `mcx-app doctor` says so, or SYSTEM > TOOLS), the local coder (AGENTS >
    installs them with dpkg from `/var/cache/metacodex/base-debs`, offline, in the background, no toast; an older
    userland without them -> `mcx-setup` downloads as before. The native toolchain is no longer installed by itself.
 
+### The SETUP panel, the locks, the tour (branch feat/first-run-tour)
+
+Owner 2026-11-14: "while the app settles the installation, a small guided wizard ... meanwhile show a progress bar on a
+panel that explains: models copied, AI services starting, Linux unpacking and install from the APK, MQH harness
+started, voice decider ready ... It must be clear it is a ONE-TIME setup for the first ever start."
+
+When: only on the very first start: on the headset, no Linux installed before (`files/linux/installed.json` missing)
+and the setting `firstStartDone` off. Any other start (an update, a new Linux install later, the Editor) sets the flag
+and shows nothing. The flag is set when the panel shows the end.
+
+**The panel** "FIRST START · ONE-TIME SETUP" (`ShellFirstRun.cs`): a window placed where the user looks, after the
+splash. It says once that this happens once, takes about a minute, downloads nothing and keeps everything on the
+headset. It shows one step at a time: its number ("STEP 3 OF 5 · ONE-TIME SETUP"), its name while it runs, one line on
+what it does, its own bar (empty at each new step) and a spinner that keeps turning. The steps shown before stay
+listed with ✓ and their time ("✓ Linux ready · 9.4 s"). A step already done long ago (1 and 2 usually end while 3
+runs) still gets its turn: its bar fills in about 0.4 s, at least 0.6 s on show.
+
+| # | While it runs | Done | Progress from | Typical (Quest 3S, first-run log) |
+|---|---|---|---|---|
+| 1 | Unpacking the AI models | AI models in place | QvacHost: the runtime unpack (first half), `ModelsProgress` (bytes) | runtime 6 s + models 0.9 s |
+| 2 | Starting the local AI service | Local AI running | QvacHost `Running`; by time (90 % at 3 s, never more) | 2.2 s |
+| 3 | Building your Linux workstation | Linux ready | `LinuxHost.Progress` (copy, unpack, overlay, MQH bundle) | 11.6 s |
+| 4 | Starting MQH, the agent harness | MQH running | MqhHost `Running`; by time (4.5 s) | 4.1 s |
+| 5 | Teaching the voice your commands | Voice commands ready | `VoiceDecider.EmbedDone / EmbedTotal`; by time without a count | 31 s after MQH |
+
+Lines under the names: 1 "Speech, language and voice models (about 650 MB) come out of the app onto this headset: no
+download."; 2 "Speech-to-text, the language model and the voice run here on the headset, on cores of their own."; 3
+"Debian with Node.js, git and Python, unpacked from the app: no download."; 4 "The harness that runs your coding
+agents, their threads and their tools, inside your Linux."; 5 "About 1,900 ways to say the app's commands become
+examples TALK can match, worked out here on the headset."
+
+A failed step stays on show 4 s with what failed and what still works (no endless spinner); a step that needs it is
+skipped (2 needs 1, 4 needs 3, 5 needs 2); the retry paths stay as they were (VOICE > START, MQH > STATUS > RESTART).
+The decision model is called failed 4 min after the AI service is up. At the end: "Setup done in N s" and "Ready now:
+TALK, THREADS, AGENTS, TERMINALS and FILES. This window closes by itself." (6 s later; with a failed step, what still
+works, a CLOSE button, 20 s). Control port: `ui setup` lists the steps. Log lines: `setup: step N A -> B (s)`,
+`setup: all steps over in N s`, `setup: done in N s`.
+
+**The locks** (`ShellSetupLocks.cs`): until its step is over, a feature is dimmed with 🔒 and a press gives one short
+callout by the orb, nothing else: "🔒 TALK is ready after step 5 of 5 · one-time setup". TALK and every way to listen
+(dock, wrist menu, orb menu, gesture bindings `voice:*`, Lua `voice.listen`, control port `voice listen`, dictation ◉)
+wait for step 5; THREADS, THREAD, NEW THREAD, the thread sidebar, WORKSPACES, CONTROL > AGENTS and its API KEY for step
+4; TERMINALS (window, + NEW, a hidden terminal, voice "new terminal"), FILES and GIT for step 3. Each lock lifts by
+itself when its step is over (done, failed or skipped). Settings (CONTROL), WEB, CLIP, FOCUS, SELECT, KEYS, CENTER and
+the tour stay usable. The voice registry is not changed meanwhile: the checks sit in OpenPanel, OpenControl,
+VoiceListen, TerminalNew and ShowTerminal, where every way in passes.
+
+**The tour** (`ShellTour.cs`): starts 1.5 s after the panel, about a minute, five cards beside their targets, a ring of
+light round the target (a DOCK tile, the left wrist, the orb) or the target window's frame lit. Each card waits until
+the user did it, says ✓, then the next: 1 open the main menu (the wrist menu, or CLIP on the DOCK), 2 open the orb's
+menu, 3 move a window by its top bar (the SETUP window), 4 open CONTROL, 5 what comes next (what unlocks by itself,
+TALK, THREADS, AGENTS > GET with the user's own key or sign-in). SKIP STEP and SKIP TOUR on every card, FINISH on the
+last. Again from CONTROL > ABOUT > TOUR, the SETUP panel's TOUR, the action `tour` and the voice command `start_tour`.
+
 Also at the first start: every Linux process gets the headset's time zone (`TZ`, from Android's default zone; the zone
 files are in the image), so git commit times and an agent's "today" are local, not UTC.
 

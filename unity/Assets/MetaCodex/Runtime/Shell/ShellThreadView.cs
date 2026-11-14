@@ -663,6 +663,7 @@ namespace MetaCodex.Shell
         {
             if (field == null || Recorder == null) return;
             if (Dictating) { StopDictation(); return; }
+            if (SetupBlocks(5, "Dictation")) return; // the first start's setup (ShellSetupLocks)
             if (Recorder.Recording) { Toast("The microphone is busy with a voice command: try again in a moment", "warn"); return; }
             _dictField = field;
             StartDictation(text =>

@@ -98,6 +98,7 @@ namespace MetaCodex.Shell
             _panels["dock"] = dock;
             Router.Register(dock);
             _dockLit.Clear();
+            _dockLocks.Clear();
             for (int i = 0; i < items.Count; i++)
             {
                 int row = i / perRow, col = i % perRow;
@@ -110,8 +111,10 @@ namespace MetaCodex.Shell
                 if (m.Label == "SELECT") _selectButton = b;
                 if (m.Label == "FOCUS") _focusButton = b;
                 if (m.Lit != null) _dockLit.Add((b, m.Lit));
+                if (m.LockStep > 0) _dockLocks.Add((b, m)); // the first start's setup (ShellSetupLocks)
             }
             RefreshDockLit();
+            ApplyDockLocks();
             // what is on shows on the dock as on the wrist (a tile stays selected): a state-only change, 4 times a second
             float next = 0f;
             dock.Tick += _ => { if (Time.unscaledTime >= next) { next = Time.unscaledTime + 0.25f; RefreshDockLit(); } };
@@ -622,6 +625,10 @@ end)
             var ab = a2.NextSplit(t.ButtonHeight, 0.5f, out var ab2);
             tabs.AddTo(TabAbout, new UiButton("LICENCES ▸", () => { _filesPath = LicencesDir; OpenPanel("files"); }) { Rect = ab });
             tabs.AddTo(TabAbout, new UiButton("APP PERMISSIONS ⚙", () => Toast(SystemBridge.OpenAppSettings() ? "Opening app settings" : SystemBridge.LastResult)) { Rect = ab2 });
+            // the guided tour of the first start, again (ShellTour; voice "start the tour")
+            var tr = a2.NextSplit(t.ButtonHeight, 0.5f, out var trText);
+            tabs.AddTo(TabAbout, new UiButton("TOUR ▸", () => StartTour()) { Rect = tr });
+            tabs.AddTo(TabAbout, new UiLabel("A one-minute guided tour: the main menu, the orb, moving windows, CONTROL.", t.SmallSize) { Rect = trText, Wrap = true, Color = t.TextDim });
         }
 
         /// Where docs/LICENSES.md and the licence texts are in the Linux (the overlay ships them).
