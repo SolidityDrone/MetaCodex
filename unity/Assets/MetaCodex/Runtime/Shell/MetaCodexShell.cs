@@ -734,7 +734,6 @@ namespace MetaCodex.Shell
 
         public void OnSettingsChanged(bool rebuild = false)
         {
-            CardsToSettings(); // the card groups in memory win over an older copy (MQH's quest.settings)
             Settings.Save(_settingsPath);
             Router.Settings = Settings.gestures;
             Gestures.Settings = Settings.gestures;

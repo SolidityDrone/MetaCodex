@@ -40,7 +40,6 @@ namespace MetaCodex.Shell
             BuildSystem();
             BuildMessagesPanel(); // the orb's messages (ShellOrb)
             BuildControl(); // CONTROL's rail beside the setup windows (ShellControl)
-            BuildCardGroups(); // the thread cards' group windows (ShellThreadCards)
             foreach (var p in _panels.Values) p.BaseScale = Vector3.one * Mathf.Clamp(Settings.uiScale, 0.6f, 1.8f);
         }
 

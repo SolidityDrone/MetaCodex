@@ -49,11 +49,6 @@ namespace MetaCodex.UI
         public bool SelectionMode;
         public event Action<UiPanel, Rect> Selected;
         public event Action<UiPanel, UiElement> Clicked;
-        /// Each frame a panel is being moved, with the ray of the hand that moves it (from the eyes through the grab
-        /// point for a closed hand): the thread cards light up the group it would join (ShellThreadCards).
-        public event Action<UiPanel, Ray> PanelDragging;
-        /// A moved panel was let go, with that ray: what lies under it there (a card group: they merge).
-        public event Action<UiPanel, Ray> PanelDropped;
         /// A hand (0 left, 1 right) that is busy with something that is not a panel (the orb): it neither points nor pokes.
         public Func<int, bool> HandBlocked;
         /// The panel whose control is being pressed or released right now (null between): a dialog it opens belongs to
@@ -271,17 +266,8 @@ namespace MetaCodex.UI
             if (p.DragPanel != null)
             {
                 bool hold = p.DragByGrab ? p.GrabHeld : p.Down;
-                if (!hold)
-                {
-                    var dropped = p.DragPanel;
-                    p.DragPanel = null;
-                    PanelDropped?.Invoke(dropped, DragRay(p)); // may merge (destroy) it: nothing of it is used after this
-                }
-                else
-                {
-                    MoveDragged(p);
-                    PanelDragging?.Invoke(p.DragPanel, DragRay(p));
-                }
+                if (!hold) p.DragPanel = null;
+                else MoveDragged(p);
                 Finish(p);
                 return;
             }
@@ -370,16 +356,6 @@ namespace MetaCodex.UI
         private static void Finish(UiPointer p) { p.WasDown = p.Down; p.WasGrab = p.GrabHeld; }
 
         private static Vector2 Clamp(UiPanel panel, Vector2 pt) => new Vector2(Mathf.Clamp(pt.x, 0, panel.Width), Mathf.Clamp(pt.y, 0, panel.Height));
-
-        /// The ray that says where a moved panel is let go: the pinching hand's ray, or for a closed hand the line from
-        /// the eyes through its palm.
-        private Ray DragRay(UiPointer p)
-        {
-            if (!p.DragByGrab) return p.Ray;
-            Vector3 eye = Head != null ? Head.position : p.Ray.origin;
-            var d = p.GrabPoint - eye;
-            return d.sqrMagnitude > 1e-6f ? new Ray(eye, d.normalized) : p.Ray;
-        }
 
         private void MoveDragged(UiPointer p)
         {

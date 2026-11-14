@@ -99,37 +99,6 @@ Owner: sometimes a message is too long to read in the one-row composer. The comp
   conversation.
 - Like the rest of the session context: only for the local model, never sent to MQH, the agents or the control port.
 
-## Thread cards and groups (owner 2026-11-14, `Shell/ShellThreadCards.cs`)
-
-A card is a small live view of one thread (0.30 x 0.20 m). There is still one THREAD window: OPEN on a card loads
-that thread into it, with its sidebar.
-
-- A card shows the title, the project and provider, a status dot and line (WORKING · 1:15, WAITING FOR YOU · 0:12,
-  ANSWERED · 3 min ago, ERROR, IDLE), and one or two lines: what it does now, what it asks, or its last answer.
-- Card buttons: OPEN (the thread in THREAD), REPLY (the system keyboard; Done sends with that thread's model, effort
-  and access, like the composer), ALLOW / DENY (only while it waits for an approval: the same MQH calls as THREAD's
-  ALLOW ONCE / DENY; a question needs OPEN), ✕ (removes the card; the thread stays).
-- Make a card: ⊞ at the right end of a THREADS row (▣ = a card already: the tap shows its group), or ⊞ CARD in
-  THREAD's header. A new card is a group of one, placed beside the window it came from.
-- A group is ONE window (`tgroup-<n>`): its cards side by side (two rows from 5 cards, up to 8), a slim header
-  (✥, the name, "N threads", ✎ rename, ⇲ UNGROUP, ✕ hides the window, the cards stay). Placement, RECENTER, the
-  FLOAT ring and bending treat it as one window, so a wide group bends round you.
-- Group: drag a group by its header and let go on another group. The target lights up ("LET GO TO GROUP") while you
-  are over it. The target keeps its place; the dragged cards go to its end.
-- Ungroup one card: pull its ✥ grip past the group's edge and let go. It becomes a group of one there (or joins the
-  group you let go on). ⇲ UNGROUP splits the whole group.
-- A change of members builds the group's window again once, at the same centre.
-- Saved in the settings (`threadCards`): each group's name, its threads in order, open or not. Places are not
-  saved: an open group is placed again at start (PlaceSmart).
-- Data: the thread list and pulses that `CtxPollPulses` reads. While a group is open the list is read every 4 s;
-  a card's timeline is read only when its row changed (or it has no pulse yet), parsed on a pool thread. A card is
-  drawn again only when its pulse or row changes; its clock once a second while it works or waits (every 30 s
-  otherwise); its dot pulses only while it works or waits. A closed group costs nothing.
-- Voice: `pin_thread_card` ("pin this thread as a card", "pin the docs thread as a card"), `remove_thread_card`
-  ("remove the card for <thread>"), `open_thread_card` ("open the card <thread>"), `show_thread_cards` (show / hide
-  all groups), `ungroup_thread_cards`, `rename_card_group`, `card_approval` (allow / deny), `reply_to_card` (with
-  the words, or the keyboard). Without cards, only `pin_thread_card` is enabled.
-
 ## Tests
 
 - Pure checks (no Unity, Unity's own .NET 8 and Roslyn): `C:\Users\pnncl\mcxcheck-chat\test\build.sh` on the
@@ -137,6 +106,3 @@ that thread into it, with its sidebar.
 - Editor self-test section `chat` (`Editor/MetaCodexUiTestChat.cs`), plus `context` and `workspace` updated:
   `~/mcxwork/tools/uirun.sh chat context workspace captures` (not run yet on 2026-11-11: Windows had 1.6-1.9 GB free).
 - Headset: docs/TEST_CHECKLIST.md section 25.
-- Editor self-test section `cards` (`Editor/MetaCodexUiTestCards.cs`): two pinned threads, live status, a drop
-  that merges them into one window that moves as one, a card pulled out by its grip, OPEN, REPLY, the voice
-  commands, the groups through a restart. Headset: docs/TEST_CHECKLIST.md section 46.

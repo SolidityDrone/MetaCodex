@@ -313,12 +313,7 @@ namespace MetaCodex.Shell
             var c = p.Content;
             var st = new UiStack(c, t.Gap);
             _threadsStatus = p.Add(new UiLabel("", t.SmallSize) { Rect = st.Next(0.02f), Color = t.TextDim });
-            // a thread row's ⊞ at its right end pins that thread as a card (ShellThreadCards)
-            _threadList = p.Add(new UiList(0.034f, (item, idx) => ThreadRowPicked(item))
-            {
-                Rect = st.Next(c.height - 0.02f - t.ButtonHeight - t.Gap * 2),
-                OnAction = (item, idx) => { if (item.Tag is string tg && tg.StartsWith("t:")) PinCard(tg.Substring(2)); },
-            });
+            _threadList = p.Add(new UiList(0.034f, (item, idx) => ThreadRowPicked(item)) { Rect = st.Next(c.height - 0.02f - t.ButtonHeight - t.Gap * 2) });
             _projectList = _threadList; // one list now (projects are its group rows)
             AddButtons(p, st.Next(t.ButtonHeight), new (string, Action)[]
             {
@@ -460,7 +455,6 @@ namespace MetaCodex.Shell
                         Badge = pending ? "NEEDS YOU" : working ? "RUNNING" : held ? "WAITING" : st == "error" ? "ERROR" : "",
                         BadgeColor = pending || held ? t.Warn : st == "error" ? t.Danger : t.Ok,
                         Tag = "t:" + id,
-                        Action = CardOf(id) != null ? "▣" : "⊞", // ▣: it is a card already (a tap shows its group)
                     });
                 }
                 if (!showSpaces) foreach (var x in list) ThreadRow(x, 2);
@@ -654,9 +648,7 @@ namespace MetaCodex.Shell
             var st = new UiStack(c, t.Gap);
             var top = st.Next(0.03f);
             float bw = 0.082f;
-            _thTitle = p.Add(new UiLabel("", t.BodySize * 1.1f) { Rect = new Rect(top.x, top.y, top.width - bw * 3 - t.Gap * 3, top.height) });
-            // ⊞ CARD: this thread as a live card (ShellThreadCards); the card stays when another thread opens here
-            p.Add(new UiButton("⊞ CARD", () => { if (_threadOpen != null) PinCard(_threadOpen); else Toast("Send the first message: then the thread can be a card", "info"); }) { Rect = new Rect(top.xMax - bw * 3 - t.Gap * 2, top.y, bw, top.height), TextSize = t.SmallSize * 1.05f });
+            _thTitle = p.Add(new UiLabel("", t.BodySize * 1.1f) { Rect = new Rect(top.x, top.y, top.width - bw * 2 - t.Gap * 2, top.height) });
             p.Add(new UiButton("⑂ FORK…", ForkPrompt) { Rect = new Rect(top.xMax - bw * 2 - t.Gap, top.y, bw, top.height), TextSize = t.SmallSize * 1.05f });
             p.Add(new UiButton("⟳", () => { _tlMaxSeq = -1; _tlTag = null; _tlInFlight = false; _nextThreadMeta = 0f; PollThread(); }) { Rect = new Rect(top.xMax - bw, top.y, bw, top.height), TextSize = t.SmallSize * 1.05f });
             // the meta row: where it works (left), the provider's plan and usage limits (right)
@@ -1278,7 +1270,12 @@ namespace MetaCodex.Shell
             var sent = hasAtt ? att.ToList() : null;
             if (_threadOpen == null) { SendDraft(msg, sent, att); return; } // the draft's first message makes the thread
             NoteThreadUsed(_threadOpen);
-            Mqh.SendMessage(_threadOpen, msg, SendExtra(_threadOpen), hasAtt ? AttachmentInputs(sent) : null, r =>
+            var o = Override(_threadOpen);
+            var extra = new JObject();
+            if (o.model != null) extra["model"] = o.model;
+            if (o.effort != null) extra["reasoningLevel"] = o.effort;
+            if (o.perm != null) extra["permissionMode"] = o.perm;
+            Mqh.SendMessage(_threadOpen, msg, extra, hasAtt ? AttachmentInputs(sent) : null, r =>
             {
                 if (r == null) { Toast("Not sent: " + Mqh.LastError, "error"); return; }
                 _thComposer.Set("");
@@ -1288,18 +1285,6 @@ namespace MetaCodex.Shell
                 _nextThreadMeta = 0f;
                 PollThread();
             });
-        }
-
-        /// What a message to a thread carries besides its text: the model, effort and access chosen for that thread
-        /// (THREAD's chips). The composer and a card's REPLY send the same.
-        private JObject SendExtra(string id)
-        {
-            var o = Override(id);
-            var extra = new JObject();
-            if (o.model != null) extra["model"] = o.model;
-            if (o.effort != null) extra["reasoningLevel"] = o.effort;
-            if (o.perm != null) extra["permissionMode"] = o.perm;
-            return extra;
         }
 
         // ------------------------------------------------------------------ NEW THREAD

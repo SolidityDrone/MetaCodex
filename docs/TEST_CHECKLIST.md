@@ -675,29 +675,13 @@ Work windows:
 - [ ] The sidebar on CHANGES while it works: new files and counts show within a few seconds
 - [ ] A script saved in the terminal still applies within about a second
 
-## 46. Thread cards and groups (branch feat/thread-cards; docs/thread-view.md)
-
-- [ ] THREADS: ⊞ at the right end of a thread row → a card of that thread opens beside THREADS; the row now shows ▣
-- [ ] THREAD: ⊞ CARD → a card of the open thread; open another thread in THREAD → the card stays
-- [ ] A card of a working thread: WORKING with a running clock, the dot pulses, the line shows what it does now; when it answers: ANSWERED · just now and the first line of the answer
-- [ ] A thread waits for an approval → its card shows WAITING FOR YOU, ALLOW and DENY; ALLOW → the agent goes on (as with THREAD's ALLOW ONCE)
-- [ ] REPLY on a card → the system keyboard; type and Done → the message arrives in that thread
-- [ ] OPEN on a card → that thread in the THREAD window with its sidebar; the card stays
-- [ ] Drag one card window by its header over another: the other lights up ("LET GO TO GROUP"); let go → one window with both cards, the target did not move
-- [ ] Drag the group by its header: both cards move together; RECENTER and FLOAT keep it as one window; with Bend panels on, a wide group bends round you
-- [ ] Pull a card out by its ✥ grip past the group's edge → it becomes its own window where you let go; the group narrows and stays where it was
-- [ ] ⇲ UNGROUP → each card its own window beside the old one; ✎ → a name for the group in its header
-- [ ] Restart the app → the groups come back with their names and threads in order (open ones open again, placed anew)
-- [ ] Voice: "pin this thread as a card", "open the card <title words>", "remove the card for <title words>", "hide the thread cards" / "show the thread cards", "allow it on the card"
-- [ ] Four cards open, two of them working, for 5 minutes: 72 fps (Perf menu Snapshot), no stutter
-
-## 47. Pose hold and the V (2026-11-14)
+## 46. Pose hold and the V (2026-11-14)
 
 - [ ] Make a V (index and middle up) for about 1 s and drop it: nothing happens.
 - [ ] Hold the V for 2 s: Ambient Focus turns on; hold it again 2 s: it turns off.
 - [ ] Horns, thumbs up, call-me held for 3 s: nothing opens.
 - [ ] A V made while the ray or the fingertip is on a window does nothing.
-## 48. THREAD's message box: grow it, back to one row on SEND (branch feat/composer-resize; docs/thread-view.md)
+## 47. THREAD's message box: grow it, back to one row on SEND (branch feat/composer-resize; docs/thread-view.md)
 
 - [ ] THREAD: the composer is one row; a bar with three dots sits on its top edge; it lights up under the ray or a finger
 - [ ] Pinch the bar and drag up: the box grows upwards, the chat above gets shorter by the same amount, `+` `◉` `SEND ▶` stay on the bottom row
@@ -711,7 +695,7 @@ Work windows:
 - [ ] Grow the box, then + → ATTACH FILES: one row; the grip does nothing while the attach window is open; CANCEL leaves one row
 - [ ] Voice: "make the text box bigger" (one step), "shrink the composer" (one step), "reset the text box" (one row); "expand the message box" and "put the message box back to the default size" work
 - [ ] While dragging the chat changes a few times a second, no stutter; 72 fps with a working thread open (Perf menu Snapshot)
-## 49. Back from a native app: the panels stay in the room (branch feat/return-anchor; docs/ui.md "Back from a native app")
+## 48. Back from a native app: the panels stay in the room (branch feat/return-anchor; docs/ui.md "Back from a native app")
 
 Setup: open the dock, THREAD and one more window in FIXED layout. Note where they are against a wall, the desk or a door.
 

@@ -256,9 +256,6 @@ namespace MetaCodex.Shell
         public bool viewsAutoOpen = true;
         /// THREAD's sidebar, per thread: "threadId|open (1/0)|tab" (ShellThreadSidebar; the newest 80 threads).
         public List<string> threadSidebar = new List<string>();
-        /// Thread cards (ShellThreadCards): each group's name, its threads in order, and whether its window is open.
-        /// Their places are not kept: an open group is placed again at start.
-        public List<ThreadCardGroup> threadCards = new List<ThreadCardGroup>();
         /// Ambient Focus: darken the room beyond a radius (Settings > FOCUS, FOCUS on the dock).
         public bool focusEnabled = false;
         public float focusRadius = 1.2f;
@@ -341,15 +338,6 @@ namespace MetaCodex.Shell
             j.Remove("mqhToken");
             return j;
         }
-    }
-
-    /// One group of thread cards as saved: its name ("" = none), its threads in order, its window open or not.
-    [Serializable]
-    public sealed class ThreadCardGroup
-    {
-        public string name = "";
-        public bool open = true;
-        public List<string> threads = new List<string>();
     }
 
     /// Where the open panels were, relative to the user's head yaw, under a name.
