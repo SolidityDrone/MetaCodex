@@ -705,3 +705,32 @@ Setup: open the dock, THREAD and one more window in FIXED layout. Note where the
 - [ ] A line `room anchor: ... too far` or `no room reference` shows: the Stage origin does not hold here; send the log (next step: Stationary or anchors, see docs/ui.md)
 - [ ] Pause and resume with the Home button, no native app: the panels stay where they were, no line about a move
 - [ ] RECENTER (wrist or ⟲) still puts the panels in front of you as before
+
+## 49. Thread windows and groups (branch feat/thread-groups; docs/thread-view.md "Thread windows and groups")
+
+Setup: two projects in THREADS, project1 with 3 threads, project2 with 1 thread. FIXED layout first, then FLOAT.
+
+- [ ] Open the 1st thread of project1: one window THREAD, free
+- [ ] Open the 2nd thread of project1: a new window opens and joins the first one as a group (2x1); no jump, it slides into its place; the group title says "Group 1 · 2 threads"
+- [ ] Open the thread of project2: a free window THREAD 3 beside the group
+- [ ] Open the 3rd thread of project1: it joins the group; the group becomes 2x2 (3 windows); the windows slide, the frame fades to its new size
+- [ ] Tap a thread that is open already in THREADS: its window flashes and gets the dot (●); no new window
+- [ ] In each grouped window: the chat streams, you can scroll it, type and SEND, ◉ dictates into that window, an approval shows ALLOW / DENY in that window and the answer goes to that thread
+- [ ] Two threads working at the same time (one in the group, one free): both chats update; the session log has no "[slow timeline]" storm
+- [ ] Ask the orb "what is this thread doing?" while you point at one window, then at another: the answer is about the window you point at
+- [ ] An approval waits in a window that is not focused: ask "is anything waiting for me?": the answer names that thread
+- [ ] RESIZE (bottom right of the group): pull it out and in; the windows get larger and smaller with the group; the top-left corner stays; the text stays readable at the smallest size
+- [ ] Pinch the group's title bar and move it: all its windows move with it
+- [ ] Pinch the title bar of a grouped window and release it on another window of the same group: the two change places (the target lights up first)
+- [ ] Pull a window out of the group (release it outside the group): it comes out at its full size where you let it go; open its thread again from THREADS: it does not go back into the group
+- [ ] Release a free window on a window of the group: it joins at that place
+- [ ] Release a free window on another free window: the two make a new group (two groups at once: Group 1 and Group 2)
+- [ ] The ✕ of a grouped window (top right, large): only that window closes; with one window left the group goes and that window is free
+- [ ] The details handle (›) of a grouped window: the sidebar opens at the right edge of the group, not inside the grid; drag the sidebar: the group comes with it
+- [ ] ⇲ UNGROUP: every window is free at its full size, side by side, sliding to its place
+- [ ] The group's ✕: the group and all its windows close; THREADS still lists the threads
+- [ ] RECENTER with a group and a free window: the group moves as one window, nothing overlaps
+- [ ] FLOAT: the group takes one place on the ring; a window pulled out takes its own place; the TURN bar turns them together
+- [ ] Voice: "put the open threads side by side", "break up the group", "switch to the other thread window", "close this thread window", "open the thread about <topic> in a new window"
+- [ ] 6 windows open: the 7th thread opens in the focused window (a message says so)
+- [ ] 72 fps with 4 windows open, 2 of them working (Perf menu Snapshot)

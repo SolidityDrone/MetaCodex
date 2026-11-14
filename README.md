@@ -197,7 +197,7 @@ The command registry is the MCP-like surface of the app.
 Everything you can do in the app is a registered command.
 Voice, the local language model, agents and plugins read the same entries.
 
-- The shell registers 29 commands, for example `open_panel`, `set_setting`, `find_thread` and `switch_workspace`.
+- The shell registers 30 commands, for example `open_panel`, `set_setting`, `find_thread` and `switch_workspace`.
 - Each command has a name, a JSON schema, synonyms, phrase templates, examples and flags.
 - Voice is English only. Speech-to-text, spoken replies and all command phrases use English.
 - A lint check rejects a weak command. The self-test fails on any warning.
@@ -351,6 +351,8 @@ A built app declares its own permissions. `mcx-app verify` lists them. The heads
 - On NEW THREAD, START opens a draft. Nothing is made until you send the first message.
 - CONTROL has a rail of pages beside its window. The rail is as tall as the window.
 - A thread view shows the agent chat, its work, approvals, a status line and a side bar with changes, files and git. The side bar builds its list of changes off the main thread.
+- Up to 6 thread windows are open at the same time. Each one has its own chat, composer and approvals. The large ✕ at the top right closes one window; the thread stays.
+- Drop a thread window on another one to make a group: a grid of 2x1, 2x2 or 3x2 that moves and resizes as one window. Threads of one project join the same group by themselves. Drag a window out of the group to set it free. The side bar of a grouped window opens beside the group.
 
 ## Security and privacy
 

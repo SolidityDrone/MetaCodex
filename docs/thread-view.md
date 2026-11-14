@@ -99,6 +99,68 @@ Owner: sometimes a message is too long to read in the one-row composer. The comp
   conversation.
 - Like the rest of the session context: only for the local model, never sent to MQH, the agents or the control port.
 
+## Thread windows and groups (owner 2026-11-14)
+
+Owner: "we shall be able to open multiple threads in the first place, and then merge or pull out from the grouping".
+The thread cards of before are gone. Each thread now has a full window, and windows can be grouped.
+
+### Several windows (`Shell/ShellThreadWindows.cs`)
+
+- Up to 6 THREAD windows are open at the same time. Their ids are `thread`, then `thread-2` to `thread-6`.
+- Each window has its own thread, chat, status line, composer, chips, approvals, attachments and draft.
+- The FOCUSED window is the last window that you touched or opened. Its title has a dot (● THREAD 2) when more than
+  one window is open. Voice commands, the clipboard's TO THE THREAD and the session context use the focused window.
+- Where a thread opens:
+  - A thread that is open already: its window gets the focus.
+  - Else the focused window, when it is closed or empty.
+  - Else THREAD, when it is closed.
+  - Else a new window, beside the focused window.
+  - When 6 windows are open, the thread replaces the thread of the focused window.
+- A thread of a project that has a window open joins the group of that window (see below). A thread of another
+  project opens as a free window.
+- The large ✕ at the top right closes that window only. The thread stays in MQH and in THREADS.
+- A window that does not have the focus polls MQH half as often.
+- Voice: "open the thread about the login page in a new window" (`find_thread`, `window: new`), "... in this window"
+  (`window: this`), "close this thread window", "switch to the other thread window" (`thread_windows`).
+
+### Groups (`Shell/ShellThreadGroups.cs`)
+
+- A group is a window that holds thread windows in a grid: 2 windows in 2x1, 3 or 4 in 2x2, 5 or 6 in 3x2.
+- The windows in a group are smaller, but they keep their full chat and composer. They work as free windows do.
+- Make a group: pinch the title bar of a window, move it onto another window and release it. The target window
+  lights up while the carried window is over it.
+- Automatic groups: when a thread opens and a window of the same project is open, the new window joins that group.
+  Two free windows of one project make a new group.
+- In a group:
+  - Release a window on another window of the same group: the two windows change places.
+  - Release a window on a window of another group: it moves to that group, at that place.
+  - Release a window outside its group: it comes out at its full size. That thread does not join a group again by
+    itself while its window stays open.
+  - The ✕ of a window closes that window only. A group with one window left goes, and that window is free.
+- The title bar of the group moves the group. ⇲ UNGROUP sets all its windows free, side by side. The ✕ of the group
+  closes all its windows.
+- RESIZE (bottom right of the group): pinch and pull. The group and its windows get larger or smaller. The top-left
+  corner stays where it is. The scale is between 0.4 and 1.2.
+- The sidebar of a window in a group opens at the right edge of the group, not inside the grid.
+- Placement, RECENTER and the FLOAT ring move a group as one window.
+- Moves are smooth: a window that joins, leaves or changes place moves to its new place in about 0.25 s.
+- Voice: "put the open threads side by side" (`thread_windows group`), "break up the group" (`ungroup`), "close the
+  whole group of threads" (`close_group`).
+- Groups are not kept when the app restarts.
+
+### How the code works
+
+- The per-window state was a set of fields of `MetaCodexShell`. It is now a `ThreadWindow` object. The old field names
+  are properties of the current window `_tw`, so the thread code did not change much.
+- Outside a scope, `_tw` is the focused window. `using (In(w))` makes `w` the current window for a block. Each
+  window's frame tick, its build and `OpenThreadIn` use this.
+- A press on a panel focuses its window first (`UiInputRouter.Touched`). Buttons, the composer and every MQH answer
+  are bound to their window (`Bind`). A window that closed drops the late answers.
+- There is one sidebar. It belongs to the window that opened it last (`_sbOwner`), and it sits beside that window or
+  its group (`SbAnchor`).
+- A group's windows are children of the group's panel. They are not in the layout lists (`IsGroupedPanel`).
+- Self-test section `threadwindows` (`Editor/MetaCodexUiTestThreadWindows.cs`). It was not run on the owner's PC.
+
 ## Tests
 
 - Pure checks (no Unity, Unity's own .NET 8 and Roslyn): `C:\Users\pnncl\mcxcheck-chat\test\build.sh` on the
