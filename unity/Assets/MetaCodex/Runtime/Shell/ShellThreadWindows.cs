@@ -331,6 +331,7 @@ namespace MetaCodex.Shell
             var w = _tw;
             if (w.Panel == null) return;
             if (w.Group != null) { if (!w.Group.Panel.IsOpen) w.Group.Panel.Open(); w.Panel.Ping(); return; }
+            if (!w.Panel.IsOpen && Settings != null) w.Panel.BaseScale = Vector3.one * Mathf.Clamp(Settings.uiScale, 0.6f, 1.8f); // closed while it was in a group: its full size again
             _threadAliasOff = true; // its own id ("thread" is also the focused window's alias in OpenPanel)
             try { OpenPanel(w.Id); } finally { _threadAliasOff = false; }
             RefreshWindowTitles();
