@@ -153,6 +153,9 @@ namespace MetaCodex.AI
         /// worker thread (1809 strings from the phrase templates: about 0.9 s on the headset's main thread, a frozen frame
         /// right as MQH came up, 0.7.19 log) and finishes on this. Null (tests): all on the caller's thread, as before.
         public Action<Action> Post;
+        /// What the last Build's final step (matrix, grouping, pruning) took on the calling thread: the 0.7.19 first-start log has
+        /// one 54 ms main-thread callback where the decision model became ready.
+        public double LastFinishMs { get; private set; }
 
         public void Build(Action<string> done = null)
         {
@@ -196,6 +199,7 @@ namespace MetaCodex.AI
             }
             void Finish()
             {
+                var finishWatch = System.Diagnostics.Stopwatch.StartNew();
                 _labels.Clear();
                 var rows = new List<float[]>();
                 foreach (var (t, c) in ex) { if (!_cache.TryGetValue(t, out var v)) continue; rows.Add(v); _labels.Add(c); }
@@ -210,6 +214,7 @@ namespace MetaCodex.AI
                 LastPruned = drop.Count;
                 Building = false;
                 Status = $"ready: {_labels.Count} examples, {_byCommand.Count - (_byCommand.ContainsKey("none") ? 1 : 0)} commands";
+                LastFinishMs = finishWatch.Elapsed.TotalMilliseconds;
                 done?.Invoke(null);
             }
             Next();

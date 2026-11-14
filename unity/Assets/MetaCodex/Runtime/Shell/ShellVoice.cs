@@ -335,13 +335,14 @@ namespace MetaCodex.Shell
                     After(1f, PollVoiceStatus);
                 });
             }
-            if (Decider != null && Settings.voice.decide && Qvac != null && Qvac.IsRunning && !Decider.Ready && !Decider.Building
+            if (Decider != null && Settings.voice.decide && Qvac != null && Qvac.IsRunning && !Decider.Ready && !Decider.Building && !_deciderCacheLoading
                 && Time.unscaledTime >= _nextDeciderTry && ModelInstalled("embed"))
             {
                 _nextDeciderTry = Time.unscaledTime + 15f;
+                double buildAt = Time.realtimeSinceStartupAsDouble;
                 Decider.Build(err =>
                 {
-                    if (err == null) { SaveDeciderCache(); Log("voice: decision model " + Decider.Status); }
+                    if (err == null) { SaveDeciderCache(); Log($"voice: decision model {Decider.Status} (built in {Time.realtimeSinceStartupAsDouble - buildAt:F0} s; main-thread finish {Decider.LastFinishMs:F0} ms)"); }
                     else Log("voice: " + err);
                     RefreshVoicePanel();
                 });
@@ -1829,7 +1830,7 @@ namespace MetaCodex.Shell
         private void LoadDeciderCache()
         {
             if (!System.IO.File.Exists(DeciderCachePath)) { StartCoroutine(SeedDeciderCacheFromApk()); return; }
-            ReadDeciderCache();
+            ReadDeciderCache(null);
         }
 
         private System.Collections.IEnumerator SeedDeciderCacheFromApk()
@@ -1839,12 +1840,17 @@ namespace MetaCodex.Shell
             using (var req = UnityEngine.Networking.UnityWebRequest.Get(url))
             {
                 yield return req.SendWebRequest();
-                if (req.result != UnityEngine.Networking.UnityWebRequest.Result.Success || req.downloadHandler.data == null) yield break;
+                if (req.result != UnityEngine.Networking.UnityWebRequest.Result.Success || req.downloadHandler.data == null)
+                {
+                    // 2026-11-14 first-start log: no "decision vectors from the APK" line and the decision model took 52 s to embed
+                    // its examples on the AI cores: the packed APK had no qvac/decider-vectors.bin. Say so.
+                    Log("voice: no decision vectors in this APK (qvac/decider-vectors.bin: " + req.error + "): the examples are embedded on the headset");
+                    yield break;
+                }
                 try { System.IO.File.WriteAllBytes(DeciderCachePath, req.downloadHandler.data); }
                 catch (Exception ex) { Log("voice decider cache from the APK: " + ex.Message); yield break; }
             }
-            ReadDeciderCache();
-            Log($"voice: {_deciderSavedCount} decision vectors from the APK");
+            ReadDeciderCache(() => Log($"voice: {_deciderSavedCount} decision vectors from the APK"));
         }
 
         /// Writes vectors in the cache's format (the shell's own cache, and the APK's copy made by the decision bench).
@@ -1860,27 +1866,57 @@ namespace MetaCodex.Shell
             }
         }
 
-        private void ReadDeciderCache()
+        /// True while the cache file is being read (the build of the decision model waits for it: a build before it would embed
+        /// every example again).
+        private bool _deciderCacheLoading;
+
+        /// Reads the cache file on a worker thread at low priority (735,000 BinaryReader.ReadSingle calls for 1,916 examples:
+        /// tens of ms on the main thread, inside the start's one long frame, at every start that has the file); the vectors
+        /// are seeded on the main thread, where the decider's dictionary lives (one insert per example).
+        private void ReadDeciderCache(Action done)
         {
-            try
+            string path = DeciderCachePath;
+            _deciderCacheLoading = true;
+            MetaCodex.Linux.LowPriority.Run(() =>
             {
-                if (!System.IO.File.Exists(DeciderCachePath)) return;
-                using (var r = new System.IO.BinaryReader(System.IO.File.OpenRead(DeciderCachePath)))
+                List<KeyValuePair<string, float[]>> rows = null;
+                string err = null;
+                try { rows = ParseDeciderCache(path, out err); }
+                catch (Exception ex) { err = ex.Message; }
+                _main.Enqueue(() =>
                 {
-                    if (r.ReadString() != DeciderModelTag) return;
-                    int n = r.ReadInt32(), dim = r.ReadInt32();
-                    if (n < 0 || n > 200000 || dim < 8 || dim > 4096) return;
-                    for (int i = 0; i < n; i++)
+                    _deciderCacheLoading = false;
+                    if (rows != null)
                     {
-                        string t = r.ReadString();
-                        var v = new float[dim];
-                        for (int k = 0; k < dim; k++) v[k] = r.ReadSingle();
-                        Decider.Seed(t, v);
+                        foreach (var kv in rows) Decider.Seed(kv.Key, kv.Value);
+                        _deciderSavedCount = rows.Count;
                     }
-                    _deciderSavedCount = n;
+                    if (err != null) Log("voice decider cache: " + err);
+                    done?.Invoke();
+                });
+            }, "mcx-decider-cache");
+        }
+
+        /// The vectors of a cache file; null (and `why`) when it is not ours (another model or an unreadable file).
+        private static List<KeyValuePair<string, float[]>> ParseDeciderCache(string path, out string why)
+        {
+            why = null;
+            if (!System.IO.File.Exists(path)) return null;
+            using (var r = new System.IO.BinaryReader(System.IO.File.OpenRead(path)))
+            {
+                if (r.ReadString() != DeciderModelTag) { why = "the vectors file is of another model; they are embedded again"; return null; }
+                int n = r.ReadInt32(), dim = r.ReadInt32();
+                if (n < 0 || n > 200000 || dim < 8 || dim > 4096) { why = "the vectors file header is not valid"; return null; }
+                var rows = new List<KeyValuePair<string, float[]>>(n);
+                for (int i = 0; i < n; i++)
+                {
+                    string t = r.ReadString();
+                    var v = new float[dim];
+                    for (int k = 0; k < dim; k++) v[k] = r.ReadSingle();
+                    rows.Add(new KeyValuePair<string, float[]>(t, v));
                 }
+                return rows;
             }
-            catch (Exception ex) { Log("voice decider cache: " + ex.Message); }
         }
 
         private void SaveDeciderCache()
