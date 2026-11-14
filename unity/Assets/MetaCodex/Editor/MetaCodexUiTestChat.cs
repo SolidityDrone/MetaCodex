@@ -11,7 +11,7 @@ namespace MetaCodex.EditorTools
     /// Self-test section `chat` (owner 2026-11-11, docs/thread-view.md): THREAD as a chat. A finished exchange (work
     /// closed under one header, the answer in markdown-lite), a live one (work open, reads grouped, a command running,
     /// the status line), the sticky prompt, opening and closing, the view holding still while new lines come, MQH's
-    /// deltas, the usage limits, dictation into the composer and the session context's answer from the pulse.
+    /// deltas, the usage limits, dictation into the composer, the message box's grip, voice and reset on SEND, and the session context's answer from the pulse.
     public static partial class MetaCodexUiTest
     {
         private static JObject ChatRow(string kind, string id, long start, JObject f)
@@ -152,6 +152,43 @@ namespace MetaCodex.EditorTools
             var mic = shell.MicForTest;
             Check(mic.Rect.xMax <= send.Rect.x + 1e-4f && comp.Rect.xMax <= mic.Rect.x + 1e-4f && chat.Rect.yMax <= els.OfType<UiLabel>().First(l => l.Text == shell.ThreadStatusTextForTest).Rect.y + 1e-4f,
                 "layout: the chat, then the status line; composer | ◉ | SEND in a row");
+            // THREAD's message box (owner 2026-11-14): the grip grows it upwards and the chat shrinks by the same amount,
+            // voice steps it, the most is capped, and SEND puts it back to one row
+            var grip = shell.ComposerGripForTest;
+            float box0 = comp.Rect.height, chat0 = chat.Rect.height, rowBottom = comp.Rect.yMax;
+            void Drag(float up)
+            {
+                Vector2 gp = grip.Rect.center;
+                grip.OnPress(new UiPointerEvent { Point = gp, PressPoint = gp });
+                for (int i = 1; i <= 5; i++) grip.OnDrag(new UiPointerEvent { Point = gp + new Vector2(0f, -up * i / 5f), PressPoint = gp });
+                grip.OnRelease(new UiPointerEvent { Point = gp + new Vector2(0f, -up), PressPoint = gp }, true);
+            }
+            bool Layered() => Mathf.Abs(comp.Rect.height - (box0 + shell.ComposerExtraForTest)) < 1e-4f
+                && Mathf.Abs(chat.Rect.height - (chat0 - shell.ChatExtraForTest)) < 1e-3f && Mathf.Abs(comp.Rect.yMax - rowBottom) < 1e-4f;
+            Drag(0.06f);
+            Check(Mathf.Abs(shell.ComposerExtraForTest - 0.06f) < 1e-3f && Layered(),
+                $"the grip dragged up 6 cm: the box {box0 * 1000f:F0} -> {comp.Rect.height * 1000f:F0} mm, the chat {chat0 * 1000f:F0} -> {chat.Rect.height * 1000f:F0} mm, the bottom row stays");
+            VoiceResult vrBox = null;
+            shell.VoiceProcessText("make the text box bigger", x => vrBox = x);
+            Check(vrBox != null && vrBox.Command == "thread_composer" && Mathf.Abs(shell.ComposerExtraForTest - 0.12f) < 1e-3f && Layered(),
+                "voice “make the text box bigger”: one more step (" + vrBox?.Reply + ")");
+            shell.VoiceProcessText("reset the text box", x => vrBox = x);
+            Check(vrBox != null && vrBox.Command == "thread_composer" && Mathf.Abs(shell.ComposerExtraForTest) < 1e-5f && Layered() && Mathf.Abs(chat.Rect.height - chat0) < 1e-3f,
+                "voice “reset the text box”: one row, the chat its old height (" + vrBox?.Reply + ")");
+            Drag(-0.3f);
+            Check(Mathf.Abs(shell.ComposerExtraForTest) < 1e-5f && Layered(), "dragged down past one row: it stays at one row");
+            Drag(1f);
+            Check(Mathf.Abs(shell.ComposerExtraForTest - shell.ComposerMaxExtraForTest) < 1e-4f && shell.ComposerMaxExtraForTest > 0.1f && chat.Rect.height >= MetaCodexShell.ComposerChatMinimum - 1e-3f && Layered(),
+                $"dragged up a metre: it stops at the most ({shell.ComposerMaxExtraForTest * 1000f:F0} mm above one row); the chat keeps {chat.Rect.height * 1000f:F0} mm");
+            Drag(-1f);
+            Drag(0.06f);
+            comp.Set("a long message that goes into the box for the send check");
+            shell.SendComposerForTest(comp.Text);
+            Check(Mathf.Abs(shell.ComposerExtraForTest) < 1e-5f && Mathf.Abs(comp.Rect.height - box0) < 1e-4f && Mathf.Abs(chat.Rect.height - chat0) < 1e-3f && Layered(),
+                "SEND: the message box is one row again, the chat its old height");
+            comp.Set("");
+            var lintBox = VoiceCommands.Lint(shell.Voice.Find("thread_composer"));
+            Check(lintBox.Count == 0, lintBox.Count == 0 ? "registry: thread_composer is complete (lint clean)" : "registry: " + string.Join("; ", lintBox));
             // the turn ends: the orb casts "answered" (a tap opens the thread), the open window pulses, the answer glows
             int notes0 = shell.Toasts.History.Count;
             var doneRow = (JObject)row.DeepClone();

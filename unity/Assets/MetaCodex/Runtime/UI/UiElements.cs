@@ -481,6 +481,9 @@ namespace MetaCodex.UI
         public bool Secure;
         /// The system keyboard opens with Enter for new lines (a text that can hold several lines).
         public bool Multiline;
+        /// Wraps the text over its lines and shows the last lines (where the caret is). Off: one line, cut at its end.
+        /// A box taller than one row shows its text from the top (THREAD's composer: its grip makes the box taller).
+        public bool Wrap;
         public Action<string> OnSubmit;
         public Action<string> OnChanged;
         public float CaptionWidth = 0.17f;
@@ -488,6 +491,8 @@ namespace MetaCodex.UI
         private int _box;
         private UiText _text, _caption;
         private bool _editing;
+        private string _pagedText;
+        private Rect _pagedRect = new Rect(0f, 0f, -1f, -1f);
 
         public UiTextField(string caption, string text, Action<string> onSubmit, string placeholder = "")
         { Caption = caption; Text = text ?? ""; OnSubmit = onSubmit; Placeholder = placeholder; }
@@ -500,11 +505,26 @@ namespace MetaCodex.UI
                 _caption = UiText.Create(Panel, new Rect(Rect.x, Rect.y, CaptionWidth - 0.006f, Rect.height), UiTheme.Pretty(Caption), Theme.Body, Theme.BodySize, Theme.Text);
             _box = Panel.Shapes.Add(Panel.Shape(UiShapeKind.Button, BoxRect, Theme.Frame, 0.006f, 0.002f, 0.005f));
             var tr = BoxRect;
-            _text = UiText.Create(Panel, new Rect(tr.x + 0.008f, tr.y, tr.width - 0.016f, tr.height), "", Theme.Mono, Theme.SmallSize * 1.1f, Theme.Text);
+            _text = UiText.Create(Panel, new Rect(tr.x + 0.008f, tr.y, tr.width - 0.016f, tr.height), "", Theme.Mono, Theme.SmallSize * 1.1f, Theme.Text, TextAlignmentOptions.MidlineLeft, Wrap);
+            if (Wrap) _text.Tmp.overflowMode = TextOverflowModes.Page; // pages of whole lines; ShowLastPage picks the last
             Refresh();
         }
 
         public void Set(string text) { Text = text ?? ""; Refresh(); }
+
+        /// The box moved or changed height (THREAD's composer grip): the box and its text follow. A box taller than
+        /// one row shows its text from the top.
+        protected override void Relayout()
+        {
+            if (Panel == null || _text == null) return;
+            var br = BoxRect;
+            Panel.Shapes.SetRect(_box, Panel.PanelToLocal(br.center), br.size);
+            if (_caption != null) _caption.SetRect(new Rect(Rect.x, Rect.y, CaptionWidth - 0.006f, Rect.height));
+            bool tall = Wrap && br.height > Theme.ButtonHeight * 1.5f;
+            _text.Tmp.alignment = tall ? TextAlignmentOptions.TopLeft : TextAlignmentOptions.MidlineLeft;
+            _text.SetRect(tall ? new Rect(br.x + 0.008f, br.y + 0.004f, br.width - 0.016f, br.height - 0.008f) : new Rect(br.x + 0.008f, br.y, br.width - 0.016f, br.height));
+            Refresh();
+        }
 
         private void Refresh()
         {
@@ -516,6 +536,20 @@ namespace MetaCodex.UI
             _text.Color = empty ? Theme.TextDim : Theme.Text;
             Panel.Shapes.SetTint(_box, _editing ? Theme.Accent : Theme.Frame);
             Panel.Shapes.SetState(_box, _editing ? 0.6f : Hover ? 0.3f : 0f);
+            if (Wrap) ShowLastPage();
+        }
+
+        /// Shows the last page (the last lines, with the caret). Only when the text or the box changed: the mesh is
+        /// built twice then (TMP needs the page count first).
+        private void ShowLastPage()
+        {
+            var tmp = _text.Tmp;
+            if (tmp.text == _pagedText && _pagedRect == Rect) return;
+            _pagedText = tmp.text;
+            _pagedRect = Rect;
+            tmp.pageToDisplay = 1;
+            tmp.ForceMeshUpdate();
+            tmp.pageToDisplay = Mathf.Max(1, tmp.textInfo.pageCount);
         }
 
         public override void Update() { if (_editing) Refresh(); }
@@ -549,6 +583,39 @@ namespace MetaCodex.UI
             DestroyGo(_text.Tmp.gameObject);
             if (_caption != null) DestroyGo(_caption.Tmp.gameObject);
         }
+    }
+
+    /// A slim bar to drag (pinch, or poke and push) to resize what it sits on. OnDragStep gets the vertical move since
+    /// the last step in panel metres (y grows downwards: a move up is negative); OnDragEnd runs when it is let go.
+    /// Hover lights it. Drawn as a bar with three dots.
+    public sealed class UiDragGrip : UiCanvas
+    {
+        public Action<float> OnDragStep;
+        public Action OnDragEnd;
+        public override bool Interactive => true;
+        private float _lastY;
+
+        protected override void Relayout() => Redraw();
+        protected override void OnInteractionChanged() => Redraw();
+
+        protected override void Draw()
+        {
+            var t = Theme;
+            var c = Rect.center;
+            Box(new Rect(c.x - 0.036f, c.y - 0.0025f, 0.072f, 0.005f), Hover || Pressed ? t.Accent : t.AccentSoft, 0.0025f, 1, Pressed ? 1f : Hover ? 0.5f : 0.2f, 0.001f);
+            for (int i = -1; i <= 1; i++) Dot(new Vector2(c.x + i * 0.012f, c.y), 0.0028f, t.Text);
+        }
+
+        public override void OnPress(UiPointerEvent e) => _lastY = e.Point.y;
+
+        public override void OnDrag(UiPointerEvent e)
+        {
+            float dy = e.Point.y - _lastY;
+            _lastY = e.Point.y;
+            if (dy != 0f) OnDragStep?.Invoke(dy);
+        }
+
+        public override void OnRelease(UiPointerEvent e, bool inside) => OnDragEnd?.Invoke();
     }
 
     public sealed class UiListItem
