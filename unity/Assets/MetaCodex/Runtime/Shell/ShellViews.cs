@@ -547,7 +547,7 @@ namespace MetaCodex.Shell
                 Mqh.SendMessage(v.ThreadId, text, r =>
                 {
                     Toast(r != null ? "Answer sent to the thread: " + UiViz.Cut(text, 40) : "Not sent: " + Mqh.LastError, r != null ? "ok" : "error");
-                    if (r != null && v.ThreadId == _threadOpen) PollThread();
+                    if (r != null && OpenWindowShowing(v.ThreadId) is ThreadWindow vw) using (In(vw)) PollThread(); // whichever window shows it
                 });
             }
             else Toast(waiters.Count > 0 ? "Answer sent: " + UiViz.Cut(text, 40) : "Answer kept (view " + v.Id + "): " + UiViz.Cut(text, 40), "ok");

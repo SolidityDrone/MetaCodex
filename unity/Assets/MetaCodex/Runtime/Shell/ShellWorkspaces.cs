@@ -27,8 +27,6 @@ namespace MetaCodex.Shell
         private int _wspGitAsk;              // the newest git read (older answers are dropped)
         private (string id, string label) _ntReuseEnv;  // NEW THREAD HERE: that workspace
         private bool _ntForcedWorktree;      // NEW THREAD: WORKTREE chosen because the checkout is busy
-        private (string id, string reason) _thWait;     // the open thread's turn held in its queue
-        private UiButton _thSendNow;
 
         public IReadOnlyDictionary<string, List<WorkspaceGroup>> WorkspaceMapForTest => _spaces;
 
@@ -370,7 +368,7 @@ namespace MetaCodex.Shell
         private void PollThreadQueue(string threadId)
         {
             if ((string)_threadInfo?["queuedWork"] != "waiting") { if (_thWait.id != null) { _thWait = default; ShowThreadStatus(); } SetSendNowVisible(false); return; }
-            Mqh.QueuedMessages(threadId, q =>
+            Mqh.QueuedMessages(threadId, Bind<JToken>(q =>
             {
                 if (threadId != _threadOpen) return;
                 var row = (q as JArray)?.OfType<JObject>().FirstOrDefault(x => x["waitingOn"] is JObject w && ((string)w["kind"] == "plugin" || (string)w["kind"] == "thread-busy"));
@@ -379,19 +377,19 @@ namespace MetaCodex.Shell
                 if (_threadInfo != null) _threadInfo["mcxWaitReason"] = _thWait.reason;
                 SetSendNowVisible(_thWait.id != null && (string)row?["waitingOn"]?["kind"] == "plugin");
                 RefreshThreadPulse();
-            });
+            }));
         }
 
-        private Rect _thStatusFull;
 
         private void SetSendNowVisible(bool on)
         {
             if (_thStatus == null) return;
             if (_thStatusFull.width <= 0f) _thStatusFull = _thStatus.Rect;
-            if (_thSendNow == null && on && PanelsById.TryGetValue("thread", out var p))
+            var p = ThreadPanel; // this window's panel
+            if (_thSendNow == null && on && p != null)
             {
                 var r = _thStatusFull;
-                _thSendNow = p.Add(new UiButton("▶ SEND NOW", SendHeldNow, UiButtonStyle.Primary) { Rect = new Rect(r.xMax - 0.11f, r.y - 0.002f, 0.11f, r.height + 0.004f), TextSize = UiTheme.Current.SmallSize * 0.95f });
+                _thSendNow = p.Add(new UiButton("▶ SEND NOW", Bind(SendHeldNow), UiButtonStyle.Primary) { Rect = new Rect(r.xMax - 0.11f, r.y - 0.002f, 0.11f, r.height + 0.004f), TextSize = UiTheme.Current.SmallSize * 0.95f });
             }
             _thSendNow?.SetVisible(on);
             // the status line makes room for it
@@ -404,18 +402,18 @@ namespace MetaCodex.Shell
         {
             if (_threadOpen == null || _thWait.id == null) return;
             string id = _threadOpen, qid = _thWait.id;
-            Modal("Start it now?", "Another thread is working in this folder: both agents will edit the same files at once. A WORKTREE thread avoids that.", new[] { "SEND NOW", "CANCEL" }, i =>
+            Modal("Start it now?", "Another thread is working in this folder: both agents will edit the same files at once. A WORKTREE thread avoids that.", new[] { "SEND NOW", "CANCEL" }, Bind<int>(i =>
             {
                 if (i != 0) return;
-                Mqh.SendQueuedNow(id, qid, r =>
+                Mqh.SendQueuedNow(id, qid, Bind<JToken>(r =>
                 {
                     Toast(r != null ? "Sent: it shares the folder now" : "Not sent: " + Mqh.LastError, r != null ? "warn" : "error");
                     _thWait = default;
                     SetSendNowVisible(false);
                     _nextThreadMeta = 0f;
                     PollThread();
-                });
-            });
+                }));
+            }));
         }
 
         public void SetThreadWaitForTest(string queuedId, string reason)

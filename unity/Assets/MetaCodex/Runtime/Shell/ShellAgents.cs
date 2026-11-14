@@ -22,18 +22,12 @@ namespace MetaCodex.Shell
     {
         private string _hostId;
         private JArray _providerStates = new JArray(), _providerCatalog = new JArray(), _projects = new JArray(), _threads = new JArray();
-        private string _agentSel, _projectSel, _threadSel, _threadOpen;
-        private JObject _threadInfo;
-        private JArray _interactions = new JArray();
-        private long _tlMaxSeq = -1;
-        private float _nextThreadPoll;
+        private string _agentSel, _projectSel, _threadSel;
         private string _ntProvider, _ntModel;
         private JArray _ntModels = new JArray();
 
         private UiList _agentList, _projectList, _threadList, _ntProviders, _ntModelList;
-        private UiLabel _agentDetail, _agentHint, _threadsStatus, _thTitle, _thMeta, _thAsk, _ntSummary;
-        private UiTextField _thComposer;
-        private readonly List<UiButton> _thAskButtons = new List<UiButton>();
+        private UiLabel _agentDetail, _agentHint, _threadsStatus, _ntSummary;
         private UiSegmented _ntPerm, _ntWork;
 
         public string LastLink { get; private set; }
@@ -301,7 +295,6 @@ namespace MetaCodex.Shell
 
         private readonly HashSet<string> _collapsedProjects = new HashSet<string>();
         private readonly HashSet<string> _collapsedTypes = new HashSet<string>(); // NATIVE, DEFAULT, RESEARCH, OTHER headers folded
-        private string _threadOpenProject;
 
         /// Threads grouped like bb's sidebar, under the project types (owner 2026-11-13): a dim type header (NATIVE,
         /// DEFAULT, RESEARCH, then OTHER when there are any; tap: fold / unfold), its projects (tap: fold / unfold), and
@@ -450,7 +443,7 @@ namespace MetaCodex.Shell
                         Icon = pending ? "?" : working ? "▶" : held ? "⏸" : st == "error" ? "⚠" : "◆",
                         IconColor = pending || held ? t.Warn : working ? t.Ok : st == "error" ? t.Danger : t.Accent,
                         Title = (string)x["title"] ?? (string)x["titleFallback"] ?? id,
-                        TitleColor = id == _threadOpen ? t.TextAccent : (Color?)null,
+                        TitleColor = id == _threadOpen || OpenWindowShowing(id) != null ? t.TextAccent : (Color?)null, // open in a window (any of them)
                         Sub = showSpaces ? $"{x["providerId"]} · {Ago(x["updatedAt"]?.Value<long>() ?? 0)}" : $"{x["providerId"]} · {(x["environmentIsWorktree"]?.Value<bool>() == true ? "⎇ " + x["environmentBranchName"] : "checkout")} · {Ago(x["updatedAt"]?.Value<long>() ?? 0)}",
                         Badge = pending ? "NEEDS YOU" : working ? "RUNNING" : held ? "WAITING" : st == "error" ? "ERROR" : "",
                         BadgeColor = pending || held ? t.Warn : st == "error" ? t.Danger : t.Ok,
@@ -623,34 +616,45 @@ namespace MetaCodex.Shell
 
         // ------------------------------------------------------------------ THREAD
 
-        private UiButton _thModelChip, _thPermChip, _thWsChip;
         /// THREAD's width: the conversation plus the strip on its right edge for the sidebar's expand handle.
         public const float ThreadW = 0.73f, ThreadHandleW = 0.03f;
-        private UiRing _thContext;
-        private UiButton _tlUp, _tlDown;
-        private Rect _tlArea;
-        private JObject _thExec;
-        private JToken _thUsage;
-        private JArray _tlRaw = new JArray();
-        private long _tlOpenSeq = -1;
         private readonly Dictionary<string, (string model, string effort, string perm)> _thOverrides = new Dictionary<string, (string, string, string)>();
         private readonly Dictionary<string, JArray> _modelsByProvider = new Dictionary<string, JArray>();
 
+        /// Every THREAD window (ShellThreadWindows): "thread" always, the extra ones that are open; then their groups.
         private void BuildThread()
+        {
+            foreach (var w in Tws.ToList()) BuildThreadWindow(w);
+            RebuildGroupPanels(); // RebuildPanels: the groups' panels again, their windows back in them
+            RefreshWindowTitles();
+        }
+
+        private void BuildThreadWindow(ThreadWindow w)
+        {
+            using (In(w)) BuildThreadWindowIn(w);
+        }
+
+        private void BuildThreadWindowIn(ThreadWindow w)
         {
             _thAskButtons.Clear(); // RebuildPanels builds the panel again
             var t = UiTheme.Current;
-            var p = Panel<UiPanel>("thread", "Thread", ThreadW, 0.66f);
+            var p = Panel<UiPanel>(w.Id, w.Number == 1 ? "Thread" : "Thread " + w.Number, ThreadW, ThreadH);
+            w.Panel = p;
+            // a large ✕ at the top-right (owner 2026-11-14: easy to hit, also when the window is shrunk in a group): it
+            // closes this window only; the thread stays in MQH and in THREADS
+            p.HideCloseButton();
+            w.CloseButton = p.Add(new UiButton("✕", () => { if (!w.Dead && w.Panel != null) w.Panel.Close(); }, UiButtonStyle.Danger)
+                { Rect = new Rect(ThreadW - 0.088f, 0.004f, 0.082f, t.HeaderHeight - 0.008f), TextSize = t.BodySize * 1.35f });
             var c0 = p.Content;
             var c = new Rect(c0.x, c0.y, c0.width - ThreadHandleW, c0.height); // the conversation; its right edge holds the handle
             // the expand handle on the right edge: the sidebar (changes, files, git, status, views) opens beside it
-            _thHandle = p.Add(new UiEdgeHandle { Rect = new Rect(c.xMax + t.Gap * 0.6f, c.y + 0.06f, ThreadW - c.xMax - t.Gap * 0.6f - 0.004f, c.height - 0.06f - 0.12f), OnClickAction = ToggleSidebar });
+            _thHandle = p.Add(new UiEdgeHandle { Rect = new Rect(c.xMax + t.Gap * 0.6f, c.y + 0.06f, ThreadW - c.xMax - t.Gap * 0.6f - 0.004f, c.height - 0.06f - 0.12f), OnClickAction = Bind(ToggleSidebar) });
             var st = new UiStack(c, t.Gap);
             var top = st.Next(0.03f);
             float bw = 0.082f;
             _thTitle = p.Add(new UiLabel("", t.BodySize * 1.1f) { Rect = new Rect(top.x, top.y, top.width - bw * 2 - t.Gap * 2, top.height) });
-            p.Add(new UiButton("⑂ FORK…", ForkPrompt) { Rect = new Rect(top.xMax - bw * 2 - t.Gap, top.y, bw, top.height), TextSize = t.SmallSize * 1.05f });
-            p.Add(new UiButton("⟳", () => { _tlMaxSeq = -1; _tlTag = null; _tlInFlight = false; _nextThreadMeta = 0f; PollThread(); }) { Rect = new Rect(top.xMax - bw, top.y, bw, top.height), TextSize = t.SmallSize * 1.05f });
+            p.Add(new UiButton("⑂ FORK…", Bind(ForkPrompt)) { Rect = new Rect(top.xMax - bw * 2 - t.Gap, top.y, bw, top.height), TextSize = t.SmallSize * 1.05f });
+            p.Add(new UiButton("⟳", Bind(() => { _tlMaxSeq = -1; _tlTag = null; _tlInFlight = false; _nextThreadMeta = 0f; PollThread(); })) { Rect = new Rect(top.xMax - bw, top.y, bw, top.height), TextSize = t.SmallSize * 1.05f });
             // the meta row: where it works (left), the provider's plan and usage limits (right)
             var metaRow = st.Next(0.02f);
             _thMeta = p.Add(new UiLabel("", t.SmallSize) { Rect = new Rect(metaRow.x, metaRow.y, metaRow.width * 0.56f, metaRow.height), Color = t.TextDim, UseMono = true });
@@ -669,38 +673,46 @@ namespace MetaCodex.Shell
             for (int i = 0; i < 3; i++)
             {
                 var d = asks[i].decision;
-                _thAskButtons.Add(p.Add(new UiButton(asks[i].label, () => Resolve(d), i == 0 ? UiButtonStyle.Primary : i == 2 ? UiButtonStyle.Danger : UiButtonStyle.Normal) { Rect = new Rect(askRow.x + i * (aw + t.Gap), askRow.y, aw, askRow.height) }));
+                _thAskButtons.Add(p.Add(new UiButton(asks[i].label, Bind(() => Resolve(d)), i == 0 ? UiButtonStyle.Primary : i == 2 ? UiButtonStyle.Danger : UiButtonStyle.Normal) { Rect = new Rect(askRow.x + i * (aw + t.Gap), askRow.y, aw, askRow.height) }));
             }
             // attachments (captures, Linux files) for the next message, then the composer with its + (owner 2026-11-09),
             // then the bb-like chips: model, access, workspace, context, stop
             float cy = c.yMax - chipH - t.Gap - t.ButtonHeight;
             float sendW = 0.11f, plusW = t.ButtonHeight * 1.2f, micW = t.ButtonHeight * 1.25f;
             BuildAttachRow(p, new Rect(c.x, cy - t.Gap - chipH, c.width, chipH));
-            _thPlus = p.Add(new UiButton("+", ToggleAttachMenu, UiButtonStyle.Primary) { Rect = new Rect(c.x, cy, plusW, t.ButtonHeight), TextSize = t.BodySize * 1.3f });
-            _thComposer = p.Add(new UiTextField("", "", s => SendToThread(s), "message the agent… (or ◉ to say it)") { Rect = new Rect(c.x + plusW + t.Gap, cy, c.width - sendW - plusW - micW - t.Gap * 3, t.ButtonHeight), CaptionWidth = 0f, Wrap = true });
+            _thPlus = p.Add(new UiButton("+", Bind(ToggleAttachMenu), UiButtonStyle.Primary) { Rect = new Rect(c.x, cy, plusW, t.ButtonHeight), TextSize = t.BodySize * 1.3f });
+            _thComposer = p.Add(new UiTextField("", "", Bind<string>(s => SendToThread(s)), "message the agent… (or ◉ to say it)") { Rect = new Rect(c.x + plusW + t.Gap, cy, c.width - sendW - plusW - micW - t.Gap * 3, t.ButtonHeight), CaptionWidth = 0f, Wrap = true });
             // the grip on its top edge makes the box taller (ShellThreadComposer): the chat above gets shorter
             BuildComposerGrip(p, _thComposer.Rect, c0.height, _tlArea.height);
             // ◉: say the message (speech to text into the composer; SEND stays yours)
-            _thMic = p.Add(new UiButton("◉", () => DictateInto(_thComposer)) { Rect = new Rect(c.xMax - sendW - t.Gap - micW, cy, micW, t.ButtonHeight), TextSize = t.BodySize * 1.15f });
-            p.Add(new UiButton("SEND ▶", () => SendToThread(_thComposer.Text), UiButtonStyle.Primary) { Rect = new Rect(c.xMax - sendW, cy, sendW, t.ButtonHeight) });
+            var composer = _thComposer;
+            _thMic = p.Add(new UiButton("◉", () => DictateInto(composer)) { Rect = new Rect(c.xMax - sendW - t.Gap - micW, cy, micW, t.ButtonHeight), TextSize = t.BodySize * 1.15f });
+            p.Add(new UiButton("SEND ▶", Bind(() => SendToThread(_thComposer.Text)), UiButtonStyle.Primary) { Rect = new Rect(c.xMax - sendW, cy, sendW, t.ButtonHeight) });
             float y = c.yMax - chipH;
-            float[] w = { 0.17f, 0.13f, 0.165f, 0.135f };
+            float[] cw = { 0.17f, 0.13f, 0.165f, 0.135f };
             float x = c.x;
             float ts = t.SmallSize * 1.02f;
-            _thModelChip = p.Add(new UiButton("◇ model ▾", ModelPrompt) { Rect = new Rect(x, y, w[0], chipH), TextSize = ts }); x += w[0] + t.Gap;
-            _thPermChip = p.Add(new UiButton("✎ Edits ▾", PermissionPrompt) { Rect = new Rect(x, y, w[1], chipH), TextSize = ts }); x += w[1] + t.Gap;
-            _thWsChip = p.Add(new UiButton("▣ checkout", () => SetSidebar(true, TabFiles)) { Rect = new Rect(x, y, w[2], chipH), TextSize = ts }); x += w[2] + t.Gap;
-            _thContext = p.Add(new UiRing { Rect = new Rect(x, y, w[3], chipH), OnClickAction = ContextPrompt }); x += w[3] + t.Gap;
-            p.Add(new UiButton("■ STOP", () => { if (_threadOpen != null) Mqh.StopThread(_threadOpen, r => { Toast(r != null ? "Stopping the turn" : "MQH: " + Mqh.LastError); if (r != null) ResyncThread(1.5f); }); }, UiButtonStyle.Danger) { Rect = new Rect(x, y, c.xMax - x, chipH), TextSize = ts });
+            _thModelChip = p.Add(new UiButton("◇ model ▾", Bind(ModelPrompt)) { Rect = new Rect(x, y, cw[0], chipH), TextSize = ts }); x += cw[0] + t.Gap;
+            _thPermChip = p.Add(new UiButton("✎ Edits ▾", Bind(PermissionPrompt)) { Rect = new Rect(x, y, cw[1], chipH), TextSize = ts }); x += cw[1] + t.Gap;
+            _thWsChip = p.Add(new UiButton("▣ checkout", Bind(() => SetSidebar(true, TabFiles))) { Rect = new Rect(x, y, cw[2], chipH), TextSize = ts }); x += cw[2] + t.Gap;
+            _thContext = p.Add(new UiRing { Rect = new Rect(x, y, cw[3], chipH), OnClickAction = Bind(ContextPrompt) }); x += cw[3] + t.Gap;
+            p.Add(new UiButton("■ STOP", Bind(() => { if (_threadOpen != null) Mqh.StopThread(_threadOpen, Bind<JToken>(r => { Toast(r != null ? "Stopping the turn" : "MQH: " + Mqh.LastError); if (r != null) ResyncThread(1.5f); })); }), UiButtonStyle.Danger) { Rect = new Rect(x, y, c.xMax - x, chipH), TextSize = ts });
             // the attach modal: drawn over the timeline area, inside this panel (not a panel of its own)
             BuildAttachModal(p, _tlArea);
+            // each window ticks in its own scope: its status line, its pulse, its polls (only while it is open)
             p.Tick += _ =>
             {
-                if (_resyncAt > 0f && Time.unscaledTime >= _resyncAt) { _resyncAt = -1f; ResyncThread(); return; }
-                if (_threadOpen != null && Time.unscaledTime >= _nextThreadPoll) PollThread();
+                if (w.Dead) return;
+                using (In(w))
+                {
+                    TickPanelPulse(p);
+                    TickThreadView();
+                    if (_resyncAt > 0f && Time.unscaledTime >= _resyncAt) { _resyncAt = -1f; ResyncThread(); return; }
+                    if (_threadOpen != null && Time.unscaledTime >= _nextThreadPoll) PollThread();
+                }
             };
-            p.Closed += _ => { if (_sb != null && _sb.IsOpen) _sb.Close(); CloseAttachModal(); SetAttachMenu(false); DiscardDraft(); UpdateSidebarVoice(); };
-            p.Opened += _ => UpdateSidebarVoice();
+            p.Closed += _ => OnThreadWindowClosed(w);
+            p.Opened += _ => { UpdateSidebarVoice(); UpdateThreadWindowVoice(); RefreshWindowTitles(); };
             SetAskVisible(false);
             RefreshAttachRow();
         }
@@ -769,12 +781,35 @@ namespace MetaCodex.Shell
             catch (Exception ex) { Log("recent threads not saved: " + ex.Message); }
         }
 
+        /// Opens a thread (THREADS, voice, a callout, a return from an app, a fork): the window that shows it already is
+        /// focused; else it opens in the focused window when that is closed or empty, else in a new window beside it
+        /// (ShellThreadWindows.PickWindowForOpen). A thread of a project that has a window open joins that window's
+        /// group (ShellThreadGroups.AutoGroup), unless the user pulled it out of it.
         public void OpenThread(string id)
         {
             if (string.IsNullOrEmpty(id)) return;
+            var shown = Tws.FirstOrDefault(x => !x.Dead && x.threadOpen == id && (WinOpen(x) || x.Panel == null || x == _twFirst));
+            var w = shown ?? PickWindowForOpen();
+            OpenThreadIn(w, id);
+            if (shown == null) AutoGroup(w);
+        }
+
+        /// Opens the thread in this window (it replaces what the window showed).
+        private void OpenThreadIn(ThreadWindow w, string id)
+        {
+            if (string.IsNullOrEmpty(id) || w == null || w.Dead) return;
+            _twOpener = _twFocus != w && WinOpen(_twFocus) ? (_twFocus.Group?.Panel ?? _twFocus.Panel) : null;
+            FocusWindow(w);
+            using (In(w)) OpenThreadHere(id);
+            _twOpener = null;
+            RefreshWindowTitles();
+        }
+
+        private void OpenThreadHere(string id)
+        {
             DiscardDraft(); // a draft never sent is dropped (nothing was made in MQH)
             NoteThreadUsed(id); // the thread used last (the way back from an app, ShellReturn)
-            if (id != _threadOpen) { _thExec = null; _thUsage = null; _tlRaw = new JArray(); CloseAttachModal(); SetAttachMenu(false); _threadOpen = id; ResetThreadChat(); }
+            if (id != _threadOpen) { if (_threadOpen != null) _pulledOut.Remove(_threadOpen); _thExec = null; _thUsage = null; _threadInfo = null; _tlRaw = new JArray(); CloseAttachModal(); SetAttachMenu(false); _threadOpen = id; ResetThreadChat(); }
             _threadOpen = id;
             RefreshAttachRow(); // each thread keeps its own attachments for its next message
             var row = _threads.FirstOrDefault(x => (string)x["id"] == id) as JObject;
@@ -785,11 +820,14 @@ namespace MetaCodex.Shell
             _tlTag = null; // a full timeline first
             _thTitle?.Set("loading …");
             _thContext?.Set(-1f, "context —");
-            OpenPanel("thread");
-            SbSetThread(id, (string)row?["environmentPath"]);
-            SetSidebar(SidebarMemory(id).open, SidebarMemory(id).tab, remember: false); // as this thread had it
+            ShowThreadWindow();
+            SbSetThread(id, (string)row?["environmentPath"]); // only when this window has the sidebar
+            // the sidebar as this thread had it: open (it comes to this window), or folded when it is this window's
+            var mem = SidebarMemory(id);
+            if (mem.open) SetSidebar(true, mem.tab, remember: false);
+            else if (_sbOwner == _tw) SetSidebar(false, mem.tab, remember: false);
             UpdateChips();
-            Mqh.ExecOptions(id, r => { if (id != _threadOpen || !(r is JObject jo)) return; _thExec = jo; UpdateChips(); });
+            Mqh.ExecOptions(id, Bind<JToken>(r => { if (id != _threadOpen || !(r is JObject jo)) return; _thExec = jo; UpdateChips(); }));
             _nextThreadMeta = 0f;
             PollThread();
             RefreshUsageLimits(true);
@@ -811,18 +849,19 @@ namespace MetaCodex.Shell
             RefreshThreads();
         }
 
-        private float _resyncAt = -1f;
 
         public void PollThread()
         {
             if (_threadOpen == null || _thTitle == null) return;
             string id = _threadOpen;
             bool live = _thPulse != null && _thPulse.Working || ThreadTimeline.IsWorking(StatusOfRow(_threadInfo));
-            _nextThreadPoll = Time.unscaledTime + (live ? 0.8f : 2.5f);
+            // a window that is not the focused one polls half as often (several windows: memory, MQH, the main thread)
+            float slow = _tw == _twFocus ? 1f : 2f;
+            _nextThreadPoll = Time.unscaledTime + (live ? 0.8f : 2.5f) * slow;
             if (Time.unscaledTime >= _nextThreadMeta)
             {
-                _nextThreadMeta = Time.unscaledTime + (live ? 2f : 3f);
-                Mqh.Threads(_threadOpenProject, th =>
+                _nextThreadMeta = Time.unscaledTime + (live ? 2f : 3f) * slow;
+                Mqh.Threads(_threadOpenProject, Bind<JToken>(th =>
                 {
                     var row = (th as JArray)?.FirstOrDefault(x => (string)x["id"] == id) as JObject;
                     if (row == null || id != _threadOpen) return;
@@ -846,14 +885,14 @@ namespace MetaCodex.Shell
                     PollThreadQueue(id); // a turn MQH holds (the workspace guard): its reason, SEND NOW
                     // working <-> idle: parse the whole timeline again with the new status (a delta may say "no change")
                     if (statusChanged) { _tlTag = null; _tlInFlight = false; RebuildChat(); RequestTimeline(id); }
-                });
-                Mqh.Interactions(id, ia =>
+                }));
+                Mqh.Interactions(id, Bind<JToken>(ia =>
                 {
                     if (id != _threadOpen) return;
                     _interactions = ia as JArray ?? new JArray();
                     ShowAsk();
                     CtxInteractionsUpdated(id);
-                });
+                }));
             }
             RequestTimeline(id);
         }
@@ -861,8 +900,6 @@ namespace MetaCodex.Shell
         /// Agent views in the thread's messages: registered; the ones that arrive while it is open also open.
         // the last message ScanViews looked at, per thread: an update looks only at newer ones (0.7.19: every agent
         // message with a code block was parsed again at every update of a working thread)
-        private string _viewsScanThread;
-        private long _viewsScanSeq = -1;
 
         private void ScanViews(JArray rows, string threadId, bool first)
         {
@@ -956,7 +993,11 @@ namespace MetaCodex.Shell
             if (provider != null && !_modelsByProvider.ContainsKey(provider))
             {
                 _modelsByProvider[provider] = new JArray(); // asked once
-                EnsureHost(() => Mqh.Models(provider, _hostId, m => { _modelsByProvider[provider] = m?["models"] as JArray ?? new JArray(); UpdateChips(); }));
+                EnsureHost(() => Mqh.Models(provider, _hostId, m =>
+                {
+                    _modelsByProvider[provider] = m?["models"] as JArray ?? new JArray();
+                    foreach (var w in Tws.Where(WinOpen).ToList()) using (In(w)) UpdateChips(); // every window of that provider
+                }));
             }
         }
 
@@ -992,9 +1033,9 @@ namespace MetaCodex.Shell
                         var o2 = Override(key);
                         _thOverrides[key] = (o2.model, it2.Tag as string, o2.perm);
                         UpdateChips();
-                    }, PanelsById["thread"]);
+                    }, ThreadPanel);
                 }
-            }, PanelsById["thread"]);
+            }, ThreadPanel);
         }
 
         private void PermissionPrompt()
@@ -1018,7 +1059,7 @@ namespace MetaCodex.Shell
                 _thOverrides[key] = (o.model, o.effort, item.Tag as string);
                 Settings.permissionMode = item.Tag as string;
                 UpdateChips();
-            }, PanelsById["thread"]);
+            }, ThreadPanel);
         }
 
         private void ContextPrompt()
@@ -1036,8 +1077,8 @@ namespace MetaCodex.Shell
             }, item =>
             {
                 if ((string)item.Tag == "fork") { ForkPrompt(); return; }
-                Mqh.CompactThread(_threadOpen, r => { Toast(r != null ? "Compacting the context" : "Not compacted: " + Mqh.LastError, r != null ? "ok" : "error"); PollThread(); });
-            }, PanelsById["thread"]);
+                Mqh.CompactThread(_threadOpen, Bind<JToken>(r => { Toast(r != null ? "Compacting the context" : "Not compacted: " + Mqh.LastError, r != null ? "ok" : "error"); PollThread(); }));
+            }, ThreadPanel);
         }
 
         // ---- fork
@@ -1064,7 +1105,7 @@ namespace MetaCodex.Shell
                 {
                     var tag = item.Tag as string[];
                     if (tag != null) ForkTo(tag[0], tag[1], tag[2]);
-                }, PanelsById["thread"]);
+                }, ThreadPanel);
             }
             if (_providerStates.Count > 0) Done(null);
             else Mqh.ProvidersState(st => { if (st != null) _providerStates = st["providers"] as JArray ?? new JArray(); Done(st); });
@@ -1085,7 +1126,7 @@ namespace MetaCodex.Shell
                 var body = new JObject { ["sourceThreadId"] = src, ["origin"] = "app", ["title"] = title + " · fork", ["permissionMode"] = perm };
                 if (!string.IsNullOrEmpty(text)) body["input"] = new JArray { MqhClient.TextInput(text) };
                 Toast("Forking …", "info");
-                Mqh.ForkThread(body, r =>
+                Mqh.ForkThread(body, Bind<JToken>(r =>
                 {
                     if (r == null)
                     {
@@ -1100,7 +1141,7 @@ namespace MetaCodex.Shell
                     Toast("Forked: " + title, "ok");
                     RefreshThreadList();
                     OpenThreadAfterRefresh(nid);
-                });
+                }));
                 return;
             }
             var envId = (string)_threadInfo["environmentId"];
@@ -1122,14 +1163,14 @@ namespace MetaCodex.Shell
             };
             if (!string.IsNullOrEmpty(model)) create["model"] = model;
             Toast("Handing over to " + provider + " …", "info");
-            EnsureHost(() => Mqh.CreateThread(create, r =>
+            EnsureHost(Bind(() => Mqh.CreateThread(create, Bind<JToken>(r =>
             {
                 if (r == null) { Toast("Not forked: " + Mqh.LastError, "error"); return; }
                 _thComposer?.Set("");
                 Toast("Forked to " + provider, "ok");
                 RefreshThreadList();
                 OpenThreadAfterRefresh((string)r["id"]);
-            }));
+            }))));
         }
 
         private void OpenThreadAfterRefresh(string id)
@@ -1159,7 +1200,9 @@ namespace MetaCodex.Shell
             while (start > 0 && used + lines[start - 1].Length < budget) { used += lines[start - 1].Length + 1; start--; }
             if (start > 0) sb.Append($"(… {start} earlier entries left out)\n");
             for (int i = start; i < lines.Count; i++) sb.Append(lines[i]).Append('\n');
-            var files = _touched.Values.Where(f => f.ByThread).Take(30).ToList();
+            // the files it touched: the sidebar's list when this window has the sidebar, else read from its own timeline
+            var touched = _tw == _sbOwner ? _touched : ThreadChanges.FromTimeline(_tlRaw, (string)_threadInfo?["environmentPath"]);
+            var files = touched.Values.Where(f => f.ByThread).Take(30).ToList();
             if (files.Count > 0) sb.Append("Files touched: " + string.Join(", ", files.Select(f => $"{f.Path} (+{f.Added} -{f.Removed})")) + "\n");
             return sb.ToString();
         }
@@ -1170,7 +1213,7 @@ namespace MetaCodex.Shell
         {
             if (projects != null) _projects = projects;
             _threads = new JArray(row);
-            OpenThread((string)row["id"]);
+            OpenThreadIn(_twFocus, (string)row["id"]); // the focused window (the tests' one window)
             _threadInfo = row;
             _thExec = exec;
             ShowThreadHeader();
@@ -1181,7 +1224,7 @@ namespace MetaCodex.Shell
             RebuildChat();
             _tlMaxSeq = rows.Max(r => r["sourceSeqEnd"]?.Value<long>() ?? 0);
             _tlOpenSeq = openViews ? 0 : _tlMaxSeq;
-            WsTrackRows(rows);
+            if (_tw == _sbOwner) WsTrackRows(rows);
             ScanViews(rows, (string)row["id"], false);
         }
 
@@ -1191,7 +1234,7 @@ namespace MetaCodex.Shell
             foreach (var r in more) _tlRaw.Add(r);
             RebuildChat();
             _tlMaxSeq = _tlRaw.Max(r => r["sourceSeqEnd"]?.Value<long>() ?? 0);
-            WsTrackRows(_tlRaw);
+            if (_tw == _sbOwner) WsTrackRows(_tlRaw);
             ScanViews(_tlRaw, _threadOpen, false);
         }
 
@@ -1237,7 +1280,6 @@ namespace MetaCodex.Shell
             }
         }
 
-        private bool _askShown;
 
         private void SetAskVisible(bool v)
         {
@@ -1252,12 +1294,12 @@ namespace MetaCodex.Shell
         {
             var pending = _interactions.FirstOrDefault(x => (string)x["status"] == "pending" || x["status"] == null);
             if (pending == null || _threadOpen == null) return;
-            Mqh.ResolveApproval(_threadOpen, (string)pending["id"], decision, r =>
+            Mqh.ResolveApproval(_threadOpen, (string)pending["id"], decision, Bind<JToken>(r =>
             {
                 Toast(r != null ? "Answered: " + decision.Replace('_', ' ') : "MQH: " + Mqh.LastError, r != null ? "ok" : "error");
                 SetAskVisible(false);
                 PollThread();
-            });
+            }));
         }
 
         private void SendToThread(string text)
@@ -1275,7 +1317,7 @@ namespace MetaCodex.Shell
             if (o.model != null) extra["model"] = o.model;
             if (o.effort != null) extra["reasoningLevel"] = o.effort;
             if (o.perm != null) extra["permissionMode"] = o.perm;
-            Mqh.SendMessage(_threadOpen, msg, extra, hasAtt ? AttachmentInputs(sent) : null, r =>
+            Mqh.SendMessage(_threadOpen, msg, extra, hasAtt ? AttachmentInputs(sent) : null, Bind<JToken>(r =>
             {
                 if (r == null) { Toast("Not sent: " + Mqh.LastError, "error"); return; }
                 _thComposer.Set("");
@@ -1284,7 +1326,7 @@ namespace MetaCodex.Shell
                 _thTimeline?.ScrollToBottom(); // your message: the view follows the answer
                 _nextThreadMeta = 0f;
                 PollThread();
-            });
+            }));
         }
 
         // ------------------------------------------------------------------ NEW THREAD
@@ -1439,9 +1481,8 @@ namespace MetaCodex.Shell
             public bool Worktree, Sending;
         }
 
-        private ThreadDraft _draft;
         private string _ntSeed; // a first message prepared for the draft's composer (NEW SKILL, ASK AN AGENT)
-        private const string DraftKey = "draft:"; // the draft's attachments and chip choices until it is a thread
+        private string DraftKey => "draft:" + _tw.Id; // the window's draft: its attachments and chip choices until it is a thread
         /// The open thread, or the draft (its attachments and chips); null when neither.
         private string ThreadKey => _threadOpen ?? (_draft != null ? DraftKey : null);
         public bool DraftOpenForTest => _draft != null && _threadOpen == null;
@@ -1476,6 +1517,17 @@ namespace MetaCodex.Shell
         /// THREAD as a draft: the title says so, the chips show the choices, the composer waits for the first message.
         private void OpenDraft(ThreadDraft d, string text, bool focus = true)
         {
+            var w = PickWindowForOpen();
+            _twOpener = _twFocus != w && WinOpen(_twFocus) ? (_twFocus.Group?.Panel ?? _twFocus.Panel) : null;
+            FocusWindow(w);
+            using (In(w)) OpenDraftHere(d, text, focus);
+            _twOpener = null;
+            RefreshWindowTitles();
+            AutoGroup(w);
+        }
+
+        private void OpenDraftHere(ThreadDraft d, string text, bool focus)
+        {
             DiscardDraft();
             CloseAttachModal();
             SetAttachMenu(false);
@@ -1489,8 +1541,8 @@ namespace MetaCodex.Shell
             _tlMaxSeq = -1;
             _tlOpenSeq = -1;
             ResetThreadChat();
-            if (_sb != null && _sb.IsOpen) _sb.Close();
-            OpenPanel("thread");
+            if (_sbOwner == _tw && _sb != null && _sb.IsOpen) _sb.Close();
+            ShowThreadWindow();
             _thContext?.Set(-1f, "context —");
             ShowDraftHeader();
             UpdateChips();
@@ -1534,12 +1586,12 @@ namespace MetaCodex.Shell
             d.Sending = true;
             var o = Override(DraftKey);
             Toast("Starting the thread …", "info");
-            EnsureHost(() =>
+            EnsureHost(Bind(() =>
             {
                 var body = NewThreadBody(d.ProjectId, d.Provider, o.model ?? d.Model, msg, d.Worktree, d.ReuseEnvId, o.perm ?? d.Perm);
                 if (o.effort != null) body["reasoningLevel"] = o.effort;
                 if (sent != null) foreach (var a in AttachmentInputs(sent)) ((JArray)body["input"]).Add(a);
-                Mqh.CreateThread(body, r =>
+                Mqh.CreateThread(body, Bind<JToken>(r =>
                 {
                     d.Sending = false;
                     if (r == null)
@@ -1559,10 +1611,10 @@ namespace MetaCodex.Shell
                         _thComposer?.Set("");
                     }
                     RefreshThreadList();
-                    if (still) OpenThread(id); // drops the draft
+                    if (still) OpenThreadIn(_tw, id); // in the draft's own window (drops the draft)
                     else Toast("Thread started: " + Cut(msg, 40), "ok");
-                });
-            });
+                }));
+            }));
         }
 
         /// Voice, a gesture or another panel: a thread in the current project with the last agent and model chosen.

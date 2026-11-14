@@ -49,6 +49,9 @@ namespace MetaCodex.UI
         public bool SelectionMode;
         public event Action<UiPanel, Rect> Selected;
         public event Action<UiPanel, UiElement> Clicked;
+        /// A pointer pressed or grabbed on a panel, before its element sees the press (the shell focuses the thread window
+        /// it belongs to, so the element's action runs for that window).
+        public Action<UiPanel> Touched;
         /// A hand (0 left, 1 right) that is busy with something that is not a panel (the orb): it neither points nor pokes.
         public Func<int, bool> HandBlocked;
         /// The panel whose control is being pressed or released right now (null between): a dialog it opens belongs to
@@ -317,6 +320,7 @@ namespace MetaCodex.UI
 
             bool pressEdge = p.Down && !p.WasDown;
             bool grabEdge = p.GrabHeld && !p.WasGrab;
+            if ((pressEdge || grabEdge) && panel != null) Touched?.Invoke(panel);
             if (grabEdge && panel != null && panel.Draggable && Settings.grabMode != 0 && p.Kind != PointerKind.Poke)
             {
                 p.DragPanel = panel;
@@ -405,6 +409,7 @@ namespace MetaCodex.UI
                 var el = panel.HitTest(p.SelectStart);
                 if (el != null)
                 {
+                    Touched?.Invoke(panel);
                     var ev = new UiPointerEvent { Point = p.SelectStart, PressPoint = p.SelectStart, Pointer = p };
                     ActivePanel = panel;
                     try { el.OnPress(ev); el.OnRelease(ev, true); } finally { ActivePanel = null; }

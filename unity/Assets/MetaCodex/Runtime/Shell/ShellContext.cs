@@ -59,7 +59,7 @@ namespace MetaCodex.Shell
             if (Time.unscaledTime >= _ctxNextPulses)
             {
                 // every 5 s while another thread works (its "answered" callout comes soon), else every 15 s
-                bool otherWorking = _pulses.Any(kv => (kv.Key != _threadOpen || !IsPanelOpen("thread")) && kv.Value.Working);
+                bool otherWorking = _pulses.Any(kv => OpenWindowShowing(kv.Key) == null && kv.Value.Working); // not in any open window
                 _ctxNextPulses = Time.unscaledTime + (otherWorking ? 5f : 15f);
                 CtxPollPulses();
             }
@@ -70,7 +70,7 @@ namespace MetaCodex.Shell
         {
             RoomAnchorPaused(paused); // the room reference before the pause, and the move back on resume (ShellRoomAnchor)
             if (paused && SessionMemory.Dirty) SessionMemory.Save(SessionLogPath);
-            if (!paused) { _returnCheckAt = 0f; ResyncThread(); } // a return at once; the threads as MQH has them now
+            if (!paused) { _returnCheckAt = 0f; ResyncAllThreads(); } // a return at once; every open window's thread as MQH has it now
         }
         private void OnApplicationQuit() { if (SessionMemory.Dirty) SessionMemory.Save(SessionLogPath); }
 
@@ -123,7 +123,7 @@ namespace MetaCodex.Shell
                 foreach (var t in rows.OfType<JObject>())
                 {
                     string id = (string)t["id"];
-                    if (id == null || id == _threadOpen && IsPanelOpen("thread")) continue; // the open window polls its own
+                    if (id == null || OpenWindowShowing(id) != null) continue; // a thread open in a window (any of them) is polled by it
                     bool active = ThreadTimeline.IsWorking(ThreadStatus(t)) || t["hasPendingInteraction"]?.Value<bool>() == true;
                     bool wasActive = _pulses.TryGetValue(id, out var pp) && pp.Working;
                     if (!active && !wasActive) continue;
@@ -140,7 +140,8 @@ namespace MetaCodex.Shell
         private ThreadPulse PulseOf(string threadId)
         {
             if (threadId == null) return null;
-            if (threadId == _threadOpen && IsPanelOpen("thread") && _tlModel != null && _tlModel.Exchanges.Count > 0) return ThreadPulse.From(_tlModel, _threadInfo, NowMs);
+            var w = OpenWindowShowing(threadId); // the window that shows it, whichever: fresh from its timeline
+            if (w != null && w.tlModel != null && w.tlModel.Exchanges.Count > 0) return ThreadPulse.From(w.tlModel, w.threadInfo, NowMs);
             return _pulses.TryGetValue(threadId, out var p) ? p : null;
         }
 
@@ -217,7 +218,7 @@ namespace MetaCodex.Shell
             return (string)subj?["command"] ?? (string)subj?["toolName"] ?? (string)subj?["path"] ?? (string)ia["payload"]?["prompt"] ?? (string)ia["payload"]?["question"] ?? (string)subj?["kind"] ?? "something";
         }
         private static string ThreadStatus(JObject t) => (string)t["runtime"]?["displayStatus"] ?? (string)t["status"] ?? "?";
-        private string ThreadTitle(string id) => (string)(_threads.FirstOrDefault(x => (string)x["id"] == id) as JObject)?["title"] ?? (string)_threadInfo?["title"] ?? id;
+        private string ThreadTitle(string id) => (string)(_threads.FirstOrDefault(x => (string)x["id"] == id) as JObject)?["title"] ?? (string)OpenWindowShowing(id)?.threadInfo?["title"] ?? id;
 
         // ------------------------------------------------------------------ the snapshot
 
@@ -261,8 +262,12 @@ namespace MetaCodex.Shell
         {
             string named = NamedThread(_ctxQuestion);
             if (named != null) return named;
-            if (focus != null && (focus.Id == "thread" || focus.Id == SidebarId) && _threadOpen != null) return _threadOpen;
+            // the window pointed at or looked at: a thread window (any of them), the sidebar (its window's), a group (the
+            // group's window used last)
+            var fw = WindowOfPanel(focus) ?? GroupOfPanel(focus)?.Members.OrderByDescending(m => m.FocusedAt).FirstOrDefault();
+            if (fw != null && fw.threadOpen != null) return fw.threadOpen;
             if (focus != null && focus.Id == "threads" && _threadSel != null) return _threadSel;
+            if (_twFocus.threadOpen != null && WinOpen(_twFocus)) return _twFocus.threadOpen; // the focused window
             if (_threadOpen != null) return _threadOpen;
             return (string)_threads.OfType<JObject>().OrderByDescending(t => t["updatedAt"]?.Value<long>() ?? 0).FirstOrDefault()?["id"];
         }
@@ -278,7 +283,18 @@ namespace MetaCodex.Shell
             var focus = FocusedPanel();
             string subject = SubjectThread(focus);
             if (focus != null) Line("focus", (Time.unscaledTime - _ctxPointedAt < 15f && focus == _ctxPointed ? "pointing at " : "looking at ") + focus.Title + " panel");
-            if (subject != null) Line("focus", $"the thread in question: “{ThreadTitle(subject)}”");
+            if (subject != null) Line("focus", $"the thread in question: “{ThreadTitle(subject)}”" + (OpenWindowShowing(subject) is ThreadWindow sw ? $" (window {sw.Id})" : ""));
+            // the open thread windows by id (several are open at once: "this thread" is the focused or pointed one)
+            var wins = new JArray();
+            foreach (var w in OpenWindows)
+            {
+                string wt = w.threadOpen != null ? ThreadTitle(w.threadOpen) : w.draft != null ? "new thread, not started" : "empty";
+                string ws = w.threadInfo != null ? ThreadStatus(w.threadInfo) : w.draft != null ? "draft" : "-";
+                int asks = w.interactions.OfType<JObject>().Count(IsPending);
+                Line("focus", $"thread window {w.Id}{(w == _twFocus ? " (focused)" : "")}{(w.Group != null ? " in group " + w.Group.Number : "")}: “{Cut(wt, 50)}” · {ws}" + (asks > 0 ? $" · {asks} waiting for the user" : ""));
+                wins.Add(new JObject { ["id"] = w.Id, ["thread"] = w.threadOpen, ["title"] = wt, ["status"] = ws, ["focused"] = w == _twFocus, ["group"] = w.Group?.Number, ["pending"] = asks });
+            }
+            data["windows"] = wins;
             if (_lastRef.id != null && Time.unscaledTime - _lastRef.at < RefSeconds)
                 Line("focus", $"last acted on: the {_lastRef.id} window ({_lastRef.verb} {(int)(Time.unscaledTime - _lastRef.at)} s ago; \"it\" means this)");
             data["subjectThread"] = subject;
@@ -286,7 +302,7 @@ namespace MetaCodex.Shell
             // the subject thread: what it is, what was asked, what it did
             if (subject != null)
             {
-                var row = _threads.OfType<JObject>().FirstOrDefault(x => (string)x["id"] == subject) ?? (subject == _threadOpen ? _threadInfo : null);
+                var row = _threads.OfType<JObject>().FirstOrDefault(x => (string)x["id"] == subject) ?? OpenWindowShowing(subject)?.threadInfo;
                 if (row != null) Line("thread", $"“{ThreadTitle(subject)}” · agent {(string)row["providerId"]} · status {ThreadStatus(row)}" + ((string)row["environmentPath"] != null ? " · in " + (string)row["environmentPath"] : ""));
                 var pulse = PulseOf(subject);
                 // which folder it works in and who shares it (docs/workspaces.md)
@@ -307,19 +323,21 @@ namespace MetaCodex.Shell
                         ["state"] = pulse.State, ["phase"] = pulse.Phase, ["stuck"] = pulse.MayBeStuck, ["pattern"] = pulse.Pattern,
                     };
                 }
-                else if (subject == _threadOpen && _tlRaw != null) foreach (var l in TimelineDigest(_tlRaw)) Line("thread", l);
+                else if (OpenWindowShowing(subject)?.tlRaw is JArray raw) foreach (var l in TimelineDigest(raw)) Line("thread", l);
             }
             // approvals and questions waiting (the open thread's are known)
-            if (_threadOpen != null)
-                foreach (var ia in _interactions.OfType<JObject>().Where(IsPending))
+            // every open window's (the subject's window first, then the focused one, then the others): each names its
+            // thread and window, so several waiting at once stay apart
+            foreach (var w in OpenWindows.OrderByDescending(x => x.threadOpen == subject))
+                foreach (var ia in w.threadOpen == null ? Enumerable.Empty<JObject>() : w.interactions.OfType<JObject>().Where(IsPending))
                 {
                     string kind = IaKind(ia), what = IaWhat(ia);
                     var risks = kind == "approval" ? CommandRisk.Flags(what) : new List<string>();
-                    Line("approval", $"{(kind == "approval" ? "approval asked" : "question asked")} in “{ThreadTitle(_threadOpen)}”: {Cut(what, 160)}" +
+                    Line("approval", $"{(kind == "approval" ? "approval asked" : "question asked")} in “{ThreadTitle(w.threadOpen)}” (window {w.Id}): {Cut(what, 160)}" +
                                      ((string)ia["payload"]?["reason"] != null ? " · reason: " + Cut((string)ia["payload"]["reason"], 100) : "") +
                                      (risks.Count > 0 ? " · scan: it " + string.Join(", ", risks) : " · scan: nothing risky found"));
                     if (data["approval"] == null)
-                        data["approval"] = new JObject { ["thread"] = ThreadTitle(_threadOpen), ["kind"] = kind == "approval" && (string)ia["payload"]?["subject"]?["command"] != null ? "command" : kind, ["what"] = what, ["risks"] = new JArray(risks) };
+                        data["approval"] = new JObject { ["thread"] = ThreadTitle(w.threadOpen), ["window"] = w.Id, ["kind"] = kind == "approval" && (string)ia["payload"]?["subject"]?["command"] != null ? "command" : kind, ["what"] = what, ["risks"] = new JArray(risks) };
                 }
             // the other threads
             var allThreads = _ctxThreadRows != null && _ctxThreadRows.Count >= _threads.Count ? _ctxThreadRows : _threads;

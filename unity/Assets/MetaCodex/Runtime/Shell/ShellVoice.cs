@@ -163,6 +163,7 @@ namespace MetaCodex.Shell
             RegisterLaunchVoiceCommands(); // the app an agent asked to launch (ShellReturn)
             RegisterSidebarVoiceCommands(); // THREAD's sidebar and INIT GIT (ShellThreadSidebar)
             RegisterComposerVoiceCommand(); // THREAD's message box: bigger, smaller, reset (ShellThreadComposer)
+            RegisterThreadWindowVoiceCommand(); // several thread windows and their groups (ShellThreadGroups)
             Decider = new VoiceDecider(Voice, (texts, done) =>
             {
                 if (Qvac == null || !Qvac.IsRunning) { done(null, "the AI service is not running"); return; }
@@ -982,10 +983,16 @@ namespace MetaCodex.Shell
             Voice.Register(new VoiceCommand
             {
                 Name = "find_thread",
-                Description = "Find the agent thread (conversation) about a topic and open it",
-                Parameters = VoiceCommands.Schema(("query", "string", null, "words about what was done in the thread", true)),
+                Description = "Find the agent thread (conversation) about a topic and open it (window: new = in a new window beside the others, this = in place of the focused window's thread; default: a new window when the focused one shows another thread)",
+                Parameters = VoiceCommands.Schema(("query", "string", null, "words about what was done in the thread", true), ("window", "string", new[] { "new", "this" }, "where it opens: new = a new window, this = the focused window", false)),
+                Synonyms = new Dictionary<string, Dictionary<string, string>>
+                {
+                    ["window"] = new Dictionary<string, string> { ["another"] = "new", ["separate"] = "new", ["second"] = "new", ["same"] = "this", ["current"] = "this", ["here"] = "this" },
+                },
                 Phrases = new[]
                 {
+                    "(open|show|find) [me] [the] (thread|conversation|chat) [about|on|where] {query} in [a|another] (new|separate|second) window {window:new}",
+                    "(open|show|find) [me] [the] (thread|conversation|chat) [about|on|where] {query} in (this|the same|the current) window {window:this}",
                     "(find|search|look for|open|show|show me|go to) [me] [the|a|that|our] (thread|conversation|chat|session) [where|in which|about|on|for|with|that|when] {query}",
                     "(search|find|look) [in|through] [the|my] (threads|conversations|chats) [for|about] {query}",
                     "where did we {query}",
@@ -995,9 +1002,9 @@ namespace MetaCodex.Shell
                 Samples = new[]
                 {
                     "find the conversation about the database migration", "which thread talked about docker", "look up the chat where we fixed the login",
-                    "search my threads for payments",
+                    "search my threads for payments", "open the thread about the login page in a new window",
                 },
-                RunAsync = (a, reply) => VoiceFindThread((string)a["query"], reply),
+                RunAsync = (a, reply) => VoiceFindThread((string)a["query"], reply, (string)a["window"]),
             });
             Voice.Register(new VoiceCommand
             {
@@ -1607,7 +1614,7 @@ namespace MetaCodex.Shell
             return s / q.Length;
         }
 
-        private void VoiceFindThread(string query, Action<string> reply)
+        private void VoiceFindThread(string query, Action<string> reply, string window = null)
         {
             if (string.IsNullOrWhiteSpace(query)) { OpenPanel("threads"); reply("Which thread? THREADS is open"); return; }
             Mqh.Threads(null, th =>
@@ -1618,7 +1625,10 @@ namespace MetaCodex.Shell
                 if (best == null || best.score < 0.34f) { OpenPanel("threads"); reply($"error: no thread about “{query}” ({arr.Count} threads)"); return; }
                 string pid = (string)best.x["projectId"];
                 if (!string.IsNullOrEmpty(pid)) { _projectSel = pid; Settings.lastProject = pid; }
-                OpenThread((string)best.x["id"]);
+                string tid = (string)best.x["id"];
+                if (window == "this") OpenThreadIn(_twFocus, tid); // in place of the focused window's thread
+                else if (window == "new" && OpenWindowShowing(tid) == null && Tws.Count < MaxThreadWindows) OpenThreadIn(NewThreadWindow(), tid);
+                else OpenThread(tid);
                 reply("Opened “" + Short(best.title, 50) + "”");
             });
         }
