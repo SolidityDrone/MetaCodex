@@ -89,7 +89,7 @@ The test headset has 6 cores and 7.9 GB RAM.
 | Dock and wrist menu tiles | 11 | The same tiles in both places. |
 | Text input | System keyboard | Each text field opens the headset's system keyboard. |
 | Local coding model | Optional | Runs agent threads on the headset, offline. |
-| APK size | 206 MB | The 0.7.19 build. |
+| APK size | 270 MB | The 0.7.19 build of 2026-11-14 (270,236,059 bytes). |
 
 ## How it works
 
