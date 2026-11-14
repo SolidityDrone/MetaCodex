@@ -25,7 +25,7 @@ Helpers on the PC: `tools/qterm` (control port), `adb logcat -s Unity`, `files/s
 - [ ] `✕` closes a terminal; TERMS panel lists terminals; FOCUS / CLOSE work
 - [ ] `⎘` on the frame pastes the clipboard into that terminal
 - [ ] `ls /mnt/quest` shows `plugins/`, `scripts/`, `control.token`
-- [ ] `ls ~/.claude/skills` shows quest-gesture-plugins, quest-scripting, metacodex-context, Unity and Meta skills (46)
+- [ ] `ls ~/.claude/skills` shows quest-gesture-plugins, quest-scripting, metacodex-context, quest-views, worktree-per-thread, Unity and Meta skills (48)
 
 ## 2. Dock, panels, hands
 

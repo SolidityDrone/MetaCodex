@@ -91,8 +91,8 @@ Skills (.bb/skills/):
 MetaCodex guide plugin:
 
   The enabled-by-default MetaCodex guide plugin owns the MetaCodex introduction and
-  the metacodex-context, quest-gesture-plugins, quest-scripting, quest-views and
-  skill-creator skills. It has two settings, introduction and skills; both
+  the metacodex-context, quest-gesture-plugins, quest-scripting, quest-views,
+  skill-creator and worktree-per-thread skills. It has two settings, introduction and skills; both
   default to true. Use:
 
     mqh plugin config metacodex-guide set introduction false

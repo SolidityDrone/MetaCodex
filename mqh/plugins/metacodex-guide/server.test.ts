@@ -78,6 +78,7 @@ it("ships only MetaCodex skills, without bb product texts", () => {
     "quest-scripting",
     "quest-views",
     "skill-creator",
+    "worktree-per-thread",
   ]);
   for (const name of bundledSkills) {
     const text = readFileSync(

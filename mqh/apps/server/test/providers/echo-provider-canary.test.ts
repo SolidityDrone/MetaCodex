@@ -613,6 +613,7 @@ describe("echo-provider canary: plugin install → server command → runtime �
       "quest-scripting",
       "quest-views",
       "skill-creator",
+      "worktree-per-thread",
     ]);
     expect(command.instructions).toContain("mqh status");
 

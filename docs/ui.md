@@ -243,7 +243,7 @@ Ambient Focus on or off. The other poses have no binding.
 
 Skills for agents (bundled into the userland at `/root/.claude/skills` and into MQH threads):
 `quest-gesture-plugins` (procedure, formats, hand model, API, recipes, testing), `quest-scripting`,
-`metacodex-context`, plus 36 Unity skills (github.com/Unity-Technologies/skills, refreshed by
+`metacodex-context`, `quest-views`, `worktree-per-thread` (own git worktree when the project folder is busy), plus 36 Unity skills (github.com/Unity-Technologies/skills, refreshed by
 `tools/sync-agent-skills.sh`) and 7 Meta skills for hand tracking, interaction and comfort.
 
 ## Live behaviours: single scripts

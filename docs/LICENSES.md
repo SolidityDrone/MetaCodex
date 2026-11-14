@@ -35,7 +35,7 @@ standard texts of the Debian image are also in `/usr/share/common-licenses/` the
 | | MoonSharp | BSD-3-Clause | notice (done) |
 | | 8 fonts | [OFL-1.1](licenses/OFL-1.1.txt) (6), Bitstream Vera / Arev (2) | notice + licence with each copy (done) |
 | | Linux image: Debian 13 "trixie", 78 packages | GPL-2/3, LGPL, BSD, MIT/X11, ISC, public domain, ... (each package's own) | **source offer** (done); licence texts (done) |
-| | 47 bundled agent skills | Unity Companion License (36), [Apache-2.0](licenses/Apache-2.0.txt) (7), ours (4) | licence file travels with them (done) |
+| | 48 bundled agent skills | Unity Companion License (36), [Apache-2.0](licenses/Apache-2.0.txt) (7), ours (5) | licence file travels with them (done) |
 | | MQH harness (fork of bb) + 72 npm packages + 97 bundled npm packages + 4 native modules | MIT, plus ISC, Apache-2.0, BSD-3, BlueOak, dual licences | MIT notice of Michael Yong (done), package notices (done) |
 | **B. Downloaded at first use** | 4 AI models (+1 optional: the local coder, Qwen2.5-Coder 0.5B, Apache-2.0) | MIT (Whisper base, multilingual-e5-small), Apache-2.0 (Qwen3 0.6B), **OpenRAIL-M** (Supertonic 3) | OpenRAIL-M use restrictions must reach the users |
 | | Node.js, NDK (community build), OpenXR 1.1.65, 198 Debian packages | MIT, Apache-2.0, LLVM exception, GPL/LGPL/... | none for us (the user's device downloads them); keep the pointers |
@@ -317,7 +317,7 @@ Our files laid over the image (scripts `mcx`, `mcx-setup`, `mcx-ui`, `mcx-secret
 | this file and the texts in `docs/licenses/` | this repository | | `/usr/share/doc/metacodex/` |
 
 `userland/agent-skills/SOURCES.md` lists every skill. Our own skills (`metacodex-context`, `quest-gesture-plugins`,
-`quest-scripting`, `quest-views`) are MIT, and so are the quest-native-* skills and the native kits (`mcx_gfx.h`,
+`quest-scripting`, `quest-views`, `worktree-per-thread`) are MIT, and so are the quest-native-* skills and the native kits (`mcx_gfx.h`,
 `mcx_ui.h`, `mcx_physics.h`, `mcx_model.h`, 2026-11-14).
 
 ### 3.8 MQH, the Meta Quest Harness (`assets/linux/mqh.tar`, 7,481 files, 70,174,720 bytes unpacked)
@@ -328,8 +328,8 @@ of bb (github.com/get-bb/bb) at `8e4208e` (2026-11-06): **MIT, Copyright (c) 202
 What is in the tar (read from `opt/mqh/`):
 
 - the server, host daemon and CLI bundles and the bundled plugins (esbuild output, `apps/*/dist`,
-  `packages/bundled-plugins/dist`), plus 5 builtin skills in the `metacodex-guide` plugin (`skill-creator`, adapted from
-  bb's; `metacodex-context`, `quest-views`, `quest-scripting`, `quest-gesture-plugins` ours). Since 2026-11-13 bb's
+  `packages/bundled-plugins/dist`), plus 6 builtin skills in the `metacodex-guide` plugin (`skill-creator`, adapted from
+  bb's; `metacodex-context`, `quest-views`, `quest-scripting`, `quest-gesture-plugins`, `worktree-per-thread` ours). Since 2026-11-13 bb's
   `bb-cli`, `bb-plugin-authoring` and `submit-a-plugin` skills and 10 bb plugins are out of `mqh/` (`docs/mqh.md`, "Plugins");
 - **97 npm packages bundled into those files** (found from the build's source maps and path comments; the files carry
   no licence comments, so their notices are in [npm-mqh-bundled-notices.txt](licenses/npm-mqh-bundled-notices.txt)):

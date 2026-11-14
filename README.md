@@ -83,7 +83,7 @@ The test headset has 6 cores and 7.9 GB RAM.
 | What | Value | Context |
 |---|---|---|
 | Voice commands in the registry | 29 | Each one has a schema, synonyms, phrases and examples. |
-| Agent skills shipped | 47 | 4 of them are written for MetaCodex. |
+| Agent skills shipped | 48 | 5 of them are written for MetaCodex. |
 | Project types | 3 | NATIVE, DEFAULT and RESEARCH. A project made in the app is a git repository. |
 | Default gesture | Pinch | Selects, drags and scrolls. No gesture opens or closes a window by default. |
 | Dock and wrist menu tiles | 11 | The same tiles in both places. |
@@ -133,7 +133,7 @@ The app checks the health of MQH and of the local AI every 5 s. Three missed che
 - The app unpacks it on first launch.
 - proot runs the image without root. The guest sees user 0, but its processes keep the Android user of the app.
 - Android 10 and later forbids `exec()` of files an app writes. For this reason proot and its loader ship as `lib*.so` files. Android unpacks them into the native library folder, where Android allows `exec()`.
-- The overlay lays MetaCodex files over the image: the `mcx-*` tools, native app templates, 47 skills and the licence texts. It is deterministic. The app lays it again only when its hash changes, and it never touches your packages.
+- The overlay lays MetaCodex files over the image: the `mcx-*` tools, native app templates, 48 skills and the licence texts. It is deterministic. The app lays it again only when its hash changes, and it never touches your packages.
 - A shared folder, mounted under `/mnt`, links the app and the Linux. The app, the Linux, `adb` and you can read it. It holds the tokens, plugins, scripts and captures.
 - Projects live in the Linux, in `/root/metacodex-projects/`. There is one folder for each type: `native`, `default` and `research`. A project made in the app is a git repository.
 - The vault is never mounted into the Linux.
@@ -252,7 +252,7 @@ None of them needs an APK rebuild.
 | Provider integrations | MQH plugins for agent CLIs | The agent processes MQH starts. |
 | Agent views | Fenced blocks in a thread message | Panels: charts, tables, diffs, graphs, a physics stage. |
 
-- **Skills.** 47 skills ship read-only. You can add your own. Six more skills load only in a native-app project.
+- **Skills.** 48 skills ship read-only. You can add your own. Six more skills load only in a native-app project.
 - **Plugins.** MQH ships only the plugins that MetaCodex uses. Every MQH thread gets the MetaCodex introduction and its skills.
 - **Gesture plugins.** A plugin folder holds `plugin.json`, pose files and `main.lua`. The app reloads it within a second. A detector runs at 36 Hz with a budget of 200,000 instructions. Gesture plugins that open or close panels were switched off. GESTURES lists them, and you can turn one on again there.
 - **Lua scripts.** A script that exceeds its budget stops. The app keeps its frame rate.
