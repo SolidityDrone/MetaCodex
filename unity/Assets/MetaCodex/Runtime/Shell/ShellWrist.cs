@@ -17,6 +17,7 @@ namespace MetaCodex.Shell
 
         private void BuildWrist()
         {
+            StartMark("wrist");
             if (Wrist != null) return;
             var t = UiTheme.Current;
             Wrist = UiWristMenu.Create(_root, t);

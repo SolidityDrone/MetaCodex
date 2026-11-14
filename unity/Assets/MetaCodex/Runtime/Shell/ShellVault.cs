@@ -54,6 +54,7 @@ namespace MetaCodex.Shell
 
         private void InitVault()
         {
+            StartMark("vault+services");
             try
             {
                 Vault = SecretVault.OpenDefault(Application.persistentDataPath);

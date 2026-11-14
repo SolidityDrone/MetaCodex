@@ -75,7 +75,12 @@ namespace MetaCodex.Shell
             }
         }
 
-        private void Start() => Build();
+        private void Start()
+        {
+            double begin = _hitchSw.Elapsed.TotalMilliseconds;
+            Build();
+            ReportStart(begin); // "[start] shell built in N ms: ..." (ShellStartTiming)
+        }
 
         /// Creates theme, router, gestures, scripts and panels. Safe to call once; Start calls it.
         public void Build(string scriptsDir = null, IHandSource hands = null)
@@ -355,6 +360,7 @@ namespace MetaCodex.Shell
 
         private T Panel<T>(string id, string title, float w, float h) where T : UiPanel
         {
+            StartMark(id);
             var p = UiPanel.Create<T>(id, title, w, h, _root);
             _panels[id] = p;
             Router.Register(p);

@@ -20,6 +20,7 @@ namespace MetaCodex.Shell
 
         private void BuildSplash()
         {
+            StartMark("splash");
             if (Application.isBatchMode) return;
             _splashTex = Resources.Load<Texture2D>("Brand/splash");
             var sh = Resources.Load<Shader>("Shaders/Splash") ?? Shader.Find("MetaCodex/Splash");

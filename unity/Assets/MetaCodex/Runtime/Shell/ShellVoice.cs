@@ -155,6 +155,7 @@ namespace MetaCodex.Shell
 
         private void InitVoice()
         {
+            StartMark("voice+scripts");
             Voice = new VoiceCommands();
             Recorder = new VoiceRecorder();
             Recorder.Finished += OnRecorderFinished;

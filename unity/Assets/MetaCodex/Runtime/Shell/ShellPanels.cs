@@ -20,6 +20,7 @@ namespace MetaCodex.Shell
 
         private void BuildPanels()
         {
+            StartMark("dock+terminals");
             BuildDock();
             BuildTerminals();
             BuildFiles();
