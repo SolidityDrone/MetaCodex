@@ -84,7 +84,8 @@ namespace MetaCodex.Shell
             _spaces = WorkspaceMap.Build(_threads, _environments);
             RenderWorkspaceList();
             if (_threadList != null && IsPanelOpen("threads")) RenderThreadGroups();
-            UpdateWorkspaceChip();
+            foreach (var w in Tws.Where(WinOpen).ToList()) using (In(w)) UpdateWorkspaceChip(); // every open thread window's chip
+            if (!Tws.Any(WinOpen)) UpdateWorkspaceChip();
         }
 
         public void SetWorkspacesForTest(JArray projects, JArray threads, JArray environments)
