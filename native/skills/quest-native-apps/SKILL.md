@@ -24,6 +24,10 @@ The user says what the app should do; you do everything else. Their only jobs: t
 `mcx-app` command; lines starting `>>> ASK THE USER` are for the user (say them short, then let the command wait);
 `RESULT:` lines are outcomes; `PROBLEM:` lines (verify) must be fixed.
 
+Mandatory with this one: **quest-native-hands-first** (hands only, mixed reality) and **quest-native-quality** (the
+brief, the passes, the self-review: how an app gets curated). The kits next to `mcx_xr.h` and their skills:
+**quest-native-rendering** (`mcx_gfx.h`), **quest-native-ui-design** (`mcx_ui.h`), **quest-native-physics**
+(`mcx_physics.h`), **quest-native-3d-models** (`mcx_model.h`); budgets: **quest-native-performance**.
 The suite: **quest-native-xr** (every Quest feature: calls + manifest entries), **quest-native-recipes** (worked
 example and short recipes), **quest-native-dev-loop** (the Runner: seconds per edit, no APK), **quest-native-debug**
 (errors, verify problems, install failures, logs). Read the one you need when you get there.
@@ -33,7 +37,8 @@ example and short recipes), **quest-native-dev-loop** (the Runner: seconds per e
 1. **Understand the request.** Ask only what you cannot decide (at most one short question). First read
    **quest-native-hands-first** (mandatory): the app is mixed reality (passthrough) and hands only, unless the request
    explicitly asks for full VR or for controllers; never ask the user about either. Decide yourself which Quest
-   features it needs (quest-native-xr). A Quest 3 / 3S app: depth and passthrough are there.
+   features it needs (quest-native-xr). A Quest 3 / 3S app: depth and passthrough are there. Then read
+   **quest-native-quality** (mandatory) and write the app's `DESIGN.md` brief before any code.
 2. **Name it.** The app's folder: the project folder itself when your thread works in a Native app project
    (`/root/metacodex-projects/native/<name>`, made by MetaCodex's + PROJECT: `mcx-app new .` fills it and keeps its
    `.git`, `AGENTS.md`, `CLAUDE.md`), else `/root/metacodex-projects/native/<name>` (lower case, short; never
@@ -53,7 +58,8 @@ example and short recipes), **quest-native-dev-loop** (the Runner: seconds per e
 5. **Write it** on `mcx_xr.h`: whole small apps to adapt are in quest-native-recipes (a floating clock / text panel
    over passthrough, pinch and buttons, the room, anchors, the icon); every feature's calls and manifest entries are
    in quest-native-xr. Give it its own icon (recipe 6) and remove the example's features and manifest entries you do
-   not use. Keep it small: one feature, then the next.
+   not use. Draw with the kits (quest-native-rendering, -ui-design, -physics, -3d-models), and build in the passes of
+   quest-native-quality (greybox, interaction, look, polish, performance), steps 6-8 after each pass.
 6. **`mcx-app check <dir>`** (about 1 s): fix every `file:line:col: error:` and check again.
 7. **`mcx-app build <dir>`** (about 2 s after the first build): `RESULT: APK ...`.
 8. **`mcx-app verify <dir>`**: every `PROBLEM:` is a missing manifest entry, an unresolved symbol, a
