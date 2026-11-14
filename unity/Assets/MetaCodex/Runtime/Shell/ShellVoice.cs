@@ -162,6 +162,7 @@ namespace MetaCodex.Shell
             RegisterSessionVoiceCommand(); // questions about the session (ShellContext)
             RegisterLaunchVoiceCommands(); // the app an agent asked to launch (ShellReturn)
             RegisterSidebarVoiceCommands(); // THREAD's sidebar and INIT GIT (ShellThreadSidebar)
+            RegisterComposerVoiceCommand(); // THREAD's message box: bigger, smaller, reset (ShellThreadComposer)
             RegisterCardVoiceCommands(); // thread cards and their groups (ShellThreadCards)
             Decider = new VoiceDecider(Voice, (texts, done) =>
             {

@@ -624,6 +624,7 @@ namespace MetaCodex.Shell
         public void OpenAttachModal(string mode)
         {
             if (ThreadKey == null) { Toast("Open a thread first", "warn"); return; }
+            ResetComposerHeight(); // the modal is laid out for the message box at one row (ShellThreadComposer)
             _amMode = mode;
             _amPicked.Clear();
             if (mode == "files") _amDir = (string)_threadInfo?["environmentPath"] ?? (_threadOpen == null ? _draft?.ProjectPath : null) ?? _amDir ?? "/root";

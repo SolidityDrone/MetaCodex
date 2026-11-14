@@ -685,7 +685,9 @@ namespace MetaCodex.Shell
             float sendW = 0.11f, plusW = t.ButtonHeight * 1.2f, micW = t.ButtonHeight * 1.25f;
             BuildAttachRow(p, new Rect(c.x, cy - t.Gap - chipH, c.width, chipH));
             _thPlus = p.Add(new UiButton("+", ToggleAttachMenu, UiButtonStyle.Primary) { Rect = new Rect(c.x, cy, plusW, t.ButtonHeight), TextSize = t.BodySize * 1.3f });
-            _thComposer = p.Add(new UiTextField("", "", s => SendToThread(s), "message the agent… (or ◉ to say it)") { Rect = new Rect(c.x + plusW + t.Gap, cy, c.width - sendW - plusW - micW - t.Gap * 3, t.ButtonHeight), CaptionWidth = 0f });
+            _thComposer = p.Add(new UiTextField("", "", s => SendToThread(s), "message the agent… (or ◉ to say it)") { Rect = new Rect(c.x + plusW + t.Gap, cy, c.width - sendW - plusW - micW - t.Gap * 3, t.ButtonHeight), CaptionWidth = 0f, Wrap = true });
+            // the grip on its top edge makes the box taller (ShellThreadComposer): the chat above gets shorter
+            BuildComposerGrip(p, _thComposer.Rect, c0.height, _tlArea.height);
             // ◉: say the message (speech to text into the composer; SEND stays yours)
             _thMic = p.Add(new UiButton("◉", () => DictateInto(_thComposer)) { Rect = new Rect(c.xMax - sendW - t.Gap - micW, cy, micW, t.ButtonHeight), TextSize = t.BodySize * 1.15f });
             p.Add(new UiButton("SEND ▶", () => SendToThread(_thComposer.Text), UiButtonStyle.Primary) { Rect = new Rect(c.xMax - sendW, cy, sendW, t.ButtonHeight) });
@@ -1271,6 +1273,7 @@ namespace MetaCodex.Shell
             var att = AttachList;
             bool hasAtt = att != null && att.Count > 0;
             if ((string.IsNullOrWhiteSpace(text) && !hasAtt) || ThreadKey == null) return;
+            ResetComposerHeight(); // sent: the message box goes back to one row (owner 2026-11-14)
             string msg = string.IsNullOrWhiteSpace(text) ? AttachmentsOnlyText(att) : text.Trim();
             var sent = hasAtt ? att.ToList() : null;
             if (_threadOpen == null) { SendDraft(msg, sent, att); return; } // the draft's first message makes the thread

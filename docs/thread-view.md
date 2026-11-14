@@ -44,6 +44,28 @@ can answer short and fast without reading the conversation.
 - `◉` beside SEND (also in a draft, for its first message): speech to text into the field (a pause of 2 s or ◉ again
   ends it; up to 30 s); SEND stays yours.
 
+## The message box (owner 2026-11-14)
+
+Owner: sometimes a message is too long to read in the one-row composer. The composer is now a message box that grows.
+
+- A grip (a bar with three dots) sits on the top edge of the message box. It lights up when hovered.
+- Drag it up (pinch it with the ray, or poke it and push up): the box grows upwards. The chat above gets shorter by the
+  same amount. Drag it down: the box gets smaller. It never goes below one row. The bottom row (`+`, `◉`, `SEND ▶`)
+  does not move.
+- The text wraps over the box's lines. When the text is longer than the box, the box shows the last lines, where the
+  caret is. The box does not scroll: it grows instead, up to its limit. Before this change the box showed one line and
+  cut the rest with `…`.
+- The limit is 60 % of the window's content height, and the chat keeps at least 12 cm. At 60 % alone the chat would
+  keep about 5 cm. Both numbers are constants in `Shell/ShellThreadComposer.cs` (`ComposerShareMax`,
+  `ComposerChatMinimum`).
+- While you drag, the box and its grip follow at once. The chat is laid out again at most four times a second, and
+  when the drag ends. Its text is not laid out again for each small move.
+- Back to one row: SEND (the button, or Enter on the keyboard), a thread that another one replaces (opening another
+  thread, or a new draft), and the attach window (`+` then ATTACH FILES or REFERENCE CAPTURE: its layout is for one row).
+  The grip does nothing while the attach window is open. The height is not kept after a restart.
+- Voice, command `thread_composer` (only while THREAD is open): "make the text box bigger" or "expand the message box"
+  (one step: 6 cm); "shrink the composer" (one step smaller); "reset the text box" (one row).
+
 ## When a thread finishes (owner 2026-11-11)
 
 - The orb casts a callout: `✓ “Fix the build” answered: <its first sentence> ›` (green), `⚠ … stopped on an error`

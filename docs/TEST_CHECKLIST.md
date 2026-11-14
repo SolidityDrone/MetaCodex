@@ -697,3 +697,17 @@ Work windows:
 - [ ] Hold the V for 2 s: Ambient Focus turns on; hold it again 2 s: it turns off.
 - [ ] Horns, thumbs up, call-me held for 3 s: nothing opens.
 - [ ] A V made while the ray or the fingertip is on a window does nothing.
+## 48. THREAD's message box: grow it, back to one row on SEND (branch feat/composer-resize; docs/thread-view.md)
+
+- [ ] THREAD: the composer is one row; a bar with three dots sits on its top edge; it lights up under the ray or a finger
+- [ ] Pinch the bar and drag up: the box grows upwards, the chat above gets shorter by the same amount, `+` `◉` `SEND ▶` stay on the bottom row
+- [ ] Poke the bar with a finger and push up, then drag down: the box shrinks, never below one row
+- [ ] Drag up as far as it goes: the box stops at about half the window; the chat keeps about 12 cm
+- [ ] A long message in a grown box: the text wraps; the last lines show, where the caret is; typing keeps the caret visible
+- [ ] Tap the box with a grown height: the keyboard opens and types into it as before
+- [ ] SEND (button): the box is one row again and the chat its full height; the message appears in the chat
+- [ ] Enter on the keyboard sends: the same reset
+- [ ] Grow the box, then open another thread (THREADS list): one row
+- [ ] Grow the box, then + → ATTACH FILES: one row; the grip does nothing while the attach window is open; CANCEL leaves one row
+- [ ] Voice: "make the text box bigger" (one step), "shrink the composer" (one step), "reset the text box" (one row); "expand the message box" and "put the message box back to the default size" work
+- [ ] While dragging the chat changes a few times a second, no stutter; 72 fps with a working thread open (Perf menu Snapshot)

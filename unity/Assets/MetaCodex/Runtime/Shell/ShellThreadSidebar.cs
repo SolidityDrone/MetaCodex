@@ -1117,6 +1117,7 @@ namespace MetaCodex.Shell
             if (Voice == null) return;
             bool thread = _threadOpen != null && _panels.TryGetValue("thread", out var th) && th.IsOpen;
             Voice.SetEnabled("thread_sidebar", thread);
+            Voice.SetEnabled("thread_composer", thread);
             Voice.SetEnabled("init_git", thread && _sbRoot != null && _sbSnap != null && !_sbSnap.Repo && _sbSnap.Error == null);
         }
 

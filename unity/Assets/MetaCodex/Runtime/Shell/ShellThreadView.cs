@@ -195,6 +195,7 @@ namespace MetaCodex.Shell
         {
             if (Time.unscaledTime < _nextStatusTick) return;
             _nextStatusTick = Time.unscaledTime + 0.25f;
+            TickComposerChat(); // a drag of the message box: the chat catches up (at most four times a second)
             if (_threadOpen != null && _tlModel != null && (int)(Time.unscaledTime * 4f) % 4 == 0) RefreshThreadPulse();
             else ShowThreadStatus();
             if (_thMic != null)
@@ -210,6 +211,7 @@ namespace MetaCodex.Shell
 
         private void ResetThreadChat()
         {
+            ResetComposerHeight(); // another thread (or a new draft) opens: the message box is one row again
             _tlTag = null;
             _tlInFlight = false;
             _tlModel = new ThreadTimeline();
