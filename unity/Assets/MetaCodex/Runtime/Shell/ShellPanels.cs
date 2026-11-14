@@ -97,6 +97,7 @@ namespace MetaCodex.Shell
             _panels["dock"] = dock;
             Router.Register(dock);
             _dockLit.Clear();
+            _dockLocks.Clear();
             for (int i = 0; i < items.Count; i++)
             {
                 int row = i / perRow, col = i % perRow;
@@ -109,8 +110,10 @@ namespace MetaCodex.Shell
                 if (m.Label == "SELECT") _selectButton = b;
                 if (m.Label == "FOCUS") _focusButton = b;
                 if (m.Lit != null) _dockLit.Add((b, m.Lit));
+                if (m.LockStep > 0) _dockLocks.Add((b, m)); // the first start's setup (ShellSetupLocks)
             }
             RefreshDockLit();
+            ApplyDockLocks();
             // what is on shows on the dock as on the wrist (a tile stays selected): a state-only change, 4 times a second
             float next = 0f;
             dock.Tick += _ => { if (Time.unscaledTime >= next) { next = Time.unscaledTime + 0.25f; RefreshDockLit(); } };

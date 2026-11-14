@@ -401,6 +401,7 @@ namespace MetaCodex.Shell
         private void VoiceListen(bool coderChecked)
         {
             if (Recorder.Recording) return;
+            if (SetupBlocks(5, "TALK")) return; // the first start's setup: the decision model is not ready (ShellSetupLocks)
             if (!coderChecked && Qvac != null && Qvac.IsRunning)
             {
                 Qvac.Client.Status((r, e) =>

@@ -27,9 +27,13 @@ namespace MetaCodex.UI
     /// so the hand that carries it stays behind it; a fingertip in front of it still shows (0.7.5).
     public sealed class UiWristMenu : MonoBehaviour
     {
-        public sealed class Item { public string Glyph, Label, Icon; public Action Act; public Func<bool> Lit; public Color LitTint; }
+        /// One tile. Locked: drawn dimmed while it returns true (the first start's setup, ShellSetupLocks); a touch still runs
+        /// Act, which says why it waits.
+        public sealed class Item { public string Glyph, Label, Icon; public Action Act; public Func<bool> Lit, Locked; public Color LitTint; }
 
         public readonly List<Item> Inner = new List<Item>(), Outer = new List<Item>();
+        /// A locked tile's colour: dim steel (its name stays, fainter).
+        private static readonly Color LockedTint = new Color(0.30f, 0.38f, 0.46f, 1f);
         /// The hands: left carries the menu, the right index fingertip presses.
         public Func<Handedness, (bool ok, HandFrame frame)> Hand;
         public Transform Head;
@@ -535,8 +539,9 @@ namespace MetaCodex.UI
                 float centre = (inner ? InStart : OutStart) - j * step + (inner ? 38f : -38f) * (1f - eo);
                 float h = _hoverAmt[i], f = _flash[i];
                 var item = ItemAt(i);
-                bool lit = item.Lit != null && item.Lit();
-                Color col = lit ? item.LitTint : accent;
+                bool locked = item.Locked != null && item.Locked();
+                bool lit = !locked && item.Lit != null && item.Lit();
+                Color col = locked ? LockedTint : lit ? item.LitTint : accent;
                 float slide = -0.007f * (1f - eb);
                 float r0 = (inner ? InR0 : OutR0) + slide + h * 0.0008f, r1 = (inner ? InR1 : OutR1) + slide + h * 0.0016f;
                 float z = 0.006f * (1f - eo) + f * 0.0012f;
@@ -548,7 +553,7 @@ namespace MetaCodex.UI
                 float ar = centre * Mathf.Deg2Rad, rm = (r0 + r1) * 0.5f;
                 var mid = new Vector2(Mathf.Cos(ar), Mathf.Sin(ar)) * rm;
                 float icon = (inner ? 0.0108f : 0.0094f) * (1f + 0.12f * h);
-                Color ink = lit ? item.LitTint : accent;
+                Color ink = locked ? LockedTint : lit ? item.LitTint : accent;
                 IconQuad(mid + new Vector2(0f, inner ? 0.0026f : 0.0022f), icon, z - 0.0005f, _iconRect[i], ink, alpha, Seg(B, s0 + 0.12f, s0 + 0.34f), state, 1f);
                 if (lit) TickLine(r1 - 0.0019f, r1 - 0.0007f, centre, 0.0011f, item.LitTint, alpha, 0.9f, z - 0.0004f);
                 float typed = Seg(B, s0 + 0.18f, s0 + 0.40f);
@@ -556,7 +561,7 @@ namespace MetaCodex.UI
                 int chars = Mathf.CeilToInt(item.Label.Length * typed);
                 if (label.maxVisibleCharacters != chars) label.maxVisibleCharacters = chars;
                 var lc = lit ? Color.Lerp(item.LitTint, Color.white, 0.5f) : Color.Lerp(t.TextDim, Color.white, 0.25f + h * 0.75f);
-                lc.a = alpha * Seg(B, s0 + 0.2f, s0 + 0.42f) * (0.85f + 0.15f * h) * (1f - uiHide);
+                lc.a = alpha * Seg(B, s0 + 0.2f, s0 + 0.42f) * (0.85f + 0.15f * h) * (1f - uiHide) * (locked ? 0.55f : 1f);
                 if (label.color != lc) label.color = lc;
             }
 
