@@ -157,6 +157,12 @@ namespace MetaCodex.UI
         /// Panel titles in capitals (the console look), except what must keep its case (paths in titles are rare).
         private static string ConsoleTitle(string title) => UiTheme.TitleCase ? UiTheme.Pretty(title) : (title ?? "").ToUpperInvariant();
 
+        /// The title's width in the header (a header with more buttons than ✕ makes room for them).
+        public void SetTitleWidth(float width)
+        {
+            if (_title != null) _title.SetRect(new Rect(_title.Rect.x, _title.Rect.y, Mathf.Max(0.02f, width), _title.Rect.height));
+        }
+
         /// Hides the title bar's own close button (terminal frames have their own buttons there).
         public void HideCloseButton() => _close?.SetVisible(false);
 

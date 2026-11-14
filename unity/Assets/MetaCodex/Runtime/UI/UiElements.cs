@@ -562,6 +562,9 @@ namespace MetaCodex.UI
         public Color? IconColor;
         public int Indent;
         public object Tag;
+        /// A small action at the row's right end (THREADS: ⊞ pins the thread as a card); a tap there calls the list's
+        /// OnAction instead of selecting the row. Empty: none.
+        public string Action = "";
     }
 
     /// A scrolling list with a fixed row height: a pool of rows reused while scrolling (drag up/down, or the
@@ -572,10 +575,14 @@ namespace MetaCodex.UI
         public Action<UiListItem, int> OnSelect;
         public int SelectedIndex = -1;
         public bool Monospace;
+        /// A tap on a row's Action (set before the list is added: its texts are made then).
+        public Action<UiListItem, int> OnAction;
+        public const float ActionWidth = 0.05f;
         public override bool Interactive => true;
         public IReadOnlyList<UiListItem> Items => _items;
         private readonly List<UiListItem> _items = new List<UiListItem>();
         private readonly List<(int shape, UiText icon, UiText title, UiText sub, UiText badge)> _rows = new List<(int, UiText, UiText, UiText, UiText)>();
+        private readonly List<UiText> _actions = new List<UiText>(); // only when OnAction is set
         private int _bar;
         private float _scroll;      // rows scrolled
         private float _dragStartScroll;
@@ -601,6 +608,7 @@ namespace MetaCodex.UI
                 var sub = UiText.Create(Panel, new Rect(r.x + r.width * 0.55f, r.y, r.width * 0.30f, r.height), "", Theme.Body, Theme.SmallSize, Theme.TextDim, TextAlignmentOptions.MidlineRight);
                 var badge = UiText.Create(Panel, new Rect(r.xMax - 0.075f, r.y, 0.070f, r.height), "", Theme.Display, Theme.SmallSize * 0.85f, Theme.Ok, TextAlignmentOptions.MidlineRight);
                 _rows.Add((shape, icon, title, sub, badge));
+                if (OnAction != null) _actions.Add(UiText.Create(Panel, new Rect(r.xMax - ActionWidth, r.y, ActionWidth, r.height), "", Theme.Display, Theme.SmallSize, Theme.TextAccent, TextAlignmentOptions.Center));
             }
             _bar = Panel.Shapes.Add(Panel.Shape(UiShapeKind.Line, new Rect(Rect.xMax - 0.003f, Rect.y, 0.003f, Rect.height), Theme.Accent, 0, 0, 0.002f));
             Render();
@@ -631,10 +639,19 @@ namespace MetaCodex.UI
                 bool has = idx < _items.Count && Visible;
                 Panel.Shapes.SetVisible(row.shape, has);
                 row.icon.SetVisible(has); row.title.SetVisible(has); row.sub.SetVisible(has); row.badge.SetVisible(has);
+                var act = i < _actions.Count ? _actions[i] : null;
+                bool hasAct = has && act != null && !string.IsNullOrEmpty(_items[idx].Action);
+                act?.SetVisible(hasAct);
                 if (!has) continue;
                 var it = _items[idx];
                 float indent = it.Indent * 0.016f;
                 var r = RowRect(i);
+                if (hasAct)
+                {
+                    act.SetRect(new Rect(r.xMax - ActionWidth, r.y, ActionWidth, r.height));
+                    act.Text = it.Action;
+                    r = new Rect(r.x, r.y, r.width - ActionWidth, r.height); // the rest of the row as before, left of it
+                }
                 row.icon.SetRect(new Rect(r.x + 0.006f + indent, r.y, 0.024f, r.height));
                 float badgeW = string.IsNullOrEmpty(it.Badge) ? 0f : Mathf.Min(0.075f, r.width * 0.3f);
                 float subW = string.IsNullOrEmpty(it.Sub) ? 0f : Mathf.Min(r.width * 0.32f, r.width - badgeW - 0.05f - indent);
@@ -700,8 +717,17 @@ namespace MetaCodex.UI
             if (r < 0) return;
             int idx = Mathf.FloorToInt(_scroll) + r;
             if (idx >= _items.Count) return;
+            if (OnAction != null && !string.IsNullOrEmpty(_items[idx].Action) && e.PressPoint.x >= RowRect(r).xMax - ActionWidth)
+            {
+                UiSounds.Fire("click");
+                OnAction(_items[idx], idx);
+                return;
+            }
             SelectIndex(idx);
         }
+
+        /// A tap on a row's action (self-tests, the control port).
+        public void ActionIndex(int idx) { if (OnAction != null && idx >= 0 && idx < _items.Count && !string.IsNullOrEmpty(_items[idx].Action)) OnAction(_items[idx], idx); }
 
         public void SelectIndex(int idx, bool notify = true)
         {
@@ -727,6 +753,8 @@ namespace MetaCodex.UI
                 DestroyGo(row.icon.Tmp.gameObject); DestroyGo(row.title.Tmp.gameObject);
                 DestroyGo(row.sub.Tmp.gameObject); DestroyGo(row.badge.Tmp.gameObject);
             }
+            foreach (var a in _actions) DestroyGo(a.Tmp.gameObject);
+            _actions.Clear();
             Panel.Shapes.SetVisible(_bar, false);
         }
     }
