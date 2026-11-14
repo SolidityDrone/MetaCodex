@@ -16,6 +16,10 @@ namespace MetaCodex.App
 
         public static void Init()
         {
+            // a development build captures and prints the managed stack of every Debug.Log call (18 lines under each
+            // "[MetaCodex] ..." line in the 0.7.19 logcat): a stack walk on the main thread per line, and the log's bulk.
+            // Plain lines carry none now; warnings, errors and exceptions keep theirs.
+            Application.SetStackTraceLogType(LogType.Log, StackTraceLogType.None);
             lock (Gate)
             {
                 if (_file != null) return;

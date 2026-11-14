@@ -57,6 +57,7 @@ namespace MetaCodex.Shell
 
         private void BuildOrb()
         {
+            StartMark("orb");
             if (Orb != null) return;
             Orb = UiOrb.Create(_root);
             Orb.Head = Head;

@@ -35,6 +35,7 @@ namespace MetaCodex.Shell
 
         private void InitSessionContext()
         {
+            StartMark("context");
             SessionMemory.Load(SessionLogPath, DateTime.Now);
             SessionMemory.Add("system", "app", "MetaCodex started");
             Scripts.Changed += () =>

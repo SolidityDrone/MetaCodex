@@ -160,6 +160,8 @@ namespace MetaCodex.Shell
         private readonly List<ToolInfo> _tools = new List<ToolInfo>();
         private readonly Dictionary<string, string> _sysCounts = new Dictionary<string, string>();
         private UiTabs _sysTabs;
+        private UiPanel _sysPanel;
+        private bool _toolsStale; // ShowTools skipped its redraw (the window was closed): the next one that finds it open draws
         private UiToolList _toolList;
         private UiLabel _sysToolsInfo, _sysStoreInfo;
         private UiStorageBar _storeDevice, _storeLinux;
@@ -178,6 +180,7 @@ namespace MetaCodex.Shell
         {
             var t = UiTheme.Current;
             var p = Panel<UiPanel>("system", "System · Linux", ControlPageW, ControlPageH); // CONTROL's one size
+            _sysPanel = p;
             var c = p.Content;
             _sysTabs = p.Add(new UiTabs("TOOLS", "STORAGE") { Rect = new Rect(c.x, c.y, Mathf.Min(c.width, 0.3f), t.ButtonHeight) });
             var area = new Rect(c.x, c.y + t.ButtonHeight + t.Gap * 2, c.width, c.height - t.ButtonHeight - t.Gap * 2);
@@ -239,14 +242,18 @@ namespace MetaCodex.Shell
 
         private void SaveToolsCache()
         {
-            try { File.WriteAllText(ToolsCachePath, new JObject { ["at"] = _toolsAt, ["tools"] = JArray.FromObject(_tools), ["counts"] = JObject.FromObject(_sysCounts) }.ToString()); }
+            try { File.WriteAllText(ToolsCachePath, ToolsCacheJson(_tools, _sysCounts, _toolsAt)); }
             catch (Exception ex) { Log("tools cache: " + ex.Message); }
         }
+
+        private static string ToolsCacheJson(List<ToolInfo> tools, Dictionary<string, string> counts, DateTime at) =>
+            new JObject { ["at"] = at, ["tools"] = JArray.FromObject(tools), ["counts"] = JObject.FromObject(counts) }.ToString();
 
         /// One shell run checks every known tool (path + version) and counts packages.
         public void RefreshTools(bool force)
         {
-            if (_toolsBusy || _toolList == null) return;
+            if (_toolList == null) return;
+            if (_toolsBusy) { if (_toolsStale) ShowTools(); return; } // opened while a scan runs: what is known now, "checking" on top
             if (!force && _tools.Count > 0 && (DateTime.Now - _toolsAt).TotalMinutes < 10) { ShowTools(); return; }
             _toolsBusy = true;
             ShowTools();
@@ -265,42 +272,74 @@ namespace MetaCodex.Shell
             sb.Append("command -v npm >/dev/null && echo \"C|npm|$(ls \"$(npm root -g 2>/dev/null)\" 2>/dev/null | wc -l)\"; ");
             sb.Append("echo \"O|$(. /etc/os-release 2>/dev/null; echo $PRETTY_NAME) $(uname -m)\"; true");
             string script = sb.ToString();
+            // the paths come from Unity's Application (main thread only)
+            string cachePath = ToolsCachePath, invPath = ToolsInventoryPath;
             Task.Run(async () =>
             {
                 var r = await Git.Shell(script, 120000);
+                // 0.7.19 first start: this callback took 324 ms on the main thread right after MQH came up ("[slow callback]
+                // ... RefreshTools"): the parsing, the JSON of the cache and of the inventory (Newtonsoft's first use of
+                // ToolInfo: reflection) and the two file writes. All of it is done here; the main thread only swaps the
+                // result in and redraws.
+                var tools = new List<ToolInfo>();
+                var counts = new Dictionary<string, string>();
+                var at = DateTime.Now;
+                try
+                {
+                    ParseToolsInto(r.output ?? "", tools, counts);
+                    WriteText(cachePath, ToolsCacheJson(tools, counts, at));
+                    WriteText(invPath, BuildInventory(tools, counts, at).ToString());
+                }
+                catch (Exception ex) { var msg = ex.Message; _main.Enqueue(() => Log("tools scan files: " + msg)); }
                 _main.Enqueue(() =>
                 {
+                    double t0 = _hitchSw.Elapsed.TotalMilliseconds;
                     _toolsBusy = false;
-                    ParseTools(r.output ?? "");
-                    _toolsAt = DateTime.Now;
+                    _tools.Clear();
+                    _tools.AddRange(tools);
+                    _sysCounts.Clear();
+                    foreach (var kv in counts) _sysCounts[kv.Key] = kv.Value;
+                    _toolsAt = at;
                     CtxToolsUpdated();
-                    SaveToolsCache();
-                    WriteToolsInventory();
                     ShowTools();
+                    double ms = _hitchSw.Elapsed.TotalMilliseconds - t0;
+                    if (ms > 20) Log($"tools scan: applied on the main thread in {ms:F0} ms"); // the integrator compares this with the 324 ms of 0.7.19
                 });
             });
+        }
+
+        private static void WriteText(string path, string text)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path));
+            File.WriteAllText(path, text);
         }
 
         private static readonly Regex VersionRe = new Regex(@"\d+\.\d+(?:\.\d+)?(?:[-+.][0-9A-Za-z]+)*", RegexOptions.Compiled);
 
         public void ParseTools(string output)
         {
+            ParseToolsInto(output, _tools, _sysCounts);
+        }
+
+        /// Parses one scan's output into `tools` and `counts` (both emptied first). No Unity calls: runs on a worker thread.
+        private static void ParseToolsInto(string output, List<ToolInfo> tools, Dictionary<string, string> counts)
+        {
             var found = new Dictionary<string, (string path, string raw)>();
-            _sysCounts.Clear();
+            counts.Clear();
             foreach (var line in output.Replace("\r", "").Split('\n'))
             {
                 var f = line.Split('|');
                 if (f.Length >= 4 && f[0] == "T") found[f[1]] = (f[2], string.Join("|", f.Skip(3)));
-                else if (f.Length >= 3 && f[0] == "C") _sysCounts[f[1]] = f[2].Trim();
-                else if (f.Length >= 2 && f[0] == "O") _sysCounts["os"] = f[1].Trim();
+                else if (f.Length >= 3 && f[0] == "C") counts[f[1]] = f[2].Trim();
+                else if (f.Length >= 2 && f[0] == "O") counts["os"] = f[1].Trim();
             }
-            _tools.Clear();
+            tools.Clear();
             foreach (var tool in ToolCatalog)
             {
                 found.TryGetValue(tool.Name, out var hit);
                 var m = hit.raw != null ? VersionRe.Match(hit.raw) : Match.Empty;
                 if (hit.raw != null && !m.Success) m = Regex.Match(hit.raw, @"\b\d+\b"); // java -version: openjdk version "21" 
-                _tools.Add(new ToolInfo
+                tools.Add(new ToolInfo
                 {
                     Name = tool.Name, Category = tool.Group, Group = tool.Group, Install = tool.Install, Update = tool.Update, Remove = tool.Remove,
                     Found = hit.path != null, Path = hit.path, Raw = hit.raw, Version = m.Success ? m.Value : hit.raw != null ? Cut(hit.raw, 16) : null,
@@ -311,6 +350,10 @@ namespace MetaCodex.Shell
         private void ShowTools()
         {
             if (_toolList == null) return;
+            // a closed window is not drawn (0.7.19: the scan that ends a minute after start rebuilt the whole list's text for a
+            // window nobody had open); opening it, or its TOOLS tab, calls RefreshTools, which draws it then
+            if (_sysPanel != null && !_sysPanel.IsOpen && _tools.Count > 0) { _toolsStale = true; return; }
+            _toolsStale = false;
             var t = UiTheme.Current;
             _toolList.Rows.Clear();
             if (_toolList.Groups.Count == 0)
@@ -346,30 +389,36 @@ namespace MetaCodex.Shell
             }
         }
 
-        public JObject ToolsInventory() => new JObject
+        public JObject ToolsInventory() => BuildInventory(_tools, _sysCounts, _toolsAt);
+
+        private static JObject BuildInventory(List<ToolInfo> tools, Dictionary<string, string> counts, DateTime at) => new JObject
         {
-            ["updated"] = _toolsAt == DateTime.MinValue ? null : _toolsAt.ToUniversalTime().ToString("o"),
-            ["os"] = _sysCounts.TryGetValue("os", out var os) ? os : null,
-            ["debianPackages"] = _sysCounts.TryGetValue("apt", out var apt) ? apt : null,
-            ["debianChosen"] = _sysCounts.TryGetValue("manual", out var man) ? man : null,
-            ["npmGlobals"] = _sysCounts.TryGetValue("npm", out var npm) ? npm : null,
+            ["updated"] = at == DateTime.MinValue ? null : at.ToUniversalTime().ToString("o"),
+            ["os"] = counts.TryGetValue("os", out var os) ? os : null,
+            ["debianPackages"] = counts.TryGetValue("apt", out var apt) ? apt : null,
+            ["debianChosen"] = counts.TryGetValue("manual", out var man) ? man : null,
+            ["npmGlobals"] = counts.TryGetValue("npm", out var npm) ? npm : null,
             ["note"] = "Kept current by MetaCodex (SYSTEM > TOOLS). Install missing tools there or with the command in `install`.",
-            ["tools"] = new JArray(_tools.Select(x => new JObject
+            ["tools"] = new JArray(tools.Select(x => new JObject
             {
                 ["name"] = x.Name, ["about"] = AboutOf(x.Name), ["installed"] = x.Found, ["version"] = x.Version, ["path"] = x.Path, ["group"] = x.Group ?? x.Category,
                 ["install"] = x.Found ? null : Cmd(x.Install, "install"),
             })),
         };
 
+        /// The inventory file for agents, from a snapshot, written on a worker thread (its JSON is Newtonsoft's first use of the
+        /// tool list on a start whose scan is still fresh: ~100 ms on the main thread, 45 s after start).
         private void WriteToolsInventory()
         {
-            try
+            string p = ToolsInventoryPath;
+            var tools = _tools.ToList();
+            var counts = new Dictionary<string, string>(_sysCounts);
+            var at = _toolsAt;
+            Task.Run(() =>
             {
-                string p = ToolsInventoryPath;
-                Directory.CreateDirectory(Path.GetDirectoryName(p));
-                File.WriteAllText(p, ToolsInventory().ToString());
-            }
-            catch (Exception ex) { Log("tools inventory: " + ex.Message); }
+                try { WriteText(p, BuildInventory(tools, counts, at).ToString()); }
+                catch (Exception ex) { var msg = ex.Message; _main.Enqueue(() => Log("tools inventory: " + msg)); }
+            });
         }
 
         /// "key value" pairs after position `from` (system launch / install-apk options).
