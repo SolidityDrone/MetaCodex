@@ -674,3 +674,19 @@ Work windows:
 - [ ] An approval row shows and goes: the chat keeps its place and text
 - [ ] The sidebar on CHANGES while it works: new files and counts show within a few seconds
 - [ ] A script saved in the terminal still applies within about a second
+
+## 46. Thread cards and groups (branch feat/thread-cards; docs/thread-view.md)
+
+- [ ] THREADS: ⊞ at the right end of a thread row → a card of that thread opens beside THREADS; the row now shows ▣
+- [ ] THREAD: ⊞ CARD → a card of the open thread; open another thread in THREAD → the card stays
+- [ ] A card of a working thread: WORKING with a running clock, the dot pulses, the line shows what it does now; when it answers: ANSWERED · just now and the first line of the answer
+- [ ] A thread waits for an approval → its card shows WAITING FOR YOU, ALLOW and DENY; ALLOW → the agent goes on (as with THREAD's ALLOW ONCE)
+- [ ] REPLY on a card → the system keyboard; type and Done → the message arrives in that thread
+- [ ] OPEN on a card → that thread in the THREAD window with its sidebar; the card stays
+- [ ] Drag one card window by its header over another: the other lights up ("LET GO TO GROUP"); let go → one window with both cards, the target did not move
+- [ ] Drag the group by its header: both cards move together; RECENTER and FLOAT keep it as one window; with Bend panels on, a wide group bends round you
+- [ ] Pull a card out by its ✥ grip past the group's edge → it becomes its own window where you let go; the group narrows and stays where it was
+- [ ] ⇲ UNGROUP → each card its own window beside the old one; ✎ → a name for the group in its header
+- [ ] Restart the app → the groups come back with their names and threads in order (open ones open again, placed anew)
+- [ ] Voice: "pin this thread as a card", "open the card <title words>", "remove the card for <title words>", "hide the thread cards" / "show the thread cards", "allow it on the card"
+- [ ] Four cards open, two of them working, for 5 minutes: 72 fps (Perf menu Snapshot), no stutter

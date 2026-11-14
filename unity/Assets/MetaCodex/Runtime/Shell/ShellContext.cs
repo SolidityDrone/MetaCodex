@@ -60,6 +60,7 @@ namespace MetaCodex.Shell
                 // every 5 s while another thread works (its "answered" callout comes soon), else every 15 s
                 bool otherWorking = _pulses.Any(kv => (kv.Key != _threadOpen || !IsPanelOpen("thread")) && kv.Value.Working);
                 _ctxNextPulses = Time.unscaledTime + (otherWorking ? 5f : 15f);
+                foreach (var g in _groups) if (g.Panel != null && g.Panel.IsOpen) { _ctxNextPulses = Mathf.Min(_ctxNextPulses, Time.unscaledTime + CardPollSeconds); break; } // a card is shown
                 CtxPollPulses();
             }
             if (Time.unscaledTime >= _ctxNextSave) { _ctxNextSave = Time.unscaledTime + 30f; if (SessionMemory.Dirty) SessionMemory.Save(SessionLogPath); }
@@ -106,6 +107,7 @@ namespace MetaCodex.Shell
             _pulses.TryGetValue(threadId, out var before);
             foreach (var e in ThreadPulse.Changes(before, p)) SessionMemory.Add("thread", threadId, e);
             _pulses[threadId] = p;
+            MarkCardDirty(threadId); // its card, if it has one, is drawn again (ShellThreadCards)
             NotifyThreadChange(threadId, before, p); // the orb: answered / error / needs you (ShellThreadView)
         }
 
@@ -118,13 +120,16 @@ namespace MetaCodex.Shell
             {
                 if (!(th is JArray rows)) return;
                 _ctxThreadRows = rows;
+                var cards = ShownCardThreads(); // shown cards: also read when idle, once per change of their row
+                if (cards != null) foreach (var g in _groups) g.Dirty = true; // their rows (titles, what waits) are new
                 foreach (var t in rows.OfType<JObject>())
                 {
                     string id = (string)t["id"];
                     if (id == null || id == _threadOpen && IsPanelOpen("thread")) continue; // the open window polls its own
                     bool active = ThreadTimeline.IsWorking(ThreadStatus(t)) || t["hasPendingInteraction"]?.Value<bool>() == true;
                     bool wasActive = _pulses.TryGetValue(id, out var pp) && pp.Working;
-                    if (!active && !wasActive) continue;
+                    bool card = cards != null && cards.Contains(id) && CardNeedsRead(id, t);
+                    if (!active && !wasActive && !card) continue;
                     var row = t;
                     // parsed on the pool thread; only the pulse comes back to the main thread
                     Mqh.CallThen(System.Net.Http.HttpMethod.Get, MqhClient.TimelinePath(id, null, 2), null,
