@@ -703,9 +703,12 @@ end)
         {
             var host = shell.Scripts;
             host.Scan();
-            // a clean start: nothing seeded, the one-time cleanup marked the folder (so a later + ADD is never cleaned up)
-            Check(host.Find("plugin/core-poses") == null && host.Find("plugin/swipes") == null && !Directory.Exists(Path.Combine(host.PluginsDir, "core-poses")) && !Directory.Exists(Path.Combine(host.PluginsDir, "swipes")),
-                "fresh start: no gesture examples installed");
+            // a clean start: only core-poses, for the one default binding (the V toggles Ambient Focus, EnsureVictoryFocus,
+            // owner 2026-11-14); no other example; the one-time cleanup marked the folder (a later + ADD is never cleaned up)
+            Check(host.Find("plugin/core-poses") != null && Directory.Exists(Path.Combine(host.PluginsDir, "core-poses"))
+                  && host.Find("plugin/swipes") == null && !Directory.Exists(Path.Combine(host.PluginsDir, "swipes"))
+                  && shell.Settings.bindings.Count(b => b.gesture == "victory" && b.action == "focus") == 1,
+                "fresh start: only core-poses, for the V -> Ambient Focus binding; no other gesture example");
             Check(File.Exists(Path.Combine(host.PluginsDir, MetaCodexShell.ExamplesMarker)), "fresh start: the cleanup marker " + MetaCodexShell.ExamplesMarker + " is written");
             shell.SetGestureExamplesOpen(false);
             var rows = shell.GestureRows();
@@ -717,7 +720,8 @@ end)
             Check(!rows.Any(r => r.Title.Contains("REFRESH")), "ALL: no ⟳ REFRESH");
             shell.SetGestureExamplesOpen(true);
             rows = shell.GestureRows();
-            Check(rows.Count(r => r.Badge == "+ ADD") == 2 && rows.Any(r => r.Title == "core-poses") && rows.Any(r => r.Title == "swipes"), "EXAMPLES unfolded: core-poses and swipes, each + ADD");
+            Check(rows.Count(r => r.Badge == "+ ADD") == 1 && rows.Any(r => r.Title == "core-poses" && r.Badge != "+ ADD") && rows.Any(r => r.Title == "swipes" && r.Badge == "+ ADD"),
+                "EXAMPLES unfolded: core-poses already added (the V), swipes with + ADD");
             Check(shell.InstallGestureExample("no-such") != null, "+ ADD of an unknown example: an error, nothing written");
             Check(shell.InstallGestureExample("core-poses") == null, "+ ADD core-poses installs it");
             string viaPort = shell.ControlCommand("plugin", "example swipes");
