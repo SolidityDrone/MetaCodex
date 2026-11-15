@@ -114,9 +114,18 @@ namespace MetaCodex.EditorTools
             PlayerSettings.SetApplicationIdentifier(android, PackageId);
             PlayerSettings.SetScriptingBackend(android, ScriptingImplementation.IL2CPP);
             PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64;
-            // iteration speed: unoptimised C++ and shared generics compile far faster (quest-env-wsl 7)
-            PlayerSettings.SetIl2CppCompilerConfiguration(android, Il2CppCompilerConfiguration.Debug);
+            // iteration speed: unoptimised C++ and shared generics compile far faster (quest-env-wsl 7). The app's own code
+            // runs several times slower so (2026-11-15 first start: the shell's start took 4.8 s of main-thread time, 3 s of
+            // it one loop drawing the wrist menu's icons): a release APK (MCX_RELEASE=1, the one for judges) gets optimised
+            // C++. Its first build compiles every C++ file again and needs more memory per compiler job (kept at 2 jobs).
+            bool release = Environment.GetEnvironmentVariable("MCX_RELEASE") == "1";
+            PlayerSettings.SetIl2CppCompilerConfiguration(android, release ? Il2CppCompilerConfiguration.Release : Il2CppCompilerConfiguration.Debug);
             PlayerSettings.SetIl2CppCodeGeneration(android, Il2CppCodeGeneration.OptimizeSize);
+            // no engine splash before the scene (Unity 6: optional on every plan): it showed the engine's logo, a brand mark
+            // the contest rules forbid in the app, and the scene waits for its animation (at least 2 s of the 3.6 s from the
+            // XR session to the scene in the 2026-11-15 log); the app's own splash (ShellSplash) is the first thing seen
+            PlayerSettings.SplashScreen.show = false;
+            PlayerSettings.SplashScreen.showUnityLogo = false;
             PlayerSettings.Android.minSdkVersion = AndroidSdkVersions.AndroidApiLevel32;
             PlayerSettings.Android.targetSdkVersion = AndroidSdkVersions.AndroidApiLevel34;
             PlayerSettings.Android.applicationEntry = AndroidApplicationEntry.Activity;

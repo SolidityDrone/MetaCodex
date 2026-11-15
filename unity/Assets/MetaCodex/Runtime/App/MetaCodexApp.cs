@@ -100,8 +100,12 @@ namespace MetaCodex.App
                 catch (Exception ex) { SessionLog.Log("control port off: " + ex.Message); }
             }
 
+            // the Linux starts preparing (on a first start: its copy and unpack, the longest step of the setup) at once, not
+            // after the head is tracked and the terminal placed: it needs neither (2026-11-15 log: the unpack began 5 s
+            // after the scene, behind the shell's 5.4 s start frame)
+            var prepare = StartCoroutine(host.Prepare());
             yield return PlaceWhenTracked();
-            yield return host.Prepare();
+            yield return prepare;
             StartSession(main);
         }
 
