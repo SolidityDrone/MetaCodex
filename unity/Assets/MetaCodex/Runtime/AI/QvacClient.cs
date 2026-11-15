@@ -114,6 +114,27 @@ namespace MetaCodex.AI
             }, cb);
         }
 
+        /// "Hey Whisp" (WakeListener): the wake check of one short voiced segment (POST /v1/audio/wake, a 16 kHz WAV)
+        /// -> {text, ms, audioMs, audioCtx, reloadMs, loadMs} or {skipped}. `query`: null, or test options
+        /// ("audio_ctx=512&log=1"). 8 s at most; it leaves LastError and Online alone (a check the service drops or
+        /// misses is not an error TALK should show).
+        public void WakeCheck(byte[] wav, string query, Action<JToken, string> cb)
+        {
+            Call(async () =>
+            {
+                var content = new ByteArrayContent(wav);
+                content.Headers.ContentType = new MediaTypeHeaderValue("audio/wav");
+                string path = "/v1/audio/wake" + (string.IsNullOrEmpty(query) ? "" : "?" + query);
+                using (var cts = new CancellationTokenSource(TimeSpan.FromSeconds(8)))
+                using (var res = await Http.SendAsync(Req(HttpMethod.Post, path, content), cts.Token).ConfigureAwait(false))
+                {
+                    string text = await res.Content.ReadAsStringAsync().ConfigureAwait(false);
+                    if (!res.IsSuccessStatusCode) throw new Exception($"{(int)res.StatusCode}: {(text.Length > 200 ? text.Substring(0, 200) : text)}");
+                    return JToken.Parse(text);
+                }
+            }, cb);
+        }
+
         /// OpenAI-style chat completion (with `tools`); the first call after a load can take ~10 s.
         public void Chat(JObject body, Action<JToken, string> cb) => Call(() => Json(HttpMethod.Post, "/v1/chat/completions", body, 90), cb);
 

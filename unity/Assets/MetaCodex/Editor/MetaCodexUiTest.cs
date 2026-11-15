@@ -187,6 +187,7 @@ namespace MetaCodex.EditorTools
                 if (Want("threadwindows")) ThreadWindowsSection(shell, head); // MetaCodexUiTestThreadWindows.cs
                 if (Want("archive")) ThreadArchiveSection(shell); // MetaCodexUiTestThreadArchive.cs
                 if (Want("firstrun")) FirstRunSection(shell, head); // MetaCodexUiTestFirstRun.cs
+                if (Want("wake")) WakeSection(shell); // MetaCodexUiTestWake.cs ("Hey Whisp")
                 if (WantNamed("voiceexport")) VoiceExport(shell);
                 if (WantNamed("voicedecide")) VoiceDecideBench(shell);
             }

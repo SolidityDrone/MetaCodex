@@ -50,6 +50,11 @@ const DEFAULTS = {
   // app's voice effect hides that (owner, 2026-11-13). The app sends its own value (VOICE > speech quality)
   ttsSteps: 3,
   minAudioCtx: 512, // smallest whisper encoder window (frames, 50 per second): 256 repeats and mishears (measured)
+  // the wake check (POST /v1/audio/wake, "Hey Whisp"): the cheapest decode of a 0.4-2.5 s segment. 256 frames (5 s)
+  // halve the encoder's work; a few tokens bound the repeats seen at 256 in commands (the app reads the first words)
+  wakeMinAudioCtx: 256,
+  wakePrompt: 'Hey Whisp.',
+  wakeMaxTokens: 8,
   idleMinutes: { asr: 30, llm: 30, tts: 10, embed: 60 }, // keep models loaded while voice is in use: a reload costs 1-4 s
   // threads per engine (null = `threads`). Measured 2026-11-12 (docs/voice.md "Streaming answers"): with the LLM
   // decoding on 1 thread (prompt evaluation on 2) and the voice on 2, both keep their solo speed while they overlap
@@ -122,6 +127,8 @@ async function handle (req, res, body) {
     }
     case 'POST /v1/audio/transcriptions':
       return transcriptions(req, res, body, u)
+    case 'POST /v1/audio/wake': // "Hey Whisp": the cheapest decode of one short segment; dropped when busy
+      return wake(req, res, body, u)
     case 'POST /v1/audio/speech':
       return speech(res, parseJson(body))
     case 'POST /v1/chat/completions':
@@ -212,6 +219,36 @@ async function transcriptions (req, res, body, u) {
   const r = await engines.transcribe(audio.resample(pcm, rate, 16000), { language })
   log(`asr ${r.audioMs} ms audio -> ${r.ms} ms: ${JSON.stringify(r.text).slice(0, 120)}`)
   if ((fields.response_format || u.searchParams.get('response_format')) === 'text') return sendBytes(res, 200, 'text/plain; charset=utf-8', Buffer.from(r.text))
+  send(res, 200, r)
+}
+
+/**
+ * The wake check (docs/voice.md "Hey Whisp"). Body: one short voiced segment, a WAV (any rate) or raw 16-bit PCM
+ * (audio/pcm; rate=N), 0.2-4 s. Query, all optional: prompt, max_tokens, audio_ctx (the test path's A/B), log=1 (the
+ * text goes into the log; by default only times do: it is speech near the headset, often not meant for it).
+ * -> 200 { text, ms, audioMs, audioCtx, reloadMs, loadMs } or 200 { skipped: paused | model | coder | speech | busy }.
+ */
+async function wake (req, res, body, u) {
+  const type = String(req.headers['content-type'] || '').toLowerCase()
+  let pcm
+  let rate
+  if (type.startsWith('audio/pcm') || type.startsWith('audio/l16')) {
+    pcm = audio.fromPcm16(body)
+    rate = Number((/rate=(\d+)/.exec(type) || [])[1] || u.searchParams.get('rate') || 16000)
+  } else {
+    const w = audio.parseWav(body)
+    pcm = w.pcm
+    rate = w.rate
+  }
+  if (!(rate >= 8000 && rate <= 192000)) throw httpError(400, 'sample rate ' + rate + ' out of range')
+  const seconds = pcm.length / rate
+  if (seconds < 0.2 || seconds > 4) throw httpError(400, 'a wake check takes 0.2-4 s of audio, not ' + seconds.toFixed(2) + ' s')
+  const q = (k) => u.searchParams.get(k)
+  const r = await engines.wakeCheck(audio.resample(pcm, rate, 16000), { prompt: q('prompt'), maxTokens: q('max_tokens'), audioCtx: q('audio_ctx') })
+  if (!r.skipped) {
+    const extra = (r.reloadMs ? `, reload ${r.reloadMs} ms` : '') + (r.loadMs ? `, load ${r.loadMs} ms` : '')
+    log(`wake ${r.audioMs} ms audio -> ${r.ms} ms (ctx ${r.audioCtx}${extra})${q('log') === '1' ? ': ' + JSON.stringify(r.text).slice(0, 80) : ''}`)
+  }
   send(res, 200, r)
 }
 

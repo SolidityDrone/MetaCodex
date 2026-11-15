@@ -48,6 +48,9 @@ namespace MetaCodex.Shell
         /// 2026-11-13 (owner): FAST is 3 steps, the voice effect hides the small loss; the headset runs the voice
         /// at about 3x slower than it plays, so every step counts.
         public string speech = "fast";
+        /// "Hey Whisp" starts TALK hands-free (WakeListener; CONTROL > VOICE, `set_wake_word`). Off by default: on, the
+        /// microphone stays open and a cheap gate sends short pieces of speech to the AI service's wake check.
+        public bool wakeWord = false;
     }
 
     /// One voice request, start to end (VOICE panel history, control port replies).
@@ -94,6 +97,16 @@ namespace MetaCodex.Shell
         public const string DeciderModelTag = "multilingual-e5-small-q8_0|query: ";
         /// idle | listening | transcribing | thinking | done | error
         public string VoiceState { get; private set; } = "idle";
+        /// "Hey Whisp": the listener of the wake phrase (WakeListener; on only with Settings.voice.wakeWord).
+        public WakeListener Wake { get; private set; }
+        /// "Hey Whisp" is on (CONTROL > VOICE, `set_wake_word`, set_setting wake_word; the first start's guide may offer it).
+        public bool WakeWordOn => Settings.voice.wakeWord;
+        /// The Whisp listens for its name right now (on, and nothing holds it): a small sign on the Whisp may follow it.
+        public bool WakeListening => Wake != null && Wake.On && (Wake.State == "listening" || Wake.State == "checking");
+        /// The wake phrase was heard (after the Whisp's flare, before TALK listens).
+        public event Action WakeHeard;
+        private bool _wakeTalk;            // this TALK was started by "Hey Whisp": the phrase is dropped, no speech ends quietly
+        private float _wakeQuietAt = -10f; // the last time TALK ran or the app spoke (the wake gate waits a moment after)
         public readonly List<VoiceResult> VoiceRecent = new List<VoiceResult>();
         public JObject QvacStatus { get; private set; }
 
@@ -167,6 +180,11 @@ namespace MetaCodex.Shell
             RegisterThreadWindowVoiceCommand(); // several thread windows and their groups (ShellThreadGroups)
             RegisterArchiveVoiceCommands(); // archive_thread, restore_thread (ShellThreadArchive)
             RegisterTourVoiceCommand(); // the guided tour (ShellTour)
+            RegisterWakeVoiceCommand(); // "Hey Whisp" on / off (below)
+            Wake = new WakeListener { Blocked = WakeBlocked };
+            Wake.Check = (wav, query, cb) => { if (Qvac?.Client == null) cb(null, "no AI service"); else Qvac.Client.WakeCheck(wav, query, cb); };
+            Wake.Heard += OnWakeHeard;
+            Wake.SetOn(Settings.voice.wakeWord, Recorder);
             Decider = new VoiceDecider(Voice, (texts, done) =>
             {
                 if (Qvac == null || !Qvac.IsRunning) { done(null, "the AI service is not running"); return; }
@@ -224,7 +242,7 @@ namespace MetaCodex.Shell
         private void PushVoiceConfig()
         {
             if (Qvac == null || !Qvac.IsRunning) return;
-            var words = new List<string> { "MetaCodex", "ambient focus", "terminal", "workspace", "thread", "panel", "layout", "float", "fixed", "recenter", "intensity", "radius", "softness" };
+            var words = new List<string> { "MetaCodex", "Whisp", "hey Whisp", "ambient focus", "terminal", "workspace", "thread", "panel", "layout", "float", "fixed", "recenter", "intensity", "radius", "softness" };
             words.AddRange(VoicePanels);
             foreach (var c in Voice.All) if (c.Enabled && c.Vocabulary != null) words.AddRange(c.Vocabulary);
             words.AddRange(_projects.Select(p => (string)p["name"]).Where(n => !string.IsNullOrEmpty(n)).Take(12));
@@ -298,6 +316,7 @@ namespace MetaCodex.Shell
         private void TickVoice()
         {
             TickSpeech(Time.unscaledTime);
+            Wake?.Tick(Time.unscaledTime); // "Hey Whisp": nothing to do while off
             TickThreadAlerts(); // "the thread on X is done" waits for a quiet moment (ShellThreadView)
             if (_cpuBoosted && Time.unscaledTime > _boostUntil && (Recorder == null || !Recorder.Recording))
             {
@@ -390,6 +409,107 @@ namespace MetaCodex.Shell
             });
         }
 
+        // ------------------------------------------------------------------ "Hey Whisp" (docs/voice.md)
+
+        /// Turns "Hey Whisp" on or off (saved). On asks for the microphone first when it is not allowed yet; off closes
+        /// the shared capture, and TALK is then exactly the button's TALK again.
+        public void SetWakeWord(bool on)
+        {
+            if (on && !VoiceRecorder.HasPermission)
+            {
+                VoiceRecorder.RequestPermission(ok => _main.Enqueue(() =>
+                {
+                    if (ok) SetWakeWord(true);
+                    else { Toast("Hey Whisp needs the microphone: allow it in Horizon settings > Apps > MetaCodex", "warn"); SyncSettingsControls(); }
+                }));
+                return;
+            }
+            if (Settings.voice.wakeWord != on) { Settings.voice.wakeWord = on; OnSettingsChanged(); }
+            Wake?.SetOn(on, Recorder);
+            SyncSettingsControls();
+            Log("wake: Hey Whisp " + (on ? "on" : "off"));
+        }
+
+        /// Why the wake listener must not listen now (null: it listens). Called every frame: no allocation.
+        private string WakeBlocked()
+        {
+            float now = Time.unscaledTime;
+            if (!Application.isFocused) return "paused";
+#if UNITY_ANDROID && !UNITY_EDITOR
+            if (OVRManager.instance != null && !OVRManager.instance.isUserPresent) return "off head";
+            if (OVRManager.instance != null && !OVRManager.hasInputFocus) return "no focus"; // the system menu is open
+#endif
+            if (SetupLocked(5)) return "setup"; // the first start's setup: voice is not ready yet
+            if (Recorder.Recording || Dictating || VoiceState == "listening" || VoiceState == "transcribing" || VoiceState == "thinking" || Speaking)
+            {
+                _wakeQuietAt = now;
+                return Speaking ? "speaking" : "talk";
+            }
+            if (now - _wakeQuietAt < 1f) return "talk"; // the end of TALK or of a reply (its sound, the room's echo)
+            if (Qvac == null || !Qvac.IsRunning) return "no AI service";
+            return null;
+        }
+
+        /// The wake phrase was heard: the Whisp flares, and TALK listens as from the button (its sound, the HUD). The
+        /// command in the same breath ("Hey Whisp, open the terminal"): TALK takes the audio from the start of that
+        /// segment and drops the phrase from what it heard; the phrase alone: TALK takes what follows it.
+        private void OnWakeHeard(WakeHit hit)
+        {
+            if (Recorder.Recording) return;
+            WhispFlare(); // ShellOrb; TALK's listening starts the same flare (one flare)
+            Log($"wake: heard \"{hit.Text}\" ({hit.AudioMs} ms of audio, check {hit.ServiceMs} ms, round trip {hit.RoundTripMs} ms){(hit.Continues ? ", the command follows" : "")}");
+            WakeHeard?.Invoke();
+            int from = hit.StartPos < 0 ? -1 : hit.Continues ? hit.StartPos : hit.EndPos;
+            _wakeTalk = true;
+            // no status round trip first: the service drops a wake check while the local coder holds the cores, so
+            // this one passed that check a moment ago
+            VoiceListen(true, from);
+            if (!Recorder.Recording) _wakeTalk = false; // it did not start (an error says why)
+        }
+
+        /// A TALK that "Hey Whisp" started heard nothing after the phrase: it ends without the error sound or a red HUD.
+        private void WakeQuietEnd()
+        {
+            _wakeTalk = false;
+            Log("wake: nothing followed the phrase");
+            SetVoiceState("idle", "", "");
+            if (_vHud != null && _vHud.IsOpen) _vHud.Close();
+        }
+
+        private void RegisterWakeVoiceCommand()
+        {
+            Voice.Register(new VoiceCommand
+            {
+                Name = "set_wake_word",
+                Description = "Hey Whisp: start TALK by saying \"Hey Whisp\" (on: the microphone stays open and listens for the phrase) or by the TALK button only (off)",
+                Parameters = VoiceCommands.Schema(("state", "string", new[] { "on", "off" }, "on: listen for \"Hey Whisp\"; off: TALK by its button only", true)),
+                Synonyms = new Dictionary<string, Dictionary<string, string>>
+                {
+                    ["state"] = new Dictionary<string, string> { ["enable"] = "on", ["start"] = "on", ["activate"] = "on", ["disable"] = "off", ["stop"] = "off", ["deactivate"] = "off" },
+                },
+                Phrases = new[]
+                {
+                    "[turn|switch|set] [the] (wake word|wake phrase|hey whisp|hey wisp|hands free talk|hands free) {state}",
+                    "(turn|switch) {state} [the] (wake word|wake phrase|hey whisp|hey wisp|hands free talk|hands free)",
+                    "(listen|wait) for (hey whisp|hey wisp|your name|the wake word|the wake phrase) {state:on}",
+                    "(stop listening|do not listen|dont listen) for (hey whisp|hey wisp|your name|the wake word|the wake phrase) {state:off}",
+                },
+                Samples = new[]
+                {
+                    "let me wake you up by saying your name", "stop listening for your name all the time", "i want to talk to you hands free",
+                    "enable the wake phrase", "no more hey whisp please", "can i start talking without pressing the button",
+                },
+                Examples = new List<(string, string)> { ("answer when I call your name", "set_wake_word on"), ("only listen when I press talk", "set_wake_word off") },
+                Vocabulary = new[] { "Whisp", "hey Whisp", "wake word", "hands free" },
+                Run = a =>
+                {
+                    bool on = (string)a["state"] == "on";
+                    SetWakeWord(on);
+                    return on ? "Hey Whisp on: say \"Hey Whisp\" to talk" : "Hey Whisp off: TALK by its button";
+                },
+            });
+        }
+
         // ------------------------------------------------------------------ the pipeline
 
         public void VoiceToggle()
@@ -398,11 +518,11 @@ namespace MetaCodex.Shell
             else VoiceListen();
         }
 
-        public void VoiceListen() => VoiceListen(false);
+        public void VoiceListen() { _wakeTalk = false; VoiceListen(false); }
 
         /// The local coder holds the AI cores (an agent on the local model is working): voice waits for its turn to end
         /// instead of queueing behind it (owner 2026-11-12). The service enforces it too; this tells the user at once.
-        private void VoiceListen(bool coderChecked)
+        private void VoiceListen(bool coderChecked, int fromPos = -1)
         {
             if (Recorder.Recording) return;
             if (SetupBlocks(5, "TALK")) return; // the first start's setup: the decision model is not ready (ShellSetupLocks)
@@ -418,7 +538,7 @@ namespace MetaCodex.Shell
                         Sounds?.Play("error");
                         return;
                     }
-                    VoiceListen(true);
+                    VoiceListen(true, fromPos);
                 });
                 return;
             }
@@ -427,14 +547,14 @@ namespace MetaCodex.Shell
             {
                 VoiceRecorder.RequestPermission(ok => _main.Enqueue(() =>
                 {
-                    if (ok) VoiceListen(true);
+                    if (ok) VoiceListen(true, fromPos);
                     else VoiceDone(new VoiceResult { Error = "microphone permission denied (Horizon settings > Apps > MetaCodex)" }, null);
                 }));
                 return;
             }
             Recorder.AutoStop = Settings.voice.autoStop;
             Recorder.MaxSeconds = Mathf.Clamp(Settings.voice.maxSeconds, 3f, 30f);
-            if (!Recorder.Start()) { VoiceDone(new VoiceResult { Error = "microphone: " + Recorder.LastError }, null); return; }
+            if (!Recorder.StartAt(fromPos)) { VoiceDone(new VoiceResult { Error = "microphone: " + Recorder.LastError }, null); return; } // -1: from now (the button)
             StopSpeaking(); // TALK interrupts a reply: nothing of it plays on top of the new question
             SetVoiceState("listening", "● LISTENING", "speak now");
             Sounds?.Play("open");
@@ -450,12 +570,14 @@ namespace MetaCodex.Shell
             if (Dictating) { StopDictation(); return; } // ◉ dictation into a text field (ShellThreadView)
             bool heard = Recorder.HeardSpeech;
             var wav = Recorder.Stop();
+            if (wav == null && _wakeTalk) { WakeQuietEnd(); return; }
             if (wav == null) { VoiceDone(new VoiceResult { Error = heard ? "too short" : "nothing recorded" }, null); return; }
             VoiceProcessWav(wav, null);
         }
 
         public void VoiceCancel()
         {
+            _wakeTalk = false;
             Recorder.Cancel();
             StopSpeaking();
             if (Dictating) { _dictateTo = null; _dictField = null; RestoreRecorder(); }
@@ -466,6 +588,7 @@ namespace MetaCodex.Shell
         private void OnRecorderFinished(byte[] wav)
         {
             if (Dictating) { DictationWav(wav); return; }
+            if (wav == null && _wakeTalk) { WakeQuietEnd(); return; } // "Hey Whisp" and then nothing: harmless
             if (wav == null) { VoiceDone(new VoiceResult { Error = "no speech heard" }, null); return; }
             VoiceProcessWav(wav, null);
         }
@@ -474,6 +597,8 @@ namespace MetaCodex.Shell
         public void VoiceProcessWav(byte[] wav, Action<VoiceResult> done)
         {
             float t0 = Time.realtimeSinceStartup;
+            bool fromWake = _wakeTalk;
+            _wakeTalk = false;
             if (Qvac == null || !Qvac.IsRunning)
             {
                 EnsureVoiceService();
@@ -485,7 +610,13 @@ namespace MetaCodex.Shell
             {
                 int asr = (int)((Time.realtimeSinceStartup - t0) * 1000f);
                 if (e != null) { VoiceDone(new VoiceResult { Started = t0, AsrMs = asr, Error = "speech-to-text: " + e }, done); return; }
-                VoiceProcessText((string)r["text"] ?? "", done, asr, t0);
+                string text = (string)r["text"] ?? "";
+                if (fromWake)
+                {
+                    text = WakeWord.Strip(text); // "Hey Whisp, open the terminal" -> "open the terminal"
+                    if (text.Trim().Length == 0) { WakeQuietEnd(); return; }
+                }
+                VoiceProcessText(text, done, asr, t0);
             });
         }
 
@@ -956,7 +1087,7 @@ namespace MetaCodex.Shell
                 Description = "Open a panel to see or manage something: terminals (open terminals), files (folders), git (repositories, branches, commits), " +
                     "agents (AI providers: which are signed in, logins, accounts, models), threads (agent conversations, workspaces, projects), web (the browser: web pages, localhost), links (bookmarks and local dev servers), " +
                     "clipboard (captures, screenshots of windows), mqh (skills, plugins, scripts, gestures, the harness), skills (the agents' skills), plugins (MQH and gesture plugins), scripts (Lua scripts), " +
-                    "gestures (hand gestures), vault (secrets, API keys), settings (look, layout, hands), voice (voice control, AI models), workspaces (the folders threads work in: checkout, worktrees, merging), control (the control center, on its last page), display (layout, distance, scale, the wrist menu), look (look and sound: opacity, sounds, the orb), hands (click, pinch, ray, clap, the select tool), about (version, licences, app permissions)",
+                    "gestures (hand gestures), vault (secrets, API keys), settings (look, layout, hands), voice (voice control, AI models), workspaces (the folders threads work in: checkout, worktrees, merging), control (the control center, on its last page), display (layout, distance, scale, the wrist menu), look (look and sound: opacity, sounds, the Whisp), hands (click, pinch, ray, clap, the select tool), about (version, licences, app permissions)",
                 Parameters = VoiceCommands.Schema(("panel", "string", VoicePanels, "the panel to open", true)),
                 Synonyms = new Dictionary<string, Dictionary<string, string>> { ["panel"] = panelSyn },
                 Phrases = new[]
@@ -1451,7 +1582,8 @@ namespace MetaCodex.Shell
             new VoiceSetting { Id = "foveation", Key = "foveation", Kind = "bool", Label = "Foveated rendering", Names = new[] { "foveation", "foveated rendering" } },
             new VoiceSetting { Id = "views_auto_open", Key = "viewsAutoOpen", Kind = "bool", Label = "Agent views open by themselves", Names = new[] { "auto open views", "agent views auto open", "views auto open" } },
             new VoiceSetting { Id = "wrist_menu", Key = "wristMenu", Kind = "bool", Label = "Main menu on the wrist", Names = new[] { "wrist menu", "menu on the wrist", "radial menu", "watch menu" } },
-            new VoiceSetting { Id = "orb", Key = "orb", Kind = "bool", Label = "Orb", Names = new[] { "orb", "the orb", "energy sphere", "sphere", "companion" } },
+            new VoiceSetting { Id = "orb", Key = "orb", Kind = "bool", Label = "Whisp", Names = new[] { "whisp", "the whisp", "wisp", "the wisp", "orb", "the orb", "energy sphere", "sphere", "companion" } },
+            new VoiceSetting { Id = "wake_word", Key = "voice.wakeWord", Kind = "bool", Label = "Hey Whisp", Names = new[] { "hey whisp", "wake word", "wake phrase", "hands free talk", "listening for its name" } },
             new VoiceSetting { Id = "voice_effect", Key = "voice.fx", Kind = "choice", Label = "Voice effect", Options = VoiceFx.Names, OptionLabels = new[] { "off", "AI", "ship", "comm" }, Values = VoiceEffectValues,
                 Names = new[] { "voice effect", "voice sound", "ai voice", "sci-fi voice", "robot voice", "voice style", "computer voice", "voice filter", "the effect on the voice" } },
             new VoiceSetting { Id = "speech_quality", Key = "voice.speech", Kind = "choice", Label = "Speech", Options = new[] { "fast", "clear" }, OptionLabels = new[] { "fast", "clear" }, Values = SpeechValues,
@@ -1523,6 +1655,7 @@ namespace MetaCodex.Shell
                 bool off = OffWords.Contains(v) || value == "-";
                 if (!on && !off && v != "toggle" && v != "switch") return "error: " + vs.Label + " is on or off";
                 if (vs.Id == "focus") SetFocus(on, false);
+                else if (vs.Id == "wake_word") SetWakeWord(on); // opens or closes the microphone, asks for it
                 else { Settings.Set(vs.Key, on ? "true" : "false"); OnSettingsChanged(); }
                 SyncSettingsControls();
                 return vs.Label + (on ? " on" : " off");
@@ -1566,7 +1699,7 @@ namespace MetaCodex.Shell
                 { "PANEL OPACITY", "panelOpacity" }, { "VOLUME", "soundVolume" }, { "RADIUS", "focusRadius" }, { "INTENSITY", "focusIntensity" }, { "SOFTNESS", "focusSoftness" }, { "BLUR", "focusBlur" } };
             var toggles = new Dictionary<string, string> { { "Bend panels", "bendPanels" }, { "Sounds", "sounds" }, { "Clap gesture", "gestures.clapEnabled" }, { "Show hand rays", "gestures.rayVisible" },
                 { "Foveated", "foveation" }, { "Ambient focus", "focusEnabled" }, { "Speak answers", "voice.speak" },
-                { "Real things in front", "occludeUi" }, { "Sharp depth", "depthCamera" }, { "Main menu on the wrist", "wristMenu" }, { "Orb", "orb" },
+                { "Real things in front", "occludeUi" }, { "Sharp depth", "depthCamera" }, { "Main menu on the wrist", "wristMenu" }, { "Orb", "orb" }, { "Whisp", "orb" }, { "Hey Whisp", "voice.wakeWord" },
                 { "Say when a thread", "voice.speakAlerts" } };
             foreach (var p in _panels.Values)
                 foreach (var e in p.Elements)
@@ -1767,6 +1900,7 @@ namespace MetaCodex.Shell
             p.Add(new UiToggle("Decision model for commands (fast, multilingual)", Settings.voice.decide, v => { Settings.voice.decide = v; OnSettingsChanged(); }) { Rect = ls.Next(0.03f) });
             p.Add(new UiToggle("Ask the LLM when nothing fits", Settings.voice.useLlm && Settings.voice.llmFallback, v => { Settings.voice.llmFallback = v; if (v) Settings.voice.useLlm = true; OnSettingsChanged(); }) { Rect = ls.Next(0.03f) });
             p.Add(new UiToggle("Stop listening after a pause", Settings.voice.autoStop, v => { Settings.voice.autoStop = v; OnSettingsChanged(); }) { Rect = ls.Next(0.03f) });
+            p.Add(new UiToggle("Hey Whisp: say it to start TALK (the microphone stays on)", Settings.voice.wakeWord, v => SetWakeWord(v)) { Rect = ls.Next(0.03f) });
             p.Add(new UiToggle("Start the AI service with the app", Settings.voice.enabled, v => { Settings.voice.enabled = v; OnSettingsChanged(); }) { Rect = ls.Next(0.03f) });
             // right column: the reply voice on top (the left one is full), then the commands
             var rs = new UiStack(new Rect(c.x + leftW + t.Gap * 2, c.y, c.width - leftW - t.Gap * 2, c.height), t.Gap);
@@ -1969,7 +2103,8 @@ namespace MetaCodex.Shell
             string svc = st == QvacHost.HostState.Running ? "<color=#3DFFA2>●</color> running" : st == QvacHost.HostState.Failed ? "<color=#FF5470>●</color> failed" : "○ " + st.ToString().ToLowerInvariant();
             var s = QvacStatus;
             string mem = s?["rssMB"] != null ? $" · {s["rssMB"]} MB · free {s["availableMB"]} MB" : "";
-            _vStatus.Set($"AI service: <b>{svc}</b>{mem}\n{Qvac?.Status}" + (Decider != null && Settings.voice.decide ? "\ndecisions: " + Decider.Status : ""));
+            _vStatus.Set($"AI service: <b>{svc}</b>{mem}\n{Qvac?.Status}" + (Decider != null && Settings.voice.decide ? "\ndecisions: " + Decider.Status : "")
+                + (Wake != null && Wake.On ? "\nHey Whisp: " + Wake.State + (Wake.WaitReason != null ? " (" + Wake.WaitReason + ")" : "") : ""));
             if (_vServiceBtn != null && _vServiceBtn.Text != ServiceButtonText()) _vServiceBtn.SetText(ServiceButtonText());
             if (s?["models"] is JObject models)
             {
@@ -2052,11 +2187,16 @@ namespace MetaCodex.Shell
                     return "fx=" + Settings.voice.fx + " (off, adjutant, starship, comm)";
                 case "speak": Settings.voice.speak = rest != "off"; OnSettingsChanged(); return "speak=" + Settings.voice.speak;
                 case "llm": Settings.voice.useLlm = rest != "off"; OnSettingsChanged(); return "useLlm=" + Settings.voice.useLlm;
-                default: return "error: voice status | list | tools | registry | match <text> | decide <text> | decider on|off | fallback on|off | listen | stop | cancel | start | stop-service | install | threads N | speak on|off | fx off|adjutant|starship|comm | llm on|off | run <text> | say <text> | wav <file> | warm";
+                case "wake": // "Hey Whisp": voice wake [status] | on | off (the test path is async: voice wake test <file.wav>)
+                    if (rest == "on" || rest == "off") SetWakeWord(rest == "on");
+                    else if (rest.Length > 0 && rest != "status") return "error: voice wake [status] | on | off | test <file.wav> [audio_ctx=N] [max_tokens=N] [fire] [prompt=TEXT]";
+                    return (Wake != null ? Wake.Describe() : "hey whisp: not built") + (Settings.voice.wakeWord && !VoiceRecorder.HasPermission ? " (no microphone permission yet)" : "");
+                default: return "error: voice status | list | tools | registry | match <text> | decide <text> | decider on|off | fallback on|off | listen | stop | cancel | start | stop-service | install | threads N | speak on|off | fx off|adjutant|starship|comm | llm on|off | wake [status|on|off|test <file.wav>] | run <text> | say <text> | wav <file> | warm";
             }
         }
 
-        /// The control-port commands that answer later: voice run <text> | say <text> | wav <file> | warm | decide <text>.
+        /// The control-port commands that answer later: voice run <text> | say <text> | wav <file> | warm | decide <text> |
+        /// wake test <file.wav> [audio_ctx=N] [max_tokens=N] [fire] [prompt=TEXT].
         public bool VoiceAsyncCommand(string line, Action<string> reply)
         {
             if (!line.StartsWith("voice ")) return false;
@@ -2087,6 +2227,32 @@ namespace MetaCodex.Shell
                     string path = rest.StartsWith("/mnt/quest/") ? Path.Combine(Application.persistentDataPath, rest.Substring(11)) : rest;
                     if (!File.Exists(path)) { reply("error: no file " + rest); return true; }
                     VoiceProcessWav(File.ReadAllBytes(path), r => reply(r.ToJson().ToString(Newtonsoft.Json.Formatting.None)));
+                    return true;
+                }
+                case "wake":
+                {
+                    // "Hey Whisp" without a microphone: a WAV through the same gate and wake check, each stage timed
+                    // (docs/voice.md "Hey Whisp"); `fire` also runs the wake on the first match (flare, sound, TALK)
+                    if (!rest.StartsWith("test ")) return false; // voice wake [status|on|off]: VoiceControl
+                    var a = rest.Substring(5).Trim();
+                    string prompt = null;
+                    int pi = a.IndexOf("prompt=", StringComparison.Ordinal);
+                    if (pi >= 0) { prompt = a.Substring(pi + 7).Trim(); a = a.Substring(0, pi).Trim(); }
+                    var words = a.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                    if (words.Length == 0) { reply("error: voice wake test <file.wav> [audio_ctx=N] [max_tokens=N] [fire] [prompt=TEXT]"); return true; }
+                    string file = words[0];
+                    string path = file.StartsWith("/mnt/quest/") ? Path.Combine(Application.persistentDataPath, file.Substring(11)) : file;
+                    if (!File.Exists(path)) { reply("error: no file " + file); return true; }
+                    if (Wake == null || Qvac == null || !Qvac.IsRunning) { reply("error: the AI service is not running"); return true; }
+                    var q = new List<string>();
+                    bool fire = false;
+                    for (int i = 1; i < words.Length; i++)
+                    {
+                        if (words[i] == "fire") fire = true;
+                        else if (words[i].StartsWith("audio_ctx=") || words[i].StartsWith("max_tokens=")) q.Add(words[i]);
+                    }
+                    if (!string.IsNullOrEmpty(prompt)) q.Add("prompt=" + Uri.EscapeDataString(prompt));
+                    Wake.TestWav(File.ReadAllBytes(path), string.Join("&", q), reply, fire ? (Action<WakeHit>)OnWakeHeard : null);
                     return true;
                 }
                 default: return false;
