@@ -410,7 +410,7 @@ namespace MetaCodex.Shell
         /// Drops (a window let go on a window or group), the grids (windows ease to their cells), sizes and glides.
         private void TickThreadGroups(float dt)
         {
-            float k = 1f - Mathf.Exp(-dt * 14f); // about 0.25 s to settle
+            float k = UiTheme.Approach(dt, UiTheme.MotionBase); // settles in about 0.22 s, the shared motion scale
             var head = Head;
             for (int i = 0; i < Tws.Count; i++)
             {

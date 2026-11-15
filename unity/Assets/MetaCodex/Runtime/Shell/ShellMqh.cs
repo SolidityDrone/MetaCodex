@@ -268,8 +268,10 @@ namespace MetaCodex.Shell
                         Tag = r,
                     });
                 }
-                if (_skillRows.Count == 0 && Mqh.Online) items.Add(new UiListItem { Icon = "", Title = "no skills listed", Tag = null });
             }
+            // nothing listed: the list itself says so and what to do (the lists' empty state), no fake row
+            _skillList.SetEmptyText(_skillsRegistry ? "Nothing found for this search." :
+                _skillRows.Count == 0 && Mqh.Online ? "No skills yet.\n+ NEW SKILL: an agent writes one with you. FIND: search the public registry." : "");
             _skillList.SetItems(items, keepScroll: true);
             ShowSkillDetail();
         }
