@@ -211,12 +211,12 @@ Voices: Supertonic 3 has ten, F1-F5 and M1-M5 (VOICE panel; `mcx-ui voice voice 
 
 ## Spoken replies, sentence by sentence
 
-Before: one request for the whole reply, and playback only after the last sample was made. Synthesis time is
-linear in characters (Supertonic 3, 5 steps, 2 threads; PC service API: 11 chars 157-197 ms, 103 chars 558-792 ms,
+Why sentence by sentence: with one request for the whole reply, playback would start only after the last sample is
+made. Synthesis time is linear in characters (Supertonic 3, 5 steps, 2 threads; PC service API: 11 chars 157-197 ms, 103 chars 558-792 ms,
 303 chars 1929-2463 ms, its first sentence alone 250-337 ms = 13 %). The headset runs at RTF 1.0-1.3, so a
-2-sentence answer stayed silent 8-24 s after its text existed.
+2-sentence answer would stay silent 8-24 s after its text exists.
 
-Now (`ShellVoice.Say`, `Runtime/AI/SpokenText.cs`):
+How it works (`ShellVoice.Say`, `Runtime/AI/SpokenText.cs`):
 
 | Step | What it does |
 |---|---|
@@ -244,7 +244,7 @@ spent its time (PC, scaled to the headset): first word 15-19 s for a recap of an
 prompt: 6.4-7.7 s on the headset, then the whole answer was synthesized before anything played), 11-14 s for a working
 thread, and the model was wrong 16 of 16 times on a working thread.
 
-What answers now:
+What answers:
 - **Recaps without the model.** "give me a recap of the login thread", "summarize this thread", "catch me up", "what has it
   done so far" (`SessionContextText.RecapOnly`) on a thread with a pulse answer from `ThreadPulse.Recap()`: a short first
   sentence with the state ("The login fix thread is idle."), then what it does or answered, what was asked and the work
@@ -329,7 +329,7 @@ Every preset, off included:
   sample replies it cuts 346 ms in front and 398 ms behind on average: the first word comes that much sooner.
 - Levels to -18 LUFS (BS.1770 K-weighted, gated), at most +24 dB (near silence is not pumped up), with a 2 ms
   look-ahead limiter and a hard ceiling at -1 dBFS. The dry service audio hard-clips (7 of 8 replies have 10-272
-  samples at full scale) and sits at -14.8 to -18.1 LUFS, so a reply is now about 2 dB quieter on average, never
+  samples at full scale) and sits at -14.8 to -18.1 LUFS, so a reply is about 2 dB quieter than the dry audio on average, never
   clipped, and every preset is equally loud (within 0.11 LU of off on the sample replies).
 - The tail: after the reply's last sentence the preset's reverb (0.2-0.85 s); between sentences 0.1 s, so the
   0.2 s gap between sentences stays short.

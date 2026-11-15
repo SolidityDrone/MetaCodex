@@ -37,7 +37,7 @@ never grows over a neighbour and the view does not jump.
 - **Where it opens**: in front of the user, with room for the rail on its left (the placement reserves it). It comes
   back where it was while that place is free and in view.
 - Every old id still opens its page (`agents`, `mqh`, `vault`, `git`, `skills`, `gestures`, `daemon` (MQH > STATUS),
-  `focus`, `storage`, ...), now with the rail; voice also knows "control panel", "control center".
+  `focus`, `storage`, ...), with the rail; voice also knows "control panel", "control center".
 - **Cross links**: HANDS > GESTURE STUDIO ▸ opens MQH on GESTURES; SYSTEM > STORAGE > AI MODELS opens VOICE; ABOUT >
   LICENCES ▸ opens FILES at `/usr/share/doc/metacodex`. System pages of Horizon OS sit where they belong: HORIZON
   HANDS ⚙ on HANDS, APP PERMISSIONS ⚙ on ABOUT (LINKS keeps only ⟳ SCAN; FILES has FILES APP).
