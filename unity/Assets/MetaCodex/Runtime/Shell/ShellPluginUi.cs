@@ -259,15 +259,14 @@ namespace MetaCodex.Shell
             }
         }
 
+        /// The wrist menu takes the new table in place (ShellWrist.RebuildWristItems: its items only, not the whole menu). It
+        /// used to be destroyed and made again through BuildWrist, but BuildWrist runs once per session now (the wrist menu
+        /// is made lazily, in WRIST mode only): a second call does nothing, and the menu would have been left gone.
         private void RebuildWrist()
         {
-            var old = Wrist;
-            if (old == null) return;
+            if (Wrist == null) return;
             _wristStale = false;
-            Wrist = null;
-            old.gameObject.SetActive(false);
-            Destroy(old.gameObject);
-            BuildWrist();
+            RebuildWristItems();
         }
     }
 }

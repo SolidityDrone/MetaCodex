@@ -207,6 +207,9 @@ namespace MetaCodex.Shell
         // failed) and, when it was installed in this session, 1.5 s more so they do not land on the install's last frames,
         // the overlay and MQH starting. A start with the Linux already there waits for nothing but its Prepare (a few
         // frames). Not on the Editor. Gives up after 180 s.
+        // On the very first start they also wait for the one-time setup to end (2026-11-15 log: 2 x 56 ms, focus 42.5 ms,
+        // as MQH and the voice's decision model were starting, and the depth's occlusion test then added GPU time to frames
+        // already at 94-97 % with the setup's windows): the setup is ~20 s, real things hide the windows from its end.
         private const float FocusInitAfterInstall = 1.5f, FocusInitMaxWait = 180f;
         private bool _focusInitOpen, _focusInitSawInstall;
         private float _focusInitReadyAt = -1f;
@@ -218,6 +221,7 @@ namespace MetaCodex.Shell
             var host = app != null ? app.Host : null;
             float now = Time.unscaledTime;
             if (host == null || now >= FocusInitMaxWait) return _focusInitOpen = true;
+            if (_setupActive) { _focusInitReadyAt = -1f; _focusInitSawInstall = true; return false; } // the first start's setup runs (ShellFirstRun)
             var st = host.State;
             if (st == MetaCodex.Linux.LinuxHost.HostState.Installing) _focusInitSawInstall = true;
             if (st != MetaCodex.Linux.LinuxHost.HostState.Ready && st != MetaCodex.Linux.LinuxHost.HostState.Failed && st != MetaCodex.Linux.LinuxHost.HostState.Unsupported) return false;

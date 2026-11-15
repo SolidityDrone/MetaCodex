@@ -25,6 +25,8 @@ namespace MetaCodex.UI
     /// around my finger").
     /// It floats in front of the wrist, towards the eyes (TowardEyes), and writes the depth of its glass (WristDepth),
     /// so the hand that carries it stays behind it; a fingertip in front of it still shows (0.7.5).
+    /// On the headset it is built in small steps, a frame each (BuildStaged), with its icon atlas drawn by a background job;
+    /// until Ready (and Built) it is out of sight and does nothing.
     public sealed class UiWristMenu : MonoBehaviour
     {
         /// One tile. Locked: drawn dimmed while it returns true (the first start's setup, ShellSetupLocks); a touch still runs
@@ -58,6 +60,13 @@ namespace MetaCodex.UI
         /// The right hand is at the menu (or over the left hand): it holds still and does not close.
         public bool Engaged { get; private set; }
         public event Action<int> Pressed;
+        /// True when every piece is built (Build, or BuildStaged some frames later). Until then the menu is out of sight,
+        /// Tick does nothing and no touch is seen.
+        public bool Ready => _ready;
+        /// Raised once, on the main thread, when the menu becomes Ready: some frames after BuildStaged, or at the end of Build.
+        public event Action Built;
+        /// How many frames (steps) the build took: the staged build does one step a frame.
+        public int BuildFrames { get; private set; }
         /// PANEL OPACITY (the value the panels get, MetaCodexShell.PanelOpacity): scales the alpha of the glass, the tiles
         /// and the watch face (WristArt `_Opacity`). Lines, icons and sparks keep their brightness; WristDepth does not change.
         public float GlassOpacity
@@ -109,6 +118,21 @@ namespace MetaCodex.UI
         private readonly List<Vector4> _info = new List<Vector4>(), _extra = new List<Vector4>();
         private readonly List<int> _tri = new List<int>();
 
+        // the build, in steps (BuildStaged: one a frame; Build: all of them now). Nothing draws or reacts before _ready.
+        private const int StepAtlas = 0, StepGlass = 1, StepMesh = 2, StepLabels = 3, StepBurst = 4, StepMotes = 5, StepFinish = 6;
+        /// A staged step makes at most this many labels, and stops after this many milliseconds (one is always made).
+        private const int LabelsPerStep = 3;
+        private const double StepBudgetMs = 6.0;
+        private bool _ready, _staged, _failed;
+        private int _step, _itemsVersion, _labelsVersion;
+        private Vector4 _closeRect; // the atlas rectangle of the face's close icon (z = 0: none, nothing drawn)
+        // kept between frames, so that Rebuild (every frame while the menu is visible) allocates nothing
+        private readonly Vector3[] _beamCorners = new Vector3[6];
+        private static readonly (float start, float len)[] ArcsOuter = { (20f, 64f), (128f, 36f), (214f, 92f) };
+        private static readonly (float start, float len)[] ArcsInner = { (60f, 22f), (250f, 30f), (318f, 12f) };
+        private int _timeMinute = -1;
+        private string _timeText = "";
+
         // ------------------------------------------------------------------ set up
 
         public static UiWristMenu Create(Transform parent, UiTheme theme)
@@ -120,16 +144,82 @@ namespace MetaCodex.UI
             return m;
         }
 
-        /// Call after filling Inner / Outer: makes the labels, the icons, the mesh and the particle systems.
+        /// Call after filling Inner / Outer: builds everything now, in one call (the Editor self-tests, which have no frame
+        /// loop); on the headset the shell uses BuildStaged.
+        /// Why the start spent 3 s here (Quest 3S log, 2026-11-15, `wrist 3060`): this drew the icon atlas on the main thread
+        /// (768 x 384 texels of signed distance, about 2.7 million closure calls, slow in IL2CPP) and made 13 labels, 2 particle
+        /// systems and 3 shaders in one frame, although the DOCK is the default main menu. Now the atlas is drawn by a background
+        /// job (one for all wrist menus: UiIconAtlas.Texture is not used at run time), BuildStaged does the rest in small steps,
+        /// one a frame, and the shell makes the menu only when WRIST is the main menu (ShellWrist). This method runs the same
+        /// steps in a loop and joins the job.
         public void Build()
+        {
+            if (_ready) return;
+            for (int guard = 0; !_ready; guard++)
+            {
+                if (guard > 1000) throw new InvalidOperationException("wrist menu: the build did not finish");
+                BuildStep(true);
+            }
+        }
+
+        /// Builds in small steps instead, one a frame in this component's own Update (each one well under 10 ms on the
+        /// headset): the atlas job, the shaders and materials, the mesh and the renderers, the labels (three at a time), the
+        /// burst particles, the motes, then the texture once the job is done. Ready and Built say when it is over. Call after
+        /// filling Inner / Outer (RebuildItems may follow at any time).
+        public void BuildStaged()
+        {
+            if (_ready || _staged) return;
+            _staged = true;
+        }
+
+        /// One step of the build. sync: no limit on the labels, and the atlas job is waited for (Build); else a frame at a time.
+        private void BuildStep(bool sync)
+        {
+            BuildFrames++;
+            switch (_step)
+            {
+                case StepAtlas: // the long one goes first: it runs beside all the other steps
+                    StartAtlas();
+                    _step = StepGlass;
+                    break;
+                case StepGlass:
+                    MakeGlass();
+                    _step = StepMesh;
+                    break;
+                case StepMesh:
+                    MakeMesh();
+                    _step = StepLabels;
+                    break;
+                case StepLabels:
+                    if (_labels.Count == 0) _labelsVersion = _itemsVersion; // made from the lists as they are now
+                    MakeLabels(sync ? int.MaxValue : LabelsPerStep, sync ? 0.0 : StepBudgetMs);
+                    if (_faceText != null && _hint != null && _labels.Count >= Inner.Count + Outer.Count) _step = StepBurst;
+                    break;
+                case StepBurst:
+                    if (_sparkMat != null && _burst == null) _burst = Sparks("sparks", false);
+                    _step = StepMotes;
+                    break;
+                case StepMotes:
+                    if (_sparkMat != null && _motes == null) _motes = Sparks("motes", true);
+                    _step = StepFinish;
+                    break;
+                default:
+                    Finish(sync);
+                    break;
+            }
+        }
+
+        private void MakeGlass()
         {
             var sh = Resources.Load<Shader>("Shaders/WristArt") ?? Shader.Find("MetaCodex/WristArt");
             var ssh = Resources.Load<Shader>("Shaders/WristSpark") ?? Shader.Find("MetaCodex/WristSpark");
             _mat = new Material(sh) { name = "wrist menu" };
-            _mat.SetTexture("_IconAtlas", UiIconAtlas.Texture);
-            _mat.SetFloat("_IconRange", UiIconAtlas.Range);
             _mat.SetFloat("_Opacity", _glassOpacity);
             _sparkMat = ssh != null ? new Material(ssh) { name = "wrist sparks" } : null;
+        }
+
+        private void MakeMesh()
+        {
             _mesh = new Mesh { name = "wrist menu" };
             _mesh.MarkDynamic();
             gameObject.AddComponent<MeshFilter>().sharedMesh = _mesh;
@@ -137,6 +227,7 @@ namespace MetaCodex.UI
             _mr.sharedMaterial = _mat;
             _mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             _mr.receiveShadows = false;
+            _mr.enabled = false; // out of sight until it is Ready and shown (SetVisible)
             // the depth of the glass, after its light and before the hands (same mesh, a second renderer: its own queue)
             var dsh = Resources.Load<Shader>("Shaders/WristDepth") ?? Shader.Find("MetaCodex/WristDepth");
             if (dsh != null)
@@ -150,26 +241,235 @@ namespace MetaCodex.UI
                 _depthMr.receiveShadows = false;
                 _depthMr.enabled = false;
             }
+        }
+
+        /// Makes the labels not made yet (the face, the hint, then one per tile): at most `max`, and, with a budget, no more
+        /// once that many milliseconds are used (one is always made). The staged build keeps each frame small with it.
+        private void MakeLabels(int max, double budgetMs)
+        {
+            long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+            for (int made = 0; made < max; made++)
+            {
+                if (made > 0 && budgetMs > 0.0 && (System.Diagnostics.Stopwatch.GetTimestamp() - t0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency > budgetMs) break;
+                if (_faceText == null)
+                {
+                    _faceText = Label("face", "", 0.0056f, Theme?.Mono ?? Theme?.Display);
+                    _faceText.characterSpacing = 1f;
+                    HideUntilShown(_faceText);
+                }
+                else if (_hint == null)
+                {
+                    _hint = Label("hint", "MENU", 0.0032f, Theme?.Display);
+                    HideUntilShown(_hint);
+                }
+                else if (_labels.Count < Inner.Count + Outer.Count)
+                {
+                    int i = _labels.Count;
+                    var it = ItemAt(i);
+                    var l = Label("tile " + it.Label, it.Label, i < Inner.Count ? 0.0034f : 0.0030f, Theme?.Display);
+                    HideUntilShown(l);
+                    _labels.Add(l);
+                }
+                else break;
+            }
+        }
+
+        /// A label made while the menu is out of sight starts off (SetVisible turns them on and off with the menu).
+        private void HideUntilShown(TextMeshPro l)
+        {
+            if (l != null && (_mr == null || !_mr.enabled)) l.gameObject.SetActive(false);
+        }
+
+        private void DestroyTileLabels()
+        {
+            foreach (var l in _labels) if (l != null) KillObject(l.gameObject);
+            _labels.Clear();
+        }
+
+        private static void KillObject(GameObject go)
+        {
+            go.SetActive(false);
+            if (Application.isPlaying) Destroy(go); else DestroyImmediate(go);
+        }
+
+        private void ResizeItemArrays()
+        {
             int n = Inner.Count + Outer.Count;
             _hoverAmt = new float[n];
             _flash = new float[n];
             _iconRect = new Vector4[n];
-            for (int i = 0; i < n; i++)
+        }
+
+        /// Each tile's icon rectangle (and the face's close icon) from the shared atlas table. An icon the atlas does not
+        /// have shows "mark"; with no atlas (its job failed) every rectangle is empty and no icon is drawn.
+        private void FillIconRects()
+        {
+            bool have = _atlasTex != null;
+            for (int i = 0; i < _iconRect.Length; i++)
             {
-                var it = ItemAt(i);
-                bool inner = i < Inner.Count;
-                if (!UiIconAtlas.TryGet(it.Icon, out _iconRect[i])) UiIconAtlas.TryGet("mark", out _iconRect[i]);
-                _labels.Add(Label("tile " + it.Label, it.Label, inner ? 0.0034f : 0.0030f, Theme?.Display));
+                _iconRect[i] = default;
+                if (have && !TryRect(ItemAt(i).Icon, out _iconRect[i])) TryRect("mark", out _iconRect[i]);
             }
-            _faceText = Label("face", "", 0.0056f, Theme?.Mono ?? Theme?.Display);
-            _faceText.characterSpacing = 1f;
-            _hint = Label("hint", "MENU", 0.0032f, Theme?.Display);
-            if (_sparkMat != null)
+            _closeRect = default;
+            if (have) TryRect("close", out _closeRect);
+        }
+
+        /// The last step: waits for the icon atlas (a frame at a time; Build joins the job), gives it to the material, sets the
+        /// icon rectangles, and goes Ready. Labels made from lists that changed since (RebuildItems before Ready) are made again.
+        private void Finish(bool sync)
+        {
+            if (_labelsVersion != _itemsVersion)
             {
-                _burst = Sparks("sparks", false);
-                _motes = Sparks("motes", true);
+                DestroyTileLabels();
+                _step = StepLabels;
+                return;
             }
+            if (!AtlasFinished(sync)) return;
+            if (_atlasTex != null) _mat.SetTexture("_IconAtlas", _atlasTex);
+            _mat.SetFloat("_IconRange", UiIconAtlas.Range);
+            ResizeItemArrays();
+            FillIconRects();
+            _ready = true;
             SetVisible(false);
+            try { Built?.Invoke(); }
+            catch (Exception ex) { Debug.LogWarning("[MetaCodex] wrist menu: Built handler: " + ex.Message); }
+        }
+
+        /// The item lists changed (a tile came or went in Inner / Outer): makes the tile labels again from them, and sizes the
+        /// per-tile arrays and icon rectangles to match. The face, hint, mesh, materials, particles and atlas stay. Cheap
+        /// enough to call whenever the table changes. Before Ready it only notes that the lists changed: the staged build
+        /// uses the new lists when it makes the labels, and makes them again at the end if they changed after.
+        public void RebuildItems()
+        {
+            if (!_ready) { _itemsVersion++; return; }
+            DestroyTileLabels();
+            MakeLabels(int.MaxValue, 0.0);
+            ResizeItemArrays();
+            FillIconRects();
+            Hover = -1;
+            _hoverPart = -1;
+            _touchPart = -1;
+        }
+
+        // ------------------------------------------------------------------ the icon atlas (one for all wrist menus)
+
+        // UiIconAtlas.Texture draws its atlas on the main thread at first use (a 3 s freeze at the start on the headset). The
+        // wrist menu keeps its own copy instead: the same cells, the same texel loop, run by a background job; the main thread
+        // only makes the Texture2D from the finished bytes. UiIconAtlas is only read: its names on the main thread, its
+        // Distance (pure) on the worker.
+        private const int AtlasIdle = 0, AtlasRunning = 1, AtlasDone = 2, AtlasFailed = 3;
+        private static volatile int _atlasState;                 // written by the job last, after the bytes
+        private static byte[] _atlasPx;                          // the finished bytes (R8, rows from the bottom)
+        private static Texture2D _atlasTex;
+        private static System.Threading.Thread _atlasJob;
+        private static Vector4[] _atlasRects;                    // by index in the atlas order
+        private static readonly Dictionary<string, int> AtlasIndex = new Dictionary<string, int>();
+
+        /// Main thread: the icon names and their rectangles (the formula of UiIconAtlas.TryGet), then the job.
+        private static void StartAtlas()
+        {
+            if (_atlasState != AtlasIdle) return;
+            _atlasState = AtlasRunning;
+            try
+            {
+                var names = new List<string>(UiIconAtlas.Names); // this also runs UiIconAtlas's static initialiser, here
+                int max = UiIconAtlas.Cols * UiIconAtlas.Rows;
+                if (names.Count > max) names.RemoveRange(max, names.Count - max);
+                AtlasIndex.Clear();
+                _atlasRects = new Vector4[names.Count];
+                for (int i = 0; i < names.Count; i++)
+                {
+                    AtlasIndex[names[i]] = i;
+                    _atlasRects[i] = new Vector4((i % UiIconAtlas.Cols) / (float)UiIconAtlas.Cols, 1f - (i / UiIconAtlas.Cols + 1) / (float)UiIconAtlas.Rows,
+                        1f / UiIconAtlas.Cols, 1f / UiIconAtlas.Rows);
+                }
+                _atlasJob = new System.Threading.Thread(() => AtlasJob(names))
+                {
+                    Name = "mcx wrist icons", IsBackground = true, Priority = System.Threading.ThreadPriority.BelowNormal,
+                };
+                _atlasJob.Start();
+            }
+            catch (Exception ex)
+            {
+                _atlasState = AtlasFailed;
+                Debug.LogWarning("[MetaCodex] wrist menu: icon atlas failed: " + ex.Message);
+            }
+        }
+
+        /// The worker: UiIconAtlas.Ensure's loop, byte for byte (cell layout, rows from the bottom, the same formula).
+        private static void AtlasJob(List<string> names)
+        {
+            try
+            {
+                const int cell = UiIconAtlas.Cell, cols = UiIconAtlas.Cols, rows = UiIconAtlas.Rows;
+                const float extent = UiIconAtlas.Extent, range = UiIconAtlas.Range;
+                int w = cell * cols, h = cell * rows;
+                var px = new byte[w * h];
+                for (int i = 0; i < names.Count; i++)
+                {
+                    string iconName = names[i];
+                    int cx = (i % cols) * cell, cy = (rows - 1 - i / cols) * cell; // row 0 at the top (uv y down the rows)
+                    for (int y = 0; y < cell; y++)
+                        for (int x = 0; x < cell; x++)
+                        {
+                            var p = new Vector2(((x + 0.5f) / cell * 2f - 1f) * extent, ((y + 0.5f) / cell * 2f - 1f) * extent);
+                            float d = UiIconAtlas.Distance(iconName, p);
+                            px[(cy + y) * w + cx + x] = (byte)Mathf.RoundToInt(Mathf.Clamp01(0.5f - d / (2f * range)) * 255f);
+                        }
+                }
+                _atlasPx = px;
+                _atlasState = AtlasDone; // the bytes first: the main thread reads them only after it sees this
+            }
+            catch (Exception ex)
+            {
+                _atlasState = AtlasFailed;
+                Debug.LogWarning("[MetaCodex] wrist menu: icon atlas failed: " + ex.Message);
+            }
+        }
+
+        /// Main thread: true once the atlas is settled (the texture is made, or there is none: the job failed). False while the
+        /// job still runs; sync waits for it.
+        private static bool AtlasFinished(bool sync)
+        {
+            StartAtlas();
+            if (_atlasState == AtlasRunning)
+            {
+                if (!sync) return false;
+                if (_atlasJob != null) _atlasJob.Join();
+            }
+            if (_atlasState == AtlasDone && _atlasTex == null && _atlasPx != null) MakeAtlasTexture();
+            return true;
+        }
+
+        /// Main thread, once: the same texture as UiIconAtlas's (R8, linear, no mips, clamped, bilinear, anisotropy 2), GPU only.
+        private static void MakeAtlasTexture()
+        {
+            try
+            {
+                var tex = new Texture2D(UiIconAtlas.Cell * UiIconAtlas.Cols, UiIconAtlas.Cell * UiIconAtlas.Rows, TextureFormat.R8, false, true)
+                {
+                    name = "mcx wrist icon atlas", wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear, anisoLevel = 2,
+                    hideFlags = HideFlags.DontSave,
+                };
+                tex.LoadRawTextureData(_atlasPx);
+                tex.Apply(false, true);
+                _atlasTex = tex;
+            }
+            catch (Exception ex)
+            {
+                _atlasState = AtlasFailed;
+                Debug.LogWarning("[MetaCodex] wrist menu: icon atlas failed: " + ex.Message);
+            }
+        }
+
+        /// An icon's rectangle in the atlas (uv offset in xy, size in zw); false when there is none by that name.
+        private static bool TryRect(string iconName, out Vector4 rect)
+        {
+            rect = default;
+            int index = 0;
+            if (_atlasRects == null || string.IsNullOrEmpty(iconName) || !AtlasIndex.TryGetValue(iconName, out index)) return false;
+            rect = _atlasRects[index];
+            return true;
         }
 
         private TextMeshPro Label(string name, string text, float lineHeight, TMP_FontAsset font)
@@ -247,12 +547,25 @@ namespace MetaCodex.UI
 
         // ------------------------------------------------------------------ every frame
 
-        private void Update() => Tick(Time.unscaledDeltaTime);
+        private void Update()
+        {
+            if (_ready) { Tick(Time.unscaledDeltaTime); return; }
+            if (!_staged || _failed) return; // not built yet: the staged build does one step a frame, nothing else runs
+            try { BuildStep(false); }
+            catch (Exception ex)
+            {
+                _failed = true;
+                enabled = false;
+                Debug.LogWarning("[MetaCodex] wrist menu: the staged build failed in step " + _step + ": " + ex.Message);
+            }
+        }
 
         /// One step: watch pose, placement, the fingertip, the timelines, the mesh (tests call it with their own dt).
+        /// Nothing happens before Ready.
         public void Tick(float dt)
         {
-            if (_mesh == null) return;
+            if (!_ready || _mesh == null) return;
+            if (_labels.Count != Inner.Count + Outer.Count) RebuildItems(); // the lists changed and nobody said so
             _time += dt;
             (bool okL, HandFrame L) = Hand != null ? Hand(Handedness.Left) : (false, default);
             (bool okR, HandFrame R) = Hand != null ? Hand(Handedness.Right) : (false, default);
@@ -408,6 +721,7 @@ namespace MetaCodex.UI
                 _waveCenter = Vector2.zero;
                 return;
             }
+            var item = ItemAt(part); // the action may change the tiles (RebuildItems): keep this one
             _flash[part] = 1f;
             _idle = 0f;
             UiSounds.Fire("click");
@@ -415,8 +729,8 @@ namespace MetaCodex.UI
             _wave = 0f;
             _waveCenter = local;
             Pressed?.Invoke(part);
-            try { ItemAt(part).Act?.Invoke(); }
-            catch (Exception ex) { Debug.LogWarning("[MetaCodex] wrist menu " + ItemAt(part).Label + ": " + ex.Message); }
+            try { item.Act?.Invoke(); }
+            catch (Exception ex) { Debug.LogWarning("[MetaCodex] wrist menu " + item.Label + ": " + ex.Message); }
         }
 
         private void Burst(Vector3 at, int count)
@@ -464,6 +778,7 @@ namespace MetaCodex.UI
         /// Tests: a frame of the timelines, drawn now (pictures of the animation).
         public void PoseTimelineForTest(float present, float bloom)
         {
+            if (!_ready) return;
             _present = Mathf.Clamp01(present);
             _bloom = Mathf.Clamp01(bloom);
             SetVisible(true);
@@ -498,7 +813,7 @@ namespace MetaCodex.UI
                 var e = transform.InverseTransformPoint(_emitterWorld);
                 var eye = transform.InverseTransformPoint(Head.position);
                 float grow = EaseOut(Seg(P, 0f, 0.42f));
-                var corners = new Vector3[6];
+                var corners = _beamCorners;
                 for (int k = 0; k < 6; k++)
                 {
                     float a = (90f + 60f * k) * Mathf.Deg2Rad;
@@ -581,14 +896,14 @@ namespace MetaCodex.UI
                 float arcs = Seg(B, 0.6f, 1f), slideIn = 0.008f * (1f - EaseOut(arcs)), drift = _time * 4f;
                 if (arcs > 0.001f)
                 {
-                    foreach (var (a0, len) in new[] { (20f, 64f), (128f, 36f), (214f, 92f) })
+                    foreach (var (a0, len) in ArcsOuter)
                     {
                         float s = a0 + drift;
                         Arc(Vector2.zero, ArcR + slideIn, 0.0006f, s, s + len * EaseOut(arcs), 18, accent, 0.5f * arcs * P, 0.6f);
                         TickLine(ArcR - 0.0022f + slideIn, ArcR + 0.0012f + slideIn, s, 0.0008f, accent, 0.8f * arcs * P, 0.6f);
                         TickLine(ArcR - 0.0022f + slideIn, ArcR + 0.0012f + slideIn, s + len * EaseOut(arcs), 0.0008f, accent, 0.8f * arcs * P, 0.6f);
                     }
-                    foreach (var (a0, len) in new[] { (60f, 22f), (250f, 30f), (318f, 12f) })
+                    foreach (var (a0, len) in ArcsInner)
                     {
                         float s = a0 - drift * 1.6f;
                         Arc(Vector2.zero, ArcR2 + slideIn * 1.4f, 0.0004f, s, s + len, 10, accent, 0.35f * arcs * P, 0.4f, 0f, -0.0003f, 7f, 0.55f);
@@ -610,8 +925,8 @@ namespace MetaCodex.UI
             float sec = (now.Second + now.Millisecond / 1000f) / 60f;
             var face = new Vector4(EaseInOut(Seg(P, 0.25f, 0.75f)), Seg(P, 0.45f, 1f), EaseInOut(Seg(P, 0.35f, 0.9f)), EaseOut(Seg(P, 0.55f, 1f)));
             FaceQuad(FaceR * faceScale, -0.0004f, accent, Mathf.Clamp01(P * 3f), Mathf.Clamp01(_coreHover + 0.6f * Bump(B, 0f, 0.3f)), sec, face);
-            if (B > 0.5f && _expandTarget && UiIconAtlas.TryGet("close", out var xr))
-                IconQuad(new Vector2(0f, -FaceR * 0.42f * faceScale), 0.0042f, -0.0008f, xr, accent, Seg(B, 0.6f, 1f) * P * (0.55f + 0.45f * _coreHover), 1f, _coreHover, 0.6f);
+            if (B > 0.5f && _expandTarget && _closeRect.z > 0f)
+                IconQuad(new Vector2(0f, -FaceR * 0.42f * faceScale), 0.0042f, -0.0008f, _closeRect, accent, Seg(B, 0.6f, 1f) * P * (0.55f + 0.45f * _coreHover), 1f, _coreHover, 0.6f);
 
             if (_wave < 1f)
             {
@@ -629,7 +944,7 @@ namespace MetaCodex.UI
             _mesh.RecalculateBounds();
 
             // the face's text: the time, or the name of what the fingertip is over while unfolded; the hint while folded
-            string want = B > 0.5f && Hover >= 0 ? ItemAt(Hover).Label : B > 0.5f && Hover == -2 ? "CLOSE" : now.ToString("HH:mm");
+            string want = B > 0.5f && Hover >= 0 ? ItemAt(Hover).Label : B > 0.5f && Hover == -2 ? "CLOSE" : TimeText(now);
             if (want != _faceShown) { _faceShown = want; _faceText.text = want; _faceTyped = 0f; }
             int faceChars = Mathf.CeilToInt(want.Length * Mathf.Min(_faceTyped, Seg(P, 0.6f, 1f) * 1.0001f));
             if (_faceText.maxVisibleCharacters != faceChars) _faceText.maxVisibleCharacters = faceChars;
@@ -649,6 +964,14 @@ namespace MetaCodex.UI
         }
 
         private static void HideLabel(TextMeshPro l) { var c = l.color; if (c.a != 0f) { c.a = 0f; l.color = c; } }
+
+        /// "HH:mm", made again only when the minute changes (the face asks every frame).
+        private string TimeText(DateTime now)
+        {
+            int minute = now.Hour * 60 + now.Minute;
+            if (minute != _timeMinute) { _timeMinute = minute; _timeText = now.ToString("HH:mm"); }
+            return _timeText;
+        }
 
         // ------------------------------------------------------------------ mesh pieces (WristArt kinds)
 
@@ -752,7 +1075,7 @@ namespace MetaCodex.UI
         /// A line icon (kind 3) from the atlas, centred at c.
         private void IconQuad(Vector2 c, float size, float z, Vector4 rect, Color col, float strength, float reveal, float state, float glow)
         {
-            if (strength <= 0.002f) return;
+            if (strength <= 0.002f || rect.z <= 0f) return; // no rectangle: the atlas has no such icon (or its job failed)
             float h = size * 0.5f * UiIconAtlas.Extent; // the cell holds the icon's -1..1 and its glow
             var lin = col.linear;
             lin.a = strength;

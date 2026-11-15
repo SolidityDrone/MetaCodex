@@ -58,6 +58,9 @@ namespace MetaCodex.Shell
             _log?.Invoke("mqh: " + status);
         }
 
+        /// Seconds between two /health checks while MQH starts (5 s once it runs).
+        public const float StartingCheckEvery = 0.5f;
+
         /// Every frame from the shell (cheap: a timer).
         public void Tick()
         {
@@ -76,7 +79,9 @@ namespace MetaCodex.Shell
             if (State == HostState.Failed) return;
             if (_restartAt >= 0f && now >= _restartAt) { _restartAt = -1f; Start(host); return; }
             if (now < _nextCheck || _checking) return;
-            _nextCheck = now + (State == HostState.Running ? 5f : 1.5f);
+            // while it starts, /health is asked every StartingCheckEvery s (a refused local connection costs nothing): the
+            // first start's setup step 4 ends as soon as MQH answers, not up to 1.5 s later (2026-11-15 log: 3.6 s)
+            _nextCheck = now + (State == HostState.Running ? 5f : StartingCheckEvery);
             Check(now);
         }
 
@@ -104,7 +109,7 @@ namespace MetaCodex.Shell
                 string log = System.IO.Path.Combine(host.LinuxDir, "mqh-run.log");
                 Service(argv, env, host.FilesDir, log);
                 _startedAt = Time.unscaledTime;
-                _nextCheck = _startedAt + 2f;
+                _nextCheck = _startedAt + 1f; // node needs about a second before it can answer
                 _fails = 0;
                 Set(HostState.Starting, "starting MQH in this headset's Linux…");
             }

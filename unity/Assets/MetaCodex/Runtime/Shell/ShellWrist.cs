@@ -10,24 +10,55 @@ namespace MetaCodex.Shell
     /// at the back of the left wrist as at a watch, touch the core with the right index finger, touch a blade. Both
     /// carry the same actions; switching closes one and brings the other (settings key `wristMenu`, voice "turn on the
     /// wrist menu", Lua settings.set("wristMenu", "true")).
+    ///
+    /// The wrist menu only exists while it can be used (2026-11-15: its first frame cost 3 s on the Quest 3S, and the DOCK
+    /// is the default): on the headset it is made when WRIST is the main menu, at the start or when the user switches to it
+    /// later, and then in small steps over some frames (UiWristMenu.BuildStaged), the DOCK staying open until it is ready.
+    /// In the Editor and in batch mode the self-tests read Wrist right after Build, so there it is made whole, at once.
     public sealed partial class MetaCodexShell
     {
         public UiWristMenu Wrist { get; private set; }
         private bool _wristModeApplied;
+        private bool _mainMenuStarted; // BuildWrist ran: from then on the main menu mode is applied (ApplyMainMenuMode)
+        private float _wristMadeAt;    // Time.realtimeSinceStartup when a staged wrist menu was made
 
         private void BuildWrist()
         {
             StartMark("wrist");
-            if (Wrist != null) return;
-            var t = UiTheme.Current;
-            Wrist = UiWristMenu.Create(_root, t);
+            if (_mainMenuStarted) return;
+            _mainMenuStarted = true;
+            _wristModeApplied = !Settings.wristMenu; // so that the first ApplyMainMenuMode below acts: the mode is applied once at the start
+            // the Editor and the batch self-tests read Wrist right after Build: made whole, now (as it always was)
+            bool whole = Application.isEditor || !Application.isPlaying || Application.isBatchMode;
+            if (Wrist == null && (whole || Settings.wristMenu)) MakeWrist(!whole);
+            ApplyMainMenuMode();
+        }
+
+        /// Makes the wrist menu: whole now (the Editor and batch self-tests), or staged (UiWristMenu.BuildStaged, ready a few
+        /// frames later: OnWristBuilt).
+        private void MakeWrist(bool staged)
+        {
+            Wrist = UiWristMenu.Create(_root, UiTheme.Current);
             Wrist.Head = Head;
             Wrist.Hand = h =>
             {
                 var st = Gestures?.Get(h);
                 return st != null && st.Frame.Tracked ? (true, st.Frame) : (false, default(HandFrame));
             };
-            // one table for the dock and the wrist menu (MainMenuItems): the same labels, order and lit states
+            Wrist.GlassOpacity = PanelOpacity; // created after ApplyMaterialSettings ran: the glass takes the setting now
+            FillWristItems();
+            if (!staged) { Wrist.Build(); return; }
+            _wristMadeAt = Time.realtimeSinceStartup;
+            Wrist.Built += OnWristBuilt;
+            Wrist.BuildStaged();
+        }
+
+        /// One table for the dock and the wrist menu (MainMenuItems): the same labels, order and lit states.
+        private void FillWristItems()
+        {
+            var t = UiTheme.Current;
+            Wrist.Inner.Clear();
+            Wrist.Outer.Clear();
             foreach (var m in MainMenuItems())
             {
                 int step = m.LockStep;
@@ -37,10 +68,25 @@ namespace MetaCodex.Shell
                     Locked = step > 0 ? () => SetupLocked(step) : (Func<bool>)null, // the first start's setup (ShellSetupLocks)
                 });
             }
-            Wrist.Build();
-            Wrist.GlassOpacity = PanelOpacity; // created after ApplyMaterialSettings ran: the glass takes the setting now
-            _wristModeApplied = !Settings.wristMenu; // applied below
-            ApplyMainMenuMode();
+        }
+
+        /// The main menu's entries changed (a plugin's tile came or went): the wrist menu takes the new table. With no wrist
+        /// menu yet (the DOCK is the main menu) there is nothing to do: it reads MainMenuItems() when it is first made.
+        public void RebuildWristItems()
+        {
+            if (Wrist == null) return;
+            FillWristItems();
+            Wrist.RebuildItems();
+        }
+
+        /// A staged wrist menu is ready: when WRIST is still the main menu, the DOCK goes and the wrist menu starts to look
+        /// for the wrist. (If the user went back to DOCK meanwhile, Dismiss put it away already: it stays so.)
+        private void OnWristBuilt()
+        {
+            Log($"wrist menu: built in {Wrist.BuildFrames} frames ({(Time.realtimeSinceStartup - _wristMadeAt) * 1000f:F0} ms)");
+            if (!Settings.wristMenu) return;
+            Wrist.Resume();
+            SetDockOpen(false);
         }
 
         /// One entry of the main menu. The dock and the wrist menu are built from the same table (MainMenuItems), so they
@@ -91,18 +137,31 @@ namespace MetaCodex.Shell
             OnSettingsChanged();
         }
 
-        /// Brings the chosen main menu and puts the other away; runs when the setting changed, whoever changed it.
+        /// Brings the chosen main menu and puts the other away; runs when the setting changed, whoever changed it (and once
+        /// at the start, from BuildWrist: before that it does nothing). DOCK mode needs no wrist menu. WRIST mode makes it if
+        /// it does not exist yet (staged) and keeps the DOCK open until it is ready (OnWristBuilt).
         private void ApplyMainMenuMode()
         {
-            if (Wrist == null || _wristModeApplied == Settings.wristMenu) return;
+            if (!_mainMenuStarted || _wristModeApplied == Settings.wristMenu) return;
             _wristModeApplied = Settings.wristMenu;
-            // the wrist menu goes with its closing animation (never at once), and comes back on the next look
-            if (Settings.wristMenu) Wrist.Resume(); else Wrist.Dismiss();
-            if (_panels.TryGetValue("dock", out var dock))
+            if (!Settings.wristMenu)
             {
-                if (Settings.wristMenu) { if (dock.IsOpen) dock.Close(); }
-                else if (!dock.IsOpen && Head != null) { PlaceDefault("dock", dock); dock.Open(); }
+                // the wrist menu goes with its closing animation (never at once), and comes back on the next look
+                if (Wrist != null) Wrist.Dismiss();
+                SetDockOpen(true);
+                return;
             }
+            if (Wrist == null) MakeWrist(true); // switched on later (DISPLAY, voice, a script): the DOCK stays until it is built
+            Wrist.Resume(); // a staged build that was put away goes on
+            if (Wrist.Ready) SetDockOpen(false);
+        }
+
+        /// The DOCK in front of the user (open: placed by default when it was closed) or put away.
+        private void SetDockOpen(bool open)
+        {
+            if (!_panels.TryGetValue("dock", out var dock)) return;
+            if (!open) { if (dock.IsOpen) dock.Close(); }
+            else if (!dock.IsOpen && Head != null) { PlaceDefault("dock", dock); dock.Open(); }
         }
 
         /// Tests: one step of the wrist menu (the Editor has no frame loop).
