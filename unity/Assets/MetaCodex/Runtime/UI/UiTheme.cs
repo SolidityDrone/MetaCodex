@@ -42,6 +42,24 @@ namespace MetaCodex.UI
         public float BodySize = 0.016f;
         public float SmallSize = 0.012f;
 
+        // ---- motion: one set of durations and easings for every open, close, move into place, focus change, lock or
+        // unlock and group change (seconds). Nothing pops: a change of state eases over one of these.
+        /// A press, a focus change, a lock or unlock, a highlight.
+        public const float MotionFast = 0.12f;
+        /// A close, a small card (a callout, a menu square), a window gliding to a new place.
+        public const float MotionBase = 0.22f;
+        /// A window opening, a group forming or changing.
+        public const float MotionSlow = 0.35f;
+        /// Cubic ease out: a quick start and a soft landing (something that arrives).
+        public static float EaseOut(float t) { t = Mathf.Clamp01(t); float u = 1f - t; return 1f - u * u * u; }
+        /// Cubic ease in: a soft start and a quick end (something that leaves).
+        public static float EaseIn(float t) { t = Mathf.Clamp01(t); return t * t * t; }
+        /// Smooth both ways (a move from one place to another).
+        public static float EaseInOut(float t) { t = Mathf.Clamp01(t); return t * t * (3f - 2f * t); }
+        /// The factor for Lerp(current, target, k) this frame so that an exponential approach is 95 % there after
+        /// `duration` seconds, whatever the frame rate.
+        public static float Approach(float dt, float duration) => 1f - Mathf.Exp(-3f * dt / Mathf.Max(duration, 1e-4f));
+
         public TMP_FontAsset Display;   // titles, buttons: Inter SemiBold
         public TMP_FontAsset Body;      // labels, lists: Inter Medium
         public TMP_FontAsset Mono;      // paths, code, logs: the terminal font

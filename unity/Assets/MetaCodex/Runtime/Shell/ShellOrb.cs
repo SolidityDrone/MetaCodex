@@ -8,7 +8,8 @@ using UnityEngine;
 
 namespace MetaCodex.Shell
 {
-    /// THE ORB (UiOrb is its body; this is what it does). A sphere of energy that floats by the user:
+    /// THE WHISP (code name the orb; UiOrb is its body, this is what it does). A small prismatic crystal wisp that
+    /// floats by the user:
     /// - it casts the panels: every panel that opens is drawn by a fan of light from the orb (UiPanelFx), and what
     ///   is left of a closed one flies home to it;
     /// - it is where the voice comes from: spoken answers play from its place and it pulses with every syllable; it
@@ -20,7 +21,9 @@ namespace MetaCodex.Shell
     ///   user lazily (it stays where it is in the room while the user only glances round, and comes along when
     ///   they turn or walk away); it never sits in front of a window (it takes the nearest free place); pinch it
     ///   and put it anywhere: it keeps that place by the user from then on (the menu's PLACE lets it choose again).
-    /// Settings > LOOK > Orb turns it off (settings key `orb`; then panels are cast from their left edge and
+    /// - its states: listening, thinking, speaking (the voice), a flare when it hears its name (WhispFlare), amber while
+    ///   a thread needs the user, dim with its shards turning while the first start's setup keeps it busy.
+    /// Settings > LOOK > Whisp turns it off (settings key `orb`; then panels are cast from their left edge and
     /// messages float in the upper field of view as before).
     public sealed partial class MetaCodexShell
     {
@@ -86,7 +89,7 @@ namespace MetaCodex.Shell
                     if (!Settings.orb || Settings.orbTipShown) return;
                     Settings.orbTipShown = true;
                     Settings.Save(_settingsPath);
-                    Toast("This is the orb: it casts your windows and speaks. Touch it for your messages, pinch it to move it.", "info");
+                    Toast("This is the Whisp: it casts your windows and speaks. Touch it for your messages, pinch it to move it.", "info");
                 });
         }
 
@@ -430,8 +433,24 @@ namespace MetaCodex.Shell
         /// Self-tests: the orb speaks this loudness curve (50 values a second) without any audio.
         public void OrbSpeakForTest(float[] envelope) { _speechEnv = envelope; _speechLen = envelope.Length / 50f; _speechT = 0f; }
 
+        private bool _orbWasListening, _orbWasBusy, _orbNeedsYou;
+
+        /// It heard its name ("Hey Whisp"): a quick flare of light, before it listens. Listening starts with the same
+        /// flare by itself (TALK, the wrist); a second call within 0.8 s is the same flare.
+        public void WhispFlare() { if (OrbActive) Orb.WhispFlare(); }
+
         private void TickOrbVoice(float dt)
         {
+            bool listening = VoiceState == "listening";
+            if (listening && !_orbWasListening) Orb.WhispFlare();
+            _orbWasListening = listening;
+            // amber while a thread needs the user; busy (dim, its shards turning) while the first start's setup keeps the
+            // voice locked, and a flare when it wakes up
+            Orb.NeedsYou = _orbNeedsYou;
+            bool busy = SetupLocked(5);
+            if (_orbWasBusy && !busy) Orb.WhispFlare();
+            _orbWasBusy = busy;
+            Orb.Busy = busy;
             bool speaking = _speechT >= 0f && _speechEnv != null && _speechEnv.Length > 0;
             if (speaking)
             {
@@ -469,6 +488,7 @@ namespace MetaCodex.Shell
         {
             // not read until the user opens the orb's menu: it rides round the orb as a gold spark (four at most)
             if (!OrbMenuOpen) _orbUnread = Mathf.Min(_orbUnread + 1, 99);
+            if (!OrbMenuOpen && n.Kind == "warn" && n.Text != null && n.Text.Contains(" needs you")) _orbNeedsYou = true; // amber until read
             if (Orb != null) Orb.Unread = Mathf.Min(_orbUnread, 4);
             if (Orb != null && Orb.Visible)
             {
@@ -500,7 +520,14 @@ namespace MetaCodex.Shell
 
         /// The orb's menu is up (its four squares).
         public bool OrbMenuOpen => _orbActs.Count > 0 && _orbActs[0].IsOpen;
-        private bool OrbMenuDrawn => _orbActs.Count > 0 && _orbActs.Any(a => a.gameObject.activeSelf);
+        private bool OrbMenuDrawn
+        {
+            get
+            {
+                for (int i = 0; i < _orbActs.Count; i++) if (_orbActs[i] != null && _orbActs[i].gameObject.activeSelf) return true;
+                return false;
+            }
+        }
 
         /// The orb's outer edge: its rings (1.75 radii), at its full size (it is smaller when idle).
         private float OrbOuterRadius => (_orbBaseRadius > 0f ? _orbBaseRadius : Orb != null ? Orb.Radius : 0.032f) * 1.75f;
@@ -579,7 +606,7 @@ namespace MetaCodex.Shell
             _orbTalkBtn = B(0, "◉\nTALK", () => VoiceToggle(), UiButtonStyle.Primary);
             ApplyOrbTalkLock(); // the first start's setup (ShellSetupLocks)
             _orbSpeakBtn = B(1, "♫\nSPEAK", () => { Settings.voice.speak = !Settings.voice.speak; OnSettingsChanged(); SyncSettingsControls(); RefreshOrbMenu(); });
-            B(2, "✥\nPLACE", () => { ResetOrbPlace(); Toast("The orb chooses its own place again · pinch it to put it anywhere", "info"); });
+            B(2, "✥\nPLACE", () => { ResetOrbPlace(); Toast("The Whisp chooses its own place again · pinch it to put it anywhere", "info"); });
             _orbLogBtn = B(3, "✉\nLOG", () => { if (OrbMenuOpen) CloseOrbMenu(); OpenPanel("messages"); });
         }
 
@@ -606,7 +633,8 @@ namespace MetaCodex.Shell
             _orbList = _messages.Add(new UiList(0.028f) { Rect = new Rect(c.x, ly, c.width, c.yMax - ly) });
             _messages.Opened += _ =>
             {
-                _orbUnread = 0; // read now: the gold sparks round the orb go
+                _orbUnread = 0; // read now: the gold shards round the Whisp go, and its amber
+                _orbNeedsYou = false;
                 if (Orb != null) Orb.Unread = 0;
                 RefreshOrbMenu();
             };
@@ -617,6 +645,7 @@ namespace MetaCodex.Shell
         {
             Toasts.History.Clear();
             _orbUnread = 0;
+            _orbNeedsYou = false;
             if (Orb != null) Orb.Unread = 0;
             RefreshOrbMenu();
         }
@@ -632,6 +661,17 @@ namespace MetaCodex.Shell
             EnsureOrbMenu();
             Sounds?.Play("click");
             if (OrbMenuOpen) { CloseOrbMenu(); return; }
+            _orbNeedsYou = false;
+            // its menu opens in view: a step aside from a window that is gone ends now, and a Whisp far out at the edge
+            // of the view comes in first (the menu sits on its left)
+            if (_watched == null || !_watched.IsOpen) { _avoidYaw = 0f; _avoidPitch = 0f; _avoidFreeSince = -1f; }
+            if (Head != null && _orbGrabHand < 0)
+            {
+                var to = Orb.Position - Head.position;
+                float off = Vector3.Angle(Head.forward, to);
+                float side = Mathf.DeltaAngle(Mathf.Atan2(Head.forward.x, Head.forward.z) * Mathf.Rad2Deg, Mathf.Atan2(to.x, to.z) * Mathf.Rad2Deg);
+                if (off > 45f || side < -30f) FrameOrb(false); // (its own place is about 35 degrees up to the right: it stays there)
+            }
             float s = OrbMenuScale();
             foreach (var a in _orbActs) a.BaseScale = Vector3.one * s;
             RefreshOrbMenu();
