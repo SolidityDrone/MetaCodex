@@ -27,7 +27,7 @@ The vendor's OpenXR support feature is on for Android, with foveation and the su
 reach the build. Check: VrApi shows GPU level 2; `adb logcat | grep tradeCpuForGpu` shows 0; the OpenXR diagnostic
 report at start says "Symmetric Projection: True".
 
-## The first start
+## First start
 
 - **No engine splash.** `ConfigurePlayer` turns the engine's own splash screen off, so the scene starts at once.
 - **The shell is built in pieces behind the splash** (`MetaCodexShell.StartStaged`): the splash, the settings, each
