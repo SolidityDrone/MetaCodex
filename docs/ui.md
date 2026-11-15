@@ -407,7 +407,7 @@ windows and your hands. No room scan of the headset is needed.
 - Refused, nothing moves (logged): a reference move over 3 m, a turn over 120 deg, or no reference on resume.
 - The log line on resume: `room anchor: back in the room after the native app: panels moved X cm (most Y cm), turned Z deg, N open`.
 - The system's own re-centre does not change the Stage reference, so it is not undone.
-- Not tested on a headset yet (`docs/TEST_CHECKLIST.md`, section 47). If Stage is not stable here, switch
+- Not tested on a headset yet ([TEST_CHECKLIST.md](TEST_CHECKLIST.md#windows-placement-and-layouts)). If Stage is not stable here, switch
   `RoomReferenceOrigin` to `OVRPlugin.TrackingOrigin.Stationary` (then the manifest flag above) or use spatial anchors.
 - Self-test: section `roomanchor` (`MetaCodexUiTestRoomAnchor.cs`).
 

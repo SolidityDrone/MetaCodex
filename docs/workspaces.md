@@ -1,17 +1,17 @@
 # Workspaces: several threads, one project, no clashes
 
-Owner, 2026-11-11: with more than one thread working on the same branch, how are worktrees managed and shown, and do
-two agents on different tasks conflict? Wanted in the daemon (MQH) and in the UI: clear grouping and tracking.
+Several threads can work in one project. MQH keeps two of them from working in the same folder at the same time, and
+the app shows which folder and branch each thread uses and who shares it.
 
-## The facts (MQH = bb's model)
+## The facts (MQH's model)
 
 - A thread works in an **environment**: the project **checkout** (the project's own folder; several threads can share
   it, and then they edit the same files, see each other's half-done changes in builds and tests, and commit each
   other's work) or a **worktree** (`git worktree`: a folder of its own, on its own branch from a base, created by the
   `git-worktree` provider; git never checks one branch out in two worktrees).
-- MQH already refused a branch switch in a checkout another live thread occupies, and lists environments
-  (`GET /api/v1/environments`: path, branch, base / merge base, worktree or not, lifecycle). It did not stop two threads
-  from *working* in one folder at the same time. Now it does.
+- MQH refuses a branch switch in a checkout that another live thread occupies, and lists environments
+  (`GET /api/v1/environments`: path, branch, base / merge base, worktree or not, lifecycle). Its workspace guard
+  (below) also keeps two threads from *working* in one folder at the same time.
 
 ## The daemon: MQH's workspace guard (`mqh/plugins/concurrency-limit`)
 
@@ -52,9 +52,8 @@ two agents on different tasks conflict? Wanted in the daemon (MQH) and in the UI
 
 ## Tests
 
-- Pure (`C:\Users\pnncl\mcxcheck-chat\test\build.sh`): grouping, clashes, the busy checkout, descriptions, git status /
-  rev-list / merge-tree parsing (checked against real git 2.43: an unknown branch exits 1 as well), the held state.
-- MQH: `cd ~/mcxwork/mqh-build/plugins/concurrency-limit && corepack pnpm exec vitest run` (35 ok).
-- Editor self-test section `workspaces` (`Editor/MetaCodexUiTestWorkspaces.cs`); `threadgroups` updated.
-- Headset: docs/TEST_CHECKLIST.md section 27. MQH reaches the headset with the next `tools/mqh-build.sh` +
-  `tools/mqh-bundle.sh` and APK.
+- The parsing of git status, rev-list and merge-tree was checked against real git 2.43 (an unknown branch exits 1
+  as well).
+- MQH: the `concurrency-limit` plugin's own tests (`pnpm exec vitest run` in its folder of the MQH build tree).
+- Editor self-test section `workspaces` (`Editor/MetaCodexUiTestWorkspaces.cs`); `threadgroups` checks it too.
+- Headset: [TEST_CHECKLIST.md](TEST_CHECKLIST.md#threads), area "Threads".

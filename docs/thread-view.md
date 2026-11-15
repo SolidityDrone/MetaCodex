@@ -1,17 +1,16 @@
-# THREAD as a chat, and the thread pulse
+# Thread windows: the chat, the message box, groups, held turns and archive
 
-Owner, 2026-11-11: threads showed only commands and a bare "Thinking"; it was not clear the agent worked or was stuck.
-Wanted: a normal Q&A chat, the last prompt pinned on top once the answers push it away, thinking (opened with a tap),
-actions and the answer told apart, streaming text, context and usage limits, a clear "working / stuck" signal, voice
-input, and a compact state for the local model ("running a task since 3 min", "re-running the test after edits") so it
-can answer short and fast without reading the conversation.
+A thread window shows an agent thread as a chat: the prompts, the agent's work, its answer, a status line that says
+whether the agent works or may be stuck, and a message box. Several windows can be open, alone or in groups. A
+compact state of each thread (the pulse) lets the local model answer questions about it without reading the
+conversation.
 
-## What MQH gives (bb's timeline, measured on the headset)
+## What MQH gives (the timeline API)
 
 - `GET /api/v1/threads/:id/timeline?includeNestedRows=true`: rows (user and agent messages; `turn` rows with their
-  steps as `children`, also for finished turns, which bb shows collapsed); reasoning is a `system` row with
+  steps as `children`, also for finished turns, which the upstream web app shows collapsed); reasoning is a `system` row with
   `operationKind: "reasoning"` (title "Thought for 792ms", the text in `detail`); commands carry output and exit code;
-  file changes carry the path and line counts (OpenCode reports 0/0). The agent's message grows while it is written
+  file changes carry the path and line counts (one agent CLI reports 0/0). The agent's message grows while it is written
   (buffered deltas), the reasoning streams in `activeThinking`; `pendingTodos`, `contextWindowUsage` come along.
 - `&afterTag=<tag of the last answer>`: a delta (`upsertRows`, `rowOrder` as runs of old rows, changed `fields`) while
   MQH still knows that answer, else the whole timeline. The app polls every 0.8 s while the agent works, 2.5 s when
@@ -19,8 +18,7 @@ can answer short and fast without reading the conversation.
   the chat blocks run on the request's pool thread (parse + pulse of 336 rows: 0.8 ms on the PC, a few ms on a Quest
   core): a frame only lays out what changed. The chat keeps each block's laid-out lines while the block's text and state
   stay the same: an update wraps only new and changed blocks (docs/perf.md).
-- `GET /api/v1/system/usage-limits?providerId=`: plan and windows (OpenCode Go on the headset: 5 hour 0 %, weekly 0 %,
-  monthly 40 %). Asked once a minute while THREAD is open; the account e-mail is never shown.
+- `GET /api/v1/system/usage-limits?providerId=`: plan and windows (for example 5 hours, a week, a month). Asked once a minute while THREAD is open; the account e-mail is never shown.
 
 ## The chat (`UI/UiChatView.cs`, `Shell/ShellThreadView.cs`)
 
@@ -44,17 +42,16 @@ can answer short and fast without reading the conversation.
 - `◉` beside SEND (also in a draft, for its first message): speech to text into the field (a pause of 2 s or ◉ again
   ends it; up to 30 s); SEND stays yours.
 
-## The message box (owner 2026-11-14)
+## The message box
 
-Owner: sometimes a message is too long to read in the one-row composer. The composer is now a message box that grows.
+The composer is a message box that grows.
 
 - A grip (a bar with three dots) sits on the top edge of the message box. It lights up when hovered.
 - Drag it up (pinch it with the ray, or poke it and push up): the box grows upwards. The chat above gets shorter by the
   same amount. Drag it down: the box gets smaller. It never goes below one row. The bottom row (`+`, `◉`, `SEND ▶`)
   does not move.
 - The text wraps over the box's lines. When the text is longer than the box, the box shows the last lines, where the
-  caret is. The box does not scroll: it grows instead, up to its limit. Before this change the box showed one line and
-  cut the rest with `…`.
+  caret is. The box does not scroll: it grows instead, up to its limit.
 - The limit is 60 % of the window's content height, and the chat keeps at least 12 cm. At 60 % alone the chat would
   keep about 5 cm. Both numbers are constants in `Shell/ShellThreadComposer.cs` (`ComposerShareMax`,
   `ComposerChatMinimum`).
@@ -66,11 +63,11 @@ Owner: sometimes a message is too long to read in the one-row composer. The comp
 - Voice, command `thread_composer` (only while THREAD is open): "make the text box bigger" or "expand the message box"
   (one step: 6 cm); "shrink the composer" (one step smaller); "reset the text box" (one row).
 
-## When a thread finishes (owner 2026-11-11)
+## When a thread finishes
 
-- The orb casts a callout: `✓ “Fix the build” answered: <its first sentence> ›` (green), `⚠ … stopped on an error`
+- The Whisp casts a callout: `✓ “Fix the build” answered: <its first sentence> ›` (green), `⚠ … stopped on an error`
   (red), `◆ … needs you: waiting for your approval (…)` (amber). A tap on it opens that thread. It also goes to the
-  orb's MESSAGES and its unread sparks.
+  Whisp's MESSAGES, and up to four of the Whisp's shards turn gold while messages are unread.
 - When that thread is open, its window's frame pulses three times (2.4 s) and the answer's green bar and background
   glow with it, so the end is clear even while looking elsewhere in it.
 - Only changes seen live raise it (nothing for threads already done at start); the other threads are read every 5 s
@@ -99,10 +96,9 @@ Owner: sometimes a message is too long to read in the one-row composer. The comp
   conversation.
 - Like the rest of the session context: only for the local model, never sent to MQH, the agents or the control port.
 
-## Thread windows and groups (owner 2026-11-14)
+## Thread windows and groups
 
-Owner: "we shall be able to open multiple threads in the first place, and then merge or pull out from the grouping".
-The thread cards of before are gone. Each thread now has a full window, and windows can be grouped.
+Each thread opens in a full window, and windows can be grouped.
 
 ### Several windows (`Shell/ShellThreadWindows.cs`)
 
@@ -150,8 +146,8 @@ The thread cards of before are gone. Each thread now has a full window, and wind
 
 ### How the code works
 
-- The per-window state was a set of fields of `MetaCodexShell`. It is now a `ThreadWindow` object. The old field names
-  are properties of the current window `_tw`, so the thread code did not change much.
+- The per-window state is a `ThreadWindow` object. The thread code reads it through properties of the current
+  window `_tw`.
 - Outside a scope, `_tw` is the focused window. `using (In(w))` makes `w` the current window for a block. Each
   window's frame tick, its build and `OpenThreadIn` use this.
 - A press on a panel focuses its window first (`UiInputRouter.Touched`). Buttons, the composer and every MQH answer
@@ -159,9 +155,9 @@ The thread cards of before are gone. Each thread now has a full window, and wind
 - There is one sidebar. It belongs to the window that opened it last (`_sbOwner`), and it sits beside that window or
   its group (`SbAnchor`).
 - A group's windows are children of the group's panel. They are not in the layout lists (`IsGroupedPanel`).
-- Self-test section `threadwindows` (`Editor/MetaCodexUiTestThreadWindows.cs`). It was not run on the owner's PC.
+- Self-test section `threadwindows` (`Editor/MetaCodexUiTestThreadWindows.cs`).
 
-## Held turns and archive (owner 2026-11-14)
+## Held turns and archive
 
 ### A held turn: SEND NOW, IN A WORKTREE, CANCEL (`Shell/ShellWorkspaces.cs`)
 
@@ -199,12 +195,12 @@ The thread cards of before are gone. Each thread now has a full window, and wind
 - Voice: `archive_thread` ("archive this chat", "archive the thread about <topic>") and `restore_thread`
   ("bring back the chat about <topic>", "show my archived chats"). There is no delete by voice.
 - Self-test section `archive` (`Editor/MetaCodexUiTestThreadArchive.cs`) and three checks in `workspaces` (the
-  worktree instruction). Not run on the owner's PC.
+  worktree instruction).
 
 ## Tests
 
-- Pure checks (no Unity, Unity's own .NET 8 and Roslyn): `C:\Users\pnncl\mcxcheck-chat\test\build.sh` on the
-  real OpenCode thread from the headset, synthetic turns, deltas, the chat's markdown and line mapping: 30 ok.
-- Editor self-test section `chat` (`Editor/MetaCodexUiTestChat.cs`), plus `context` and `workspace` updated:
-  `~/mcxwork/tools/uirun.sh chat context workspace captures` (not run yet on 2026-11-11: Windows had 1.6-1.9 GB free).
-- Headset: docs/TEST_CHECKLIST.md section 25.
+- Editor self-test sections `chat` (`Editor/MetaCodexUiTestChat.cs`), `threadwindows`, `threadgroups` and `archive`;
+  `context` and `workspace` check the thread state too.
+- The chat's parsing was checked outside the repository with the engine's own .NET 8 and Roslyn: a real thread from
+  the headset, synthetic turns, deltas, the chat's markdown and line mapping (30 checks).
+- Headset: [TEST_CHECKLIST.md](TEST_CHECKLIST.md#threads), area "Threads".

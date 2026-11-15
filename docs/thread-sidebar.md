@@ -1,17 +1,14 @@
-# The thread sidebar (owner 2026-11-11)
+# The thread side bar
 
-The owner: "we dont get to see the project folder where we are in but we actually see the root ... if the project folder
-we are in isnt a git it shouldn't display anything, but rather have a button to init git ... File difference is weird, it
-doesnt seem to show all the files that are worked, and i expand em i see a white text no wrap ... I would rather see a
-sort of visual studio code style ... a button expand on the right of the thread ... like a sidebar that pop up".
-
-It replaces the separate WORKSPACE module (the old `ShellWorkspace.cs`, now `Runtime/Shell/ShellThreadSidebar.cs`).
+An expand handle on the right edge of a thread window opens a side bar with the thread's project folder: what the
+agent changed, the files, git and the agent's views, in a code-editor style. When the folder is not a git repository,
+the side bar offers INIT GIT. Code: `Runtime/Shell/ShellThreadSidebar.cs`.
 
 ## Attached to the thread
 
 - THREAD has a handle on its right edge (`UiEdgeHandle`: `›`, PROJECT down its length, the number of files the thread
   changed). A tap opens the sidebar; `‹` (on the handle or in the sidebar's header) folds it.
-- The sidebar (`thread-side`, 0.62 × 0.66 m, THREAD is 0.73 m wide now) sits at the thread's right edge, tops level. Bent
+- The sidebar (`thread-side`, 0.62 × 0.66 m, THREAD is 0.73 m wide) sits at the thread's right edge, tops level. Bent
   panels: on the thread's own cylinder (the pair reads as one curved screen); flat: turned 14° towards you round the
   thread's right edge. It moves, turns and bends with the thread every frame; pinch its header to carry both. FIXED: the
   pair then spans about 95 degrees with the sidebar far to the right, so when it opens the pair glides round you until
@@ -53,7 +50,7 @@ It replaces the separate WORKSPACE module (the old `ShellWorkspace.cs`, now `Run
   for how long, what it does, quiet), STUCK? when the pulse says so, RUNNING (the command and its time), THIS TURN
   (thoughts, commands, failures, files, lines), QUEUE, APPROVALS waiting, USAGE (plan and windows), FOLDER (path,
   checkout / worktree, branch), MQH (online, the thread's status, its address).
-- **VIEWS**: the thread's agent views (OPEN ALL, CLOSE ALL, DEMO), as before.
+- **VIEWS**: the thread's agent views (OPEN ALL, CLOSE ALL, DEMO).
 
 ## Legibility
 
@@ -90,4 +87,4 @@ terminal.
   the attachment (flat and bent), every tab, the diff (folds, sideways drag, wrap, keys), big and binary files, a live
   edit, the breadcrumb, INIT GIT, another thread (nothing stale), each thread's memory, a pinch with a hand ray, the
   commands; pictures `Bench/selftest/ui-sidebar-*.png`. The section `workspace` checks the sidebar in FLOAT.
-- Headset: docs/TEST_CHECKLIST.md section 33.
+- Headset: [TEST_CHECKLIST.md](TEST_CHECKLIST.md#threads), area "Threads".
