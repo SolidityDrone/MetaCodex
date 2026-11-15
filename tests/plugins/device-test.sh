@@ -11,6 +11,8 @@ ID=${1:-timers}
 PKG=com.pnncl.metacodex
 STATE=/sdcard/Android/data/$PKG/files/scripts/.state.json
 Q() { python3 "$ROOT/tools/qterm" "$@" 2>&1 | tr -d '\r'; }
+# "plugin check <id>" is not a control-port command: mcx-ui turns it into the eval sandbox's check(id); so does this
+C() { Q script eval "return check(\"$1\")"; }
 fails=0
 ok()   { echo "ok   $*"; }
 fail() { echo "FAIL $*"; fails=$((fails+1)); }
@@ -22,7 +24,7 @@ except Exception: print("{}"); sys.exit()
 for s in d.get("stores",[]):
     if s.get("script")=="plugin/'"$ID"'": print(json.dumps({kv["k"]:kv["v"] for kv in s.get("values",[])},sort_keys=True)); sys.exit()
 print("{}")'; }
-wait_loaded() { for _ in $(seq 1 60); do out=$(Q plugin check "$ID"); grep -q "loaded" <<<"$out" && grep -q "tiles: [A-Z]" <<<"$out" && { echo "$out"; return; }; sleep 2; done; echo "$out"; }
+wait_loaded() { for _ in $(seq 1 60); do out=$(C "$ID"); grep -q "loaded" <<<"$out" && grep -q "tiles: [A-Z]" <<<"$out" && { echo "$out"; return; }; sleep 2; done; echo "$out"; }
 
 adb get-state >/dev/null 2>&1 || { echo "no headset on adb"; exit 1; }
 echo "== $ID: install"
@@ -30,7 +32,7 @@ had=$(Q plugin list | grep -c "^$ID ")
 expect "plugin example $ID" "^ok" "$(Q plugin example "$ID")"
 sleep 2
 expect "plugin list has $ID enabled, no error" "^$ID .*enabled=True.*error=-" "$(Q plugin list)"
-c=$(Q plugin check "$ID")
+c=$(C "$ID")
 expect "check: loaded" "plugin $ID: loaded" "$c"
 expect "check: a window" "windows: main" "$c"
 expect "check: a tile" "tiles: [A-Z]" "$c"
@@ -41,10 +43,10 @@ echo "== window and a button"
 expect "view open plugin-$ID-main" "^ok" "$(Q view open "plugin-$ID-main")"
 sleep 1
 expect "ui list: the window is open" "view-plugin-$ID-main open=True" "$(Q ui list)"
-BTN=START; [[ $ID == calendar ]] && BTN=NEXT
+BTN=START; [[ $ID == calendar ]] && BTN="NEXT ▶"
 expect "ui click $BTN" "^ok" "$(Q ui click "view-plugin-$ID-main" "$BTN")"
 sleep 2
-c=$(Q plugin check "$ID")
+c=$(C "$ID")
 expect "still loaded after the click" "plugin $ID: loaded" "$c"
 expect "the window took the event (builds >= 1)" "main\(builds=[1-9]" "$c"
 before=$(store_of); echo "     store before the restart: ${before:0:300}"
@@ -68,7 +70,7 @@ echo "     look at the headset now: the $ID window shows the state from before t
 echo "== disable"
 expect "plugin disable" "^ok" "$(Q plugin disable "$ID")"
 sleep 2
-c=$(Q plugin check "$ID")
+c=$(C "$ID")
 expect "check: disabled" "plugin $ID: disabled" "$c"
 expect "check: no window" "windows: none" "$c"
 expect "check: no tile" "tiles: none" "$c"

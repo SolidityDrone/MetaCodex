@@ -474,6 +474,9 @@ namespace MetaCodex.Scripting
                 else File.Delete(e.Path);
             }
             catch (Exception) { }
+            // deleted means gone: its saved on/off flag and its store go too, so installing the same id again starts clean
+            // (on the headset a deleted Timers came back disabled with its old store)
+            ForgetState(e.Key);
             Changed?.Invoke();
             return true;
         }
