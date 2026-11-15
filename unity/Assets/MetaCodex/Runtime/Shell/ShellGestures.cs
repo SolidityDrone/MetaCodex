@@ -238,7 +238,22 @@ end)
         /// The gesture examples: nothing installs them by itself. GESTURES > ALL > EXAMPLES (+ ADD), the control
         /// port (`plugin example <id>`) and voice install one with InstallGestureExample. Today they are the
         /// starter files; change them here freely (StarterV1 keeps the old ones for the cleanup).
-        public static readonly IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> ExamplePlugins = StarterV1;
+        public static IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> ExamplePlugins => _examplePlugins ?? (_examplePlugins = BuildExamplePlugins());
+        private static IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> _examplePlugins;
+
+        /// The starter examples, then the ones that ship as files (PluginExamples). Built on first use: Resources.Load must
+        /// not run in a field initializer.
+        private static IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> BuildExamplePlugins()
+        {
+            var all = new Dictionary<string, IReadOnlyDictionary<string, string>>();
+            foreach (var kv in StarterV1) all[kv.Key] = kv.Value;
+            foreach (var id in MetaCodex.Scripting.PluginExamples.Ids)
+            {
+                var files = MetaCodex.Scripting.PluginExamples.Files(id);
+                if (files != null && !all.ContainsKey(id)) all[id] = files;
+            }
+            return all;
+        }
 
         /// Example ids in the order the list shows them.
         public static IEnumerable<string> GestureExampleIds => ExamplePlugins.Keys;
@@ -425,7 +440,7 @@ end)
             if (e == null) return false;
             if (_exampleState.TryGetValue(id, out var c) && c.mtime == e.Mtime) return c.untouched;
             var dir = Path.Combine(Scripts.PluginsDir, id);
-            bool same = SameFiles(dir, ExamplePlugins[id]) || SameFiles(dir, StarterV1[id]);
+            bool same = SameFiles(dir, ExamplePlugins[id]) || (StarterV1.TryGetValue(id, out var starter) && SameFiles(dir, starter));
             _exampleState[id] = (e.Mtime, same);
             return same;
         }
@@ -673,7 +688,7 @@ end)
                         Icon = installed ? "▣" : "+",
                         IconColor = installed ? t.Ok : t.TextDim,
                         Title = id,
-                        Sub = string.Join(" ", names),
+                        Sub = names.Count > 0 ? string.Join(" ", names) : ExampleDescription(ExamplePlugins[id]), // a plugin window has no gestures: its description
                         Badge = installed ? "ADDED" : "+ ADD",
                         BadgeColor = installed ? t.Ok : t.Accent,
                         Tag = new GestureExampleRow { Id = id },
@@ -792,14 +807,19 @@ end)
                 "\n\n<color=#7FA9BF>LUA</color>\n  gesture.on(\"" + name + "\", function(e) … end)", t.Text);
         }
 
+        private static string ExampleDescription(IReadOnlyDictionary<string, string> files)
+        {
+            try { return (string)Newtonsoft.Json.Linq.JObject.Parse(files["plugin.json"])["description"] ?? ""; } catch (Exception) { return ""; }
+        }
+
         private void ShowExampleDetail(string id)
         {
             var t = UiTheme.Current;
             var files = ExamplePlugins[id];
-            string desc = "";
-            try { desc = (string)Newtonsoft.Json.Linq.JObject.Parse(files["plugin.json"])["description"] ?? ""; } catch (Exception) { }
+            string desc = ExampleDescription(files);
+            var gnames = GestureNamesIn(files);
             bool installed = Scripts.Find("plugin/" + id) != null;
-            _gDetail.Set($"<size=130%><b>{id}</b></size>  <color=#7FA9BF>EXAMPLE</color>\n{desc}\n\n<color=#7FA9BF>GESTURES</color>\n  " + string.Join("\n  ", GestureNamesIn(files)) + "\n\n" +
+            _gDetail.Set($"<size=130%><b>{id}</b></size>  <color=#7FA9BF>EXAMPLE</color>\n{desc}\n\n<color=#7FA9BF>GESTURES</color>\n  " + (gnames.Count > 0 ? string.Join("\n  ", gnames) : "none: a plugin window, opened from its menu tile") + "\n\n" +
                 (installed ? "<color=#4DFFA6>● added</color> in /mnt/quest/plugins/" + id + ": bind its gestures in BIND; remove it in MQH > PLUGINS."
                            : "Not installed: nothing runs. + ADD puts it in /mnt/quest/plugins/" + id + "."), t.Text);
         }

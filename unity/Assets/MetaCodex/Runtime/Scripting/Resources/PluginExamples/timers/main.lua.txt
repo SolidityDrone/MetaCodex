@@ -1,0 +1,451 @@
+-- Timers: a focus timer (tomato style) and alarms.
+--
+-- A MODEL PLUGIN. Copy its shape for any small app that has a window:
+--   * window   one ui.panel{} made again by a single render() whenever the state changes
+--   * tile     menu.add{} puts a TIMER tile on the dock and the wrist menu
+--   * LIVE     the clock and the phase are `text` components with an id: while only their text changes,
+--              the app sets the labels and does not rebuild the window (so keep the rest of the spec
+--              identical and in the same order between two seconds)
+--   * store    the whole state is one JSON text; saved on every change; times are WALL CLOCK
+--              (app.clock), never app.time (session time restarts at zero when the app restarts)
+--   * restart  on load: a running phase goes on from its stored end time; a phase or an alarm that
+--              ended while the app was closed is reported once; alarms are armed again with app.at
+--   * timers   ONE app.every(1, ...) runs only while a phase runs; it is cancelled when idle
+--   * voice    complete voice.command entries (description, typed params, phrases, 4+ samples)
+
+-- Settings (seconds): change these to change the rhythm.
+local WORK  = 25 * 60   -- a work round
+local SHORT = 5 * 60    -- a short break
+local LONG  = 15 * 60   -- the long break after the last round
+local ROUNDS = 4        -- work rounds before the long break
+local MAX_ALARMS = 6
+
+local st            -- the saved state (see fresh())
+local ticker        -- id of the one-second timer, nil when idle
+local alarmTimers = {}  -- alarm id -> app.at timer id
+local shownPhase, shownClock = "", ""  -- what the LIVE texts show now
+local render        -- forward declaration
+
+------------------------------------------------------------------ state
+
+local function duration(phase)
+  if phase == "work" then return WORK end
+  if phase == "long" then return LONG end
+  return SHORT
+end
+
+local function dayKey(t)
+  local d = app.date(t)
+  return string.format("%04d-%02d-%02d", d.year, d.month, d.day)
+end
+
+local function fresh()
+  return { phase = "work", round = 1, running = false, endsAt = 0, left = WORK,
+           done = 0, day = dayKey(), alarms = {}, nextId = 1 }
+end
+
+local function save()
+  store.set("state", json.encode(st))
+end
+
+-- Read the store. Bad or missing text gives the defaults: never trust saved data.
+local function loadState()
+  local s = fresh()
+  local raw = store.get("state")
+  local v = nil
+  if raw then v = json.decode(raw) end        -- nil on bad text
+  if type(v) ~= "table" then return s end
+  if v.phase == "work" or v.phase == "short" or v.phase == "long" then s.phase = v.phase end
+  if type(v.round) == "number" and v.round >= 1 and v.round <= ROUNDS then s.round = math.floor(v.round) end
+  s.left = duration(s.phase)
+  if type(v.left) == "number" and v.left >= 1 and v.left <= s.left then s.left = math.floor(v.left) end
+  if v.running == true and type(v.endsAt) == "number" then s.running = true; s.endsAt = v.endsAt end
+  if type(v.done) == "number" and v.done >= 0 and type(v.day) == "string" then s.done = math.floor(v.done); s.day = v.day end
+  if type(v.nextId) == "number" then s.nextId = math.floor(v.nextId) end
+  if type(v.alarms) == "table" then
+    for _, a in ipairs(v.alarms) do
+      if type(a) == "table" and type(a.at) == "number" and type(a.id) == "number" and #s.alarms < MAX_ALARMS then
+        local msg = type(a.msg) == "string" and a.msg or "Reminder"
+        s.alarms[#s.alarms + 1] = { id = math.floor(a.id), at = a.at, msg = msg }
+        if a.id >= s.nextId then s.nextId = math.floor(a.id) + 1 end
+      end
+    end
+  end
+  return s
+end
+
+-- The counter of rounds is for today: a new day starts at zero.
+local function rollDay()
+  local today = dayKey()
+  if st.day ~= today then st.day = today; st.done = 0 end
+end
+
+local function remaining()
+  if st.running then return math.max(0, math.ceil(st.endsAt - app.clock())) end
+  return st.left
+end
+
+local function fmt(secs)
+  return string.format("%02d:%02d", math.floor(secs / 60), secs % 60)
+end
+
+local function phaseText()
+  if st.phase == "work" then return string.format("WORK %d/%d", st.round, ROUNDS) end
+  if st.phase == "long" then return "LONG BREAK" end
+  return "BREAK"
+end
+
+-- The phase is over (finished or skipped): the next phase waits, full length, until START.
+local function advance(counted)
+  if st.phase == "work" then
+    if counted then rollDay(); st.done = st.done + 1 end
+    st.phase = (st.round >= ROUNDS) and "long" or "short"
+  else
+    st.round = (st.phase == "long") and 1 or st.round + 1
+    st.phase = "work"
+  end
+  st.running = false
+  st.endsAt = 0
+  st.left = duration(st.phase)
+end
+
+local function nextText(ended)
+  if ended ~= "work" then return "Break over. Ready for the next work round." end
+  if st.phase == "long" then return "Round done. Time for the long break." end
+  return "Round done. Time for a short break."
+end
+
+local function say(text)
+  ui.notify{ text = text, tone = "ok", sound = "alert", speak = true, panel = "main" }
+end
+
+------------------------------------------------------------------ timer control
+
+local function syncTicker(onSecond)
+  if st.running and not ticker then
+    ticker = app.every(1, onSecond)
+  elseif not st.running and ticker then
+    app.cancel(ticker)
+    ticker = nil
+  end
+end
+
+local onSecond
+onSecond = function()
+  if st.running and app.clock() >= st.endsAt then
+    local ended = st.phase
+    advance(true)
+    save()
+    say(nextText(ended))
+    render()
+    return
+  end
+  -- redraw only when a shown text changed
+  if phaseText() .. fmt(remaining()) ~= shownPhase .. shownClock then render() end
+end
+
+local function startRun()
+  if not st.running then
+    st.running = true
+    st.endsAt = app.clock() + st.left
+    save()
+    render()
+  end
+end
+
+local function pauseRun()
+  if st.running then
+    st.left = math.max(1, remaining())
+    st.running = false
+    st.endsAt = 0
+    save()
+    render()
+  end
+end
+
+local function skipPhase()
+  advance(false)
+  save()
+  render()
+end
+
+local function resetRound()
+  st.phase = "work"; st.round = 1; st.running = false; st.endsAt = 0; st.left = WORK
+  save()
+  render()
+end
+
+------------------------------------------------------------------ alarms
+
+local function trim(s) return (s:gsub("^%s+", ""):gsub("%s+$", "")) end
+
+-- Remove a leading pattern; matched on the lower-case copy, cut from both.
+local function strip(s, low, pat)
+  local _, e = low:find(pat)
+  if e then return s:sub(e + 1), low:sub(e + 1) end
+  return s, low
+end
+
+-- "20 stretch", "in 20 minutes to stretch", "at 15:30 call mum", "15:30 call mum"
+-- gives a wall-clock time and a message, or nil and a hint.
+local function parseAlarm(text)
+  local s = trim(text or "")
+  local low = s:lower()
+  s, low = strip(s, low, "^remind me%s+")
+  local at, rest
+  local s2, low2 = strip(s, low, "^at%s+")
+  local h, m, tail = low2:match("^(%d%d?):(%d%d)%s*(.*)$")
+  if h then
+    h, m = tonumber(h), tonumber(m)
+    if h > 23 or m > 59 then return nil, "Time is 00:00 to 23:59" end
+    local d = app.date()
+    at = app.clock{ year = d.year, month = d.month, day = d.day, hour = h, min = m }
+    if at <= app.clock() then at = app.clock{ year = d.year, month = d.month, day = d.day + 1, hour = h, min = m } end
+    rest = s2:sub(#low2 - #tail + 1)
+  else
+    local s3, low3 = strip(s, low, "^in%s+")
+    local n, tail2 = low3:match("^(%d+)%s*(.*)$")
+    if not n then return nil, "Try: 20 stretch  or  15:30 call mum" end
+    n = tonumber(n)
+    if n < 1 or n > 10080 then return nil, "Minutes: 1 to 10080" end
+    local r, rl = s3:sub(#low3 - #tail2 + 1), tail2
+    for _, pat in ipairs({ "^minutes?%s+", "^mins?%s+", "^min%s+" }) do
+      local r2, rl2 = strip(r, rl, pat)
+      if #r2 < #r then r, rl = r2, rl2; break end
+    end
+    if rl == "minutes" or rl == "minute" or rl == "mins" or rl == "min" then r = "" end
+    at = app.clock() + n * 60
+    rest = r
+  end
+  rest = trim(rest or "")
+  local _, e = rest:lower():find("^to%s+")
+  if e then rest = rest:sub(e + 1) end
+  if rest == "" then rest = "Reminder" end
+  return at, rest:sub(1, 80)
+end
+
+local function fireAlarm(id)
+  alarmTimers[id] = nil
+  for i, a in ipairs(st.alarms) do
+    if a.id == id then
+      table.remove(st.alarms, i)
+      save()
+      say("Alarm: " .. a.msg)
+      render()
+      return
+    end
+  end
+end
+
+local function arm(a)
+  local id = a.id
+  alarmTimers[id] = app.at(a.at, function() fireAlarm(id) end)
+end
+
+-- Returns the alarm, or nil and a reason.
+local function addAlarm(at, msg)
+  if #st.alarms >= MAX_ALARMS then return nil, "Alarm list is full (" .. MAX_ALARMS .. "). Remove one first." end
+  local a = { id = st.nextId, at = at, msg = msg }
+  st.nextId = st.nextId + 1
+  st.alarms[#st.alarms + 1] = a
+  table.sort(st.alarms, function(x, y) return x.at < y.at end)
+  arm(a)
+  save()
+  render()
+  return a
+end
+
+local function removeAlarm(id)
+  for i, a in ipairs(st.alarms) do
+    if a.id == id then
+      if alarmTimers[id] then app.cancel(alarmTimers[id]); alarmTimers[id] = nil end
+      table.remove(st.alarms, i)
+      save()
+      render()
+      return true
+    end
+  end
+  return false
+end
+
+local function whenText(t)
+  local d = app.date(t)
+  local hm = string.format("%02d:%02d", d.hour, d.min)
+  if dayKey(t) == dayKey() then return hm end
+  return string.format("%02d-%02d %s", d.month, d.day, hm)
+end
+
+local function addFromText(text)
+  local at, msg = parseAlarm(text)
+  if not at then
+    ui.notify{ text = msg, tone = "warn", sound = "error", panel = "main" }
+    return
+  end
+  local a, why = addAlarm(at, msg)
+  if not a then ui.notify{ text = why, tone = "warn", sound = "error", panel = "main" } return end
+  ui.sound("ping")
+end
+
+------------------------------------------------------------------ window
+
+local function onEvent(e)
+  if e.type == "button" then
+    if e.id == "start" then startRun()
+    elseif e.id == "pause" then pauseRun()
+    elseif e.id == "skip" then skipPhase()
+    elseif e.id == "reset" then resetRound()
+    elseif type(e.id) == "string" and e.id:sub(1, 3) == "rm-" then removeAlarm(tonumber(e.id:sub(4)) or -1)
+    end
+  elseif e.type == "input" then
+    addFromText(e.value)
+  elseif e.type == "open" then
+    render()
+  end
+end
+
+render = function()
+  rollDay()
+  local clock = fmt(remaining())
+  local phase = phaseText()
+  local comps = {
+    -- LIVE texts: only their text changes between two seconds
+    { type = "text", id = "phase", text = phase, tone = (st.phase == "work") and "accent" or "ok" },
+    { type = "text", id = "clock", style = "big", text = clock },
+    { type = "buttons", id = "controls", items = {
+      { id = "start", label = "START", tone = "accent" },
+      { id = "pause", label = "PAUSE" },
+      { id = "skip", label = "SKIP" },
+      { id = "reset", label = "RESET" },
+    } },
+    { type = "kv", items = {
+      { key = "Rounds today", value = tostring(st.done) },
+      { key = "Focus today", value = math.floor(st.done * WORK / 60) .. " min" },
+    } },
+  }
+  if #st.alarms == 0 then
+    comps[#comps + 1] = { type = "text", text = "No alarms. Type one below." }
+  else
+    local rows, items = {}, {}
+    for i, a in ipairs(st.alarms) do
+      rows[#rows + 1] = { tostring(i), whenText(a.at), a.msg:sub(1, 36) }
+      items[#items + 1] = { id = "rm-" .. a.id, label = "✕ " .. i .. " " .. a.msg:sub(1, 9), tone = "error" }
+    end
+    comps[#comps + 1] = { type = "table", columns = { "#", "TIME", "MESSAGE" }, rows = rows }
+    comps[#comps + 1] = { type = "buttons", id = "remove", items = items }
+  end
+  comps[#comps + 1] = { type = "input", prompt = "New alarm", placeholder = "20 stretch  or  15:30 call mum" }
+  ui.panel{ id = "main", title = "Timers", components = comps, on = onEvent }
+  shownPhase, shownClock = phase, clock
+  syncTicker(onSecond)
+end
+
+------------------------------------------------------------------ voice
+
+local function listText()
+  local parts = {}
+  if st.running then
+    parts[#parts + 1] = phaseText() .. ", " .. math.ceil(remaining() / 60) .. " minutes left"
+  else
+    parts[#parts + 1] = phaseText() .. " is waiting, " .. math.ceil(st.left / 60) .. " minutes"
+  end
+  if #st.alarms == 0 then
+    parts[#parts + 1] = "no alarms"
+  else
+    local names = {}
+    for _, a in ipairs(st.alarms) do names[#names + 1] = a.msg .. " at " .. whenText(a.at) end
+    parts[#parts + 1] = "alarms: " .. table.concat(names, "; ")
+  end
+  return table.concat(parts, ". ") .. "."
+end
+
+voice.command{
+  name = "timers_start_focus",
+  description = "Start (or resume) the focus timer: the current work round or break runs on",
+  phrases = { "start [a|the] (focus|tomato|pomodoro) [timer|round]", "(start|begin) focusing", "resume [the] focus timer" },
+  samples = { "start a focus timer", "start the pomodoro", "begin a work round", "I want to focus now", "resume the focus timer" },
+  run = function(args)
+    startRun()
+    return phaseText() .. " started, " .. math.ceil(remaining() / 60) .. " minutes."
+  end
+}
+
+voice.command{
+  name = "timers_pause",
+  description = "Pause the focus timer (start it again with timers_start_focus)",
+  phrases = { "pause [the] (focus|tomato|pomodoro) [timer]", "pause [the] timer" },
+  samples = { "pause the timer", "pause the focus timer", "hold the timer for now", "stop the pomodoro for a moment" },
+  run = function(args)
+    if not st.running then return "The timer is not running." end
+    pauseRun()
+    return "Paused at " .. fmt(st.left) .. "."
+  end
+}
+
+voice.command{
+  name = "timers_skip",
+  description = "Skip the current focus phase (work round or break) and go to the next one",
+  phrases = { "skip [the] (break|phase|round)", "next (phase|round)" },
+  samples = { "skip this phase", "skip the break", "go to the next round", "skip to the next phase" },
+  run = function(args)
+    skipPhase()
+    return "Skipped. Next: " .. phaseText() .. "."
+  end
+}
+
+voice.command{
+  name = "timers_add_alarm",
+  description = "Set an alarm that fires after some minutes (minutes: 1 to 1440; message: what to say, optional)",
+  params = {
+    minutes = { type = "number", description = "minutes from now, 1 to 1440", required = true, min = 1, max = 1440, unit = "minutes" },
+    message = { type = "string", description = "what to remind, for example stretch", required = false },
+  },
+  phrases = { "remind me in {minutes} minutes [to] {message}", "(set|add) [an] alarm [for|in] {minutes} minutes", "alarm in {minutes} minutes" },
+  samples = { "remind me in 20 minutes to stretch", "set an alarm for ten minutes", "wake me in 45 minutes",
+              "alert me in 5 minutes to check the oven", "set a 30 minute timer for the laundry" },
+  run = function(args)
+    local n = tonumber(args.minutes)
+    if not n or n < 1 or n > 1440 then return "error: say how many minutes, 1 to 1440" end
+    n = math.floor(n)
+    local msg = (type(args.message) == "string" and trim(args.message) ~= "") and args.message or "Reminder"
+    local a, why = addAlarm(app.clock() + n * 60, msg:sub(1, 80))
+    if not a then return "error: " .. why end
+    return "Alarm in " .. n .. " minutes: " .. a.msg .. "."
+  end
+}
+
+voice.command{
+  name = "timers_list",
+  description = "Say what the focus timer is doing and which alarms are set",
+  speak = true,
+  phrases = { "(what|which) (timers|alarms) [do i have|are set|are running]", "list [my] (timers|alarms)", "how much time is left" },
+  samples = { "what timers are running", "which alarms do I have", "how much time is left on the timer",
+              "list my alarms", "is the focus timer running" },
+  run = function(args) return listText() end
+}
+
+------------------------------------------------------------------ load
+
+menu.add{ id = "timers", label = "TIMER", glyph = "◷", icon = "mark", panel = "main" }
+
+st = loadState()
+rollDay()
+local notes = {}
+-- A phase that ended while the app was closed: report it once, move on.
+if st.running and app.clock() >= st.endsAt then
+  local ended = st.phase
+  advance(true)
+  notes[#notes + 1] = (ended == "work" and "Work round" or "Break") .. " ended while MetaCodex was closed. " .. nextText(ended)
+end
+-- Alarms: the ones that are over are reported once, the others are armed again.
+local keep, missed = {}, {}
+for _, a in ipairs(st.alarms) do
+  if a.at <= app.clock() then missed[#missed + 1] = a.msg else keep[#keep + 1] = a end
+end
+st.alarms = keep
+for _, a in ipairs(st.alarms) do arm(a) end
+if #missed > 0 then
+  notes[#notes + 1] = (#missed == 1 and "Alarm" or "Alarms") .. " ended while MetaCodex was closed: " .. table.concat(missed, ", ")
+end
+save()
+render()
+for _, n in ipairs(notes) do say(n) end

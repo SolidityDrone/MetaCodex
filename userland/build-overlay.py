@@ -42,7 +42,7 @@ with tarfile.open(fileobj=raw, mode="w", format=tarfile.PAX_FORMAT) as tf:
     skills_dst = "root/.claude/skills"
     trees = {}
     mqh_skills = os.path.join(root, "mqh", "plugins", "metacodex-guide", "skills")
-    own = ["quest-scripting", "quest-gesture-plugins", "metacodex-context", "quest-views", "worktree-per-thread"]
+    own = ["quest-scripting", "quest-gesture-plugins", "quest-plugins", "metacodex-context", "quest-views", "worktree-per-thread"]
     for name in own:
         trees[f"{skills_dst}/{name}"] = os.path.join(mqh_skills, name)
     # the template of `mcx-app new` is Hello Native itself (sources only: its build/ folder stays out)

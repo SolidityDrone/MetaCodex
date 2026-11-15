@@ -4,7 +4,7 @@ Tell every agent MQH runs where it is (MetaCodex on the headset) and give it Met
 skills. The plugin and its two settings are on by default.
 
 - `introduction`: send the MetaCodex introduction (the mqh CLI, threads, messages).
-- `skills`: give agents `metacodex-context`, `quest-gesture-plugins`, `quest-scripting`,
+- `skills`: give agents `metacodex-context`, `quest-gesture-plugins`, `quest-plugins`, `quest-scripting`,
   `quest-views`, `skill-creator` and `worktree-per-thread`.
 
 Use `mqh plugin config metacodex-guide set <key> true|false` from the CLI. Changes apply

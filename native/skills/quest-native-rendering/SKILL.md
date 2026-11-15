@@ -1,6 +1,6 @@
 ---
 name: quest-native-rendering
-description: Makes a native Quest app built in MetaCodex (mcx_xr.h) look good and run fast with mcx_gfx.h - meshes and primitives (box, rounded box, sphere, capsule, cylinder, cone, torus, plane), lighting and materials (matte, a sci-fi glow with emissive and rim, glass), contact shadows that ground an object on the floor, real scale and the floor height, the per-eye draw loop and draw order (opaque, shadows, translucent back to front, UI), instancing, and the cost of drawing on Quest 3 and 3S (frame budget, draw calls, triangles, overdraw and blending over passthrough, sRGB, foveation and refresh rate through mcx::Config, mediump). Use when the user asks for a native app that looks flat, plain or unfinished, when you draw or place meshes, primitives, lights, materials, glow, glass or shadows, when objects float, sink or look the wrong size, or when drawing is slow or hot.
+description: Makes a native Quest app built in MetaCodex (mcx_xr.h) look good and run fast with mcx_gfx.h - meshes and primitives (box, rounded box, sphere, capsule, cylinder, cone, torus, plane), lighting and materials (matte, a sci-fi glow with emissive and rim, glass), contact shadows that ground an object on the floor, additive glow sprites (halos, stars, a starfield, sparks, particles, trails), the room fading to space, motion (easing, damping, pulses, grow-in transitions, hover feedback), procedural meshes (lathe), a sun or lamp as the light, real scale and the floor height, the per-eye draw loop and draw order (opaque, shadows, translucent back to front, UI), instancing, and the cost of drawing on Quest 3 and 3S (frame budget, draw calls, triangles, overdraw and blending over passthrough, sRGB, foveation and refresh rate through mcx::Config, mediump). Use when the user asks for a native app that looks flat, plain or unfinished, or for effects, glow, neon, space, stars, planets, explosions, sparks, trails or animation, when you draw or place meshes, primitives, lights, materials, glow, glass or shadows, when objects float, sink or look the wrong size, or when drawing is slow or hot.
 ---
 
 # Rendering: a native app that looks good and runs fast
@@ -137,7 +137,8 @@ void android_main(android_app* android)
 1. Opaque: `lit.Begin`, `lit.Draw`, `lit.End`. Writes depth.
 2. Shadows: `shadow.Draw`. Darkens the floor. No depth writes.
 3. Translucent: `lit.DrawTranslucent`, farthest first (sort by distance to `eye.pose.position`, ours). No depth writes.
-4. UI last (quest-native-ui-design).
+4. Glow sprites: `Sprites::Draw`, additive, no sorting (section 6).
+5. UI last (quest-native-ui-design).
 
 Meta: blended content writes no depth, so it can draw in the wrong order (essentials/compositor-layers.md).
 `shadow.Draw` restores the GL state it changes, so it is safe between `Begin` and `End` (verified on Mesa).
@@ -174,7 +175,26 @@ Meta: blended content writes no depth, so it can draw in the wrong order (essent
 - Edges: one sample per pixel (`sampleCount = 1`, native/xr/mcx_xr.cpp). Meta calls 4x MSAA cheap
   (documentation/unity/gpu-improved-algorithms.md). The kit does not enable it: ask the owner.
 
-## 6. Checks before you call it done
+## 6. Effects and motion: `references/effects.md`
+
+The kit also has additive glow and motion helpers. `references/effects.md` has recipes that compile, and a whole app
+built from them (a solar system in the room).
+
+| Kit name | What it gives |
+|---|---|
+| `mcx::Sprites` | soft round sprites that face the eye and ADD light, one draw call per set: halos, stars, sparks, orbit dots. `stars.intensity` fades a whole set |
+| `mcx::Particles` | a fixed pool of glow particles: `Burst`, `Update`, `AddTo` a sprite set |
+| `mcx::Trail` | the recent path of a moving thing, drawn as fading sprites |
+| `mcx::EaseOut`, `mcx::EaseIn`, `mcx::EaseInOut`, `mcx::EaseOutBack`, `mcx::Progress` | arrive, leave and move over a time |
+| `mcx::Damp`, `mcx::Vec3Damp`, `mcx::QuatDamp` | follow a target smoothly at any frame rate |
+| `mcx::Pulse` | 0..1..0 at a rate: idle breathing, a pulsing glow |
+
+- Glow without post-processing: a lit `Glow` body plus two sprites at its centre (effects section 1).
+- Draw sprites after the opaque objects and the shadows, before the UI. They write no depth and need no sorting.
+- A point light (a sun, a lamp): set `lit.light.keyDir` towards it for each object and call `lit.Begin` again
+  (effects section 7).
+
+## 7. Checks before you call it done
 
 1. Every `lit.Draw` and `lit.DrawTranslucent` sits between `lit.Begin` and `lit.End`, in the order of section 4.
 2. Each object rests on the floor or floats for a reason, and its shadow matches its height.

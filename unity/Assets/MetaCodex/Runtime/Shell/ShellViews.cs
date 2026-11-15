@@ -29,6 +29,13 @@ namespace MetaCodex.Shell
             public DateTime At = DateTime.Now;
             public readonly List<Action<string>> Waiters = new List<Action<string>>();
             public string PanelId => "view-" + Id;
+            /// Interactive components (choices, input, buttons, toggle, grid cells) call this with (type, id, value) instead of
+            /// answering the thread. Set for plugin windows (ShellPluginUi).
+            public Action<string, string, string> OnEvent;
+            /// LIVE text components (a `text` with an "id") of the built panel: component id -> its label (cleared at each build).
+            public readonly Dictionary<string, UiLabel> Live = new Dictionary<string, UiLabel>();
+            /// Plugin windows: the open state last reported to the host (Opened / Closed events of the panel).
+            public bool Shown;
         }
 
         private readonly List<AgentView> _viewList = new List<AgentView>();
@@ -46,6 +53,7 @@ namespace MetaCodex.Shell
             "  mermaid {text} (flowchart, sequenceDiagram, pie) | table {columns:[..], rows:[[..]]} | code {text, lang?} | diff {text: unified diff}\n" +
             "  progress {items:[{label,value 0..1,tone?}]} | checklist {items:[{text,done}]} | timeline {items:[{time,text,tone}]}\n" +
             "  kanban {columns:[{title,cards:[..]}]} | kv {items:[{key,value}]} | choices {prompt?, options:[..]} | input {prompt?, placeholder?}\n" +
+            "  buttons {items:[{id,label,tone?}]} | toggle {id,label,value} | grid {columns:1..7, cells:[{id?,text,sub?,tone?}]} | text {text, style?:big}\n" +
             "  image {path: /root/plot.png} | scene3d {size:[w,d], gravity:[0,-9.81,0], bodies:[{shape,size,pos,vel,mass,color,bounce,count}]}\n" +
             "tones: ok warn error accent dim, or #RRGGBB. Answers (choices/input) go to the thread or `mcx-ui view wait <id>`.";
 
@@ -140,7 +148,7 @@ namespace MetaCodex.Shell
             v.At = DateTime.Now;
             v.Error = null;
             try { BuildViewPanel(v, open); }
-            catch (Exception ex) { v.Error = ex.Message; Log("view " + id + " failed: " + ex); Toast("Agent view failed: " + ex.Message, "error"); }
+            catch (Exception ex) { v.Error = ex.Message; Log("view " + id + " failed: " + ex); if (source != "plugin") Toast("Agent view failed: " + ex.Message, "error"); }
             TrimViewPanels();
             RefreshWorkspaceViews();
             return v;
@@ -187,6 +195,8 @@ namespace MetaCodex.Shell
             bool had = _panels.TryGetValue(pid, out var old);
             Vector3 pos = default; Quaternion rot = default; bool wasOpen = false;
             if (had) { pos = old.transform.position; rot = old.transform.rotation; wasOpen = old.IsOpen; DestroyViewPanel(pid); }
+            v.Live.Clear();
+            bool plugin = v.Source == "plugin";
             var comps = ViewComponents(v.Spec);
             int columns = Mathf.Clamp(I(v.Spec["columns"], 1), 1, 3);
             var size = Fl(v.Spec["size"]);
@@ -207,7 +217,8 @@ namespace MetaCodex.Shell
             var rowsH = rows.Select(rw => rw.Select(i => heights[i]).DefaultIfEmpty(0.05f).Max()).ToList();
             float contentH = rowsH.Sum() + t.Gap * Mathf.Max(0, rowsH.Count - 1);
             float h = size != null && size.Length > 1 ? Mathf.Clamp(size[1], 0.18f, 0.9f) : Mathf.Clamp(contentH + t.HeaderHeight + 2 * t.Padding, 0.2f, 0.86f);
-            var p = Panel<UiPanel>(pid, "View · " + v.Title, w, h);
+            var p = Panel<UiPanel>(pid, plugin ? v.Title : "View · " + v.Title, w, h);
+            if (plugin) HookPluginWindow(v, p); // before any open below: its Opened event reaches the plugin
             p.BaseScale = Vector3.one * Mathf.Clamp(Settings.uiScale, 0.6f, 1.8f);
             var c0 = p.Content;
             float k = contentH > c0.height ? (c0.height - t.Gap * Mathf.Max(0, rowsH.Count - 1)) / Mathf.Max(0.01f, rowsH.Sum()) : 1f;
@@ -234,6 +245,7 @@ namespace MetaCodex.Shell
                 if (wasOpen || open) { p.gameObject.SetActive(true); p.ForceRefresh(); OnOpenedFloating(p); }
             }
             else if (open) OpenPanel(pid);
+            if (plugin) PluginShownSync(v, p); // a rebuild that opened a panel the user had closed
         }
 
         private static bool Is(JObject c, params string[] types) => types.Contains(((string)c["type"] ?? "").ToLowerInvariant());
@@ -263,12 +275,21 @@ namespace MetaCodex.Shell
                 case "timeline": return 0.027f * Mathf.Max(1, Count("items"));
                 case "kanban": return 0.22f;
                 case "kv": case "list": return 0.024f * Mathf.Max(1, Count("items") > 0 ? Count("items") : (c["items"] as JObject)?.Count ?? 1);
-                case "choices": case "buttons": return 0.02f + 0.04f * Mathf.CeilToInt(Mathf.Max(1, Count("options")) / 4f);
+                case "choices": case "buttons": return 0.02f + 0.04f * Mathf.CeilToInt(Mathf.Max(1, type == "buttons" && Count("items") > 0 ? Count("items") : Count("options")) / 4f);
+                case "toggle": return UiTheme.Current.ButtonHeight + 0.008f;
+                case "grid":
+                {
+                    bool anySub = (c["cells"] as JArray)?.Any(x => x is JObject o && !string.IsNullOrEmpty((string)o["sub"])) ?? false;
+                    int cols = Mathf.Clamp(I(c["columns"], 1), 1, 7);
+                    int rowsN = Mathf.CeilToInt(Mathf.Clamp(Count("cells"), 1, 49) / (float)cols);
+                    return rowsN * (anySub ? 0.044f : 0.034f);
+                }
                 case "input": return 0.06f;
                 case "scene3d": case "physics": return 0.04f;
                 case "image": return 0.22f;
                 default:
                 {
+                    if ((string)c["style"] == "big") return 0.05f;
                     string text = (string)c["text"] ?? (string)c["markdown"] ?? "";
                     int chars = Mathf.Max(20, (int)(width / (UiTheme.Current.SmallSize * 1.1f * 0.42f)));
                     int lines = text.Replace("\r", "").Split('\n').Sum(l => Mathf.Max(1, Mathf.CeilToInt(l.Length / (float)chars)));
@@ -359,7 +380,14 @@ namespace MetaCodex.Shell
                     var st = new UiStack(r, t.Gap * 0.6f);
                     string prompt = (string)c["prompt"] ?? title;
                     if (!string.IsNullOrEmpty(prompt)) p.Add(new UiLabel(UiViz.NoParse(prompt), t.SmallSize * 1.05f) { Rect = st.Next(0.018f), Color = t.TextDim });
-                    var opts = (c["options"] as JArray ?? new JArray()).Select(o => o.Type == JTokenType.Object ? ((string)o["label"] ?? (string)o["text"], (string)o["value"] ?? (string)o["label"]) : (Str(o), Str(o))).Take(12).ToList();
+                    // `buttons` with `items` {id, label, tone?}: the event is "button" (item id, label); `choices` and the old
+                    // `buttons` with `options`: "choice" (component id, value)
+                    bool items = type == "buttons" && c["items"] is JArray;
+                    string compId = (string)c["id"] ?? "";
+                    var opts = items
+                        ? ((JArray)c["items"]).OfType<JObject>().Select(o => ((string)o["label"] ?? (string)o["id"] ?? "", (string)o["label"] ?? (string)o["id"] ?? "", (string)o["id"] ?? "", (string)o["tone"])).Take(12).ToList()
+                        : (c["options"] as JArray ?? new JArray()).Select(o => o.Type == JTokenType.Object ? ((string)o["label"] ?? (string)o["text"], (string)o["value"] ?? (string)o["label"], compId, (string)null) : (Str(o), Str(o), compId, (string)null)).Take(12).ToList();
+                    string evType = items ? "button" : "choice";
                     for (int i = 0; i < opts.Count; i += 4)
                     {
                         var row = st.Next(t.ButtonHeight);
@@ -367,9 +395,45 @@ namespace MetaCodex.Shell
                         float bw = (row.width - t.Gap * (chunk.Count - 1)) / chunk.Count;
                         for (int j = 0; j < chunk.Count; j++)
                         {
-                            var (label, value) = chunk[j];
-                            p.Add(new UiButton(UiViz.Cut(label, 28), () => AnswerView(v, value), i + j == 0 ? UiButtonStyle.Primary : UiButtonStyle.Normal) { Rect = new Rect(row.x + j * (bw + t.Gap), row.y, bw, row.height) });
+                            var (label, value, evId, tone) = chunk[j];
+                            var style = items ? (tone == "accent" ? UiButtonStyle.Primary : tone == "error" ? UiButtonStyle.Danger : UiButtonStyle.Normal)
+                                : i + j == 0 ? UiButtonStyle.Primary : UiButtonStyle.Normal;
+                            p.Add(new UiButton(UiViz.Cut(label, 28), () => ViewEvent(v, evType, evId, value, value), style) { Rect = new Rect(row.x + j * (bw + t.Gap), row.y, bw, row.height) });
                         }
+                    }
+                    break;
+                }
+                case "toggle":
+                {
+                    string tid = (string)c["id"] ?? "";
+                    string label = (string)c["label"] ?? (string)c["text"] ?? tid;
+                    bool on = c["value"]?.Type == JTokenType.Boolean && (bool)c["value"];
+                    p.Add(new UiToggle(UiViz.NoParse(label), on, now => ViewEvent(v, "toggle", tid, now ? "true" : "false", label + ": " + (now ? "on" : "off"))) { Rect = new Rect(r.x, r.y, r.width, Mathf.Min(r.height, t.ButtonHeight)) });
+                    break;
+                }
+                case "grid":
+                {
+                    var area = TitleRow(p, r, title);
+                    var cells = (c["cells"] as JArray ?? new JArray()).Select(x => x as JObject ?? new JObject { ["text"] = Str(x) }).Take(49).ToList();
+                    int cols = Mathf.Clamp(I(c["columns"], 1), 1, 7);
+                    int rowsN = Mathf.Max(1, (cells.Count + cols - 1) / cols);
+                    bool anySub = cells.Any(x => !string.IsNullOrEmpty((string)x["sub"]));
+                    float ch = Mathf.Min(anySub ? 0.044f : 0.034f, area.height / rowsN), cw = area.width / cols, gap = 0.003f;
+                    for (int i = 0; i < cells.Count; i++)
+                    {
+                        var cell = cells[i];
+                        string cid = (string)cell["id"] ?? "", text = Str(cell["text"]), sub = (string)cell["sub"], tone = (string)cell["tone"];
+                        string label = UiViz.NoParse(text) + (string.IsNullOrEmpty(sub) ? "" : "\n<size=72%>" + UiViz.NoParse(sub) + "</size>");
+                        bool tap = cid.Length > 0;
+                        var gc = new UiGridCell(label, tap ? () => ViewEvent(v, "cell", cid, text, text) : (Action)null)
+                        {
+                            Rect = new Rect(area.x + (i % cols) * cw, area.y + (i / cols) * ch, cw - gap, ch - gap),
+                            Tappable = tap,
+                            TextSize = anySub ? 0.0105f : 0.0115f,
+                        };
+                        if (!string.IsNullOrEmpty(tone)) gc.ToneColor = UiViz.Tone(tone);
+                        else if (!tap) gc.ToneColor = t.TextDim * 0.55f;
+                        p.Add(gc);
                     }
                     break;
                 }
@@ -377,10 +441,11 @@ namespace MetaCodex.Shell
                 {
                     var st = new UiStack(r, t.Gap * 0.6f);
                     string prompt = (string)c["prompt"] ?? title;
+                    string inId = (string)c["id"] ?? "";
                     if (!string.IsNullOrEmpty(prompt)) p.Add(new UiLabel(UiViz.NoParse(prompt), t.SmallSize * 1.05f) { Rect = st.Next(0.018f), Color = t.TextDim });
                     var row = st.NextSplit(t.ButtonHeight, 0.78f, out var send);
-                    var field = p.Add(new UiTextField("", "", s => { if (!string.IsNullOrWhiteSpace(s)) AnswerView(v, s.Trim()); }, (string)c["placeholder"] ?? "type an answer…") { Rect = row, CaptionWidth = 0f });
-                    p.Add(new UiButton("SEND ▶", () => { if (!string.IsNullOrWhiteSpace(field.Text)) AnswerView(v, field.Text.Trim()); }, UiButtonStyle.Primary) { Rect = send });
+                    var field = p.Add(new UiTextField("", "", s => { if (!string.IsNullOrWhiteSpace(s)) ViewEvent(v, "input", inId, s.Trim(), s.Trim()); }, (string)c["placeholder"] ?? "type an answer…") { Rect = row, CaptionWidth = 0f });
+                    p.Add(new UiButton("SEND ▶", () => { if (!string.IsNullOrWhiteSpace(field.Text)) ViewEvent(v, "input", inId, field.Text.Trim(), field.Text.Trim()); }, UiButtonStyle.Primary) { Rect = send });
                     break;
                 }
                 case "scene3d": case "physics":
@@ -413,8 +478,11 @@ namespace MetaCodex.Shell
                 default:
                 {
                     string text = (string)c["text"] ?? (string)c["markdown"] ?? (c["value"]?.ToString() ?? "");
-                    var lab = p.Add(new UiLabel(MdLite(text), t.SmallSize * 1.1f) { Rect = r, Wrap = true, Align = TextAlignmentOptions.TopLeft, Color = UiViz.Tone((string)c["tone"], t.Text) });
-                    _ = lab;
+                    // style "big": one centred line in the display face (a countdown, a clock, a score)
+                    bool big = (string)c["style"] == "big";
+                    var lab = p.Add(new UiLabel(MdLite(text), big ? t.SmallSize * 2.8f : t.SmallSize * 1.1f) { Rect = r, Wrap = !big, UseDisplay = big, Align = big ? TextAlignmentOptions.Center : TextAlignmentOptions.TopLeft, Color = UiViz.Tone((string)c["tone"], t.Text) });
+                    string liveId = (string)c["id"];
+                    if (!string.IsNullOrEmpty(liveId)) v.Live[liveId] = lab; // LIVE text: a plugin window sets it without a rebuild
                     break;
                 }
             }
@@ -533,6 +601,15 @@ namespace MetaCodex.Shell
         }
 
         // ------------------------------------------------------------------ answers
+
+        /// An interactive component was used: the owner of the view gets (type, id, value) when it takes events (plugin
+        /// windows), else the thread (or `view wait`) gets `answer`.
+        private void ViewEvent(AgentView v, string type, string id, string value, string answer)
+        {
+            if (v.OnEvent == null) { AnswerView(v, answer); return; }
+            try { v.OnEvent(type, id, value); }
+            catch (Exception ex) { Log("view " + v.Id + " event " + type + " failed: " + ex.Message); }
+        }
 
         /// A choice or input answered in VR: to the thread the view came from, else to `view wait` callers.
         public void AnswerView(AgentView v, string text)

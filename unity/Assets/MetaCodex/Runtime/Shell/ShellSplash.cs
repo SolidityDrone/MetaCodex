@@ -6,15 +6,17 @@ namespace MetaCodex.Shell
     /// disappears with a transition"): the MetaCodex logo (Resources/Brand/splash.png, transparent) about a metre in front
     /// of the eyes, over the room, on top of everything (Resources/Shaders/Splash). It stays where it appeared, upright and
     /// facing the user (owner 2026-11-13: "fixed, perpendicular to the ground, facing us; not following the camera"), comes in behind a scan line (0.7 s), holds while the shell starts, then breaks up into light (0.9 s) and is
-    /// destroyed with its texture. Not in batch runs (self-tests, builds).
+    /// destroyed with its texture. Not in batch runs (self-tests, builds). It is the first piece of the staged start
+    /// (MetaCodexShell.StartStaged), so the first frame shows it; it holds at least SplashHold and for as long as the rest
+    /// of the shell is still being built behind it (at most SplashMaxExtra more), then goes.
     public sealed partial class MetaCodexShell
     {
         public const float SplashWidth = 0.60f, SplashDistance = 1.0f;
-        private const float SplashIn = 0.7f, SplashHold = 2.3f, SplashOut = 0.9f;
+        private const float SplashIn = 0.7f, SplashHold = 1.4f, SplashOut = 0.9f, SplashMaxExtra = 8f;
         private GameObject _splash;
         private Material _splashMat;
         private Texture2D _splashTex;
-        private float _splashT = -1f, _splashWait;
+        private float _splashT = -1f, _splashWait, _splashExtra;
         private static readonly int SplashFadeId = Shader.PropertyToID("_Fade"), SplashScanId = Shader.PropertyToID("_Scan"),
             SplashDissolveId = Shader.PropertyToID("_Dissolve");
 
@@ -51,9 +53,13 @@ namespace MetaCodex.Shell
                 _splashT = 0f;
                 _splash.SetActive(true);
                 PlaceSplash(head, 1f);
+                NoteSplashShown(); // its time goes into the [start] line (ShellStartTiming)
                 RequestStartPermissions();
             }
-            _splashT += Mathf.Min(dt, 0.1f); // a long first frame does not skip the transition
+            float step = Mathf.Min(dt, 0.1f); // a long frame does not skip the transition
+            // the shell is still being built behind it (the staged start): it holds, at most SplashMaxExtra more
+            if (_staging && _splashT >= SplashIn + SplashHold && _splashExtra < SplashMaxExtra) _splashExtra += step;
+            else _splashT += step;
             float t = _splashT;
             float fadeIn = Mathf.SmoothStep(0f, 1f, t / SplashIn);
             float scan = Mathf.Clamp01(t / SplashIn);

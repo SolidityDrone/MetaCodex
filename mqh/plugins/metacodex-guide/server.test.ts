@@ -75,6 +75,7 @@ it("ships only MetaCodex skills, without bb product texts", () => {
   expect([...bundledSkills].sort()).toEqual([
     "metacodex-context",
     "quest-gesture-plugins",
+    "quest-plugins",
     "quest-scripting",
     "quest-views",
     "skill-creator",

@@ -1,6 +1,6 @@
 ---
 name: quest-native-apps
-description: Make a native Meta Quest app (Quest 3 / 3S, Horizon OS) on this headset, from a one-line request to an installed app with its own Library icon - C++ with OpenXR and Meta's extensions (passthrough, environment depth, hands, controllers, the room, anchors), built, checked, installed and launched by MetaCodex itself (mcx-app; no PC, no Unity, no Gradle). Use whenever the user wants a native, standalone, separate, "real" or headset app, a VR or mixed-reality app, a tool, toy, demo, utility or experiment that runs on its own in the headset, or asks to build, install, launch, update or fix such an app. Entry point of the quest-native-* skills. For behaviour inside MetaCodex itself use quest-scripting, quest-gesture-plugins or quest-views instead.
+description: Make a native Meta Quest app (Quest 3 / 3S, Horizon OS) on this headset, from a one-line request to an installed app with its own Library icon - C++ with OpenXR and Meta's extensions (passthrough, environment depth, hands, controllers, the room, anchors), built, checked, installed and launched by MetaCodex itself (mcx-app; no PC, no Unity, no Gradle). Use whenever the user wants a native, standalone, separate, "real" or headset app, a VR or mixed-reality app, a game, tool, toy, demo, viewer, utility or experiment that runs on its own in the headset, or asks to build, install, launch, update or fix such an app. Entry point of the quest-native-* skills. For behaviour inside MetaCodex itself use quest-scripting, quest-gesture-plugins or quest-views instead.
 ---
 
 # Native Quest apps: from "I want an app that ..." to an app in the Library
@@ -24,10 +24,12 @@ The user says what the app should do; you do everything else. Their only jobs: t
 `mcx-app` command; lines starting `>>> ASK THE USER` are for the user (say them short, then let the command wait);
 `RESULT:` lines are outcomes; `PROBLEM:` lines (verify) must be fixed.
 
-Mandatory with this one: **quest-native-hands-first** (hands only, mixed reality) and **quest-native-quality** (the
-brief, the passes, the self-review: how an app gets curated). The kits next to `mcx_xr.h` and their skills:
-**quest-native-rendering** (`mcx_gfx.h`), **quest-native-ui-design** (`mcx_ui.h`), **quest-native-physics**
-(`mcx_physics.h`), **quest-native-3d-models** (`mcx_model.h`); budgets: **quest-native-performance**.
+Mandatory with this one: **quest-native-hands-first** (hands only, mixed reality), **quest-native-quality** (the
+brief, the passes, the self-review: how an app gets curated) and **quest-native-art-direction** (pick a look and keep
+it: palette, light, materials, motion, what reads over the room). The kits next to `mcx_xr.h` and their skills:
+**quest-native-rendering** (`mcx_gfx.h`: lit materials, shadows, glow sprites, particles, trails, easing; effects in its
+`references/effects.md`), **quest-native-ui-design** (`mcx_ui.h`), **quest-native-physics** (`mcx_physics.h`),
+**quest-native-3d-models** (`mcx_model.h`); budgets: **quest-native-performance**.
 The suite: **quest-native-xr** (every Quest feature: calls + manifest entries), **quest-native-recipes** (worked
 example and short recipes), **quest-native-dev-loop** (the Runner: seconds per edit, no APK), **quest-native-debug**
 (errors, verify problems, install failures, logs). Read the one you need when you get there.
@@ -36,9 +38,11 @@ example and short recipes), **quest-native-dev-loop** (the Runner: seconds per e
 
 1. **Understand the request.** Ask only what you cannot decide (at most one short question). First read
    **quest-native-hands-first** (mandatory): the app is mixed reality (passthrough) and hands only, unless the request
-   explicitly asks for full VR or for controllers; never ask the user about either. Decide yourself which Quest
+   explicitly asks for full VR or for controllers; never ask the user about either (a "VR" or "space" look on
+   request: the room can fade to a dark sky, quest-native-rendering `references/effects.md`). Decide yourself which Quest
    features it needs (quest-native-xr). A Quest 3 / 3S app: depth and passthrough are there. Then read
-   **quest-native-quality** (mandatory) and write the app's `DESIGN.md` brief before any code.
+   **quest-native-quality** and **quest-native-art-direction** (both mandatory) and write the app's `DESIGN.md` (the
+   brief and the look card) before any code. The table "Common requests" below gives the path for frequent ones.
 2. **Name it.** The app's folder: the project folder itself when your thread works in a Native app project
    (`/root/metacodex-projects/native/<name>`, made by MetaCodex's + PROJECT: `mcx-app new .` fills it and keeps its
    `.git`, `AGENTS.md`, `CLAUDE.md`), else `/root/metacodex-projects/native/<name>` (lower case, short; never
@@ -59,7 +63,9 @@ example and short recipes), **quest-native-dev-loop** (the Runner: seconds per e
    over passthrough, pinch and buttons, the room, anchors, the icon); every feature's calls and manifest entries are
    in quest-native-xr. Give it its own icon (recipe 6) and remove the example's features and manifest entries you do
    not use. Draw with the kits (quest-native-rendering, -ui-design, -physics, -3d-models), and build in the passes of
-   quest-native-quality (greybox, interaction, look, polish, performance), steps 6-8 after each pass.
+   quest-native-quality (blockout, look, motion, UI, polish, self-review), steps 6-8 after each pass. Install and
+   launch (steps 9-10) only after the self-review: the first launch is the user's first impression, so it must
+   already look designed. Never hand over a greybox.
 6. **`mcx-app check <dir>`** (about 1 s): fix every `file:line:col: error:` and check again.
 7. **`mcx-app build <dir>`** (about 2 s after the first build): `RESULT: APK ...`.
 8. **`mcx-app verify <dir>`**: every `PROBLEM:` is a missing manifest entry, an unresolved symbol, a
@@ -79,6 +85,19 @@ example and short recipes), **quest-native-dev-loop** (the Runner: seconds per e
     launch).
 
 **Done** = `verify ok`, installed, launched, the user saw it work, and you told them the app's name in the Library.
+
+## Common requests: the path through the skills
+
+Decide these yourself; do not ask. Base = the nightvision example (hands, passthrough) with its scene replaced.
+
+| Request | Look (art-direction) | Stage and scale | Hero and cast | Skills in order after the mandatory three |
+|---|---|---|---|---|
+| "a solar system", planets, stars | Cosmic | a 1.2-1.6 m wide volume 1.2 m ahead at chest height; the sun 0.25-0.35 m | the sun (glow sprites, the key light from it); planets with orbit rings, trails | the whole app to adapt: quest-native-rendering `references/effects.md` section 8 (halo, orbits, trails, the room fading to space on request); ui-design (start, a label per planet) |
+| "a breakout / pinball / table game on my desk" | Neon arcade | on the TABLE from the room (quest-native-recipes, recipe 3), 40-60 cm from its front edge; a board about 0.5 x 0.35 m | the ball (a trail), the bricks (instanced, one draw per row colour), the paddle under the hand | the whole app to adapt: quest-native-recipes `references/desk-game.md`; physics for grab and throw; ui-design (start, pause, result) |
+| "a 3D model viewer", a museum piece, a product | Gallery | on the table or a plinth at 1 m; the model fitted to 0.3-0.5 m | the model on a turntable with a contact shadow | 3d-models (fit, pivot, fallback), ui-design (a menu panel beside it, not over it) |
+| a timer, notes, a dashboard, a tool | Night glass | panels at 1 m, 10-15 cm below the eyes | the main panel | ui-design, quest-native-recipes (recipe 1: a panel over passthrough) |
+| a toy or sandbox to grab and throw | Toy clay | on the floor or table, real sizes (5-30 cm) | the objects to grab | physics (grab and throw), rendering (contact shadows) |
+| something that uses the real room (walls, floor, furniture) | from the subject | on the room's surfaces | what the room shows | quest-native-xr (scene, depth), recipes 3-4 |
 
 ## Updates, versions, the key
 

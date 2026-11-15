@@ -46,6 +46,8 @@ Handler argument `e`: `name`, `hand` (`left` | `right` | `both`), `phase` (`star
 | `gesture.define(name, opts, detect)` / `gesture.pose(name, spec)` | new gestures: see the skill `quest-gesture-plugins` |
 | `hands.get("left"\|"right")` (alias `hands.state`) | `{tracked, pinch, pinching, grabbing, pointing, open, palmUp, x, y, z, curl = {thumb, index, middle, ring, little}, rel, vel, speed, palmFacing, thumbPointing, ...}` |
 
+A new window or a button in the menu (a timer, a calendar, a tool) belongs in a **plugin** too: skill
+`quest-plugins`.
 New gestures (hand poses, swipes, two-hand shapes) belong in a **plugin** folder
 (`/mnt/quest/plugins/<id>/`, skill `quest-gesture-plugins`); a script can react to them by name, but only to
 names `mcx-ui gesture list` shows: a script never assumes a plugin's gesture is installed.
@@ -58,13 +60,18 @@ names `mcx-ui gesture list` shows: a script never assumes a plugin's gesture is 
 | `ui.open(id)` `ui.close(id)` `ui.toggle(id)` | panels: `dock`, `terminals`, `files`, `git`, `web` (browser window), `browser` (its LINKS page), `scripts`, `gestures`, `agents`, `threads`, `thread`, `thread-new`, `vault`, `settings`, `voice`, `term-1`... |
 | `ui.panels()` | ids of all panels |
 | `ui.modal(title, text, {"YES","NO"}, fn)` | a dialog; `fn(index, label)` with the answer |
+| `ui.panel{id, title, components, on=fn}` | the script's or plugin's own window (view components; events to `fn(e)`): skill `quest-plugins` |
+| `menu.add{id, label, glyph, panel=\|run=}` / `menu.remove(id)` | a button on the DOCK and the wrist menu (6 plugin tiles at most): skill `quest-plugins` |
+| `ui.notify{text, tone, sound, speak, panel}` / `ui.sound(name)` | a callout by the Whisp (a tap opens `panel`) / a short app sound (`click` `open` `close` `ping` `toast` `alert` `error`) |
 | `ui.select(true\|false)` | the select tool (pinch-drag a rectangle on a panel) |
 | `terminal.send(text)` / `terminal.run(cmd)` / `terminal.new()` | type into the active terminal (`run` adds Enter) / open a new one |
 | `browser.open(url)` | the Horizon OS browser at a URL (also `http://127.0.0.1:<port>` for local web apps) |
 | `keyboard.open()` | the system keyboard for the terminal |
 | `settings.get(key)` / `settings.set(key, value)` | app settings (strings in and out), saved and synced to MQH |
-| `store.get(key)` / `store.set(key, value)` | this script's own persistent strings |
-| `app.after(sec, fn)` / `app.every(sec, fn)` / `app.cancel(id)` / `app.time()` | timers |
+| `store.get(key)` / `store.set(key, value)` | this script's own persistent strings (tables: `json.encode` / `json.decode`) |
+| `json.encode(value)` / `json.decode(text)` | Lua table to JSON text and back (`decode` returns `nil, message` on bad text) |
+| `app.after(sec, fn)` / `app.every(sec, fn)` / `app.cancel(id)` / `app.time()` | timers (session time: `app.time()` starts at 0 with the app) |
+| `app.clock()` / `app.clock{year, month, day, hour, min, sec}` / `app.date([t])` / `app.at(t, fn)` | wall clock (seconds since 1970) / a local time in seconds / `{year, month, day, hour, min, sec, wday, yday}` / run once at a clock time |
 | `app.action("verb:arg")` | one action string: `open:` `close:` `toggle:<panel>`, `toast:`, `run:<cmd>`, `type:<text>`, `url:<url>`, `layout:fixed\|float`, `spin:<deg>`, `select`, `keyboard`, `terminal:new`, `recenter`, `gesture:<name>`, `voice:listen\|stop\|toggle\|say:<text>\|run:<text>` |
 | `head.pose()` | `{x, y, z, fx, fy, fz}`: eyes and look direction |
 | `voice.command{...}` | a voice command (below); removed when the script is disabled or deleted |

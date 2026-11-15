@@ -75,6 +75,15 @@ their count. Log the counts once after the load:
 - Base colour (with its texture), metallic and roughness factors and emissive are read from the file. Cut-outs use
   alpha mode mask; glass uses blend.
 - Blend parts draw last inside a model. The kit does not sort models: draw glass objects from far to near yourself.
+- Match the app's look (quest-native-art-direction): pass the look's ambient and key light to `SetLight`. A model
+  viewer takes the Gallery look: the model on a matte plinth (`mcx::MakeRoundedBox`, the body tone), a contact
+  shadow under it from its bounds (`mcx::ContactShadow`, quest-native-rendering), the menu panel beside it.
+- A viewer's motion: the model grows in (`mcx::EaseOut`, 0.4 s), turns slowly when idle (10-15 degrees per second),
+  and turns with the hand while the user pinches beside it (the change of the index tip's angle round the model,
+  smoothed with `mcx::Damp`). Two hands pinching scale it, between 0.5 and 2 times the fitted size.
+- The file is missing or fails to load (`Load` or `LoadAsset` returns false): log the error, draw a stand-in of the
+  same size (a rounded box in the support tone, with its shadow), and say in one line on the panel what is missing
+  ("Model file not found: models/chair.glb"). Never show an empty scene.
 
 ## 7. Worked example
 

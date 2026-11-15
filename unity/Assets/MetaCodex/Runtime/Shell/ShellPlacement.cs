@@ -5,23 +5,32 @@ using UnityEngine;
 
 namespace MetaCodex.Shell
 {
-    /// WHERE A PANEL OPENS (owner 2026-11-10: "smart positions"). Every open panel is a rectangle in the user's view
-    /// (the yaw and the pitch its corners span, seen from the eyes, bent or flat, wherever it was dragged). A new
-    /// panel takes the free place that costs least:
-    /// - in front of where the user faces, at eye level, when that is free;
-    /// - else the nearest free place round it: to the side, or above or below a window when that is nearer than a
-    ///   far turn of the head (never above 50 degrees or below 42); tilted to face the user;
+    /// WHERE A PANEL OPENS (owner 2026-11-10: "smart positions"; 2026-11-15: "the place where stuff spawns is weird").
+    /// Every open panel is a rectangle in the user's view (the yaw and the pitch its corners span, seen from the eyes,
+    /// bent or flat, wherever it was dragged). A new panel takes the free place that costs least:
+    /// - in front of where the user faces, at the panel distance and just below eye level, when that is free;
+    /// - else the nearest free place round it in view: to the side, or above or below a window when that is nearer than
+    ///   a far turn of the head (never above 50 degrees or below 42); tilted to face the user;
+    /// - never under the DOCK (the main menu, low in front): the middle of a window is never lower than the dock's top
+    ///   edge, and it keeps 3 degrees off the dock in the view;
+    /// - never in front of the Whisp's items while it holds still (its menu, its callouts, its disc while it listens,
+    ///   thinks or speaks); its idle disc costs a little (it moves away from a window by itself, PickOrbSpot);
     /// - a panel opened from a window's button (a thread from THREADS, a view from a thread, the picker) opens right
-    ///   beside that window: to its right when there is room, else its left, else above or below it;
-    /// - a panel that was open before comes back where the user left it, when that place is still free and still
-    ///   in view; else it is placed anew;
+    ///   beside that window (a window in a group: beside the group): to its right when there is room, else its left,
+    ///   else above or below it;
+    /// - a panel that was open before comes back where the user left it, when that place is still in view and free
+    ///   (the dock and the Whisp's held items count as taken); else it is placed anew;
     /// - when nothing is free at the panel distance it opens further away (up to twice as far, smaller in the view) in
-    ///   the nearest gap; only when nothing is free even there it cascades in front, a little nearer each time;
+    ///   the nearest gap; when nothing is free in view at all, it takes the nearest free place round the user (up to
+    ///   PlaceYawLimit degrees to a side, never behind) and the Whisp points to it; only when nothing is free even
+    ///   there it cascades in front, a little nearer each time;
     /// - "in front" is where the user's body faces when they look down at their wrist or the dock to press (the nose
     ///   points at the hand then, not at where the window should go);
     /// - never inside a wall: while the room's depth runs, the last reading (48 x 48 points, every 0.3 s, the one the
     ///   floor is found from) says how far the real things are in each direction; a panel opens at least 8 cm in front
-    ///   of them, and a direction where something real is nearer than half a metre is a poor place.
+    ///   of them, and a direction where something real is nearer than half a metre is a poor place;
+    /// - the small cards are not placed here: the callouts ride beside the Whisp, the tour card is the tour's, and
+    ///   KeepCardsOffDock raises the tour card when it comes within 2 degrees of the dock.
     /// FLOAT keeps its ring (ShellLayout); this decides the first place there too.
     public sealed partial class MetaCodexShell
     {
@@ -43,6 +52,9 @@ namespace MetaCodex.Shell
             new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0f, 1f), new Vector2(1f, 1f),
             new Vector2(0.5f, 0f), new Vector2(0.5f, 1f), new Vector2(0f, 0.5f), new Vector2(1f, 0.5f),
         };
+
+        /// The sides a search tries at an offset: straight ahead only at 0, else both ways (kept, not made per step).
+        private static readonly float[] SignAhead = { 1f }, SignBoth = { 1f, -1f };
 
         /// The rectangle a panel covers seen from `eye` (false: it lies across the user's back, or on the eye).
         public static bool ViewRectOf(UiPanel q, Vector3 eye, float refYaw, out ViewRect r)
@@ -68,12 +80,48 @@ namespace MetaCodex.Shell
         }
 
         /// The window whose button is being pressed right now, when it is a real window (not the dock, a message or
-        /// the orb's menu): what opens from it opens beside it.
+        /// the Whisp's menu: NotAWindow): what opens from it opens beside it. A window in a group counts as its group.
         private UiPanel OpenerNow()
         {
             var a = Router != null ? Router.ActivePanel : null;
-            if (a == null || !a.IsOpen || a.Id == "dock" || a.Id == "toast" || a.Id == "voice-hud" || (a.Id ?? "").StartsWith("orb-") || a.Id == "picker") return null; // the orb's menu squares
-            return a;
+            if (a == null || !a.IsOpen || a.Id == "picker" || NotAWindow(a.Id)) return null;
+            return PlacementUnit(a);
+        }
+
+        /// Not a window: the dock, a callout, the voice card, the Whisp's menu squares, a dialog, the tour card and its ring.
+        private static bool NotAWindow(string id) =>
+            id == null || id == "dock" || id == "toast" || id == "voice-hud" || id == "modal" || id == "tour" || id == "tour-ring" || id.StartsWith("orb-");
+
+        /// What a window counts as when others are placed round it: itself, or its group's window when it is a window
+        /// in a group (a group is one unit; its windows are no obstacles of their own).
+        private UiPanel PlacementUnit(UiPanel p)
+        {
+            if (p == null || !IsGroupedPanel(p)) return p;
+            foreach (var w in Tws)
+                if (w.Panel == p && w.Group != null && w.Group.Panel != null) return w.Group.Panel;
+            return p;
+        }
+
+        /// The window `id` opens beside: the one whose button is being pressed, else the one it belongs to (ContextOpener),
+        /// else (the picker) the one it was put in front of.
+        private UiPanel PlacementOpener(string id, UiPanel p) =>
+            OpenerNow() ?? ContextOpener(id) ?? (id == "picker" ? PanelUnder(p) : null);
+
+        /// The open window `p` lies right in front of, parallel to it, when there is one: the picker is put over the window
+        /// that asked for it before it opens, and a voice command presses no button (then OpenerNow knows no window).
+        private UiPanel PanelUnder(UiPanel p)
+        {
+            UiPanel best = null;
+            float bestZ = float.MaxValue;
+            foreach (var q in PlacementObstacles(p))
+            {
+                if (q == null || q.Id == "picker" || NotAWindow(q.Id)) continue;
+                if (Quaternion.Angle(q.transform.rotation, p.transform.rotation) > 2f) continue;
+                var l = q.transform.InverseTransformPoint(p.transform.position);
+                if (Mathf.Abs(l.x) > q.Width * 0.5f || Mathf.Abs(l.y) > q.Height * 0.5f || l.z > 0f || l.z < -0.4f) continue;
+                if (-l.z < bestZ) { bestZ = -l.z; best = q; }
+            }
+            return best;
         }
 
         public const float PlaceYawLimit = 112f, PlaceTop = 50f, PlaceBottom = -42f;
@@ -83,6 +131,67 @@ namespace MetaCodex.Shell
         /// about 46 degrees out). When no free place is in view, it opens in front over the others (a little nearer).
         /// Only RECENTER, which lays every window out again, searches the wide range above.
         public const float ViewYaw = 50f, ViewPitch = 36f;
+        /// When nothing is free in view, a window's middle may go this far round to a side (never behind the user).
+        public const float WideYaw = 100f;
+
+        /// The degrees a window keeps off the dock in the view, and a small card (KeepCardsOffDock).
+        public const float DockGap = 3f, CardDockGap = 2f;
+        /// What it costs (degrees of turning away) to open under the idle Whisp's disc: it moves aside by itself.
+        public const float OrbSoftCost = 8f;
+
+        // ---- what a new window keeps clear of besides the other windows: the dock, and the Whisp's items while it holds still
+
+        private ViewRect _keepDock;
+        private bool _keepHasDock;
+        private readonly List<ViewRect> _keepHard = new List<ViewRect>(), _keepSoft = new List<ViewRect>(), _orbRects = new List<ViewRect>();
+
+        private static ViewRect Inflate(ViewRect r, float d) =>
+            new ViewRect { Yaw0 = r.Yaw0 - d, Yaw1 = r.Yaw1 + d, Pitch0 = r.Pitch0 - d, Pitch1 = r.Pitch1 + d };
+
+        /// The Whisp holds still while it shows something: its menu is open, a callout or the voice card is up, it listens,
+        /// thinks or speaks. Then its disc, its menu and its callouts are in the way; idle, only its disc is, and it can move.
+        private bool OrbHolds() =>
+            OrbMenuOpen
+            || (Toasts != null && (Toasts.Count > 0 || (Toasts.Pinned != null && Toasts.Pinned.gameObject.activeSelf)))
+            || Orb.State != UiOrb.Mood.Idle;
+
+        /// Finds what a new window keeps off, in the view from `eye` (`refYaw` is 0 degrees): the dock (looked up by its id
+        /// every time: a plugin can build it again) and, with `withOrb` and the Whisp there, its rectangles (OrbFootprint),
+        /// taken places while it holds still, else its disc as a soft one.
+        private void FillKeepOut(Vector3 eye, float refYaw, bool withOrb)
+        {
+            _keepHasDock = false;
+            _keepHard.Clear();
+            _keepSoft.Clear();
+            if (_panels.TryGetValue("dock", out var dock) && dock != null && dock.IsOpen && ViewRectOf(dock, eye, refYaw, out var dr)) { _keepDock = dr; _keepHasDock = true; }
+            if (!withOrb || !OrbActive) return;
+            var rel = Orb.Position - eye;
+            float od = rel.magnitude;
+            if (od < 0.1f) return;
+            float oy = Mathf.DeltaAngle(refYaw, Mathf.Atan2(rel.x, rel.z) * Mathf.Rad2Deg);
+            float op = Mathf.Asin(Mathf.Clamp(rel.y / od, -1f, 1f)) * Mathf.Rad2Deg;
+            OrbFootprint(oy, op, od, _orbRects);
+            bool holds = OrbHolds();
+            for (int i = 0; i < _orbRects.Count; i++)
+            {
+                if (holds) _keepHard.Add(i == 0 ? _orbRects[i] : Inflate(_orbRects[i], 1f)); // its menu and callouts keep 3 degrees off a window, its disc 2
+                else if (i == 0) _keepSoft.Add(_orbRects[i]);
+            }
+        }
+
+        /// Whether a window's rectangle `c` (its middle at `centrePitch`; `level` is the row's pitch) is in the way of what
+        /// FillKeepOut found: within 3 degrees of the dock, its middle lower than the dock's top edge (when the dock lies
+        /// under the row), or on a held item of the Whisp.
+        private bool HitsKeepOut(ViewRect c, float centrePitch, float level)
+        {
+            if (_keepHasDock)
+            {
+                if (c.Overlaps(_keepDock, DockGap)) return true;
+                if (_keepDock.Pitch1 <= level && centrePitch < _keepDock.Pitch1) return true;
+            }
+            for (int i = 0; i < _keepHard.Count; i++) if (c.Overlaps(_keepHard[i], 2f)) return true;
+            return false;
+        }
 
         // ---- the room: what the last depth reading saw (world points), for a few seconds
         private List<Vector3> _roomPts;
@@ -170,64 +279,77 @@ namespace MetaCodex.Shell
                 taken.Add(r);
                 if (q == opener) { openerRect = r; hasOpener = true; }
             }
+            FillKeepOut(eye, gaze, true); // the dock, and the Whisp's items (taken while it holds still, its idle disc a cost)
             const float margin = 2f;
             float best = float.MaxValue, bestYaw = float.NaN, bestPitch = 0f, bestDist = dist, bestLevel = 0f;
             float bestFar = 0f;
-            foreach (float far in PlaceFurther)
+            bool wide = false;
+            // in view first; when nothing is free in view, the nearest free place round the user (never behind: WideYaw),
+            // and the Whisp points to it
+            for (int pass = 0; pass < 2 && float.IsNaN(bestYaw); pass++)
             {
-                if (bestFar == 1f) break; // free at the panel distance: it goes there
-                float fd = dist * far;
-                float halfYaw = Mathf.Atan2(halfW, fd) * Mathf.Rad2Deg;
-                float halfPitch = Mathf.Atan2(halfH, fd) * Mathf.Rad2Deg;
-                float reserveYaw = RailReserveYaw(halfW, fd, reserveM);
-                float level = Mathf.Asin(Mathf.Clamp(-0.06f / fd, -1f, 1f)) * Mathf.Rad2Deg; // centres just below the eyes, as before
-                for (float pitchOff = 0f; pitchOff <= 60f; pitchOff += 3f)
+                if (pass == 1 && !inView) break; // RECENTER searched the wide range already
+                bool view = inView && pass == 0;
+                wide = pass == 1;
+                bestFar = 0f;
+                foreach (float far in PlaceFurther)
                 {
-                    foreach (float ps in pitchOff == 0f ? new[] { 1f } : new[] { 1f, -1f })
+                    if (bestFar == 1f) break; // free at the panel distance: it goes there
+                    float fd = dist * far;
+                    float halfYaw = Mathf.Atan2(halfW, fd) * Mathf.Rad2Deg;
+                    float halfPitch = Mathf.Atan2(halfH, fd) * Mathf.Rad2Deg;
+                    float reserveYaw = RailReserveYaw(halfW, fd, reserveM);
+                    float level = Mathf.Asin(Mathf.Clamp(-0.06f / fd, -1f, 1f)) * Mathf.Rad2Deg; // centres just below the eyes, as before
+                    for (float pitchOff = 0f; pitchOff <= 60f; pitchOff += 3f)
                     {
-                        float pitch = level + pitchOff * ps;
-                        if (pitch + halfPitch > PlaceTop || pitch - halfPitch < PlaceBottom) continue;
-                        if (inView && pitchOff > ViewPitch) continue;
-                        bool tilted = pitchOff >= 1.5f;
-                        float yawLimit = inView ? ViewYaw + reserveYaw * 0.5f : PlaceYawLimit; // the middle of the pair (window + rail) in view
-                        for (float yawOff = 0f; yawOff <= yawLimit; yawOff += 2f)
+                        foreach (float ps in pitchOff == 0f ? SignAhead : SignBoth)
                         {
-                            foreach (float ys in yawOff == 0f ? new[] { 1f } : new[] { 1f, -1f })
+                            float pitch = level + pitchOff * ps;
+                            if (pitch + halfPitch > PlaceTop || pitch - halfPitch < PlaceBottom) continue;
+                            if (view && pitchOff > ViewPitch) continue;
+                            bool tilted = pitchOff >= 1.5f;
+                            float yawLimit = view ? ViewYaw + reserveYaw * 0.5f : inView ? WideYaw : PlaceYawLimit; // the middle of the pair (window + rail) in view
+                            for (float yawOff = 0f; yawOff <= yawLimit; yawOff += 2f)
                             {
-                                float yaw = yawOff * ys;
-                                var c = new ViewRect { Yaw0 = yaw - halfYaw - reserveYaw, Yaw1 = yaw + halfYaw, Pitch0 = pitch - halfPitch, Pitch1 = pitch + halfPitch };
-                                // something real there (a wall, a monitor): the panel comes 8 cm in front of it, and is larger in
-                                // the view for it; nearer than half a metre is a poor place
-                                float d = fd, wall = 0f;
-                                float clear = ClearanceIn(room, yawBins, pitchBins, c);
-                                if (clear - 0.08f < fd)
+                                foreach (float ys in yawOff == 0f ? SignAhead : SignBoth)
                                 {
-                                    d = Mathf.Max(0.42f, clear - 0.08f);
-                                    wall = d < 0.5f ? 12f + (0.5f - (clear - 0.08f)) * 60f : (fd - d) * 12f;
-                                    float hy = Mathf.Atan2(halfW, d) * Mathf.Rad2Deg, hp = Mathf.Atan2(halfH, d) * Mathf.Rad2Deg;
-                                    c = new ViewRect { Yaw0 = yaw - hy - RailReserveYaw(halfW, d, reserveM), Yaw1 = yaw + hy, Pitch0 = pitch - hp, Pitch1 = pitch + hp };
+                                    float yaw = yawOff * ys;
+                                    var c = new ViewRect { Yaw0 = yaw - halfYaw - reserveYaw, Yaw1 = yaw + halfYaw, Pitch0 = pitch - halfPitch, Pitch1 = pitch + halfPitch };
+                                    // something real there (a wall, a monitor): the panel comes 8 cm in front of it, and is larger in
+                                    // the view for it; nearer than half a metre is a poor place
+                                    float d = fd, wall = 0f;
+                                    float clear = ClearanceIn(room, yawBins, pitchBins, c);
+                                    if (clear - 0.08f < fd)
+                                    {
+                                        d = Mathf.Max(0.42f, clear - 0.08f);
+                                        wall = d < 0.5f ? 12f + (0.5f - (clear - 0.08f)) * 60f : (fd - d) * 12f;
+                                        float hy = Mathf.Atan2(halfW, d) * Mathf.Rad2Deg, hp = Mathf.Atan2(halfH, d) * Mathf.Rad2Deg;
+                                        c = new ViewRect { Yaw0 = yaw - hy - RailReserveYaw(halfW, d, reserveM), Yaw1 = yaw + hy, Pitch0 = pitch - hp, Pitch1 = pitch + hp };
+                                    }
+                                    bool free = true;
+                                    foreach (var t in taken) if (c.Overlaps(t, margin)) { free = false; break; }
+                                    if (!free || HitsKeepOut(c, pitch, level)) continue;
+                                    // the quick guess above is a window straight ahead; the real pose (tilted above or below eye
+                                    // level, its rail turned towards the user) spreads wider: check what it really covers
+                                    var exact = PoseRect(yaw, pitch, d, halfW, halfH, reserveM, tilted);
+                                    foreach (var t in taken) if (exact.Overlaps(t, margin)) { free = false; break; }
+                                    if (!free || HitsKeepOut(exact, pitch, level)) continue;
+                                    // turning the head sideways is easier than nodding: a degree up or down costs more
+                                    // (and above a window rather than below it: below is where the hands and the dock are);
+                                    // further away than the panel distance costs too (only when nothing nearer is free)
+                                    float groupYaw = yaw - reserveYaw * 0.5f;
+                                    float further = (far - 1f) * 40f;
+                                    float cost = Mathf.Abs(groupYaw) + Mathf.Abs(pitch - level) * (pitch >= level ? 1.6f : 3.0f) + wall + further;
+                                    if (hasOpener)
+                                    {
+                                        // beside the window it was opened from: the gap to it counts most, its right side is preferred
+                                        var gap = c.Gap(openerRect);
+                                        cost = Mathf.Abs(groupYaw) * 0.25f + Mathf.Abs(pitch - level) * 0.5f + (gap.yaw + gap.pitch * 1.5f) * 1.6f + (c.YawMid < openerRect.YawMid ? 5f : 0f) + wall + further;
+                                    }
+                                    // the idle Whisp moves aside by itself: covering it only costs a little
+                                    for (int k = 0; k < _keepSoft.Count; k++) if (exact.Overlaps(_keepSoft[k], 1f)) { cost += OrbSoftCost; break; }
+                                    if (cost < best) { best = cost; bestYaw = yaw; bestPitch = pitch; bestDist = d; bestLevel = level; bestFar = far; }
                                 }
-                                bool free = true;
-                                foreach (var t in taken) if (c.Overlaps(t, margin)) { free = false; break; }
-                                if (!free) continue;
-                                // the quick guess above is a window straight ahead; the real pose (tilted above or below eye
-                                // level, its rail turned towards the user) spreads wider: check what it really covers
-                                var exact = PoseRect(yaw, pitch, d, halfW, halfH, reserveM, tilted);
-                                foreach (var t in taken) if (exact.Overlaps(t, margin)) { free = false; break; }
-                                if (!free) continue;
-                                // turning the head sideways is easier than nodding: a degree up or down costs more
-                                // (and above a window rather than below it: below is where the hands and the dock are);
-                                // further away than the panel distance costs too (only when nothing nearer is free)
-                                float groupYaw = yaw - reserveYaw * 0.5f;
-                                float further = (far - 1f) * 40f;
-                                float cost = Mathf.Abs(groupYaw) + Mathf.Abs(pitch - level) * (pitch >= level ? 1.6f : 3.0f) + wall + further;
-                                if (hasOpener)
-                                {
-                                    // beside the window it was opened from: the gap to it counts most, its right side is preferred
-                                    var gap = c.Gap(openerRect);
-                                    cost = Mathf.Abs(groupYaw) * 0.25f + Mathf.Abs(pitch - level) * 0.5f + (gap.yaw + gap.pitch * 1.5f) * 1.6f + (c.YawMid < openerRect.YawMid ? 5f : 0f) + wall + further;
-                                }
-                                if (cost < best) { best = cost; bestYaw = yaw; bestPitch = pitch; bestDist = d; bestLevel = level; bestFar = far; }
                             }
                         }
                     }
@@ -261,6 +383,7 @@ namespace MetaCodex.Shell
             var flat = new Vector3(Mathf.Sin(a), 0f, Mathf.Cos(a));
             var facing = Mathf.Abs(bestPitch - bestLevel) < 1.5f ? flat : dir;
             p.transform.SetPositionAndRotation(eye + dir * dist, Quaternion.LookRotation(facing, Vector3.up));
+            if (wide && OrbActive) Orb.PointAt(p.transform.position); // out of view: the Whisp shows where it opened
         }
 
         /// The distances (times the panel distance) a panel may open at: the panel distance first, further only when
@@ -378,7 +501,44 @@ namespace MetaCodex.Shell
             if (Mathf.Abs(mine.YawMid) > ViewYaw + 6f) return false; // out of view: placed anew, in front
             foreach (var q in PlacementObstacles(p))
                 if (q.Id != "dock" && ViewRectOf(q, head.position, gaze, out var r) && mine.Overlaps(r, -1f)) return false; // a degree of overlap is a touch, not a cover
-            return true;
+            // the dock (under it, or within 3 degrees of it) and the Whisp's items while it holds still count as taken
+            FillKeepOut(head.position, gaze, true);
+            float level = Mathf.Asin(Mathf.Clamp(-0.06f / Mathf.Max(0.3f, Vector3.Distance(p.transform.position, head.position)), -1f, 1f)) * Mathf.Rad2Deg;
+            return !HitsKeepOut(mine, mine.PitchMid, level);
+        }
+
+        private UiPanel _cardOffDock;
+        private float _cardOffDockFind;
+
+        /// Small cards never touch the DOCK (owner's picture 2026-11-15: the tour card was set 3 cm above the dock, which
+        /// leans towards the user, so in the view the two met): an open tour card that comes within CardDockGap degrees of
+        /// the dock is raised round the eyes, at the same distance, turned to the user. Every frame, no allocation: the
+        /// card is looked up by its id once a second (FIRSTRUN owns it), then two view rectangles.
+        private void KeepCardsOffDock()
+        {
+            var head = Head;
+            if (head == null || Router == null) return;
+            float now = Time.unscaledTime;
+            if (now >= _cardOffDockFind)
+            {
+                _cardOffDockFind = now + 1f;
+                _cardOffDock = null;
+                foreach (var q in Router.Panels) if (q != null && q.Id == "tour") { _cardOffDock = q; break; }
+            }
+            var card = _cardOffDock;
+            if (card == null || !card.IsOpen || Router.IsDragging(card)) return;
+            if (!_panels.TryGetValue("dock", out var dock) || dock == null || !dock.IsOpen) return; // a plugin may have built it again
+            Vector3 eye = head.position;
+            float refYaw = Mathf.Atan2(head.forward.x, head.forward.z) * Mathf.Rad2Deg;
+            if (!ViewRectOf(dock, eye, refYaw, out var d) || !ViewRectOf(card, eye, refYaw, out var c) || !c.Overlaps(d, CardDockGap)) return;
+            float lift = d.Pitch1 + CardDockGap - c.Pitch0; // degrees up
+            if (lift <= 0.01f) return;
+            var tr = card.transform;
+            var to = tr.position - eye;
+            var axis = Vector3.Cross(Vector3.up, to);
+            if (axis.sqrMagnitude < 1e-6f) return;
+            var pos = eye + Quaternion.AngleAxis(-lift, axis.normalized) * to; // a negative turn round the right-hand axis raises it
+            tr.SetPositionAndRotation(pos, Quaternion.LookRotation(pos - eye, Vector3.up));
         }
     }
 }

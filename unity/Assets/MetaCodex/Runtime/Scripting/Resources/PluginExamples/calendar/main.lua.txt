@@ -1,0 +1,403 @@
+-- Calendar: a month grid, entries per day, an agenda of the next 7 days and reminders.
+--
+-- A MODEL PLUGIN. Copy its shape for any app with a window of tappable cells:
+--   * window   one ui.panel{} made again by a single render() whenever the state changes
+--   * tile     menu.add{} puts a CALENDAR tile on the dock and the wrist menu
+--   * grid     two `grid` components: weekday headers (cells without id are not tappable) and the days
+--              (cells with id "d-YYYY-MM-DD"; the "cell" event gives that id back)
+--   * store    entries keyed by date, one JSON text, saved on every change, at most MAX_ENTRIES
+--   * restart  on load: reminders are armed again with app.at (they are not saved by the host);
+--              an entry whose time passed while the app was closed is reported once
+--   * voice    complete voice.command entries (description, typed params, phrases, 4+ samples)
+-- Dates use wall clock only: app.clock{year=,month=,day=} and app.date(t); the app has no os library.
+
+local REMIND_BEFORE = 10 * 60   -- seconds: a timed entry reminds this long before it starts
+local MAX_ENTRIES = 200         -- in the whole calendar; the oldest past ones are dropped first
+local MAX_PER_DAY = 8
+local MONTHS = { "January", "February", "March", "April", "May", "June", "July", "August",
+                 "September", "October", "November", "December" }
+local DAYS = { "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday" }
+
+local entries = {}      -- ["2026-11-20"] = { {id=1, time="14:30" ("" = all day), text="dentist", fired=false}, ... }
+local nextId = 1
+local viewY, viewM      -- the month on show
+local sel               -- the selected day, "YYYY-MM-DD"
+local remind = {}       -- entry id -> app.at timer id
+local render            -- forward declaration
+
+------------------------------------------------------------------ dates
+
+local function key(y, m, d) return string.format("%04d-%02d-%02d", y, m, d) end
+
+local function keyOf(t)
+  local d = app.date(t)
+  return key(d.year, d.month, d.day)
+end
+
+-- The time (seconds since 1970) of a date key and an optional "HH:MM".
+local function timeOf(k, hhmm)
+  local y, m, d = k:match("^(%d+)-(%d+)-(%d+)$")
+  local h, mi = (hhmm or ""):match("^(%d+):(%d+)$")
+  return app.clock{ year = tonumber(y), month = tonumber(m), day = tonumber(d),
+                    hour = h and tonumber(h) or 0, min = mi and tonumber(mi) or 0 }
+end
+
+local function daysIn(y, m) return app.date(app.clock{ year = y, month = m + 1, day = 0 }).day end
+
+-- The key of the day `n` days after the key `k` (the clock overflows days for us).
+local function plusDays(k, n)
+  local y, m, d = k:match("^(%d+)-(%d+)-(%d+)$")
+  return keyOf(app.clock{ year = tonumber(y), month = tonumber(m), day = tonumber(d) + n, hour = 12 })
+end
+
+local function dayLabel(k)
+  local d = app.date(timeOf(k))
+  return string.format("%s %d %s", DAYS[d.wday], d.day, MONTHS[d.month])
+end
+
+-- "today", "tomorrow", "2026-11-20", "friday", "next friday" -> a key, or nil.
+local function parseDay(text)
+  local low = tostring(text or ""):lower():gsub("^%s+", ""):gsub("%s+$", ""):gsub("^next%s+", "")
+  local today = keyOf()
+  if low == "" or low == "today" or low == "tonight" then return today end
+  if low == "tomorrow" then return plusDays(today, 1) end
+  local y, m, d = low:match("^(%d%d%d%d)-(%d%d?)-(%d%d?)$")
+  if y then
+    y, m, d = tonumber(y), tonumber(m), tonumber(d)
+    if m < 1 or m > 12 or d < 1 or d > daysIn(y, m) then return nil end
+    return key(y, m, d)
+  end
+  local names = { sun = 1, mon = 2, tue = 3, wed = 4, thu = 5, fri = 6, sat = 7 }
+  local want = low:match("^%a+$") and names[low:sub(1, 3)]
+  if want then
+    local have = app.date().wday
+    return plusDays(today, (want - have - 1) % 7 + 1)     -- the next one after today
+  end
+  return nil
+end
+
+-- "14:30", "9:05", "2pm", "2:30 pm" -> "HH:MM", or nil.
+local function parseTime(text)
+  local h, m, ap = tostring(text or ""):lower():match("^%s*(%d%d?):?(%d?%d?)%s*([ap]?)m?%s*$")
+  if not h then return nil end
+  h, m = tonumber(h), tonumber(m) or 0
+  if ap == "p" and h < 12 then h = h + 12 end
+  if ap == "a" and h == 12 then h = 0 end
+  if h > 23 or m > 59 then return nil end
+  return string.format("%02d:%02d", h, m)
+end
+
+------------------------------------------------------------------ state
+
+local function save()
+  store.set("calendar", json.encode({ nextId = nextId, entries = entries }))
+end
+
+local function count()
+  local n = 0
+  for _, list in pairs(entries) do n = n + #list end
+  return n
+end
+
+local function sortDay(k)
+  table.sort(entries[k], function(a, b)
+    if a.time ~= b.time then return a.time < b.time end     -- "" (all day) first
+    return a.id < b.id
+  end)
+end
+
+-- Read the store. Bad text gives an empty calendar; every field is checked.
+local function loadEntries()
+  local raw = store.get("calendar")
+  local v = nil
+  if raw then v = json.decode(raw) end
+  if type(v) ~= "table" or type(v.entries) ~= "table" then return end
+  local total = 0
+  for k, list in pairs(v.entries) do
+    if type(k) == "string" and k:match("^%d%d%d%d%-%d%d%-%d%d$") and type(list) == "table" then
+      for _, e in ipairs(list) do
+        if type(e) == "table" and type(e.id) == "number" and type(e.text) == "string" and total < MAX_ENTRIES then
+          local time = (type(e.time) == "string" and e.time:match("^%d%d:%d%d$")) and e.time or ""
+          entries[k] = entries[k] or {}
+          entries[k][#entries[k] + 1] = { id = math.floor(e.id), time = time, text = e.text, fired = e.fired == true }
+          total = total + 1
+          if e.id >= nextId then nextId = math.floor(e.id) + 1 end
+        end
+      end
+      if entries[k] then sortDay(k) end
+    end
+  end
+end
+
+-- Make room for one more: drop the oldest entries of days before today. False when nothing can go.
+local function makeRoom()
+  while count() >= MAX_ENTRIES do
+    local oldest = nil
+    for k in pairs(entries) do
+      if k < keyOf() and (oldest == nil or k < oldest) then oldest = k end
+    end
+    if not oldest then return false end
+    for _, e in ipairs(entries[oldest]) do
+      if remind[e.id] then app.cancel(remind[e.id]); remind[e.id] = nil end
+    end
+    entries[oldest] = nil
+  end
+  return true
+end
+
+------------------------------------------------------------------ reminders
+
+local function findEntry(id)
+  for _, list in pairs(entries) do
+    for _, e in ipairs(list) do if e.id == id then return e end end
+  end
+end
+
+local function fireReminder(id, k)
+  remind[id] = nil
+  local e = findEntry(id)
+  if not e or e.fired then return end
+  e.fired = true
+  save()
+  local mins = math.max(1, math.ceil((timeOf(k, e.time) - app.clock()) / 60))
+  ui.notify{ text = "In " .. mins .. " minutes: " .. e.time .. " " .. e.text, tone = "ok", sound = "alert", speak = true, panel = "main" }
+end
+
+-- A timed entry in the future gets one app.at, REMIND_BEFORE ahead (at once when that moment is past).
+local function arm(k, e)
+  if e.time == "" or e.fired then return end
+  local at = timeOf(k, e.time)
+  if at <= app.clock() then e.fired = true return end
+  local id = e.id
+  remind[id] = app.at(math.max(at - REMIND_BEFORE, app.clock()), function() fireReminder(id, k) end)
+end
+
+------------------------------------------------------------------ entries
+
+-- Returns the entry, or nil and a reason.
+local function addEntry(k, time, text)
+  if entries[k] and #entries[k] >= MAX_PER_DAY then return nil, "That day is full (" .. MAX_PER_DAY .. " entries)." end
+  if not makeRoom() then return nil, "The calendar is full (" .. MAX_ENTRIES .. " entries)." end
+  local e = { id = nextId, time = time or "", text = text:sub(1, 60), fired = false }
+  nextId = nextId + 1
+  entries[k] = entries[k] or {}
+  entries[k][#entries[k] + 1] = e
+  sortDay(k)
+  arm(k, e)
+  save()
+  render()
+  return e
+end
+
+local function removeEntry(id)
+  for k, list in pairs(entries) do
+    for i, e in ipairs(list) do
+      if e.id == id then
+        if remind[id] then app.cancel(remind[id]); remind[id] = nil end
+        table.remove(list, i)
+        if #list == 0 then entries[k] = nil end
+        save()
+        render()
+        return
+      end
+    end
+  end
+end
+
+-- "14:30 dentist" is timed, "buy a gift" is all day.
+local function addFromText(text)
+  local time, rest = text:match("^(%d%d?:%d%d)%s+(.+)$")
+  if time then time = parseTime(time) else rest = text end
+  local e, why = addEntry(sel, time, rest or text)
+  if not e then ui.notify{ text = why, tone = "warn", sound = "error", panel = "main" } else ui.sound("ping") end
+end
+
+------------------------------------------------------------------ window
+
+local function showMonth(y, m)                           -- any month number is fine: 0 and 13 roll over
+  local d = app.date(app.clock{ year = y, month = m, day = 1 })
+  viewY, viewM = d.year, d.month
+end
+
+local function onEvent(e)
+  if e.type == "button" then
+    if e.id == "prev" then showMonth(viewY, viewM - 1)
+    elseif e.id == "next" then showMonth(viewY, viewM + 1)
+    elseif e.id == "today" then local d = app.date(); showMonth(d.year, d.month); sel = keyOf()
+    elseif type(e.id) == "string" and e.id:sub(1, 3) == "rm-" then removeEntry(tonumber(e.id:sub(4)) or -1); return
+    end
+    render()
+  elseif e.type == "cell" and type(e.id) == "string" and e.id:sub(1, 2) == "d-" then
+    sel = e.id:sub(3)
+    render()
+  elseif e.type == "input" then
+    addFromText(e.value)
+  elseif e.type == "open" then
+    render()
+  end
+end
+
+local function monthCells()
+  local cells = {}
+  local today = keyOf()
+  local lead = (app.date(app.clock{ year = viewY, month = viewM, day = 1 }).wday + 5) % 7   -- Monday first
+  for _ = 1, lead do cells[#cells + 1] = { text = "", tone = "dim" } end
+  for d = 1, daysIn(viewY, viewM) do
+    local k = key(viewY, viewM, d)
+    local n = entries[k] and #entries[k] or 0
+    local tone = (k == today) and "accent" or (k == sel) and "ok" or nil
+    local sub = nil                                  -- "•" for one entry, the count for more
+    if n == 1 then sub = "•" elseif n > 1 then sub = tostring(n) end
+    cells[#cells + 1] = { id = "d-" .. k, text = tostring(d), tone = tone, sub = sub }
+  end
+  while #cells % 7 ~= 0 do cells[#cells + 1] = { text = "", tone = "dim" } end
+  return cells
+end
+
+local function agenda()
+  local items, today = {}, keyOf()
+  for i = 0, 6 do
+    local k = plusDays(today, i)
+    for _, e in ipairs(entries[k] or {}) do
+      if #items < 8 then
+        local d = app.date(timeOf(k))
+        items[#items + 1] = { time = i == 0 and "Today" or string.format("%s %d", DAYS[d.wday]:sub(1, 3), d.day),
+                              text = (e.time ~= "" and (e.time .. " ") or "") .. e.text }
+      end
+    end
+  end
+  return items
+end
+
+render = function()
+  local selList = entries[sel] or {}
+  local comps = {
+    { type = "text", text = "# " .. MONTHS[viewM] .. " " .. viewY },
+    { type = "buttons", id = "nav", items = {
+      { id = "prev", label = "◀ PREV" }, { id = "today", label = "TODAY", tone = "accent" }, { id = "next", label = "NEXT ▶" } } },
+    { type = "grid", id = "weekdays", columns = 7, cells = {
+      { text = "Mon" }, { text = "Tue" }, { text = "Wed" }, { text = "Thu" }, { text = "Fri" }, { text = "Sat" }, { text = "Sun" } } },
+    { type = "grid", id = "days", columns = 7, cells = monthCells() },
+  }
+  local items, rm = {}, {}
+  for _, e in ipairs(selList) do
+    items[#items + 1] = { key = e.time ~= "" and e.time or "all day", value = e.text }
+    rm[#rm + 1] = { id = "rm-" .. e.id, label = "✕ " .. (e.time ~= "" and e.time:sub(1, 5) .. " " or "") .. e.text:sub(1, 6), tone = "error" }
+  end
+  if #items == 0 then items[1] = { key = "-", value = "nothing planned" } end
+  comps[#comps + 1] = { type = "kv", title = dayLabel(sel), items = items }
+  if #rm > 0 then comps[#comps + 1] = { type = "buttons", id = "remove", items = rm } end
+  comps[#comps + 1] = { type = "input", prompt = "Add to " .. sel, placeholder = "14:30 dentist  or  buy a gift" }
+  local ag = agenda()
+  if #ag == 0 then
+    comps[#comps + 1] = { type = "text", text = "Nothing in the next 7 days." }
+  else
+    comps[#comps + 1] = { type = "timeline", title = "Next 7 days", items = ag }
+  end
+  ui.panel{ id = "main", title = "Calendar", components = comps, on = onEvent }
+end
+
+------------------------------------------------------------------ voice
+
+local function spoken(k)
+  local today = keyOf()
+  if k == today then return "today" end
+  if k == plusDays(today, 1) then return "tomorrow" end
+  return DAYS[app.date(timeOf(k)).wday]
+end
+
+voice.command{
+  name = "calendar_open",
+  description = "Open the calendar window, on a day if one is given (day: today, tomorrow, a weekday or a date like 2026-11-20)",
+  params = { day = { type = "string", description = "today, tomorrow, a weekday name or a date like 2026-11-20", required = false } },
+  phrases = { "(open|show) [the] calendar [on {day}]", "what is on {day}" },
+  samples = { "open the calendar", "show me the calendar", "show the calendar for tomorrow", "what is in my calendar on friday" },
+  run = function(args)
+    local k = parseDay(args.day)
+    if not k then return "error: I did not understand the day" end
+    sel = k
+    local d = app.date(timeOf(k)); showMonth(d.year, d.month)
+    render()
+    ui.open("main")
+    return "Calendar on " .. dayLabel(k) .. "."
+  end
+}
+
+voice.command{
+  name = "calendar_add_entry",
+  description = "Add a calendar entry (day: today, tomorrow, a weekday or a date like 2026-11-20; time: for example 14:30, leave out for all day; text: what it is)",
+  params = {
+    day = { type = "string", description = "today, tomorrow, a weekday name or a date like 2026-11-20; default today", required = false },
+    time = { type = "string", description = "clock time like 14:30 or 2pm; leave out for an all-day entry", required = false },
+    text = { type = "string", description = "what the entry is, for example dentist", required = true },
+  },
+  synonyms = { day = { tonight = "today" } },
+  phrases = { "(add|put) {text} (on|to) [the] calendar [for] {day}", "remind me on {day} at {time} (to|about) {text}" },
+  samples = { "add dentist to the calendar tomorrow at 2 pm", "put a meeting on friday at 10:30",
+              "remind me on 2026-11-20 about the report", "add buy a gift to my calendar today", "schedule lunch with Anna on monday at 12:30" },
+  run = function(args)
+    -- "tomorrow at 2 pm": a {day} capture can hold the time too; split it off
+    if type(args.day) == "string" and not args.time then
+      local d, t = args.day:match("^(.-)%s+at%s+(.+)$")
+      if d then args.day, args.time = d, t end
+    end
+    local k = parseDay(args.day)
+    if not k then return "error: I did not understand the day" end
+    local time = nil
+    if type(args.time) == "string" and args.time ~= "" then
+      time = parseTime(args.time)
+      if not time then return "error: I did not understand the time" end
+    end
+    if type(args.text) ~= "string" or args.text == "" then return "error: what should I add?" end
+    local e, why = addEntry(k, time, args.text)
+    if not e then return "error: " .. why end
+    return "Added " .. e.text .. " for " .. spoken(k) .. (time and (" at " .. time) or "") .. "."
+  end
+}
+
+voice.command{
+  name = "calendar_agenda",
+  description = "Read the next entries of the calendar in the coming 7 days",
+  speak = true,
+  phrases = { "what is (on|in) my (calendar|agenda)", "(read|tell me) [my] (agenda|calendar)", "what is next on [my] calendar" },
+  samples = { "what is on my calendar", "what do I have this week", "read my agenda", "what is next in my calendar", "do I have anything planned" },
+  run = function(args)
+    local today, now, parts = keyOf(), app.clock(), {}
+    for i = 0, 6 do
+      local k = plusDays(today, i)
+      for _, e in ipairs(entries[k] or {}) do
+        local passed = e.time ~= "" and timeOf(k, e.time) < now
+        if #parts < 5 and not passed then
+          parts[#parts + 1] = e.text .. " " .. spoken(k) .. (e.time ~= "" and (" at " .. e.time) or "")
+        end
+      end
+    end
+    if #parts == 0 then return "Nothing planned in the next seven days." end
+    return "Next: " .. table.concat(parts, "; ") .. "."
+  end
+}
+
+------------------------------------------------------------------ load
+
+menu.add{ id = "calendar", label = "CALENDAR", glyph = "▦", icon = "mark", panel = "main" }
+
+loadEntries()
+sel = keyOf()
+do local d = app.date(); showMonth(d.year, d.month) end
+-- Reminders are armed again; a timed entry that began while the app was closed is reported once.
+local missed = {}
+for k, list in pairs(entries) do
+  for _, e in ipairs(list) do
+    if e.time ~= "" and not e.fired and timeOf(k, e.time) <= app.clock() then
+      e.fired = true
+      missed[#missed + 1] = e.time .. " " .. e.text
+    else
+      arm(k, e)
+    end
+  end
+end
+save()
+render()
+if #missed > 0 then
+  ui.notify{ text = "Passed while MetaCodex was closed: " .. table.concat(missed, ", "), tone = "warn", sound = "alert", speak = true, panel = "main" }
+end
