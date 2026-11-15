@@ -1,7 +1,8 @@
 // mcx_gfx.h: the rendering kit of native MetaCodex apps, header-only, next to mcx_xr.h. Shader helpers, the maths
 // the layer lacks, procedural meshes (normals, uvs, counter-clockwise winding), a lit renderer (hemisphere ambient,
 // one key light, soft specular, Fresnel rim, emissive, optional fog) with an opaque and a premultiplied translucent
-// path, instanced drawing, and contact shadows that ground an object on the floor.
+// path, instanced drawing, contact shadows that ground an object on the floor, motion helpers (easing, damping,
+// pulses), and additive glow: Sprites (halos, stars, sparks; one draw call), Trail and Particles that feed them.
 //
 //   mcx::Lit lit;  mcx::ContactShadow shadow;  mcx::Mesh box;
 //   lit.Init();  shadow.Init();  box.Upload(mcx::MakeBox({0.2f, 0.2f, 0.2f}));            // once, at init
@@ -979,6 +980,320 @@ private:
     GLuint prog_ = 0;
     GLint uViewProj_ = -1, uModel_ = -1, uStrength_ = -1, uFade_ = -1;
     Mesh disc_;
+};
+
+// ================================================================ motion: easing, damping, pulses
+// t is 0..1 (clamped). Arrive with EaseOut, leave with EaseIn, move from A to B with EaseInOut. EaseOutBack overshoots
+// a little: game objects only, never UI. Damp follows a moving target at the same speed at any frame rate: `rate` per
+// second (10: the gap closes 63 % in 0.1 s, settled in about 0.3 s). Progress turns a start time into 0..1.
+inline float Clamp01(float t) { return t < 0.f ? 0.f : (t > 1.f ? 1.f : t); }
+inline float EaseIn(float t) { t = Clamp01(t); return t * t * t; }
+inline float EaseOut(float t) { t = 1.f - Clamp01(t); return 1.f - t * t * t; }
+inline float EaseInOut(float t) { t = Clamp01(t); return t < 0.5f ? 4.f * t * t * t : 1.f - 4.f * (1.f - t) * (1.f - t) * (1.f - t); }
+inline float EaseOutBack(float t, float overshoot = 1.70158f) { t = Clamp01(t) - 1.f; return 1.f + t * t * ((overshoot + 1.f) * t + overshoot); }
+// 0..1 from `start` (Frame::seconds) over `duration` seconds
+inline float Progress(double now, double start, float duration) { return duration > 0.f ? Clamp01((float)((now - start) / duration)) : 1.f; }
+// 0..1..0 at `hz` cycles per second: idle breathing, a glow that pulses
+inline float Pulse(double seconds, float hz) { return 0.5f - 0.5f * std::cos((float)std::fmod(seconds * hz, 1.0) * gfx_detail::kTwoPi); }
+inline float Damp(float current, float target, float rate, float dt) { return target + (current - target) * std::exp(-rate * dt); }
+inline XrVector3f Vec3Damp(XrVector3f current, XrVector3f target, float rate, float dt) { return Vec3Lerp(target, current, std::exp(-rate * dt)); }
+inline XrQuaternionf QuatDamp(XrQuaternionf current, XrQuaternionf target, float rate, float dt) { return QuatSlerp(current, target, 1.f - std::exp(-rate * dt)); }
+
+// ================================================================ glow sprites: additive light, one draw call
+// Soft round sprites that face the eye and ADD light: halos round glowing objects, particles, sparks, trails, stars.
+// The colour adds; the alpha grows only by `dim` x the halo. The layer is premultiplied, so over passthrough a sprite
+// lights the room (and darkens it a little under its centre, so it still reads on a white wall).
+// Fixed capacity (set in Init, no growth); Add copies 8 floats into reserved memory. Draw after the opaque objects:
+// depth test on, no depth writes, so solid things hide sprites and sprites never hide anything. Additive: no sorting.
+inline constexpr const char* kGfxSpriteVs = R"(#version 300 es
+layout(location = 0) in vec2 aCorner;
+layout(location = 1) in vec4 aPosSize;
+layout(location = 2) in vec4 aColorCore;
+uniform mat4 uViewProj;
+uniform vec3 uRight;
+uniform vec3 uUp;
+out mediump vec2 vUv;
+out mediump vec4 vColor;
+void main() {
+    vUv = aCorner;
+    vColor = aColorCore;
+    vec3 p = aPosSize.xyz + (uRight * aCorner.x + uUp * aCorner.y) * (0.5 * aPosSize.w);
+    gl_Position = uViewProj * vec4(p, 1.0);
+}
+)";
+
+inline constexpr const char* kGfxSpriteFs = R"(#version 300 es
+precision mediump float;
+in mediump vec2 vUv;
+in mediump vec4 vColor;
+uniform float uDim;
+uniform float uIntensity;
+out vec4 fragColor;
+void main() {
+    float h = 1.0 - min(dot(vUv, vUv), 1.0);
+    float halo = h * h * h;
+    float core = vColor.a * smoothstep(0.75, 0.94, h);
+    fragColor = vec4(vColor.rgb * ((halo + core) * uIntensity), uDim * halo * uIntensity);
+}
+)";
+
+class Sprites
+{
+public:
+    float dim = 0.3f;      // 0..1: how much a sprite also darkens what is behind its centre (0: pure added light)
+    bool depthTest = true; // false: drawn over everything (a marker that must always show)
+    float intensity = 1.f; // multiplies every sprite: fades a whole set in or out (a fixed starfield) with no Add
+    Sprites() = default;
+    Sprites(const Sprites&) = delete;
+    Sprites& operator=(const Sprites&) = delete;
+    bool Init(int capacity) // compiles the program; false (and a log line) when it fails
+    {
+        Destroy();
+        if (capacity < 1) return false;
+        prog_ = CreateProgram("sprites", kGfxSpriteVs, kGfxSpriteFs);
+        if (!prog_) return false;
+        uViewProj_ = glGetUniformLocation(prog_, "uViewProj");
+        uRight_ = glGetUniformLocation(prog_, "uRight");
+        uUp_ = glGetUniformLocation(prog_, "uUp");
+        uDim_ = glGetUniformLocation(prog_, "uDim");
+        uIntensity_ = glGetUniformLocation(prog_, "uIntensity");
+        capacity_ = capacity;
+        data_.reserve((size_t)capacity * kFloats);
+        static const float corners[8] = {-1.f, -1.f, 1.f, -1.f, -1.f, 1.f, 1.f, 1.f};
+        glGenVertexArrays(1, &vao_);
+        glGenBuffers(1, &quad_);
+        glGenBuffers(1, &vbo_);
+        glBindVertexArray(vao_);
+        glBindBuffer(GL_ARRAY_BUFFER, quad_);
+        glBufferData(GL_ARRAY_BUFFER, sizeof corners, corners, GL_STATIC_DRAW);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), nullptr);
+        glBindBuffer(GL_ARRAY_BUFFER, vbo_);
+        glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)((size_t)capacity * kFloats * sizeof(float)), nullptr, GL_DYNAMIC_DRAW);
+        const GLsizei stride = (GLsizei)(kFloats * sizeof(float));
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, stride, nullptr);
+        glVertexAttribDivisor(1, 1);
+        glEnableVertexAttribArray(2);
+        glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, stride, reinterpret_cast<const void*>(4 * sizeof(float)));
+        glVertexAttribDivisor(2, 1);
+        glBindVertexArray(0);
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        return true;
+    }
+    void Clear() // count 0, keeps the memory (each frame for moving sprites; never for a fixed starfield)
+    {
+        data_.clear();
+        dirty_ = true;
+    }
+    // centre and diameter in metres; LINEAR colour with the brightness in it (mcx::GfxSrgbRgb once at init, scaled);
+    // core 0..1: a small hot centre (stars, sparks). False when full.
+    bool Add(XrVector3f position, float size, XrVector3f color, float core = 0.f)
+    {
+        if (Count() >= capacity_) return false;
+        const float v[kFloats] = {position.x, position.y, position.z, size, color.x, color.y, color.z, core};
+        data_.insert(data_.end(), v, v + kFloats);
+        dirty_ = true;
+        return true;
+    }
+    int Count() const { return (int)(data_.size() / kFloats); }
+    int Capacity() const { return capacity_; }
+    // one draw call into the eye, after the opaque objects. Uploads what changed since the last Draw. Saves the GL state
+    // it changes (program, depth, culling, blending and its function) and puts it back, so it may run anywhere.
+    void Draw(const Eye& eye)
+    {
+        if (!prog_ || data_.empty() || intensity <= 0.f) return;
+        if (dirty_)
+        {
+            glBindBuffer(GL_ARRAY_BUFFER, vbo_);
+            glBufferSubData(GL_ARRAY_BUFFER, 0, (GLsizeiptr)(data_.size() * sizeof(float)), data_.data());
+            glBindBuffer(GL_ARRAY_BUFFER, 0);
+            dirty_ = false;
+        }
+        GLint prog = 0, depthFunc = GL_LESS, srcRgb = GL_ONE, dstRgb = GL_ZERO, srcA = GL_ONE, dstA = GL_ZERO;
+        GLboolean wasDepth = glIsEnabled(GL_DEPTH_TEST), wasBlend = glIsEnabled(GL_BLEND), wasCull = glIsEnabled(GL_CULL_FACE);
+        GLboolean depthMask = GL_TRUE;
+        glGetIntegerv(GL_CURRENT_PROGRAM, &prog);
+        glGetIntegerv(GL_DEPTH_FUNC, &depthFunc);
+        glGetBooleanv(GL_DEPTH_WRITEMASK, &depthMask);
+        glGetIntegerv(GL_BLEND_SRC_RGB, &srcRgb);
+        glGetIntegerv(GL_BLEND_DST_RGB, &dstRgb);
+        glGetIntegerv(GL_BLEND_SRC_ALPHA, &srcA);
+        glGetIntegerv(GL_BLEND_DST_ALPHA, &dstA);
+        glUseProgram(prog_);
+        glUniformMatrix4fv(uViewProj_, 1, GL_FALSE, eye.viewProj.m);
+        glUniform3f(uRight_, eye.view.m[0], eye.view.m[4], eye.view.m[8]); // the eye's right and up axes in the world
+        glUniform3f(uUp_, eye.view.m[1], eye.view.m[5], eye.view.m[9]);
+        glUniform1f(uDim_, dim);
+        glUniform1f(uIntensity_, intensity);
+        if (depthTest)
+        {
+            glEnable(GL_DEPTH_TEST);
+            glDepthFunc(GL_LEQUAL);
+        }
+        else glDisable(GL_DEPTH_TEST);
+        glDepthMask(GL_FALSE);
+        glDisable(GL_CULL_FACE);
+        glEnable(GL_BLEND);
+        glBlendFuncSeparate(GL_ONE, GL_ONE, GL_ONE, GL_ONE);
+        glBindVertexArray(vao_);
+        glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)Count());
+        glBindVertexArray(0);
+        glBlendFuncSeparate((GLenum)srcRgb, (GLenum)dstRgb, (GLenum)srcA, (GLenum)dstA);
+        glUseProgram((GLuint)prog);
+        glDepthFunc((GLenum)depthFunc);
+        glDepthMask(depthMask);
+        if (wasDepth) glEnable(GL_DEPTH_TEST);
+        else glDisable(GL_DEPTH_TEST);
+        if (wasCull) glEnable(GL_CULL_FACE);
+        if (!wasBlend) glDisable(GL_BLEND);
+    }
+    void Destroy()
+    {
+        if (prog_) glDeleteProgram(prog_);
+        if (vao_) glDeleteVertexArrays(1, &vao_);
+        if (quad_) glDeleteBuffers(1, &quad_);
+        if (vbo_) glDeleteBuffers(1, &vbo_);
+        prog_ = vao_ = quad_ = vbo_ = 0;
+        capacity_ = 0;
+        data_.clear();
+        dirty_ = true;
+    }
+
+private:
+    static constexpr size_t kFloats = 8; // x y z size, r g b core
+    GLuint prog_ = 0, vao_ = 0, quad_ = 0, vbo_ = 0;
+    GLint uViewProj_ = -1, uRight_ = -1, uUp_ = -1, uDim_ = -1, uIntensity_ = -1;
+    int capacity_ = 0;
+    bool dirty_ = true;
+    std::vector<float> data_;
+};
+
+// ================================================================ trails: the recent path of a moving thing
+// A fixed ring of points (no growth after Init). Push the position each frame; a point is kept only when it is
+// `spacing` metres from the last one, so the trail has the same length at any speed. AddTo draws it into Sprites,
+// fading from the newest point to the oldest. Reset when the thing stops or jumps.
+class Trail
+{
+public:
+    bool Init(int points, float spacing)
+    {
+        if (points < 2) return false;
+        pts_.assign((size_t)points, XrVector3f{0.f, 0.f, 0.f});
+        head_ = count_ = 0;
+        spacing_ = spacing;
+        return true;
+    }
+    void Reset() { count_ = 0; }
+    void Push(XrVector3f p)
+    {
+        if (pts_.empty()) return;
+        if (count_ > 0)
+        {
+            XrVector3f d = Vec3Sub(p, pts_[(size_t)head_]);
+            if (Vec3Dot(d, d) < spacing_ * spacing_) return;
+        }
+        head_ = (head_ + 1) % (int)pts_.size();
+        pts_[(size_t)head_] = p;
+        if (count_ < (int)pts_.size()) count_++;
+    }
+    int Count() const { return count_; }
+    XrVector3f At(int i) const // 0 = the newest point; i < Count()
+    {
+        const int n = (int)pts_.size();
+        return pts_[(size_t)(((head_ - i) % n + n) % n)];
+    }
+    // newest: `size` and `color`; both fade towards the oldest point
+    void AddTo(Sprites& s, float size, XrVector3f color) const
+    {
+        for (int i = 0; i < count_; i++)
+        {
+            const float k = 1.f - (float)i / (float)count_;
+            s.Add(At(i), size * (0.35f + 0.65f * k), Vec3Scale(color, k * k));
+        }
+    }
+
+private:
+    std::vector<XrVector3f> pts_;
+    int head_ = 0, count_ = 0;
+    float spacing_ = 0.01f;
+};
+
+// ================================================================ particles: short bursts of glow
+// A fixed pool (no growth after Init): sparks on a hit, a celebration, dust. Burst starts some, Update moves them
+// (drag + gravity), AddTo draws the live ones into Sprites; each shrinks and fades over its life.
+class Particles
+{
+public:
+    XrVector3f gravity{0.f, -0.6f, 0.f}; // metres per second squared: a light fall; {0, 0, 0} in space
+    float drag = 1.5f;                   // per second: the share of speed lost (exponential)
+    bool Init(int capacity)
+    {
+        if (capacity < 1) return false;
+        p_.assign((size_t)capacity, P{});
+        return true;
+    }
+    // up to `count` new particles at `at`: speeds up to `speed` m/s in random directions (`up` lifts them),
+    // diameter about `size` metres, life about `life` seconds. Dead particles are reused; none when the pool is full.
+    void Burst(XrVector3f at, int count, float speed, XrVector3f color, float size, float life, float up = 0.3f)
+    {
+        for (P& q : p_)
+        {
+            if (count <= 0) break;
+            if (q.age < q.life) continue;
+            XrVector3f d = Vec3Normalize({Rand() * 2.f - 1.f, Rand() * 2.f - 1.f, Rand() * 2.f - 1.f});
+            d.y += up;
+            q.pos = at;
+            q.vel = Vec3Scale(Vec3Normalize(d), speed * (0.35f + 0.65f * Rand()));
+            q.color = color;
+            q.size = size * (0.6f + 0.4f * Rand());
+            q.age = 0.f;
+            q.life = life * (0.6f + 0.4f * Rand());
+            count--;
+        }
+    }
+    void Update(float dt)
+    {
+        const float k = std::exp(-drag * dt);
+        for (P& q : p_)
+        {
+            if (q.age >= q.life) continue;
+            q.age += dt;
+            q.vel = Vec3Add(Vec3Scale(q.vel, k), Vec3Scale(gravity, dt));
+            q.pos = Vec3Add(q.pos, Vec3Scale(q.vel, dt));
+        }
+    }
+    void AddTo(Sprites& s) const
+    {
+        for (const P& q : p_)
+        {
+            if (q.age >= q.life) continue;
+            const float k = 1.f - q.age / q.life;
+            s.Add(q.pos, q.size * (0.4f + 0.6f * k), Vec3Scale(q.color, k * k), 0.5f * k);
+        }
+    }
+    int Alive() const
+    {
+        int n = 0;
+        for (const P& q : p_) n += q.age < q.life ? 1 : 0;
+        return n;
+    }
+
+private:
+    struct P
+    {
+        XrVector3f pos{0.f, 0.f, 0.f}, vel{0.f, 0.f, 0.f}, color{0.f, 0.f, 0.f};
+        float size = 0.f, age = 1.f, life = 0.f; // age >= life: dead
+    };
+    float Rand() // 0..1, xorshift: no allocation, no global state
+    {
+        seed_ ^= seed_ << 13;
+        seed_ ^= seed_ >> 17;
+        seed_ ^= seed_ << 5;
+        return (float)(seed_ & 0xFFFFFFu) / 16777216.f;
+    }
+    std::vector<P> p_;
+    uint32_t seed_ = 0x9E3779B9u;
 };
 
 } // namespace mcx

@@ -40,6 +40,7 @@ Status: the kit's API test, which uses every name below, compiles with the NDK (
 - `CreateProgram(name, vsSrc, fsSrc)`: a linked program. Returns 0 on failure. The shader objects are deleted.
 - `kGfxLitVs`, `kGfxLitFs`: the source of the lit program (`inline constexpr const char*`).
 - `kGfxShadowVs`, `kGfxShadowFs`: the source of the contact shadow program.
+- `kGfxSpriteVs`, `kGfxSpriteFs`: the source of the glow sprite program.
 
 ## Mesh data (CPU)
 - `MeshVertex`: `pos`, `normal`, `uv`. 32 bytes.
@@ -93,6 +94,18 @@ Status: the kit's API test, which uses every name below, compiles with the NDK (
 - `ContactShadow::Init()`: returns bool.
 - `ContactShadow::Draw(eye, center, size, floorY, strength = 0.5)`: `center` and `size` in metres. The radius is 0.55 x the larger horizontal side. The shadow fades with height above `floorY`. It saves and restores the program, depth test, depth writes, depth function and blending, so it may run between `Begin` and `End`.
 - `ContactShadow::Destroy()`: deletes the program and the disc.
+
+## Motion (easing, damping, pulses)
+- `Clamp01(t)`; `EaseIn(t)`, `EaseOut(t)`, `EaseInOut(t)` (cubic, t clamped to 0..1); `EaseOutBack(t, overshoot = 1.70158f)` (a small overshoot: game objects, never UI).
+- `Progress(now, start, duration)`: 0..1 from `start` (seconds, as `Frame::seconds`) over `duration`.
+- `Pulse(seconds, hz)`: 0..1..0, `hz` cycles per second.
+- `Damp(current, target, rate, dt)`, `Vec3Damp(...)`, `QuatDamp(...)`: exponential follow, the same at any frame rate (`rate` per second).
+
+## Glow sprites, trails, particles
+- `Sprites`: `Init(capacity)` (compiles its program; fixed capacity), `Clear()`, `Add(position, size, color, core = 0)` (centre and diameter in metres, LINEAR colour with the brightness in it, `core` 0..1 a hot centre; false when full), `Count()`, `Capacity()`, `Draw(eye)` (one instanced call; uploads what changed; saves and restores the GL state it changes), `Destroy()`. Fields: `dim` (0.3: how much a sprite darkens what is behind its centre), `depthTest` (true), `intensity` (1: multiplies the whole set).
+- Blending: colour ONE + ONE (added), alpha ONE + ONE with `dim` x the halo. The layer is premultiplied, so a sprite adds light over passthrough (ours: compiled, not yet seen on the headset).
+- `Trail`: `Init(points, spacing)`, `Reset()`, `Push(p)` (kept when `spacing` metres from the last point), `Count()`, `At(i)` (0 = newest), `AddTo(sprites, size, color)` (fades to the oldest).
+- `Particles`: fields `gravity` ({0, -0.6, 0} m/s^2), `drag` (1.5 per second); `Init(capacity)`, `Burst(at, count, speed, color, size, life, up = 0.3f)`, `Update(dt)`, `AddTo(sprites)`, `Alive()`.
 
 ## Internal (not for apps)
 - `gfx_detail`: the helpers behind the primitives and the vertex layout.
