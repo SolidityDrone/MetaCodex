@@ -268,7 +268,7 @@ None of them needs an APK rebuild.
 | Provider integrations | MQH plugins for agent CLIs | The agent processes MQH starts. |
 | Agent views | Fenced blocks in a thread message | Panels: charts, tables, diffs, graphs, a physics stage. |
 
-- **Skills.** 48 skills ship read-only. You can add your own. 12 more skills load only in a native-app project.
+- **Skills.** 49 skills ship read-only, 6 of them written for MetaCodex. You can add your own. 13 more skills load only in a native-app project.
 - **Plugins.** MQH ships only the plugins that MetaCodex uses. Every MQH thread gets the MetaCodex introduction and its skills.
 - **Gesture plugins.** A plugin folder holds `plugin.json`, pose files and `main.lua`. The app reloads it within a second. A detector runs at 36 Hz with a budget of 200,000 instructions. Gesture plugins that open or close panels are off by default. GESTURES lists them, and you can turn one on there.
 - **Lua scripts.** A script that exceeds its budget stops. The app keeps its frame rate.
