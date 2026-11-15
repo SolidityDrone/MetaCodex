@@ -418,6 +418,7 @@ The repository holds neither the Debian layer nor the model files.
 | [docs/perf.md](docs/perf.md) | Frame rate: rendering options, GPU level, main-thread costs, measured numbers. |
 | [docs/ui.md](docs/ui.md) | Spatial UI: style, the Whisp, windows, placement, hands, gestures, layouts, Ambient Focus. |
 | [docs/control-center.md](docs/control-center.md) | CONTROL and the main menu. |
+| [docs/scripting.md](docs/scripting.md) | Lua scripts and app plugins: their windows, menu tiles and API. |
 | [docs/thread-view.md](docs/thread-view.md) | Thread windows: the chat, the message box, groups, held turns, archive. |
 | [docs/thread-sidebar.md](docs/thread-sidebar.md) | The side bar of a thread window: changes, files, git. |
 | [docs/workspaces.md](docs/workspaces.md) | Several threads in one project, without clashes. |

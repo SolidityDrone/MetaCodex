@@ -217,6 +217,8 @@ Skills for agents (bundled into the userland at `/root/.claude/skills` and into 
 
 ## Live behaviours: single scripts
 
+The Lua API of scripts and app plugins is in [scripting.md](scripting.md).
+
 `/mnt/quest/scripts/*.lua` (skill `quest-scripting`): same Lua API, one file per behaviour. Settings are JSON
 (mirrored to MQH as the UI preference `quest.settings`, which agents can edit through the MQH API; the MQH
 token is not synced). Note: at the first sync after a start the app takes MQH's copy when its revision is not 0, so a

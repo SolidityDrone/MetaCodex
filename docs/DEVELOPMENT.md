@@ -222,6 +222,7 @@ App: TerminalView (TMP rows + cell mesh) <- VtTerminal (xterm emulator) <- pty b
 | [perf.md](perf.md) | Frame rate: rendering options, the first start, main thread, depth, UI shader. |
 | [ui.md](ui.md) | Spatial UI, the Whisp, windows, hands, gestures, layouts, Ambient Focus. |
 | [control-center.md](control-center.md) | CONTROL and the main menu. |
+| [scripting.md](scripting.md) | Lua scripts, gesture plugins and app plugins: the API, limits, tests. |
 | [thread-view.md](thread-view.md), [thread-sidebar.md](thread-sidebar.md), [workspaces.md](workspaces.md) | Thread windows and groups, the side bar, workspaces. |
 | [voice.md](voice.md) | The voice path, the registry, the decision model, spoken replies. |
 | [local-ai.md](local-ai.md) | The local AI runtime and why it runs in its own process. |
