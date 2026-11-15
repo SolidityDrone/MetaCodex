@@ -1,0 +1,7 @@
+{
+  "id": "timers",
+  "name": "Timers",
+  "version": "1.0.0",
+  "kind": "app",
+  "description": "Focus timer (tomato style) and alarms"
+}

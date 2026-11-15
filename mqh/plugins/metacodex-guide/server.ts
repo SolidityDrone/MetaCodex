@@ -5,6 +5,7 @@ import { introduction } from "./introduction.js";
 const METACODEX_SKILLS = [
   "metacodex-context",
   "quest-gesture-plugins",
+  "quest-plugins",
   "quest-scripting",
   "quest-views",
   "skill-creator",
@@ -24,7 +25,7 @@ export default async function plugin(bb: BbPluginApi) {
       type: "boolean",
       label: "Give agents the MetaCodex skills",
       description:
-        "metacodex-context, quest-gesture-plugins, quest-scripting, quest-views, skill-creator and worktree-per-thread.",
+        "metacodex-context, quest-gesture-plugins, quest-plugins, quest-scripting, quest-views, skill-creator and worktree-per-thread.",
       default: true,
     },
   });
