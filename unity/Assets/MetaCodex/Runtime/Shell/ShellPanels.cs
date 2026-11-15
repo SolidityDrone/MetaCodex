@@ -41,8 +41,8 @@ namespace MetaCodex.Shell
             BuildSystem();
             BuildMessagesPanel(); // the orb's messages (ShellOrb)
             BuildControl(); // CONTROL's rail beside the setup windows (ShellControl)
-            BuildCardGroups(); // the thread cards' group windows (ShellThreadCards)
             foreach (var p in _panels.Values) p.BaseScale = Vector3.one * Mathf.Clamp(Settings.uiScale, 0.6f, 1.8f);
+            ApplyGroupScales(); // a group's windows are scaled by their group, not again by the UI scale
         }
 
         /// Accent colour changes are baked into shape tints: rebuild every panel, keeping where they are.
@@ -660,7 +660,7 @@ end)
             var lay = new SavedLayout { name = name, mode = Settings.layout };
             foreach (var kv in _panels)
             {
-                if (!kv.Value.IsOpen || kv.Key == "dock" || kv.Key == ControlId || kv.Key == SidebarId) continue; // the rail and the sidebar come back with their window
+                if (!kv.Value.IsOpen || kv.Key == "dock" || kv.Key == ControlId || kv.Key == SidebarId || IsGroupedPanel(kv.Value)) continue; // the rail and the sidebar come back with their window; a grouped window with its group
                 var d = kv.Value.transform.position - head.position;
                 var fw = kv.Value.transform.forward;
                 lay.panels.Add(new SavedPanel
@@ -686,7 +686,7 @@ end)
             var head = Gestures.Head;
             Gestures.HeadFrame(out var r, out var u, out var f);
             float headYaw = Mathf.Atan2(f.x, f.z) * Mathf.Rad2Deg;
-            foreach (var kv in _panels) if (kv.Key != "dock" && kv.Key != SidebarId && kv.Value.IsOpen && lay.panels.All(x => x.id != kv.Key)) kv.Value.Close();
+            foreach (var kv in _panels.ToList()) if (kv.Key != "dock" && kv.Key != SidebarId && kv.Value.IsOpen && !IsGroupedPanel(kv.Value) && lay.panels.All(x => x.id != kv.Key)) kv.Value.Close();
             foreach (var sp in lay.panels)
             {
                 if (!_panels.TryGetValue(sp.id, out var p)) continue;

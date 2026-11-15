@@ -131,6 +131,13 @@ namespace MetaCodex.Shell
         {
             if (_rpThread == null) return;
             if (Time.unscaledTime > _rpUntil) { _rpThread = null; return; }
+            var w = OpenWindowShowing(_rpThread); // the window that shows the thread the app was launched from
+            if (w == null) return;
+            using (In(w)) ApplyPendingReportIn();
+        }
+
+        private void ApplyPendingReportIn()
+        {
             if (_threadOpen != _rpThread || _thComposer == null || AttachList == null) return;
             var l = AttachList;
             foreach (var a in _rpAttach)

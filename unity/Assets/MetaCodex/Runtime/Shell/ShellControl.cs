@@ -327,13 +327,12 @@ namespace MetaCodex.Shell
             switch (id)
             {
                 case "terminals": return Frame();
-                case "files": return Frame() ?? OpenOne("thread");
-                case "clipboard": return OpenOne("thread") ?? OpenOne("web");
+                case "files": return Frame() ?? FocusedThreadAnchor();
+                case "clipboard": return FocusedThreadAnchor() ?? OpenOne("web");
                 case "browser": return OpenOne("web");
                 case "thread-new": return OpenOne("threads");
-                case "thread": return OpenOne("threads");
-                case "workspaces": return OpenOne("threads") ?? OpenOne("thread");
-                default: return null;
+                case "workspaces": return OpenOne("threads") ?? FocusedThreadAnchor();
+                default: return IsThreadWindowId(id) ? _twOpener ?? OpenOne("threads") : null; // another thread window: beside the one it came from
             }
         }
 

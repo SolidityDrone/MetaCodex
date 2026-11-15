@@ -91,8 +91,8 @@ call it (`MqhClient` calls only `/api/v1/plugins` and enable / disable, never a 
 | github, docs, memory, tasks | REMOVE | bb's optional catalog plugins (issue browser, Markdown editor, memory, task boards) for its web UI; never installed by default and the app cannot install them |
 
 `metacodex-guide` gives every MQH thread `metacodex-context`, `quest-gesture-plugins`, `quest-scripting`,
-`quest-views` and `skill-creator` (Codex too, which does not read `~/.claude/skills`); the overlay still lays the first
-four in `/root/.claude/skills` for agents started in a terminal (Claude Code skips the duplicate copy). `bb-cli`,
+`quest-views`, `skill-creator` and `worktree-per-thread` (Codex too, which does not read `~/.claude/skills`); the overlay
+still lays all but `skill-creator` in `/root/.claude/skills` for agents started in a terminal (Claude Code skips the duplicate copy). `bb-cli`,
 `bb-plugin-authoring` and `submit-a-plugin` are gone. Re-syncs reproduce the cut: the lists in `tools/mqh-gut.sh`.
 
 ## Wiring

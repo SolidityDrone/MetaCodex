@@ -37,7 +37,8 @@ namespace MetaCodex.Shell
             {
                 case "terminals": case "files": case "git": return 3;
                 case "threads": case "thread": case "thread-new": case "agents": case "agent-key": case "workspaces": case SidebarId: return 4;
-                default: return 0;
+                // the other thread windows ("thread-2" ...) and their groups ("tgroup-1" ...) need MQH too
+                default: return IsThreadWindowId(id) || id != null && id.StartsWith("tgroup-", System.StringComparison.Ordinal) ? 4 : 0;
             }
         }
 
@@ -55,7 +56,7 @@ namespace MetaCodex.Shell
                 case "agent-key": return "API KEY";
                 case "workspaces": return "WORKSPACES";
                 case SidebarId: return "THREAD's sidebar";
-                default: return (id ?? "").ToUpperInvariant();
+                default: return IsThreadWindowId(id) ? "THREAD" : (id ?? "").ToUpperInvariant();
             }
         }
 

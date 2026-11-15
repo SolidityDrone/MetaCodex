@@ -337,8 +337,8 @@ namespace MetaCodex.Shell
                     var it = SelectedClip();
                     if (it == null) { Toast("Pick a capture", "warn"); return; }
                     if (ThreadKey == null) { Toast("Open a thread first (THREADS): it goes with your next message there", "warn"); return; }
-                    AddAttachment(CaptureAttachment(it));
-                    OpenPanel("thread");
+                    AddAttachment(CaptureAttachment(it)); // the focused thread window's next message
+                    ShowThreadWindow();
                     Toast("Capture attached to the next message", "ok");
                 }),
                 ("DELETE", () => { var it = SelectedClip(); if (it != null) Clipboard.Delete(it.file); }),
@@ -436,10 +436,6 @@ namespace MetaCodex.Shell
         public sealed class Attachment { public string Kind, LinuxPath, Name, Mime; public long Size; }
 
         private readonly Dictionary<string, List<Attachment>> _attach = new Dictionary<string, List<Attachment>>();
-        private readonly List<UiButton> _attChips = new List<UiButton>();
-        private UiButton _attMore, _attMenuFiles, _attMenuCapture, _attMenuClose, _thPlus;
-        private UiLabel _attHint;
-        private bool _attMenuOpen;
 
         private List<Attachment> AttachList
         {
@@ -588,16 +584,6 @@ namespace MetaCodex.Shell
 
         // ---- the modal inside the thread panel: Linux files or the clipboard, several picked at once
 
-        private bool _amOpen;
-        private string _amMode, _amDir = "/root";
-        private readonly HashSet<string> _amPicked = new HashSet<string>();
-        private UiLabel _amTitle, _amInfo;
-        private UiList _amList;
-        private UiButton _amUp, _amAttach, _amCancel;
-        private Rect _amPreviewArea;
-        private GameObject _amPreview;
-        private Texture2D _amTex;
-        private readonly List<UiElement> _amElements = new List<UiElement>();
 
         public bool AttachModalOpenForTest => _amOpen;
         public UiList AttachModalListForTest => _amList;
@@ -708,8 +694,13 @@ namespace MetaCodex.Shell
                 if (e.IsDir) { _amDir = e.LinuxPath; ShowAttachModalList(); return; }
                 if (!_amPicked.Remove(e.LinuxPath)) _amPicked.Add(e.LinuxPath);
                 _amInfo.Set($"{e.LinuxPath}\n{FileService.Size(e.Size)} · {e.Modified:dd MMM HH:mm}", t.TextDim);
-                if (_panels.TryGetValue("thread", out var tp) && ImageExt.Contains(Path.GetExtension(e.Name).ToLowerInvariant()))
-                    _amTex = ShowImage(tp, ref _amPreview, _amTex, Files.HostPath(e.LinuxPath), _amPreviewArea);
+                var tp = ThreadPanel; // this window's panel (the modal is drawn inside it)
+                if (tp != null && ImageExt.Contains(Path.GetExtension(e.Name).ToLowerInvariant()))
+                {
+                    var prev = _amPreview;
+                    _amTex = ShowImage(tp, ref prev, _amTex, Files.HostPath(e.LinuxPath), _amPreviewArea);
+                    _amPreview = prev;
+                }
                 else if (_amPreview != null) _amPreview.SetActive(false);
             }
             else if (item?.Tag is CaptureClipboard.Item c)
@@ -717,7 +708,13 @@ namespace MetaCodex.Shell
                 string key = Clipboard.LinuxPath(c);
                 if (!_amPicked.Remove(key)) _amPicked.Add(key);
                 _amInfo.Set(key, t.TextDim);
-                if (_panels.TryGetValue("thread", out var tp)) _amTex = ShowImage(tp, ref _amPreview, _amTex, Clipboard.HostPath(c), _amPreviewArea);
+                var tp = ThreadPanel;
+                if (tp != null)
+                {
+                    var prev = _amPreview;
+                    _amTex = ShowImage(tp, ref prev, _amTex, Clipboard.HostPath(c), _amPreviewArea);
+                    _amPreview = prev;
+                }
             }
             ShowAttachModalList();
         }

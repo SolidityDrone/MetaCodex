@@ -183,8 +183,9 @@ namespace MetaCodex.EditorTools
                 if (Want("workspaces")) WorkspacesSection(shell, head); // MetaCodexUiTestWorkspaces.cs
                 if (Want("sidebar")) SidebarSection(shell, head, hands); // MetaCodexUiTestSidebar.cs
                 if (Want("orbplace")) OrbPlaceSection(shell, head, hands); // MetaCodexUiTestOrbPlace.cs
-                if (Want("cards")) CardsSection(shell, head); // MetaCodexUiTestCards.cs
                 if (Want("roomanchor")) RoomAnchorSection(shell); // MetaCodexUiTestRoomAnchor.cs
+                if (Want("threadwindows")) ThreadWindowsSection(shell, head); // MetaCodexUiTestThreadWindows.cs
+                if (Want("archive")) ThreadArchiveSection(shell); // MetaCodexUiTestThreadArchive.cs
                 if (Want("firstrun")) FirstRunSection(shell, head); // MetaCodexUiTestFirstRun.cs
                 if (WantNamed("voiceexport")) VoiceExport(shell);
                 if (WantNamed("voicedecide")) VoiceDecideBench(shell);
@@ -208,7 +209,7 @@ namespace MetaCodex.EditorTools
 
         private static void Glyphs(MetaCodexShell shell)
         {
-            string needed = "▶▤◫⎇◎ƒ⚙⌨⌖⟲✕↑⌂▸·↪●◆◇◎▣⚠✓▌•↓−⟳✋⚿☰⇗⎘◈✎⇢⇣○■▲▼→⑂◧◐☑☐▾❚λ⚒⛁⇅⬢✦‹›✥✉⊞⇲◌";
+            string needed = "▶▤◫⎇◎ƒ⚙⌨⌖⟲✕↑⌂▸·↪●◆◇◎▣⚠✓▌•↓−⟳✋⚿☰⇗⎘◈✎⇢⇣○■▲▼→⑂◧◐☑☐▾❚λ⚒⛁⇅⬢✦‹›✥✉";
             foreach (var (name, font) in new[] { ("display", UiTheme.Current.Display), ("body", UiTheme.Current.Body) })
             {
                 font.HasCharacters(needed, out uint[] missing, true, true);

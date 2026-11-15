@@ -277,7 +277,7 @@ namespace MetaCodex.Shell
             }
         }
 
-        private void OnTourPanelDropped(UiPanel p, Ray _)
+        private void OnTourPanelDropped(UiPanel p)
         {
             if (_tourStep != 2 || p == null || p == _tourRing || (p.Id ?? "").StartsWith("orb-")) return;
             _tourDropped = true;

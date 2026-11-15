@@ -141,6 +141,7 @@ namespace MetaCodex.Shell
             Router.Head = Head;
             Router.Settings = Settings.gestures;
             Router.Init();
+            Router.Touched = OnPanelTouched; // a press on a thread window focuses it first (ShellThreadWindows)
             if (hands == null && (leftHand != null || rightHand != null)) hands = new OvrHandSource(leftHand, rightHand);
             if (hands == null) { SimHands = new SimulatedHands(); hands = SimHands; }
             else SimHands = hands as SimulatedHands;
@@ -399,6 +400,7 @@ namespace MetaCodex.Shell
         /// Open (an alias counts when its tab is the one shown).
         public bool IsPanelOpen(string id)
         {
+            if (id == "thread") return WinOpen(_twFocus); // "thread": the focused thread window (there may be several)
             bool alias = Alias(ref id, out int tab);
             if (!_panels.TryGetValue(id ?? "", out var p) || !p.IsOpen) return false;
             return !alias || tab < 0 || PanelTabs(id)?.Selected == tab;
@@ -419,6 +421,8 @@ namespace MetaCodex.Shell
             if (need > 0 && SetupBlocks(need, PanelLockName(id))) return true;
             if (id == ControlId) return OpenControl(null); // the rail alone is not a window: CONTROL on its last category
             if (id == SidebarId) return SetSidebar(true); // it opens beside the open thread, never alone
+            if (id == "thread" && !_threadAliasOff) { using (In(_twFocus)) ShowThreadWindow(); return true; } // the focused thread window
+            if (IsThreadWindowId(id) && Tws.FirstOrDefault(x => x.Id == id) is ThreadWindow gw && gw.Group != null) { using (In(gw)) ShowThreadWindow(); return true; } // in a group: the group
             if (Alias(ref id, out int tab))
             {
                 bool ok = OpenPanel(id);
@@ -463,6 +467,7 @@ namespace MetaCodex.Shell
                 return _rail != null;
             }
             Alias(ref id, out _);
+            if (id == "thread") { if (_twFocus.Panel == null) return false; _twFocus.Panel.Close(); return true; } // the focused thread window
             if (!_panels.TryGetValue(id ?? "", out var p)) return false;
             p.Close();
             return true;
@@ -471,6 +476,7 @@ namespace MetaCodex.Shell
         public bool TogglePanel(string id)
         {
             if (id == ControlId) { ToggleControl(); return true; } // CONTROL is its window and the rail, never the rail alone
+            if (id == "thread") { if (WinOpen(_twFocus)) _twFocus.Panel.Close(); else OpenPanel("thread"); return true; } // the focused thread window
             if (Alias(ref id, out int tab))
             {
                 if (!_panels.TryGetValue(id, out var ap)) return false;
@@ -750,7 +756,6 @@ namespace MetaCodex.Shell
 
         public void OnSettingsChanged(bool rebuild = false)
         {
-            CardsToSettings(); // the card groups in memory win over an older copy (MQH's quest.settings)
             Settings.Save(_settingsPath);
             Router.Settings = Settings.gestures;
             Gestures.Settings = Settings.gestures;
@@ -758,6 +763,7 @@ namespace MetaCodex.Shell
             Mqh.Token = MqhTokenNow();
             ApplyMaterialSettings();
             foreach (var p in _panels.Values) p.BaseScale = Vector3.one * Mathf.Clamp(Settings.uiScale, 0.6f, 1.8f);
+            ApplyGroupScales(); // a group's windows are scaled by their group, not again by the UI scale
             ApplyMainMenuMode();
             ApplyOrbSetting();
             // FIXED: the frame loop bends panels only while "Bend panels" is on, so turning it off any way (voice, a

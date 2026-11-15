@@ -20,11 +20,6 @@ namespace MetaCodex.Shell
         private const float ComposerRelayoutMin = 0.003f; // the chat is laid out again once the box moved this far (metres)
         private const float GripHeight = 0.014f;
 
-        private UiDragGrip _thGrip;
-        private float _thComposerMax;     // the most the box grows above one row (metres)
-        private float _thComposerWant;    // the growth the grip or the voice asked for (metres above one row)
-        private float _thComposerApplied; // the growth the composer and its row use now
-        private float _thChatApplied;     // the growth the chat area uses now
 
         public UiDragGrip ComposerGripForTest => _thGrip;
         public float ComposerExtraForTest => _thComposerApplied;
@@ -95,7 +90,7 @@ namespace MetaCodex.Shell
             _thTimeline.SetRect(TimelineRect(_askShown));
             LayoutTimelineButtons(_askShown);
             MoveY(_thStatus, -d);
-            if (_thStatusFull.width > 0f) _thStatusFull.y -= d; // the status line's full width, kept for the SEND NOW case
+            if (_thStatusFull.width > 0f) { var sf = _thStatusFull; sf.y -= d; _thStatusFull = sf; } // the status line's full width, kept for the SEND NOW case
             MoveY(_thSendNow, -d);
             MoveY(_thAsk, -d);
             foreach (var b in _thAskButtons) MoveY(b, -d);
@@ -150,7 +145,7 @@ namespace MetaCodex.Shell
 
         private string ComposerVoice(string action)
         {
-            if (_thComposer == null || !(_panels.TryGetValue("thread", out var th) && th.IsOpen)) return "error: open a thread first";
+            if (_thComposer == null || !ThreadWinOpen) return "error: open a thread first"; // the focused window
             if (_amOpen) return "error: close the attach window first";
             switch (action)
             {

@@ -256,9 +256,6 @@ namespace MetaCodex.Shell
         public bool viewsAutoOpen = true;
         /// THREAD's sidebar, per thread: "threadId|open (1/0)|tab" (ShellThreadSidebar; the newest 80 threads).
         public List<string> threadSidebar = new List<string>();
-        /// Thread cards (ShellThreadCards): each group's name, its threads in order, and whether its window is open.
-        /// Their places are not kept: an open group is placed again at start.
-        public List<ThreadCardGroup> threadCards = new List<ThreadCardGroup>();
         /// Ambient Focus: darken the room beyond a radius (Settings > FOCUS, FOCUS on the dock).
         public bool focusEnabled = false;
         public float focusRadius = 1.2f;
@@ -344,15 +341,6 @@ namespace MetaCodex.Shell
             j.Remove("mqhToken");
             return j;
         }
-    }
-
-    /// One group of thread cards as saved: its name ("" = none), its threads in order, its window open or not.
-    [Serializable]
-    public sealed class ThreadCardGroup
-    {
-        public string name = "";
-        public bool open = true;
-        public List<string> threads = new List<string>();
     }
 
     /// Where the open panels were, relative to the user's head yaw, under a name.
@@ -504,6 +492,19 @@ namespace MetaCodex.Shell
         // ---- threads
         public void Threads(string projectId, Action<JToken> cb) => Call(HttpMethod.Get, "/api/v1/threads" + (string.IsNullOrEmpty(projectId) ? "" : "?projectId=" + E(projectId)), null, cb);
         public void Thread(string id, Action<JToken> cb) => Call(HttpMethod.Get, $"/api/v1/threads/{E(id)}", null, cb);
+        // archive and delete (owner 2026-11-14, ShellThreadArchive): MQH's list leaves archived threads out unless asked
+        /// The archived threads only (`archived=true`; deleted ones are never listed).
+        public void ThreadsArchived(Action<JToken> cb) => Call(HttpMethod.Get, "/api/v1/threads?archived=true", null, cb);
+        /// Archives the thread and its child threads; answers `{ ok, archivedThreadIds }`.
+        public void ArchiveThread(string id, Action<JToken> cb) => Call(HttpMethod.Post, $"/api/v1/threads/{E(id)}/archive-all", null, cb);
+        /// Brings an archived thread back (only that thread; 409 while its lifecycle owner is still archived).
+        public void UnarchiveThread(string id, Action<JToken> cb) => Call(HttpMethod.Post, $"/api/v1/threads/{E(id)}/unarchive", null, cb);
+        /// `{ nonDeletedChildCount, unarchivedDescendantCount }`: what a delete or an archive takes along.
+        public void ThreadChildSummary(string id, Action<JToken> cb) => Call(HttpMethod.Get, $"/api/v1/threads/{E(id)}/child-summary", null, cb);
+        /// Deletes the thread for good; `childThreadsConfirmed` true when the user agreed to its child threads going too
+        /// (MQH answers 409 child_threads_confirmation_required when it has some and this is false).
+        public void DeleteThread(string id, bool childThreadsConfirmed, Action<JToken> cb) =>
+            Call(HttpMethod.Delete, $"/api/v1/threads/{E(id)}", new JObject { ["childThreadsConfirmed"] = childThreadsConfirmed }, cb);
         public void CreateThread(JObject body, Action<JToken> cb) => Call(HttpMethod.Post, "/api/v1/threads", body, cb);
         public void Timeline(string id, Action<JToken> cb) => Call(HttpMethod.Get, $"/api/v1/threads/{E(id)}/timeline", null, cb);
         /// The timeline with every turn's steps (thinking, commands, edits); with afterTag (the last answer's `tag`)
@@ -539,6 +540,10 @@ namespace MetaCodex.Shell
         /// The user's Send now on a queued row: it skips the plugins' holds (MQH's workspace guard, the limits).
         public void SendQueuedNow(string threadId, string queuedId, Action<JToken> cb) =>
             Call(HttpMethod.Post, $"/api/v1/threads/{E(threadId)}/queued-messages/{E(queuedId)}/send", new JObject { ["mode"] = "auto" }, cb);
+        /// Rewrites a queued row (MQH `PATCH /threads/:id/queued-messages/:qid`): body `{ expectedUpdatedAt, input }`,
+        /// `expectedUpdatedAt` the row's `updatedAt` as read (a row changed meanwhile answers 409).
+        public void UpdateQueuedMessage(string threadId, string queuedId, JObject body, Action<JToken> cb) =>
+            Call(new HttpMethod("PATCH"), $"/api/v1/threads/{E(threadId)}/queued-messages/{E(queuedId)}", body, cb);
         public void DeleteQueuedMessage(string threadId, string queuedId, Action<JToken> cb) =>
             Call(HttpMethod.Delete, $"/api/v1/threads/{E(threadId)}/queued-messages/{E(queuedId)}", null, cb);
         public void ExecOptions(string id, Action<JToken> cb) => Call(HttpMethod.Get, $"/api/v1/threads/{E(id)}/default-execution-options", null, cb);

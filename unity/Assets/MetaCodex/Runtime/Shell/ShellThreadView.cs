@@ -18,15 +18,6 @@ namespace MetaCodex.Shell
     /// the agent works stays cheap. The same model feeds the session context (ThreadPulse, ShellContext).
     public sealed partial class MetaCodexShell
     {
-        private UiChatView _thTimeline; // the chat (the attach modal hides it, ShellCaptures)
-        private UiLabel _thStatus, _thLimits;
-        private UiButton _thNewBtn, _thMic;
-        private ThreadTimeline _tlModel = new ThreadTimeline();
-        private ThreadPulse _thPulse;
-        private JObject _tlFields = new JObject();
-        private string _tlTag;
-        private bool _tlInFlight;
-        private float _tlSentAt, _nextThreadMeta, _nextStatusTick;
         private readonly Dictionary<string, JObject> _usage = new Dictionary<string, JObject>();
         private readonly Dictionary<string, float> _usageAskedAt = new Dictionary<string, float>();
         private const int ChatSegments = 8; // the last 8 exchanges: enough to read back, small to parse
@@ -62,12 +53,10 @@ namespace MetaCodex.Shell
             _thNewBtn = p.Add(new UiButton("↓ NEW", () => { _thTimeline.ScrollToBottom(); RefreshNewButton(); }, UiButtonStyle.Primary) { TextSize = t.SmallSize * 0.95f });
             _thStatus = p.Add(new UiLabel("", t.SmallSize * 1.04f) { Rect = statusRow, Color = t.TextDim });
             _thNewBtn.SetVisible(false);
-            p.Tick += _ => { TickPanelPulse(p); TickThreadView(); };
         }
 
         // ------------------------------------------------------------------ "it answered": the orb says so, the window pulses
 
-        private float _panelPulseUntil;
         private const float PanelPulseSeconds = 2.4f;
         public bool ThreadPanelPulsingForTest => _panelPulseUntil > 0f;
         public string LastThreadNoteForTest { get; private set; }
@@ -82,7 +71,7 @@ namespace MetaCodex.Shell
             // nothing to say: no words built (this runs at every pulse, once a second while THREAD is open)
             if (!(before.Working && now.State == "idle") && !(now.State == "error" && before.State != "error") && !(now.State == "waiting" && before.State != "waiting")) return;
             string title = "“" + ThreadPulse.Clip(now.Title, 38) + "”";
-            bool open = id == _threadOpen && IsPanelOpen("thread");
+            var shownIn = OpenWindowShowing(id); // the open window that shows this thread (any of them), or none
             string project = ThreadProjectName(id), name = "“" + ThreadPulse.Clip(now.Title, 40) + "”";
             string thread = project != null ? "The thread on " + project : "The thread " + name;
             string agent = project != null ? "An agent on " + project : "The agent in " + name;
@@ -90,19 +79,19 @@ namespace MetaCodex.Shell
             {
                 string gist = now.AnswerGist.Length > 0 ? ": " + ThreadPulse.Clip(now.AnswerGist, 64) : "";
                 CastThreadNote(title + " answered" + gist, "ok", id);
-                if (open) { PulseThreadPanel(); FlashAnswer(); }
+                if (shownIn != null) using (In(shownIn)) { PulseThreadPanel(); FlashAnswer(); }
                 SayThreadAlert(thread + " is done.");
             }
             else if (now.State == "error" && before.State != "error")
             {
                 CastThreadNote(title + " stopped on an error" + (now.ErrorText.Length > 0 ? ": " + ThreadPulse.Clip(now.ErrorText, 60) : ""), "error", id);
-                if (open) PulseThreadPanel();
+                if (shownIn != null) using (In(shownIn)) PulseThreadPanel();
                 SayThreadAlert(thread + " stopped on an error.");
             }
             else if (now.State == "waiting" && before.State != "waiting")
             {
                 CastThreadNote(title + " needs you: " + ThreadPulse.Clip(now.Doing, 60), "warn", id);
-                if (open) PulseThreadPanel();
+                if (shownIn != null) using (In(shownIn)) PulseThreadPanel();
                 SayThreadAlert(agent + (now.Doing.StartsWith("waiting for your approval") ? " needs your approval."
                     : now.Doing.StartsWith("waiting for your answer") ? " is asking you something." : " needs you."));
             }
@@ -155,7 +144,14 @@ namespace MetaCodex.Shell
             Log("thread note: " + text);
             if (Toasts == null) return;
             if (Toasts.Register == null && Router != null) { Toasts.Register = Router.Register; Toasts.Unregister = Router.Unregister; }
-            Toasts.Show(text + "  ›", kind, kind == "ok" ? 6f : 7f, () => { if (threadId != _threadOpen || !IsPanelOpen("thread")) OpenThread(threadId); else PulseThreadPanel(); });
+            Toasts.Show(text + "  ›", kind, kind == "ok" ? 6f : 7f, () =>
+            {
+                // the window that shows it: focused and pulsed; else the thread opens (ShellThreadWindows decides where)
+                var w = OpenWindowShowing(threadId);
+                if (w == null) { OpenThread(threadId); return; }
+                FocusWindow(w);
+                using (In(w)) PulseThreadPanel();
+            });
         }
 
         private void PulseThreadPanel() => _panelPulseUntil = Time.unscaledTime + PanelPulseSeconds;
@@ -252,10 +248,11 @@ namespace MetaCodex.Shell
             var baseFields = _tlFields;
             var row = _threadInfo;
             long now = NowMs;
-            string touchRoot = _sbRoot;
+            // the sidebar's folder only for the window that has the sidebar (its CHANGES list is fed from this timeline)
+            string touchRoot = _tw == _sbOwner ? _sbRoot : null;
             Mqh.CallThen(System.Net.Http.HttpMethod.Get, MqhClient.TimelinePath(id, tag, ChatSegments), null,
                 r => PrepareTimeline(r as JObject, tag, baseRows, baseFields, row, now, touchRoot),
-                u => { _tlInFlight = false; ApplyTimeline(id, u); });
+                Bind<TimelineUpdate>(u => { _tlInFlight = false; ApplyTimeline(id, u); }));
         }
 
         /// Pool thread: reads the old rows and fields (the main thread does not change them while a request is out).
@@ -333,7 +330,7 @@ namespace MetaCodex.Shell
             _thTimeline?.SetBlocks(u.Blocks);
             double tBlocks = sw.Elapsed.TotalMilliseconds;
             RefreshNewButton();
-            if (u.Touched != null && u.TouchedRoot == _sbRoot) WsTrackFound(u.Touched); else WsTrackRows(_tlRaw);
+            if (_tw == _sbOwner) { if (u.Touched != null && u.TouchedRoot == _sbRoot) WsTrackFound(u.Touched); else WsTrackRows(_tlRaw); } // the sidebar's window only
             double tWs = sw.Elapsed.TotalMilliseconds;
             ScanViews(_tlRaw, id, first);
             double tAll = sw.Elapsed.TotalMilliseconds;
@@ -601,7 +598,7 @@ namespace MetaCodex.Shell
             EnsureHost(() => Mqh.UsageLimits(provider, _hostId, r =>
             {
                 if (r?[provider] is JObject u) _usage[provider] = u;
-                ShowLimits();
+                foreach (var w in Tws.Where(WinOpen).ToList()) using (In(w)) ShowLimits(); // every window of that provider
             }));
         }
 

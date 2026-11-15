@@ -63,7 +63,7 @@ namespace MetaCodex.Shell
 
         private IEnumerable<UiPanel> PlacementObstacles(UiPanel except)
         {
-            foreach (var q in _panels.Values) if (q != null && q != except && q.IsOpen) yield return q;
+            foreach (var q in _panels.Values) if (q != null && q != except && q.IsOpen && !IsGroupedPanel(q)) yield return q; // a group covers its windows
             foreach (var q in _frames.Values) if (q != null && q != except && q.IsOpen) yield return q;
         }
 

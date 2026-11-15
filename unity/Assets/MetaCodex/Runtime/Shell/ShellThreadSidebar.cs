@@ -32,7 +32,6 @@ namespace MetaCodex.Shell
 
         private UiPanel _sb;
         private UiTabs _sbTabs;
-        private UiEdgeHandle _thHandle;
         private readonly List<(UiElement el, int tab, Func<bool> when)> _sbEls = new List<(UiElement, int, Func<bool>)>();
         private string _sbThread, _sbRoot;
         private int _sbGen;                 // bumped when the thread or its folder changes: late answers are dropped
@@ -75,7 +74,17 @@ namespace MetaCodex.Shell
         public UiPanel Sidebar => _sb;
         public bool SidebarOpen => _sb != null && _sb.IsOpen;
         public int SidebarTab => _sbTabs?.Selected ?? 0;
-        private bool SbLinked => _sb != null && _sb.IsOpen && _panels.TryGetValue("thread", out var th) && th.IsOpen;
+        private bool SbLinked => _sb != null && _sb.IsOpen && SbAnchor != null && SbAnchor.IsOpen;
+
+        /// One sidebar for all the thread windows (ShellThreadWindows): it belongs to one window at a time, the one whose
+        /// handle (or chip, or voice) opened it last; it shows that window's thread.
+        private ThreadWindow _sbOwnerW;
+        private ThreadWindow _sbOwner { get => _sbOwnerW != null && !_sbOwnerW.Dead ? _sbOwnerW : _twFirst; set => _sbOwnerW = value; }
+
+        /// What the sidebar sits beside: its window, or the window's group when it is in one (owner 2026-11-14: a grouped
+        /// window's details open on the group's edge, not inside the grid).
+        private UiPanel SbAnchor => _sbOwner.Group != null && _sbOwner.Group.Panel != null ? _sbOwner.Group.Panel : _sbOwner.Panel;
+        public UiPanel SidebarAnchorForTest => SbAnchor;
 
         // ------------------------------------------------------------------ build
 
@@ -173,8 +182,8 @@ namespace MetaCodex.Shell
                 ("DEMO", ShowDemoView, 1f));
 
             _sbTabs.OnChanged = SbTabChanged;
-            p.Tick += _ => SbTick();
-            p.Opened += _ => SbRefreshTab(_sbTabs.Selected);
+            p.Tick += _ => { using (In(_sbOwner)) SbTick(); }; // the sidebar reads its window's thread
+            p.Opened += _ => { using (In(_sbOwner)) SbRefreshTab(_sbTabs.Selected); };
             LoadSidebarMemory();
             // built again (RebuildPanels): the data stays, the lists and the views are drawn again; a file view starts over
             _sbDiffPath = null;
@@ -227,21 +236,30 @@ namespace MetaCodex.Shell
         public bool SetSidebar(bool open, int tab = -1, bool remember = true)
         {
             if (_sb == null) return false;
-            bool thread = _threadOpen != null && _panels.TryGetValue("thread", out var th) && th.IsOpen;
+            bool thread = _threadOpen != null && ThreadWinOpen;
             if (open && !thread) return false;
+            if (!open && _sbOwner != _tw) { using (In(_sbOwner)) return SetSidebar(false, tab, remember); } // fold it on its own window
+            if (open && _sbOwner != _tw)
+            {
+                // the sidebar moves to this window: the other window's pair is undone first, then it shows this thread
+                if (_sb.IsOpen) { _sb.Close(); if (!Floating) UncentreThreadPair(); else if (_carousel != null && SbAnchor != null && SbAnchor.IsOpen) Slot(SbAnchor.transform); }
+                _sbOwner = _tw;
+                SbSetThread(_threadOpen, (string)_threadInfo?["environmentPath"]);
+                WsTrackRows(_tlRaw); // its CHANGES from this window's timeline at once
+            }
             if (tab >= 0) _sbTabs.Select(tab);
             if (open && !_sb.IsOpen)
             {
                 _sb.gameObject.SetActive(true);
                 UpdateSidebarLink(true);
                 _sb.Open();
-                if (Floating && _carousel != null && _panels.TryGetValue("thread", out var t2)) Slot(t2.transform); // the pair needs more room on the ring
+                if (Floating && _carousel != null && SbAnchor != null) Slot(SbAnchor.transform); // the pair needs more room on the ring
                 else if (!Floating) CentreThreadPair(); // FIXED: the pair centred where the user faces, when there is room
             }
             else if (!open && _sb.IsOpen)
             {
                 _sb.Close();
-                if (Floating && _carousel != null && _panels.TryGetValue("thread", out var t3) && t3.IsOpen) Slot(t3.transform);
+                if (Floating && _carousel != null && SbAnchor != null && SbAnchor.IsOpen) Slot(SbAnchor.transform);
                 else if (!Floating) UncentreThreadPair(); // back where it was, unless the user moved it
             }
             if (remember && _sbThread != null) { _sbMem[_sbThread] = (open, _sbTabs.Selected); SaveSidebarMemory(); }
@@ -278,12 +296,15 @@ namespace MetaCodex.Shell
         private void UpdateSidebarHandle()
         {
             int n = _sbFiles.Count(f => f.ByThread);
-            _thHandle?.Set(_sb != null && _sb.IsOpen, n > 0 ? (n > 99 ? "99+" : n.ToString()) : "");
+            // every window's handle: open and the count on the sidebar's window, closed on the others
+            foreach (var w in Tws)
+                w.thHandle?.Set(w == _sbOwner && _sb != null && _sb.IsOpen, w == _sbOwner && n > 0 ? (n > 99 ? "99+" : n.ToString()) : "");
         }
 
         /// The open thread (and its folder) whose sidebar this is. A new thread or folder drops everything shown before.
         private void SbSetThread(string threadId, string root)
         {
+            if (_tw != _sbOwner) return; // another window's thread: the sidebar stays on its own window
             root = string.IsNullOrEmpty(root) ? null : root.Replace('\\', '/').TrimEnd('/');
             if (root != null && root.Length == 0) root = "/";
             bool newThread = threadId != _sbThread, newRoot = root != _sbRoot;
@@ -326,9 +347,9 @@ namespace MetaCodex.Shell
         private string SbRel(string path) => ThreadChanges.Rel(_sbRoot, path);
         private string SbAbs(string rel) => rel == null ? null : rel.StartsWith("/") || _sbRoot == null ? rel : _sbRoot.TrimEnd('/') + "/" + rel;
         private string SbTop => _sbSnap != null && _sbSnap.Repo && _sbSnap.Top.Length > 0 ? _sbSnap.Top : null;
-        private bool SbOwnFolder => _threadInfo?["environmentIsWorktree"]?.Type == JTokenType.Boolean && (bool)_threadInfo["environmentIsWorktree"];
+        private bool SbOwnFolder => _sbOwner.threadInfo?["environmentIsWorktree"]?.Type == JTokenType.Boolean && (bool)_sbOwner.threadInfo["environmentIsWorktree"];
         private string SbBaseBranch => SbOwnFolder ? WorkspaceMap.GroupOf(_spaces, _sbThread)?.Base : null;
-        private bool SbWorking => _thPulse != null && _thPulse.Working || ThreadTimeline.IsWorking(StatusOfRow(_threadInfo));
+        private bool SbWorking => _sbOwner.thPulse != null && _sbOwner.thPulse.Working || ThreadTimeline.IsWorking(StatusOfRow(_sbOwner.threadInfo));
 
         // ------------------------------------------------------------------ CHANGES
 
@@ -636,6 +657,11 @@ namespace MetaCodex.Shell
 
         private void MentionInComposer(string path)
         {
+            using (In(_sbOwner)) MentionInComposerHere(path); // the composer of the sidebar's window
+        }
+
+        private void MentionInComposerHere(string path)
+        {
             if (_thComposer == null) return;
             string cur = (_thComposer.Text ?? "").TrimEnd();
             _thComposer.Set((cur.Length > 0 ? cur + " " : "") + path + " ");
@@ -911,6 +937,11 @@ namespace MetaCodex.Shell
 
         private void SbRenderStatus()
         {
+            using (In(_sbOwner)) SbRenderStatusHere();
+        }
+
+        private void SbRenderStatusHere()
+        {
             if (_sbStatus == null) return;
             var t = UiTheme.Current;
             _sbNextStatus = Time.unscaledTime + 1f;
@@ -1040,7 +1071,8 @@ namespace MetaCodex.Shell
         private void UpdateSidebarLink(bool force = false)
         {
             if (_sb == null || !_sb.IsOpen && !force) return;
-            if (!_panels.TryGetValue("thread", out var th) || !th.IsOpen) { if (_sb.IsOpen) _sb.Close(); return; }
+            var th = SbAnchor; // the window, or its group
+            if (th == null || !th.IsOpen) { if (_sb.IsOpen) _sb.Close(); return; }
             float k = _sb.RestLossyScale.x / Mathf.Max(1e-5f, th.RestLossyScale.x);
             if (Router != null && Router.IsDragging(_sb))
             {
@@ -1115,7 +1147,7 @@ namespace MetaCodex.Shell
         private void UpdateSidebarVoice()
         {
             if (Voice == null) return;
-            bool thread = _threadOpen != null && _panels.TryGetValue("thread", out var th) && th.IsOpen;
+            bool thread = _threadOpen != null && ThreadWinOpen; // the focused window (voice means that one)
             Voice.SetEnabled("thread_sidebar", thread);
             Voice.SetEnabled("thread_composer", thread);
             Voice.SetEnabled("init_git", thread && _sbRoot != null && _sbSnap != null && !_sbSnap.Repo && _sbSnap.Error == null);
@@ -1217,7 +1249,7 @@ namespace MetaCodex.Shell
         public void SidebarFocusForTest(bool on) => _sbKeyFocus = on;
         public bool SidebarPhysicalKeyForTest(MetaCodex.Terminal.TermKey k) => SidebarPhysicalKey(k);
         public void UpdateSidebarLinkForTest() => UpdateSidebarLink();
-        public (Vector3 pos, Quaternion rot) SidebarPoseForTest() => _panels.TryGetValue("thread", out var th) ? SidebarPose(th) : (Vector3.zero, Quaternion.identity);
+        public (Vector3 pos, Quaternion rot) SidebarPoseForTest() => SbAnchor != null ? SidebarPose(SbAnchor) : (Vector3.zero, Quaternion.identity);
         public void ForgetSidebarMemoryForTest() { _sbMem.Clear(); Settings.threadSidebar?.Clear(); }
 
         // ------------------------------------------------------------------ picker
@@ -1253,7 +1285,7 @@ namespace MetaCodex.Shell
             _pickerHint.Set(hint ?? "");
             _pickerList.SelectedIndex = -1;
             _pickerList.SetItems(items);
-            _pickerCb = onPick;
+            _pickerCb = WindowOfPanel(near) != null ? Bind(onPick) : onPick; // a thread window's picker answers in that window
             if (near != null)
             {
                 var fwd = near.transform.forward;

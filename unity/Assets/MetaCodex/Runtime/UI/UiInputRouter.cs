@@ -49,11 +49,11 @@ namespace MetaCodex.UI
         public bool SelectionMode;
         public event Action<UiPanel, Rect> Selected;
         public event Action<UiPanel, UiElement> Clicked;
-        /// Each frame a panel is being moved, with the ray of the hand that moves it (from the eyes through the grab
-        /// point for a closed hand): the thread cards light up the group it would join (ShellThreadCards).
-        public event Action<UiPanel, Ray> PanelDragging;
-        /// A moved panel was let go, with that ray: what lies under it there (a card group: they merge).
-        public event Action<UiPanel, Ray> PanelDropped;
+        /// A pointer pressed or grabbed on a panel, before its element sees the press (the shell focuses the thread window
+        /// it belongs to, so the element's action runs for that window).
+        public Action<UiPanel> Touched;
+        /// A panel was let go after a drag by its bar (the tour's "move a window" card waits for it).
+        public event Action<UiPanel> PanelDropped;
         /// A hand (0 left, 1 right) that is busy with something that is not a panel (the orb): it neither points nor pokes.
         public Func<int, bool> HandBlocked;
         /// The panel whose control is being pressed or released right now (null between): a dialog it opens belongs to
@@ -275,13 +275,9 @@ namespace MetaCodex.UI
                 {
                     var dropped = p.DragPanel;
                     p.DragPanel = null;
-                    PanelDropped?.Invoke(dropped, DragRay(p)); // may merge (destroy) it: nothing of it is used after this
+                    PanelDropped?.Invoke(dropped);
                 }
-                else
-                {
-                    MoveDragged(p);
-                    PanelDragging?.Invoke(p.DragPanel, DragRay(p));
-                }
+                else MoveDragged(p);
                 Finish(p);
                 return;
             }
@@ -331,6 +327,7 @@ namespace MetaCodex.UI
 
             bool pressEdge = p.Down && !p.WasDown;
             bool grabEdge = p.GrabHeld && !p.WasGrab;
+            if ((pressEdge || grabEdge) && panel != null) Touched?.Invoke(panel);
             if (grabEdge && panel != null && panel.Draggable && Settings.grabMode != 0 && p.Kind != PointerKind.Poke)
             {
                 p.DragPanel = panel;
@@ -370,16 +367,6 @@ namespace MetaCodex.UI
         private static void Finish(UiPointer p) { p.WasDown = p.Down; p.WasGrab = p.GrabHeld; }
 
         private static Vector2 Clamp(UiPanel panel, Vector2 pt) => new Vector2(Mathf.Clamp(pt.x, 0, panel.Width), Mathf.Clamp(pt.y, 0, panel.Height));
-
-        /// The ray that says where a moved panel is let go: the pinching hand's ray, or for a closed hand the line from
-        /// the eyes through its palm.
-        private Ray DragRay(UiPointer p)
-        {
-            if (!p.DragByGrab) return p.Ray;
-            Vector3 eye = Head != null ? Head.position : p.Ray.origin;
-            var d = p.GrabPoint - eye;
-            return d.sqrMagnitude > 1e-6f ? new Ray(eye, d.normalized) : p.Ray;
-        }
 
         private void MoveDragged(UiPointer p)
         {
@@ -429,6 +416,7 @@ namespace MetaCodex.UI
                 var el = panel.HitTest(p.SelectStart);
                 if (el != null)
                 {
+                    Touched?.Invoke(panel);
                     var ev = new UiPointerEvent { Point = p.SelectStart, PressPoint = p.SelectStart, Pointer = p };
                     ActivePanel = panel;
                     try { el.OnPress(ev); el.OnRelease(ev, true); } finally { ActivePanel = null; }

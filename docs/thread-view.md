@@ -99,36 +99,107 @@ Owner: sometimes a message is too long to read in the one-row composer. The comp
   conversation.
 - Like the rest of the session context: only for the local model, never sent to MQH, the agents or the control port.
 
-## Thread cards and groups (owner 2026-11-14, `Shell/ShellThreadCards.cs`)
+## Thread windows and groups (owner 2026-11-14)
 
-A card is a small live view of one thread (0.30 x 0.20 m). There is still one THREAD window: OPEN on a card loads
-that thread into it, with its sidebar.
+Owner: "we shall be able to open multiple threads in the first place, and then merge or pull out from the grouping".
+The thread cards of before are gone. Each thread now has a full window, and windows can be grouped.
 
-- A card shows the title, the project and provider, a status dot and line (WORKING · 1:15, WAITING FOR YOU · 0:12,
-  ANSWERED · 3 min ago, ERROR, IDLE), and one or two lines: what it does now, what it asks, or its last answer.
-- Card buttons: OPEN (the thread in THREAD), REPLY (the system keyboard; Done sends with that thread's model, effort
-  and access, like the composer), ALLOW / DENY (only while it waits for an approval: the same MQH calls as THREAD's
-  ALLOW ONCE / DENY; a question needs OPEN), ✕ (removes the card; the thread stays).
-- Make a card: ⊞ at the right end of a THREADS row (▣ = a card already: the tap shows its group), or ⊞ CARD in
-  THREAD's header. A new card is a group of one, placed beside the window it came from.
-- A group is ONE window (`tgroup-<n>`): its cards side by side (two rows from 5 cards, up to 8), a slim header
-  (✥, the name, "N threads", ✎ rename, ⇲ UNGROUP, ✕ hides the window, the cards stay). Placement, RECENTER, the
-  FLOAT ring and bending treat it as one window, so a wide group bends round you.
-- Group: drag a group by its header and let go on another group. The target lights up ("LET GO TO GROUP") while you
-  are over it. The target keeps its place; the dragged cards go to its end.
-- Ungroup one card: pull its ✥ grip past the group's edge and let go. It becomes a group of one there (or joins the
-  group you let go on). ⇲ UNGROUP splits the whole group.
-- A change of members builds the group's window again once, at the same centre.
-- Saved in the settings (`threadCards`): each group's name, its threads in order, open or not. Places are not
-  saved: an open group is placed again at start (PlaceSmart).
-- Data: the thread list and pulses that `CtxPollPulses` reads. While a group is open the list is read every 4 s;
-  a card's timeline is read only when its row changed (or it has no pulse yet), parsed on a pool thread. A card is
-  drawn again only when its pulse or row changes; its clock once a second while it works or waits (every 30 s
-  otherwise); its dot pulses only while it works or waits. A closed group costs nothing.
-- Voice: `pin_thread_card` ("pin this thread as a card", "pin the docs thread as a card"), `remove_thread_card`
-  ("remove the card for <thread>"), `open_thread_card` ("open the card <thread>"), `show_thread_cards` (show / hide
-  all groups), `ungroup_thread_cards`, `rename_card_group`, `card_approval` (allow / deny), `reply_to_card` (with
-  the words, or the keyboard). Without cards, only `pin_thread_card` is enabled.
+### Several windows (`Shell/ShellThreadWindows.cs`)
+
+- Up to 6 THREAD windows are open at the same time. Their ids are `thread`, then `thread-2` to `thread-6`.
+- Each window has its own thread, chat, status line, composer, chips, approvals, attachments and draft.
+- The FOCUSED window is the last window that you touched or opened. Its title has a dot (● THREAD 2) when more than
+  one window is open. Voice commands, the clipboard's TO THE THREAD and the session context use the focused window.
+- Where a thread opens:
+  - A thread that is open already: its window gets the focus.
+  - Else the focused window, when it is closed or empty.
+  - Else THREAD, when it is closed.
+  - Else a new window, beside the focused window.
+  - When 6 windows are open, the thread replaces the thread of the focused window.
+- A thread of a project that has a window open joins the group of that window (see below). A thread of another
+  project opens as a free window.
+- The large ✕ at the top right closes that window only. The thread stays in MQH and in THREADS.
+- A window that does not have the focus polls MQH half as often.
+- Voice: "open the thread about the login page in a new window" (`find_thread`, `window: new`), "... in this window"
+  (`window: this`), "close this thread window", "switch to the other thread window" (`thread_windows`).
+
+### Groups (`Shell/ShellThreadGroups.cs`)
+
+- A group is a window that holds thread windows in a grid: 2 windows in 2x1, 3 or 4 in 2x2, 5 or 6 in 3x2.
+- The windows in a group are smaller, but they keep their full chat and composer. They work as free windows do.
+- Make a group: pinch the title bar of a window, move it onto another window and release it. The target window
+  lights up while the carried window is over it.
+- Automatic groups: when a thread opens and a window of the same project is open, the new window joins that group.
+  Two free windows of one project make a new group.
+- In a group:
+  - Release a window on another window of the same group: the two windows change places.
+  - Release a window on a window of another group: it moves to that group, at that place.
+  - Release a window outside its group: it comes out at its full size. That thread does not join a group again by
+    itself while its window stays open.
+  - The ✕ of a window closes that window only. A group with one window left goes, and that window is free.
+- The title bar of the group moves the group. ⇲ UNGROUP sets all its windows free, side by side. The ✕ of the group
+  closes all its windows.
+- RESIZE (bottom right of the group): pinch and pull. The group and its windows get larger or smaller. The top-left
+  corner stays where it is. The scale is between 0.4 and 1.2.
+- The sidebar of a window in a group opens at the right edge of the group, not inside the grid.
+- Placement, RECENTER and the FLOAT ring move a group as one window.
+- Moves are smooth: a window that joins, leaves or changes place moves to its new place in about 0.25 s.
+- Voice: "put the open threads side by side" (`thread_windows group`), "break up the group" (`ungroup`), "close the
+  whole group of threads" (`close_group`).
+- Groups are not kept when the app restarts.
+
+### How the code works
+
+- The per-window state was a set of fields of `MetaCodexShell`. It is now a `ThreadWindow` object. The old field names
+  are properties of the current window `_tw`, so the thread code did not change much.
+- Outside a scope, `_tw` is the focused window. `using (In(w))` makes `w` the current window for a block. Each
+  window's frame tick, its build and `OpenThreadIn` use this.
+- A press on a panel focuses its window first (`UiInputRouter.Touched`). Buttons, the composer and every MQH answer
+  are bound to their window (`Bind`). A window that closed drops the late answers.
+- There is one sidebar. It belongs to the window that opened it last (`_sbOwner`), and it sits beside that window or
+  its group (`SbAnchor`).
+- A group's windows are children of the group's panel. They are not in the layout lists (`IsGroupedPanel`).
+- Self-test section `threadwindows` (`Editor/MetaCodexUiTestThreadWindows.cs`). It was not run on the owner's PC.
+
+## Held turns and archive (owner 2026-11-14)
+
+### A held turn: SEND NOW, IN A WORKTREE, CANCEL (`Shell/ShellWorkspaces.cs`)
+
+- MQH holds a turn while another thread works in the same folder (docs/workspaces.md). The window shows
+  **▶ SEND NOW**. It asks "Start it now?" with three choices:
+  - **SEND NOW**: the turn starts in the shared folder. Both agents then edit the same files.
+  - **IN A WORKTREE**: the app reads the held message (`GET /threads/:id/queued-messages`), puts the worktree
+    instruction in front of its text, saves it (`PATCH .../queued-messages/:qid` with the row's `updatedAt` as
+    `expectedUpdatedAt`), and only then sends it (`POST .../send`). The agent makes or picks its own git worktree and
+    branch with the skill `worktree-per-thread` and works there. The shared folder stays as it is.
+  - **CANCEL**: the turn keeps waiting.
+- The message's text items become one text item (the instruction, then the texts; their mentions move with them).
+  Images and files stay as they are. If any step fails, a toast shows MQH's error and nothing is sent.
+- The skill (`mqh/plugins/metacodex-guide/skills/worktree-per-thread`) tells the agent: never edit the shared
+  checkout, reuse a worktree whose branch fits or `git worktree add -b agent/<name> <checkout>-wt-<name> <base>`,
+  commit there, and report the path, the branch, the base and "MERGE in WORKSPACES when done".
+- Limit: a worktree that an agent makes with git is not an MQH environment. WORKSPACES may not list it, and MQH
+  still counts the thread in the checkout. The skill then tells the user to ask the agent to merge.
+
+### Archive and delete (`Shell/ShellThreadArchive.cs`)
+
+- Each thread window has **ARCHIVE…** and **DELETE…** at the top. They act on the thread of that window (not on the
+  focused one). They show only while the window shows a thread.
+  - ARCHIVE… asks first, then archives the thread and its child threads (`POST /threads/:id/archive-all`). Every
+    window that shows one of them closes.
+  - DELETE… reads the child count (`GET /threads/:id/child-summary`), asks with that count, then deletes
+    (`DELETE /threads/:id`, `childThreadsConfirmed` true only when the question named child threads). The window
+    closes.
+- **THREADS > ▤ ARCHIVED** shows the archived threads (`GET /threads?archived=true`, one request when it is switched
+  on, after a change and on ⟳). Tap a row: **RESTORE** (`POST /threads/:id/unarchive`, that thread only) or
+  **DELETE…**. **◂ ACTIVE** goes back to the normal list.
+- A thread archived or deleted elsewhere (another client, an agent): when it is missing from MQH's list, the window
+  asks MQH for that thread (at most every 10 s). If it is archived or deleted, the window closes. Archived threads are
+  not in MQH's normal list, so they never count as working and are not in the session context's open windows.
+- Voice: `archive_thread` ("archive this chat", "archive the thread about <topic>") and `restore_thread`
+  ("bring back the chat about <topic>", "show my archived chats"). There is no delete by voice.
+- Self-test section `archive` (`Editor/MetaCodexUiTestThreadArchive.cs`) and three checks in `workspaces` (the
+  worktree instruction). Not run on the owner's PC.
 
 ## Tests
 
@@ -137,6 +208,3 @@ that thread into it, with its sidebar.
 - Editor self-test section `chat` (`Editor/MetaCodexUiTestChat.cs`), plus `context` and `workspace` updated:
   `~/mcxwork/tools/uirun.sh chat context workspace captures` (not run yet on 2026-11-11: Windows had 1.6-1.9 GB free).
 - Headset: docs/TEST_CHECKLIST.md section 25.
-- Editor self-test section `cards` (`Editor/MetaCodexUiTestCards.cs`): two pinned threads, live status, a drop
-  that merges them into one window that moves as one, a card pulled out by its grip, OPEN, REPLY, the voice
-  commands, the groups through a restart. Headset: docs/TEST_CHECKLIST.md section 46.

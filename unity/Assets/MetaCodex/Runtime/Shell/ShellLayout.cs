@@ -36,7 +36,7 @@ namespace MetaCodex.Shell
 
         private IEnumerable<UiPanel> LayoutPanels()
         {
-            foreach (var kv in _panels) if (kv.Key != "dock" && kv.Key != "picker" && kv.Key != ControlId && kv.Key != SidebarId) yield return kv.Value; // CONTROL's rail and THREAD's sidebar ride with their window
+            foreach (var kv in _panels) if (kv.Key != "dock" && kv.Key != "picker" && kv.Key != ControlId && kv.Key != SidebarId && !IsGroupedPanel(kv.Value)) yield return kv.Value; // CONTROL's rail and THREAD's sidebar ride with their window; a grouped thread window with its group
             foreach (var f in _frames.Values) yield return f;
         }
 
@@ -45,14 +45,14 @@ namespace MetaCodex.Shell
 
         /// Half the arc a panel takes on the ring, including its sidebar when it is the thread.
         private float GroupHalfArc(UiPanel p, float r) =>
-            p != null && p.Id == "thread" && SbLinked ? HalfArc(p, r) + SbGapDeg(r) * 0.5f + HalfArc(_sb, r)
+            p != null && p == SbAnchor && SbLinked ? HalfArc(p, r) + SbGapDeg(r) * 0.5f + HalfArc(_sb, r)
             : RailBeside(p) ? HalfArc(p, r) + RailShift(r) // CONTROL: the rail on the window's left
             : HalfArc(p, r);
 
         /// A panel's own centre for a group centred at `groupAngle`: the thread left of its workspace, a CONTROL window
         /// right of its rail.
         private float PanelAngleInGroup(UiPanel p, float groupAngle, float r) =>
-            p != null && p.Id == "thread" ? ThreadAngleInGroup(groupAngle, r) : RailBeside(p) ? groupAngle + RailShift(r) : groupAngle;
+            p != null && p == SbAnchor ? ThreadAngleInGroup(groupAngle, r) : RailBeside(p) ? groupAngle + RailShift(r) : groupAngle;
 
         /// The thread's own centre for a group centred at `groupAngle` (the sidebar sits to its right).
         private float ThreadAngleInGroup(float groupAngle, float r) => SbLinked ? groupAngle - SbGapDeg(r) * 0.5f - HalfArc(_sb, r) : groupAngle;
@@ -107,7 +107,7 @@ namespace MetaCodex.Shell
                 if (q == null || q == p || !q.IsOpen) continue;
                 if (!SameRow(p, height, q, kv.Value.height)) continue;
                 if (RailBeside(q)) { occ.Add((kv.Value.angle - RailShift(r), GroupHalfArc(q, r))); continue; } // with its rail
-                if (q.Id == "thread" && SbLinked) { occ.Add((ThreadGroupAngle(kv.Value.angle, r), GroupHalfArc(q, r))); continue; } // with its sidebar
+                if (q == SbAnchor && SbLinked) { occ.Add((ThreadGroupAngle(kv.Value.angle, r), GroupHalfArc(q, r))); continue; } // with its sidebar
                 occ.Add((kv.Value.angle, HalfArc(q, r)));
             }
             return occ;
@@ -145,7 +145,7 @@ namespace MetaCodex.Shell
         /// there is none the ring grows and is laid out again.
         private void OnOpenedFloating(UiPanel p)
         {
-            if (!Floating || p == null || _carousel == null || p.Id == "dock" || p.Id == "picker") return;
+            if (!Floating || p == null || _carousel == null || p.Id == "dock" || p.Id == "picker" || IsGroupedPanel(p)) return;
             float r = FloatRadius();
             if (r > _ringRadius + 0.02f) { ArrangeRing(); return; }
             var head = Head;
@@ -200,7 +200,7 @@ namespace MetaCodex.Shell
 
         /// Windows that never bend: terminals (their text grid cannot bend yet) and WEB (the page is one flat picture,
         /// so a bent frame around it would not match where the pointer touches the page).
-        public static bool StaysFlat(UiPanel p) => p.Id.StartsWith("term-") || p.Id == "web";
+        public static bool StaysFlat(UiPanel p) => p.Id.StartsWith("term-") || p.Id == "web" || p.Id.StartsWith("tgroup-"); // a thread group: its windows are flat children
 
         /// Fixed layout with "Bend panels": each panel curves towards you around its own distance (bent on the GPU,
         /// eased by the panel, so it follows you smoothly). Terminals and WEB stay flat (StaysFlat).
@@ -236,7 +236,7 @@ namespace MetaCodex.Shell
             if (p != null)
             {
                 float r = Mathf.Max(_ringRadius, FloatRadius());
-                bool group = p.Id == "thread" && SbLinked;
+                bool group = p == SbAnchor && SbLinked;
                 // a dropped thread: its group (thread + sidebar) is centred a little to the right of the thread; a
                 // CONTROL window's group (rail + window) a little to its left
                 float groupAngle = group ? ThreadGroupAngle(angle, r) : RailBeside(p) ? angle - RailShift(r) : angle;
@@ -258,6 +258,7 @@ namespace MetaCodex.Shell
         private void UpdateLayout(float dt)
         {
             if (Settings == null) return;
+            TickThreadWindows(dt); // thread windows dropped on each other, the groups' grids (ShellThreadGroups)
             TickGlide(dt);
             UpdateSidebarLink();
             UpdateControlRail();
@@ -292,7 +293,7 @@ namespace MetaCodex.Shell
             {
                 if (p == null || !p.IsOpen) continue;
                 var t = p.transform;
-                if (Router.IsDragging(p) || RailCarries(p) || p.Id == "thread" && SbLinked && Router.IsDragging(_sb)) { _slots.Remove(t); continue; } // re-slotted where it is dropped
+                if (Router.IsDragging(p) || RailCarries(p) || p == SbAnchor && SbLinked && Router.IsDragging(_sb) || IsResizing(p)) { _slots.Remove(t); continue; } // re-slotted where it is dropped
                 if (!_slots.TryGetValue(t, out var slot)) { Slot(t); slot = _slots[t]; }
                 float a = (_baseYaw + _spin + slot.angle) * Mathf.Deg2Rad;
                 var dir = new Vector3(Mathf.Sin(a), 0f, Mathf.Cos(a));
@@ -367,7 +368,8 @@ namespace MetaCodex.Shell
         {
             _pairThread = null;
             var head = Head;
-            if (Floating || head == null || _sb == null || !_sb.IsOpen || !_panels.TryGetValue("thread", out var th) || !th.IsOpen) return;
+            var th = SbAnchor; // the sidebar's window, or its group
+            if (Floating || head == null || _sb == null || !_sb.IsOpen || th == null || !th.IsOpen) return;
             if (Router != null && (Router.IsDragging(th) || Router.IsDragging(_sb))) return;
             Vector3 eye = head.position;
             float front = FrontYaw();
@@ -379,7 +381,7 @@ namespace MetaCodex.Shell
             float shift = FreePairShift(group, want, new Vector2(d.x, d.z).magnitude, eye, front, th, _sb);
             if (shift == 0f) return;
             GlideRound(th, eye, shift, th.TransitionPhase != UiPanel.Phase.Open);
-            _pairThread = _threadOpen;
+            _pairThread = _sbOwner.threadOpen;
             _pairShift = shift;
             _pairPos = _glideToPos;
             _pairRot = _glideToRot;
@@ -392,7 +394,8 @@ namespace MetaCodex.Shell
             string was = _pairThread;
             _pairThread = null;
             var head = Head;
-            if (was == null || was != _threadOpen || Floating || head == null || !_panels.TryGetValue("thread", out var th) || !th.IsOpen) return;
+            var th = SbAnchor;
+            if (was == null || was != _sbOwner.threadOpen || Floating || head == null || th == null || !th.IsOpen) return;
             bool gliding = _glide == th && _glideT >= 0f;
             var pos = gliding ? _glideToPos : th.transform.position;
             var rot = gliding ? _glideToRot : th.transform.rotation;

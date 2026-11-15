@@ -25,7 +25,7 @@ Helpers on the PC: `tools/qterm` (control port), `adb logcat -s Unity`, `files/s
 - [ ] `✕` closes a terminal; TERMS panel lists terminals; FOCUS / CLOSE work
 - [ ] `⎘` on the frame pastes the clipboard into that terminal
 - [ ] `ls /mnt/quest` shows `plugins/`, `scripts/`, `control.token`
-- [ ] `ls ~/.claude/skills` shows quest-gesture-plugins, quest-scripting, metacodex-context, Unity and Meta skills (46)
+- [ ] `ls ~/.claude/skills` shows quest-gesture-plugins, quest-scripting, metacodex-context, quest-views, worktree-per-thread, Unity and Meta skills (48)
 
 ## 2. Dock, panels, hands
 
@@ -675,29 +675,13 @@ Work windows:
 - [ ] The sidebar on CHANGES while it works: new files and counts show within a few seconds
 - [ ] A script saved in the terminal still applies within about a second
 
-## 46. Thread cards and groups (branch feat/thread-cards; docs/thread-view.md)
-
-- [ ] THREADS: ⊞ at the right end of a thread row → a card of that thread opens beside THREADS; the row now shows ▣
-- [ ] THREAD: ⊞ CARD → a card of the open thread; open another thread in THREAD → the card stays
-- [ ] A card of a working thread: WORKING with a running clock, the dot pulses, the line shows what it does now; when it answers: ANSWERED · just now and the first line of the answer
-- [ ] A thread waits for an approval → its card shows WAITING FOR YOU, ALLOW and DENY; ALLOW → the agent goes on (as with THREAD's ALLOW ONCE)
-- [ ] REPLY on a card → the system keyboard; type and Done → the message arrives in that thread
-- [ ] OPEN on a card → that thread in the THREAD window with its sidebar; the card stays
-- [ ] Drag one card window by its header over another: the other lights up ("LET GO TO GROUP"); let go → one window with both cards, the target did not move
-- [ ] Drag the group by its header: both cards move together; RECENTER and FLOAT keep it as one window; with Bend panels on, a wide group bends round you
-- [ ] Pull a card out by its ✥ grip past the group's edge → it becomes its own window where you let go; the group narrows and stays where it was
-- [ ] ⇲ UNGROUP → each card its own window beside the old one; ✎ → a name for the group in its header
-- [ ] Restart the app → the groups come back with their names and threads in order (open ones open again, placed anew)
-- [ ] Voice: "pin this thread as a card", "open the card <title words>", "remove the card for <title words>", "hide the thread cards" / "show the thread cards", "allow it on the card"
-- [ ] Four cards open, two of them working, for 5 minutes: 72 fps (Perf menu Snapshot), no stutter
-
-## 47. Pose hold and the V (2026-11-14)
+## 46. Pose hold and the V (2026-11-14)
 
 - [ ] Make a V (index and middle up) for about 1 s and drop it: nothing happens.
 - [ ] Hold the V for 2 s: Ambient Focus turns on; hold it again 2 s: it turns off.
 - [ ] Horns, thumbs up, call-me held for 3 s: nothing opens.
 - [ ] A V made while the ray or the fingertip is on a window does nothing.
-## 48. THREAD's message box: grow it, back to one row on SEND (branch feat/composer-resize; docs/thread-view.md)
+## 47. THREAD's message box: grow it, back to one row on SEND (branch feat/composer-resize; docs/thread-view.md)
 
 - [ ] THREAD: the composer is one row; a bar with three dots sits on its top edge; it lights up under the ray or a finger
 - [ ] Pinch the bar and drag up: the box grows upwards, the chat above gets shorter by the same amount, `+` `◉` `SEND ▶` stay on the bottom row
@@ -711,7 +695,7 @@ Work windows:
 - [ ] Grow the box, then + → ATTACH FILES: one row; the grip does nothing while the attach window is open; CANCEL leaves one row
 - [ ] Voice: "make the text box bigger" (one step), "shrink the composer" (one step), "reset the text box" (one row); "expand the message box" and "put the message box back to the default size" work
 - [ ] While dragging the chat changes a few times a second, no stutter; 72 fps with a working thread open (Perf menu Snapshot)
-## 49. Back from a native app: the panels stay in the room (branch feat/return-anchor; docs/ui.md "Back from a native app")
+## 48. Back from a native app: the panels stay in the room (branch feat/return-anchor; docs/ui.md "Back from a native app")
 
 Setup: open the dock, THREAD and one more window in FIXED layout. Note where they are against a wall, the desk or a door.
 
@@ -722,7 +706,59 @@ Setup: open the dock, THREAD and one more window in FIXED layout. Note where the
 - [ ] Pause and resume with the Home button, no native app: the panels stay where they were, no line about a move
 - [ ] RECENTER (wrist or ⟲) still puts the panels in front of you as before
 
-## 50. First start: the one-time SETUP panel, the locks, the tour (branch feat/first-run-tour; docs/ready-on-install.md)
+## 49. Thread windows and groups (branch feat/thread-groups; docs/thread-view.md "Thread windows and groups")
+
+Setup: two projects in THREADS, project1 with 3 threads, project2 with 1 thread. FIXED layout first, then FLOAT.
+
+- [ ] Open the 1st thread of project1: one window THREAD, free
+- [ ] Open the 2nd thread of project1: a new window opens and joins the first one as a group (2x1); no jump, it slides into its place; the group title says "Group 1 · 2 threads"
+- [ ] Open the thread of project2: a free window THREAD 3 beside the group
+- [ ] Open the 3rd thread of project1: it joins the group; the group becomes 2x2 (3 windows); the windows slide, the frame fades to its new size
+- [ ] Tap a thread that is open already in THREADS: its window flashes and gets the dot (●); no new window
+- [ ] In each grouped window: the chat streams, you can scroll it, type and SEND, ◉ dictates into that window, an approval shows ALLOW / DENY in that window and the answer goes to that thread
+- [ ] Two threads working at the same time (one in the group, one free): both chats update; the session log has no "[slow timeline]" storm
+- [ ] Ask the orb "what is this thread doing?" while you point at one window, then at another: the answer is about the window you point at
+- [ ] An approval waits in a window that is not focused: ask "is anything waiting for me?": the answer names that thread
+- [ ] RESIZE (bottom right of the group): pull it out and in; the windows get larger and smaller with the group; the top-left corner stays; the text stays readable at the smallest size
+- [ ] Pinch the group's title bar and move it: all its windows move with it
+- [ ] Pinch the title bar of a grouped window and release it on another window of the same group: the two change places (the target lights up first)
+- [ ] Pull a window out of the group (release it outside the group): it comes out at its full size where you let it go; open its thread again from THREADS: it does not go back into the group
+- [ ] Release a free window on a window of the group: it joins at that place
+- [ ] Release a free window on another free window: the two make a new group (two groups at once: Group 1 and Group 2)
+- [ ] The ✕ of a grouped window (top right, large): only that window closes; with one window left the group goes and that window is free
+- [ ] The details handle (›) of a grouped window: the sidebar opens at the right edge of the group, not inside the grid; drag the sidebar: the group comes with it
+- [ ] ⇲ UNGROUP: every window is free at its full size, side by side, sliding to its place
+- [ ] The group's ✕: the group and all its windows close; THREADS still lists the threads
+- [ ] RECENTER with a group and a free window: the group moves as one window, nothing overlaps
+- [ ] FLOAT: the group takes one place on the ring; a window pulled out takes its own place; the TURN bar turns them together
+- [ ] Voice: "put the open threads side by side", "break up the group", "switch to the other thread window", "close this thread window", "open the thread about <topic> in a new window"
+- [ ] 6 windows open: the 7th thread opens in the focused window (a message says so)
+- [ ] 72 fps with 4 windows open, 2 of them working (Perf menu Snapshot)
+
+## 50. Held turns IN A WORKTREE, archive / restore / delete (branch feat/held-turn-archive; docs/thread-view.md "Held turns and archive")
+
+Held turn (two threads in one project checkout):
+- [ ] Thread A works in the checkout (a long task). Send a message to thread B in the same checkout: B shows ⏸ Not started and ▶ SEND NOW
+- [ ] ▶ SEND NOW: the question "Start it now?" has SEND NOW, IN A WORKTREE and CANCEL, and its text says what IN A WORKTREE does
+- [ ] CANCEL: B keeps waiting. SEND NOW (on another try): B starts in the checkout, the toast says it shares the folder
+- [ ] IN A WORKTREE: the toast says "Sent: the agent moves to its own worktree first"; B's first message in the chat starts with "This project's folder is busy with another agent..." and then your text
+- [ ] B's agent runs `git worktree list` / `git worktree add` (worktree-per-thread skill), works in `<checkout>-wt-<name>` on `agent/<name>`, and ends with the path, the branch, the base and how to merge
+- [ ] A's files in the checkout did not change because of B (`git status` in the checkout shows only A's work)
+- [ ] `ls ~/.claude/skills` has worktree-per-thread; MQH > SKILLS shows it read-only
+
+Archive / restore / delete:
+- [ ] A thread window shows ARCHIVE… and DELETE… at the top; a NEW THREAD draft and an empty window do not
+- [ ] Two windows open, focus window 1, press ARCHIVE… in window 2: the question names window 2's thread; ARCHIVE: window 2 closes, window 1 stays; THREADS no longer lists it
+- [ ] A thread with a child thread (a sub-thread an agent spawned): ARCHIVE… archives both; both windows close if open
+- [ ] THREADS > ▤ ARCHIVED: the archived threads, newest first, each with RESTORE ▸; ◂ ACTIVE goes back
+- [ ] Tap an archived row > RESTORE: it is back in THREADS and opens normally
+- [ ] DELETE… on a thread with no child: the question says it has no child threads; DELETE: the window closes, it is in neither list
+- [ ] DELETE… on a thread with child threads: the question says how many go too; DELETE removes them all
+- [ ] Archive a thread from another client (the MQH CLI: `mqh thread archive <id>` or a second app) while its window is open: the window closes within about 10 s with a toast
+- [ ] Voice: "archive this chat" (the focused window's thread), "archive the thread about <topic>", "bring back the chat about <topic>", "show my archived chats"
+- [ ] An archived thread that was working: the RUNNING count in THREADS drops, the orb does not report it as working
+
+## 51. First start: the one-time SETUP panel, the locks, the tour (branch feat/first-run-tour; docs/ready-on-install.md)
 
 Uninstall first (`adb uninstall com.pnncl.metacodex`), then install and start: a clean first start.
 
