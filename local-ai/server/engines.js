@@ -9,6 +9,10 @@ const { CATALOGUE } = require('./models')
 const KINDS = ['asr', 'llm', 'tts', 'embed', 'coder']
 const INTERFACE = ['asr', 'llm', 'tts', 'embed'] // the app's own voice / UI AI
 const BULK_EMBED = 8 // more texts than this in one request: background work (a spoken command has a few clauses)
+const ASR_MAX_TOKENS = 128 // speech-to-text's token limit (a command is 5-30 tokens)
+// whisper.cpp's default temperature step (whisper_full_default_params): speech-to-text runs with it (decodes again
+// hotter when a result looks wrong); the wake check turns it off (one pass) and speech-to-text puts it back after one
+const ASR_TEMPERATURE_INC = 0.2
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 class Engines {
@@ -43,6 +47,8 @@ class Engines {
     this._yields = []
     this._ttsBeside = null
     this.speechYields = { warmup: 0, prefill: 0, embed: 0 }
+    // wake checks ("Hey Whisp", wakeCheck): done, their own time, and the ones dropped because the service was busy
+    this.wake = { checks: 0, ms: 0, skipped: { paused: 0, coder: 0, speech: 0, busy: 0, model: 0 } }
     this.idleTimer = setInterval(() => this._unloadIdle(), 15000)
   }
 
@@ -55,7 +61,7 @@ class Engines {
       if (this.loadMs[k]) engines[k].loadMs = this.loadMs[k]
     }
     const busy = KINDS.map((k) => this.busy[k]).filter(Boolean)
-    return { coderHold: this.coderHolds(), speech: { active: this.speechActive(), yields: this.speechYields }, busy: busy.length ? busy.join(',') : null, queued: KINDS.reduce((n, k) => n + this.queued[k], 0), paused: this.paused, jobs: this.jobs, lastMs: this.last, engines }
+    return { coderHold: this.coderHolds(), speech: { active: this.speechActive(), yields: this.speechYields }, wake: this.wake, busy: busy.length ? busy.join(',') : null, queued: KINDS.reduce((n, k) => n + this.queued[k], 0), paused: this.paused, jobs: this.jobs, lastMs: this.last, engines }
   }
 
   /**
@@ -204,19 +210,81 @@ class Engines {
       const actx = Math.min(1500, Math.max(Number(this.cfg.minAudioCtx) || 512, Math.ceil((seconds * 50 + 96) / 64) * 64))
       this.asrWant = { actx: 0, language: opts.language || null } // actx is not part of the load key: set per run below
       const asr = await this._ensure('asr')
-      if (asr._mcxActx !== actx) {
+      if (asr._mcxWake) {
+        // the last run was a wake check (wakeCheck): speech-to-text's own settings go back first, in place
+        const r0 = Date.now()
+        await asr.reload({ whisperConfig: { audio_ctx: actx, initial_prompt: this.cfg.prompt || '', max_tokens: ASR_MAX_TOKENS, temperature_inc: ASR_TEMPERATURE_INC } })
+        asr._mcxWake = false
+        asr._mcxActx = actx
+        this.last.asrReload = Date.now() - r0
+      } else if (asr._mcxActx !== actx) {
         const r0 = Date.now()
         await asr.reload({ whisperConfig: { audio_ctx: actx } })
         asr._mcxActx = actx
         this.last.asrReload = Date.now() - r0
       }
       const t0 = Date.now()
-      const r = await asr.run(pcm)
-      let text = ''
-      await r.onUpdate((out) => {
-        for (const s of Array.isArray(out) ? out : [out]) if (s && typeof s.text === 'string') text += s.text
-      }).await()
+      const text = await asrText(asr, pcm)
       return { text: cleanTranscript(text), ms: Date.now() - t0, audioMs: Math.round(seconds * 1000), audioCtx: actx }
+    })
+  }
+
+  /** Why a wake check cannot run at once (null: it can). It never waits: the app sends the next segment instead. */
+  wakeBlocked () {
+    if (this.paused) return 'paused'
+    if (!this.models.installed('asr')) return 'model'
+    if (this.coderHolds()) return 'coder'
+    if (this.speechActive()) return 'speech'
+    if (KINDS.some((k) => this.busy[k] || this.queued[k] > 0) || (this._spec && !this._spec.aborted)) return 'busy'
+    return null
+  }
+
+  /**
+   * The wake check (POST /v1/audio/wake; docs/voice.md "Hey Whisp"): the text of one short voiced segment that the app's
+   * voice gate cut (0.4-2.5 s with a little audio before it); the app decides whether it is the wake phrase. The lowest
+   * speech job: dropped, never queued, when anything else runs or holds the cores -> { skipped: paused | model | coder |
+   * speech | busy }. The cheapest decode: an encoder window sized to the clip (opts.audioCtx, else cfg.wakeMinAudioCtx
+   * at least; 512 frames is speech-to-text's floor), the prompt "Hey Whisp." (opts.prompt / cfg.wakePrompt), a few
+   * tokens (opts.maxTokens / cfg.wakeMaxTokens) and one greedy pass (no hotter retries). Whisper settings changed in
+   * place, no model reload; speech-to-text puts its own back on its next run. -> { text, ms, audioMs, audioCtx,
+   * reloadMs, loadMs }: ms is the decode, loadMs the model load when it was not loaded.
+   */
+  wakeCheck (pcm, opts = {}) {
+    const why = this.wakeBlocked()
+    if (why) {
+      this.wake.skipped[why]++
+      return Promise.resolve({ skipped: why })
+    }
+    const seconds = pcm.length / 16000
+    const want = Math.floor(Number(opts.audioCtx)) || 0
+    const floor = Math.floor(Number(this.cfg.wakeMinAudioCtx)) || 256
+    const actx = Math.min(1500, want >= 64 ? Math.ceil(want / 64) * 64 : Math.max(floor, Math.ceil((seconds * 50 + 96) / 64) * 64))
+    const prompt = String(opts.prompt || this.cfg.wakePrompt || 'Hey Whisp.').slice(0, 200)
+    const tokens = Math.max(1, Math.min(32, Math.floor(Number(opts.maxTokens || this.cfg.wakeMaxTokens)) || 8))
+    this.wake.checks++
+    return this.job('asr', 'wake', async () => {
+      // the load key stays speech-to-text's (its language; actx 0 as it sets it): no model reload between the two
+      this.asrWant = { actx: 0, language: this.asrWant.language || null }
+      const l0 = Date.now()
+      const loaded = !!this.inst.asr
+      const asr = await this._ensure('asr')
+      const loadMs = loaded ? 0 : Date.now() - l0
+      const key = JSON.stringify([actx, prompt, tokens])
+      let reloadMs = 0
+      if (!asr._mcxWake || asr._mcxWakeKey !== key) { // the same settings as the last wake check: no reload
+        const r0 = Date.now()
+        asr._mcxWake = true // before the reload: one that fails is put right by the next run
+        asr._mcxWakeKey = null
+        asr._mcxActx = actx
+        await asr.reload({ whisperConfig: { audio_ctx: actx, initial_prompt: prompt, max_tokens: tokens, temperature_inc: 0 } })
+        asr._mcxWakeKey = key
+        reloadMs = Date.now() - r0
+      }
+      const t0 = Date.now()
+      const text = await asrText(asr, pcm)
+      const ms = Date.now() - t0
+      this.wake.ms += ms
+      return { text: cleanTranscript(text), ms, audioMs: Math.round(seconds * 1000), audioCtx: actx, reloadMs, loadMs }
     })
   }
 
@@ -508,7 +576,7 @@ class Engines {
         n_threads: c.threads,
         no_timestamps: true,
         single_segment: true,
-        max_tokens: 128,
+        max_tokens: ASR_MAX_TOKENS,
         audio_ctx: 512
       }
       if (c.prompt) whisperConfig.initial_prompt = c.prompt
@@ -571,6 +639,16 @@ class Engines {
       }
     }
   }
+}
+
+/** One speech-to-text run of 16 kHz mono Int16 PCM -> the text as Whisper wrote it. */
+async function asrText (asr, pcm) {
+  const r = await asr.run(pcm)
+  let text = ''
+  await r.onUpdate((out) => {
+    for (const s of Array.isArray(out) ? out : [out]) if (s && typeof s.text === 'string') text += s.text
+  }).await()
+  return text
 }
 
 /** One pass of sentence vectors (up to 64 texts), L2-normalised. */
