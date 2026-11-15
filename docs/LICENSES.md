@@ -19,6 +19,14 @@ package licences. What is downloaded later was read from the scripts that downlo
 and from the upstream repositories. Where something could not be verified, the text says so. Open duties are in
 [section 8](#8-gaps).
 
+**Packed install (APK 0.7.19, versionCode 26, 994,868,919 bytes).** The APK now also carries the ready Linux image
+([section 3.6](#36-the-linux-image-debian-13-trixie-assetslinuxrootfstar): the official layer plus Node.js 24.22.3 and
+54 Debian packages installed), the four core AI models ([section 3.10](#310-the-ai-models-assetsqvacmodels)) and the
+decision model's vectors of the command examples (data made by our code from our own sentences). These facts come from
+the build inputs (`unity/Assets/StreamingAssets/linux/rootfs.json`, `tools/userland-image.sh`,
+`tools/local-ai-models-pack.sh`, `local-ai/server/models.js`), not from a new listing of the APK file: rerun
+[section 10](#10-how-this-was-checked-rerun-before-every-submission) on the release APK.
+
 On the headset this file and the licence texts it points to are in `/usr/share/doc/metacodex/` (laid by
 `userland/build-overlay.py`, which ships every file that lies directly in `docs/licenses/`: keep that folder flat). The
 standard texts of the Debian image are also in `/usr/share/common-licenses/` there.
@@ -34,16 +42,18 @@ standard texts of the Debian image are also in `/usr/share/common-licenses/` the
 | | Bare runtime (V8, libuv, BoringSSL, ICU inside), QVAC engines and 133 npm packages | Apache-2.0 83, MIT 45, ISC 5, plus BSD-3, ISC/OpenSSL, Unicode | licence + NOTICE texts (done) |
 | | MoonSharp | BSD-3-Clause | notice (done) |
 | | 8 fonts | [OFL-1.1](licenses/OFL-1.1.txt) (6), Bitstream Vera / Arev (2) | notice + licence with each copy (done) |
-| | Linux image: Debian 13 "trixie", 78 packages | GPL-2/3, LGPL, BSD, MIT/X11, ISC, public domain, ... (each package's own) | **source offer** (done); licence texts (done) |
+| | Linux image: Debian 13 "trixie", 132 packages (78 of the official layer, 54 installed by the image build) | GPL-2/3, LGPL, BSD, MIT/X11, ISC, public domain, ... (each package's own) | **source offer** (78: done; 54: gap G14); licence texts (in the image; the 78 also here) |
+| | Node.js 24.22.3 in the Linux image, with the npm CLI of its official archive | MIT (Node.js, with the notices of its bundled parts in its `LICENSE`); Artistic-2.0 (npm) and the licences of npm's bundled packages | the licence files travel in the image (`/usr/local/LICENSE`, `/usr/local/lib/node_modules/npm/`) |
+| | 4 AI models | MIT (Whisper base, multilingual-e5-small), Apache-2.0 (Qwen3 0.6B), **OpenRAIL-M** (Supertonic 3) | notices; OpenRAIL-M: a copy of the licence, and the use restrictions must reach the users |
 | | 48 bundled agent skills | Unity Companion License (36), [Apache-2.0](licenses/Apache-2.0.txt) (7), ours (5) | licence file travels with them (done) |
 | | MQH harness (fork of bb) + 72 npm packages + 97 bundled npm packages + 4 native modules | MIT, plus ISC, Apache-2.0, BSD-3, BlueOak, dual licences | MIT notice of Michael Yong (done), package notices (done) |
-| **B. Downloaded at first use** | 4 AI models (+1 optional: the local coder, Qwen2.5-Coder 0.5B, Apache-2.0) | MIT (Whisper base, multilingual-e5-small), Apache-2.0 (Qwen3 0.6B), **OpenRAIL-M** (Supertonic 3) | OpenRAIL-M use restrictions must reach the users |
-| | Node.js, NDK (community build), OpenXR 1.1.65, 198 Debian packages | MIT, Apache-2.0, LLVM exception, GPL/LGPL/... | none for us (the user's device downloads them); keep the pointers |
+| **B. Downloaded on request** | the optional local coder: Qwen2.5-Coder 0.5B | Apache-2.0 | none for us (the user's device downloads it); keep the pointer |
+| | NDK (community build), OpenXR 1.1.65, 144 Debian packages (`mcx-setup quest`) | MIT, Apache-2.0, LLVM exception, GPL/LGPL/... | none for us (the user's device downloads them); keep the pointers |
 | | android.jar | Android SDK License Agreement | the user must accept it (gap G6) |
 | | agent CLIs the user installs | Claude Code: proprietary, Anthropic's terms; OpenCode MIT; Codex Apache-2.0 | never bundled |
 | **C. Build / development only** | Unity Editor, build tools, MQH dev tree (1,012 npm packages), voice-bench packages and models, diagram fonts | many; none is shipped | listed for completeness |
 
-Counts, measured: 4 AI models; 78 Debian packages in the image and 198 downloaded; 133 + 72 + 97 npm packages
+Counts, measured: 4 AI models; 132 Debian packages in the image (78 + 54) and 144 more on request; 133 + 72 + 97 npm packages
 (overlapping sets, 302 entries, 301 distinct, [Appendix B](#appendix-b-npm-packages-in-the-apk)); 22 native libraries in
 `lib/arm64-v8a` and 28 more in `assets/lib`; 8 fonts; 20 Unity packages in the APK (8 more only in the Editor).
 
@@ -58,7 +68,9 @@ Counts, measured: 4 AI models; 78 Debian packages in the image and 198 downloade
   repository.
 - There is no separate `THIRD_PARTY_NOTICES.md`: the notices are the files of `docs/licenses/` (they ship to
   `/usr/share/doc/metacodex/licenses/`), indexed below.
-- "Text" links the licence text in `docs/licenses/` (`debian-image-copyright.txt` holds all 78 Debian copyright files).
+- "Text" links the licence text in `docs/licenses/` (`debian-image-copyright.txt` holds the 78 copyright files of the
+  official layer; the 54 packages that the image build installs carry theirs in the image, in
+  `/usr/share/doc/<package>/copyright`).
 
 ### Licence texts in `docs/licenses/`
 
@@ -75,9 +87,9 @@ Counts, measured: 4 AI models; 78 Debian packages in the image and 198 downloade
 | [Android-SDK-License-Agreement.txt](licenses/Android-SDK-License-Agreement.txt) | Android SDK License Agreement | android.jar |
 | [V8-LICENSE.txt](licenses/V8-LICENSE.txt), [libuv-LICENSE.txt](licenses/libuv-LICENSE.txt), [BoringSSL-LICENSE.txt](licenses/BoringSSL-LICENSE.txt), [ICU-LICENSE.txt](licenses/ICU-LICENSE.txt), [RocksDB-LevelDB-BSD-3-Clause.txt](licenses/RocksDB-LevelDB-BSD-3-Clause.txt), [libsodium-ISC.txt](licenses/libsodium-ISC.txt) | licences of the libraries embedded in Bare and the AI addons | `libbare.so`, `.bare` addons |
 | [MoonSharp-LICENSE.txt](licenses/MoonSharp-LICENSE.txt), [libandroid-shmem-BSD-3-Clause.txt](licenses/libandroid-shmem-BSD-3-Clause.txt), [proot-COPYING.txt](licenses/proot-COPYING.txt), [talloc-LICENSE.txt](licenses/talloc-LICENSE.txt), [MQH-bb-MIT-LICENSE.txt](licenses/MQH-bb-MIT-LICENSE.txt) | the component's own licence file | MoonSharp, shmem, PRoot, talloc, MQH |
-| [Qwen3-Apache-2.0-LICENSE.txt](licenses/Qwen3-Apache-2.0-LICENSE.txt), [Whisper-OpenAI-MIT-LICENSE.txt](licenses/Whisper-OpenAI-MIT-LICENSE.txt), [whisper.cpp-ggml-MIT-LICENSE.txt](licenses/whisper.cpp-ggml-MIT-LICENSE.txt) | model and engine licences | the downloaded models, the engines |
+| [Qwen3-Apache-2.0-LICENSE.txt](licenses/Qwen3-Apache-2.0-LICENSE.txt), [Whisper-OpenAI-MIT-LICENSE.txt](licenses/Whisper-OpenAI-MIT-LICENSE.txt), [whisper.cpp-ggml-MIT-LICENSE.txt](licenses/whisper.cpp-ggml-MIT-LICENSE.txt) | model and engine licences | the models, the engines |
 | [npm-qvac-runtime-notices.txt](licenses/npm-qvac-runtime-notices.txt), [npm-mqh-runtime-notices.txt](licenses/npm-mqh-runtime-notices.txt), [npm-mqh-bundled-notices.txt](licenses/npm-mqh-bundled-notices.txt) | every `LICENSE`/`NOTICE` of the 133 + 72 + 97 npm packages | Appendix B |
-| [debian-image-copyright.txt](licenses/debian-image-copyright.txt), [debian-image-sources.txt](licenses/debian-image-sources.txt), [debian-first-use-packages.md](licenses/debian-first-use-packages.md) | the 78 copyright files; the source files; the first-use set | the Debian image and downloads |
+| [debian-image-copyright.txt](licenses/debian-image-copyright.txt), [debian-image-sources.txt](licenses/debian-image-sources.txt), [debian-first-use-packages.md](licenses/debian-first-use-packages.md) | the 78 copyright files of the official layer; their source files; the packages beyond the layer (the 54 of the base step, installed in the image, and the 144 of `mcx-setup quest`) | the Debian image and downloads |
 | `source-proot-5.1.107.102.zip.bin`, `source-talloc-2.5.0.tar.gz.bin`, `source-libandroid-shmem-0.7.tar.gz.bin` | corresponding source | [section 6](#6-source-code-for-the-gpl-and-lgpl-parts) |
 | [fonts.md](licenses/fonts.md) | copyright lines of the fonts | section 3.5 |
 
@@ -136,8 +148,9 @@ record); no third-party code was found copied into these files (searched for "ad
    at build time), and its binaries in the APK stay under Meta's terms; MIT does not touch them.
 3. *MQH is MIT upstream* (bb, Copyright (c) 2026 Michael Yong), so the fork may carry our changes under MIT with his
    notice kept: `mqh/LICENSE` is unchanged and ships in the APK (`/opt/mqh/LICENSE`); the root `LICENSE` names him too.
-4. *The AI models are not in the repository nor the APK* (downloaded by the user's device at first use), so the
-   OpenRAIL-M use restrictions bind the model and its users, not our source code; they are passed on in the app.
+4. *The AI models are not in the repository.* The APK carries the four core models, so MetaCodex redistributes
+   them under their own licences ([section 3.10](#310-the-ai-models-assetsqvacmodels)); the OpenRAIL-M use
+   restrictions bind the voice model and its users, not our source code, and must be passed on to the users.
 5. *What MIT does not give:* the **APK is an aggregate** of components under the licences listed here, not a single MIT
    work. Whoever redistributes the APK must follow every one of them (source offer for GPL/LGPL, the Meta SDK terms,
    Unity's terms). The repository also tracks a few third-party binaries (PRoot, talloc, libandroid-shmem, MoonSharp):
@@ -289,15 +302,28 @@ from the Bitstream Vera licensed font and must carry that notice (gap G12).
 
 ### 3.6 The Linux image: Debian 13 "trixie" (`assets/linux/rootfs.tar`)
 
-The official `debian:trixie-slim` image for linux/arm64, unmodified: manifest digest
-`sha256:24a01011d10eba3a023bc8585b9650b8b29021240d4217c05b905e09ef4a5232`, layer
-`sha256:acd43e9bebc37bc4ba7a5f47bd7598913337803e53d468f37d940f11f5d5f1ef` (30,214,037 bytes; 3,266 entries; fetched
-2026-11-06 by `userland/fetch-rootfs.sh`; the APK packs it as plain tar). It holds **78 Debian packages** from **55
+The ready image that `tools/userland-image.sh` builds on the PC (`rootfs.json`: tag `trixie-slim+metacodex-base`,
+124,780,445 bytes, 10,594 entries; the APK packs it as a tar):
+
+- the official `debian:trixie-slim` image for linux/arm64, unmodified: manifest digest
+  `sha256:24a01011d10eba3a023bc8585b9650b8b29021240d4217c05b905e09ef4a5232`, layer
+  `sha256:acd43e9bebc37bc4ba7a5f47bd7598913337803e53d468f37d940f11f5d5f1ef` (30,214,037 bytes; 3,266 entries; fetched
+  by `userland/fetch-rootfs.sh`);
+- **Node.js 24.22.3** for linux-arm64 from nodejs.org (sha256 pinned in the script), unpacked in `/usr/local` with
+  its `LICENSE` (MIT, plus the notices of the parts it bundles: V8, libuv, ICU, OpenSSL, ...) and the npm CLI of the
+  same archive (Artistic-2.0, `/usr/local/lib/node_modules/npm/` with its own licence files); only Node's C headers
+  (`/usr/local/include/node`) are left out;
+- **54 Debian packages** (the base step `ca-certificates curl git xz-utils python3 procps less nano` and their
+  dependencies, from Debian's mirrors, each `.deb` checked against the sha256 of trixie's signed index), installed with
+  dpkg inside the image; each keeps its `/usr/share/doc/<package>/copyright`. The set and the licences of their
+  source packages are in [debian-first-use-packages.md](licenses/debian-first-use-packages.md) (step "base").
+
+The official layer holds **78 Debian packages** from **55
 source packages** (list in [Appendix A](#appendix-a-debian-packages-in-the-linux-image)); 64 of them name GPL or LGPL
 licences in their copyright file, 9 are permissive only, 5 have free-text files (debian-archive-keyring, gcc-14-base,
 libcrypt1 and, by link, libgcc-s1, libstdc++6). Licences: GPL-2/GPL-3 (+), LGPL-2/2.1/3, BSD (2/3/4 clause and
 variants), MIT/Expat, X11, ISC, Zlib, Apache-2.0 (openssl), public domain, GFDL (docs), Artistic/GPL (perl),
-Sleepycat (libdb) and others, each as its own `copyright` file states. Texts: all 78 copyright files in
+Sleepycat (libdb) and others, each as its own `copyright` file states. Texts: the 78 copyright files of the layer in
 [debian-image-copyright.txt](licenses/debian-image-copyright.txt); the standard texts are also in the image
 (`/usr/share/common-licenses/`) and in this folder ([GPL-2.0](licenses/GPL-2.0.txt), [GPL-3.0](licenses/GPL-3.0.txt),
 [LGPL-2.1](licenses/LGPL-2.1.txt), [LGPL-3.0](licenses/LGPL-3.0.txt), [Apache-2.0](licenses/Apache-2.0.txt),
@@ -375,15 +401,15 @@ paths show:
 
 **Note on QVAC's NOTICE files.** They also list licences of models of the QVAC registry that MetaCodex neither ships
 nor downloads (Llama 3.2 with its "Built with Llama" duty, HAI-DEF terms, NVIDIA open model licence, gpt-oss and
-others). Those terms bind only whoever distributes those models. MetaCodex's four models are in section 4.1.
+others). Those terms bind only whoever distributes those models. MetaCodex's models are in section 3.10.
 
-## 4. Group B: downloaded on the headset at first use (not in the APK)
+### 3.10 The AI models (`assets/qvac/models/`)
 
-### 4.1 The four AI models
-
-The AI service fetches them on request into the app's private storage (VOICE > INSTALL MODELS, 660 MB), pinned by
-sha256 in `local-ai/server/models.js`; nothing is redistributed by us inside the APK. Licences read from the model cards on
-2026-11-12.
+The four core models ship in the APK (681,022,441 bytes, packed by `tools/local-ai-models-pack.sh` into
+`assets/qvac/models/` after a check against the sha256 values that `local-ai/server/models.js` pins). At the first start
+the app copies them into its private storage; a development APK built without them downloads them with VOICE >
+INSTALL MODELS. The local coder is not in the APK: it is downloaded only when the user installs it (AGENTS > LOCAL
+CODER). Licences read from the model cards on 2026-11-12.
 
 | Role | Exact model | File, sha256 | From | Licence | Copyright | Duties |
 |---|---|---|---|---|---|---|
@@ -403,13 +429,22 @@ exploit the vulnerabilities of a group of people to distort their behaviour in a
 licence lists. The full text is binding, not this summary. The restrictions follow the model and its derivatives, not
 our source code (MIT).
 
-### 4.2 What `mcx-setup` downloads (first use, or on request)
+## 4. Group B: downloaded on the headset on request (not in the APK)
+
+### 4.1 The local coder
+
+Qwen2.5-Coder 0.5B Instruct, Apache-2.0: its row is in the table of [section 3.10](#310-the-ai-models-assetsqvacmodels).
+
+### 4.2 What `mcx-setup` downloads (on request)
+
+The base packages and Node.js are in the image ([section 3.6](#36-the-linux-image-debian-13-trixie-assetslinuxrootfstar));
+`mcx-setup` downloads them only into an older userland that lacks them.
 
 | What | Version | From | Licence | Notes |
 |---|---|---|---|---|
-| Base tools: `ca-certificates curl git xz-utils python3 procps less nano` + dependencies | Debian trixie | Debian mirrors, by `apt` | each package's own; **54 packages** (GPL-2/3, LGPL, MIT/X11, BSD, PSF, ...) | [list with licences](licenses/debian-first-use-packages.md) |
+| Base tools (in the image; downloaded only into an older userland): `ca-certificates curl git xz-utils python3 procps less nano` + dependencies | Debian trixie | Debian mirrors, by `apt` | each package's own; **54 packages** (GPL-2/3, LGPL, MIT/X11, BSD, PSF, ...) | [list with licences](licenses/debian-first-use-packages.md) |
 | Quest build tools: `aapt zipalign apksigner default-jdk-headless unzip` + dependencies | Debian trixie (OpenJDK 21, Android tools, the GTK/Mesa/X11 libraries apt pulls in with the JRE) | same | **144 more packages**: OpenJDK GPL-2.0 with Classpath Exception, Android tools Apache-2.0, GTK/Mesa/X11 LGPL/MIT, ... | same list |
-| Node.js 24 LTS (linux-arm64) | 24.22.3 when checked (`latest-v24.x`, checked against `SHASUMS256.txt`) | nodejs.org/dist | MIT, plus the notices of its bundled parts (V8, ICU, OpenSSL, ...) in Node's own `LICENSE` | needed by MQH and the agent CLIs |
+| Node.js 24 LTS (linux-arm64; in the image, downloaded only into an older userland) | 24.22.3 when checked (`latest-v24.x`, checked against `SHASUMS256.txt`) | nodejs.org/dist | MIT, plus the notices of its bundled parts (V8, ICU, OpenSSL, ...) in Node's own `LICENSE` | needed by MQH and the agent CLIs |
 | Android NDK r27d for arm64 Linux (community build) | r27d | github.com/HomuHomu833/android-ndk-custom, release r27, `android-ndk-r27d-aarch64-linux-gnu.tar.xz`, sha256 `94a7e5a0dffee4ab68cc14adc081674c6f42116046d5ae1eafe1f3492a1045dc` (matches the release's digest) | the build scripts: MIT, Copyright (c) 2025-2026 Lily Ross (checked via the repository's licence file); the NDK's own components keep their licences (LLVM: Apache-2.0 with LLVM exception; Bionic and NDK parts: Apache-2.0 / BSD; the NDK's `NOTICE` files) | Google ships Linux NDKs for x86_64 only |
 | android.jar (Android SDK Platform 34 ext7 r03) | API 34 | dl.google.com/android/repository/platform-34-ext7_r03.zip, sha256 `16fdb74c55e59ae3ef52def135aec713508467bd56d7dabcd8c9be31fa8b20f3` | **[Android Software Development Kit License Agreement](licenses/Android-SDK-License-Agreement.txt)** | the user must accept the agreement: gap G6 |
 | OpenXR loader for Android + headers | 1.1.65 | Maven Central `org.khronos.openxr:openxr_loader_for_android` (sha256 `a298c326085b09181c85235fb04d37510939bd30938ed4322c093c09780e8643`, re-checked 2026-11-12) | Apache-2.0, The Khronos Group Inc. | its `LICENSE` is kept in `/opt/openxr/LICENSE` |
@@ -424,8 +459,7 @@ visible terminal and redistributes none of them. Catalogue measured in `ShellSys
 12.18.0 (MIT, npm), bun (MIT, bun.sh installer), uv (MIT OR Apache-2.0, astral.sh installer), Rust via rustup (MIT OR
 Apache-2.0, sh.rustup.rs), the agents Claude Code (proprietary, above), Codex CLI (`@openai/codex` 0.167.2, Apache-2.0)
 and OpenCode (above), and Debian packages through `apt` (python3-pip, build-essential, clang, cmake, ninja-build, go,
-adb, glslc, git, curl, wget, openssh-client, jq, ripgrep, fd-find, fzf, tmux, sqlite3, nano, vim, neovim). Pi (MIT) was
-offered before 2026-11-10 and is no longer.
+adb, glslc, git, curl, wget, openssh-client, jq, ripgrep, fd-find, fzf, tmux, sqlite3, nano, vim, neovim).
 
 ## 5. Group C: used only to build or develop (not shipped)
 
@@ -454,8 +488,9 @@ MetaCodex code is linked to them.
 | PRoot (Termux fork) | GPL-2.0-or-later | 5.1.107.102 (Termux package `proot_5.1.107.102_aarch64.deb`; changed only by renaming and by patchelf: `DT_NEEDED`, RUNPATH) | [source-proot-5.1.107.102.zip.bin](licenses/source-proot-5.1.107.102.zip.bin): github.com/termux/proot, tag `v5.1.107.102`, archive sha256 `30d12a6e2cc4147123756ff58edea262d3083bbc238c12d0ab9b39e3d1c40852` (the value pinned by Termux's `packages/proot/build.sh`) | this repository (`docs/licenses/`), the headset (`/usr/share/doc/metacodex/licenses/`) |
 | talloc | LGPL-3.0-or-later | 2.5.0 | [source-talloc-2.5.0.tar.gz.bin](licenses/source-talloc-2.5.0.tar.gz.bin): samba.org/ftp/talloc, sha256 `912afa237510ae542a7733998eb18a12bcda35ab6729c8e2ddb43e8d0ebab007` (Termux's `libtalloc/build.sh`) | same |
 | libandroid-shmem (BSD-3, no source duty; supplied anyway) | BSD-3-Clause | 0.7 | [source-libandroid-shmem-0.7.tar.gz.bin](licenses/source-libandroid-shmem-0.7.tar.gz.bin), sha256 `1e5ff8459bc0a8c229dd8a94b27d119987e09ef3414331c2b5ebfff20b98e867` | same |
-| 55 Debian source packages (78 binaries of the image) | GPL / LGPL / others | exactly the versions of [Appendix A](#appendix-a-debian-packages-in-the-linux-image) | every source file with its SHA-1 on snapshot.debian.org: [debian-image-sources.txt](licenses/debian-image-sources.txt) (read from the archive's API 2026-11-12: all 55 found, 178 files) | the list ships with the APK files; the files themselves are Debian's, fetched on request |
-| Debian packages installed at first use (198) | as above | those of the user's `apt` at that time | `apt-get source <package>` from the same archive | downloaded by the user's device from Debian, not by us |
+| 55 Debian source packages (78 binaries of the official layer) | GPL / LGPL / others | exactly the versions of [Appendix A](#appendix-a-debian-packages-in-the-linux-image) | every source file with its SHA-1 on snapshot.debian.org: [debian-image-sources.txt](licenses/debian-image-sources.txt) (read from the archive's API 2026-11-12: all 55 found, 178 files) | the list ships with the APK files; the files themselves are Debian's, fetched on request |
+| The 54 Debian packages that the image build installs (base step) | GPL / LGPL / others | the versions in the image's `/var/lib/dpkg/status` (the set and its licences: [debian-first-use-packages.md](licenses/debian-first-use-packages.md)) | snapshot.debian.org, or `apt-get source <package>=<version>`; a file list like `debian-image-sources.txt` is not made yet (gap G14) | in the image |
+| Debian packages of `mcx-setup quest` (144) | as above | those of the user's `apt` at that time | `apt-get source <package>` from the same archive | downloaded by the user's device from Debian, not by us |
 
 The three source archives are the upstream files byte for byte (the sha256 values above); they carry an extra `.bin`
 suffix only because the repository's `.gitattributes` sends `*.zip` and `*.gz` to Git LFS, and source that must be
@@ -471,7 +506,8 @@ and everything needed to rebuild the APK is in this repository (`userland/fetch-
 **Written offer (GPL-2.0 section 3(b); GPL-3.0 section 6, which LGPL-3.0 section 4 applies to talloc).** For three years from the day a
 MetaCodex release containing them is made available, anyone who has a copy of the MetaCodex APK may obtain, for no
 charge beyond the cost of physically performing the copy, the complete corresponding source code of PRoot 5.1.107.102,
-talloc 2.5.0 and of every Debian package named in Appendix A, in the exact versions listed there: from the folder
+talloc 2.5.0 and of every Debian package installed in the Linux image (Appendix A and the base step of
+`debian-first-use-packages.md`), in the exact versions of the image's `/var/lib/dpkg/status`: from the folder
 `docs/licenses/` of https://github.com/SolidityDrone/MetaCodex (the PRoot, talloc and libandroid-shmem archives), from
 snapshot.debian.org with the file list `docs/licenses/debian-image-sources.txt` (the Debian packages), or by a request
 through the issue tracker of that repository (the contact must be confirmed by the owner: gap G2).
@@ -483,9 +519,10 @@ through the issue tracker of that repository (the contact must be confirmed by t
 | Our MIT notice | our code | `LICENSE` (+ `docs/licenses/MetaCodex-MIT-LICENSE.txt` for the headset) | done |
 | MIT notice of Michael Yong | MQH | `LICENSE`, `mqh/LICENSE`, `/opt/mqh/LICENSE` in the APK | done |
 | Licence text + copyright with binaries: BSD-3 (MoonSharp, libandroid-shmem, V8 ...), MIT (libuv, whisper.cpp ...), ISC, OFL fonts, Bitstream Vera | components in 3.x | `docs/licenses/` (shipped to `/usr/share/doc/metacodex/licenses/`), fonts in `licenses/fonts/` | done in the files; reaches users with the next build (the overlay ships the folder) |
-| Apache-2.0: licence + NOTICE retained | Bare, QVAC, Khronos, Meta skills, Qwen3 | `npm-qvac-runtime-notices.txt` (every NOTICE), inside the tar too; Apache text | done |
+| Apache-2.0: licence + NOTICE retained | Bare, QVAC, Khronos, Meta skills, Qwen3 0.6B | `npm-qvac-runtime-notices.txt` (every NOTICE), inside the tar too; Apache text | done |
 | Source offer: GPL-2.0 / LGPL-3.0 | PRoot, talloc | section 6; source archives in `docs/licenses/` | done (contact: G2) |
-| Source offer: Debian GPL/LGPL packages | 78 packages in the image | `debian-image-sources.txt` + written offer | done |
+| Source offer: Debian GPL/LGPL packages | 132 packages in the image | `debian-image-sources.txt` + written offer | done for the 78 of the official layer; the 54 of the image build: G14 |
+| Licence files with the binaries | Node.js, npm (in the image) | their own licence files stay in the image (`/usr/local/LICENSE`, `/usr/local/lib/node_modules/npm/`) | done |
 | Unity Companion License section 5: licence and notices with the Work | 20 packages, 36 skills | Unity files in `docs/licenses/` | done |
 | Unity: valid engine licence | the app, UCL-licensed skills | the owner's subscription | owner keeps the proof (G11) |
 | Meta SDK terms: only for Meta hardware; SDK not under open source; keep notices | Meta XR SDK | SDK not in the repository; NOTICE files in `docs/licenses/` | done |
@@ -514,6 +551,7 @@ Status of the gaps of 2026-11-10 (G1-G9) and the new ones. "Owner" = a decision 
 | G11 | **New.** Unity-made and UCL files in the repository (TextMesh Pro resources, settings, 36 Unity skills): UCL section 1 allows use and distribution only with content made under a valid Unity engine licence | **noted**, not a block | **owner**: keep the proof of the Unity licence (plan, seat) with the submission; the `LICENSE` scope clause already names these files |
 | G12 | **New.** `native/xr/mcx_font.h` (a DejaVu Sans Mono atlas) gets copied into every app built on the headset from the template; the Bitstream Vera licence wants its notice with copies | **open**, small | **code**: put the licence text in the header (or ship `DejaVu-LICENSE.txt` in `quest-native/xr`) |
 | G13 | **New.** Four npm packages in the AI bundle publish no licence file (only a `license` field in `package.json`): `bare-stdio` 1.0.3 (Apache-2.0), `corestore` 7.16.1 (MIT), `noise-curve-ed` 2.1.0 (ISC), `varint` 5.0.0 (MIT) | **noted**: the declared licence is clear, the standard text is in `docs/licenses/`; copyright holders from package.json: Holepunch (Inc), Chris Dickinson | none for us; upstream omission |
+| G14 | **New.** The packed install ships the 54 Debian packages of the base step and Node.js 24.22.3 inside the image. Their licence files are in the image; `debian-image-sources.txt` lists the sources of the 78 packages of the official layer only | **open** | **code**: run the G3 script on the ready image's `/var/lib/dpkg/status` and add the 54 packages' source files to the list; re-run section 10 on the release APK |
 
 ## 9. Services the app and its tools talk to (terms, not licences)
 
@@ -546,6 +584,9 @@ GitHub Releases (the NDK), skills.sh (MQH's skill registry). MetaCodex never rea
 ---
 
 ## Appendix A: Debian packages in the Linux image
+
+These are the 78 packages of the official layer. The 54 packages that the image build adds are in
+[debian-first-use-packages.md](licenses/debian-first-use-packages.md) (step "base").
 
 Read from the image's `/var/lib/dpkg/status` and each package's `/usr/share/doc/<package>/copyright` (DEP-5 `License:` fields, in file order, at most six shown; the complete files are in [debian-image-copyright.txt](licenses/debian-image-copyright.txt)). "free text" means the copyright file is not machine-readable.
 
