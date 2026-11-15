@@ -66,7 +66,7 @@ content. A single component object (with `"type"`) is accepted as a whole view.
 | `input` | `prompt`, `placeholder` | ask for a short text |
 | `buttons` | `items: [{id, label, tone}]` (1-12; `tone: accent` = the main one) | a few actions to tap |
 | `toggle` | `id`, `label`, `value` (true/false) | an on / off answer |
-| `grid` | `columns` (1-7), `cells: [{id, text, sub, tone}]` (1-42; a cell without `id` is not tappable) | a month, a launcher, a board |
+| `grid` | `columns` (1-7), `cells: [{id, text, sub, tone}]` (1-49; a cell without `id` is not tappable) | a month, a launcher, a board |
 | `image` | `path` (PNG/JPG in Linux: `/root/...`, `/mnt/quest/...`) | anything you can render to a file (matplotlib, graphviz) |
 | `scene3d` | `size: [w, d]`, `gravity: [0,-9.81,0]`, `walls`, `timeScale`, `bodies: [{shape: sphere\|box\|capsule\|cylinder, size, pos: [x,y,z], vel, spin, mass, color, bounce, friction, static, count, spread}]` | physics demos: the user pushes bodies with a fingertip |
 

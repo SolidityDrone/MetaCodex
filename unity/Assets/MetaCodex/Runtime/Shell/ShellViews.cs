@@ -281,7 +281,7 @@ namespace MetaCodex.Shell
                 {
                     bool anySub = (c["cells"] as JArray)?.Any(x => x is JObject o && !string.IsNullOrEmpty((string)o["sub"])) ?? false;
                     int cols = Mathf.Clamp(I(c["columns"], 1), 1, 7);
-                    int rowsN = Mathf.CeilToInt(Mathf.Clamp(Count("cells"), 1, 42) / (float)cols);
+                    int rowsN = Mathf.CeilToInt(Mathf.Clamp(Count("cells"), 1, 49) / (float)cols);
                     return rowsN * (anySub ? 0.044f : 0.034f);
                 }
                 case "input": return 0.06f;
@@ -414,7 +414,7 @@ namespace MetaCodex.Shell
                 case "grid":
                 {
                     var area = TitleRow(p, r, title);
-                    var cells = (c["cells"] as JArray ?? new JArray()).Select(x => x as JObject ?? new JObject { ["text"] = Str(x) }).Take(42).ToList();
+                    var cells = (c["cells"] as JArray ?? new JArray()).Select(x => x as JObject ?? new JObject { ["text"] = Str(x) }).Take(49).ToList();
                     int cols = Mathf.Clamp(I(c["columns"], 1), 1, 7);
                     int rowsN = Mathf.Max(1, (cells.Count + cols - 1) / cols);
                     bool anySub = cells.Any(x => !string.IsNullOrEmpty((string)x["sub"]));

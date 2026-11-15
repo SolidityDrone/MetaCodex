@@ -45,7 +45,7 @@ plugin is disabled, deleted or stopped by an error, and comes back when it loads
 local win = ui.panel{
   id = "main",                 -- default "main"; the window id is then "plugin-<plugin id>-main"
   title = "Water",             -- 40 characters at most
-  components = { ... },        -- 1 to 16 (keep it to 8 or fewer), drawn top to bottom
+  components = { ... },        -- 1 to 8 (16 is the hard limit), drawn top to bottom
   columns = 1,                 -- optional: 2 puts small components side by side
   size = { 0.58, 0.40 },       -- optional, metres; leave it out: the app sizes the window to the content
   open = false,                -- default false: made, not shown (the tile or the user opens it)
@@ -77,7 +77,7 @@ Events (`e.type`, `e.id`, `e.value`, `e.window`):
 | `buttons` | `items = { {id, label, tone?}, ... }` (1-12, 4 a row), `prompt?` | actions |
 | `toggle` | `id`, `label`, `value` (bool) | an on / off option |
 | `input` | `id`, `prompt?`, `placeholder?` | typed or dictated text |
-| `grid` | `columns` (1-7), `cells = { {id?, text, sub?, tone?}, ... }` (1-42), `title?` | a month, a launcher, a board |
+| `grid` | `columns` (1-7), `cells = { {id?, text, sub?, tone?}, ... }` (1-49: a 7 x 7 month with its week day row), `title?` | a month, a launcher, a board |
 | `kv` | `items = { {key, value}, ... }` | label / value lines |
 | `stats` | `items = { {label, value, delta?, tone?}, ... }` | 1-4 big numbers |
 | `progress` | `items = { {label, value 0..1, tone?}, ... }` | bars |
@@ -92,9 +92,11 @@ Tones: `ok` (green), `warn` (amber), `error` (red), `accent` (the app's colour: 
 
 Rules:
 - Button labels: short verbs in capitals, 14 characters at most: `START`, `PAUSE`, `+5 MIN`, `✕ STRETCH`.
-  One `accent` button at most (the main action); `error` only for something that deletes.
-- Up to 8 components. A list longer than about 8 rows: show the first ones and say "+3 more".
-- A cell without `id` is not tappable (week day headers, empty days). Give tappable things stable ids
+  At most one `accent` button in the window: the main action when there is one (START, +1, TODAY); `error`
+  only for something that deletes.
+- Up to 8 components (16 is refused).
+- Values in `kv`, `stats`, `table` may be strings or numbers. A list longer than about 8 rows: show the first ones and say "+3 more".
+- A cell without `id` is not tappable (week day headers, empty days: `{ text = "", tone = "dim" }`). Give tappable things stable ids
   (`"d-2026-11-20"`, `"alarm-3"`), never list positions that shift.
 - Do not draw your own frame, header or close button: the app does. No emoji walls; one symbol in a label is fine.
 - Text is English. No brand names.
@@ -117,8 +119,10 @@ menu.add{ id = "water", label = "WATER", glyph = "◔", panel = "main" }   -- ta
 menu.add{ id = "drink", label = "+1", glyph = "+", run = function() add_glass() end }  -- tap = run
 menu.remove("drink")
 ```
-`label`: capitals, 8 characters at most. `glyph`: one character (the dock). `icon`: optional wrist icon name.
-Exactly one of `panel` (a window you made with `ui.panel` first) or `run`. The menu holds 6 plugin tiles in
+`label`: capitals, 8 characters at most. `glyph`: one simple symbol for the dock, like the app's own
+(`◆ ◉ ▤ ◫ ☰ ◎ ▣ ◐ ⌖ ◷ ◔ ✓ ★`). `icon`: optional wrist icon name.
+Exactly one of `panel` (one of your windows: `ui.panel` may come before or after `menu.add` in `main.lua`) or
+`run`. The menu holds 6 plugin tiles in
 all: `menu.add` returns false when it is full (the log says so); then tell the user.
 
 ## Time: wall clock, not session time
@@ -129,9 +133,10 @@ all: `menu.add` returns false when it is full (the log says so); then tell the u
 | `app.clock{year=, month=, day=, hour=, min=, sec=}` | that local time in seconds; fields overflow: `day = 0` is the last day of the month before |
 | `app.date([t])` | `{year, month, day, hour, min, sec, wday (1 = Sunday), yday}` in local time |
 | `app.at(t, fn)` | `fn()` once at clock time `t` (a past `t` runs at once); returns an id for `app.cancel(id)` |
-| `app.every(sec, fn)` / `app.after(sec, fn)` / `app.cancel(id)` | repeating / one-shot timers (session time) |
+| `app.every(sec, fn)` / `app.after(sec, fn)` / `app.cancel(id)` | repeating (first call after `sec`, not at once) / one-shot timers (session time) |
 
-Use `app.clock()` and `app.date()`, not `os.time` / `os.date`. `app.time()` restarts at 0 with the app: never
+Lua has `string` (`format`, `match`, `gsub`...), `table` (`insert`, `remove`, `sort`, `concat`), `math`, `pairs`,
+`ipairs`, `pcall`. Use `app.clock()` and `app.date()`, not `os.time` / `os.date`. `app.time()` restarts at 0 with the app: never
 save it. Timers are not saved: the plugin sets them again from its state when it loads.
 
 Days in a month: `app.date(app.clock{year=y, month=m+1, day=0}).day`.
@@ -159,7 +164,8 @@ local function save() store.set("state", json.encode(S)) end
 ui.notify{ text = "Break over: back to work", tone = "ok", sound = "alert", speak = true, panel = "main" }
 ui.sound("click")   -- click open close ping toast alert error
 ```
-`ui.notify` is a callout by the Whisp; a tap opens `panel`. `speak = true` says the text with the local voice
+`ui.notify` is a callout by the Whisp; a tap opens `panel`. Its `tone` is `info` (default), `ok`, `warn` or
+`error`. It works at any time, also while `main.lua` loads (for "ended while MetaCodex was closed"). `speak = true` says the text with the local voice
 (or give a shorter string). Use it for things that end or need the user, not for every button.
 
 ## Voice commands
@@ -167,7 +173,10 @@ ui.sound("click")   -- click open close ping toast alert error
 Each command is a complete entry (rules in `quest-scripting`, "Voice commands"): `name` (snake_case, starts
 with your plugin id), `description` (what it does and every option), typed `params` (`type`, `description`,
 `required`; `min`/`max`/`unit` for numbers), `phrases`, 4 or more `samples` in English covering every option,
-`run` returning a short sentence. `mcx-ui plugin check <id>` lists them; any `voice.command ...` warning there
+`run` returning a short sentence. A command without options leaves `params` out. `number` and `integer`
+parameters get spoken numbers already parsed ("twenty minutes" arrives as 20), but a `{param}` capture can
+still hold extra words: check the type and fall back (`tonumber(args.minutes)`, a default) instead of failing.
+`mcx-ui plugin check <id>` lists them; any `voice.command ...` warning there
 must be fixed.
 
 ```lua
@@ -250,6 +259,8 @@ second.)
   moves to the next state and calls `ui.notify`.
 - **Alarms at a time**: save `{at, text}` items; on load and after each change, `app.cancel` the old ids and
   `app.at` every future one; past ones: notify once ("... while MetaCodex was closed") and drop them.
+- **Input**: the field empties when the window is rebuilt (after a change of the state); when you reject the
+  text, change nothing in the spec (the text stays to fix) and `ui.toast` the right form.
 - **Parsing typed text** ("20 stretch", "in 20 minutes to stretch", "at 15:30 call mum"): `string.match` with
   patterns like `"(%d+)%s*min"`, `"(%d%d?):(%d%d)"`; when nothing matches, `ui.toast("Say for example: 20 stretch", "warn")`.
 - **Month grid**: 7 header cells without id, then blanks without id (tone `dim`), then one cell a day with id
@@ -259,7 +270,11 @@ second.)
 ## Change or remove a plugin
 
 - Change: edit the files; the app reloads within a second, the window stays where it was. Keep the store's
-  format, or convert old state in `load()` (old keys may be missing: give defaults).
+  format, or convert old state in `load()` (old keys may be missing: give defaults). Raise `version` in
+  `plugin.json` (1.0.0 -> 1.1.0). Change only what was asked; keep the voice commands in step with the window
+  (a new button that does something new gets a voice command too).
+- Any change of the spec other than LIVE texts (a label, a new row) rebuilds the window: fine after a tap or a
+  phase change, never every second.
 - Disable / enable: `mcx-ui plugin disable <id>` / `enable <id>` (tile, window, commands go and come back).
 - Remove: `mcx-ui plugin delete <id>` (the folder goes; its store is kept until a plugin with that id comes back).
 

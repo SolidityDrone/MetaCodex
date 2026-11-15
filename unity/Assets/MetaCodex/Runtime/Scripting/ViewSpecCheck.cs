@@ -8,7 +8,7 @@ namespace MetaCodex.Scripting
     /// types: the host (ui.panel) and a PC harness use the same rules. Component numbers in messages start at 1.
     public static class ViewSpecCheck
     {
-        public const int MaxComponents = 16, MaxButtons = 12, MaxCells = 42, MaxGridColumns = 7;
+        public const int MaxComponents = 16, MaxButtons = 12, MaxCells = 49, MaxGridColumns = 7;
 
         /// Every component type the app draws (aliases included).
         public static readonly string[] Types =
