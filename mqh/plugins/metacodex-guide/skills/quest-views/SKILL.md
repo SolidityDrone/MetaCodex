@@ -64,9 +64,13 @@ content. A single component object (with `"type"`) is accepted as a whole view.
 | `kv` | `items: [{key, value, tone}]` or an object | properties |
 | `choices` | `prompt`, `options: ["A", "B"]` or `[{label, value}]` | ask the user to pick |
 | `input` | `prompt`, `placeholder` | ask for a short text |
+| `buttons` | `items: [{id, label, tone}]` (1-12; `tone: accent` = the main one) | a few actions to tap |
+| `toggle` | `id`, `label`, `value` (true/false) | an on / off answer |
+| `grid` | `columns` (1-7), `cells: [{id, text, sub, tone}]` (1-42; a cell without `id` is not tappable) | a month, a launcher, a board |
 | `image` | `path` (PNG/JPG in Linux: `/root/...`, `/mnt/quest/...`) | anything you can render to a file (matplotlib, graphviz) |
 | `scene3d` | `size: [w, d]`, `gravity: [0,-9.81,0]`, `walls`, `timeScale`, `bodies: [{shape: sphere\|box\|capsule\|cylinder, size, pos: [x,y,z], vel, spin, mass, color, bounce, friction, static, count, spread}]` | physics demos: the user pushes bodies with a fingertip |
 
+A `text` with `style: "big"` is one short centred line in large type (a number, a clock).
 Every component takes an optional `title` and `height` (metres). Tones: `ok`, `warn`, `error`, `accent`,
 `dim`, or `#RRGGBB`. Chart series get a fixed, colour-blind-safe palette in order: keep to 4 series or fewer
 on line/bar charts and 3 on scatter plots; past 8, fold the rest into "other".
@@ -74,7 +78,8 @@ on line/bar charts and 3 on scatter plots; past 8, fold the rest into "other".
 ## Answers come back to you
 
 A `choices` tap or an `input` sent arrives **as the user's next message in this thread** (the option's
-`value`, else its label). From a shell, `mcx-ui view wait <id>` returns it instead. Ask one question per
+`value`, else its label; a `buttons` item: its label; a `toggle`: `"<label>: on"` or `"off"`; a `grid` cell:
+its text). From a shell, `mcx-ui view wait <id>` returns it instead. Ask one question per
 view.
 
 ## Mermaid subset
@@ -111,6 +116,9 @@ A physics demo (balls dropped on boxes):
   ]}
 ]}
 ```
+
+A window that stays, with its own button in the menu and its own logic (a timer, a calendar, a tool), is a
+plugin, not a view: skill `quest-plugins` (same components, events go to Lua).
 
 ## Rules
 

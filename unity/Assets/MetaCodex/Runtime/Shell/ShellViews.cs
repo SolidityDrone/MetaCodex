@@ -53,6 +53,7 @@ namespace MetaCodex.Shell
             "  mermaid {text} (flowchart, sequenceDiagram, pie) | table {columns:[..], rows:[[..]]} | code {text, lang?} | diff {text: unified diff}\n" +
             "  progress {items:[{label,value 0..1,tone?}]} | checklist {items:[{text,done}]} | timeline {items:[{time,text,tone}]}\n" +
             "  kanban {columns:[{title,cards:[..]}]} | kv {items:[{key,value}]} | choices {prompt?, options:[..]} | input {prompt?, placeholder?}\n" +
+            "  buttons {items:[{id,label,tone?}]} | toggle {id,label,value} | grid {columns:1..7, cells:[{id?,text,sub?,tone?}]} | text {text, style?:big}\n" +
             "  image {path: /root/plot.png} | scene3d {size:[w,d], gravity:[0,-9.81,0], bodies:[{shape,size,pos,vel,mass,color,bounce,count}]}\n" +
             "tones: ok warn error accent dim, or #RRGGBB. Answers (choices/input) go to the thread or `mcx-ui view wait <id>`.";
 

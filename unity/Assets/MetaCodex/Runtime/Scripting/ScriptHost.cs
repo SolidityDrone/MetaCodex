@@ -887,7 +887,7 @@ namespace MetaCodex.Scripting
             foreach (var t in _wallTimers) if (t.Owner == e) timers++;
             sb.Append("\ntimers: ").Append(timers);
             var bad = new List<string>();
-            foreach (var line in e.Log) if (line.StartsWith("warn", StringComparison.Ordinal) || line.StartsWith("ERROR", StringComparison.Ordinal)) bad.Add(line);
+            foreach (var line in e.Log) if (line.StartsWith("warn", StringComparison.Ordinal) || line.StartsWith("ERROR", StringComparison.Ordinal) || line.StartsWith("voice.command ", StringComparison.Ordinal)) bad.Add(line); // voice.command lines are the registry's lint warnings
             sb.Append("\nwarnings: ").Append(bad.Count);
             for (int i = Math.Max(0, bad.Count - 10); i < bad.Count; i++) sb.Append('\n').Append(bad[i]);
             return sb.ToString();
