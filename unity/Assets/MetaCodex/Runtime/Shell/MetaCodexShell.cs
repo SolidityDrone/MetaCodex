@@ -437,7 +437,7 @@ namespace MetaCodex.Shell
                 // back where the user left it when that place is still free and in view, else the best free place:
                 // beside the window it is opened from (or the one it belongs to), or in front (ShellPlacement)
                 if (swapFrom != null) TakePlaceOf(p, swapFrom);
-                else if (!_placed.Contains(id) || !OldPlaceStillGood(p)) PlaceSmart(id, p, OpenerNow() ?? ContextOpener(id));
+                else if (!_placed.Contains(id) || !OldPlaceStillGood(p)) PlaceSmart(id, p, PlacementOpener(id, p));
                 else FaceUser(p); // back where it was, turned to where the user stands now
                 p.Open();
                 _placed.Add(id);

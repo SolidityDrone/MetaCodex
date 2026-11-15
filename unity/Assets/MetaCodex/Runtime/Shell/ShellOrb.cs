@@ -740,6 +740,7 @@ namespace MetaCodex.Shell
 
         private void TickOrb(float dt)
         {
+            KeepCardsOffDock(); // (ShellPlacement: every frame, with or without the Whisp)
             if (Orb == null) return;
             dt = Mathf.Clamp(dt, 0f, 0.1f);
             _orbClock += dt;
