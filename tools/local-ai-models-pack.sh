@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # Usage: tools/local-ai-models-pack.sh [--clean]      (WSL)
 #
-# Puts the local AI service's core models in the APK (feat/ready-on-install, owner 2026-11-13: no downloads at first
-# start): the non-optional kinds of local-ai/server/models.js (asr Whisper base, llm Qwen3 0.6B, embed e5-small, tts
+# Puts the local AI service's core models in the APK, so the first start downloads nothing: the non-optional kinds of local-ai/server/models.js (asr Whisper base, llm Qwen3 0.6B, embed e5-small, tts
 # Supertonic 3, ~680 MB), each checked against the catalogue's sha256, into
 #   unity/Assets/StreamingAssets/qvac/models/<file>  +  qvac/models.json  (both gitignored: generated)
 # At first start QvacHost copies them into <data>/models with their .sha256 markers (the service then counts them as

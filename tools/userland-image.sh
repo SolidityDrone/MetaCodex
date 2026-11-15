@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Usage: tools/userland-image.sh            (WSL, no sudo, no emulation; a few minutes, needs the network)
 #
-# Builds the Linux userland MetaCodex ships ready to use (feat/ready-on-install, owner 2026-11-13: "a judge must not
-# wait for downloads and setup at first start"): the official Debian trixie-slim arm64 layer (userland/fetch-rootfs.sh)
+# Builds the Linux userland MetaCodex ships ready to use, so the first start downloads nothing: the official Debian
+# trixie-slim arm64 layer (userland/fetch-rootfs.sh)
 # plus what MQH and the app need, so the first start downloads nothing:
 #   - Node.js 24 LTS for linux-arm64 (nodejs.org, pinned version and sha256), unpacked in /usr/local: plain files,
 #     ready at once (MQH starts on it)
