@@ -1,19 +1,22 @@
-# MQH spatial surface: how plugins, gestures and appearance reach Unity (design v0, Nov 7)
+# Plugin panels: the `spatial.json` format (served by MQH, not rendered by the app)
 
-Upstream bb plugins draw their UI with React (an `"app"` entry in the plugin's `package.json` `"bb"`
-field). MQH removed that web surface entirely (no React, no app bundles; the manifest schema no longer
-accepts `"app"`). Unity runs IL2CPP and cannot load code at runtime, so a plugin's UI is **data only**:
+Upstream plugins draw their UI as web components (an `"app"` entry in the plugin's `package.json` `"bb"` field). MQH
+removed that web surface (the manifest schema no longer accepts `"app"`), and the app's compiled C# cannot load code
+at run time, so a plugin's panel would be **data only**:
 
 ```json
 "bb": { "name": "...", "server": "./src/server.ts", "spatial": "./spatial.json" }
 ```
 
-MQH serves `spatial.json` to Unity (`GET /api/v1/plugins/:id/spatial`; every plugin in the plugin list
-carries `spatial: { hasSpatial, url }`); Unity renders it with prebuilt widgets and calls back into the
-plugin's own server code over RPC. A plugin an agent writes on the headset shows up in VR without an APK.
-`mqh plugin new` scaffolds a server, a `spatial.json` panel (list + form bound to RPCs) and a skill.
+What exists in MQH: the manifest field; the route `GET /api/v1/plugins/:id/spatial`; the field
+`spatial: { hasSpatial, url }` in the plugin list; and `mqh plugin new`, which scaffolds a server, a `spatial.json`
+panel (a list and a form bound to the server's RPCs) and a skill.
 
-## spatial.json v0
+What does not exist: a renderer in the app. No shipped plugin has a panel. To give the headset new windows and menu
+tiles while it runs, write an app plugin in Lua instead (`ui.panel`, `menu.add`: the skill `quest-plugins`,
+[ui.md](ui.md)).
+
+## The format (version 1)
 
 ```json
 {
@@ -45,44 +48,4 @@ plugin's own server code over RPC. A plugin an agent writes on the headset shows
 | `action` | `{ "rpc": m, "args": {} }`, `{ "thread": "send", "text": "..." }`, `{ "open": "thread:<id>" }` |
 | `refresh.on` | MQH change notifications that re-run the binds (`thread.changed`, `plugin.changed`, ...) |
 
-Unity validates the file against a JSON Schema before rendering and shows the error in the panel
-instead of failing.
-
-## Gestures
-
-Recognition runs in Unity (hand joints at frame rate); everything else is data in MQH.
-
-- **Built-in gestures** (Unity, `GestureEngine.Names`): `pinch`, `grab`, `point`, `open`, `palm-up`, `clap`,
-  `select`. Everything else is a plugin gesture. `thumbs-up`, `thumbs-down`, `victory`, `horns`, `call-me`
-  (example `core-poses`) and `swipe-left` / `-right` / `-up` (example `swipes`) are opt-in examples, not
-  installed on a fresh headset. Plan, not built: `pinch-hold`, `palm-up-pinch` (push to talk), `fist`,
-  `two-hand-push`, `flick-left`, `flick-right`.
-- **Plugin gestures**: `gestures.json` in a plugin, pose templates Unity can evaluate:
-  `{ "id": "ok-sign", "hand": "any", "fingers": { "thumb": "touching-index", "middle": "extended", "ring": "extended", "pinky": "extended" }, "palm": "any", "holdMs": 250 }`.
-- **Bindings** (settings, user-editable, agents can change them): gesture id + context (`global`,
-  `panel:<id>`, `thread`) -> an action (MQH command or plugin RPC). Unity sends
-  `{ gesture, hand, target: { panel, thread, region } }`; MQH resolves the binding and runs the action.
-
-This replaces bb's *Keyboard* settings page: hands only, no controller or gamepad mapping.
-
-## Appearance
-
-A `quest.appearance` settings group owned by MQH, applied live by Unity: panel distance and height, text
-scale, theme colours, passthrough dimming, which panels open at start. Agents and the CLI can change it
-like any setting.
-
-## Agent skills that ship with MQH
-
-| Skill | Teaches |
-|---|---|
-| plugin authoring (bb's, rebranded) | plugin layout, server code, the SDK |
-| `mqh-spatial-panels` | `spatial.json`: widgets, binds, actions, validation, preview |
-| `mqh-gestures` | pose templates, bindings, testing a gesture without wearing the headset |
-| `mqh-appearance` | the appearance keys and safe ranges (comfort) |
-| skill creator (bb's, rebranded) | writing and activating skills |
-
-## Later: an MQH MCP server for the spatial side
-
-Tools that let agents see and touch the user's space: `quest.screenshot(panel?)`, `quest.listPanels()`,
-`quest.highlight(panel, region)`, `quest.say(text)`, `quest.notify(...)`. Needed for the multimodal
-pipeline in `mqh.md`; shipped as an MQH plugin that registers the server for every thread.
+A renderer would validate the file against a JSON Schema first and show the error in the panel instead of failing.
