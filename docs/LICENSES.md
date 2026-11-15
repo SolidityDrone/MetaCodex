@@ -45,7 +45,7 @@ standard texts of the Debian image are also in `/usr/share/common-licenses/` the
 | | Linux image: Debian 13 "trixie", 132 packages (78 of the official layer, 54 installed by the image build) | GPL-2/3, LGPL, BSD, MIT/X11, ISC, public domain, ... (each package's own) | **source offer** (78: done; 54: gap G14); licence texts (in the image; the 78 also here) |
 | | Node.js 24.22.3 in the Linux image, with the npm CLI of its official archive | MIT (Node.js, with the notices of its bundled parts in its `LICENSE`); Artistic-2.0 (npm) and the licences of npm's bundled packages | the licence files travel in the image (`/usr/local/LICENSE`, `/usr/local/lib/node_modules/npm/`) |
 | | 4 AI models | MIT (Whisper base, multilingual-e5-small), Apache-2.0 (Qwen3 0.6B), **OpenRAIL-M** (Supertonic 3) | notices; OpenRAIL-M: a copy of the licence, and the use restrictions must reach the users |
-| | 48 bundled agent skills | Unity Companion License (36), [Apache-2.0](licenses/Apache-2.0.txt) (7), ours (5) | licence file travels with them (done) |
+| | 49 bundled agent skills, and 13 native-app skills | Unity Companion License (36), [Apache-2.0](licenses/Apache-2.0.txt) (7), ours (6 + the 13 native-app skills) | licence file travels with them (done) |
 | | MQH harness (fork of bb) + 72 npm packages + 97 bundled npm packages + 4 native modules | MIT, plus ISC, Apache-2.0, BSD-3, BlueOak, dual licences | MIT notice of Michael Yong (done), package notices (done) |
 | **B. Downloaded on request** | the optional local coder: Qwen2.5-Coder 0.5B | Apache-2.0 | none for us (the user's device downloads it); keep the pointer |
 | | NDK (community build), OpenXR 1.1.65, 144 Debian packages (`mcx-setup quest`) | MIT, Apache-2.0, LLVM exception, GPL/LGPL/... | none for us (the user's device downloads them); keep the pointers |
@@ -332,7 +332,7 @@ Sleepycat (libdb) and others, each as its own `copyright` file states. Texts: th
 ### 3.7 Overlay (`assets/linux/overlay.tar`, 489 files)
 
 Our files laid over the image (scripts `mcx`, `mcx-setup`, `mcx-ui`, `mcx-secret`, `mcx-ai`, `mcx-app`, `mcx-core`,
-`mcx-build(d)`, `mcx-project`; Core v0; the Quest native template; our 4 skills), plus:
+`mcx-build(d)`, `mcx-project`; Core v0; the native app template; our 6 skills and the 13 native-app skills), plus:
 
 | Bundled | Source | Licence | Licence file shipped |
 |---|---|---|---|
@@ -343,7 +343,7 @@ Our files laid over the image (scripts `mcx`, `mcx-setup`, `mcx-ui`, `mcx-secret
 | this file and the texts in `docs/licenses/` | this repository | | `/usr/share/doc/metacodex/` |
 
 `userland/agent-skills/SOURCES.md` lists every skill. Our own skills (`metacodex-context`, `quest-gesture-plugins`,
-`quest-scripting`, `quest-views`, `worktree-per-thread`) are MIT, and so are the quest-native-* skills and the native kits (`mcx_gfx.h`,
+`quest-plugins`, `quest-scripting`, `quest-views`, `worktree-per-thread`) are MIT, and so are the quest-native-* skills and the native kits (`mcx_gfx.h`,
 `mcx_ui.h`, `mcx_physics.h`, `mcx_model.h`, 2026-11-14).
 
 ### 3.8 MQH, the Meta Quest Harness (`assets/linux/mqh.tar`, 7,481 files, 70,174,720 bytes unpacked)
@@ -354,8 +354,9 @@ of bb (github.com/get-bb/bb) at `8e4208e` (2026-11-06): **MIT, Copyright (c) 202
 What is in the tar (read from `opt/mqh/`):
 
 - the server, host daemon and CLI bundles and the bundled plugins (esbuild output, `apps/*/dist`,
-  `packages/bundled-plugins/dist`), plus 6 builtin skills in the `metacodex-guide` plugin (`skill-creator`, adapted from
-  bb's; `metacodex-context`, `quest-views`, `quest-scripting`, `quest-gesture-plugins`, `worktree-per-thread` ours). Since 2026-11-13 bb's
+  `packages/bundled-plugins/dist`), plus 7 builtin skills in the `metacodex-guide` plugin (`skill-creator`, adapted from
+  bb's; `metacodex-context`, `quest-views`, `quest-plugins`, `quest-scripting`, `quest-gesture-plugins`,
+  `worktree-per-thread` ours). Since 2026-11-13 bb's
   `bb-cli`, `bb-plugin-authoring` and `submit-a-plugin` skills and 10 bb plugins are out of `mqh/` (`docs/mqh.md`, "Plugins");
 - **97 npm packages bundled into those files** (found from the build's source maps and path comments; the files carry
   no licence comments, so their notices are in [npm-mqh-bundled-notices.txt](licenses/npm-mqh-bundled-notices.txt)):
