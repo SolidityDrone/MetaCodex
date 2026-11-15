@@ -332,7 +332,7 @@ namespace MetaCodex.Shell
         private float _glideT = -1f;
         private Vector3 _glideFromPos, _glideToPos;
         private Quaternion _glideFromRot, _glideToRot;
-        private const float GlideTime = 0.45f, PairMinShift = 3f;
+        private const float GlideTime = UiTheme.MotionSlow, PairMinShift = 3f; // the shared motion scale (was 0.45 s)
 
         private static ViewRect Union(ViewRect a, ViewRect b) => new ViewRect
             { Yaw0 = Mathf.Min(a.Yaw0, b.Yaw0), Yaw1 = Mathf.Max(a.Yaw1, b.Yaw1), Pitch0 = Mathf.Min(a.Pitch0, b.Pitch0), Pitch1 = Mathf.Max(a.Pitch1, b.Pitch1) };

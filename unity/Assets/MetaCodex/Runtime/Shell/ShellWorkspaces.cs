@@ -41,7 +41,7 @@ namespace MetaCodex.Shell
             float leftW = 0.33f;
             _wspStatus = p.Add(new UiLabel("", t.SmallSize) { Rect = new Rect(c.x, c.y, c.width, 0.02f), Color = t.TextDim });
             var body = new Rect(c.x, c.y + 0.02f + t.Gap, c.width, c.height - 0.02f - t.Gap);
-            _wspList = p.Add(new UiList(0.034f, (item, idx) => { if (item.Tag is string tag && tag.StartsWith("w:")) { _wspSelKey = tag.Substring(2); ShowWorkspaceDetail(); } }) { Rect = new Rect(body.x, body.y, leftW, body.height) });
+            _wspList = p.Add(new UiList(0.034f, (item, idx) => { if (item.Tag is string tag && tag.StartsWith("w:")) { _wspSelKey = tag.Substring(2); ShowWorkspaceDetail(); } }) { Rect = new Rect(body.x, body.y, leftW, body.height), EmptyText = "No workspaces yet.\nThreads show up here with the folder they work in." });
             var r = new UiStack(new Rect(body.x + leftW + t.Gap * 2, body.y, body.width - leftW - t.Gap * 2, body.height), t.Gap);
             _wspTitle = p.Add(new UiLabel("", t.BodySize * 1.05f) { Rect = r.Next(0.03f) });
             _wspDetail = p.Add(new UiLabel("", t.SmallSize) { Rect = r.Next(0.17f), Wrap = true, Align = TextAlignmentOptions.TopLeft });
@@ -163,7 +163,7 @@ namespace MetaCodex.Shell
             if (g == null)
             {
                 _wspTitle.Set("");
-                _wspDetail.Set("Pick a workspace on the left.", t.TextDim);
+                _wspDetail.Set(_wspList != null && _wspList.Items.Count == 0 ? "" : "Pick a workspace on the left.", t.TextDim); // an empty list says why itself
                 _wspGitLine.Set("");
                 _wspNote.Set("");
                 foreach (var b in new[] { _wspMerge, _wspRemove, _wspNewHere }) b?.SetEnabled(false);

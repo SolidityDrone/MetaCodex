@@ -21,7 +21,7 @@ namespace MetaCodex.UI
         public Color Ok = Hex(0x46F28C);
         public Color Violet = Hex(0xB28CFF);
         public Color Text = Hex(0xE2F4FF);
-        public Color TextDim = Hex(0x9DBDD2);     // readable at small sizes in the headset
+        public Color TextDim = Hex(0xAACADD);     // readable at small sizes in the headset (0x9DBDD2 was too faint on the glass)
         public Color TextAccent = Hex(0x8FEBFF);
 
         public float HeaderHeight = 0.040f;
@@ -41,6 +41,24 @@ namespace MetaCodex.UI
         public float TitleSize = 0.019f;
         public float BodySize = 0.016f;
         public float SmallSize = 0.012f;
+
+        // ---- motion: one set of durations and easings for every open, close, move into place, focus change, lock or
+        // unlock and group change (seconds). Nothing pops: a change of state eases over one of these.
+        /// A press, a focus change, a lock or unlock, a highlight.
+        public const float MotionFast = 0.12f;
+        /// A close, a small card (a callout, a menu square), a window gliding to a new place.
+        public const float MotionBase = 0.22f;
+        /// A window opening, a group forming or changing.
+        public const float MotionSlow = 0.35f;
+        /// Cubic ease out: a quick start and a soft landing (something that arrives).
+        public static float EaseOut(float t) { t = Mathf.Clamp01(t); float u = 1f - t; return 1f - u * u * u; }
+        /// Cubic ease in: a soft start and a quick end (something that leaves).
+        public static float EaseIn(float t) { t = Mathf.Clamp01(t); return t * t * t; }
+        /// Smooth both ways (a move from one place to another).
+        public static float EaseInOut(float t) { t = Mathf.Clamp01(t); return t * t * (3f - 2f * t); }
+        /// The factor for Lerp(current, target, k) this frame so that an exponential approach is 95 % there after
+        /// `duration` seconds, whatever the frame rate.
+        public static float Approach(float dt, float duration) => 1f - Mathf.Exp(-3f * dt / Mathf.Max(duration, 1e-4f));
 
         public TMP_FontAsset Display;   // titles, buttons: Inter SemiBold
         public TMP_FontAsset Body;      // labels, lists: Inter Medium

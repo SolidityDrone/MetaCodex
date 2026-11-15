@@ -4,14 +4,18 @@ using UnityEngine;
 
 namespace MetaCodex.UI
 {
-    /// How a panel comes and goes: it is CAST, by the orb when there is one (UiOrb), like a hologram printed by a
-    /// line of light (an original design):
-    /// OPEN (0.64 s) four corner brackets fly in and lock on where the panel will be, a fan of light opens from the
-    /// orb to one edge, and a hot line sweeps across between the brackets; behind the line the panel exists: first a
-    /// glowing hexagon lattice whose cells close one by one and cool into glass, the frame, then the controls and
-    /// the texts coming online hot and flickering; a last pulse through the frame settles it.
-    /// CLOSE (0.44 s) a surge, the line runs back and takes the panel with it, the brackets let go, and a spark of
-    /// what is left flies home to the orb.
+    /// How a panel comes and goes: it is CAST, by the Whisp when there is one (UiOrb), like a hologram printed by a
+    /// line of light (an original design), on the shared motion scale (UiTheme):
+    /// OPEN (MotionSlow, 0.35 s) four corner brackets fly in and lock on where the panel will be, two thin rays of light
+    /// run from the Whisp to the ends of a hot line that sweeps across between the brackets; behind the line the panel
+    /// exists: first a glowing hexagon lattice whose cells close and cool into glass, the frame, then the controls and
+    /// the texts coming online hot; a last pulse through the frame settles it.
+    /// CLOSE (MotionBase, 0.22 s) a surge, the line runs back and takes the panel with it, the brackets let go, and a
+    /// spark of what is left flies home to the Whisp. A small passing panel (a callout, the voice card, the Whisp's menu
+    /// squares) opens in MotionBase and closes in MotionFast, with no brackets.
+    /// Kept light on the GPU (2026-11-15: two windows opening at once took it to 97 %): no filled fan of light between
+    /// the Whisp and the line any more (it covered the whole space between them), only its two edge rays, and the line's
+    /// glow quad is 5 cm wide (was 11).
     /// Nothing moves or is scaled: the panel's shaders (McxPanelFx.hlsl) read one plane, the scan line, from
     /// _PanelScan (UiPanel) and draw only what lies behind it. This component draws the light itself, in the panel's
     /// own space (a child mesh, bent like the panel) with MetaCodex/WristArt: the brackets while they fly, the scan
@@ -31,7 +35,7 @@ namespace MetaCodex.UI
             public bool FanWhole;
         }
 
-        public const float OpenTime = 0.64f, CloseTime = 0.44f;
+        public const float OpenTime = UiTheme.MotionSlow, CloseTime = UiTheme.MotionBase;
 
         /// Who casts the panels: the orb's place in the world, or null when there is none (then the line simply
         /// crosses from the left).
@@ -47,7 +51,7 @@ namespace MetaCodex.UI
         internal static void RaiseAbsorbed(UiPanel p) { try { Absorbed?.Invoke(p); } catch (Exception) { } }
 
         /// Seconds for the opening or the closing; `light` = a small passing panel (a callout, the voice HUD).
-        public static float Duration(bool opening, bool light) => light ? (opening ? 0.30f : 0.22f) : opening ? OpenTime : CloseTime;
+        public static float Duration(bool opening, bool light) => light ? (opening ? UiTheme.MotionBase : UiTheme.MotionFast) : opening ? OpenTime : CloseTime;
 
         private static float Seg(float x, float a, float b) => Mathf.Clamp01((x - a) / (b - a));
         private static float Bump(float x, float a, float b) => Mathf.Sin(Mathf.PI * Seg(x, a, b));
@@ -181,7 +185,7 @@ namespace MetaCodex.UI
         private static Material _mat;
         private readonly List<Vector3> _v = new List<Vector3>();
         // reused every frame of a cast (no garbage while a window is drawn)
-        private readonly List<Vector3> _line = new List<Vector3>(), _fan = new List<Vector3>();
+        private readonly List<Vector3> _line = new List<Vector3>();
         private static readonly (float sx, float sy)[] Corners = { (-1f, 1f), (1f, 1f), (1f, -1f), (-1f, -1f) };
         private readonly List<Color> _c = new List<Color>();
         private readonly List<Vector2> _uv = new List<Vector2>();
@@ -269,13 +273,11 @@ namespace MetaCodex.UI
                 var from = p.transform.InverseTransformPoint(caster.Value);
                 if (tl.Fan > 0.002f)
                 {
-                    // the fan between the caster and the line, and a ray along each of its edges
-                    var fan = _fan;
-                    fan.Clear();
-                    foreach (var q in line) fan.Add(new Vector3(q.x, q.y, q.z + z));
-                    Fan(from, fan, accent, tl.Fan);
-                    Ray(from, fan[0], eye, 0.0034f, Hot, tl.Fan);
-                    Ray(from, fan[fan.Count - 1], eye, 0.0034f, Hot, tl.Fan);
+                    // a ray from the caster to each end of the line (the filled fan between them is gone: it covered the
+                    // whole space between the Whisp and the panel, the largest overdraw of a cast)
+                    var a0 = line[0]; var a1 = line[line.Count - 1];
+                    Ray(from, new Vector3(a0.x, a0.y, a0.z + z), eye, 0.0034f, Hot, tl.Fan);
+                    Ray(from, new Vector3(a1.x, a1.y, a1.z + z), eye, 0.0034f, Hot, tl.Fan);
                 }
                 if (tl.Spark >= 0f && tl.SparkA > 0.002f)
                 {
@@ -364,7 +366,7 @@ namespace MetaCodex.UI
         /// The scan line (WristArt kind 7): a hot core, a glow on both sides, beads of light running along it.
         private void ScanLine(List<Vector3> pts, float z, float strength)
         {
-            const float qw = 0.11f; // the quad: the glow reaches 5 cm to each side
+            const float qw = 0.05f; // the quad: the glow reaches 2.5 cm to each side (was 5: less to draw)
             var lin = Hot.linear;
             lin.a = Mathf.Clamp01(strength);
             float total = 0f;
@@ -393,24 +395,6 @@ namespace MetaCodex.UI
             if (r <= 0.01f) return new Vector3(0f, 0f, -1f);
             float s = Mathf.Clamp(x / r, -1f, 1f);
             return new Vector3(-s, 0f, -Mathf.Sqrt(Mathf.Max(1f - s * s, 0f)));
-        }
-
-        /// The fan of light from the caster to the line (WristArt kind 6): thin triangles from one point.
-        private void Fan(Vector3 from, List<Vector3> pts, Color col, float strength)
-        {
-            var lin = col.linear;
-            lin.a = Mathf.Clamp01(strength);
-            int n = pts.Count - 1;
-            for (int i = 0; i < n; i++)
-            {
-                // uv: (0,0) at the caster, (1,0) and (0,1) at the two ends on the line; info.xy: where across the whole fan
-                var info = new Vector4(i / (float)n, (i + 1) / (float)n, 6f, 0f);
-                int i0 = _v.Count;
-                _v.Add(from); _c.Add(lin); _uv.Add(new Vector2(0f, 0f)); _info.Add(info); _extra.Add(Vector4.zero);
-                _v.Add(pts[i]); _c.Add(lin); _uv.Add(new Vector2(1f, 0f)); _info.Add(info); _extra.Add(Vector4.zero);
-                _v.Add(pts[i + 1]); _c.Add(lin); _uv.Add(new Vector2(0f, 1f)); _info.Add(info); _extra.Add(Vector4.zero);
-                _tri.Add(i0); _tri.Add(i0 + 1); _tri.Add(i0 + 2);
-            }
         }
 
         /// A ray of light through the air from a to b (WristArt kind 4, a ray), turned to face the eyes.
