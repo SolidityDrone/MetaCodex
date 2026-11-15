@@ -56,7 +56,7 @@ and the user sees requests in VR.
 1. **Key**: one AES-256-GCM key generated inside the Android Keystore, StrongBox first, the TEE
    otherwise (`StrongBoxUnavailableException` falls back). It is non-exportable: even the app cannot
    read it; it can only ask the keystore to seal or open. The VAULT panel shows where it lives
-   (`getSecurityLevel()`).
+   (`getSecurityLevel()`); on the test headset it is the TEE.
 2. **Vault**: `SecretVault` keeps names, policies and sealed values (12-byte random IV, 128-bit tag,
    associated data `metacodex-vault:v1:<name>` so a value cannot be swapped onto another name) in
    `getNoBackupFilesDir()/vault.json`. That folder is internal storage, excluded from backups, and

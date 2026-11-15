@@ -1,13 +1,13 @@
 # Core Session Context Protocol (CSCP)
 
-Owner's idea (2026-11-09), shaped here. A parallel layer that knows what is going on in the workbench, so the user
-can **ask** about it ("is this build stuck?", "what did this thread achieve?", "do we have the rust toolchain?",
+A parallel layer that knows what is going on in the workbench, so the user can **ask** about it ("is this build stuck?", "what did this thread achieve?", "do we have the rust toolchain?",
 "what is this command I'm asked to accept, is it safe?") instead of only giving orders ("open settings").
 
 ## Rules
 
-- **For the local model only.** The context never goes to the ACP providers (Claude Code, Codex, opencode), to MQH or
-  off the headset: no control-port command, no file in the Linux. Only the local AI service (QVAC) reads it.
+- **For the local model only.** The context never goes to the agent CLIs, to MQH or off the headset, and no
+  control-port command gives it out. Only the local AI service reads it. To keep the events across a restart, the app
+  saves them in `session-context.jsonl` in the shared folder; everything in the Linux can read that file.
 - **Read-only.** It observes; it never runs, approves or changes anything. Answers end with what the user can do.
 - **Cheap.** Event taps on what the app already does, one low-priority `ps` every 20 s while the Linux is up.
   Nothing on the render thread beyond reading fields.
