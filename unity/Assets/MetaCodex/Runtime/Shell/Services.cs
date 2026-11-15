@@ -229,7 +229,7 @@ namespace MetaCodex.Shell
         public string mqhToken = "";
         public bool mqhSync = true;
         public string filesRoot = "/root";
-        public List<string> bookmarks = new List<string> { "https://developers.meta.com/horizon/", "https://github.com", "http://127.0.0.1:5173" };
+        public List<string> bookmarks = new List<string> { "http://127.0.0.1:5173" }; // no company sites by default (contest rule: no brands in the app)
         /// Gesture -> action links (Gestures panel > BIND).
         public List<GestureBinding> bindings = new List<GestureBinding>();
         // look and feel

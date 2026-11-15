@@ -21,7 +21,7 @@ namespace MetaCodex.UI
         public Color Ok = Hex(0x46F28C);
         public Color Violet = Hex(0xB28CFF);
         public Color Text = Hex(0xE2F4FF);
-        public Color TextDim = Hex(0x9DBDD2);     // readable at small sizes in the headset
+        public Color TextDim = Hex(0xAACADD);     // readable at small sizes in the headset (0x9DBDD2 was too faint on the glass)
         public Color TextAccent = Hex(0x8FEBFF);
 
         public float HeaderHeight = 0.040f;

@@ -390,7 +390,7 @@ namespace MetaCodex.UI
         protected override void Build()
         {
             _label = UiText.Create(Panel, new Rect(Rect.x, Rect.y, LabelWidth - 0.006f, Rect.height), UiTheme.Pretty(Text), Theme.Body, Theme.BodySize, Theme.Text);
-            _value = UiText.Create(Panel, new Rect(Rect.xMax - 0.055f, Rect.y, 0.055f, Rect.height), "", Theme.Mono, Theme.SmallSize, Theme.TextAccent, TextAlignmentOptions.MidlineRight);
+            _value = UiText.Create(Panel, new Rect(Rect.xMax - 0.055f, Rect.y, 0.055f, Rect.height), "", Theme.Mono, Theme.SmallSize * 1.12f, Theme.TextAccent, TextAlignmentOptions.MidlineRight);
             _track = Panel.Shapes.Add(Panel.Shape(UiShapeKind.Bar, TrackRect, Theme.Accent, 0.003f, 0.003f, 0.004f));
             _thumb = Panel.Shapes.Add(Panel.Shape(UiShapeKind.Button, ThumbRect(), Theme.Text, 0.05f, 1f, 0.005f));
             Refresh();
@@ -409,7 +409,7 @@ namespace MetaCodex.UI
         private void ApplyDim()
         {
             if (Panel == null || _label == null) return;
-            _label.Text = UiTheme.Pretty(Text) + (Dimmed && !string.IsNullOrEmpty(Note) ? "\n<size=62%>" + Note + "</size>" : "");
+            _label.Text = UiTheme.Pretty(Text) + (Dimmed && !string.IsNullOrEmpty(Note) ? "\n<size=75%>" + Note + "</size>" : "");
             _label.Color = Dimmed ? Theme.TextDim * 0.8f : Theme.Text;
             _value.Color = Dimmed ? Theme.TextDim * 0.8f : Theme.TextAccent;
             Panel.Shapes.SetTint(_track, Dimmed ? Theme.Frame : Theme.Accent);
@@ -643,11 +643,15 @@ namespace MetaCodex.UI
         public Action<UiListItem, int> OnSelect;
         public int SelectedIndex = -1;
         public bool Monospace;
+        /// What the list says while it has no items: centred in its area, with what to do next (empty: nothing). The same
+        /// pattern in every window (SetEmptyText changes it).
+        public string EmptyText = "";
         public override bool Interactive => true;
         public IReadOnlyList<UiListItem> Items => _items;
         private readonly List<UiListItem> _items = new List<UiListItem>();
         private readonly List<(int shape, UiText icon, UiText title, UiText sub, UiText badge)> _rows = new List<(int, UiText, UiText, UiText, UiText)>();
         private int _bar;
+        private UiText _empty;
         private float _scroll;      // rows scrolled
         private float _dragStartScroll;
         private bool _dragged;
@@ -669,11 +673,24 @@ namespace MetaCodex.UI
                 var icon = UiText.Create(Panel, new Rect(r.x + 0.006f, r.y, 0.024f, r.height), "", Theme.Body, Theme.BodySize, Theme.TextAccent, TextAlignmentOptions.Center);
                 var title = UiText.Create(Panel, new Rect(r.x + 0.032f, r.y, r.width * 0.62f, r.height), "", Monospace ? Theme.Mono : Theme.Body,
                     Monospace ? Theme.SmallSize * 1.1f : Theme.BodySize, Theme.Text);
-                var sub = UiText.Create(Panel, new Rect(r.x + r.width * 0.55f, r.y, r.width * 0.30f, r.height), "", Theme.Body, Theme.SmallSize, Theme.TextDim, TextAlignmentOptions.MidlineRight);
-                var badge = UiText.Create(Panel, new Rect(r.xMax - 0.075f, r.y, 0.070f, r.height), "", Theme.Display, Theme.SmallSize * 0.85f, Theme.Ok, TextAlignmentOptions.MidlineRight);
+                var sub = UiText.Create(Panel, new Rect(r.x + r.width * 0.55f, r.y, r.width * 0.30f, r.height), "", Theme.Body, Theme.SmallSize * 1.08f, Color.Lerp(Theme.TextDim, Theme.Text, 0.25f), TextAlignmentOptions.MidlineRight);
+                var badge = UiText.Create(Panel, new Rect(r.xMax - 0.075f, r.y, 0.070f, r.height), "", Theme.Display, Theme.SmallSize * 0.92f, Theme.Ok, TextAlignmentOptions.MidlineRight);
                 _rows.Add((shape, icon, title, sub, badge));
             }
             _bar = Panel.Shapes.Add(Panel.Shape(UiShapeKind.Line, new Rect(Rect.xMax - 0.003f, Rect.y, 0.003f, Rect.height), Theme.Accent, 0, 0, 0.002f));
+            // the empty state: in the upper middle of the list's area (where its first rows would be), wrapped
+            float ey = Mathf.Min(Rect.height * 0.25f, 0.06f), eh = Mathf.Max(0.02f, Mathf.Min(Rect.height - ey, 0.09f));
+            _empty = UiText.Create(Panel, new Rect(Rect.x + Rect.width * 0.08f, Rect.y + ey, Rect.width * 0.84f, eh), "",
+                Theme.Body, Theme.BodySize * 0.95f, Color.Lerp(Theme.TextDim, Theme.Text, 0.15f), TextAlignmentOptions.Top, true);
+            Render();
+        }
+
+        /// Sets what the list says while it has no items (only when it changes).
+        public void SetEmptyText(string text)
+        {
+            text ??= "";
+            if (EmptyText == text) return;
+            EmptyText = text;
             Render();
         }
 
@@ -707,8 +724,10 @@ namespace MetaCodex.UI
                 float indent = it.Indent * 0.016f;
                 var r = RowRect(i);
                 row.icon.SetRect(new Rect(r.x + 0.006f + indent, r.y, 0.024f, r.height));
-                float badgeW = string.IsNullOrEmpty(it.Badge) ? 0f : Mathf.Min(0.075f, r.width * 0.3f);
-                float subW = string.IsNullOrEmpty(it.Sub) ? 0f : Mathf.Min(r.width * 0.32f, r.width - badgeW - 0.05f - indent);
+                // the tag and the badge take about the room their text needs (a generous guess from its length), never
+                // more than before: a short tag ("key", "2 keys") leaves the title room instead of a third of the row
+                float badgeW = string.IsNullOrEmpty(it.Badge) ? 0f : Mathf.Min(Mathf.Min(0.075f, r.width * 0.3f), it.Badge.Length * Theme.SmallSize * 0.92f * 0.72f * 0.78f + 0.010f);
+                float subW = string.IsNullOrEmpty(it.Sub) ? 0f : Mathf.Min(Mathf.Min(r.width * 0.32f, it.Sub.Length * Theme.SmallSize * 1.08f * 0.72f * 0.62f + 0.012f), r.width - badgeW - 0.05f - indent);
                 row.title.SetRect(new Rect(r.x + 0.032f + indent, r.y, r.width - 0.036f - indent - subW - badgeW, r.height));
                 row.sub.SetRect(new Rect(r.xMax - badgeW - subW - 0.004f, r.y, subW, r.height));
                 row.badge.SetRect(new Rect(r.xMax - badgeW - 0.004f, r.y, badgeW, r.height));
@@ -730,6 +749,12 @@ namespace MetaCodex.UI
             var bar = new Rect(Rect.xMax - 0.004f, Rect.y + (Rect.height - h) * pos, 0.004f, h);
             Panel.Shapes.SetRect(_bar, Panel.PanelToLocal(bar.center), bar.size);
             Panel.Shapes.SetVisible(_bar, Visible && frac < 1f);
+            if (_empty != null)
+            {
+                bool none = Visible && _items.Count == 0 && !string.IsNullOrEmpty(EmptyText);
+                if (none) _empty.Text = EmptyText;
+                _empty.SetVisible(none);
+            }
         }
 
         private int RowAt(Vector2 p)
@@ -798,6 +823,7 @@ namespace MetaCodex.UI
                 DestroyGo(row.icon.Tmp.gameObject); DestroyGo(row.title.Tmp.gameObject);
                 DestroyGo(row.sub.Tmp.gameObject); DestroyGo(row.badge.Tmp.gameObject);
             }
+            if (_empty != null) { DestroyGo(_empty.Tmp.gameObject); _empty = null; }
             Panel.Shapes.SetVisible(_bar, false);
         }
     }

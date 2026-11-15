@@ -61,7 +61,7 @@ namespace MetaCodex.Shell
             p.Add(new UiButton("NEW THREAD →", () => OpenNewThread(_agentSel)) { Rect = new Rect(r2.x + bw2 + t.Gap, r2.y, bw2, r2.height) });
             _agentUpdate = p.Add(new UiButton("UPDATE", () => InstallAgent(_agentSel)) { Rect = new Rect(r2.x + (bw2 + t.Gap) * 2, r2.y, bw2, r2.height) });
             _agentUpdate.SetVisible(false);
-            _agentHint = p.Add(new UiLabel("GET installs an agent here. API KEY: paste your provider's key once (sealed in the vault, given to the agents MQH starts). SIGN IN runs the provider's own login in a new terminal: ⇗ on that terminal opens its link in Horizon's browser, codes go back with ⎘ PASTE; those logins stay in the CLI's own files, MetaCodex never reads them.", t.SmallSize) { Rect = rs.Rest(), Wrap = true, Color = t.TextDim, Align = TextAlignmentOptions.TopLeft });
+            _agentHint = p.Add(new UiLabel("GET installs an agent here. API KEY: paste your provider's key once (sealed in the vault, given to the agents MQH starts). SIGN IN runs the provider's own login in a new terminal: ⇗ on that terminal opens its link in the system browser, codes go back with ⎘ PASTE; those logins stay in the CLI's own files, MetaCodex never reads them.", t.SmallSize) { Rect = rs.Rest(), Wrap = true, Color = t.TextDim, Align = TextAlignmentOptions.TopLeft });
         }
 
         /// MQH's provider id (acp-opencode, codex, claude-code) -> the GET agent it is (opencode, codex, claude).
@@ -1355,10 +1355,10 @@ namespace MetaCodex.Shell
             float colW = 0.22f;
             var a = new UiStack(new Rect(c.x, c.y, colW, c.height), t.Gap);
             p.Add(new UiLabel("PROVIDER", t.SmallSize) { Rect = a.Next(0.018f), UseDisplay = true, Color = t.TextDim });
-            _ntProviders = p.Add(new UiList(0.032f, (item, idx) => { _ntProvider = item.Tag as string; LoadModels(); }) { Rect = a.Rest() });
+            _ntProviders = p.Add(new UiList(0.032f, (item, idx) => { _ntProvider = item.Tag as string; LoadModels(); }) { Rect = a.Rest(), EmptyText = "No agent yet.\nGet one in CONTROL › AGENTS (GET), or turn on the local coder there." });
             var b = new UiStack(new Rect(c.x + colW + t.Gap * 2, c.y, colW, c.height), t.Gap);
             p.Add(new UiLabel("MODEL", t.SmallSize) { Rect = b.Next(0.018f), UseDisplay = true, Color = t.TextDim });
-            _ntModelList = p.Add(new UiList(0.032f, (item, idx) => { _ntModel = item.Tag as string; ShowNewThreadSummary(); }) { Rect = b.Rest() });
+            _ntModelList = p.Add(new UiList(0.032f, (item, idx) => { _ntModel = item.Tag as string; ShowNewThreadSummary(); }) { Rect = b.Rest(), EmptyText = "Pick a provider: its models show here." });
             var r = new UiStack(new Rect(c.x + (colW + t.Gap * 2) * 2, c.y, c.width - (colW + t.Gap * 2) * 2, c.height), t.Gap);
             _ntSummary = p.Add(new UiLabel("", t.SmallSize) { Rect = r.Next(0.07f), Wrap = true, Align = TextAlignmentOptions.TopLeft });
             int perm = Math.Max(0, Array.IndexOf(new[] { "accept-edits", "auto", "full" }, Settings.permissionMode));

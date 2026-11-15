@@ -323,7 +323,7 @@ namespace MetaCodex.Shell
             float leftW = 0.28f;
             var left = new UiStack(new Rect(c.x, c.y, leftW, c.height), t.Gap);
             _clipStatus = p.Add(new UiLabel("", t.SmallSize) { Rect = left.Next(0.022f), Color = t.TextDim });
-            _clipList = p.Add(new UiList(0.034f, (item, idx) => ShowClipPreview()) { Rect = left.Rest() });
+            _clipList = p.Add(new UiList(0.034f, (item, idx) => ShowClipPreview()) { Rect = left.Rest(), EmptyText = "No captures yet.\nSELECT (wrist or dock), then pinch and drag over any window." });
             var rs = new UiStack(new Rect(c.x + leftW + t.Gap * 2, c.y, c.width - leftW - t.Gap * 2, c.height), t.Gap);
             const float keepH = 0.032f;
             _clipPreviewArea = rs.Next(c.height - 0.022f - keepH - t.ButtonHeight - t.Gap * 4);
@@ -381,7 +381,7 @@ namespace MetaCodex.Shell
             if (it == null)
             {
                 ClearClipPreview();
-                _clipInfo.Set(Clipboard.Items.Count == 0 ? "No captures yet: SELECT (wrist or dock), then pinch and drag over any window." : "", t.TextDim);
+                _clipInfo.Set("", t.TextDim); // with no captures the list itself says what to do
                 return;
             }
             _clipInfo.Set($"{Clipboard.LinuxPath(it)}", t.TextDim);
