@@ -348,6 +348,11 @@ namespace MetaCodex.Scripting
                 var chunk = script.LoadString(code, null, chunkName);
                 Run(e, chunk);
                 if (e.Error == null) Say(e, $"loaded ({e.Handlers} handlers, {e.Poses} poses, {e.Detectors} detectors)");
+                // a tile that opens a window main.lua never made
+                if (e.Error == null)
+                    foreach (var te in _tileEntries)
+                        if (te.Owner == e && te.Tile.Window != null && FindWindow(te.Tile.Window) == null)
+                            Say(e, "warn menu.add " + te.Tile.Id + ": panel " + te.Tile.Window + " is not a window of this plugin; make it with ui.panel{id=...} in main.lua");
             }
             catch (InterpreterException ex) { Fail(e, ex.DecoratedMessage ?? ex.Message); }
             catch (Exception ex) { Fail(e, ex.Message); }
@@ -843,7 +848,8 @@ namespace MetaCodex.Scripting
                 if (te.Tile.Window != null)
                 {
                     var w = FindWindow(te.Tile.Window);
-                    if (w != null) ShowOwn(w, 2); else _svc.PluginWindowShow(te.Tile.Window, 2);
+                    if (w != null) ShowOwn(w, 2);
+                    else { Say(te.Owner, "warn menu.add " + te.Tile.Id + ": its window " + te.Tile.Window + " was never made (ui.panel{id=...})"); _svc.Toast(te.Tile.Label + ": this plugin has no such window", "warn"); }
                 }
                 else Run(te.Owner, te.Run);
                 return;
@@ -1227,11 +1233,15 @@ namespace MetaCodex.Scripting
                 var pv = t.Get("panel");
                 bool hasPanel = !pv.IsNil();
                 if (hasRun == hasPanel) throw new ScriptRuntimeException("menu.add " + id + ": give exactly one of panel=<window id> or run=function() end, for example " + form);
-                PlugWin w = null;
+                // panel: one of this plugin's windows, made before or after (main.lua may add the tile first); a window that
+                // still does not exist when main.lua has run is a warning (Load), and the tap says so
+                string tileWindow = null;
                 if (hasPanel)
                 {
-                    w = OwnWindow(e, pv.ToPrintString());
-                    if (w == null) throw new ScriptRuntimeException("menu.add " + id + ": panel '" + pv.ToPrintString() + "' is not a window of this plugin; make it first with ui.panel{id=\"" + SafeId(pv.ToPrintString()) + "\", title=..., components=...}");
+                    var w = OwnWindow(e, pv.ToPrintString());
+                    string want = pv.ToPrintString();
+                    string prefix = "plugin-" + e.Name + "-";
+                    tileWindow = w != null ? w.FullId : want.StartsWith(prefix, StringComparison.Ordinal) ? want : prefix + SafeId(want);
                 }
                 label = label.ToUpperInvariant();
                 if (label.Length > 8)
@@ -1241,7 +1251,7 @@ namespace MetaCodex.Scripting
                 }
                 string glyph = TStr(t, "glyph", "");
                 glyph = glyph.Length == 0 ? "\u25C6" : glyph.Substring(0, char.IsHighSurrogate(glyph[0]) && glyph.Length > 1 ? 2 : 1);
-                var tile = new PluginTile { Owner = e.Name, Id = id, Label = label, Glyph = glyph, Icon = TStr(t, "icon", "mark"), Window = w?.FullId };
+                var tile = new PluginTile { Owner = e.Name, Id = id, Label = label, Glyph = glyph, Icon = TStr(t, "icon", "mark"), Window = tileWindow };
                 int at = _tileEntries.FindIndex(x => x.Owner == e && x.Tile.Id == id);
                 if (at < 0 && _tileEntries.Count >= MaxPluginTiles)
                 {

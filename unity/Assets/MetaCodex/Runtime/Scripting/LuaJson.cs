@@ -58,8 +58,10 @@ namespace MetaCodex.Scripting
             if (depth >= MaxDepth) throw new ScriptRuntimeException("nested deeper than " + MaxDepth + " levels (at " + path + "); a table that contains itself?");
             int count = 0;
             bool array = true;
+            // a key set to nil can stay in the table's pairs (MoonSharp keeps the slot): it is not there for Lua, nor here
             foreach (var pair in t.Pairs)
             {
+                if (pair.Value.IsNil()) continue;
                 count++;
                 if (pair.Key.Type != DataType.Number) array = false;
             }
@@ -70,6 +72,7 @@ namespace MetaCodex.Scripting
                 var items = new JToken[count];
                 foreach (var pair in t.Pairs)
                 {
+                    if (pair.Value.IsNil()) continue;
                     double k = pair.Key.Number;
                     if (k != Math.Floor(k) || k < 1 || k > count) { array = false; break; }
                     items[(int)k - 1] = ToJson(pair.Value, depth + 1, path + "[" + (int)k + "]");
@@ -85,6 +88,7 @@ namespace MetaCodex.Scripting
             var vals = new Dictionary<string, DynValue>(count);
             foreach (var pair in t.Pairs)
             {
+                if (pair.Value.IsNil()) continue;
                 string key;
                 if (pair.Key.Type == DataType.String) key = pair.Key.String;
                 else if (pair.Key.Type == DataType.Number) key = pair.Key.Number.ToString(CultureInfo.InvariantCulture);
