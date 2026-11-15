@@ -19,9 +19,13 @@ GLES 3. After any change: `mcx-app check`, `mcx-app build`, `mcx-app verify`.
 | 5. Frame budget on the Quest 3S | keeping 72 fps |
 | 6. The app's own Library icon (pure Python) | every app made from an example |
 
-A whole designed app (a solar system in the room: a look, glow, trails, a starfield, grow-in motion, a start panel
-and a control panel) is in quest-native-rendering `references/effects.md`. Pick the look first:
-quest-native-art-direction.
+Whole designed apps that compile, to adapt:
+- `references/desk-game.md`: a breakout game on the real table (Neon arcade look, the TABLE from the room, the
+  paddle under the hand, instanced bricks, sparks, a trail, start / HUD / result panels).
+- quest-native-rendering `references/effects.md`: a solar system in the room (Cosmic look, glow, trails, a
+  starfield, grow-in motion, a start panel and a control panel).
+
+Pick the look first: quest-native-art-direction.
 
 ## Night Vision, the full example (`/opt/metacodex/quest-native/examples/nightvision`)
 
