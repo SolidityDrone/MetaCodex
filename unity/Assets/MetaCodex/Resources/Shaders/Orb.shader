@@ -1,16 +1,16 @@
-// MetaCodex, the Whisp (UiOrb): a small prismatic crystal wisp that floats by the user, casts the panels and speaks.
-// One small mesh made once by UiOrb (98 triangles: a halo, a tail ribbon, a heart, a crystal cluster, four shards; the
-// part is TEXCOORD0.x), shaped and moved here in the vertex shader from a few uniforms. The fragment is a few dozen
-// operations: a fresnel hue shift over the tint (each facet a little apart; a back facet, seen through the front ones,
-// half a turn on), glowing facet edges (barycentric, TEXCOORD1), the light inside (the ray's distance to the centre),
-// the halo, ripples and the wake flare. An original design. Far cheaper than the orb before it: the halo square is 1.7
-// radii instead of 2.3, the room's depth is looked up with a matrix per vertex, and no pixel runs plasma or rings.
-// Straight-line maths as since 0.7.10 (the headset once showed flat cream blocks over the old orb, never the Editor):
-// no loops, no uniform arrays, no derivatives, every input an ordinary material property in UnityPerMaterial.
-// URP, single-pass instanced stereo, premultiplied: its light is added over the passthrough and the crystal's glass
-// darkens what is behind it a little (alpha), so it reads in a bright room. A first pass writes the crystal's depth,
-// pushed back a radius (its own facets and halo still pass): a hand behind it does not clear it (FocusMesh draws the
-// hands last, depth-tested), a fingertip in front of it still shows.
+// MetaCodex, the orb (UiOrb): a sphere of energy that floats by the user, casts the panels and speaks. One quad that
+// faces each eye; every pixel follows its own ray through a unit sphere (orb units = radii), so the orb has true depth
+// per eye: a hot core, two shells of plasma turning against each other, a glass membrane with a bright limb and the
+// plates of a shield that light up in a wave, three thin rings of light round it (the nearest point between the ray
+// and each circle, so a ring is a tube from every side and passes behind the sphere), motes, ripples that leave it
+// while it speaks, a halo. An original design.
+// Written as straight-line code (0.7.10, after the headset showed flat cream blocks and stripes over the orb in most
+// frames, never in the Editor): no loops, no uniform arrays, no early return before a derivative, every input an
+// ordinary material property in UnityPerMaterial. It is also about a third cheaper than the first version: the far side
+// of the outer plasma shell and the motes' tails are gone, and the quad is smaller (2.3 radii instead of 2.7).
+// URP, single-pass instanced stereo, premultiplied: its light is added over the passthrough and the body darkens what
+// is behind it (alpha), so it reads in a bright room. A first pass writes the depth of its disc: a hand behind it does
+// not clear it (FocusMesh draws the hands last, depth-tested), a fingertip in front of it still shows.
 Shader "MetaCodex/Orb"
 {
     Properties
@@ -20,35 +20,35 @@ Shader "MetaCodex/Orb"
         _OrbTint ("Tint (linear)", Vector) = (0.036, 0.63, 1, 1)
         _OrbDeep ("Body glass (linear)", Vector) = (0.01, 0.03, 0.075, 1)
         _OrbGold ("Gold (linear)", Vector) = (1, 0.6, 0.21, 1)
-        _OrbPhaseA ("Prism phase 0..1 (x), wake flare 0..1 (y)", Vector) = (0, 0, 0, 1.4)
-        _OrbPhaseB ("Prism strength (w)", Vector) = (0, 0, 0, -0.9)
-        _OrbRotA0 ("Crystal rotation, row 0", Vector) = (1, 0, 0, 0)
-        _OrbRotA1 ("Crystal rotation, row 1", Vector) = (0, 1, 0, 0)
-        _OrbRotA2 ("Crystal rotation, row 2", Vector) = (0, 0, 1, 0)
-        _OrbRotB0 ("Heart rotation, row 0", Vector) = (1, 0, 0, 0)
-        _OrbRotB1 ("Heart rotation, row 1", Vector) = (0, 1, 0, 0)
-        _OrbRotB2 ("Heart rotation, row 2", Vector) = (0, 0, 1, 0)
-        _OrbLook ("Where it attends (xyz), light wave strength (w)", Vector) = (0, 0, -1, 0)
-        _OrbShield ("Light wave 0..1 (x), halo half size in radii (y)", Vector) = (1, 2.3, 0, 0)
+        _OrbPhaseA ("Inner plasma: phases xyz, twist w", Vector) = (0, 0, 0, 1.4)
+        _OrbPhaseB ("Outer plasma: phases xyz, twist w", Vector) = (0, 0, 0, -0.9)
+        _OrbRotA0 ("Inner shell rotation, row 0", Vector) = (1, 0, 0, 0)
+        _OrbRotA1 ("Inner shell rotation, row 1", Vector) = (0, 1, 0, 0)
+        _OrbRotA2 ("Inner shell rotation, row 2", Vector) = (0, 0, 1, 0)
+        _OrbRotB0 ("Outer shell rotation, row 0", Vector) = (1, 0, 0, 0)
+        _OrbRotB1 ("Outer shell rotation, row 1", Vector) = (0, 1, 0, 0)
+        _OrbRotB2 ("Outer shell rotation, row 2", Vector) = (0, 0, 1, 0)
+        _OrbLook ("Where it attends (xyz), shield strength (w)", Vector) = (0, 0, -1, 0)
+        _OrbShield ("Shield wave (x), quad half size in radii (y)", Vector) = (1, 2.3, 0, 0)
         _OrbRipples ("Ripple ages (< 0: none)", Vector) = (-1, -1, -1, -1)
-        _OrbRing0N ("Tail point 1 (radii), tail width (w)", Vector) = (0, 1, 0, 0)
-        _OrbRing0U ("Tail point 2 (radii), tail brightness (w)", Vector) = (1, 0, 0, 0)
-        _OrbRing0P ("Spare", Vector) = (1.3, 0.02, 0, 0)
-        _OrbRing0Q ("Spare", Vector) = (0, 1, 1, 0)
-        _OrbRing1N ("Shard tumble angles", Vector) = (0, 1, 0, 0)
-        _OrbRing1U ("Spare", Vector) = (1, 0, 0, 0)
-        _OrbRing1P ("Spare", Vector) = (1.46, 0.012, 0, 0)
-        _OrbRing1Q ("Spare", Vector) = (0, 1, 0, 0)
-        _OrbRing2N ("Spare", Vector) = (0, 1, 0, 0)
-        _OrbRing2U ("Spare", Vector) = (1, 0, 0, 0)
-        _OrbRing2P ("Spare", Vector) = (1.64, 0.009, 0, 0)
-        _OrbRing2Q ("Spare", Vector) = (0, 1, 1, 0)
-        _OrbMote0 ("Shard 0 place (radii), size (w)", Vector) = (0, 0, 0, 0)
-        _OrbMote1 ("Shard 1 place (radii), size (w)", Vector) = (0, 0, 0, 0)
-        _OrbMote2 ("Shard 2 place (radii), size (w)", Vector) = (0, 0, 0, 0)
-        _OrbMote3 ("Shard 3 place (radii), size (w)", Vector) = (0, 0, 0, 0)
-        _OrbMoteW ("Shards: how bright", Vector) = (0, 0, 0, 0)
-        _OrbMoteGold ("Shards: a message not read yet (gold)", Vector) = (0, 0, 0, 0)
+        _OrbRing0N ("Ring 0 normal", Vector) = (0, 1, 0, 0)
+        _OrbRing0U ("Ring 0 in-plane axis", Vector) = (1, 0, 0, 0)
+        _OrbRing0P ("Ring 0 radius, width, phase, brightness", Vector) = (1.3, 0.02, 0, 0)
+        _OrbRing0Q ("Ring 0 dashes, duty, gold", Vector) = (0, 1, 1, 0)
+        _OrbRing1N ("Ring 1 normal", Vector) = (0, 1, 0, 0)
+        _OrbRing1U ("Ring 1 in-plane axis", Vector) = (1, 0, 0, 0)
+        _OrbRing1P ("Ring 1 radius, width, phase, brightness", Vector) = (1.46, 0.012, 0, 0)
+        _OrbRing1Q ("Ring 1 dashes, duty, gold", Vector) = (0, 1, 0, 0)
+        _OrbRing2N ("Ring 2 normal", Vector) = (0, 1, 0, 0)
+        _OrbRing2U ("Ring 2 in-plane axis", Vector) = (1, 0, 0, 0)
+        _OrbRing2P ("Ring 2 radius, width, phase, brightness", Vector) = (1.64, 0.009, 0, 0)
+        _OrbRing2Q ("Ring 2 dashes, duty, gold", Vector) = (0, 1, 1, 0)
+        _OrbMote0 ("Mote 0 place (radii), size squared", Vector) = (0, 0, 0, 0)
+        _OrbMote1 ("Mote 1 place (radii), size squared", Vector) = (0, 0, 0, 0)
+        _OrbMote2 ("Mote 2 place (radii), size squared", Vector) = (0, 0, 0, 0)
+        _OrbMote3 ("Mote 3 place (radii), size squared", Vector) = (0, 0, 0, 0)
+        _OrbMoteW ("Motes: how bright", Vector) = (0, 0, 0, 0)
+        _OrbMoteGold ("Motes: a message not read yet (gold)", Vector) = (0, 0, 0, 0)
     }
     SubShader
     {
@@ -68,105 +68,25 @@ Shader "MetaCodex/Orb"
             float4 _OrbMote0, _OrbMote1, _OrbMote2, _OrbMote3, _OrbMoteW, _OrbMoteGold;
         CBUFFER_END
 
-        // the mesh (UiOrb.BuildMesh): positions in radii; TEXCOORD0 = (part, shard index, facet hue, -): part 0 the crystal,
-        // 1 the heart, 2 a shard, 3 the halo, 4 the tail; TEXCOORD1 = a facet corner's barycentric place (xyz);
-        // TEXCOORD2 = a shard's tumble axis (xyz)
-        struct Attributes
-        {
-            float4 positionOS : POSITION;
-            float3 normalOS : NORMAL;
-            float4 uv0 : TEXCOORD0;
-            float4 uv1 : TEXCOORD1;
-            float4 uv2 : TEXCOORD2;
-            UNITY_VERTEX_INPUT_INSTANCE_ID
-        };
-        struct Varyings
-        {
-            float4 positionCS : SV_POSITION;
-            float3 positionWS : TEXCOORD0;
-            float3 normalWS : TEXCOORD1;
-            float4 info : TEXCOORD2;   // part, gold (a shard while a message waits), facet hue, brightness (a shard)
-            float3 bary : TEXCOORD3;   // a facet: barycentric; the halo and the tail: their place on the square or ribbon
-            float4 occ : TEXCOORD4;    // McxOcclusionCoord: linear in the position, so it interpolates exactly
-            UNITY_VERTEX_OUTPUT_STEREO
-        };
+        struct Attributes { float4 positionOS : POSITION; UNITY_VERTEX_INPUT_INSTANCE_ID };
+        struct Varyings { float4 positionCS : SV_POSITION; float3 positionWS : TEXCOORD0; UNITY_VERTEX_OUTPUT_STEREO };
 
-        #define TURN(r0, r1, r2, p) float3(dot(r0.xyz, p), dot(r1.xyz, p), dot(r2.xyz, p))
-
-        // p turned by the angle t round the unit axis a
-        float3 SpinAround(float3 p, float3 a, float t)
-        {
-            float s = sin(t), c = cos(t);
-            return p * c + cross(a, p) * s + a * (dot(a, p) * (1.0 - c));
-        }
-
-        // every part to its place this frame; `depthOnly`: the crystal alone, pushed back a radius from the eye (the other
-        // parts fold to one point and draw nothing)
-        Varyings vertAt(Attributes v, float depthOnly)
+        // the quad (-0.5..0.5) turned to this eye, `back` radii further from it
+        Varyings vertAt(Attributes v, float back)
         {
             Varyings o;
             UNITY_SETUP_INSTANCE_ID(v);
             UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(o);
             float3 c = _OrbCenter.xyz;
             float3 toCam = GetCameraPositionWS() - c;
-            toCam /= max(length(toCam), 1e-4);
+            float dist = max(length(toCam), 1e-4);
+            toCam /= dist;
             float3 right = cross(float3(0.0, 1.0, 0.0), toCam);
             right = dot(right, right) < 1e-6 ? float3(1.0, 0.0, 0.0) : normalize(right);
             float3 up = cross(toCam, right);
-            float kind = v.uv0.x;
-            float3 p = v.positionOS.xyz;
-            float3 n = v.normalOS;
-            float3 off = 0;
-            float3 nw = toCam;
-            float gold = 0.0, bright = 1.0;
-            if (kind < 0.5)
-            {
-                // the crystal: the cluster turned by RotA, a little larger on a pulse
-                off = TURN(_OrbRotA0, _OrbRotA1, _OrbRotA2, p) * (1.0 + 0.05 * _OrbState.y);
-                nw = TURN(_OrbRotA0, _OrbRotA1, _OrbRotA2, n);
-            }
-            else if (kind < 1.5)
-            {
-                // the heart: turned the other way by RotB; it swells with the energy and the voice
-                off = TURN(_OrbRotB0, _OrbRotB1, _OrbRotB2, p) * (0.75 + 0.35 * saturate(_OrbState.x) + 0.25 * _OrbState.y);
-                nw = TURN(_OrbRotB0, _OrbRotB1, _OrbRotB2, n);
-            }
-            else if (kind < 2.5)
-            {
-                // a shard: its place and size (Mote k), tumbling round its own axis (Ring1N k)
-                float k = v.uv0.y;
-                float4 m = k < 0.5 ? _OrbMote0 : (k < 1.5 ? _OrbMote1 : (k < 2.5 ? _OrbMote2 : _OrbMote3));
-                float ang = k < 0.5 ? _OrbRing1N.x : (k < 1.5 ? _OrbRing1N.y : (k < 2.5 ? _OrbRing1N.z : _OrbRing1N.w));
-                gold = k < 0.5 ? _OrbMoteGold.x : (k < 1.5 ? _OrbMoteGold.y : (k < 2.5 ? _OrbMoteGold.z : _OrbMoteGold.w));
-                bright = k < 0.5 ? _OrbMoteW.x : (k < 1.5 ? _OrbMoteW.y : (k < 2.5 ? _OrbMoteW.z : _OrbMoteW.w));
-                float3 ax = v.uv2.xyz * rsqrt(max(dot(v.uv2.xyz, v.uv2.xyz), 1e-8));
-                off = m.xyz + SpinAround(p, ax, ang) * m.w;
-                nw = SpinAround(n, ax, ang);
-            }
-            else if (kind < 3.5)
-            {
-                // the halo: a square turned to this eye
-                off = (right * p.x + up * p.y) * _OrbShield.y;
-            }
-            else
-            {
-                // the tail: a ribbon along a curve from the centre through P1 to P2 (Ring0N, Ring0U), turned to this eye,
-                // narrowing to its end
-                float tt = p.x;
-                float3 p1 = _OrbRing0N.xyz, p2 = _OrbRing0U.xyz;
-                float3 q = 2.0 * (1.0 - tt) * tt * p1 + tt * tt * p2;
-                float3 d = 2.0 * (1.0 - tt) * p1 + 2.0 * tt * (p2 - p1);
-                float3 side = cross(d, toCam);
-                side = dot(side, side) < 1e-8 ? right : normalize(side);
-                off = q + side * (p.y * _OrbRing0N.w * (1.0 - 0.85 * tt));
-            }
-            if (depthOnly > 0.5) off = kind < 0.5 ? off - toCam : float3(0.0, 0.0, 0.0);
-            o.positionWS = c + off * _OrbCenter.w;
+            float size = _OrbCenter.w * _OrbShield.y * 2.0;
+            o.positionWS = c + (right * v.positionOS.x + up * v.positionOS.y) * size - toCam * (back * _OrbCenter.w);
             o.positionCS = TransformWorldToHClip(o.positionWS);
-            o.normalWS = nw;
-            o.info = float4(kind, gold, v.uv0.z, bright);
-            o.bary = kind < 2.5 ? v.uv1.xyz : float3(p.xy, 0.0);
-            o.occ = McxOcclusionCoord(o.positionWS);
             return o;
         }
         ENDHLSL
@@ -184,12 +104,16 @@ Shader "MetaCodex/Orb"
             #pragma fragment fragDepth
             #pragma multi_compile_instancing
 
-            Varyings vertDepth(Attributes v) { return vertAt(v, 1.0); }
+            Varyings vertDepth(Attributes v) { return vertAt(v, 0.3); }
 
             half4 fragDepth(Varyings i) : SV_Target
             {
                 UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
-                clip(min(_OrbState.z - 0.6, 0.5 - _McxUiHide)); // its crystal only, while it is there
+                float3 cam = GetCameraPositionWS();
+                float3 ro = (cam - _OrbCenter.xyz) / _OrbCenter.w;
+                float3 rd = normalize(i.positionWS - cam);
+                float3 pc = ro - rd * dot(ro, rd);
+                clip(min(0.80 - dot(pc, pc), min(_OrbState.z - 0.6, 0.5 - _McxUiHide))); // its body only, while it is there
                 return 0;
             }
             ENDHLSL
@@ -210,112 +134,186 @@ Shader "MetaCodex/Orb"
 
             Varyings vert(Attributes v) { return vertAt(v, 0.0); }
 
-            // the hue wheel 0..1: the prism's colours
-            float3 Spectrum(float h)
+            #define TURN(r0, r1, r2, p) float3(dot(r0.xyz, p), dot(r1.xyz, p), dot(r2.xyz, p))
+
+            // a vortex of filaments on a shell: the pattern is sheared round the y axis by latitude, then warped twice
+            void Plasma(float3 n, float3 ph, float k, float twist, out float fil, out float cloud)
             {
-                return saturate(abs(frac(h + float3(0.0, 0.6666667, 0.3333333)) * 6.0 - 3.0) - 1.0);
+                float a = n.y * twist;
+                float ca = cos(a), sa = sin(a);
+                n = float3(n.x * ca - n.z * sa, n.y, n.x * sa + n.z * ca);
+                float3 q = n * k;
+                q += 0.55 * sin(q.yzx * 1.9 + ph.x);
+                q += 0.30 * sin(q.zxy * 3.1 - ph.y);
+                float v = sin(q.x * 2.0) * sin(q.y * 2.0) + 0.6 * sin(q.z * 2.0 + ph.z);
+                float f = saturate(1.0 - abs(v) * 1.7);
+                f = f * f * f;
+                fil = f * f;
+                cloud = saturate(0.5 + 0.5 * sin(q.x * 0.9 + q.y * 0.6 + q.z * 1.1));
             }
 
-            // a ripple of age 0..1 on its way out (< 0: none), at `imp` radii from the centre
-            float Ripple(float age, float imp)
+            // the plates of its shield: a cube's six faces, each a hexagon lattice; 1 on the seams
+            float HexPlates(float3 n, float scale)
+            {
+                float3 a = abs(n);
+                float2 uv = a.x >= a.y && a.x >= a.z ? n.yz : (a.y >= a.z ? n.xz : n.xy);
+                float m = max(a.x, max(a.y, a.z));
+                uv = uv / max(m, 1e-4) * scale;
+                const float2 s = float2(1.0, 1.7320508);
+                float2 pa = (frac(uv / s) - 0.5) * s, pb = (frac((uv - s * 0.5) / s) - 0.5) * s;
+                float2 g = abs(dot(pa, pa) < dot(pb, pb) ? pa : pb);
+                return smoothstep(0.40, 0.49, max(g.x * 0.5 + g.y * 0.8660254, g.x));
+            }
+
+            // a ring seen along one start of the ray (the near or the far arc): two steps of "nearest point of the
+            // circle, nearest point of the ray"; returns how much of its light this pixel gets
+            float RingFrom(float3 ro, float3 rd, float tt, float t0, float hit, float px, float4 N, float4 U, float4 P, float4 Q)
+            {
+                float rho = P.x, w = max(P.y, 1e-4);
+                float3 p = ro + rd * tt;
+                float3 q = p - N.xyz * dot(p, N.xyz);
+                q *= rho / max(length(q), 1e-5);
+                tt = dot(q - ro, rd);
+                p = ro + rd * tt;
+                q = p - N.xyz * dot(p, N.xyz);
+                q *= rho / max(length(q), 1e-5);
+                tt = dot(q - ro, rd);
+                float dist = length(ro + rd * tt - q);
+                float glow = exp(-dist / (w * 2.2));
+                float line0 = saturate((w * 0.5 - dist) / px + 0.5);
+                float dash = 1.0;
+                if (Q.x > 0.5) // a uniform: the same for every pixel
+                {
+                    float3 V = cross(N.xyz, U.xyz);
+                    float f = frac((atan2(dot(q, V), dot(q, U.xyz) + 1e-6) / 6.2831853 + P.z) * Q.x);
+                    dash = smoothstep(0.0, 0.015, f) * smoothstep(Q.y, Q.y - 0.015, f);
+                }
+                float occ = (hit > 0.5 && tt > t0) ? 0.22 : 1.0; // behind the near surface: seen through the body
+                return (line0 * dash + glow * 0.40 * lerp(1.0, dash, 0.55)) * occ;
+            }
+
+            float Ring(float3 ro, float3 rd, float tca, float d2, float t0, float hit, float px, float4 N, float4 U, float4 P, float4 Q)
+            {
+                float th = sqrt(max(P.x * P.x - d2, 0.0));
+                return max(RingFrom(ro, rd, tca - th, t0, hit, px, N, U, P, Q), RingFrom(ro, rd, tca + th, t0, hit, px, N, U, P, Q));
+            }
+
+            float3 Mote(float3 ro, float3 rd, float t0, float hit, float4 m, float weight, float unread, float3 tint, float3 gold)
+            {
+                float3 dv = m.xyz - ro;
+                float tm = dot(rd, dv);
+                float dm2 = max(dot(dv, dv) - tm * tm, 0.0);
+                float g = m.w / (dm2 + m.w + 1e-7);
+                float occ = (hit > 0.5 && tm > t0) ? 0.15 : 1.0;
+                return lerp((tint * 0.5 + 0.5) * 1.2, gold * 2.2, unread) * g * g * occ * weight;
+            }
+
+            float Ripple(float age, float imp, float px)
             {
                 float on = step(0.0, age) * step(age, 0.999);
-                float rho = 0.55 + 1.05 * age;
-                return exp(-abs(imp - rho) * 18.0) * (1.0 - age) * (1.0 - age) * 0.8 * on;
+                float rho = 1.06 + 1.10 * age;
+                float dr = abs(imp - rho);
+                float rip = saturate(((0.016 + 0.03 * age) * 0.5 - dr) / px + 0.5) + exp(-dr / 0.06) * 0.25;
+                return rip * (1.0 - age) * (1.0 - age) * 0.9 * on;
             }
 
             half4 frag(Varyings i) : SV_Target
             {
                 UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
                 float3 cam = GetCameraPositionWS();
-                float3 V = normalize(cam - i.positionWS);                       // towards this eye
-                float3 toC = (_OrbCenter.xyz - cam) / max(_OrbCenter.w, 1e-5);  // the eye to the centre, radii
-                float3 pc = toC - V * dot(toC, V);                              // the centre's offset from this ray
-                float d2 = dot(pc, pc);                                         // the ray's squared distance from the centre
-                float kind = i.info.x;
+                float3 ro = (cam - _OrbCenter.xyz) / _OrbCenter.w;
+                float3 rd = normalize(i.positionWS - cam);
+                float tca = -dot(ro, rd);
+                float3 pc = ro + rd * tca;                          // the ray's closest point to the centre
+                float d2 = dot(pc, pc);
+                float imp = sqrt(d2);
+                float px = max(fwidth(imp), 1e-4);                  // about one pixel, in radii (first: no branch before it)
+                float vis = McxVisibility(i.positionWS) * saturate(_OrbState.z);
                 float E = _OrbState.x, P = _OrbState.y;
-                float3 tint = _OrbTint.rgb;
+                float3 tint = _OrbTint.rgb, deep = _OrbDeep.rgb, gold = _OrbGold.rgb;
                 const float3 hot = float3(1.0, 1.0, 1.0);
-                float vis = McxVisibilityAt(i.occ) * saturate(_OrbState.z);
-                // the light inside: a hot point and a soft bloom round it, breathing with the energy, swelling with the voice
-                float inner = (0.010 + 0.028 * E + 0.030 * P) / (d2 + 0.010) + (0.05 + 0.10 * P) * exp(-d2 * 6.0);
+                float hit = d2 < 1.0 ? 1.0 : 0.0;
+                float nz = sqrt(max(1.0 - d2, 0.0));                // cos of the angle at the near surface
+                float t0 = tca - nz;
                 float3 light = 0;
-                float alpha = 0.0, glass = 0.0;
-                if (kind > 3.5)
+
+                // ---- the halo (outside), a faint fill towards the limb inside
+                float outside = max(imp - 1.0, 0.0);
+                float halo = (0.30 * exp(-outside * 4.6) + 0.085 * exp(-outside * 1.5)) * (0.50 + 0.8 * E + 0.7 * P);
+                halo *= lerp(1.0, 0.25 + 0.75 * d2 * d2, hit);
+                light += tint * halo;
+
+                // ---- the core: a hot point with a soft bloom, two faint streaks through it (level with the world)
+                float core = (0.016 + 0.040 * P + 0.008 * E) / (d2 + 0.0055) + (0.05 + 0.10 * P) * exp(-d2 * 9.0);
+                light += (tint * 0.30 + hot * 0.70) * core;
+                float3 side = cross(float3(0.0, 1.0, 0.0), rd);
+                side = dot(side, side) < 1e-6 ? float3(1.0, 0.0, 0.0) : normalize(side);
+                float3 upv = cross(rd, side);
+                float su = dot(pc, side), sv = dot(pc, upv);
+                float streak = exp(-abs(sv) * 30.0) * exp(-abs(su) * 1.1) * (0.07 + 0.9 * P) + exp(-abs(su) * 34.0) * exp(-abs(sv) * 2.4) * (0.03 + 0.3 * P);
+                light += (tint * 0.6 + hot * 0.4) * streak * 0.5;
+
+                // ---- plasma: the inner shell seen on its near and its far side, the outer shell on its near side
+                const float3 blue = float3(0.0513, 0.2140, 1.0);
+                float fil, cloud;
                 {
-                    // ---- the tail: soft across, fading along, the colours running down it
-                    float tt = saturate(i.bary.x), side = i.bary.y;
-                    float a = (1.0 - side * side) * (1.0 - tt) * (1.0 - tt) * _OrbRing0U.w;
-                    light = lerp(tint, Spectrum(_OrbPhaseA.x + 0.5 + tt * 0.35), 0.35 * saturate(_OrbPhaseB.w)) * a * 0.55;
+                    const float r = 0.56;
+                    float th = sqrt(max(r * r - d2, 0.0));
+                    float inside = d2 < r * r ? 1.0 : 0.0;
+                    float limb = (0.55 + 0.45 * (1.0 - th / r) * (1.0 - th / r)) * smoothstep(0.0, 0.30, th / r) * inside;
+                    float3 c0 = lerp(tint, blue, 0.15), c1 = lerp(tint, hot, 0.75);
+                    float3 pn = (ro + rd * (tca - th)) / r;
+                    Plasma(TURN(_OrbRotA0, _OrbRotA1, _OrbRotA2, pn), _OrbPhaseA.xyz, 2.2, _OrbPhaseA.w, fil, cloud);
+                    light += lerp(c0, c1, fil) * fil * (0.30 + 0.70 * cloud) * (0.60 + 1.9 * E + 0.9 * P) * limb + c0 * cloud * cloud * (0.05 + 0.10 * E) * inside;
+                    float3 pf = (ro + rd * (tca + th)) / r;
+                    Plasma(TURN(_OrbRotA0, _OrbRotA1, _OrbRotA2, pf), _OrbPhaseA.xyz, 2.2, _OrbPhaseA.w, fil, cloud);
+                    light += (lerp(c0, c1, fil) * fil * (0.30 + 0.70 * cloud) * (0.60 + 1.9 * E + 0.9 * P) * limb + c0 * cloud * cloud * (0.05 + 0.10 * E) * inside) * 0.40;
                 }
-                else if (kind > 2.5)
                 {
-                    // ---- the halo (the square turned to the eye): a soft glow, the light inside, a faint star, ripples,
-                    // the wake flare (a ring of light that runs out, a bright star)
-                    float2 uv = i.bary.xy * _OrbShield.y;
-                    float imp = length(uv);
-                    float glow = 0.26 * exp(-max(imp - 0.30, 0.0) * 3.0) * (0.45 + 0.7 * E + 0.6 * P);
-                    float f = 1.0 - saturate(_OrbPhaseA.y);                     // 1 as it flares, 0 when that is over
-                    float f2 = f * f;
-                    float star = (exp(-abs(uv.y) * 40.0) * exp(-abs(uv.x) * 1.7) + exp(-abs(uv.x) * 40.0) * exp(-abs(uv.y) * 1.7)) * (0.05 + 0.10 * P + 1.4 * f2);
-                    float rip = 0.0;
-                    if (max(max(_OrbRipples.x, _OrbRipples.y), max(_OrbRipples.z, _OrbRipples.w)) >= 0.0) // a uniform: the same for every pixel
-                        rip = Ripple(_OrbRipples.x, imp) + Ripple(_OrbRipples.y, imp) + Ripple(_OrbRipples.z, imp) + Ripple(_OrbRipples.w, imp);
-                    float ring = 0.0;
-                    if (f > 0.001) // a uniform
-                        ring = exp(-abs(imp - (1.55 - 1.20 * f)) * 14.0) * f2 * 1.3;
-                    float edge = saturate((_OrbShield.y - imp) / (_OrbShield.y * 0.40));
-                    edge = edge * edge * (3.0 - 2.0 * edge);
-                    light = (tint * (glow + rip + ring) + lerp(tint, hot, 0.7) * (inner * 0.8 + star)) * edge;
+                    const float r = 0.88;
+                    float th = sqrt(max(r * r - d2, 0.0));
+                    float inside = d2 < r * r ? 1.0 : 0.0;
+                    float limb = (0.55 + 0.45 * (1.0 - th / r) * (1.0 - th / r)) * smoothstep(0.0, 0.30, th / r) * inside;
+                    float3 c0 = lerp(tint, blue, 0.65), c1 = lerp(tint, hot, 0.35);
+                    float3 pn = (ro + rd * (tca - th)) / r;
+                    Plasma(TURN(_OrbRotB0, _OrbRotB1, _OrbRotB2, pn), _OrbPhaseB.xyz, 3.3, _OrbPhaseB.w, fil, cloud);
+                    light += (lerp(c0, c1, fil) * fil * (0.30 + 0.70 * cloud) * (0.60 + 1.9 * E + 0.9 * P) * limb + c0 * cloud * cloud * (0.05 + 0.10 * E) * inside) * 0.52;
                 }
-                else
+
+                // ---- the membrane: a fresnel rim, a thin bright limb, a highlight, the shield's plates in a wave
+                float fres = pow(1.0 - nz, 2.4);
+                float rim = smoothstep(0.92, 0.997, imp) * hit;
+                light += tint * (fres * 0.36 + rim * 0.60) * hit * (0.55 + 0.6 * E);
+                float3 n0 = ro + rd * t0;
+                float hx = dot(n0, side) + 0.40, hy = dot(n0, upv) - 0.52;
+                light += hot * exp(-(hx * hx + hy * hy) * 10.0) * hit * 0.13;
+                if (_OrbLook.w > 0.002) // a uniform
                 {
-                    // ---- a facet (the crystal, the heart, a shard)
-                    float3 N = normalize(i.normalWS);
-                    float ndv = dot(N, V);
-                    float front = ndv >= 0.0 ? 1.0 : 0.0;
-                    float cv = abs(ndv);
-                    float fres = (1.0 - cv) * (1.0 - cv);
-                    // the prism: the hue walks with the angle it is seen at, each facet a little apart; a back facet (seen
-                    // through the front ones) half a turn on
-                    float hue = _OrbPhaseA.x + i.info.z * 0.30 + fres * 0.85 + (1.0 - front) * 0.45;
-                    float3 prism = lerp(tint, Spectrum(hue), saturate(_OrbPhaseB.w) * (0.25 + 0.75 * fres));
-                    float e = min(i.bary.x, min(i.bary.y, i.bary.z));
-                    float rim = exp(-e * 14.0);                                     // its edges catch the light
-                    float3 Nf = N * (front * 2.0 - 1.0);                            // the side that faces the eye
-                    float3 L = normalize(float3(-0.35, 0.80, 0.0) + V * 0.6);       // a key light above, a little towards the eye
-                    float glint = pow(saturate(dot(reflect(-V, Nf), L)), 20.0);
-                    // a cast: a band of light runs along it from the side it turns to
-                    float bw = (dot(normalize(i.positionWS - _OrbCenter.xyz + 1e-5), _OrbLook.xyz) - (1.0 - 2.0 * _OrbShield.x)) / 0.35;
-                    float band = exp(-bw * bw) * _OrbLook.w;
-                    if (kind < 0.5)
-                    {
-                        // the crystal: dark glass with a prismatic sheen towards its rims, lit edges, a glint, the light inside
-                        float body = 0.35 + 0.65 * front;
-                        light = prism * (0.10 + 0.70 * fres) * (0.55 + 0.6 * E) * body
-                              + lerp(prism, hot, 0.45) * rim * (0.30 + 0.45 * E + 0.5 * P + band) * body
-                              + hot * glint * 0.7 * front
-                              + lerp(tint, hot, 0.5) * (inner * 0.55 + band * 0.4);
-                        alpha = front * (0.22 + 0.18 * fres);
-                        glass = front;
-                    }
-                    else if (kind < 1.5)
-                    {
-                        // the heart: light, not glass
-                        light = lerp(tint, hot, 0.6) * (0.35 + 0.9 * E + 0.9 * P) * (0.55 + 0.45 * cv) + hot * rim * (0.2 + 0.6 * P);
-                    }
-                    else
-                    {
-                        // a shard: small, bright edges; gold while a message waits
-                        float3 col = lerp(prism, _OrbGold.rgb * 1.3, i.info.y);
-                        light = (col * (0.25 + 0.75 * fres) + lerp(col, hot, 0.5) * rim * 0.9 + hot * glint * 0.6) * i.info.w;
-                        alpha = front * 0.18 * saturate(i.info.w);
-                    }
+                    float bw = (dot(n0, _OrbLook.xyz) - (1.0 - 2.0 * _OrbShield.x)) / 0.33;
+                    float band = exp(-bw * bw) * hit;
+                    float plates = HexPlates(TURN(_OrbRotB0, _OrbRotB1, _OrbRotB2, n0), 3.2);
+                    light += (lerp(tint, hot, 0.35) * plates * (0.35 + 0.65 * fres) * 1.6 + tint * 0.10) * band * _OrbLook.w;
                 }
-                // tone map; the crystal's glass is dark over what is behind it; the light carries a little alpha too
+
+                // ---- three rings (each a thin tube of light), motes, ripples
+                light += lerp(tint, gold, _OrbRing0Q.z) * Ring(ro, rd, tca, d2, t0, hit, px, _OrbRing0N, _OrbRing0U, _OrbRing0P, _OrbRing0Q) * _OrbRing0P.w;
+                light += lerp(tint, gold, _OrbRing1Q.z) * Ring(ro, rd, tca, d2, t0, hit, px, _OrbRing1N, _OrbRing1U, _OrbRing1P, _OrbRing1Q) * _OrbRing1P.w;
+                light += lerp(tint, gold, _OrbRing2Q.z) * Ring(ro, rd, tca, d2, t0, hit, px, _OrbRing2N, _OrbRing2U, _OrbRing2P, _OrbRing2Q) * _OrbRing2P.w;
+                light += Mote(ro, rd, t0, hit, _OrbMote0, _OrbMoteW.x, _OrbMoteGold.x, tint, gold);
+                light += Mote(ro, rd, t0, hit, _OrbMote1, _OrbMoteW.y, _OrbMoteGold.y, tint, gold);
+                light += Mote(ro, rd, t0, hit, _OrbMote2, _OrbMoteW.z, _OrbMoteGold.z, tint, gold);
+                light += Mote(ro, rd, t0, hit, _OrbMote3, _OrbMoteW.w, _OrbMoteGold.w, tint, gold);
+                light += tint * (Ripple(_OrbRipples.x, imp, px) + Ripple(_OrbRipples.y, imp, px) + Ripple(_OrbRipples.z, imp, px) + Ripple(_OrbRipples.w, imp, px));
+
+                // ---- nothing reaches the edge of the quad (a tail cut off by it shows as a faint square of light)
+                float edge = saturate((_OrbShield.y - imp) / max(_OrbShield.y * 0.36, 1e-3));
+                light *= edge * edge * (3.0 - 2.0 * edge);
+
+                // ---- tone map; the body is dark glass over what is behind it, the light carries some alpha too
                 float3 rgb = 1.0 - exp(-max(light, 0.0) * _OrbState.w);
-                rgb += _OrbDeep.rgb * glass * 0.8;
-                alpha = saturate(alpha + max(rgb.r, max(rgb.g, rgb.b)) * 0.45);
+                float body = 0.80 * smoothstep(1.02, 0.86, imp);
+                rgb += deep * body * (0.35 + 0.65 * nz) * 0.9;
+                float alpha = saturate(body + max(rgb.r, max(rgb.g, rgb.b)) * 0.55);
                 return half4(saturate(rgb) * vis, alpha * vis);
             }
             ENDHLSL

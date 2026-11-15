@@ -67,7 +67,7 @@ The composer is a message box that grows.
 
 - The Whisp casts a callout: `✓ “Fix the build” answered: <its first sentence> ›` (green), `⚠ … stopped on an error`
   (red), `◆ … needs you: waiting for your approval (…)` (amber). A tap on it opens that thread. It also goes to the
-  Whisp's MESSAGES, and up to four of the Whisp's shards turn gold while messages are unread.
+  Whisp's MESSAGES, and up to four of the Whisp's motes turn gold while messages are unread.
 - When that thread is open, its window's frame pulses three times (2.4 s) and the answer's green bar and background
   glow with it, so the end is clear even while looking elsewhere in it.
 - Only changes seen live raise it (nothing for threads already done at start); the other threads are read every 5 s

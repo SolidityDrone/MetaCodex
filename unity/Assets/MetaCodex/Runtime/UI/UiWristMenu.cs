@@ -148,7 +148,7 @@ namespace MetaCodex.UI
         /// loop); on the headset the shell uses BuildStaged.
         /// Why the start spent 3 s here (Quest 3S log, 2026-11-15, `wrist 3060`): this drew the icon atlas on the main thread
         /// (768 x 384 texels of signed distance, about 2.7 million closure calls, slow in IL2CPP) and made 13 labels, 2 particle
-        /// systems and 3 shaders in one frame, although the DOCK is the default main menu. Now the atlas is drawn by a background
+        /// systems and 3 shaders in one frame, even in DOCK mode, where no wrist menu is needed. Now the atlas is drawn by a background
         /// job (one for all wrist menus: UiIconAtlas.Texture is not used at run time), BuildStaged does the rest in small steps,
         /// one a frame, and the shell makes the menu only when WRIST is the main menu (ShellWrist). This method runs the same
         /// steps in a loop and joins the job.

@@ -9,8 +9,8 @@ description: Where you are when you run inside MetaCodex - a Meta Quest headset 
 
 - A **Meta Quest 3 / 3S** (Android 14, Horizon OS, 6 ARM cores, about 4 GB free RAM, no GPU for you).
 - **MetaCodex** is the headset app (Unity): passthrough, hand tracking, floating panels, terminals, and
-  **the Whisp** (the prismatic crystal wisp that listens, answers and casts callouts; the main menu is the DOCK
-  or the wrist menu). Threads open in THREAD windows (several at once, in groups); a thread can be archived,
+  **the Whisp** (the orb of light that listens, answers and casts callouts; the main menu is the wrist menu,
+  or the DOCK). Threads open in THREAD windows (several at once, in groups); a thread can be archived,
   restored or deleted, and a held turn can run in its own git worktree.
 - You run in its **Linux userland**: Debian 13 arm64 under **proot**, as `root` (a fake root: you are
   the app's Android user). It is the app's private storage; other apps cannot see it.

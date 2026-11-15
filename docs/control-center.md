@@ -49,7 +49,7 @@ never grows over a neighbour and the view does not jump.
 - Inner ring (most used): TALK, TERMS, FILES, THREADS, WEB, CONTROL.
 - Outer ring: CLIP, FOCUS (on / off), SELECT, KEYS (the system keyboard for the terminal), CENTER.
 - App plugins can add up to 6 tiles of their own (`menu.add`), on the DOCK and on the wrist menu's outer ring.
-- The DOCK is the default main menu; the wrist menu is made only when DISPLAY's "Main menu on the wrist" is on. The DOCK shows
+- The wrist menu is the default main menu ("Main menu on the wrist" in DISPLAY is on for a new install); with it off the DOCK is the main menu and the wrist menu is not made. The DOCK shows
   the same tiles in the same order. Its tiles show what is on as the wrist's do (selected while TALK listens, FILES / THREADS / WEB /
   TERMS / CLIP are open, CONTROL shows, FOCUS and SELECT are on, the keyboard is up): a state-only change, 4 times a
   second.

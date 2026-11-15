@@ -78,32 +78,29 @@ rise as the spark flies home.
 
 ## The Whisp
 
-The Whisp is a small prismatic crystal wisp that floats by the user and casts the windows, speaks and shows the
+The Whisp is a small orb of light that floats by the user and casts the windows, speaks and shows the
 app's messages. In the code it is the orb: `UiOrb` is its body, `ShellOrb` what it does, `MetaCodex/Orb` how it is
 drawn. CONTROL > LOOK & SOUND > Whisp turns it off (settings key `orb`; voice "turn the orb off"); then windows are
 cast from their left edge and messages float in the upper view.
 
-- **How it looks.** A faceted crystal cluster (one six-sided point and two smaller ones), a small heart of light
-  inside it that breathes, four small shards in slow orbit, a soft halo, and a short soft tail when it moves. Its
-  facets change hue with the angle you see them from, over the app's cyan, and its edges glow.
+- **How it looks.** One quad that faces each eye; every pixel follows its own ray through a unit sphere, so the
+  orb has true depth per eye: a white-hot core, two shells of plasma filaments turning against each other, a dark
+  glass body with a bright limb, three thin rings round it (two of warm gold, one dashed in its own colour; a ring is a
+  tube from every side and passes behind the sphere), four motes, a halo. Premultiplied: its light is added over the
+  room and its body darkens what is behind it, so it reads in a bright room; a depth pass on its disc keeps a hand
+  that is behind it from cutting it out.
 - **States.** Each state eases into the next:
-  - idle: calm cyan, a slow turn, the light inside breathes (about 4 s a breath);
-  - flare, when listening starts: a burst of white light, a ring of light runs out, the shards are thrown out and
-    come back;
-  - listening: bright ice white, the shards gather in a ring that faces you, the light follows your voice;
-  - thinking: violet, it spins up, the shards race round it;
+  - idle: calm cyan, it breathes, its light shimmers slowly;
+  - listening: gold, the rings face you, the light follows your voice; it starts with a flash of ice white and a
+    ripple (also when "Hey Whisp" is heard: `WhispFlare`);
+  - thinking: violet, the plasma and the rings spin up;
   - speaking: the light pulses with every syllable and ripples leave it; the spoken answer comes from its place
     (the AudioSource sits on it, 80 % spatial);
-  - needs you: amber with a slow heartbeat, while a thread waits for your approval or answer (until you open its
-    menu or the LOG);
-  - busy: dim steel, the shards turn round it like a spinner, while the first start's setup keeps the voice locked;
-    it flares once when the voice is ready;
-  - unread messages: up to four of its shards turn gold and larger;
-  - pointing: when a window had to open out of view, its tip turns to the window and its shards stream that way
-    for 2.5 s.
-- **How it is drawn.** One draw of a 98-triangle mesh, shaped and moved in the vertex shader, plus its depth pass,
-  so a hand behind it does not cut it out. Its halo square is 1.7 radii, and the fragment work is a few dozen
-  operations. Its light is added over the room and its body darkens what is behind it, so it reads in a bright room.
+  - needs you: an amber heartbeat while a thread waits for your approval or answer (until you open its menu or the
+    LOG);
+  - busy: dim steel and slow while the first start's setup keeps the voice locked;
+  - unread messages: up to four of its motes turn gold;
+  - pointing: when a window had to open out of view, its rings turn to the window for 2.5 s (`PointAt`).
 - **Where it floats.** Up to the right of where you face (30 degrees right, 17 up, 0.52 m), in a frame that
   follows you lazily: it stays where it is in the room while you only glance round, and comes along when you turn
   (more than 34 degrees for 0.7 s) or walk away (25 cm), moving round you, never through your head. While it shows

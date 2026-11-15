@@ -8,7 +8,7 @@ using UnityEngine;
 
 namespace MetaCodex.Shell
 {
-    /// THE WHISP (code name the orb; UiOrb is its body, this is what it does). A small prismatic crystal wisp that
+    /// THE WHISP (code name the orb; UiOrb is its body, this is what it does). A small orb of light that
     /// floats by the user:
     /// - it casts the panels: every panel that opens is drawn by a fan of light from the orb (UiPanelFx), and what
     ///   is left of a closed one flies home to it;

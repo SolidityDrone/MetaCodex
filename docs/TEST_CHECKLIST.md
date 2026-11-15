@@ -199,16 +199,15 @@ Lua scripts (CONTROL > MQH > SCRIPTS):
 
 Look and states:
 
-- [ ] Start the app → a small prismatic crystal wisp appears up to the right of where you face, about half a metre away: a faceted crystal cluster with a breathing heart of light, four small shards in slow orbit and a soft halo; it reads in a bright room; no square of light round it; the first time a message says what it is
-- [ ] Move your head near it → its facets change hue with the angle you see them from; its edges glow
-- [ ] Idle → calm cyan, a slow turn, the light inside breathes (about 4 s a breath)
-- [ ] Listening starts (TALK) → a burst of white light and a ring of light runs out, the shards are thrown out and come back; then it is bright ice white, the shards gather in a ring that faces you, the light follows your voice, the HUD card stands beside it
-- [ ] It thinks → violet, it spins up, the shards race round it, the colours run
+- [ ] Start the app → a small orb of light appears up to the right of where you face, about half a metre away: a white-hot core, plasma turning inside, three thin rings, a halo
+- [ ] Idle → calm cyan, it breathes, its light shimmers slowly
+- [ ] Listening starts (TALK) → a flash of ice white and a ripple; then it is gold, its rings face you, the light follows your voice
+- [ ] It thinks → violet, the plasma and the rings spin up
 - [ ] It speaks → the light pulses with every syllable and ripples leave it; a spoken answer comes from its direction
-- [ ] A thread waits for your approval or an answer → it is amber with a slow heartbeat, until you open its menu or the LOG
-- [ ] The first start's setup keeps the voice locked → it is dim steel and its shards turn like a spinner; it flares once when the voice is ready
-- [ ] Messages you have not read → up to four of its shards turn gold and larger
-- [ ] A window has to open out of view → the Whisp's tip turns to the window and its shards stream that way for about 2.5 s
+- [ ] A thread waits for your approval or an answer → an amber heartbeat, until you open its menu or the LOG
+- [ ] The first start's setup keeps the voice locked → it is dim steel and slow; it wakes when the voice is ready
+- [ ] Messages you have not read → up to four of its motes turn gold
+- [ ] A window has to open out of view → the Whisp's rings turn to the window for about 2.5 s
 - [ ] The Whisp for a minute (idle, touch it for its menu, move round it, put a hand near and behind it) → no flat blocks, stripes or half discs on it, in any frame
 
 Place:
