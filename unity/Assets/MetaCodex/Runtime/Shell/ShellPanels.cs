@@ -88,8 +88,10 @@ namespace MetaCodex.Shell
             // the same table as the wrist menu (MainMenuItems, owner 2026-11-11: 19 was too many): work windows and quick
             // actions, without wrist-only entries; setup (agents, MQH, vault, voice, system, settings) is in CONTROL
             var items = MainMenuItems().Where(m => !m.WristOnly).ToList();
-            const int perRow = 6;
-            int rows = (items.Count + perRow - 1) / perRow;
+            // six tiles a row at most, the rows as even as they can be (plugins add up to six tiles: 11 to 17), and a
+            // shorter row centred under the others
+            int rows = Mathf.Max(1, (items.Count + 5) / 6);
+            int perRow = Mathf.Max(1, (items.Count + rows - 1) / rows);
             float bw = 0.070f, gap = 0.006f, pad = 0.012f, bh = 0.058f, handle = 0.016f;
             float w = perRow * bw + (perRow - 1) * gap + 2 * pad, h = rows * bh + (rows - 1) * gap + 2 * pad + handle;
             var dock = UiPanel.Create<UiPanel>("dock", "", w, h, _root, header: false);
@@ -102,10 +104,12 @@ namespace MetaCodex.Shell
             for (int i = 0; i < items.Count; i++)
             {
                 int row = i / perRow, col = i % perRow;
+                int inRow = Mathf.Min(perRow, items.Count - row * perRow);
+                float x0 = pad + (perRow - inRow) * (bw + gap) * 0.5f;
                 var m = items[i];
                 var b = dock.Add(new UiButton(m.Glyph + "\n" + m.Label, m.Act, m.Label == "TALK" ? UiButtonStyle.Primary : UiButtonStyle.Normal)
                 {
-                    Rect = new Rect(pad + col * (bw + gap), handle + pad * 0.6f + row * (bh + gap), bw, bh),
+                    Rect = new Rect(x0 + col * (bw + gap), handle + pad * 0.6f + row * (bh + gap), bw, bh),
                     TextSize = 0.0135f,
                 });
                 if (m.Label == "SELECT") _selectButton = b;
