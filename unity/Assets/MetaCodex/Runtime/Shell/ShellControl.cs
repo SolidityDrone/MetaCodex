@@ -55,7 +55,7 @@ namespace MetaCodex.Shell
                     Blurb = "Where windows go and how big they are: fixed or floating layout, distance, scale, bending, the main menu, saved layouts.",
                     Status = () => Settings.layout == "float" ? "float" : "fixed" },
                 new ControlCategory { Key = "look", Label = "LOOK & SOUND", Glyph = "◈", Group = "THIS HEADSET", Panel = "settings", Tab = SetLook,
-                    Blurb = "How the glass looks and sounds: opacity, foveation, sounds and volume, the orb.",
+                    Blurb = "How the glass looks and sounds: opacity, foveation, sounds and volume, the Whisp.",
                     Status = () => Settings.sounds ? "sound" : "muted" },
                 new ControlCategory { Key = "focus", Label = "FOCUS", Glyph = "◐", Group = "THIS HEADSET", Panel = "settings", Tab = SetFocusTab,
                     Blurb = "Ambient focus: the room fades beyond a dome around you; real things in front of windows.",
@@ -106,7 +106,7 @@ namespace MetaCodex.Shell
                 if (cat.Group != group)
                 {
                     group = cat.Group;
-                    rail.Add(new UiLabel(group, 0.0098f) { Rect = new Rect(0.012f, y + 0.002f, RailW - 0.024f, capH), UseDisplay = true, Color = t.TextDim });
+                    rail.Add(new UiLabel(group, 0.0104f) { Rect = new Rect(0.012f, y + 0.002f, RailW - 0.024f, capH), UseDisplay = true, Color = t.TextDim });
                     y += capH + 0.004f;
                 }
                 var c = cat;
@@ -114,7 +114,8 @@ namespace MetaCodex.Shell
                 var b = rail.Add(new UiButton("", () => OpenControl(c.Key), UiButtonStyle.Tab) { Rect = r });
                 // the console voice (Rajdhani capitals, as the title and the group captions): "◈  LOOK & SOUND", the longest, is ~7 cm of 10
                 var name = rail.Add(new UiLabel(c.Glyph + "  " + c.Label, 0.0118f) { Rect = new Rect(r.x + 0.008f, r.y, r.width * 0.66f, r.height), UseDisplay = true, Color = t.Text });
-                var st = rail.Add(new UiLabel("", 0.0092f) { Rect = new Rect(r.x + r.width * 0.60f, r.y, r.width * 0.40f - 0.006f, r.height), Color = t.TextDim, Align = TextAlignmentOptions.MidlineRight });
+                // its state ("ready", "2 keys"): it was a 9 mm line, too small at arm's length
+                var st = rail.Add(new UiLabel("", 0.0105f) { Rect = new Rect(r.x + r.width * 0.60f, r.y, r.width * 0.40f - 0.006f, r.height), Color = t.TextDim, Align = TextAlignmentOptions.MidlineRight });
                 _railRows.Add((c, b, name, st));
                 y += rowH + rowGap;
             }

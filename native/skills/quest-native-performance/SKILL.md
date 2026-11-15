@@ -30,6 +30,7 @@ Each rule is marked **Meta** (Meta's docs), **verified** (the owner measured it 
 | GPU textures | 128 MB or fewer, eye buffers extra | ours (Meta gives no texture figure) |
 | Full-screen passes, translucent layers | one full-screen pass per eye; few, small translucent quads | ours; a pass that reads an earlier pass's output costs a tile resolve (Meta); with passthrough every translucent pixel blends over the room |
 | Physics | 2 ms CPU per frame, fixed step | ours |
+| Glow sprites (`mcx::Sprites`) | one draw call per set; 2-4 big halos (over 0.3 m at 1 m); about 300 particles; about 1,000 stars (a few pixels each) | ours: the cost is the screen area they cover, added over the room |
 
 ## 3. CPU and GPU levels, and what passthrough allows
 

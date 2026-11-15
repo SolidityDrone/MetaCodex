@@ -8,7 +8,10 @@ description: Where you are when you run inside MetaCodex - a Meta Quest headset 
 ## The machine
 
 - A **Meta Quest 3 / 3S** (Android 14, Horizon OS, 6 ARM cores, about 4 GB free RAM, no GPU for you).
-- **MetaCodex** is the headset app (Unity): passthrough, hand tracking, floating panels, terminals.
+- **MetaCodex** is the headset app (Unity): passthrough, hand tracking, floating panels, terminals, and
+  **the Whisp** (the prismatic crystal wisp that listens, answers and casts callouts; the main menu is the DOCK
+  or the wrist menu). Threads open in THREAD windows (several at once, in groups); a thread can be archived,
+  restored or deleted, and a held turn can run in its own git worktree.
 - You run in its **Linux userland**: Debian 13 arm64 under **proot**, as `root` (a fake root: you are
   the app's Android user). It is the app's private storage; other apps cannot see it.
 - **MQH** (the Meta Quest Harness) runs in this Linux: server on 127.0.0.1:38990, daemon
@@ -22,7 +25,7 @@ description: Where you are when you run inside MetaCodex - a Meta Quest headset 
 | `/root` | home |
 | `/root/metacodex-projects/{native,default,research}/<name>` | the user's projects, by type (MetaCodex's + PROJECT makes them: git init, `mcx-project` type); THREADS groups them the same way |
 | `/mnt/quest` | the app's shared folder (the user and adb can reach it) |
-| `/mnt/quest/plugins/<id>/` | gesture / behaviour plugins (skill `quest-gesture-plugins`) |
+| `/mnt/quest/plugins/<id>/` | app plugins: own windows, menu buttons, voice commands (skill `quest-plugins`); gesture / behaviour plugins (skill `quest-gesture-plugins`) |
 | `/mnt/quest/scripts/*.lua` | single-file Lua behaviours (skill `quest-scripting`) |
 | `/mnt/quest/control.token` | token for the app's control port (new at every app start) |
 | `/mnt/quest/qvac.token` | token for the local AI service (new at every start of the service) |
@@ -94,7 +97,8 @@ description: Where you are when you run inside MetaCodex - a Meta Quest headset 
 - The user wears the headset: keep answers short, and say what to do with the hands or panels in body
   words ("make a fist", "open GESTURES from the dock").
 - Things you change for the app (plugins, scripts, settings) apply live; never ask for an app rebuild
-  for behaviour changes. **Review first:** show the user what you will change and get their OK before writing
+  for behaviour changes. A feature the app lacks (a timer, a calendar, a tool window with a menu button) is a
+  plugin (skill `quest-plugins`), not an app change. **Review first:** show the user what you will change and get their OK before writing
   plugins, scripts, gestures or voice commands.
 - Keep the command registry true: whatever you add declares all its options (skill `quest-scripting`, "MUST");
   whatever you turn off or remove takes its commands with it, so no agent or the voice model ever offers a dead

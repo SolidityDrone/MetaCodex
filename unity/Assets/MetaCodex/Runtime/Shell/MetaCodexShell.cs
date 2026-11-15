@@ -77,18 +77,250 @@ namespace MetaCodex.Shell
 
         private void Start()
         {
-            double begin = _hitchSw.Elapsed.TotalMilliseconds;
-            Build();
-            ReportStart(begin); // "[start] shell built in N ms: ..." (ShellStartTiming)
+            // batch runs (self-tests, builds): everything at once; the headset: the splash first, the rest behind it
+            if (Application.isBatchMode) { double begin = _hitchSw.Elapsed.TotalMilliseconds; Build(); ReportStart(begin); return; }
+            StartCoroutine(StartStaged());
         }
 
-        /// Creates theme, router, gestures, scripts and panels. Safe to call once; Start calls it.
+        /// Creates theme, router, gestures, scripts and panels, all at once (self-tests). Safe to call once. On the headset
+        /// Start runs the same pieces a few per frame instead (StartStaged).
         public void Build(string scriptsDir = null, IHandSource hands = null)
         {
             if (_built) return;
+            foreach (var (name, run) in BuildSteps(scriptsDir, hands))
+            {
+                double t0 = _hitchSw.Elapsed.TotalMilliseconds;
+                run();
+                NoteStartPiece(name, _hitchSw.Elapsed.TotalMilliseconds - t0);
+            }
+        }
+
+        // ---- the staged start (owner 2026-11-15: "make the startup faster with stable performance"). Measured on the
+        // Quest 3S (0.7.19 packed APK): Build was one call of 4.8 s, the first frame 5.4 s, and the splash appeared only
+        // after it (it was made last). Now the splash is the first piece, the first frame shows it, and the pieces run
+        // until StartFrameBudgetMs of main-thread time is used in a frame (at least one per frame): the splash animates
+        // while the shell builds behind it. Until the last piece Update only moves the splash; the app's events that
+        // need the shell (a terminal made, the focus, the first recenter) are taken up when it is done; a window asked
+        // for before its turn (OpenPanel: a control-port command, a script) runs the rest of the start at once.
+
+        /// Main-thread time the staged start may use in one frame (it runs at least one piece a frame).
+        public const double StartFrameBudgetMs = 20.0;
+        private bool _staging, _shellUp, _inStartPiece;
+        private List<(string name, Action run)> _startPieces;
+        private int _startNext;
+        private double _startBegin;
+        private (Vector3 center, Quaternion rot)? _startRecenter;
+
+        /// The shell is built (all pieces of the start ran).
+        public bool ShellUp => _shellUp;
+
+        private System.Collections.IEnumerator StartStaged()
+        {
+            if (_built) yield break; // built already (Build was called first)
+            _startBegin = _hitchSw.Elapsed.TotalMilliseconds;
+            _staging = true;
+            _startPieces = BuildSteps(null, null);
+            _startNext = 0;
+            while (_staging && _startNext < _startPieces.Count)
+            {
+                double f0 = _hitchSw.Elapsed.TotalMilliseconds;
+                do RunStartPiece(); while (_startNext < _startPieces.Count && _hitchSw.Elapsed.TotalMilliseconds - f0 < StartFrameBudgetMs);
+                NoteStartFrame(_hitchSw.Elapsed.TotalMilliseconds - f0);
+                if (_startNext < _startPieces.Count) yield return null;
+            }
+            FinishStart();
+        }
+
+        /// One piece of the staged start, timed; one that fails is logged and the start goes on with the next.
+        private void RunStartPiece()
+        {
+            var (name, run) = _startPieces[_startNext++];
+            double t0 = _hitchSw.Elapsed.TotalMilliseconds;
+            _inStartPiece = true;
+            try { run(); }
+            catch (Exception ex) { Log($"[start] {name} failed: {ex}"); }
+            finally { _inStartPiece = false; }
+            NoteStartPiece(name, _hitchSw.Elapsed.TotalMilliseconds - t0);
+        }
+
+        /// A window was asked for before the staged start reached it: the rest of the start runs now, in this frame
+        /// (false inside a piece: a script asking at load time finds no window, as before the staged start).
+        private bool CompleteStartNow()
+        {
+            if (!_staging || _inStartPiece || _startPieces == null) return false;
+            Log($"[start] the rest of the start runs at once ({_startPieces.Count - _startNext} pieces left)");
+            double f0 = _hitchSw.Elapsed.TotalMilliseconds;
+            while (_startNext < _startPieces.Count) RunStartPiece();
+            NoteStartFrame(_hitchSw.Elapsed.TotalMilliseconds - f0);
+            FinishStart();
+            return true;
+        }
+
+        private void FinishStart()
+        {
+            if (!_staging) return;
+            _staging = false;
+            if (_startRecenter.HasValue) { var r = _startRecenter.Value; _startRecenter = null; OnRecentered(r.center, r.rot); }
+            ReportStart(_startBegin); // "[start] shell built in N ms over F frames: ..." (ShellStartTiming)
+        }
+
+        /// The start's pieces in their order (Build runs them at once, StartStaged a few per frame). The panels are one
+        /// piece each, in the order of BuildPanels (ShellPanels), which an accent change still uses to rebuild them: the
+        /// two lists must name the same builders.
+        private List<(string name, Action run)> BuildSteps(string scriptsDir, IHandSource hands)
+        {
             _built = true;
-            Settings = ShellSettings.Load(_settingsPath);
-            InitFirstRun(); // the very first start: the one-time SETUP panel, its locks and the tour (ShellFirstRun)
+            UiTheme theme = null;
+            string dir = null;
+            var s = new List<(string, Action)>(48);
+            s.Add(("splash", BuildSplash)); // the logo over the room, first: the first frame shows it (ShellSplash)
+            s.Add(("settings file", () =>
+            {
+                Settings = ShellSettings.Load(_settingsPath);
+                InitFirstRun(); // the very first start: the one-time setup, its locks and the guide card (ShellFirstRun)
+                MigrateSettings();
+            }));
+            s.Add(("font body", () =>
+            {
+                theme = new UiTheme();
+                theme.SetAccent(Settings.accent);
+                theme.Body = UiTheme.MakeFont(bodyFont, symbolFonts);
+            }));
+            s.Add(("font display", () => theme.Display = UiTheme.MakeFont(displayFont, symbolFonts)));
+            s.Add(("theme", () =>
+            {
+                theme.Mono = FindMonoFont() ?? theme.Body;
+                theme.ShapeMaterial = shapeMaterial;
+                theme.BeamMaterial = beamMaterial;
+                UiTheme.Current = theme;
+                ApplyMaterialSettings();
+            }));
+            s.Add(("router", () =>
+            {
+                _root = new GameObject("Shell").transform;
+                _root.SetParent(transform, false);
+                Router = new GameObject("UiInputRouter").AddComponent<UiInputRouter>();
+                Router.transform.SetParent(_root, false);
+                Router.Head = Head;
+                Router.Settings = Settings.gestures;
+                Router.Init();
+                Router.Touched = OnPanelTouched; // a press on a thread window focuses it first (ShellThreadWindows)
+                if (hands == null && (leftHand != null || rightHand != null)) hands = new OvrHandSource(leftHand, rightHand);
+                if (hands == null) { SimHands = new SimulatedHands(); hands = SimHands; }
+                else SimHands = hands as SimulatedHands;
+                Gestures = new GestureEngine(hands, Settings.gestures);
+                Gestures.HeadPose = () => Head != null ? new Pose(Head.position, Head.rotation) : new Pose(new Vector3(0f, 1.4f, 0f), Quaternion.identity);
+                Gestures.OnGesture += OnGesture;
+                Router.Gestures = Gestures;
+                Router.Selected += OnSelected;
+                Toasts = new GameObject("Toasts").AddComponent<UiToasts>();
+                Toasts.transform.SetParent(_root, false);
+                Toasts.Head = Head;
+            }));
+            s.Add(("sounds", () =>
+            {
+                Sounds = new GameObject("UiSounds").AddComponent<UiSounds>(); // its clips are made in code here
+                Sounds.transform.SetParent(_root, false);
+                if (Sounds != null) { Sounds.Enabled = Settings.sounds; Sounds.Volume = Mathf.Clamp01(Settings.soundVolume); }
+            }));
+            s.Add(("vault", () =>
+            {
+                Mqh = new MqhClient(Settings.mqhUrl, Settings.mqhToken, _main);
+                InitVault();
+            }));
+            s.Add(("services", () =>
+            {
+                MqhHost = new MqhHost(() => app != null ? app.Host : null, () => Settings.mqhUrl, MqhTokenNow,
+                    () => Vault?.Rearm(MqhEnvKeyName), Log, _main);
+                MqhHost.Online += OnMqhOnline;
+                var host = app != null ? app.Host : null;
+                Git = new GitService(host);
+                Files = new FileService(host, Application.isEditor ? Path.GetFullPath(Path.Combine(Application.dataPath, "../..")) : null);
+                InitClipboard();
+            }));
+            s.Add(("voice", InitVoice)); // before the scripts: plugins register voice commands while they load
+            s.Add(("scripts", () =>
+            {
+                dir = scriptsDir ?? DefaultScriptsDir(app != null ? app.Host : null);
+                Scripts = new ScriptHost(this, dir);
+                Scripts.Changed += () => { RefreshScriptsPanel(); RefreshGesturesPanel(); };
+            }));
+            s.Add(("gesture defaults", () =>
+            {
+                RetireWindowShortcuts(); // once: no gesture opens or closes a window by default (owner 2026-11-13)
+                EnsureVictoryFocus(); // once: the V, held 2 s, toggles Ambient Focus (owner 2026-11-14)
+                RetireStarterExamples(); // no seeding: gesture examples are opt-in (GESTURES > ALL > EXAMPLES); old untouched copies go once
+            }));
+            s.Add(("context", () =>
+            {
+                InitSessionContext(); // the session's context for the local model (docs/session-context.md)
+                UiKeyboard.TerminalKeyboardRequested += () => app?.Input?.ToggleSystemKeyboard();
+                SystemKeyboard.Opened += KeyboardTip;
+            }));
+            // the panels, as BuildPanels (ShellPanels) makes them
+            s.Add(("dock", BuildDock));
+            s.Add(("terminals", BuildTerminals));
+            s.Add(("files", BuildFiles));
+            s.Add(("browser", BuildBrowser));
+            s.Add(("web", BuildWeb)); // the in-app browser window (ShellWeb)
+            s.Add(("settings", BuildSettings));
+            s.Add(("mqh", BuildMqh)); // SKILLS · PLUGINS · SCRIPTS · GESTURES · STATUS
+            s.Add(("clipboard", BuildClipboard));
+            s.Add(("agents", BuildAgents));
+            s.Add(("threads", BuildThreads));
+            s.Add(("thread", BuildThread));
+            s.Add(("thread-side", BuildSidebar)); // THREAD's sidebar (ShellThreadSidebar)
+            s.Add(("thread-new", BuildNewThread));
+            s.Add(("workspaces", BuildWorkspaces)); // checkouts and worktrees (ShellWorkspaces)
+            s.Add(("picker", BuildPicker));
+            s.Add(("vault panel", BuildVault));
+            s.Add(("voice panel", BuildVoice));
+            s.Add(("system", BuildSystem));
+            s.Add(("messages", BuildMessagesPanel)); // the Whisp's messages (ShellOrb)
+            s.Add(("control", BuildControl)); // CONTROL's rail beside the setup windows (ShellControl)
+            s.Add(("panel scales", () =>
+            {
+                foreach (var p in _panels.Values) p.BaseScale = Vector3.one * Mathf.Clamp(Settings.uiScale, 0.6f, 1.8f);
+                ApplyGroupScales(); // a group's windows are scaled by their group, not again by the UI scale
+            }));
+            s.Add(("wrist", BuildWrist)); // DOCK mode on the headset: no wrist menu is made (ShellWrist)
+            s.Add(("orb", BuildOrb));
+            s.Add(("guide", PrepareFirstRunUi)); // a first start: the guide card, made now so showing it costs only its opening
+            s.Add(("glyphs body", () => WarmGlyphs(UiTheme.Current?.Body, WarmLetters)));
+            s.Add(("glyphs display", () => WarmGlyphs(UiTheme.Current?.Display, WarmLetters)));
+            s.Add(("glyphs symbols", () => { WarmGlyphs(UiTheme.Current?.Body, WarmSymbols); WarmGlyphs(UiTheme.Current?.Display, WarmSymbols); }));
+            s.Add(("shell up", () =>
+            {
+                _shellUp = true;
+                if (app != null) foreach (var t in app.Terminals) WrapTerminal(t);
+                Log($"shell up: {_panels.Count} panels, scripts in {dir}");
+            }));
+            return s;
+        }
+
+        /// The characters the first minutes show (the dock's tiles, the locks, the guide card), added to the dynamic font
+        /// atlases behind the splash: the first time a glyph is drawn TMP rasterises it on the main thread (2026-11-15 log:
+        /// a frame of 181 ms, outside the shell's Update, as the setup's locks lifted and the tiles' glyphs changed; the
+        /// tiles' symbols live in the fallback fonts). Not in batch runs.
+        private const string WarmLetters = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~";
+        private const string WarmSymbols = "·•…–—“”‘’→←↑↓✓✗✕⚠▸○●◉▤◫☰◎⚙▣◐⌖⌨⟲🔒";
+
+        /// Adds the characters to the font's atlas and the ones it lacks to its fallbacks (one atlas upload per font).
+        private static void WarmGlyphs(TMP_FontAsset font, string chars)
+        {
+            if (font == null || Application.isBatchMode) return;
+            font.TryAddCharacters(chars, out string missing);
+            if (font.fallbackFontAssetTable == null) return;
+            foreach (var fb in font.fallbackFontAssetTable)
+            {
+                if (string.IsNullOrEmpty(missing)) break;
+                if (fb != null) fb.TryAddCharacters(missing, out missing);
+            }
+        }
+
+        /// One-time settings migrations of older installs (run once each, in order).
+        private void MigrateSettings()
+        {
             _hideFirstTerminal = !Settings.terminalAtStart;
             if (Settings.settingsVersion < 2)
             {
@@ -124,66 +356,6 @@ namespace MetaCodex.Shell
                 Settings.Save(_settingsPath);
                 _localSettingsWin = true;
             }
-            var theme = new UiTheme();
-            theme.SetAccent(Settings.accent);
-            theme.Body = UiTheme.MakeFont(bodyFont, symbolFonts);
-            theme.Display = UiTheme.MakeFont(displayFont, symbolFonts);
-            theme.Mono = FindMonoFont() ?? theme.Body;
-            theme.ShapeMaterial = shapeMaterial;
-            theme.BeamMaterial = beamMaterial;
-            UiTheme.Current = theme;
-            ApplyMaterialSettings();
-
-            _root = new GameObject("Shell").transform;
-            _root.SetParent(transform, false);
-            Router = new GameObject("UiInputRouter").AddComponent<UiInputRouter>();
-            Router.transform.SetParent(_root, false);
-            Router.Head = Head;
-            Router.Settings = Settings.gestures;
-            Router.Init();
-            Router.Touched = OnPanelTouched; // a press on a thread window focuses it first (ShellThreadWindows)
-            if (hands == null && (leftHand != null || rightHand != null)) hands = new OvrHandSource(leftHand, rightHand);
-            if (hands == null) { SimHands = new SimulatedHands(); hands = SimHands; }
-            else SimHands = hands as SimulatedHands;
-            Gestures = new GestureEngine(hands, Settings.gestures);
-            Gestures.HeadPose = () => Head != null ? new Pose(Head.position, Head.rotation) : new Pose(new Vector3(0f, 1.4f, 0f), Quaternion.identity);
-            Gestures.OnGesture += OnGesture;
-            Router.Gestures = Gestures;
-            Router.Selected += OnSelected;
-
-            Toasts = new GameObject("Toasts").AddComponent<UiToasts>();
-            Toasts.transform.SetParent(_root, false);
-            Toasts.Head = Head;
-            Sounds = new GameObject("UiSounds").AddComponent<UiSounds>();
-            Sounds.transform.SetParent(_root, false);
-
-            Mqh = new MqhClient(Settings.mqhUrl, Settings.mqhToken, _main);
-            InitVault();
-            MqhHost = new MqhHost(() => app != null ? app.Host : null, () => Settings.mqhUrl, MqhTokenNow,
-                () => Vault?.Rearm(MqhEnvKeyName), Log, _main);
-            MqhHost.Online += OnMqhOnline;
-            var host = app != null ? app.Host : null;
-            Git = new GitService(host);
-            Files = new FileService(host, Application.isEditor ? Path.GetFullPath(Path.Combine(Application.dataPath, "../..")) : null);
-            InitClipboard();
-
-            InitVoice(); // before the scripts: plugins register voice commands while they load
-            string dir = scriptsDir ?? DefaultScriptsDir(host);
-            Scripts = new ScriptHost(this, dir);
-            Scripts.Changed += () => { RefreshScriptsPanel(); RefreshGesturesPanel(); };
-            RetireWindowShortcuts(); // once: no gesture opens or closes a window by default (owner 2026-11-13)
-            EnsureVictoryFocus(); // once: the V, held 2 s, toggles Ambient Focus (owner 2026-11-14)
-            RetireStarterExamples(); // no seeding: gesture examples are opt-in (GESTURES > ALL > EXAMPLES); old untouched copies go once
-            InitSessionContext(); // the session's context for the local model (docs/session-context.md)
-            UiKeyboard.TerminalKeyboardRequested += () => app?.Input?.ToggleSystemKeyboard();
-            SystemKeyboard.Opened += KeyboardTip;
-
-            BuildPanels();
-            BuildWrist();
-            BuildOrb();
-            BuildSplash(); // the logo over the room while the rest starts (ShellSplash)
-            if (app != null) foreach (var t in app.Terminals) WrapTerminal(t);
-            Log($"shell up: {_panels.Count} panels, scripts in {dir}");
         }
 
         private TMP_FontAsset FindMonoFont()
@@ -223,17 +395,37 @@ namespace MetaCodex.Shell
         /// Render resolution x on the headset: text stays sharp on the curved panels (owner, 0.7.3: fixed, no slider).
         public const float RenderScale = 1.6f;
 
+        /// The render scale while the first start's one-time setup runs (~20 s; ShellFirstRun `_setupActive`). Measured on
+        /// the Quest 3S (0.7.19): the app's GPU time was 12-13.7 ms at 640 MHz, 94-97 % busy, 55-65 fps for ~10 s of the
+        /// setup, with the AI service, the unpack and MQH starting beside it; after it ~10 ms at 545-640 MHz, 83-85 %. The
+        /// panels' shading is per eye-buffer pixel, and their pixels scale with the square of the render scale: 1.4 shades
+        /// (1.4/1.6)^2 = 77 % of them, ~23 % less of the frame's UI cost, with the text still supersampled (1.4x the
+        /// headset's resolution). URP turns this into the XR display's scaleOfAllRenderTargets, which re-makes the eye
+        /// textures: so it changes twice only, at the start (where the scale is set anyway) and once when the setup is
+        /// over (the guide card says "Setup done" then), never in steps.
+        public const float SetupRenderScale = 1.4f;
+
+        /// The render scale wanted now: SetupRenderScale while the first start's setup runs, else RenderScale.
+        public float RenderScaleNow => _setupActive ? SetupRenderScale : RenderScale;
+
+        private bool _renderScaleForSetup;
+
         /// Render resolution and foveation on the headset (the Editor keeps its own: the URP asset is a file there).
         private void ApplyDisplaySettings()
         {
+            _renderScaleForSetup = _setupActive;
             if (Application.isEditor) return;
             try
             {
                 // only what changed (0.7.19 log: OnSettingsChanged re-applied the render scale and the foveation level at
                 // every settings change, several times a minute while talking)
+                float scale = RenderScaleNow;
                 if (UnityEngine.Rendering.GraphicsSettings.currentRenderPipeline is UnityEngine.Rendering.Universal.UniversalRenderPipelineAsset urp
-                    && !Mathf.Approximately(urp.renderScale, RenderScale))
-                    urp.renderScale = RenderScale;
+                    && !Mathf.Approximately(urp.renderScale, scale))
+                {
+                    urp.renderScale = scale;
+                    Log($"display: render scale {scale:F2}" + (_setupActive ? " while the one-time setup runs" : ""));
+                }
                 if (!_displayApplied)
                 {
                     _displayApplied = true;
@@ -283,6 +475,7 @@ namespace MetaCodex.Shell
         private void Update()
         {
             HitchCheck();
+            if (_staging) { TickSplash(Time.unscaledDeltaTime); return; } // the staged start: only the splash moves until the shell is up
             while (_main.TryDequeue(out var a))
             {
                 double c0 = _hitchSw.Elapsed.TotalMilliseconds;
@@ -316,7 +509,8 @@ namespace MetaCodex.Shell
             HitchMark(9);
             TickOrb(Time.unscaledDeltaTime);
             TickSplash(Time.unscaledDeltaTime);
-            TickFirstRun(Time.unscaledDeltaTime); // the first start's SETUP panel, locks and tour (one test when none runs)
+            TickFirstRun(Time.unscaledDeltaTime); // the first start's guide card, locks and tour (one test when none runs)
+            if (_renderScaleForSetup != _setupActive) ApplyDisplaySettings(); // the setup is over: the full render scale, once
             HitchMark(10);
         }
 
@@ -408,6 +602,7 @@ namespace MetaCodex.Shell
 
         public bool OpenPanel(string id)
         {
+            if (_staging) CompleteStartNow(); // asked before the staged start reached it (StartStaged)
             NoteRef(id, "opened"); // what "it" means next (ShellContext)
             _refDepth++;
             try { return OpenPanelCore(id); }
@@ -437,7 +632,7 @@ namespace MetaCodex.Shell
                 // back where the user left it when that place is still free and in view, else the best free place:
                 // beside the window it is opened from (or the one it belongs to), or in front (ShellPlacement)
                 if (swapFrom != null) TakePlaceOf(p, swapFrom);
-                else if (!_placed.Contains(id) || !OldPlaceStillGood(p)) PlaceSmart(id, p, OpenerNow() ?? ContextOpener(id));
+                else if (!_placed.Contains(id) || !OldPlaceStillGood(p)) PlaceSmart(id, p, PlacementOpener(id, p));
                 else FaceUser(p); // back where it was, turned to where the user stands now
                 p.Open();
                 _placed.Add(id);
@@ -475,6 +670,7 @@ namespace MetaCodex.Shell
 
         public bool TogglePanel(string id)
         {
+            if (_staging) CompleteStartNow(); // asked before the staged start reached it (StartStaged)
             if (id == ControlId) { ToggleControl(); return true; } // CONTROL is its window and the rail, never the rail alone
             if (id == "thread") { if (WinOpen(_twFocus)) _twFocus.Panel.Close(); else OpenPanel("thread"); return true; } // the focused thread window
             if (Alias(ref id, out int tab))
@@ -537,14 +733,15 @@ namespace MetaCodex.Shell
 
         private void OnRecentered(Vector3 center, Quaternion rot)
         {
+            if (_staging) { _startRecenter = (center, rot); return; } // the first recenter comes during the staged start: done when it ends
             var from = app != null ? app.RecenterFrom : null;
             var main = app != null ? app.RecenterMain : null;
             if (app != null) { app.RecenterFrom = null; app.RecenterMain = null; }
             foreach (var kv in _panels)
             {
                 if (kv.Key != "dock") continue;
-                // the WRIST main menu replaces the dock
-                if (Settings.wristMenu) { if (kv.Value.IsOpen) kv.Value.Close(); continue; }
+                // the WRIST main menu replaces the dock (once it is made: until then the dock stays, ShellWrist)
+                if (Settings.wristMenu && Wrist != null && Wrist.Ready) { if (kv.Value.IsOpen) kv.Value.Close(); continue; }
                 PlaceDefault("dock", kv.Value);
                 if (!kv.Value.IsOpen) kv.Value.Open();
             }
@@ -560,7 +757,7 @@ namespace MetaCodex.Shell
 
         private void WrapTerminal(TerminalInstance inst)
         {
-            if (!_built || _frames.ContainsKey(inst) || inst.View == null) return;
+            if (!_shellUp || _frames.ContainsKey(inst) || inst.View == null) return; // made during the start: wrapped when the shell is up
             var t = UiTheme.Current;
             float bezel = 0.012f;
             var v = inst.View;
@@ -644,6 +841,7 @@ namespace MetaCodex.Shell
 
         private void OnFocusChanged(TerminalInstance inst)
         {
+            if (!_shellUp) return; // the staged start: the frames are made, and lit, when the shell is up
             foreach (var kv in _frames) kv.Value.SetHighlight(kv.Key == inst ? 0.55f : 0f);
             RefreshTerminalsPanel();
         }

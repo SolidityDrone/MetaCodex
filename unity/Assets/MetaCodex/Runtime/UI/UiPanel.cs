@@ -443,7 +443,7 @@ namespace MetaCodex.UI
         private void StepPing(float dt)
         {
             if (_pingT >= 1f) return;
-            _pingT = Mathf.Min(1f, _pingT + dt / 0.42f);
+            _pingT = Mathf.Min(1f, _pingT + dt / UiTheme.MotionSlow); // the shared motion scale (was 0.42 s)
             var tl = UiPanelFx.Ping(_pingT, Light);
             if (Slot >= 0) FxData[Slot] = _pingT >= 1f ? Vector4.zero : new Vector4(0f, tl.Flash, 0f, 0f);
             if (_pingT >= 1f) Fx.Hide(); else Fx.Draw(this, tl);

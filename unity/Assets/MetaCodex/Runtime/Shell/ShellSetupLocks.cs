@@ -6,9 +6,11 @@ namespace MetaCodex.Shell
 {
     /// The first start's locks (owner 2026-11-14: "if a user clicks TALK by mistake he is prevented, instead of clicking
     /// while the model is down: no errors, no UX uncertainty"). While the one-time setup runs (ShellFirstRun), what needs
-    /// a step that is not over yet is shown dimmed with 🔒 and, pressed, does nothing but one short callout by the orb:
-    /// "🔒 TALK is ready after step 5 of 5 · one-time setup". Each lock lifts by itself when its step ends (done, failed
-    /// or skipped: a failed feature then says why through its own paths, as before).
+    /// a step that is not over yet is shown dimmed with 🔒 and, pressed, does nothing but one short callout by the Whisp:
+    /// "🔒 TALK unlocks by itself in a few seconds (one-time setup, step 5 of 5)". Each lock lifts by itself when its step
+    /// ends (done, failed or skipped: a failed feature then says why through its own paths, as before); a step still not
+    /// over 5 minutes after the setup began is skipped by ShellFirstRun, so no lock can stay. The guide card (ShellTour)
+    /// reads the locks too: it never asks for something that is locked.
     ///   step 5 (the voice's decision model): TALK on the dock, the wrist menu and the orb's menu; every other way to
     ///     start listening goes through VoiceListen (gesture bindings `voice:*`, Lua voice.listen, the control port
     ///     `voice listen`), and dictation into a text field (DictateInto);
@@ -61,9 +63,9 @@ namespace MetaCodex.Shell
         }
 
         /// The callout for a locked feature.
-        public static string LockText(int step, string what) => $"🔒 {what} is ready after step {step} of {SetupSteps} · one-time setup";
+        public static string LockText(int step, string what) => $"🔒 {what} unlocks by itself in a few seconds (one-time setup, step {step} of {SetupSteps})";
 
-        /// True when `step` is not over yet: the orb says so once (the same feature again within 2.5 s: nothing) and the
+        /// True when `step` is not over yet: the Whisp says so once (the same feature again within 2.5 s: nothing) and the
         /// caller does nothing else.
         public bool SetupBlocks(int step, string what)
         {
@@ -78,7 +80,8 @@ namespace MetaCodex.Shell
             return true;
         }
 
-        /// Every frame of the setup: when a step ends, its locks lift (the tiles, the orb's TALK, the rail, the panel's note).
+        /// Every frame of the setup: when a step ends, its locks lift (the tiles, the Whisp's TALK, the rail). The guide
+        /// card notices the change by itself (its text is made again when a lock lifts).
         private void TickSetupLocks()
         {
             int mask = 0;
@@ -89,14 +92,13 @@ namespace MetaCodex.Shell
             ApplySetupLocks();
         }
 
-        /// The lock marks now: the dock's tiles (🔒 in place of the glyph, dimmed), the orb's TALK, CONTROL's rail. The
+        /// The lock marks now: the dock's tiles (🔒 in place of the glyph, dimmed), the Whisp's TALK, CONTROL's rail. The
         /// wrist menu reads its items' Locked each frame it draws.
         private void ApplySetupLocks()
         {
             ApplyDockLocks();
             ApplyOrbTalkLock();
             if (_rail != null && _rail.IsOpen) RefreshRail();
-            RefreshSetupLocksLabel();
         }
 
         private void ApplyDockLocks()
@@ -117,20 +119,6 @@ namespace MetaCodex.Shell
             if (_orbTalkBtn.Dimmed == locked) return;
             _orbTalkBtn.SetDimmed(locked);
             _orbTalkBtn.SetText(locked ? "🔒\nTALK" : "◉\nTALK");
-        }
-
-        /// The SETUP panel's footer: what waits for which step (made only when a lock changes).
-        private void RefreshSetupLocksLabel()
-        {
-            if (_setupLocksLabel == null || _setup == null) return;
-            var sb = new System.Text.StringBuilder();
-            for (int i = 0; i < SetupSteps; i++)
-            {
-                if (string.IsNullOrEmpty(_setup[i].Unlocks) || !SetupLocked(i + 1)) continue;
-                sb.Append(sb.Length == 0 ? "🔒 Waiting for their step: " : " · ").Append(_setup[i].Unlocks).Append(" (step ").Append(i + 1).Append(')');
-            }
-            if (sb.Length == 0) sb.Append(_setupActive ? "Nothing waits any more: the last steps finish in the background." : "Everything is unlocked.");
-            _setupLocksLabel.Set(sb.ToString());
         }
     }
 }

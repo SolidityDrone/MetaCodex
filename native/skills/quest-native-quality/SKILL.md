@@ -6,37 +6,44 @@ description: MANDATORY with quest-native-hands-first - read before writing code 
 # Quality: a curated native app, not a few lines in a build
 
 Goal: the person puts the headset on, sees one clear thing to do, does it with the hands, and sees a result that
-looks designed. Get there with a brief, six passes that each end in a check and a look, and a review before you
-call the app done. The build, install and launch steps are in quest-native-apps. This skill frames them and does
-not repeat them.
+looks designed. Get there with a brief, passes that each end in a check, and a review before the first install.
+The build, install and launch steps are in quest-native-apps. This skill frames them and does not repeat them.
+The look itself (palette, light, materials, motion, what reads over the room) is in **quest-native-art-direction**.
 
 ## 1. Write the brief first: DESIGN.md in the app folder
 
-Write it before any code. Keep it to one screen. Update it when the plan changes.
+Write it before any code. Keep it to one screen. Update it when the plan changes. Decide every line yourself.
 
-```
-Purpose: <one sentence: what the app is for>
-Moments: arrive: <...>  act: <...>  leave: <...>   (the three things the user must feel)
-Look: palette and mood from quest-native-ui-design; light, materials and shadows from quest-native-rendering
+```text
+Purpose: <one sentence: what the app is for, in the user's words>
+Moments: arrive: <the first second>  act: <the main action>  leave: <the result or the end>
+Look card: <look name>; palette body/support/support/accent <4 sRGB hex>; light <key direction, warm or cool>;
+           materials <body preset, accent preset, glow where>; motion <arrive, idle, feedback>; UI accent <hex>
+Stage: <where: the table / the floor / 1.2 m ahead>; <its size in metres>; <the hero and its size>
 Actions: <action> | <hand input: pinch, poke, aim ray or grab> | <feedback, and in which frame>
-Content: <each primitive or model>; for a model, its source and licence
+Content: <each primitive or model and its size in metres>; for a model, its source and licence
 States: start, playing, paused, done, error: what the user sees in each
+Budget: <draw calls, triangles, sprites>; the numbers in quest-native-performance
 ```
 
-## 2. Build in six passes
+## 2. Build in passes: blockout, look, motion, UI, polish, self-review
 
 Each pass ends the same way: `mcx-app check <dir>`, `mcx-app build <dir>`, `mcx-app verify <dir>` until it says
-`RESULT: verify ok`, then `mcx-app run <dir>` (install and launch request). You cannot see the headset, so the look
-belongs to the user: ask one short question per pass.
+`RESULT: verify ok`. Do all six passes before the first `mcx-app run <dir>`: you cannot see the headset, so the
+first launch must already be the designed app. Exception: an app with a risky feature (depth, the room, a large
+model) may launch once after pass 1; tell the user "this is the blockout, the look comes next".
 
-| Pass | Build | Check before the next pass | Ask the user |
-|---|---|---|---|
-| 1 Greybox | scale in metres, placement, comfort; plain shapes | panels 1.0-1.5 m away, used with the aim ray; things to touch 40-60 cm from the hand; nothing head-locked | "Can you reach and see everything?" |
-| 2 Interaction | every action in DESIGN.md with its hand input | each action works and changes something in the frame the pinch starts (`pinchStarted`) | "Try each action: did each one react?" |
-| 3 Look | lights, materials, contact shadows, UI theme, motion | no flat unlit colour; no pure white or black; text uses the theme | "Does it look like one app, with the room lights on and off?" |
-| 4 Polish | start screen, first-use hint, transitions, empty and error states, icon, name | all five states exist; icon and label are set | "Start to finish once: anything odd?" |
-| 5 Performance | quest-native-performance: frame logger, levels, budgets | `missed` 0 over 30 s of normal use | "Use it for a minute; send a report if it stutters." |
-| 6 Self-review | section 3 | every item is yes | the final message |
+| Pass | Build | Check before the next pass |
+|---|---|---|
+| 1 Blockout | the stage in metres from the brief; plain shapes at real size; every action of DESIGN.md wired to its hand input | things to touch 40-60 cm from the hand; panels 1.0-1.5 m; nothing head-locked; each action changes something in the frame the pinch starts (`pinchStarted`) |
+| 2 Look | the look card: palette, key light, materials (lit, rim, glow), contact shadows, glow sprites on the accents | no flat unlit colour; no default grey; no pure white or black; the accent on few things; every grounded object has a shadow |
+| 3 Motion | the first second (things grow in, staggered), idle motion, feedback on every action, leave and reset; easing and damping from `mcx_gfx.h` | nothing pops in or out in one frame; nothing jitters; motion is slow and has one purpose |
+| 4 UI | start panel, pause, result, a first-use hint, a HUD only if needed; the UI accent from the look card (quest-native-ui-design) | text 2.6 cm at 1 m or larger; the panel beside the hero, not over it; Primary on the main action |
+| 5 Polish and performance | empty and error states in words, icon, label, version; the frame logger (quest-native-performance) | all five states exist; draw calls and triangles inside the budget of the brief |
+| 6 Self-review | section 3, and the critic's look check of quest-native-art-direction | every item is yes; then install and launch |
+
+After the first launch, ask ONE short question about what the user sees ("Does the sun read as the light, and can
+you reach the planets?"). Each report goes back to the pass that owns the problem (section 4).
 
 ## 3. Self-review: every item must be yes
 
@@ -57,6 +64,19 @@ belongs to the user: ask one short question per pass.
 - [ ] The source is split (section 6) and `main.cpp` only runs the loop.
 - [ ] `mcx-app verify` says `RESULT: verify ok`.
 
+Then look at the app as a critic who sees it for the first time, and fix what they would say:
+- "Which thing is the point?" One hero, larger or brighter than the rest; the eye goes there first.
+- "It is all one colour" or "it looks like a debug build": the palette of the look card, one accent, lit materials.
+- "It floats" or "it is the wrong size": real sizes in metres, resting on a real surface, a contact shadow.
+- "It just appeared": the first second grows things in; nothing pops.
+- "It is dead": one idle motion on the hero; every action answers in its frame.
+- "I cannot read it": text sizes from quest-native-ui-design; the panel faces the user, at or below eye level.
+- "It is in my face": nothing nearer than 0.4 m unless the user brought it there; the UI does not cover the hero.
+
+Evidence levels: in your messages, say how you know each claim. **seen**: the user saw it, or a report picture shows
+it. **built**: `RESULT: verify ok`, not yet seen. **assumed**: neither (for example a colour you could not check).
+Never say "it looks great" about something only built: say what the user should look at.
+
 ## 4. Use the user's report
 
 A report arrives as a draft with a picture and the log (`log <Label>`).
@@ -69,7 +89,10 @@ A report arrives as a draft with a picture and the log (`log <Label>`).
 
 | Anti-pattern | Why it fails | Fix |
 |---|---|---|
+| A greybox as the first launch | The first impression is "unfinished"; the user stops trying | All six passes before the first install (section 2) |
 | A lone cube, or one shape as the whole app | Nothing to do, nothing to look at | Build the three moments: a floor or table, a focus object, a panel, a light |
+| Every object in the MetaCodex cyan | The app has no identity; nothing is the hero | The look card of quest-native-art-direction: cyan is the UI accent of one look, not a default |
+| The example's HUD lines left in (depth, hands, room state) | Debug text in the user's view | Remove the HUD; log the state with `mcx::Log` |
 | Flat unlit colours | Looks like a debug build | Key light, ambient, contact shadows (quest-native-rendering) |
 | UI at 2 m with small text | Unreadable; the eyes strain | Panels at 1.0-1.5 m; text 2.5 cm tall at 1 m, larger further away |
 | Panels that follow the head | They swim and cause discomfort | Place once in the room; move only when the user walks away, and glide (the lazy follow in quest-native-recipes, recipe 1) |

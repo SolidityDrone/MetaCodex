@@ -1,0 +1,7 @@
+{
+  "id": "calendar",
+  "name": "Calendar",
+  "version": "1.0.0",
+  "kind": "app",
+  "description": "Month calendar with entries and reminders"
+}

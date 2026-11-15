@@ -4,7 +4,8 @@
 #   mcx-ui script list | script log <name> | script eval 'return 1+1' | script dir
 #   mcx-ui gesture clap        (simulates a recognised gesture: test a script without moving your hands)
 #   mcx-ui gesture list | gesture bindings | gesture bind thumbs-up open:git | gesture unbind thumbs-up
-#   mcx-ui plugin list | plugin log <id> | plugin new <id> | plugin examples | plugin example <id> | plugin enable|disable|delete <id> | plugin reload
+#   mcx-ui plugin list | plugin log <id> | plugin new <id> | plugin examples | plugin example <id> | plugin enable|disable|delete <id> | plugin reload | plugin check <id>
+#                (check: loaded or error, windows, tiles, timers, the last warnings; run it after a plugin edit)
 #   mcx-ui action open:git     (any action: open/close/toggle:<panel>, toast:, run:, url:, layout:, spin:, voice:, ...)
 #   mcx-ui voice run "close all windows" | voice say "hello" | voice list | voice status | voice match "open git"
 #   mcx-ui voice listen | voice wav /mnt/quest/cmd.wav | voice install | voice threads 2 | voice lang en
@@ -20,12 +21,17 @@
 set -euo pipefail
 TOKEN_FILE=${MCX_TOKEN_FILE:-/mnt/quest/control.token}
 PORT=${MCX_CONTROL_PORT:-47800}
-[[ $# -gt 0 ]] || { sed -n 2,19p "$0"; exit 2; }
+[[ $# -gt 0 ]] || { sed -n 2,20p "$0"; exit 2; }
 # views: the app reads the spec file itself (any size), so pass an absolute path; '-' takes stdin
 if [[ "$1" == view && ( "${2:-}" == show || "${2:-}" == mermaid ) && -n "${3:-}" ]]; then
   f=$3
   if [[ "$f" == - ]]; then mkdir -p /tmp/mcx-views; f=/tmp/mcx-views/stdin-$$.json; cat > "$f"; fi
   if [[ -r "$f" ]]; then set -- view "$2" "$(readlink -f "$f")"; elif [[ "$2" == show ]]; then echo "mcx-ui: no file $f" >&2; exit 1; fi
+fi
+# plugin check <id>: the app's eval sandbox has check(id) (windows, tiles, timers, last warnings)
+if [[ "$1" == plugin && "${2:-}" == check ]]; then
+  [[ "${3:-}" =~ ^[A-Za-z0-9_-]+$ ]] || { echo "usage: mcx-ui plugin check <id>   (the id: letters, digits, - and _)" >&2; exit 2; }
+  set -- script eval "return check(\"$3\")"
 fi
 [[ -r "$TOKEN_FILE" ]] || { echo "mcx-ui: no $TOKEN_FILE (is the MetaCodex app running?)" >&2; exit 1; }
 exec 3<>"/dev/tcp/127.0.0.1/$PORT" || { echo "mcx-ui: control port $PORT closed" >&2; exit 1; }

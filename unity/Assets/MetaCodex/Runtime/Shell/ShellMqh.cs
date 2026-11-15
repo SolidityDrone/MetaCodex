@@ -58,7 +58,7 @@ namespace MetaCodex.Shell
         // ------------------------------------------------------------------ SKILLS
 
         /// MetaCodex's own skills (mqh/plugins/metacodex-guide/skills, also laid into /root/.claude/skills): always read-only.
-        public static readonly string[] OwnSkills = { "metacodex-context", "quest-scripting", "quest-gesture-plugins", "quest-views", "skill-creator", "worktree-per-thread" };
+        public static readonly string[] OwnSkills = { "metacodex-context", "quest-scripting", "quest-gesture-plugins", "quest-plugins", "quest-views", "skill-creator", "worktree-per-thread" };
 
         private sealed class SkillRow
         {
@@ -268,8 +268,10 @@ namespace MetaCodex.Shell
                         Tag = r,
                     });
                 }
-                if (_skillRows.Count == 0 && Mqh.Online) items.Add(new UiListItem { Icon = "", Title = "no skills listed", Tag = null });
             }
+            // nothing listed: the list itself says so and what to do (the lists' empty state), no fake row
+            _skillList.SetEmptyText(_skillsRegistry ? "Nothing found for this search." :
+                _skillRows.Count == 0 && Mqh.Online ? "No skills yet.\n+ NEW SKILL: an agent writes one with you. FIND: search the public registry." : "");
             _skillList.SetItems(items, keepScroll: true);
             ShowSkillDetail();
         }
@@ -426,6 +428,8 @@ namespace MetaCodex.Shell
 
         public static string NewPluginPrompt(string idea) =>
             "Make a plugin for MetaCodex: " + idea.Trim() + "\n\n" +
+            "If it needs its own window or a button in the menu (a timer, a calendar, a tool), make an app plugin (skill quest-plugins: " +
+            "a folder in /mnt/quest/plugins, applies live, loads at every start). " +
             "If it reacts to hands, gestures or the app's panels, make a gesture / behaviour plugin (skill quest-gesture-plugins: a folder " +
             "in /mnt/quest/plugins, applies live). If it extends MQH itself (a server part, a spatial panel), make an MQH plugin " +
             "(`mqh plugin new` makes its folder). Read metacodex-context first. Show me the plan before you write files.";

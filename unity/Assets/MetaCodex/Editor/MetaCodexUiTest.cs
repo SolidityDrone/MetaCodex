@@ -2958,7 +2958,7 @@ end)
                 p.Closed += _ => closedEvents++;
                 p.Close();
                 bool logical = !p.IsOpen && p.gameObject.activeSelf && closedEvents == 1 && p.TransitionPhase == UiPanel.Phase.Closing;
-                Step(4);
+                Step(4, UiPanelFx.CloseTime / 10f);
                 float mid = ScanNow();
                 bool cast = p.FxDataForTest.x > 0.5f && Still();
                 // changed its mind: it is cast again from where the line is (no jump)
@@ -2968,19 +2968,19 @@ end)
                 Step(12);
                 bool restored = p.IsOpen && p.TransitionPhase == UiPanel.Phase.Open && p.FxDataForTest == Vector4.zero && p.ScanDataForTest == Vector4.zero && Still();
                 Check(logical && cast && mid > 0.05f && mid < 0.95f && back >= mid - 0.001f && restored,
-                    $"Close: closed at once for the rest of the app ({logical}), the line takes it back (built {mid:F2} after 0.2 s) and nothing is moved or scaled ({cast}); Open half way sends the line out again from there ({mid:F2} -> {back:F2}), and the panel is at rest ({restored})");
+                    $"Close: closed at once for the rest of the app ({logical}), the line takes it back (built {mid:F2} after 40 % of {UiPanelFx.CloseTime:F2} s) and nothing is moved or scaled ({cast}); Open half way sends the line out again from there ({mid:F2} -> {back:F2}), and the panel is at rest ({restored})");
                 // all the way out: off at the end, nothing left of the transition
                 int absorbed = 0;
                 Action<UiPanel> onAbsorbed = q => { if (q == p) absorbed++; };
                 UiPanelFx.Absorbed += onAbsorbed;
                 p.Close();
-                Step(4);
+                Step(4, UiPanelFx.CloseTime / 10f);
                 bool during = p.gameObject.activeSelf && p.Transitioning;
                 Step(6);
                 UiPanelFx.Absorbed -= onAbsorbed;
                 bool off = !p.gameObject.activeSelf && !p.Transitioning && p.FxDataForTest == Vector4.zero && Still();
                 Check(during && off && absorbed == 1, $"a closing panel is drawn for {UiPanelFx.CloseTime:F2} s ({during}), then turned off with nothing left of the cast ({off}); its spark reaches the caster once ({absorbed})");
-                // opening: open at once for the app, the line builds it in 0.64 s
+                // opening: open at once for the app, the line builds it in UiPanelFx.OpenTime (0.35 s)
                 int castEvents = 0;
                 Action<UiPanel, bool> onCast = (q, opens) => { if (q == p && opens) castEvents++; };
                 UiPanelFx.Casting += onCast;
@@ -2988,7 +2988,7 @@ end)
                 UiPanelFx.Casting -= onCast;
                 bool opening = p.IsOpen && p.TransitionPhase == UiPanel.Phase.Opening && ScanNow() < 0.01f && p.FxDataForTest.x > 0.5f && castEvents == 1;
                 var scans = new List<float>();
-                for (int k = 0; k < 14; k++) { p.TickTransitionForTest(0.05f); scans.Add(p.Transitioning ? ScanNow() : 1f); }
+                for (int k = 0; k < 14; k++) { p.TickTransitionForTest(UiPanelFx.OpenTime / 12f); scans.Add(p.Transitioning ? ScanNow() : 1f); }
                 bool rising = true;
                 for (int k = 1; k < scans.Count; k++) if (scans[k] < scans[k - 1] - 1e-4f) rising = false;
                 bool done = p.TransitionPhase == UiPanel.Phase.Open && p.FxDataForTest == Vector4.zero && Still();
@@ -3104,7 +3104,7 @@ end)
                 bool dlgClosing = dlg != null && dlg.gameObject.activeSelf && dlg.TransitionPhase == UiPanel.Phase.Closing && UiModal.OpenCount == 0;
                 if (dlg != null) for (int k = 0; k < 10; k++) { if (dlg == null) break; dlg.TickTransitionForTest(0.05f); }
                 Check(dlgOpening && dlgClosing && dlg == null, $"a dialog opens with the transition ({dlgOpening}), its answer closes it with the transition ({dlgClosing}), then it is destroyed ({dlg == null})");
-                // a toast comes in with the light variant (no brackets, 0.30 s)
+                // a toast comes in with the light variant (no brackets, UiTheme.MotionBase)
                 shell.Toast("transition test");
                 var toast = shell.GetComponentsInChildren<UiPanel>(true).FirstOrDefault(x => x.Id == "toast" && x.Transitioning);
                 var toastsNow = shell.GetComponentsInChildren<UiPanel>(true).Where(x => x.Id == "toast").Select(x => $"{x.TransitionPhase}/{(x.gameObject.activeSelf ? "on" : "off")}/slot {x.Slot}").ToList();
