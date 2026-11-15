@@ -44,9 +44,9 @@ MetaCodex gives you the space and the controls that metacoding needs:
 
 | Need | What MetaCodex gives you |
 |---|---|
-| See many agents at once | Each thread has its own panel. The panels stand around you in the room, so the status of all your work is in view. |
-| Know what an agent did | Ask "give me a recap of the login thread". The app speaks the answer by default. The thread panel shows a live map of the changed files and their diffs. |
-| Run agents in parallel safely | Threads that work in the same folder wait for each other. A new thread can get its own git worktree. A dry run shows merge conflicts before you merge. |
+| See many agents at once | Each thread has its own window, and up to six are open at the same time. Drop one window on another to make a group that moves as one. The status of all your work stays in view. |
+| Know what an agent did | Ask "give me a recap of the login thread". The app speaks the answer by default. The side bar of a thread window shows a live map of the changed files and their diffs. |
+| Run agents in parallel safely | Threads that work in the same folder wait for each other. You can send a waiting turn IN A WORKTREE, so its agent works on its own git branch. A dry run shows merge conflicts before you merge. |
 | Control without a keyboard | Hands and voice do the common actions: open, close, switch, find a thread. Only your hands approve. The headset's system keyboard is there for real typing. |
 | Close the loop on one device | An agent builds a native app on the headset. You launch it, test it and go back to the thread. One tap sends a picture and the logs back to the agent. |
 | Work offline and in private | Local models run the voice interface on the headset. An optional local coding model lets agents work with no network. Keys stay sealed in a vault, and the agents' sign-ins stay inside their own tools. |
@@ -83,14 +83,16 @@ The test headset has 6 cores and 7.9 GB RAM.
 
 | What | Value | Context |
 |---|---|---|
-| Voice commands in the registry | 29 | Each one has a schema, synonyms, phrases and examples. |
-| Agent skills shipped | 48 | 5 of them are written for MetaCodex. |
+| APK size | 995 MB | 994,868,919 bytes. It holds the Linux, the AI models and MQH, so the first start downloads nothing. |
+| First start | 21 s | A one-time setup from the APK, offline, with a guided tour. Measured from the shell start to the last setup step. |
+| Voice commands in the registry | 34 | Each one has a schema, synonyms, phrases and examples. |
+| Thread windows | 6 | Open at the same time. Groups of 2x1, 2x2 or 3x2 move as one window. |
+| Agent skills shipped | 48 + 12 | 48 for every project, 5 of them written for MetaCodex. 12 more for native-app projects. |
 | Project types | 3 | NATIVE, DEFAULT and RESEARCH. A project made in the app is a git repository. |
 | Default gesture | Pinch | Selects, drags and scrolls. No gesture opens or closes a window by default. |
 | Dock and wrist menu tiles | 11 | The same tiles in both places. |
 | Text input | System keyboard | Each text field opens the headset's system keyboard. |
 | Local coding model | Optional | Runs agent threads on the headset, offline. |
-| APK size | 270 MB | The 0.7.19 build of 2026-11-14 (270,236,059 bytes). |
 
 ## How it works
 
@@ -103,7 +105,7 @@ The test headset has 6 cores and 7.9 GB RAM.
 - The `:ai` service process holds MQH, the agent CLIs, the build daemon and the local AI runtime. It runs on cores 0-2.
 - Only a separate Android process can reach cores 0-2. Every child process inherits the cpuset of its parent. For this reason the heavy services live in `:ai`.
 - The frame loop keeps cores 3-5. The local AI runs with 2 inference threads at `nice 10`.
-- At start, the app asks the headset for a sustained high GPU level. The build no longer trades CPU level for GPU level.
+- At start, the app asks the headset for a sustained high GPU level. It does not trade CPU level for GPU level.
 - Each build turns on these rendering options: dynamic foveation, symmetric projection, multiview render regions and late latching.
 - Garbage collection is incremental in every build.
 - Start-up work, such as building the voice decision model, runs off the main thread.
@@ -117,38 +119,40 @@ The test headset has 6 cores and 7.9 GB RAM.
 | 47810 | Local AI service | Random, new at every start. |
 | 47950 | Log sink for built apps | None. |
 
-**Background behaviour.** The test with a built app in front of MetaCodex showed two facts.
-Android stopped the idle service. That was the old service, without a foreground notice.
-Android also killed `:ai` and its children, because they used too much CPU for too long.
-The source now makes `:ai` a foreground service while it has children.
-It also holds a wake lock while a build runs.
-Neither change is proven on the device yet (see [Status and limits](#status-and-limits)).
+**Background behaviour.** While `:ai` has child processes, it runs as a foreground service.
+This keeps the agents, the local AI and a build alive while a built app is in front.
+A build also holds a wake lock.
+Android stops a background process whose children use more than 25 % CPU over 5 minutes.
+For this reason, when `:ai` has no foreground service, the build daemon pauses a build before it passes 15 %.
 
 The app checks the health of MQH and of the local AI every 5 s. Three missed checks restart the process.
 
 ### First start
 
-- The very first start lays out what the APK carries. It takes about a minute. Nothing is downloaded.
+- The APK carries everything the app needs: the Linux with its tools, the four AI models, MQH and the vectors of the voice's decision model. The first start downloads nothing.
+- While the start splash shows, the app asks once for the microphone, spatial data and the headset camera. The install script grants them at install time.
+- The very first start lays out what the APK carries. On the test headset this one-time setup took 21 s after the shell was up.
 - A panel in front of you, "FIRST START · ONE-TIME SETUP", shows the five steps in turn: the AI models, the local AI service, the Linux, MQH and the voice's decision model.
 - Each step has a name, one line on what it does, its own bar and a spinner. A step that is done stays in the list with ✓ and its time.
 - Until its step is done, a feature is dimmed and shows 🔒. TALK waits for step 5. THREADS and AGENTS wait for step 4. TERMINALS and FILES wait for step 3. A tap gives one short message, nothing else.
-- A guided tour of about a minute runs at the same time: the main menu, the orb, moving a window, CONTROL. Each card waits for you to do it. You can skip a step or the whole tour.
+- A guided tour runs at the same time: the main menu, the orb, moving a window, CONTROL. Each card waits for you to do it. You can skip a step or the whole tour.
 - The panel closes itself at the end. It never shows again. CONTROL > ABOUT > TOUR, or the voice command "start the tour", plays the tour again.
-- [docs/ready-on-install.md](docs/ready-on-install.md#first-start) has the details.
+- [docs/ready-on-install.md](docs/ready-on-install.md) has the details and the measured times of each step.
 
 ### A real Linux inside the app
 
 <a href="docs/assets/diagrams/userland-light.webp"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/diagrams/userland-dark.webp"><img alt="A Debian arm64 root file system runs inside the app through proot, with an overlay of MetaCodex files, shared mounts, a pty bridge and separate process trees." src="docs/assets/diagrams/userland-light.webp"></picture></a><br><sub>Full size: <a href="docs/assets/diagrams/userland-dark.webp">dark</a> · <a href="docs/assets/diagrams/userland-light.webp">light</a></sub>
 
-- The Linux is the official Debian 13 arm64 image. It is 30,214,037 bytes in the APK.
-- The app unpacks it on first launch.
+- The Linux is the official Debian 13 arm64 image with Node.js 24, git, Python 3, curl and their dependencies installed. The APK holds it as one archive of 124,780,445 bytes.
+- The first start unpacks it. The app never replaces a Linux that is already installed.
 - proot runs the image without root. The guest sees user 0, but its processes keep the Android user of the app.
 - Android 10 and later forbids `exec()` of files an app writes. For this reason proot and its loader ship as `lib*.so` files. Android unpacks them into the native library folder, where Android allows `exec()`.
-- The overlay lays MetaCodex files over the image: the `mcx-*` tools, native app templates, 48 skills and the licence texts. It is deterministic. The app lays it again only when its hash changes, and it never touches your packages.
+- The overlay lays MetaCodex files over the image: the `mcx-*` tools, native app templates, the skills and the licence texts. It is deterministic. The app lays it again only when its hash changes, and it never touches your packages.
 - A shared folder, mounted under `/mnt`, links the app and the Linux. The app, the Linux, `adb` and you can read it. It holds the tokens, plugins, scripts and captures.
 - Projects live in the Linux, in `/root/metacodex-projects/`. There is one folder for each type: `native`, `default` and `research`. A project made in the app is a git repository.
 - The vault is never mounted into the Linux.
-- First use runs `mcx-setup` in the background. It adds Node.js 24 and, for native apps, the compiler toolchain. A checksum pins every download.
+- Every Linux process gets the time zone of the headset, so commit times are local.
+- The compiler toolchain for native apps is not in the APK. `mcx-setup quest` installs it when the first native app needs it, or from SYSTEM > TOOLS. A checksum pins every download.
 
 **Processes and threads across the boundary**
 
@@ -186,7 +190,7 @@ MetaCodex has two AI stacks. They do different jobs and never merge.
 
 #### Local models
 
-The model files are not in the APK. VOICE > INSTALL MODELS downloads them once, about 650 MiB in total. The app checks the SHA-256 of each file. The local coding model is a separate, optional download in AGENTS > LOCAL CODER.
+The four model files ship in the APK, about 650 MiB in total. The first start copies them into place, and a SHA-256 pins each file. The local coding model is a separate, optional download in AGENTS > LOCAL CODER.
 
 | Role | Model | Size | Licence |
 |---|---|---|---|
@@ -208,7 +212,7 @@ The command registry is the MCP-like surface of the app.
 Everything you can do in the app is a registered command.
 Voice, the local language model, agents and plugins read the same entries.
 
-- The shell registers 30 commands, for example `open_panel`, `set_setting`, `find_thread` and `switch_workspace`.
+- The shell registers 34 commands, for example `open_panel`, `set_setting`, `find_thread`, `archive_thread` and `switch_workspace`. Plugins and Lua scripts can add more.
 - Each command has a name, a JSON schema, synonyms, phrase templates, examples and flags.
 - Voice is English only. Speech-to-text, spoken replies and all command phrases use English.
 - A lint check rejects a weak command. The self-test fails on any warning.
@@ -263,14 +267,13 @@ None of them needs an APK rebuild.
 | Provider integrations | MQH plugins for agent CLIs | The agent processes MQH starts. |
 | Agent views | Fenced blocks in a thread message | Panels: charts, tables, diffs, graphs, a physics stage. |
 
-- **Skills.** 48 skills ship read-only. You can add your own. Six more skills load only in a native-app project.
+- **Skills.** 48 skills ship read-only. You can add your own. 12 more skills load only in a native-app project.
 - **Plugins.** MQH ships only the plugins that MetaCodex uses. Every MQH thread gets the MetaCodex introduction and its skills.
-- **Gesture plugins.** A plugin folder holds `plugin.json`, pose files and `main.lua`. The app reloads it within a second. A detector runs at 36 Hz with a budget of 200,000 instructions. Gesture plugins that open or close panels were switched off. GESTURES lists them, and you can turn one on again there.
+- **Gesture plugins.** A plugin folder holds `plugin.json`, pose files and `main.lua`. The app reloads it within a second. A detector runs at 36 Hz with a budget of 200,000 instructions. Gesture plugins that open or close panels are off by default. GESTURES lists them, and you can turn one on there.
 - **Lua scripts.** A script that exceeds its budget stops. The app keeps its frame rate.
-- **Providers.** One provider speaks the Agent Client Protocol (ACP) to an agent CLI over stdio. The app turns off the folder snapshots of one agent CLI, because they stalled its threads for minutes.
+- **Providers.** One provider speaks the Agent Client Protocol (ACP) to an agent CLI over stdio. The app turns off the folder snapshots of one agent CLI, because they stall its threads.
 - **Review.** When an agent changes a plugin, gesture, script or voice command, it shows the change and asks for your OK first.
-- **Proof.** A fresh agent wrote a working gesture plugin from the skills alone.
-- **Planned.** A plugin can describe a panel in `spatial.json`. The server serves it, but the app does not render it yet.
+- **Proof.** A fresh agent writes a working gesture plugin from the skills alone (`tools/agent-plugin-test.sh`).
 
 ### Secrets stay sealed
 
@@ -309,9 +312,9 @@ Permissions MetaCodex uses:
 
 | Permission | What for | When you see a prompt |
 |---|---|---|
-| Microphone | Push-to-talk speech to text. | At the first TALK. |
-| Spatial data | The live depth of the room for Ambient Focus. | At the first use of Ambient Focus. |
-| Headset camera | The passthrough camera, for the Ambient Focus blur. | At the first use of Ambient Focus. |
+| Microphone | Push-to-talk speech to text. | Once, at the first start, while the splash shows. The install script grants it at install time. A refused permission is asked again at the first TALK. |
+| Spatial data | The live depth of the room for Ambient Focus. | The same: at the first start, or at install time. Asked again at the first use of Ambient Focus. |
+| Headset camera | The passthrough camera, for the Ambient Focus blur. | The same: at the first start, or at install time. Asked again at the first use of Ambient Focus. |
 | Hand tracking | Hands as the main input. | No prompt. Granted at install. Hand tracking must be on in the headset settings. |
 | Spatial anchors | Anchors in the room, for the app and for the native apps it builds. | No prompt. Granted at install. |
 | Install apps | Install the apps an agent builds. | The "Install unknown apps" page, once. Then one tap on INSTALL for each new app. |
@@ -344,10 +347,10 @@ A built app declares its own permissions. `mcx-app verify` lists them. The heads
 
 - Camera passthrough shows your room. The panels float in it, curved around you.
 - One shader draws a whole panel as one mesh with one draw call. The GPU bends the panel, so text that changes every frame bends with it.
-- The UI shader is cheaper. It reads precomputed noise and lattice textures, and it stops early where it adds nothing.
+- The UI shader reads precomputed noise and lattice textures, and it stops early where it adds nothing.
 - Panel frames look like carved stone armour, and buttons look like carved slate. Both have energy channels. The wrist menu's glass follows the panel opacity setting.
 - A start splash shows a transparent logo a metre in front of you, at eye level. It breaks up into light after a few seconds.
-- The app has no keyboard of its own for typing. Each text field opens the headset's system keyboard. KEYS opens it for the terminal. The headset may show it on a table when its experimental setting is on. This is not proven yet.
+- Each text field opens the headset's system keyboard. KEYS opens it for the terminal.
 - The orb is a sphere of energy near you. Its quick actions are four plain squares: TALK, SPEAK, PLACE and LOG. It casts panels in and out, shows messages as callouts, and speaks status answers and thread alerts.
 - The orb moves aside from the panel you look at. It holds still while it shows a callout or its menu, or while it listens, thinks or speaks. If you turn more than 70 degrees away from it, it follows you.
 - A new panel opens in view. Its middle is within 50 degrees of where you face, and within 36 degrees above or below eye level. Near objects, such as a desk or a monitor, weigh less, so a panel can open in front of them. With depth on, it opens at least 8 cm in front of real surfaces.
@@ -364,12 +367,14 @@ A built app declares its own permissions. `mcx-app verify` lists them. The heads
 - A thread view shows the agent chat, its work, approvals, a status line and a side bar with changes, files and git. The side bar builds its list of changes off the main thread.
 - Up to 6 thread windows are open at the same time. Each one has its own chat, composer and approvals. The large ✕ at the top right closes one window; the thread stays.
 - Drop a thread window on another one to make a group: a grid of 2x1, 2x2 or 3x2 that moves and resizes as one window. Threads of one project join the same group by themselves. Drag a window out of the group to set it free. The side bar of a grouped window opens beside the group.
+- When another thread works in the same folder, a new turn waits. SEND NOW starts it in the shared folder. IN A WORKTREE sends it with an instruction to work in a git worktree on its own branch. CANCEL lets it wait.
+- ARCHIVE… and DELETE… at the top of a thread window act on its thread, after a question. THREADS > ARCHIVED lists the archived threads; RESTORE brings one back.
 
 ## Security and privacy
 
 - **Local tokens.** Every local service has its own token (see [One app, two processes](#one-app-two-processes)). The control port compares in constant time.
 - **No remote access in MQH.** It has no cloud account, no tunnel, no telemetry and no self-update. Its API binds to `127.0.0.1`.
-- **User-triggered traffic only.** The agent CLIs talk to their providers under your account. The skills registry proxy contacts a public skills site. Model and package downloads reach public hosts.
+- **User-triggered traffic only.** The first start downloads nothing. The agent CLIs talk to their providers under your account. The skills registry proxy contacts a public skills site. The downloads that you ask for (agent CLIs, the native toolchain, the local coding model, packages) reach public hosts.
 - **Local AI is private.** Voice, session answers and command decisions use on-device models. Agent threads use cloud models, unless you choose the local coding model.
 - **Sign-in pages stay out of the app web view.** Known sign-in hosts and paths open in the headset system browser. The web view keeps cookies, so this keeps accounts out of MetaCodex.
 - **Launch on tap.** No app installs or launches without your tap. See [Native apps](#native-apps-built-on-the-headset).
@@ -389,43 +394,59 @@ A built app declares its own permissions. `mcx-app verify` lists them. The heads
 | `mqh/` | MQH, the agent harness: server, host daemon, CLI, plugins. | TypeScript, Node.js |
 | Folder of the local AI service | The JavaScript service for speech, language, voice, decision and coding models. See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md). | JavaScript |
 | `userland/` | Fetch scripts for proot and Debian, the overlay, bundled skills, the MQH start script. | shell, Python |
-| `native/` | `pty/` (the pty library), `xr/` (the native app layer), templates, examples, native-app skills, the parked Runner. | C, C++ |
+| `native/` | `pty/` (the pty library), `xr/` (the native app layer), templates, examples, native-app skills, the Runner (a host app that reloads a module). | C, C++ |
 | `tests/` | Terminal emulator, side bar and voice effect tests. | C# |
-| `tools/` | Compile check, batch scripts, device test, control-port client, MQH build, voice bench. | shell, Python |
+| `tools/` | Compile check, batch scripts, the packed install, device test, control-port client, MQH build, voice bench, release scripts. | shell, Python |
 | `docs/` | Design documents, licence inventory, diagrams. | Markdown |
 
-The repository does not hold the 30 MB Debian layer.
-`userland/fetch-rootfs.sh` downloads it and checks its SHA-256.
+The repository holds neither the Debian layer nor the model files.
+`userland/fetch-rootfs.sh` downloads the 30 MB Debian layer and checks its SHA-256.
+`tools/userland-image.sh` turns it into the ready Linux of the APK.
+`tools/local-ai-models-pack.sh` checks the four model files against their SHA-256 and packs them. It takes them from a folder of verified downloads (`MCX_MODELS_DIR`).
 
 ## Documentation
 
 | Document | Content |
 |---|---|
-| [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | Commands, build stack, folder names, dev loop, guards. |
-| [docs/LICENSES.md](docs/LICENSES.md) | Licence inventory of every third-party part. |
-| [docs/ui.md](docs/ui.md) | Spatial UI, hands, gestures, panels. |
-| [docs/voice.md](docs/voice.md) | Voice path and models. |
+| [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | Commands, build stack, real names, folder map, dev loop, test suites, guards. |
+| [docs/ready-on-install.md](docs/ready-on-install.md) | What the APK carries, the first start (setup panel, locks, tour), its measured times, the release folder. |
+| [docs/perf.md](docs/perf.md) | Frame rate: rendering options, GPU level, main-thread costs, measured numbers. |
+| [docs/ui.md](docs/ui.md) | Spatial UI: style, the orb, panels, placement, hands, gestures, layouts, Ambient Focus. |
+| [docs/control-center.md](docs/control-center.md) | CONTROL and the main menu. |
+| [docs/thread-view.md](docs/thread-view.md) | Thread windows: the chat, the message box, groups, held turns, archive. |
+| [docs/thread-sidebar.md](docs/thread-sidebar.md) | The side bar of a thread window: changes, files, git. |
+| [docs/workspaces.md](docs/workspaces.md) | Several threads in one project, without clashes. |
+| [docs/voice.md](docs/voice.md) | The voice path, the command registry, the decision model, spoken replies. |
+| [docs/local-ai.md](docs/local-ai.md) | The local AI service: its process, cores, API and frame-rate rules. |
 | [docs/local-coder.md](docs/local-coder.md) | The local coding model for agent threads. |
+| [docs/session-context.md](docs/session-context.md) | The session context (CSCP). |
 | [docs/mqh.md](docs/mqh.md) | The agent harness. |
+| [docs/mqh-spatial.md](docs/mqh-spatial.md) | The `spatial.json` format of plugin panels. |
 | [docs/secrets.md](docs/secrets.md) | The vault and the threat model. |
-| [docs/native-build-and-install.md](docs/native-build-and-install.md) | Native app pipeline, background behaviour, guards. |
-| [docs/session-context.md](docs/session-context.md) | The session context. |
+| [docs/native-build-and-install.md](docs/native-build-and-install.md) | The native app pipeline: build, install, launch, return. |
+| [docs/TEST_CHECKLIST.md](docs/TEST_CHECKLIST.md) | What to test on the headset, by area. |
+| [docs/LICENSES.md](docs/LICENSES.md) | Licence inventory of every third-party part. |
 
 ## Build and run
 
 You need a Linux shell, `adb`, and the editor version of the app project.
 The version is in `ProjectSettings/ProjectVersion.txt` inside the app project folder.
 
-1. Make the generated parts:
+1. Make the generated parts of the APK. Each step is needed again only when its sources change:
 
    ```bash
-   userland/fetch-proot.sh && userland/fetch-rootfs.sh && native/pty/build.sh && python3 -I userland/build-overlay.py
+   userland/fetch-proot.sh && userland/fetch-rootfs.sh && native/pty/build.sh
+   tools/userland-image.sh                         # the ready Linux: Debian, Node.js, base packages
+   tools/local-ai-bundle.sh                        # the local AI runtime
+   tools/local-ai-models-pack.sh                   # the four AI models
+   tools/mqh-build.sh all && tools/mqh-bundle.sh   # MQH for the Linux of the headset
+   python3 -I userland/build-overlay.py            # the overlay
    ```
 
-2. Build MQH and start it in the Linux shell, apart from the headset:
+2. Make the vectors of the decision model, after a change to the voice commands. The development AI service runs on the PC for this step:
 
    ```bash
-   tools/mqh-build.sh && tools/mqh-dev.sh start
+   tools/local-ai-dev.sh pc start && MCX_UITEST_ONLY=voicedecide tools/unity-batch.sh BatchUiTest && tools/local-ai-dev.sh pc stop
    ```
 
 3. Check that the C# code compiles without the editor:
@@ -434,7 +455,10 @@ The version is in `ProjectSettings/ProjectVersion.txt` inside the app project fo
    tools/cscheck.sh
    ```
 
-4. Build the APK with the batch script, then install it. [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) has the exact commands.
+4. Build the APK with `tools/unity-batch.sh BatchBuild`.
+   `tools/release/make-release.sh` puts the APK, the install scripts and `INSTALL.md` into `release/`.
+   `tools/release/install-metacodex.sh` installs the APK over USB and grants its permissions.
+   [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) has the other commands.
 
 ## Testing
 
@@ -443,47 +467,47 @@ The version is in `ProjectSettings/ProjectVersion.txt` inside the app project fo
 | `tests/terminal/run-core-tests.sh` | about 10 s | The terminal emulator against a terminal multiplexer, and the archive extractor. No editor. |
 | `tools/cscheck.sh` | about 10 s | A compile check with the editor and device defines. No editor. |
 | `tests/sidebar/run-sidebar-tests.sh` | not timed | The side bar logic. |
+| `tests/voicefx/run-voicefx-tests.sh` | not timed | The voice effect. |
 | `python3 tools/check-native-skills.py` | not timed | Every command, flag, path and code block in the native-app skills. |
+| `python3 tools/comments-only-check.py <git-ref>` | seconds | That a change to C# files touched only comments and whitespace. |
 
-- The headless editor runs a UI self-test with about 340 checks. It needs 3 GB of free memory. See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
-- The MQH type check passes (61/61). The workspace guard plugin has its own test files.
-- [docs/TEST_CHECKLIST.md](docs/TEST_CHECKLIST.md) lists what to test on the headset. None of its lines is ticked yet.
+- The headless editor runs a UI self-test in 52 named sections. `MCX_UITEST_ONLY` picks some of them. It needs 3 GB of free memory. See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
+- MQH has its own type check and tests in `mqh/`. The workspace guard plugin has its own test files.
+- [docs/TEST_CHECKLIST.md](docs/TEST_CHECKLIST.md) lists what to test on the headset, by area.
 
 ## Status and limits
 
-This README describes the app at version 0.7.19 (versionCode 26), with the source changes made after that build, as of 2026-11-14.
+This README describes MetaCodex 0.7.19 (versionCode 26).
 
-**Under rework or not built**
+**Not built**
 
 - **Plugin panels.** The `spatial.json` format, the server route and the scaffold exist. The app has no renderer, and no shipped plugin has a panel. Gesture plugins and Lua scripts are the working path.
-- **One agent CLI runs in a terminal.** MQH threads work with two of the three supported agent CLIs. The third runs in a terminal for now.
-- **Runner.** The no-build path works. The project has parked it. A native host app loads a module and reloads it. Classic native apps are the default.
-- **Not built.** MQH tools in the command registry. A "point and say" prompt to an agent.
+- **One agent CLI runs only in a terminal.** MQH threads work with two of the three supported agent CLIs.
+- **MQH tools in the command registry**, and a "point and say" prompt to an agent.
+- **Runner.** A native host app loads a module and reloads it, so a change needs no APK build. It works, but classic native apps are the default.
 
-**Not proven on the device**
+**Not verified on the headset**
 
-- The foreground service and the build wake lock are in the 0.7.19 build. Their effect on the device is not tested yet.
-- Back from a built app to MetaCodex works on the headset (owner test, 2026-11-11). Report to MetaCodex is not confirmed on the headset yet.
-- Built apps with passthrough ran on the headset (owner test, 2026-11-11). The Night Vision example builds and passes `verify`. Its depth view is not confirmed in a recorded test.
-- Camera passthrough, depth, hand and controller features of the native layer build on the headset. Their runtime proof is pending.
-- The changes made after the 0.7.19 build are in the source. Their effect on the headset is not measured yet.
-- The local coding model's fixes are not tested on the headset yet. A local coding thread dropped frames badly in a headset test.
-- The decision model has no headset benchmark.
-- Many items in the device checklist (see [docs/TEST_CHECKLIST.md](docs/TEST_CHECKLIST.md)) await a test on the headset. Among them are the orb menu, the CONTROL rail, the side bar, the system keyboard and the start splash.
-- Known Editor self-test failures remain. One example is the orb's timing while it casts a panel.
+- The effect of the foreground service and of the build wake lock while a built app is in front.
+- REPORT from a built app back to its thread. BACK works on the headset.
+- The depth view of the Night Vision example. Built apps with passthrough run on the headset. The camera, depth, hand and controller features of the native layer build there, but their runtime is not verified.
+- The speed of the local coding model. A local coding thread dropped frames badly in a headset test.
+- A headset benchmark of the decision model.
+- Many lines of the device checklist ([docs/TEST_CHECKLIST.md](docs/TEST_CHECKLIST.md)).
+- Some Editor self-test checks fail, for example the orb's timing while it casts a panel.
 
-**Known problems and limits**
+**Known limits**
 
 - Memory grows after repeated app switches. Android's low-memory killer stopped `:ai` twice in one test.
 - The app polls MQH over HTTP. There is no WebSocket.
 - While the orb menu is open, the app does not poll the thread list. Answers about running threads may be stale then.
 - The app saves the session context in a file in the shared folder (`session-context.jsonl`). Everything in the Linux can read it. The app sends it to no agent.
 - Agents and the Linux share one Android user. There is no sandbox between them.
-- After a crash of a built app, MetaCodex cannot come forward by itself. Open it from the dock.
+- After a crash of a built app, MetaCodex cannot come forward by itself. Open it from the headset's app list.
 - Hand tracking is the only pointing input in the shell. There is no controller mapping.
 - The text-to-speech model has use restrictions that apply to users.
 - The app is not store-ready. It declares the permission to install packages.
-- The headset needs a network for first use: Debian, Node.js, toolchain and model downloads. The local coding model is an optional download.
+- A network is needed only for what you add: agent CLIs, the native toolchain, the local coding model and packages.
 
 ## License
 
