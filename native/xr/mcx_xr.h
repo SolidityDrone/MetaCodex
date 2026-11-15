@@ -23,7 +23,8 @@
 //   Permissions  Activity.checkSelfPermission / requestPermissions through JNI (polled: NativeActivity gets no result)
 //   Text         mcx::Text: a monospaced font (DejaVu Sans Mono) and filled rectangles drawn in 3D
 //   App menu     built in, always there: the left controller's menu button or the left hand's menu gesture opens
-//                Back to MetaCodex / Report to MetaCodex / Restart / Quit (+ your items: App::menuItems).
+//                Back to MetaCodex / Report to MetaCodex (opened from MetaCodex), your items (App::menuItems),
+//                Quit, Close menu.
 //                "Back" starts MetaCodex again (warm: nothing reloads) and ends this app; "Report" sends MetaCodex
 //                a picture of this app, its last log lines, name and version, which open as a draft in the thread
 //                that launched it.
