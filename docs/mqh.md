@@ -1,8 +1,9 @@
 # MQH: the Meta Quest Harness
 
 MQH is MetaCodex's agent harness: the daemon that owns threads, plugins, skills, providers, machines
-and their data, running inside the headset's Linux userland. Unity is its spatial client. (Before Nov 7
-this was "Core" / "the bb-like daemon"; `docs/core-v0-spec.md` is that first prototype.)
+and their data, running inside the headset's Linux userland. The app is its spatial client. The overlay still carries the first
+prototype of this control plane, Core v0 (`mcx-core`, `mcx`, `/opt/metacodex/core`); MQH replaced it, and the app does
+not start it.
 
 ## Decision (Nov 7): a trimmed hard fork of bb, rebranded, with Unity in place of the web app
 

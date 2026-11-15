@@ -215,8 +215,6 @@ App: TerminalView (TMP rows + cell mesh) <- VtTerminal (xterm emulator) <- pty b
 | [session-context.md](session-context.md) | The session context (CSCP). |
 | [native-build-and-install.md](native-build-and-install.md) | The native app pipeline, background behaviour and guards. |
 | [thread-view.md](thread-view.md), [thread-sidebar.md](thread-sidebar.md), [workspaces.md](workspaces.md), [control-center.md](control-center.md) | Thread view, side bar, workspaces, control center. |
-| [VOICE_DECISION_RESEARCH.md](VOICE_DECISION_RESEARCH.md) | Research behind the decision model. |
-| [core-v0-spec.md](core-v0-spec.md) | Core v0, the superseded prototype. |
 | [LICENSES.md](LICENSES.md) | Licence inventory. |
 | [diagrams/README.md](diagrams/README.md) | The diagram kit that draws the README images. |
 

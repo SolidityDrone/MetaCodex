@@ -119,22 +119,24 @@ not offered to the LLM: only their exact phrases ("type …", "run …") run the
 `find_thread` scores MQH thread titles and branch names against the spoken words (stems, one-letter
 slips) and opens the best match; `switch_workspace` matches MQH project names and folder names.
 
-## The decision model (0.7.2)
+## The decision model
 
-Jev-style, without generating text: the options are the registry's enabled commands plus "none"; the answer is
-a command and its values, or nothing. Chosen by measurement (`docs/VOICE_DECISION_RESEARCH.md`,
-`tools/voicebench/`): on 355 sentences (then English and Italian; single, composite, misheard, chit-chat) today's
-pipeline (fast path -> Qwen3 0.6B) was 58 % exact, fast path -> this model 79-81 %, and the decision takes ~6-10 ms
-on the PC instead of ~205 ms for the LLM. Since 2026-11-12 the bench is the 180 English sentences only (the app's
-pipeline: 93 % exact on them, as on 2026-11-11).
+It decides without generating text: the options are the registry's enabled commands plus "none"; the answer is a
+command and its values, or nothing. It was chosen by measurement (`tools/voicebench/`): on the bench sentences
+(single, composite, misheard, chit-chat) the fast path followed by the LLM was 58 % exact, the fast path followed by
+this model 79-81 %, and a decision takes about 6-10 ms on the PC instead of about 205 ms for the LLM. On the 180
+English sentences of today's bench the app's pipeline is 93 % exact. Static embedding models (69-75 %), small English-only
+encoders (64-74 %) and a larger multilingual encoder (81 %) were measured too (`tools/voicebench/results/`).
 
 - **Model:** multilingual-e5-small (118M parameters, q8_0 GGUF, 132 MB) in the local AI service
-  (`POST /v1/embeddings`, `@qvac/embed-llamacpp`), on the service's cores 0-2, unloaded after 60 idle minutes.
-  Installed with the voice models; a headset that already has them fetches it once by itself.
+  (`POST /v1/embeddings`), on the service's cores 0-2, unloaded after 60 idle minutes. It ships in the APK with the
+  other models.
 - **Examples** (`VoiceDecider.BuildExamples`): each enabled command's phrase templates expanded with its enum
   values and synonyms, its examples, samples and description; "none" from chit-chat. Their
-  vectors are cached on disk (`voice-decider-vectors.bin`, ~2 MB) and rebuilt only for what changed when a
-  plugin adds, removes or disables commands; a removed or disabled command is never offered, even before the
+  vectors are cached on disk (`voice-decider-vectors.bin`, about 3 MB). The APK carries the vectors of every
+  command example (`decider-vectors.bin`, made by the Editor bench section `voicedecide`), so the first start embeds
+  only the examples changed since. They are rebuilt only for what changed when a plugin adds, removes or disables
+  commands; a removed or disabled command is never offered, even before the
   rebuild.
 - **Clauses:** the sentence is split on and / then / also / after that / commas, keeping "and a half" and
   decimal commas; fillers and punctuation are dropped. Each part is decided
@@ -149,7 +151,7 @@ pipeline: 93 % exact on them, as on 2026-11-11).
   (the most specific word wins: "more transparent" is less opacity), free text without the command's own words.
   The command's `Check` and the schema validate before anything runs.
 - **Settings:** VOICE > "Decision model for commands" (on), "Ask the LLM when nothing fits" (off). The VOICE
-  status line shows the model's state ("ready: 1500 examples, 17 commands").
+  status line shows the model's state ("ready: N examples, M commands").
 - **The LLM** stays for answers and, when that toggle is on, for sentences the model does not place.
 
 ## The registry as JSON (agents, plugins)

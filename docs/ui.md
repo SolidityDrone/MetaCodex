@@ -292,7 +292,7 @@ while speech is turned into text and the command decided, the camera keeps runni
 The depth and the camera stay on, idle, for 60 s after nothing needs them any more (a restart costs seconds of low
 frame rate: measured 17.7 fps for ~15 s on the Quest 3S). RADIUS is the dome's size (from the floor under your head), SOFTNESS the width of its edge, INTENSITY
 the darkness, BLUR how soft the room outside gets (0 = darkened only); BLACKOUT (radius 0, 100 %) leaves only the
-windows and your hands. No Space Setup scan is needed (branch `feat/spatial-dome`, `docs/SPATIAL_DOME_PLAN.md`).
+windows and your hands. No room scan of the headset is needed.
 
 - **The void** (owner 2026-11-09: "in the fog some interesting effect, not simple black"). Outside the dome it is
   not black but deep space: blue-black with a slow nebula drifting in two layers (a tiling noise drawn by code,
@@ -307,7 +307,7 @@ windows and your hands. No Space Setup scan is needed (branch `feat/spatial-dome
   at 1.5 x the resolution (480 x 480) when the camera guides it, at the sensor's resolution without the camera. Each
   texel uses the 2 x 2 readings around it. Where the camera sees, its picture guides the result (joint bilateral
   upsampling: each reading weighs by distance and by how alike its colour is, so depth edges follow the picture's
-  edges; SandyBridge `docs/DEPTH_UPSCALE_PLAN.md`, option A). Elsewhere an edge-preserving depth-only filter. Then a
+  edges). Elsewhere an edge-preserving depth-only filter. Then a
   temporal filter (last frame's result reprojected, kept where it agrees within 2 cm + 2 %), so the cut-out stops
   flickering and its edge is cleaner. "Sharp depth (camera)" in FOCUS (on): off, the camera does not guide the depth
   (it still runs for BLUR). Until 2026-11-13: 640 x 640, 3 x 3 readings and a median, camera at 30 fps (docs/perf.md).
