@@ -21,7 +21,7 @@ An app plugin makes windows drawn with the app's own UI kit, and tiles on the DO
 It loads again at every start, and its `main.lua` makes its windows and tiles again from its saved `store`.
 
 Two examples ship with the app: **Timers** (a focus timer in the tomato style, with alarms) and **Calendar** (a month
-grid with entries and reminders). Install one from CONTROL > GESTURES > EXAMPLES, by voice, or with
+grid with entries and reminders). Install one from CONTROL > MQH > GESTURES > EXAMPLES, by voice, or with
 `mcx-ui plugin example timers`. Their files are in `Runtime/Scripting/Resources/PluginExamples/<id>/`.
 
 ### The API

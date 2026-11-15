@@ -190,10 +190,11 @@ Folders in `/mnt/quest/plugins/<id>/`: `plugin.json`, `poses/*.json` (named hand
 finger, palm / thumb direction, pinch range, hold, cooldown) and `main.lua` (Lua detectors with
 `gesture.define`, reactions with `gesture.on` / `gesture.sequence`). The app reloads a plugin within a
 second of any change. Detectors run as persistent coroutines about 36 times a second under the
-instruction budget; a runaway detector stops only its plugin. Nothing is installed on first run:
-the two examples `core-poses` (thumbs-up, thumbs-down, victory, horns, call-me; data only) and `swipes` (swipe
-left / right / up; Lua) are opt-in (GESTURES > ALL > EXAMPLES > + ADD, or `mcx-ui plugin example <id>`;
-`mcx-ui plugin examples` lists them). Builds before then seeded them: the first start of a newer build removes
+instruction budget; a runaway detector stops only its plugin. A fresh install adds
+one example, `core-poses` (thumbs-up, thumbs-down, victory, horns, call-me; data only), for the default binding of
+the V to Ambient Focus (`EnsureVictoryFocus`). The other examples are opt-in: `swipes` (swipe left / right / up; Lua)
+and the app plugins Timers and Calendar (MQH > GESTURES > ALL > EXAMPLES > + ADD, or `mcx-ui plugin example <id>`;
+`mcx-ui plugin examples` lists them). Seeded copies of older installs: the first start removes
 those copies once (marker `.examples-v2` in the plugins folder) when they are untouched (byte for byte the
 shipped files) and unused (no binding, script or other plugin's Lua names one of their gestures); edited or
 used copies stay, my-poses and other folders are never touched. New plugins: MQH > PLUGINS > + NEW PLUGIN…
