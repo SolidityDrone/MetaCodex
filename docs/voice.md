@@ -1,17 +1,11 @@
 # Voice control and the local AI service
 
-Status: v0.3, 2026-11-08. Runs in the APK on the Quest 3S (0.4: service process on cores 0-2, models
-installed on the headset); 0.5 makes the cycle faster (measured below) and fixes the service after the
-headset sleeps; 0.6 confirms actions silently (the HUD shows them) and adds `set_focus` and the SYSTEM panel;
-0.7 fixes misheard words against the commands' vocabulary, runs several commands said in one sentence and
-adds `set_setting` (every setting by voice: on / off, numbers, more / less). 0.7.2 replaces the LLM in the loop
-with a **decision model** (below: 79-81 % exact against the LLM's 58 %, ~10-60 ms instead of 0.5-9 s) and makes
-the registry complete (samples, more names, four more commands, `voice registry`).
+The voice path of MetaCodex: push-to-talk speech-to-text, one command registry that every caller shares, a decision
+model that picks commands without generating text, spoken replies and their voice effect. The models run in the
+local AI service ([local-ai.md](local-ai.md)).
 
-**English only (2026-11-12).** The owner dropped Italian: speech-to-text, spoken replies, the LLM prompts, the
-command registry and the bench are English. VOICE > LANGUAGE and `voice lang` are gone; the setting `voice.language`
-stays in the settings file (old files load) and always reads as `en` (a stored `it` or `auto` becomes `en` at load).
-Italian phrases no longer match. Later options, not done in this change (see "English-only models: later options").
+**English only.** Speech-to-text, spoken replies, the LLM prompts, the command registry and the bench are English. The
+setting `voice.language` stays in the settings file (old files load) and always reads as `en`.
 
 ## What it does
 
@@ -26,8 +20,8 @@ Push-to-talk, then the headset does the rest, privately, with no cloud:
       examples and phrases (multilingual sentence vectors); the best command, or none; values read
       from the command's schema                                 -> run them in order (~10-60 ms)
       else (only with "Ask the LLM when nothing fits") the local LLM writes the command lines (~0.5 s)
-   -> HUD above the dock ("✓ Opened GIT"); actions are confirmed there only (0.6: a spoken "Opened GIT"
-      arrived seconds after the action and was annoying); spoken replies are for answers (commands marked
+   -> HUD above the dock ("✓ Opened GIT"); actions are confirmed there only (a spoken confirmation would come
+      seconds after the action); spoken replies are for answers (commands marked
       `speak`, e.g. a plugin's `voice.command{speak=true}`)
 ```
 
@@ -58,7 +52,7 @@ tool), phrase templates for the fast path, and a run function. The shell registe
 | `recenter` | | "recenter", "bring the panels back" |
 | `type_text` | `text` | "type {text}" |
 | `run_in_terminal` | `command` (confirmed in VR) | "run {command}" |
-| `show_keyboard` | | "show the keyboard", "open the table keyboard" (the system keyboard; the table version is Settings > Experimental > Surface keyboard) |
+| `show_keyboard` | | "show the keyboard", "open the table keyboard" (the headset's system keyboard; the headset lays it on a table when its own experimental setting is on) |
 | `set_focus` | `state`: on off | "focus mode on", "turn off the focus", "darken the room" (Ambient Focus) |
 | `set_setting` | `setting` (see below), `value`: on, off, toggle, a number, + or - | "set the dome radius to two meters", "intensity 30", "turn off the sounds", "make the windows bigger", "volume a bit less" |
 | `focus_preset` | `preset`: subtle focus blackout | "use the subtle preset", "blackout preset", "apply the normal focus preset" |
@@ -83,7 +77,7 @@ spoken freely: "zero", "fifty percent", "two point five", "30 cm", "max", "half"
 0-1 setting means 30 %. More / less words ("bigger", "darker", "a bit less") move it by a tenth of its
 range. The slider or toggle in an open panel moves with it.
 
-### Misheard words and several commands at once (0.7)
+### Misheard words and several commands at once
 
 - **Vocabulary.** Every word a command uses (its phrases, synonyms, enum values and the `vocabulary` it
   declares) goes into the speech-to-text prompt, so Whisper hears "ambient focus" and not "ambient fogus".
@@ -106,7 +100,7 @@ case without punctuation or apostrophes, after fillers ("hey", "could you", "ple
 Enum values accept synonyms and close misspellings of the whole phrase ("provider's" -> agents); a value
 that fits nothing is not forced, the request goes to the LLM instead.
 
-The LLM path (0.5): the model answers with one command line, `open_panel git` or `none`, not a JSON tool
+The LLM path: the model answers with one command line, `open_panel git` or `none`, not a JSON tool
 call. The prompt lists the commands in that form (`open_panel PANEL, set_layout fixed|float, ...`), example
 turns teach it ("show me my secrets" → `open_panel vault`), and a GBNF grammar built from the registry only
 lets it write valid lines, so it decodes 1-4 tokens instead of ~20. The system prompt and the example turns
@@ -163,41 +157,23 @@ warnings in its log when it registers. `mcx-ui voice decide "<text>"` shows what
 with each part's command, score and runner-up; nothing runs. Rules for every command, shell or plugin:
 `AGENTS.md` ("The command registry") and the in-app skill `quest-scripting` ("MUST").
 
-## The local AI service
+## The models
 
-QVAC (Tether's local AI stack) on the Bare runtime, in its own process: `local-ai/server/` (Bare JS),
-packed by `tools/local-ai-bundle.sh` into `StreamingAssets/qvac/runtime.tar.gz` (24 MB: QVAC addons for
-android-arm64 with CPU backends only, `libc++_shared.so` from NDK r29) plus `libbare.so` (the Bare
-executable, 62 MB, stripped) in `Plugins/Android/libs/arm64-v8a`. Models are not in the APK: VOICE >
-INSTALL MODELS downloads them once (660 MB) into the app's private storage, each checked against the
-sha256 of the QVAC model registry.
+The local AI service runs them; [local-ai.md](local-ai.md) has its process, cores, API and engine settings. The four
+models ship in the APK ([ready-on-install.md](ready-on-install.md)); each file is pinned by revision and SHA-256 in
+`local-ai/server/models.js`.
 
 | Model | Size | Source | Use |
 |---|---|---|---|
-| Whisper base q8_0 (multilingual) | 78 MB | Hugging Face (ggerganov/whisper.cpp, pinned revision) | speech-to-text |
-| Qwen3 0.6B q4_0 | 364 MB | Hugging Face (unsloth/Qwen3-0.6B-GGUF, pinned revision) | picks commands (tool calling), short answers |
-| Supertonic 3 q4_0 | 81 MB | QVAC model registry (Hyperswarm) | spoken replies, 31 languages |
-| multilingual-e5-small q8_0 | 126 MB | Hugging Face (TwinSunsLLC/multilingual-e5-small-gguf, pinned revision) | the decision model's sentence vectors |
+| Whisper base q8_0 (multilingual) | 78 MB | ggerganov/whisper.cpp (pinned revision) | speech-to-text |
+| Qwen3 0.6B q4_0 | 364 MB | unsloth/Qwen3-0.6B-GGUF (pinned revision) | short answers, recaps, the optional command fallback |
+| Supertonic 3 q4_0 | 81 MB | the AI runtime's model registry | spoken replies, ten voices (F1-F5, M1-M5) |
+| multilingual-e5-small q8_0 | 126 MB | TwinSunsLLC/multilingual-e5-small-gguf (pinned revision) | the decision model's sentence vectors |
 
-How the app runs it (`Runtime/AI/QvacHost.cs`, `Plugins/Android/MetaCodexAiService.java`): the runtime is
-unpacked to `files/qvac/runtime` when its hash changes; a new token goes to `files/qvac/token` and
-`/mnt/quest/qvac.token`; then the app asks its own Android service process (`:ai`, declared in the manifest)
-to start `taskset 7 nice -n 10 libbare.so server/main.js --data files/qvac/data --port 47810 --threads 2`
-(exec is only allowed from `nativeLibraryDir`; the addons are dlopen'ed from the unpacked runtime). The
-service replaces a running child on every start (new token); the app health-checks it every 5 s and asks
-for a restart after 3 misses (3 times in 5 minutes, then FAILED). Models load on first use and unload after
-idle minutes (speech-to-text 10, LLM 15, voice 3). `GET /status` reports where the system placed the
-process (`placement`: CPU set and allowed cores).
+Models load on first use. The app's config sets the idle unload: speech-to-text after 10 minutes, the LLM and the
+voice after 15; the decision model stays loaded.
 
-Why a separate Android process (measured on the Quest 3S, 0.4.0): **Horizon OS keeps the running immersive
-app in the `/immersive` CPU set, cores 3-5 only, and every process the app starts inherits it**: the first
-build started the service as a child of the app (like proot) and `taskset 7` failed with EINVAL (cores 0-2
-not allowed). The frame loop (Unity's main, render and job threads) runs on those same cores. A service
-process of the app is placed by the system instead (top-app 0-5 / foreground and background 0-2), so its
-child can be pinned to 0-2. BareKit (Bare inside the service process) has no Android release to link, so
-the service starts the Bare executable as its child.
-
-### API (127.0.0.1:47810, `Authorization: Bearer <token>`)
+### The service API used by the voice path (127.0.0.1:47810, `Authorization: Bearer <token>`)
 
 | Endpoint | Does |
 |---|---|
@@ -217,23 +193,23 @@ From the app's control port: `mcx-ui voice status | list | match <text> | run <t
 wav /mnt/quest/f.wav | listen | install | threads N | registry | decide <text> | decider on|off |
 fallback on|off`.
 
-## Faster cycle (0.5, measured)
+## Why the cycle is fast (measured)
 
 | Change | Effect |
 |---|---|
 | CPU level Boost while a voice request runs (`OVRManager.suggestedCpuPerfLevel`; back after) | the app's level held cores 2-5 at 1.38 GHz; Boost allows 2.05: speech-to-text 0.80 → 0.66 s, LLM 1.39 → 1.17 s, speech 3.4 → 2.8 s (same requests, API) |
 | LLM writes one command line under a grammar (above) | 1-4 tokens instead of ~20; 9/12 off-template phrasings right vs 5/8 with tool calls; 0.15-0.3 s on the PC (x4-6 on the headset) |
-| 2 inference threads, fixed | 3 threads measured slower (LLM 10 vs 14.5 tok/s: the third core is the slow, shared one), 4 stalls (more threads than the 3 cores): the old THREADS 3/4 options are gone |
-| End of speech after 0.7 s of silence (was 1.0 s) | 0.3 s less on every request |
-| Models stay loaded 30 min (speech 10) | no 1-4 s reloads between requests |
+| 2 inference threads, fixed | 3 threads measured slower (LLM 10 vs 14.5 tok/s: the third core is the slow, shared one), 4 stalls (more threads than the 3 cores) |
+| End of speech after 0.7 s of silence | 0.3 s less on every request than with 1.0 s |
+| Models stay loaded 15 min (speech-to-text 10) | no 1-4 s reloads between requests |
 | Replies' audio cached (64 entries) | the second "Opened GIT" is instant |
 | Whisper encoder window sized to the clip, changed with `reload` (instant) | long clips get a bigger window; below 512 frames Whisper base repeats and mishears (tested 256: "Open the Provider's page. Open the Provider's page.", "MedicoDex"), so 512 stays the minimum |
-| Supertonic steps | kept at 5: 3 and 2 steps are faster but garble words (round trip through speech-to-text: "I don't have a trip partner") |
+| Voice steps | FAST = 3 by default (the voice effect hides the small loss), CLEAR = 5; 2 steps garble words (round trip through speech-to-text: "I don't have a trip partner") |
 | Health checks skip a busy service; 6 s timeout; restarts that actually restart; the app binds to the service | the service is no longer restarted under load, and survives the headset sleeping |
 
 Voices: Supertonic 3 has ten, F1-F5 and M1-M5 (VOICE panel; `mcx-ui voice voice M2`).
 
-## Spoken replies, sentence by sentence (feat/polish, 2026-11-12)
+## Spoken replies, sentence by sentence
 
 Before: one request for the whole reply, and playback only after the last sample was made. Synthesis time is
 linear in characters (Supertonic 3, 5 steps, 2 threads; PC service API: 11 chars 157-197 ms, 103 chars 558-792 ms,
@@ -246,31 +222,24 @@ Now (`ShellVoice.Say`, `Runtime/AI/SpokenText.cs`):
 |---|---|
 | Split | `SpokenText.Sentences`: after `. ! ? …` when a space and a word that is not lower case follow; not inside `foo.cs`, `3.5`, `v1.2.4`, `e.g.`, `Dr. Rossi`, `J. Smith`, `No. 5`, `wait... then`; line breaks, list items and ` · ` (joined replies) end a sentence; code blocks are not read. A sentence under 20 characters goes with the next one (a tiny clip costs a request and leaves a gap); one over 180 is cut at a comma. |
 | Shorten | A reply (`SayReply`: answers, session questions) speaks at most 2 sentences / about 200 characters; the full text stays on the HUD. `SAY…`, `voice say`, Lua `voice.say` speak everything. |
-| Speakable | `SpokenText.Speakable`: `3 min 20 s` -> `3 minutes 20 seconds`, `1 h`, `250 ms` (English words only since 2026-11-12). `ThreadPulse.Speak` writes its durations as words itself (`SpokenText.Duration`). Before, "3 min" came back from speech-to-text as "three men". |
+| Speakable | `SpokenText.Speakable`: `3 min 20 s` -> `3 minutes 20 seconds`, `1 h`, `250 ms` (English words). `ThreadPulse.Speak` writes its durations as words itself (`SpokenText.Duration`). Before, "3 min" came back from speech-to-text as "three men". |
 | Pipeline | One request at a time, at most two clips made ahead: sentence 2 is made while sentence 1 plays; a Stop never waits behind a long service queue. Clip 1 plays as soon as it arrives; the next one follows 0.2 s after the previous ends (`SentenceGap`). |
 | Cancel | Stop (the HUD's ■ STOP, `voice:stop` / `voice:cancel`), TALK and a new reply call `StopSpeaking`: the playing clip stops, waiting clips are destroyed, late answers of the old reply are dropped (a generation counter). |
-| Orb | `OnSpeechStarted` runs per clip: the orb speaks each sentence, quiet in the gap. |
-| CPU Boost | Held while the reply speaks (was a fixed 15 s), 0.5 s after the last clip, capped at 60 s from its start (`SpeechBoostCap`). Boost makes synthesis 16-18 % faster, which brings the headset to about RTF 1: sentence 2 is ready when sentence 1 ends. |
-| Model kept loaded | TTS idle unload 3 -> 15 min (`PushVoiceConfig`): most replies no longer pay the 1-4 s reload. Costs about 0.5 GB RSS while loaded. |
-| Language | `ttsLanguage` is always `en` (English only since 2026-11-12; before, VOICE > LANGUAGE IT read replies as Italian). |
-| Shorter answers | Session answers: LLM `max_tokens` 110 -> 70, the prompt asks for one or two short sentences under 40 words; an answer cut by the limit keeps only its finished sentences (`CleanAnswer`). |
-| Clips | Every played or dropped `AudioClip` is destroyed (before, a replaced clip stayed in memory until Unity unloaded unused assets). The WAV is decoded without a call per sample. |
+| The Whisp | `OnSpeechStarted` runs per clip: the Whisp speaks each sentence, quiet in the gap. |
+| CPU Boost | Held while the reply speaks, 0.5 s after the last clip, capped at 60 s from its start (`SpeechBoostCap`). Boost makes synthesis 16-18 % faster, which brings the headset to about RTF 1: sentence 2 is ready when sentence 1 ends. |
+| Model kept loaded | The voice unloads after 15 idle minutes (`PushVoiceConfig`): most replies do not pay the 1-4 s reload. Costs about 0.5 GB RSS while loaded. |
+| Language | `ttsLanguage` is always `en`. |
+| Shorter answers | Session answers: LLM `max_tokens` 70, the prompt asks for one or two short sentences under 40 words; an answer cut by the limit keeps only its finished sentences (`CleanAnswer`). |
+| Clips | Every played or dropped `AudioClip` is destroyed. The WAV is decoded without a call per sample. |
 
-Expected on the headset (scaled from the PC at about 8x; the owner's headset check is open): first audio for
-a 2-sentence answer about 3-4 s after the text exists (was 8.5-9.5 s), for long replies about 3 s (was 21-24 s),
-and 1-4 s less on most first answers (no reload). Unchanged on purpose: Supertonic steps 5 (2-4 garble or drop
-words in the speech-to-text round trip), 2 threads (72 fps), CPU only (GPU 12 % faster, not worth sharing it),
-and speed 1.0 (1.15 is 9 % shorter and still exact in the round trip, but speed is the owner's ear: not changed).
-Next step, not done: server-side chunk streaming (`streamChunkTokens`) and LLM token streaming into this queue.
+Expected on the headset (scaled from the PC at about 8x; not measured there): first audio for a 2-sentence answer
+about 3-4 s after the text exists, for long replies about 3 s. Kept on purpose: 2 threads (72 fps), CPU only (the GPU
+is 12 % faster for speech, not worth sharing it), and speed 1.0 (1.15 is 9 % shorter and still exact in the round
+trip).
 
-Tests: `tests/voicefx/run-voicefx-tests.sh` (splitter, units, shortening; also run by
-`tests/terminal/run-core-tests.sh`), Editor self-test section `spokenreplies` (a fake speech service: one request
-in flight, first clip at once, Stop and a new reply drop late clips, clips freed, the VOICE panel's ■ STOP / ▶ START
-button and the COMMANDS row hint).
+## Streaming answers and recaps
 
-## Streaming answers and recaps (feat/polish, 2026-11-12)
-
-Owner: "we can't have the user wait 10-20 seconds if he asks the resume of a thread". Measured where a session answer
+A recap must not keep the user waiting 10-20 seconds. Measured where a session answer
 spent its time (PC, scaled to the headset): first word 15-19 s for a recap of an idle thread (the LLM read a 750-token
 prompt: 6.4-7.7 s on the headset, then the whole answer was synthesized before anything played), 11-14 s for a working
 thread, and the model was wrong 16 of 16 times on a working thread.
@@ -281,7 +250,7 @@ What answers now:
   sentence with the state ("The login fix thread is idle."), then what it does or answered, what was asked and the work
   so far (only the first two sentences are spoken). "why" / "explain" still go to the model.
 - **The thread the question names.** `NamedThread` matches the words before "thread" against the titles (the same
-  scorer as find_thread); before, a recap was always of the open / pointed / newest thread.
+  scorer as find_thread); without a name, a recap is of the open, pointed or newest thread.
 - **An acknowledgement at once.** "Let me look." is made ahead (one WAV per voice / effect / speech setting, after the
   service config) and plays the moment a session question starts; the answer is made while it plays. The HUD shows
   "◆ LOOKING" at once, then the text as it streams ("◆ ANSWERING").
@@ -298,27 +267,22 @@ What answers now:
 Expected first word on the headset (estimates from PC runs): recap 1.6-1.7 s (the acknowledgement), its first real
 sentence 3.7-4.5 s; a model answer about 4-6 s with the compact prompt still to come (open: the compact recap context).
 
-## Spoken alerts and status questions (fix/fix-list, 2026-11-13)
-
-Owner: "does the orb actually speak? If I ask a status update on ongoing threads I see the text but it doesn't seem to
-speak back", and "when some task is completed or requires action it could speak: 'Thread on <project> is done', 'An
-agent is requiring allowance'".
+## Spoken alerts and status questions
 
 - Status questions are session questions: `ask_about_session` has the phrases "[give me] [a|the] status [update] [on|of]
   [the|my] [ongoing|running|open] threads|agents", "status update", "how are my threads|agents doing", "what are my
-  threads|agents doing" and samples like them. Session answers are spoken by default (`voice.speakAnswers`); before,
-  such a question could match another command, whose reply is only shown while "Speak answers" (`voice.speak`) is off.
+  threads|agents doing" and samples like them. Session answers are spoken by default (`voice.speakAnswers`).
 - Alerts (`voice.speakAlerts`, on; VOICE > "Say when a thread is done or needs you"; voice setting "thread alerts"): when a
-  thread the app follows changes, the orb says "The thread on <project> is done.", "... stopped on an error.", "An agent
+  thread the app follows changes, the Whisp says "The thread on <project> is done.", "... stopped on an error.", "An agent
   on <project> needs your approval." or "... is asking you something." (without a known project: the thread's title).
-  The callout shows as before. An alert that comes while the user talks or the orb speaks waits (the newest two, a
+  The callout shows too. An alert that comes while the user talks or the Whisp speaks waits (the newest two, a
   minute at most) and is said after. Not without the local AI service (the callout alone then).
 
-## Speech quality: FAST (3 steps) or CLEAR (5) (feat/polish, 2026-11-12; FAST 3 since 2026-11-13)
+## Speech quality: FAST (3 steps) or CLEAR (5)
 
 VOICE > SPEECH (setting `voice.speech`, voice `set_setting speech_quality fast|clear`) picks Supertonic's diffusion steps,
-sent to the service as `ttsSteps` (a change reloads the voice model once). FAST = 3 is the default (it was 4 until
-2026-11-13), CLEAR = 5 (the model default). Measured on the PC, linux-x64 addon, 2 threads on 2 cores, warm, median of 3, two interleaved rounds:
+sent to the service as `ttsSteps` (a change reloads the voice model once). FAST = 3 is the default, CLEAR = 5 (the model
+default). Measured on the PC, linux-x64 addon, 2 threads on 2 cores, warm, median of 3, two interleaved rounds:
 
 | Text | chars | audio | 5 steps | 4 steps | 4 vs 5 |
 |---|---|---|---|---|---|
@@ -334,7 +298,7 @@ the headset is about 4-6x slower than this loaded PC, so there Supertonic makes 
 (RTF ~1.0-1.3 at 5 steps, ~0.85-1.1 at 4). The 0.6B LLM writes about 14 tokens (~55 characters) a second on the same cores:
 the voice, not the LLM, is the slow part of a spoken answer.
 
-Why FAST is 3 (2026-11-13, owner): on the headset the voice made a sentence in 3 to 4 times its playing time
+Why FAST is 3: on the headset the voice made a sentence in 3 to 4 times its playing time
 (`tts 51 chars -> 3314 ms audio in 11439 ms`) while other AI jobs ran on the same 3 cores. Fewer steps is the
 biggest single cut in that time, and the voice effect (VOICE > SOUND, AI by default) hides the small loss. The values
 `fast` and `clear` are unchanged. Three more changes in the app keep the first sound near (the sentence cut is a pure
@@ -347,9 +311,9 @@ function, `SpokenText.SplitFirstClause`):
   plays. No cut inside numbers, code in backticks or quotes. Only the first sentence of a reply.
 - The Linux userland (`userland/mqh/mqh-run`) runs at nice 5: MQH and the agents it starts (git, builds) yield to the voice.
 
-## Voice effect (feat/polish, 2026-11-12)
+## Voice effect
 
-The owner: "post process the voices so they sound more like an AI of a true sci-fi, just tweaking the output".
+The replies are post-processed so the voice sounds like a synthetic assistant.
 `Runtime/AI/VoiceFx.cs` (pure C#, no UnityEngine) processes each sentence's WAV in `QvacClient.Speak`, on the
 worker thread that fetched it, never on the main thread. If it fails, the sentence plays dry.
 
@@ -387,8 +351,8 @@ Measured (tests/voicefx, Windows dev PC, Unity's bundled .NET 8 with Unity's Ros
 Headset estimate (not measured; the PC is 4-6x faster than a Quest 3S core): adjutant about 50-120 ms per
 second of speech, starship 90-210, comm 45-100. Only the first sentence's cost is felt (the next one is made and
 processed while the first plays), and trimming gives back about 0.35 s in front. For a 3 s first sentence:
-off starts about 0.35 s sooner than before, adjutant costs 0.15-0.36 s (about what trimming gives back), starship
-0.27-0.63 s (up to about 0.3 s later than before), comm 0.13-0.29 s.
+off starts about 0.35 s sooner than without trimming, adjutant costs 0.15-0.36 s (about what trimming gives back), starship
+0.27-0.63 s (up to about 0.3 s later than off), comm 0.13-0.29 s.
 Memory: scratch buffers are pooled (16 per type, the larger ones kept): a 5 s sentence allocates 483 KB for a
 481 KB output, a run of 7 sentences of all presets 1722 KB for 1722 KB of output, so no garbage beyond the WAV
 itself. The pool is dropped 2 min after the last reply (`VoiceFx.ReleaseScratch`).
@@ -404,18 +368,7 @@ output twice and from two threads at once, the WAV header / rate / length, the t
 time; with the samples folder also the service's own replies and parity with the prototype's renders
 (correlation adjutant 0.995, starship 0.986, comm 0.974). Editor self-test section `voicefx`.
 
-## English-only models: later options (2026-11-12, not done)
-
-The app is English only, but the models stay multilingual in this change: a model swap needs a new download, its
-sha256 in `local-ai/server/models.js`, a `docs/LICENSES.md` entry and a headset install, and none was measured yet.
-
-| Now | Option | Why it may help | What it needs |
-|---|---|---|---|
-| Whisper base, multilingual (q8_0, 78 MB) | Whisper `base.en` | English-only Whisper models make fewer English errors than the multilingual one of the same size, and never switch language on a short or noisy command | the download (ggml `base.en`, q8_0), sha256 and pinned revision in `models.js`, a LICENSES row (MIT), a headset install, then the bench and the owner's recordings |
-| multilingual-e5-small (118M, q8_0, 126 MB) | an English-only sentence embedder (for example a bge-small-en class model, 33M) | smaller and faster; the 2026-11-09 bench (`tools/voicebench/bench.py`) already scores English routers next to e5-small | the GGUF download, sha256, LICENSES row, new cached vectors (the tag `DeciderModelTag` changes), a `voicedecide` bench run with no drop in exact accuracy |
-| Supertonic 3 (31 languages) | keep | English is one of its languages; `ttsLanguage` = `en` | nothing |
-
-## GPU? (measured 2026-11-08, Quest 3S, the app not running)
+## GPU or CPU (measured on the headset with the app not running)
 
 QVAC's Android prebuilds carry an OpenCL backend for Adreno (and Vulkan). On the headset it works once
 `libqvac-ggml-vulkan.so` is next to the OpenCL one (fabric detects the Adreno version through Vulkan; without
@@ -477,7 +430,7 @@ vocabulary prompt fixes names ("MetaCodex", not "MedicoDex").
 | Lua API | `Runtime/Scripting/ScriptHost.cs` (`voice.*`) |
 | Userland | `userland/overlay/usr/local/bin/mcx-ai`, `mcx-ui voice ...` |
 
-## Speech has priority (voice/server, 2026-11-13)
+## Speech has priority
 
 Measured on the headset: a spoken answer took 3x longer to make than to play ("tts 51 chars -> 3314 ms audio in
 11439 ms"). In the same seconds the service ran its own background work on the same 3 AI cores: the LLM warm-up
@@ -499,7 +452,7 @@ What changed in the service (`local-ai/server/engines.js`, `main.js`):
   with 128 it took 0.11 s. The prefill speed did not change (12.9 s, before 13.3 s). This also makes the old rule
   "speech-to-text cancels a speculative prefill" act at once.
 - Config: `backgroundYieldsToSpeech` (default true) turns it all off; `speechHoldMs`, `maxYieldMs`, `llmPromptBatch`.
-- The service's default `ttsSteps` is now 3 (owner: the voice effect hides the small loss). 1-10 is accepted.
+- The service's default `ttsSteps` is 3 (the voice effect hides the small loss). 1-10 is accepted.
   The app still sends its own value.
 
 Measured on the PC (`tools/local-ai-dev.sh pc start` under `taskset -c 0-2`, threads 2, ttsThreads 2, llmThreads 1,
@@ -511,8 +464,8 @@ llmBatchThreads 2, ttsSteps 4). The same 56-character sentence, solo 1.0 s:
 | a speculative prefill runs | 1545 ms | 1517 ms |
 | bulk vectors run (12 requests of 64) | 10703 ms | 1142 ms |
 
-The prefill slowed the speech less than the warm-up on the PC (not explained). Before, it ran on for 14 s; now it
-stops and runs again after the speech. After the change the warm-up still finished (13.2 s run, 18.2 s with the wait), a second call replied `cached`, and a
+The prefill slowed the speech less than the warm-up on the PC (not explained). It stops for the speech and runs
+again after it. After the change the warm-up still finished (13.2 s run, 18.2 s with the wait), a second call replied `cached`, and a
 chat on that prompt started from the cache (22 prompt tokens to read, first token in 0.8 s).
 
 How to check on the headset, in `files/qvac/data/service.log`:
@@ -528,7 +481,7 @@ How to check on the headset, in `files/qvac/data/service.log`:
 Not changed (same cores, by design or out of the service's reach):
 
 - A chat answer streams while it is spoken (LLM on 1 thread, the voice on 2: "Streaming answers").
-- Speech-to-text does not wait for speech: the user may talk while the orb speaks.
+- Speech-to-text does not wait for speech: the user may talk while the Whisp speaks.
 - The local coder never shares the cores with the voice: a spoken answer waits for a coder job that runs
   (`coderHolds`, up to `coderHoldMs` after its last request).
 - A model that loads cannot be stopped. The vector model load (about 2 s on the PC) also blocks the service's

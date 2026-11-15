@@ -35,8 +35,9 @@ app: it never writes code and is not a provider of the agent threads (the local 
 3. **Few threads, low priority, away from the frame loop's cores**: 2 inference threads at nice 10, on cores 0-2
    (the test headset has 6 cores: 0-1 at 2.05 GHz, 2-5 at 2.36 GHz).
 4. **On demand only.** Push-to-talk speech-to-text, short spoken replies, one decision per clause. No always-on
-   inference. Idle models unload: speech and the language model after 30 minutes, the voice after 10, the decision
-   model after 60, the local coder after 10.
+   inference. Idle models unload with the times the app sends in its config (`ShellVoice`): speech-to-text after 10
+   minutes, the language model and the voice after 15; the decision model stays loaded; the local coder goes after
+   10. The service's own defaults (30, 30, 10 and 60 minutes) apply only before the app's config arrives.
 5. **Small quantized models**: Whisper base (q8_0), Qwen3 0.6B (q4_0), multilingual-e5-small (q8_0) and a
    text-to-speech model with 10 voices (q4_0).
 6. **The app owns the frame budget.** It can pause the service (`POST /pause`) and resume it.

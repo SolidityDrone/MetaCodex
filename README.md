@@ -201,7 +201,7 @@ The four model files ship in the APK, about 650 MiB in total. The first start co
 | Local coding model (optional) | Qwen2.5-Coder 0.5B Instruct (q4_0) | 409 MiB | Apache-2.0 |
 
 - All four models run on the CPU with 2 threads at `nice 10`. A GPU test was slower for the language model, so the models stay on the CPU. The local coding model also runs on the CPU.
-- Idle models unload: speech and language model after 30 min, voice after 10 min, decision model after 60 min.
+- Idle models unload: speech-to-text after 10 min, the language model and the voice after 15 min. The decision model stays loaded.
 - While the local coding model works, the voice models unload. They load again at their next use.
 - The runtime exposes HTTP APIs on loopback, in chat-completions, Responses and Messages styles. In the Linux, `mcx-ai` uses the chat-completions API.
 - In NEW THREAD, the local model is the first row of the model list. It is marked LOCAL and never becomes the default.
