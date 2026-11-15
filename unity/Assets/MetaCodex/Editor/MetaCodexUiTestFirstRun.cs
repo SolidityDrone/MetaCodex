@@ -14,11 +14,20 @@ namespace MetaCodex.EditorTools
     /// TALK and the windows that need a step not over are locked with one callout and lift by themselves; a failed step says
     /// it did not start and lifts its lock; the end says "Setup done in N s", sets the flag, and the strip folds away; the
     /// beats wait for their actions; the finale follows TALK's lock; a replay has no strip; the voice command lints clean.
+    /// Also: the staged start's pieces make the same windows as BuildPanels (MetaCodexShell.BuildSteps).
     public static partial class MetaCodexUiTest
     {
         private static void FirstRunSection(MetaCodexShell shell, Transform head)
         {
             Check(shell.Settings.firstStartDone && !shell.SetupActive, "first run: the Editor is never a first start (flag set at once, no setup)");
+            Check(shell.ShellUp, "start: the shell is up after Build (all pieces ran)");
+
+            // ---- the start's pieces and BuildPanels make the same windows (an accent change rebuilds through BuildPanels)
+            var built = shell.PanelIds.OrderBy(x => x).ToList();
+            shell.RebuildPanels();
+            var rebuilt = shell.PanelIds.OrderBy(x => x).ToList();
+            Check(built.SequenceEqual(rebuilt), "start: BuildSteps and BuildPanels make the same windows"
+                + (built.SequenceEqual(rebuilt) ? "" : ": only at start " + string.Join(",", built.Except(rebuilt)) + "; only in BuildPanels " + string.Join(",", rebuilt.Except(built))));
 
             // ---- a first start, steps set by the test: the card opens with the strip and the first beat
             shell.BeginFirstRunForTest();
