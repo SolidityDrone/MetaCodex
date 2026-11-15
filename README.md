@@ -84,13 +84,14 @@ The test headset has 6 cores and 7.9 GB RAM.
 | What | Value | Context |
 |---|---|---|
 | APK size | 995 MB | 994,868,919 bytes. It holds the Linux, the AI models and MQH, so the first start downloads nothing. |
-| First start | 21 s | A one-time setup from the APK, offline, with a guided tour. Measured from the shell start to the last setup step. |
+| First start | 21 s | A one-time setup from the APK, offline, while a guided tour runs. Measured on the test headset from the shell start to the last setup step. |
 | Voice commands in the registry | 34 | Each one has a schema, synonyms, phrases and examples. |
 | Thread windows | 6 | Open at the same time. Groups of 2x1, 2x2 or 3x2 move as one window. |
-| Agent skills shipped | 48 + 12 | 48 for every project, 5 of them written for MetaCodex. 12 more for native-app projects. |
+| Agent skills shipped | 49 + 13 | 49 for every project, 6 of them written for MetaCodex. 13 more for native-app projects. |
+| App plugins | 2 examples | A Lua plugin adds its own windows, menu tiles and voice commands while the app runs. Timers and Calendar ship as examples. |
 | Project types | 3 | NATIVE, DEFAULT and RESEARCH. A project made in the app is a git repository. |
 | Default gesture | Pinch | Selects, drags and scrolls. No gesture opens or closes a window by default. |
-| Dock and wrist menu tiles | 11 | The same tiles in both places. |
+| Dock and wrist menu tiles | 11 | The same tiles in both places. Plugins can add up to 6 more. |
 | Text input | System keyboard | Each text field opens the headset's system keyboard. |
 | Local coding model | Optional | Runs agent threads on the headset, offline. |
 
@@ -108,7 +109,7 @@ The test headset has 6 cores and 7.9 GB RAM.
 - At start, the app asks the headset for a sustained high GPU level. It does not trade CPU level for GPU level.
 - Each build turns on these rendering options: dynamic foveation, symmetric projection, multiview render regions and late latching.
 - Garbage collection is incremental in every build.
-- Start-up work, such as building the voice decision model, runs off the main thread.
+- Start-up work, such as building the voice decision model, runs off the main thread. The shell is built in small pieces behind the start splash, with at most 20 ms of main-thread work in a frame.
 - Each service listens on `127.0.0.1` only. Every app on the headset can reach loopback, so each service has its own token.
 
 | Port | Service | Token |
@@ -131,12 +132,11 @@ The app checks the health of MQH and of the local AI every 5 s. Three missed che
 
 - The APK carries everything the app needs: the Linux with its tools, the four AI models, MQH and the vectors of the voice's decision model. The first start downloads nothing.
 - While the start splash shows, the app asks once for the microphone, spatial data and the headset camera. The install script grants them at install time.
-- The very first start lays out what the APK carries. On the test headset this one-time setup took 21 s after the shell was up.
-- A panel in front of you, "FIRST START · ONE-TIME SETUP", shows the five steps in turn: the AI models, the local AI service, the Linux, MQH and the voice's decision model.
-- Each step has a name, one line on what it does, its own bar and a spinner. A step that is done stays in the list with ✓ and its time.
-- Until its step is done, a feature is dimmed and shows 🔒. TALK waits for step 5. THREADS and AGENTS wait for step 4. TERMINALS and FILES wait for step 3. A tap gives one short message, nothing else.
-- A guided tour runs at the same time: the main menu, the orb, moving a window, CONTROL. Each card waits for you to do it. You can skip a step or the whole tour.
-- The panel closes itself at the end. It never shows again. CONTROL > ABOUT > TOUR, or the voice command "start the tour", plays the tour again.
+- The very first start lays out what the APK carries, in five steps: the AI models, the local AI service, the Linux, MQH and the voice's decision model. On the test headset this one-time setup took 21 s after the shell was up.
+- One small guide card opens after the splash. Its top strip shows the step in plain words, STEP k OF 5, one bar for the whole setup and the line "One-time setup: only on this first start, nothing is downloaded". At the end it says "Setup done in N s" and folds away.
+- Until its step is done, a feature is dimmed and shows 🔒. TALK waits for step 5. THREADS and AGENTS wait for step 4. TERMINALS and FILES wait for step 3. A tap gives one short message, nothing else. Every lock lifts by itself, at the latest 5 minutes after the setup began.
+- Below the strip, the Whisp gives a short tour: the main menu, the Whisp, moving a window, CONTROL and TALK. Each beat waits for you to do it, and a ring of light marks its target. You can skip a step or the whole tour.
+- The setup never runs again. CONTROL > ABOUT > TOUR, or the voice command "start the tour", plays the tour again.
 - [docs/ready-on-install.md](docs/ready-on-install.md) has the details and the measured times of each step.
 
 ### A real Linux inside the app
@@ -225,7 +225,7 @@ The core session context protocol (CSCP) lets you ask questions instead of only 
 Examples: "Is this build stuck?" and "What did this thread achieve?".
 
 - It collects focus, threads, pending approvals, processes, tools, plugins and events. Events stay for 3 hours at most.
-- It does not record small UI events, such as the orb's callouts, or what you ask it.
+- It does not record small UI events, such as the Whisp's callouts, or what you ask it.
 - It answers from exact facts first. Only then does the local language model phrase a short recap.
 - It is read-only. It never approves a command and never calls a command "safe". It lists the risks, and you decide.
 
@@ -264,6 +264,7 @@ None of them needs an APK rebuild.
 | MQH plugins | Node.js in the Linux, TypeScript | The MQH API, project files and processes. |
 | Gesture plugins | In the app. Lua detectors and JSON poses. | App actions, panels, terminal input, settings, hands. |
 | Lua scripts | In the app, in a soft sandbox | The same actions. No files, no network. |
+| App plugins | In the app. Lua with a `plugin.json`. | Their own windows, main menu tiles, voice commands, alarms and saved state. |
 | Provider integrations | MQH plugins for agent CLIs | The agent processes MQH starts. |
 | Agent views | Fenced blocks in a thread message | Panels: charts, tables, diffs, graphs, a physics stage. |
 
@@ -271,6 +272,7 @@ None of them needs an APK rebuild.
 - **Plugins.** MQH ships only the plugins that MetaCodex uses. Every MQH thread gets the MetaCodex introduction and its skills.
 - **Gesture plugins.** A plugin folder holds `plugin.json`, pose files and `main.lua`. The app reloads it within a second. A detector runs at 36 Hz with a budget of 200,000 instructions. Gesture plugins that open or close panels are off by default. GESTURES lists them, and you can turn one on there.
 - **Lua scripts.** A script that exceeds its budget stops. The app keeps its frame rate.
+- **App plugins.** MetaCodex grows while it runs. An agent writes a plugin, a folder of Lua in the Linux, and it appears at once: its own window drawn with the app's UI kit, its own tile on the DOCK and the wrist menu, voice commands, alarms and saved state. It loads again at every start. Two examples ship: Timers (a focus timer in the tomato style, with alarms) and Calendar (a month grid with entries and reminders). Install them from CONTROL > GESTURES > EXAMPLES.
 - **Providers.** One provider speaks the Agent Client Protocol (ACP) to an agent CLI over stdio. The app turns off the folder snapshots of one agent CLI, because they stall its threads.
 - **Review.** When an agent changes a plugin, gesture, script or voice command, it shows the change and asks for your OK first.
 - **Proof.** A fresh agent writes a working gesture plugin from the skills alone (`tools/agent-plugin-test.sh`).
@@ -343,7 +345,7 @@ A built app declares its own permissions. `mcx-app verify` lists them. The heads
 
 ### A workspace you can stand in
 
-<a href="docs/assets/diagrams/spatial-ui-light.webp"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/diagrams/spatial-ui-dark.webp"><img alt="The spatial interface: curved panels around you, an orb that casts and manages them, placement rules, layouts, and hands with gestures." src="docs/assets/diagrams/spatial-ui-light.webp"></picture></a><br><sub>Full size: <a href="docs/assets/diagrams/spatial-ui-dark.webp">dark</a> · <a href="docs/assets/diagrams/spatial-ui-light.webp">light</a></sub>
+<a href="docs/assets/diagrams/spatial-ui-light.webp"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/diagrams/spatial-ui-dark.webp"><img alt="The spatial interface: curved panels around you, the Whisp that casts and manages them, placement rules, layouts, and hands with gestures." src="docs/assets/diagrams/spatial-ui-light.webp"></picture></a><br><sub>Full size: <a href="docs/assets/diagrams/spatial-ui-dark.webp">dark</a> · <a href="docs/assets/diagrams/spatial-ui-light.webp">light</a></sub>
 
 - Camera passthrough shows your room. The panels float in it, curved around you.
 - One shader draws a whole panel as one mesh with one draw call. The GPU bends the panel, so text that changes every frame bends with it.
@@ -351,13 +353,16 @@ A built app declares its own permissions. `mcx-app verify` lists them. The heads
 - Panel frames look like carved stone armour, and buttons look like carved slate. Both have energy channels. The wrist menu's glass follows the panel opacity setting.
 - A start splash shows a transparent logo a metre in front of you, at eye level. It breaks up into light after a few seconds.
 - Each text field opens the headset's system keyboard. KEYS opens it for the terminal.
-- The orb is a sphere of energy near you. Its quick actions are four plain squares: TALK, SPEAK, PLACE and LOG. It casts panels in and out, shows messages as callouts, and speaks status answers and thread alerts.
-- The orb moves aside from the panel you look at. It holds still while it shows a callout or its menu, or while it listens, thinks or speaks. If you turn more than 70 degrees away from it, it follows you.
-- A new panel opens in view. Its middle is within 50 degrees of where you face, and within 36 degrees above or below eye level. Near objects, such as a desk or a monitor, weigh less, so a panel can open in front of them. With depth on, it opens at least 8 cm in front of real surfaces.
-- A window that comes back to its old place does so only when that place is in view. It then turns to face you.
+- The Whisp is a small prismatic crystal wisp that floats near you, up to the right of your view. Its quick actions are four plain squares: TALK, SPEAK, PLACE and LOG. It casts windows in and out, shows messages as callouts, and speaks status answers and thread alerts.
+- Its light shows its state: calm cyan when idle, ice white while it listens, violet while it thinks, pulses while it speaks, amber while a thread waits for your answer. Gold shards mean unread messages.
+- The Whisp moves aside from the window you look at. It holds still while it shows a callout or its menu, or while it listens, thinks or speaks. If you turn more than 70 degrees away from it, it follows you.
+- A new window opens where you look, its middle just below eye level, turned to you. It never covers another window, the DOCK, or the Whisp's menu and messages. With depth on, it opens at least 8 cm in front of real surfaces.
+- A window that you open from another window opens beside it. A window that you open again comes back where you left it, when that place is still in view and free.
+- When the view is full, a window opens a little further away, or at the nearest free place round you. The Whisp then points to it.
+- The Whisp casts each window: corner brackets lock on and a line of light sweeps across it in 0.35 s. Closing runs the line back in 0.22 s.
 - Layouts: FIXED panels stay in the world. FLOAT panels sit on an invisible cylinder that follows your body. The cylinder moves only past a dead zone of 0.30 m, so a small step does not move it. A TURN bar turns the cylinder. No gesture turns it. Named layouts save the open panels.
 - Recenter keeps the layout. Every window turns with you, so each keeps its place relative to the others.
-- The wrist menu opens when you look at your left wrist and touch it with your right index finger. The wrist menu and the dock show the same 11 tiles.
+- The main menu is the DOCK, or the wrist menu if you choose it in CONTROL > DISPLAY. The wrist menu opens when you look at your left wrist and touch it with your right index finger. Both show the same 11 tiles, plus the tiles of app plugins.
 - Hand tracking drives everything: ray and pinch, fingertip poke, fist to move a panel. By default only the pinch selects, drags and scrolls. No gesture opens or closes a window by default. A pose fires only after you hold it for 2 s in a row. One pose is bound by default: the V (index and middle finger up) turns Ambient Focus on or off. Taps, such as a clap or a swipe, fire at once. A binding never fires while that hand is on a window. Built-in gestures are pinch, grab, point, open, palm-up and clap.
 - Ambient Focus keeps a dome of your room visible. The blur covers the whole room at once, using the colours of the room that the camera has seen. A sharpened depth map keeps real people and objects in front of the panels.
 - Depth and camera stay on for 60 s after nothing needs them. Voice does not stop the camera. Its frames are not used while speech is turned into text.
@@ -380,7 +385,7 @@ A built app declares its own permissions. `mcx-app verify` lists them. The heads
 - **Launch on tap.** No app installs or launches without your tap. See [Native apps](#native-apps-built-on-the-headset).
 - **Sealed secrets.** See [Secrets stay sealed](#secrets-stay-sealed).
 - **Agent limits.** Each thread has a permission mode: EDITS, AUTO or FULL. EDITS asks before commands. FULL never asks. Approvals show in the headset. A voice command never approves.
-- **No third-party marks.** The app shows no third-party logos.
+- **No third-party marks.** The app shows no third-party logos, and the engine's own start logo is off.
 - **Not claimed.**
   - No sandbox separates agents from the files of the Linux. They share one Android user.
   - A debuggable APK lets anyone with `adb` use the Keystore key of the app. Make a release build before you store real keys.
@@ -409,9 +414,9 @@ The repository holds neither the Debian layer nor the model files.
 | Document | Content |
 |---|---|
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | Commands, build stack, real names, folder map, dev loop, test suites, guards. |
-| [docs/ready-on-install.md](docs/ready-on-install.md) | What the APK carries, the first start (setup panel, locks, tour), its measured times, the release folder. |
+| [docs/ready-on-install.md](docs/ready-on-install.md) | What the APK carries, the first start (the guide card, the locks, the tour), its measured times, the release folder. |
 | [docs/perf.md](docs/perf.md) | Frame rate: rendering options, GPU level, main-thread costs, measured numbers. |
-| [docs/ui.md](docs/ui.md) | Spatial UI: style, the orb, panels, placement, hands, gestures, layouts, Ambient Focus. |
+| [docs/ui.md](docs/ui.md) | Spatial UI: style, the Whisp, windows, placement, hands, gestures, layouts, Ambient Focus. |
 | [docs/control-center.md](docs/control-center.md) | CONTROL and the main menu. |
 | [docs/thread-view.md](docs/thread-view.md) | Thread windows: the chat, the message box, groups, held turns, archive. |
 | [docs/thread-sidebar.md](docs/thread-sidebar.md) | The side bar of a thread window: changes, files, git. |
@@ -468,6 +473,7 @@ The version is in `ProjectSettings/ProjectVersion.txt` inside the app project fo
 | `tools/cscheck.sh` | about 10 s | A compile check with the editor and device defines. No editor. |
 | `tests/sidebar/run-sidebar-tests.sh` | not timed | The side bar logic. |
 | `tests/voicefx/run-voicefx-tests.sh` | not timed | The voice effect. |
+| `tests/plugins/run-plugin-tests.sh --examples` | not timed | App plugins on the real script host with a fake app: load, tiles, every button, three hours of clock, voice lint, restart, unload. No editor. |
 | `python3 tools/check-native-skills.py` | not timed | Every command, flag, path and code block in the native-app skills. |
 | `python3 tools/comments-only-check.py <git-ref>` | seconds | That a change to C# files touched only comments and whitespace. |
 
@@ -488,19 +494,20 @@ This README describes MetaCodex 0.7.19 (versionCode 26).
 
 **Not verified on the headset**
 
+- The staged start, the guide card, the Whisp's body and the app plugins have no headset run yet. Their checks are in the device checklist.
 - The effect of the foreground service and of the build wake lock while a built app is in front.
 - REPORT from a built app back to its thread. BACK works on the headset.
 - The depth view of the Night Vision example. Built apps with passthrough run on the headset. The camera, depth, hand and controller features of the native layer build there, but their runtime is not verified.
 - The speed of the local coding model. A local coding thread dropped frames badly in a headset test.
 - A headset benchmark of the decision model.
 - Many lines of the device checklist ([docs/TEST_CHECKLIST.md](docs/TEST_CHECKLIST.md)).
-- Some Editor self-test checks fail, for example the orb's timing while it casts a panel.
+- Some Editor self-test checks fail, for example the Whisp's timing while it casts a window.
 
 **Known limits**
 
 - Memory grows after repeated app switches. Android's low-memory killer stopped `:ai` twice in one test.
 - The app polls MQH over HTTP. There is no WebSocket.
-- While the orb menu is open, the app does not poll the thread list. Answers about running threads may be stale then.
+- While the Whisp's menu is open, the app does not poll the thread list. Answers about running threads may be stale then.
 - The app saves the session context in a file in the shared folder (`session-context.jsonl`). Everything in the Linux can read it. The app sends it to no agent.
 - Agents and the Linux share one Android user. There is no sandbox between them.
 - After a crash of a built app, MetaCodex cannot come forward by itself. Open it from the headset's app list.
