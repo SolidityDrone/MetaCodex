@@ -61,18 +61,24 @@ namespace MetaCodex.AI
 #endif
         }
 
-        public bool Start()
+        public bool Start() => StartAt(-1);
+
+        /// Start, from `clipPos` of the shared capture when it is open (audio already captured: what was said with or
+        /// after "Hey Whisp"); -1 or no shared capture: from now, as Start always did.
+        public bool StartAt(int clipPos)
         {
             if (Recording) return true;
             LastError = null;
-            if (Microphone.devices.Length == 0) { LastError = "no microphone found"; return false; }
-            _device = null; // the default input
-            Microphone.GetDeviceCaps(_device, out int min, out int max);
-            int want = min == 0 && max == 0 ? 16000 : Mathf.Clamp(16000, min, max);
-            _clip = Microphone.Start(_device, true, 20, want); // a looping 20 s ring buffer
-            if (_clip == null) { LastError = "the microphone did not start"; return false; }
-            _rate = _clip.frequency;
-            _readPos = 0;
+            if (SharedOpen)
+            {
+                int now = Microphone.GetPosition(_device);
+                _readPos = clipPos >= 0 && clipPos < _clip.samples ? clipPos : Mathf.Max(0, now);
+            }
+            else
+            {
+                if (!OpenMicrophone()) return false;
+                _readPos = 0;
+            }
             _samples.Clear();
             _speech = _silence = 0f;
             HeardSpeech = false;
@@ -121,7 +127,7 @@ namespace MetaCodex.AI
         {
             if (!Recording) return null;
             Tick(); // the last samples
-            Microphone.End(_device);
+            if (!Shared) Microphone.End(_device);
             Recording = false;
             Level = 0f;
             if (_samples.Count < _rate / 5) return null; // under 0.2 s
@@ -131,11 +137,82 @@ namespace MetaCodex.AI
         public void Cancel()
         {
             if (!Recording) return;
-            Microphone.End(_device);
+            if (!Shared) Microphone.End(_device);
             Recording = false;
             Level = 0f;
             _samples.Clear();
         }
+
+        private bool OpenMicrophone()
+        {
+            if (Microphone.devices.Length == 0) { LastError = "no microphone found"; return false; }
+            _device = null; // the default input
+            Microphone.GetDeviceCaps(_device, out int min, out int max);
+            int want = min == 0 && max == 0 ? 16000 : Mathf.Clamp(16000, min, max);
+            _clip = Microphone.Start(_device, true, 20, want); // a looping 20 s ring buffer
+            if (_clip == null) { LastError = "the microphone did not start"; return false; }
+            _rate = _clip.frequency;
+            CaptureId++;
+            return true;
+        }
+
+        // ---- the shared capture ("Hey Whisp", WakeListener; docs/voice.md): one microphone capture for the wake gate
+        // and TALK. While Shared, the microphone stays open between recordings and Start / Stop / Cancel only mark a
+        // stretch of it; off (the default), everything above runs exactly as it always did.
+
+        /// The microphone stays open for the wake word.
+        public bool Shared { get; private set; }
+        /// Counts the times the microphone was started (a reader of the shared capture starts over when it changes).
+        public int CaptureId { get; private set; }
+        /// The shared capture is open and running.
+        public bool SharedOpen => Shared && _clip != null && Microphone.IsRecording(_device);
+        /// The capture's sample rate and the length of its loop (samples); 0 when closed.
+        public int Rate => _clip != null ? _rate : 0;
+        public int LoopSamples => _clip != null ? _clip.samples : 0;
+        /// Where the microphone writes now in its loop (-1 when it is not open).
+        public int Position => _clip != null && (Recording || Shared) ? Microphone.GetPosition(_device) : -1;
+
+        /// Opens the one capture and keeps it open (TALK's capture is kept when it records); false with LastError.
+        public bool OpenShared()
+        {
+            if (SharedOpen) return true;
+            LastError = null;
+            if (!(Recording && _clip != null && Microphone.IsRecording(_device)) && !OpenMicrophone()) return false;
+            Shared = true;
+            return true;
+        }
+
+        /// The wake word is off or paused: the microphone closes (at the end of TALK's recording when one runs).
+        public void CloseShared()
+        {
+            if (!Shared) return;
+            Shared = false;
+            if (!Recording && _clip != null) Microphone.End(_device);
+        }
+
+        /// The wake gate's reader, no allocation: the next block.Length mono samples of the shared capture from `pos`
+        /// (advanced), when the microphone (`head`, its Position) is that far ahead; false otherwise.
+        public bool ReadTap(float[] block, ref int pos, int head)
+        {
+            if (_clip == null || head < 0 || pos < 0) return false;
+            int n = block.Length, loop = _clip.samples;
+            int avail = head - pos;
+            if (avail < 0) avail += loop;
+            if (avail < n) return false;
+            int ch = Mathf.Max(1, _clip.channels);
+            if (ch == 1) _clip.GetData(block, pos); // wraps round the loop by itself
+            else
+            {
+                if (_tapRaw.Length != n * ch) _tapRaw = new float[n * ch]; // once (the channels do not change)
+                _clip.GetData(_tapRaw, pos);
+                for (int i = 0; i < n; i++) { float v = 0f; for (int c = 0; c < ch; c++) v += _tapRaw[i * ch + c]; block[i] = v / ch; }
+            }
+            pos += n;
+            if (pos >= loop) pos -= loop;
+            return true;
+        }
+
+        private float[] _tapRaw = new float[0];
 
         private void Finish()
         {
