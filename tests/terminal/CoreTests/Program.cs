@@ -19,7 +19,13 @@ internal static class Program
         Unit();
         Corpus(corpus);
         if (synthTar != null && File.Exists(synthTar)) SyntheticTar(synthTar);
-        if (rootfs != null && File.Exists(rootfs)) { RealRootfs(rootfs); RealRootfs(Gunzipped(rootfs), " (plain tar, as packed in the APK)"); }
+        if (rootfs != null && File.Exists(rootfs))
+        {
+            // the number of tar entries the image was packed with (rootfs.json "entries", written by fetch-rootfs.sh or
+            // tools/userland-image.sh); the extractor's counts must add up to it ("./" is the one entry it does not count)
+            _rootfsEntries = RootfsEntries(Path.Combine(Path.GetDirectoryName(rootfs) ?? ".", "rootfs.json"));
+            RealRootfs(rootfs); RealRootfs(Gunzipped(rootfs), " (plain tar, as packed in the APK)");
+        }
         string overlay = args.Length > 3 ? args[3] : null;
         if (overlay != null && File.Exists(overlay)) { Overlay(overlay); Overlay(Gunzipped(overlay), " (plain tar, as packed in the APK)"); }
         Console.WriteLine(_fails == 0 ? $"ALL OK ({_passes} checks)" : $"{_fails} FAILED, {_passes} passed");
@@ -212,6 +218,24 @@ internal static class Program
         Check(ops.Files.Contains("usr/local/bin/mcx-secret") && ops.Files.Contains("root/.claude/skills/quest-gesture-plugins/SKILL.md"), "overlay: mcx-secret and the agent skills" + note);
     }
 
+    private static long _rootfsEntries = -1;
+
+    /// "entries" of rootfs.json (a flat JSON object; -1 when missing).
+    private static long RootfsEntries(string json)
+    {
+        try
+        {
+            var text = File.ReadAllText(json);
+            int i = text.IndexOf("\"entries\"", StringComparison.Ordinal);
+            if (i < 0) return -1;
+            i = text.IndexOf(':', i) + 1;
+            int j = i;
+            while (j < text.Length && (char.IsWhiteSpace(text[j]) || char.IsDigit(text[j]))) j++;
+            return long.TryParse(text.Substring(i, j - i).Trim(), out var n) ? n : -1;
+        }
+        catch (Exception) { return -1; }
+    }
+
     private static void RealRootfs(string path, string note = "")
     {
         string root = Path.Combine(Path.GetTempPath(), "mcx-rootfs-null");
@@ -221,7 +245,9 @@ internal static class Program
         float last = 0;
         using (var f = File.OpenRead(path)) st = TarGzExtractor.Extract(f, root, ops, p => last = p);
         Console.WriteLine($"rootfs parse: {st} in {(DateTime.UtcNow - t0).TotalSeconds:F1} s");
-        Check(st.Files == 2677 && st.Dirs == 414 && st.Symlinks == 173 && st.HardLinks == 1 && last == 1f, "rootfs: entry counts (tar tv: 2677 files, 415 dirs incl. ./, 173 links, 1 hard link)" + note, st.ToString());
+        long counted = (long)st.Files + st.Dirs + st.Symlinks + st.HardLinks + 1; // + "./"
+        Check(_rootfsEntries > 0 && counted == _rootfsEntries && st.Files > 2000 && last == 1f,
+            $"rootfs: entry counts add up to rootfs.json's {_rootfsEntries} entries (files + dirs + links + hard links + ./)" + note, st.ToString());
         Check(ops.Links.TryGetValue("bin", out var b) && b == "usr/bin", "rootfs: /bin -> usr/bin");
         Check(ops.Files.Contains("usr/bin/bash") && ops.Files.Contains("usr/lib/aarch64-linux-gnu/libc.so.6"), "rootfs: bash and glibc present");
         RootfsSetup.Apply(root, new[] { 3003, 9997, 20123 }, 6, ops);
