@@ -128,7 +128,7 @@ namespace MetaCodex.AI
 
         private static readonly string[] LeadingFillers =
         {
-            "hey metacodex", "ok metacodex", "okay metacodex", "metacodex", "hey whisp", "hey wisp", "hi whisp", "whisp", "wisp", // the Whisp's name
+            "hey metacodex", "ok metacodex", "okay metacodex", "metacodex", "hey whisp", "hey wisp", "hi whisp", // the wake phrase (not the bare name: "whisp off" is a setting)
             "hey", "ok", "okay", "so", "um", "uh", "please",
             "can you", "could you", "would you", "will you", "i want to", "i would like to", "id like to", "i would like", "id like", "i want", "lets", "now",
         };

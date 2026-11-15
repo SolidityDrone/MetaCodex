@@ -60,8 +60,12 @@ namespace MetaCodex.EditorTools
             var cmd = shell.Voice.Find("set_wake_word");
             var lint = cmd != null ? VoiceCommands.Lint(cmd) : new List<string> { "missing" };
             Check(cmd != null && lint.Count == 0, "set_wake_word is registered, lint clean" + (lint.Count > 0 ? ": " + string.Join("; ", lint) : ""));
+            // set_setting (registered first) takes "turn off the wake word" as setting wake_word: the same SetWakeWord
             var m = shell.Voice.FastMatch("turn off the wake word");
-            Check(m != null && m.Command.Name == "set_wake_word" && (string)m.Args["state"] == "off", "\"turn off the wake word\" -> set_wake_word off (fast path)");
+            Check(m != null && (m.Command.Name == "set_wake_word" && (string)m.Args["state"] == "off" || m.Command.Name == "set_setting" && (string)m.Args["setting"] == "wake_word" && (string)m.Args["value"] == "off"),
+                "\"turn off the wake word\" -> Hey Whisp off (fast path: " + (m != null ? m.Command.Name + " " + m.Args.ToString(Newtonsoft.Json.Formatting.None) : "no match") + ")");
+            var ml = shell.Voice.FastMatch("listen for hey whisp");
+            Check(ml != null && ml.Command.Name == "set_wake_word" && (string)ml.Args["state"] == "on", "\"listen for hey whisp\" -> set_wake_word on (fast path)");
             var w = shell.Voice.FastMatch("hey whisp open the terminal");
             var plain = shell.Voice.FastMatch("open the terminal");
             Check(plain == null || w != null && w.Command.Name == plain.Command.Name, "\"hey whisp\" in front of a command is dropped (fast path fillers)");
