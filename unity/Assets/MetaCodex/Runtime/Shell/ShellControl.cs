@@ -55,7 +55,7 @@ namespace MetaCodex.Shell
                     Blurb = "Where windows go and how big they are: fixed or floating layout, distance, scale, bending, the main menu, saved layouts.",
                     Status = () => Settings.layout == "float" ? "float" : "fixed" },
                 new ControlCategory { Key = "look", Label = "LOOK & SOUND", Glyph = "◈", Group = "THIS HEADSET", Panel = "settings", Tab = SetLook,
-                    Blurb = "How the glass looks and sounds: opacity, foveation, sounds and volume, the orb.",
+                    Blurb = "How the glass looks and sounds: opacity, foveation, sounds and volume, the Whisp.",
                     Status = () => Settings.sounds ? "sound" : "muted" },
                 new ControlCategory { Key = "focus", Label = "FOCUS", Glyph = "◐", Group = "THIS HEADSET", Panel = "settings", Tab = SetFocusTab,
                     Blurb = "Ambient focus: the room fades beyond a dome around you; real things in front of windows.",
