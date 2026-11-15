@@ -1375,4 +1375,43 @@ namespace MetaCodex.UI
             }
         }
     }
+    /// One cell of a view `grid` (plugin windows, agent views): a small button with a text, an optional sub line and a
+    /// tone for its frame and text. A cell without an action is only drawn (headers, empty days). It reuses the button's
+    /// shape and label; the tone is put back after every state change (hover, press, flash) of the base button.
+    public sealed class UiGridCell : UiButton
+    {
+        public Color? ToneColor;
+        public bool Tappable = true;
+        private float _toneFlash;
+
+        public UiGridCell(string text, Action onClick) : base(text, onClick, UiButtonStyle.Normal) { }
+
+        public override bool Interactive => Tappable;
+
+        protected override void Build() { base.Build(); ApplyTone(); }
+
+        protected override void OnInteractionChanged() { base.OnInteractionChanged(); ApplyTone(); }
+
+        public override void OnClick(UiPointerEvent e)
+        {
+            base.OnClick(e);
+            _toneFlash = 0.4f;
+            ApplyTone();
+        }
+
+        public override void Update()
+        {
+            base.Update();
+            if (_toneFlash <= 0f) return;
+            _toneFlash -= Time.unscaledDeltaTime;
+            ApplyTone();
+        }
+
+        private void ApplyTone()
+        {
+            if (!ToneColor.HasValue || Panel == null || _shape < 0) return;
+            Panel.Shapes.SetTint(_shape, ToneColor.Value);
+            if (_label != null) _label.Color = Color.Lerp(Theme.Text, ToneColor.Value, 0.55f);
+        }
+    }
 }

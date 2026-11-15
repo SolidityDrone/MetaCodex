@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Text;
 using MetaCodex.Hands;
 using MoonSharp.Interpreter;
 using Newtonsoft.Json.Linq;
@@ -40,6 +41,29 @@ namespace MetaCodex.Scripting
         /// Starts listening (push-to-talk).
         void VoiceListen();
         void Log(string line);
+        /// Seconds since 1970 UTC (a test harness fakes it).
+        double WallClock();
+        /// Makes or replaces a plugin window (full window id, e.g. "plugin-timers-main") from a validated view spec (JSON
+        /// text). open: show it now. A window that is not open and not built yet only keeps the spec (built on first open).
+        void PluginWindow(string windowId, string specJson, bool open);
+        /// Sets LIVE texts (component id -> text) of a built window without a rebuild. False when the window is not built
+        /// (the host then sends the whole spec with PluginWindow(..., open: false)).
+        bool PluginWindowText(string windowId, IDictionary<string, string> texts);
+        /// mode 1 = open, 0 = close, 2 = toggle. Returns the open state after the call.
+        bool PluginWindowShow(string windowId, int mode);
+        bool PluginWindowIsOpen(string windowId);
+        void PluginWindowRemove(string windowId);
+        /// The whole list of plugin tiles now (in order). The app rebuilds the DOCK and the wrist menu once, soon after.
+        void SetPluginTiles(IReadOnlyList<PluginTile> tiles);
+        void PlaySound(string name);
+        /// A callout by the Whisp. onTap may be null.
+        void Notify(string text, string tone, string sound, string speak, Action onTap);
+    }
+
+    /// A tile a plugin put in the menu (DOCK and wrist). Window = the full window id it toggles, or null (a `run` tile).
+    public sealed class PluginTile
+    {
+        public string Owner, Id, Label, Glyph, Icon, Window;
     }
 
     /// Behaviours in Lua (MoonSharp: pure C#, IL2CPP-safe), changed during a session without a rebuild.
@@ -76,6 +100,17 @@ namespace MetaCodex.Scripting
         private sealed class Handler { public Entry Owner; public string Event; public DynValue Fn; }
         private sealed class Sequence { public Entry Owner; public string[] Steps; public float Window; public DynValue Fn; public int Next; public float Start; }
         private sealed class Timer { public Entry Owner; public int Id; public float At, Every; public DynValue Fn; }
+        private sealed class WallTimer { public Entry Owner; public int Id; public double At; public DynValue Fn; }
+        /// One window of a plugin (ui.panel): the spec the plugin made, what the app has of it, and the flush state.
+        private sealed class PlugWin
+        {
+            public Entry Owner; public string LocalId, FullId; public JObject Spec; public DynValue On;
+            public string Sig, LastSig, Warned;                 // Sig: of the pending spec; LastSig: of the one the app has
+            public Dictionary<string, string> Live, LastLive;   // live texts: pending, and what the app has
+            public float LastBuild; public int Builds;
+            public bool Dirty, EverSent, OpenRequested;
+        }
+        private sealed class TileEntry { public Entry Owner; public PluginTile Tile; public DynValue Run; }
         private sealed class Detector
         {
             public Entry Owner; public string Name, Hand; public float Hold, Cooldown; public DynValue Loop;
@@ -89,6 +124,8 @@ namespace MetaCodex.Scripting
         public readonly string PluginsDir;
         public IReadOnlyList<Entry> Entries => _entries;
         public event Action Changed;
+        /// Runs at the end of every Tick (the app's per-frame work for plugin tiles).
+        public event Action AfterTick;
         public float Now { get; private set; }
         /// Lua detector time in the last detection pass (ms), for the Gestures panel.
         public double DetectMs { get; private set; }
@@ -100,6 +137,13 @@ namespace MetaCodex.Scripting
         private readonly List<Handler> _handlers = new List<Handler>();
         private readonly List<Sequence> _sequences = new List<Sequence>();
         private readonly List<Timer> _timers = new List<Timer>();
+        private readonly List<WallTimer> _wallTimers = new List<WallTimer>();
+        private readonly List<PlugWin> _windows = new List<PlugWin>();
+        private readonly List<TileEntry> _tileEntries = new List<TileEntry>();
+        private bool _anyDirty;
+        public const int MaxWindowsPerPlugin = 4, MaxPluginTiles = 6;
+        private static readonly DateTime Epoch = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        public static readonly string[] SoundNames = { "click", "open", "close", "ping", "toast", "alert", "error" };
         private readonly List<Detector> _detectors = new List<Detector>();
         private readonly Dictionary<string, bool> _enabled = new Dictionary<string, bool>();
         private readonly Dictionary<string, Dictionary<string, string>> _stores = new Dictionary<string, Dictionary<string, string>>();
@@ -169,6 +213,19 @@ namespace MetaCodex.Scripting
                 if (t.Every > 0f) t.At = now + t.Every; else { _timers.RemoveAt(i); i--; }
                 Run(t.Owner, t.Fn);
             }
+            if (_wallTimers.Count > 0)
+            {
+                double wc = _svc.WallClock();
+                for (int i = 0; i < _wallTimers.Count; i++)
+                {
+                    var t = _wallTimers[i];
+                    if (t.At > wc || !t.Owner.Enabled || t.Owner.Error != null) continue;
+                    _wallTimers.RemoveAt(i); i--;
+                    Run(t.Owner, t.Fn);
+                }
+            }
+            if (_anyDirty) FlushWindows(now);
+            AfterTick?.Invoke();
         }
 
         private sealed class ScanResult { public int Gen; public List<(string kind, string name, string path, DateTime mtime)> Found; }
@@ -320,6 +377,7 @@ namespace MetaCodex.Scripting
             _handlers.RemoveAll(h => h.Owner == e);
             _sequences.RemoveAll(s => s.Owner == e);
             _timers.RemoveAll(t => t.Owner == e);
+            RemoveOwnedUi(e);
             _detectors.RemoveAll(d => d.Owner == e);
             _svc.Gestures?.RemoveOwnedBy(e.Key);
             _svc.Voice?.RemoveOwnedBy(e.Key);
@@ -512,6 +570,7 @@ namespace MetaCodex.Scripting
             e.Script = script;
             e.Store = new Table(script);
             Install(e, script);
+            Set(script.Globals, "check", a => DynValue.NewString(Check(Str(a, 0))));
             try
             {
                 var r = Run(e, script.LoadString(code, null, "eval"));
@@ -632,6 +691,212 @@ namespace MetaCodex.Scripting
             t.Set("palmFacing", DynValue.NewString(s.Tracked ? eng.Nearest(s.PalmNormal, p) : ""));
             t.Set("thumbPointing", DynValue.NewString(s.Tracked ? eng.Nearest(s.ThumbDir, p) : ""));
             t.Set("size", DynValue.NewNumber(Math.Round(s.HandSize, 4)));
+        }
+
+        // ------------------------------------------------------------------ plugin windows, tiles, wall-clock time
+
+        /// The id part of a window id: lower case, [a-z0-9_-] only, at most 32 characters.
+        public static string SafeId(string s)
+        {
+            var sb = new StringBuilder();
+            foreach (char c in (s ?? "").ToLowerInvariant())
+            {
+                if (c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '_' || c == '-') sb.Append(c);
+                if (sb.Length >= 32) break;
+            }
+            return sb.ToString();
+        }
+
+        public static bool IsSoundName(string n) => n != null && Array.IndexOf(SoundNames, n) >= 0;
+
+        private PlugWin OwnWindow(Entry e, string id)
+        {
+            if (string.IsNullOrEmpty(id)) return null;
+            string safe = SafeId(id);
+            for (int i = 0; i < _windows.Count; i++)
+            {
+                var w = _windows[i];
+                if (w.Owner == e && (w.FullId == id || w.LocalId == id || w.LocalId == safe)) return w;
+            }
+            return null;
+        }
+
+        private PlugWin FindWindow(string fullId)
+        {
+            for (int i = 0; i < _windows.Count; i++) if (_windows[i].FullId == fullId) return _windows[i];
+            return null;
+        }
+
+        private void RemoveOwnedUi(Entry e)
+        {
+            _wallTimers.RemoveAll(t => t.Owner == e);
+            for (int i = _windows.Count - 1; i >= 0; i--)
+            {
+                if (_windows[i].Owner != e) continue;
+                var w = _windows[i];
+                _windows.RemoveAt(i);
+                _svc.PluginWindowRemove(w.FullId);
+            }
+            if (_tileEntries.RemoveAll(t => t.Owner == e) > 0) PushTiles();
+        }
+
+        private void PushTiles()
+        {
+            var list = new List<PluginTile>(_tileEntries.Count);
+            for (int i = 0; i < _tileEntries.Count; i++) list.Add(_tileEntries[i].Tile);
+            _svc.SetPluginTiles(list);
+        }
+
+        /// The spec as JSON text with the `text` of LIVE text components (type text/markdown/note with an id) blanked,
+        /// and those texts by component id.
+        private static string Signature(JObject spec, out Dictionary<string, string> live)
+        {
+            live = new Dictionary<string, string>();
+            var c = (JObject)spec.DeepClone();
+            if (c["components"] is JArray comps)
+                foreach (var item in comps)
+                {
+                    if (!(item is JObject co)) continue;
+                    string type = co["type"]?.Type == JTokenType.String ? (string)co["type"] : null;
+                    string id = co["id"]?.Type == JTokenType.String ? (string)co["id"] : null;
+                    if (string.IsNullOrEmpty(id) || !ViewSpecCheck.IsTextType(type)) continue;
+                    string text = co["text"] != null && co["text"].Type != JTokenType.Null ? (string)co["text"]
+                        : co["markdown"] != null && co["markdown"].Type != JTokenType.Null ? (string)co["markdown"] : "";
+                    live[id] = text ?? "";
+                    if (co["text"] != null) co["text"] = "";
+                    if (co["markdown"] != null) co["markdown"] = "";
+                }
+            return c.ToString(Newtonsoft.Json.Formatting.None);
+        }
+
+        private void FlushWindows(float now)
+        {
+            bool pending = false;
+            for (int i = 0; i < _windows.Count; i++)
+            {
+                var w = _windows[i];
+                if (!w.Dirty) continue;
+                if (!FlushWindow(w, now, false)) pending = true;
+            }
+            _anyDirty = pending;
+        }
+
+        /// Sends a dirty window to the app: only the changed LIVE texts when nothing else changed, else the whole spec
+        /// (at most once a second a window, the first one at once). False = still dirty (waiting for the rate limit).
+        private bool FlushWindow(PlugWin w, float now, bool force)
+        {
+            if (w.Sig == null) w.Sig = Signature(w.Spec, out w.Live);
+            if (w.EverSent && w.Sig == w.LastSig)
+            {
+                Dictionary<string, string> changed = null;
+                foreach (var kv in w.Live)
+                    if (w.LastLive == null || !w.LastLive.TryGetValue(kv.Key, out var old) || old != kv.Value)
+                        (changed ??= new Dictionary<string, string>()).Add(kv.Key, kv.Value);
+                w.Dirty = false;
+                w.LastLive = w.Live;
+                bool open = w.OpenRequested;
+                w.OpenRequested = false;
+                if (changed != null)
+                {
+                    if (!_svc.PluginWindowText(w.FullId, changed))
+                    {
+                        w.Builds++;
+                        w.LastBuild = now;
+                        _svc.PluginWindow(w.FullId, w.Spec.ToString(Newtonsoft.Json.Formatting.None), false);
+                    }
+                }
+                if (open) _svc.PluginWindowShow(w.FullId, 1);
+                return true;
+            }
+            if (w.EverSent && !force && now - w.LastBuild < 1f) return false;
+            w.Dirty = false;
+            w.EverSent = true;
+            w.LastBuild = now;
+            w.LastSig = w.Sig;
+            w.LastLive = w.Live;
+            w.Builds++;
+            bool show = w.OpenRequested;
+            w.OpenRequested = false;
+            _svc.PluginWindow(w.FullId, w.Spec.ToString(Newtonsoft.Json.Formatting.None), show);
+            return true;
+        }
+
+        /// A window the app has never got (ui.panel and ui.open in the same frame): sends it now.
+        private void EnsureSent(PlugWin w)
+        {
+            if (!w.EverSent && w.Dirty) FlushWindow(w, Now, true);
+        }
+
+        private bool ShowOwn(PlugWin w, int mode)
+        {
+            EnsureSent(w);
+            return _svc.PluginWindowShow(w.FullId, mode);
+        }
+
+        /// A tile was tapped (DOCK or wrist menu): a panel tile toggles its window, a run tile runs its function.
+        public void TileTapped(string owner, string tileId)
+        {
+            for (int i = 0; i < _tileEntries.Count; i++)
+            {
+                var te = _tileEntries[i];
+                if (te.Tile.Owner != owner || te.Tile.Id != tileId) continue;
+                if (te.Tile.Window != null)
+                {
+                    var w = FindWindow(te.Tile.Window);
+                    if (w != null) ShowOwn(w, 2); else _svc.PluginWindowShow(te.Tile.Window, 2);
+                }
+                else Run(te.Owner, te.Run);
+                return;
+            }
+        }
+
+        /// An event of a plugin window (a button, choice, input, toggle, cell, or the window opened or closed by the
+        /// user): runs the `on` function of ui.panel with e = {type, id, value, window}. value is a boolean for toggle.
+        public void WindowEvent(string windowId, string type, string id, string value)
+        {
+            var w = FindWindow(windowId);
+            if (w == null || w.On == null || w.Owner.Script == null) return;
+            var t = new Table(w.Owner.Script);
+            t.Set("type", DynValue.NewString(type ?? ""));
+            t.Set("id", DynValue.NewString(id ?? ""));
+            t.Set("value", type == "toggle" ? DynValue.NewBoolean(value == "true") : DynValue.NewString(value ?? ""));
+            t.Set("window", DynValue.NewString(w.LocalId));
+            Run(w.Owner, w.On, DynValue.NewTable(t));
+        }
+
+        /// What `mcx-ui plugin check <id>` prints: state, error, windows, tiles, voice commands, timers, warnings.
+        public string Check(string pluginId)
+        {
+            var e = Find("plugin/" + pluginId) ?? Find(pluginId);
+            if (e == null) return "plugin " + pluginId + ": not found (mcx-ui plugin list)";
+            var sb = new StringBuilder();
+            sb.Append("plugin ").Append(e.Name).Append(": ").Append(e.Error != null ? "error" : !e.Enabled ? "disabled" : "loaded");
+            if (e.Error != null) sb.Append("\nerror: ").Append(e.Error);
+            var wins = new List<string>();
+            foreach (var w in _windows)
+                if (w.Owner == e) wins.Add(w.LocalId + "(builds=" + w.Builds + (_svc.PluginWindowIsOpen(w.FullId) ? ", open" : "") + ")");
+            sb.Append("\nwindows: ").Append(wins.Count == 0 ? "none" : string.Join(", ", wins));
+            var tiles = new List<string>();
+            foreach (var te in _tileEntries) if (te.Owner == e) tiles.Add(te.Tile.Label);
+            sb.Append("\ntiles: ").Append(tiles.Count == 0 ? "none" : string.Join(", ", tiles));
+            var voice = new List<string>();
+            if (_svc.Voice != null) foreach (var c in _svc.Voice.All) if (c.Owner == e.Key) voice.Add(c.Name);
+            sb.Append("\nvoice: ").Append(voice.Count == 0 ? "none" : string.Join(", ", voice));
+            int timers = 0;
+            foreach (var t in _timers) if (t.Owner == e) timers++;
+            foreach (var t in _wallTimers) if (t.Owner == e) timers++;
+            sb.Append("\ntimers: ").Append(timers);
+            var bad = new List<string>();
+            foreach (var line in e.Log) if (line.StartsWith("warn", StringComparison.Ordinal) || line.StartsWith("ERROR", StringComparison.Ordinal)) bad.Add(line);
+            sb.Append("\nwarnings: ").Append(bad.Count);
+            for (int i = Math.Max(0, bad.Count - 10); i < bad.Count; i++) sb.Append('\n').Append(bad[i]);
+            return sb.ToString();
+        }
+
+        private static double LocalToEpoch(int year, int month, int day, int hour, int min, double sec)
+        {
+            var dt = new DateTime(year, 1, 1, 0, 0, 0, DateTimeKind.Local).AddMonths(month - 1).AddDays(day - 1).AddHours(hour).AddMinutes(min).AddSeconds(sec);
+            return (dt.ToUniversalTime() - Epoch).TotalSeconds;
         }
 
         // ------------------------------------------------------------------ the Lua API
@@ -848,9 +1113,87 @@ namespace MetaCodex.Scripting
 
             var ui = new Table(s);
             Set(ui, "toast", a => { _svc.Toast(Str(a, 0), Str(a, 1, "info")); return DynValue.Nil; });
-            Set(ui, "open", a => DynValue.NewBoolean(_svc.OpenPanel(Str(a, 0))));
-            Set(ui, "close", a => DynValue.NewBoolean(_svc.ClosePanel(Str(a, 0))));
-            Set(ui, "toggle", a => DynValue.NewBoolean(_svc.TogglePanel(Str(a, 0))));
+            Set(ui, "open", a => { var w = OwnWindow(e, Str(a, 0)); return DynValue.NewBoolean(w != null ? ShowOwn(w, 1) : _svc.OpenPanel(Str(a, 0))); });
+            Set(ui, "close", a => { var w = OwnWindow(e, Str(a, 0)); if (w == null) return DynValue.NewBoolean(_svc.ClosePanel(Str(a, 0))); _svc.PluginWindowShow(w.FullId, 0); return DynValue.True; });
+            Set(ui, "toggle", a => { var w = OwnWindow(e, Str(a, 0)); return DynValue.NewBoolean(w != null ? ShowOwn(w, 2) : _svc.TogglePanel(Str(a, 0))); });
+            Set(ui, "panel", a =>
+            {
+                const string form = "ui.panel{id=\"main\", title=\"Timer\", components={ {type=\"text\", text=\"hello\"} }, on=function(e) end}";
+                if (a.Count < 1 || a[0].Type != DataType.Table) throw new ScriptRuntimeException(form);
+                var t = a[0].Table;
+                var idv = t.Get("id");
+                string local = SafeId(idv.IsNil() ? "main" : idv.ToPrintString());
+                if (local.Length == 0) throw new ScriptRuntimeException("ui.panel: id needs letters or digits, for example id=\"main\"");
+                var spec = new JObject { ["id"] = local };
+                try
+                {
+                    foreach (var key in new[] { "title", "components", "columns", "size" })
+                    {
+                        var v = t.Get(key);
+                        if (!v.IsNil()) spec[key] = LuaJson.ToJson(v, key);
+                    }
+                }
+                catch (ScriptRuntimeException ex) { throw new ScriptRuntimeException("ui.panel: " + ex.Message); }
+                if (spec["title"] == null) spec["title"] = string.IsNullOrEmpty(e.Title) ? e.Name : e.Title;
+                var errors = new List<string>();
+                var warnings = new List<string>();
+                ViewSpecCheck.Check(spec, errors, warnings);
+                if (errors.Count > 0) throw new ScriptRuntimeException("ui.panel: " + string.Join("; ", errors.Take(3)) + "  (form: " + form + ")");
+                string full = "plugin-" + e.Name + "-" + local;
+                var w = OwnWindow(e, full);
+                if (w == null)
+                {
+                    int mine = 0;
+                    foreach (var x in _windows) if (x.Owner == e) mine++;
+                    if (mine >= MaxWindowsPerPlugin) throw new ScriptRuntimeException("ui.panel: at most " + MaxWindowsPerPlugin + " windows a plugin");
+                    if (FindWindow(full) != null) throw new ScriptRuntimeException("ui.panel: the window id " + full + " belongs to another plugin or script");
+                    w = new PlugWin { Owner = e, LocalId = local, FullId = full };
+                    _windows.Add(w);
+                }
+                string warned = string.Join("; ", warnings);
+                if (warned.Length > 0 && warned != w.Warned) foreach (var m in warnings) Say(e, "warn ui.panel " + local + ": " + m);
+                w.Warned = warned;
+                var on = t.Get("on");
+                w.On = on.Type == DataType.Function || on.Type == DataType.ClrFunction ? on : null;
+                w.Spec = spec;
+                w.Sig = null;
+                w.Dirty = true;
+                if (t.Get("open").CastToBool()) w.OpenRequested = true;
+                _anyDirty = true;
+                return DynValue.NewString(full);
+            });
+            Set(ui, "sound", a =>
+            {
+                string n = Str(a, 0).ToLowerInvariant();
+                if (!IsSoundName(n)) { Say(e, "warn ui.sound: unknown sound '" + Str(a, 0) + "' (click, open, close, ping, toast, alert, error)"); return DynValue.Nil; }
+                _svc.PlaySound(n);
+                return DynValue.Nil;
+            });
+            Set(ui, "notify", a =>
+            {
+                const string form = "ui.notify{text=\"Timer done\", tone=\"ok\", sound=\"ping\", panel=\"main\"}";
+                if (a.Count < 1 || a[0].Type != DataType.Table) throw new ScriptRuntimeException(form);
+                var t = a[0].Table;
+                string text = TStr(t, "text", "");
+                if (text.Length == 0) throw new ScriptRuntimeException("ui.notify: text is required, for example " + form);
+                string tone = TStr(t, "tone", "info");
+                if (tone != "info" && tone != "ok" && tone != "warn" && tone != "error") { Say(e, "warn ui.notify: unknown tone '" + tone + "' (info, ok, warn, error)"); tone = "info"; }
+                var sv = t.Get("sound");
+                string sound = sv.Type == DataType.Boolean && !sv.Boolean ? null : sv.Type == DataType.String ? sv.String.ToLowerInvariant() : "ping";
+                if (sound != null && !IsSoundName(sound)) { Say(e, "warn ui.notify: unknown sound '" + sound + "' (click, open, close, ping, toast, alert, error)"); sound = null; }
+                var sp = t.Get("speak");
+                string speak = sp.Type == DataType.Boolean ? (sp.Boolean ? text : null) : sp.Type == DataType.String ? sp.String : null;
+                Action onTap = null;
+                var pv = t.Get("panel");
+                if (!pv.IsNil())
+                {
+                    var w = OwnWindow(e, pv.ToPrintString());
+                    if (w == null) Say(e, "warn ui.notify: panel '" + pv.ToPrintString() + "' is not a window of this plugin (make it with ui.panel first); the tap does nothing");
+                    else onTap = () => { if (_windows.Contains(w)) ShowOwn(w, 1); };
+                }
+                _svc.Notify(text, tone, sound, speak, onTap);
+                return DynValue.Nil;
+            });
             Set(ui, "select", a => { _svc.SetSelectionMode(a.Count == 0 || a[0].CastToBool()); return DynValue.Nil; });
             Set(ui, "panels", a =>
             {
@@ -869,6 +1212,64 @@ namespace MetaCodex.Scripting
                 return DynValue.Nil;
             });
             g.Set("ui", DynValue.NewTable(ui));
+
+            var menu = new Table(s);
+            Set(menu, "add", a =>
+            {
+                const string form = "menu.add{id=\"timer\", label=\"TIMER\", panel=\"main\"} or menu.add{id=\"go\", label=\"GO\", run=function() end}";
+                if (a.Count < 1 || a[0].Type != DataType.Table) throw new ScriptRuntimeException(form);
+                var t = a[0].Table;
+                string id = TStr(t, "id", "");
+                string label = TStr(t, "label", "");
+                if (id.Length == 0 || label.Length == 0) throw new ScriptRuntimeException("menu.add: id and label are required, for example " + form);
+                var run = t.Get("run");
+                bool hasRun = run.Type == DataType.Function || run.Type == DataType.ClrFunction;
+                var pv = t.Get("panel");
+                bool hasPanel = !pv.IsNil();
+                if (hasRun == hasPanel) throw new ScriptRuntimeException("menu.add " + id + ": give exactly one of panel=<window id> or run=function() end, for example " + form);
+                PlugWin w = null;
+                if (hasPanel)
+                {
+                    w = OwnWindow(e, pv.ToPrintString());
+                    if (w == null) throw new ScriptRuntimeException("menu.add " + id + ": panel '" + pv.ToPrintString() + "' is not a window of this plugin; make it first with ui.panel{id=\"" + SafeId(pv.ToPrintString()) + "\", title=..., components=...}");
+                }
+                label = label.ToUpperInvariant();
+                if (label.Length > 8)
+                {
+                    Say(e, "warn menu.add " + id + ": the label is cut to 8 characters (" + label.Substring(0, 8) + ")");
+                    label = label.Substring(0, 8);
+                }
+                string glyph = TStr(t, "glyph", "");
+                glyph = glyph.Length == 0 ? "\u25C6" : glyph.Substring(0, char.IsHighSurrogate(glyph[0]) && glyph.Length > 1 ? 2 : 1);
+                var tile = new PluginTile { Owner = e.Name, Id = id, Label = label, Glyph = glyph, Icon = TStr(t, "icon", "mark"), Window = w?.FullId };
+                int at = _tileEntries.FindIndex(x => x.Owner == e && x.Tile.Id == id);
+                if (at < 0 && _tileEntries.Count >= MaxPluginTiles)
+                {
+                    Say(e, "menu.add " + id + ": the menu is full (" + MaxPluginTiles + " plugin tiles)");
+                    return DynValue.False;
+                }
+                var entry = new TileEntry { Owner = e, Tile = tile, Run = hasRun ? run : null };
+                if (at >= 0) _tileEntries[at] = entry; else _tileEntries.Add(entry);
+                PushTiles();
+                return DynValue.True;
+            });
+            Set(menu, "remove", a =>
+            {
+                string id = Str(a, 0);
+                bool removed = _tileEntries.RemoveAll(x => x.Owner == e && x.Tile.Id == id) > 0;
+                if (removed) PushTiles();
+                return DynValue.NewBoolean(removed);
+            });
+            g.Set("menu", DynValue.NewTable(menu));
+
+            var json = new Table(s);
+            Set(json, "encode", a =>
+            {
+                try { return DynValue.NewString(LuaJson.Encode(a.Count > 0 ? a[0] : DynValue.Nil)); }
+                catch (ScriptRuntimeException ex) { throw new ScriptRuntimeException("json.encode: " + ex.Message); }
+            });
+            Set(json, "decode", a => LuaJson.Decode(s, Str(a, 0)));
+            g.Set("json", DynValue.NewTable(json));
 
             var terminal = new Table(s);
             Set(terminal, "send", a => { _svc.TerminalSend(Str(a, 0)); return DynValue.Nil; });
@@ -923,7 +1324,44 @@ namespace MetaCodex.Scripting
                 _timers.Add(t);
                 return DynValue.NewNumber(t.Id);
             });
-            Set(app, "cancel", a => { int id = (int)Num(a, 0, -1); _timers.RemoveAll(t => t.Id == id && t.Owner == e); return DynValue.Nil; });
+            Set(app, "cancel", a =>
+            {
+                int id = (int)Num(a, 0, -1);
+                _timers.RemoveAll(t => t.Id == id && t.Owner == e);
+                _wallTimers.RemoveAll(t => t.Id == id && t.Owner == e);
+                return DynValue.Nil;
+            });
+            Set(app, "clock", a =>
+            {
+                if (a.Count == 0 || a[0].Type != DataType.Table) return DynValue.NewNumber(_svc.WallClock());
+                const string form = "app.clock{year=2026, month=11, day=15, hour=9, min=30}";
+                var t = a[0].Table;
+                double? year = TNum(t, "year"), month = TNum(t, "month"), day = TNum(t, "day");
+                if (year == null || month == null || day == null) throw new ScriptRuntimeException("app.clock needs year, month and day: " + form);
+                double hour = TNum(t, "hour") ?? 0, min = TNum(t, "min") ?? 0, sec = TNum(t, "sec") ?? 0;
+                if (Math.Abs(month.Value) > 1e5 || Math.Abs(day.Value) > 1e6 || Math.Abs(hour) > 1e7 || Math.Abs(min) > 1e8) throw new ScriptRuntimeException("app.clock: a field is far out of range: " + form);
+                try { return DynValue.NewNumber(LocalToEpoch((int)year.Value, (int)month.Value, (int)day.Value, (int)hour, (int)min, sec)); }
+                catch (ArgumentException) { throw new ScriptRuntimeException("app.clock: that date does not exist (year 1..9999): " + form); }
+            });
+            Set(app, "date", a =>
+            {
+                double secs = Num(a, 0, _svc.WallClock());
+                if (Math.Abs(secs) > 2e11) throw new ScriptRuntimeException("app.date(t): t is seconds since 1970 (use app.clock())");
+                var d = Epoch.AddSeconds(Math.Floor(secs)).ToLocalTime();
+                var t = new Table(s);
+                t.Set("year", DynValue.NewNumber(d.Year)); t.Set("month", DynValue.NewNumber(d.Month)); t.Set("day", DynValue.NewNumber(d.Day));
+                t.Set("hour", DynValue.NewNumber(d.Hour)); t.Set("min", DynValue.NewNumber(d.Minute)); t.Set("sec", DynValue.NewNumber(d.Second));
+                t.Set("wday", DynValue.NewNumber((int)d.DayOfWeek + 1)); t.Set("yday", DynValue.NewNumber(d.DayOfYear));
+                return DynValue.NewTable(t);
+            });
+            Set(app, "at", a =>
+            {
+                var fn = Fn(a, 1);
+                if (fn == null || a.Count < 1 || a[0].Type != DataType.Number) throw new ScriptRuntimeException("app.at(t, function() ... end): t is seconds since 1970, for example app.at(app.clock() + 60, fn)");
+                var t = new WallTimer { Owner = e, Id = ++_timerIds, At = a[0].Number, Fn = fn };
+                _wallTimers.Add(t);
+                return DynValue.NewNumber(t.Id);
+            });
             Set(app, "action", a => { var err = _svc.RunAction(Str(a, 0)); return err == null ? DynValue.True : DynValue.NewString(err); });
             g.Set("app", DynValue.NewTable(app));
 

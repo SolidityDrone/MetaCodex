@@ -80,6 +80,7 @@ namespace MetaCodex.Shell
             // the system keyboard for the terminal (Horizon OS can lay it on a table: Settings > Experimental > Surface keyboard)
             I(true, "⌨", "keyboard", "KEYS", () => OpenKeyboard(), () => app?.Input != null && app.Input.SystemKeyboardOpen);
             I(true, "⟲", "recenter", "CENTER", () => app?.Recenter());
+            AddPluginMenuItems(list, outer: true); // the plugins' tiles (menu.add; ShellPluginUi)
             return list;
         }
 
