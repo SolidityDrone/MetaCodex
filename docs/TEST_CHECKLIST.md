@@ -1,777 +1,685 @@
-# Headset test checklist (MetaCodex 0.7, 2026-11-08)
+# Headset test checklist
 
-Tick each line on the Quest. "→" is what should happen. Items marked **(MQH)** need MQH reachable at
-127.0.0.1:38990 from the headset: until MQH runs on the headset (roadmap step 1-2), run it in WSL
-(`tools/mqh-dev.sh start`) and forward the port: `adb reverse tcp:38990 tcp:38990` (works over Wi-Fi adb).
-With that setup, threads run on the PC, not on the headset; the panels and flows are what you test.
+Tick each line on the headset. "→" is what should happen.
+Helpers on the PC: `tools/qterm` (control port), `adb logcat -s Unity`, and `files/session_log.txt` on the headset.
+Frame rate means 72 fps: `adb logcat -s VrApi` shows `FPS=` and stale frames.
+A clean first start needs `adb uninstall com.pnncl.metacodex` first.
+Commands such as `mcx-ui`, `mcx-app` and `mcx-secret` run in a terminal of the app.
 
-Helpers on the PC: `tools/qterm` (control port), `adb logcat -s Unity`, `files/session_log.txt` on the device.
+## Install and first start
 
-## 0. Install and first start
-
-- [ ] `adb install -r unity/Builds/MetaCodex.apk` → installs (version 0.3.x)
-- [ ] Start from the Library → passthrough, no boundary prompt (boundaryless), the dock in front; the terminal runs hidden (TERMS on the menu lists it, a tap shows it)
-- [ ] First start installs the Linux userland (progress in the status line) → a shell prompt in the terminal
-- [ ] Frame rate: status line shows about 72 fps with the shell idle
+- [ ] `tools/release/install-metacodex.sh unity/Builds/MetaCodex.apk` with the headset on USB → installs the app (about 1 GB), grants the microphone, spatial data and headset camera permissions, and lets the app install the apps it builds
+- [ ] Install with a bare `adb install -r` instead → the microphone, spatial data and headset camera are asked once, together, while the start splash shows; a refused one is asked again by its feature
+- [ ] Start from the Library → passthrough, no boundary prompt (boundaryless), the DOCK in front; the terminal runs hidden (TERMS on the menu lists it, a tap shows it)
 - [ ] `mcx-ui status` inside the terminal → host=Ready, fps, terminals=1
+- [ ] Right after the first start, in the first terminal: `git --version`, `node --version`, `python3 --version`, `curl --version` → all answer (they ship in the app, nothing was downloaded)
 
-## 1. Terminal and Linux
+First start (clean install, then start):
 
-- [ ] Type with the system keyboard (`⌨` on the frame) → text appears; Enter runs
-- [ ] Bluetooth keyboard (if paired) → typing, arrows, Ctrl-C work
-- [ ] Key bar: Esc, Tab, Ctrl, arrows, ⌨, paste → each does its job
-- [ ] `vim`, `less`, `htop` (or `top`) draw correctly; colours; resize-free
-- [ ] `+` on the frame → a second terminal opens beside; tapping a frame focuses it (the key bar follows)
-- [ ] `✕` closes a terminal; TERMS panel lists terminals; FOCUS / CLOSE work
-- [ ] `⎘` on the frame pastes the clipboard into that terminal
-- [ ] `ls /mnt/quest` shows `plugins/`, `scripts/`, `control.token`
-- [ ] `ls ~/.claude/skills` shows quest-gesture-plugins, quest-scripting, metacodex-context, quest-views, worktree-per-thread, Unity and Meta skills (48)
+- [ ] The splash shows at once and animates, with no freeze → the logo about a metre in front of you over the room (passthrough visible around it) comes in behind a scan line, stays fixed in the room (upright, facing you; turn your head: it stays), then breaks up into light once the shell is built; nothing of it stays
+- [ ] The guide card opens about 0.3 s after the splash, in front of you (0.4 m wide, as tall as its text) → it never touches the DOCK, the Whisp or an open window, and moves aside smoothly if one comes near
+- [ ] The setup strip on top of the card → a spinner while a step runs, the step in plain words (unpacking the models, starting the local AI, unpacking the Linux workstation, starting MQH, teaching the voice your commands), STEP 1 OF 5 … 5 OF 5, one bar with a percentage that never goes back, and "One-time setup: only on this first start, nothing is downloaded"
+- [ ] Turn Wi-Fi off before the first start → the setup finishes the same (nothing is downloaded)
+- [ ] `ui setup` on the control port, and `setup: all steps over in N s` in `files/session_log.txt` → the five steps with their times; the Linux unpack is the longest step (about 9-12 s); the whole setup takes well under a minute
+- [ ] Tap TALK on the DOCK (or the wrist menu, or the Whisp's menu) during the setup → one callout "🔒 TALK unlocks by itself in a few seconds (one-time setup, step 5 of 5)", no listening, no error; tapping again at once gives no second callout
+- [ ] THREADS, TERMS and FILES tiles show 🔒 dimmed; tapped → their callout (step 4 or 3); CONTROL > AGENTS is dimmed with "🔒 step 4" and does not open; CONTROL, WEB and CLIP work
+- [ ] The locks lift by themselves → TERMS and FILES when the Linux is ready, THREADS and AGENTS when MQH runs, TALK at the end (then TALK listens); a step still not over 5 minutes after the setup began is skipped and its lock lifts anyway
+- [ ] The end of the setup → "✓ Setup done in N s: everything is unlocked" for a few seconds, then the strip folds away and the tour goes on in the same card
+- [ ] The tour has six beats (HELLO, THE MAIN MENU, THE WHISP, WINDOWS, CONTROL, YOUR TURN; five when the Whisp is off) → each asks for one action and says ✓ when it is done: NEXT ▸ (or by itself after 12 s), open CLIP on the DOCK (or the wrist menu), open the Whisp's menu, move the card by its bar (pinch) or with a closed hand, open CONTROL, then press TALK and say "open files" (the card shows what it heard)
+- [ ] A ring of 12 warm dots round the target (CLIP or the wrist, the Whisp, CONTROL, TALK) → it is visible, not hidden by the DOCK, and breathes slowly; the card's frame breathes on the WINDOWS beat; the card sits beside its target and comes back if you turn away
+- [ ] SKIP STEP moves on, SKIP TOUR ends the tour → the tour never asks for a 🔒 feature; while the setup runs the card has no ✕ (SKIP TOUR leaves the strip and says how to replay the tour); afterwards ✕ ends the tour
+- [ ] The last beat after the setup → no "when the setup is done" text; it says what TALK heard
+- [ ] Frame rate during the setup and the tour → steady (no stall over 50 ms; `[hitch]` lines in `files/session_log.txt`)
+- [ ] Quit and start again → no card, no tour, nothing locked; CONTROL > ABOUT > TOUR (or the voice command "start the tour") plays the tour again, without the strip
 
-## 2. Dock, panels, hands
+## Performance and stability
 
-- [ ] Dock: two rows of 8 (Term Terms Files Git Agents Threads Web Scripts / Gesture Vault Talk Setup Keys Select Center Voice), a grab bar on top: pinch it and move → the dock moves
-- [ ] New look: rounded dark-glass panels, blue primary buttons, clean type, no scanlines / grid / glowing frames
-- [ ] Terminal `–` hides it (TERMS lists it as hidden; TERM shows it again); `✕` on the last terminal hides it instead of ending it
-- [ ] Hover over a slider without pinching → it does not move; pinch and drag → it moves
-- [ ] SELECT on → pinch-drag a rectangle → "Selected …" and the tool turns itself off; SELECT on, then SELECT again (dock or Settings) → off
-- [ ] Each dock button opens/closes its panel; new panels open where you look, beside the others, not overlapping
-- [ ] Open many panels (10+) → when no gap is left within a head turn, extra panels open further away in a free gap (smaller, tilted to you), and only when even that is full cascade in front (closer, higher, a bit to the side), never exactly on another
-- [ ] Ray + pinch clicks buttons; poke with the index fingertip clicks too
-- [ ] Pinch a panel header and move → panel follows; release → stays (fixed layout)
-- [ ] Close the hand (fist) while pointing at a panel → panel moves with the hand
-- [ ] SELECT, then pinch-drag on a panel → a dashed rectangle; toast "Selected … cm"
-- [ ] CENTER (⟲) → terminal and dock in front of you again
-- [ ] Sounds: click, open, close, toast blips (if they annoy you: Settings > LOOK > Sounds)
+- [ ] The shell idle (DOCK, the Whisp, one terminal) → about 72 fps (`FPS=` in `adb logcat -s VrApi`, or `fps=` in `mcx-ui status`)
+- [ ] All panels open (6 or more) + FLOAT layout + 2 terminals → still about 72 fps; no stutter when gestures run
+- [ ] 6+ windows open, during a long spoken reply, a native build in a terminal and a local coder turn → 72 fps (VrApi FPS, no stale frames)
+- [ ] Five windows open → 72 fps; open three windows at once and close them → no drop below 72 fps; the same while a window opens or closes
+- [ ] Hover and press buttons in a big window (MQH, SETTINGS) → no stutter; the light on a button still follows the hover and the click
+- [ ] A long `apt install` or `npm install` in a terminal (run it with `nice -n 10`) → the app stays smooth
+- [ ] Take the headset off and on, reopen the app → terminals and panels come back
+- [ ] The headset's Apps settings > MetaCodex → a running service / notification "Local services running" (the AI service is a foreground service)
+- [ ] Text at the edges of the view → sharp while nothing heavy runs; under load it may soften a little (dynamic foveation), never flickers
+- [ ] Ambient Focus, real things in front of windows and bent windows → all look right with the rendering options (symmetric projection)
+- [ ] Move the head and the hands fast → windows stay still in the room, the hand ray stays on the fingers (late latching)
+- [ ] Open a thread with a long conversation and let the agent work for 10 minutes → no stop of 1-3 s, 72 fps
+- [ ] `files/session_log.txt` after that → `GC: incremental` at start; no `[slow callback]` line from the chat; no `[slow timeline]` above 40 ms
 
-## 3. Layouts
+## Main menu: DOCK and wrist menu
 
-- [ ] Settings > DISPLAY > LAYOUT FLOAT → panels arrange on a circle around you, side panels bend, terminal flat
-- [ ] Walk a few steps → the circle follows horizontally; nodding/looking down does not move panels up/down
+The DOCK (the default main menu):
+
+- [ ] The DOCK has 11 tiles in two rows, TALK TERMS FILES THREADS WEB CONTROL / CLIP FOCUS SELECT KEYS CENTER, with TALK highlighted; a grab bar on top: pinch it and move → the DOCK moves
+- [ ] Open FILES, THREADS, WEB, TERMS, CLIP and CONTROL from it, then close them again → each tile opens and closes its window, stays lit while the window is open and goes dark within a quarter second after it closes; FOCUS and SELECT are lit while on; KEYS while the terminal keyboard is up (also on the wrist); TALK while listening
+- [ ] Watch the DOCK open for a minute → 72 fps, no hitch every quarter second
+
+The wrist menu (CONTROL > DISPLAY > Main menu on the wrist):
+
+- [ ] The wrist menu has the same 11 tiles: 6 inner (TALK, TERMS, FILES, THREADS, WEB, CONTROL) and 5 outer (CLIP, FOCUS, SELECT, KEYS, CENTER) → easy to hit, nothing missing that you use daily
+- [ ] Switch the setting on → the DOCK stays until the wrist menu is ready (no freeze), then goes; look at the back of your left wrist: the core appears; touch it with the right index finger: the rings unfold; touch FILES and TALK; look away: it folds and hides; switch the setting off again: the DOCK comes back
+- [ ] Hold the left wrist as a watch → the rings stay whole, the hand behind them never cuts them; the right fingertip shows over a blade while pressing; windows still let hands and things in front show
+- [ ] Look at the back of the left wrist → the watch face (the time, ticks, a warm seconds point) builds up with the projector rays from the wrist; touch it: a shock ring runs out, the inner tiles swing in one way and the outer the other, icons draw with a scan line, names type in; nothing pops in or out at once
+- [ ] The left side: press FOCUS, CENTER, KEYS, SELECT with the right hand reaching over the left → the menu stays where it is and stays open, even when the left hand is lost for a moment; it does not run off
+- [ ] Slide the fingertip across the face on the way to the left tiles → nothing is pressed, the menu stays unfolded; a straight poke into a tile runs it once
+- [ ] Move the left arm around while looking at it → it stays on the wrist, no jitter when still, no lag when moving; turn the wrist away: it waits a moment, folds and fades; turn it back while it fades: it comes back from where it was
+- [ ] Switch the wrist menu off in CONTROL > DISPLAY while it is open → it folds and fades away, the DOCK comes back
+- [ ] The wrist menu open → about 72 fps
+- [ ] PANEL OPACITY at 100 % → the wrist menu glass is solid; at 50 % the tiles and the watch face are clearly more see-through, while their lines, icons, ticks and sparks stay as bright; a hand behind the menu is still hidden by its glass
+- [ ] Change PANEL OPACITY (the slider, or voice: "set the opacity to 60 percent") with the wrist menu open → its glass changes at once, the panels too, no restart
+
+## Windows, placement and layouts
+
+Where windows open:
+
+- [ ] Open a window with nothing else open (DOCK, wrist menu or voice) → it opens where you look, at the panel distance (CONTROL > DISPLAY > DISTANCE), its middle just below eye level, turned to you
+- [ ] Open more windows → each opens beside the others, none over another; none sits on or under the DOCK (it keeps 3 degrees off the DOCK in your view, and its middle is never lower than the DOCK's top edge)
+- [ ] Open a window from another window (a thread from THREADS, a picker, a details window; VOICE from SYSTEM > STORAGE > AI MODELS) → it opens right beside that window, on its right when there is room, also when you look elsewhere; a window of a thread group counts as its group
+- [ ] A dialog from a window (CONTROL > MQH > SKILLS > REMOVE, a thread's dialogs) → it opens over that window, parallel to it; a dialog asked by voice opens in front of you
+- [ ] With a terminal open, press TERMS on the menu; with a thread open, press CLIP → TERMS opens right beside the terminal, CLIP beside the thread
+- [ ] Close a window you had dragged somewhere and open it again → it is back there; put another window in that place first: it opens beside instead; turn right round and open it: it opens in front of you
+- [ ] Look down at the wrist menu held to your left and press FILES → it opens in front of your body, not off to the left
+- [ ] Open many windows (10 or more) → when no place is free in view, the next ones open a little further away (up to twice the distance, smaller in view); when even that is full, at the nearest free place round you (at most 100 degrees to a side, never behind you), and the Whisp points to it; only when nothing is free anywhere does one open in front of you over the others, a little nearer each time
+- [ ] UI SCALE 0.8 and DISTANCE 1.3 m, open six windows → none overlaps another; one goes above the row (tilted towards you) rather than far to the side; none goes below the DOCK
+- [ ] Stand 70 cm from a wall and open a window (depth on: CONTROL > FOCUS > Real things in front) → it opens at least 8 cm in front of the wall, not inside it
+- [ ] CENTER (⟲, wrist or DOCK) → the layout turns round you as one piece (the terminal and the DOCK are in front of you again); only a window that would cover another one moves
+
+Layouts:
+
+- [ ] CONTROL > DISPLAY > LAYOUT FLOAT → windows arrange on a circle around you, side windows bend, the terminal stays flat
+- [ ] Walk a few steps → the circle follows horizontally; nodding or looking down does not move windows up or down
 - [ ] Fist in empty space + swipe sideways → the carousel spins and slows down smoothly
-- [ ] LAYOUT FIXED → panels stay world-locked, flat
-- [ ] SAVE LAYOUT… "desk", move/close panels, turn around, LOAD NEXT LAYOUT → panels come back around you
+- [ ] FLOAT with 10+ windows open → evenly spaced around you, none overlapping (the circle grows); drop a window on another → it slides to a free place
+- [ ] LAYOUT FIXED → windows stay world-locked, flat
+- [ ] SAVE LAYOUT… "desk", move and close windows, turn around, LOAD NEXT LAYOUT → windows come back around you
 
-## 4. Settings
+The look of a window:
 
-- [ ] GESTURES: click mode PINCH / POKE / BOTH changes how buttons react
-- [ ] GESTURES: move panels by PINCH HEADER / CLOSED HAND / BOTH
-- [ ] GESTURES: POINT RAY ALWAYS / POINTING POSE (ray only when you point)
-- [ ] GESTURES: PINCH AT slider, clap on/off, clap distance, "Custom gestures from plugins" on/off
-- [ ] DISPLAY: distance, carousel radius, UI scale; "Bend panels around you" bends panels in FIXED too (terminals stay flat)
-- [ ] FLOAT with 10+ panels open → evenly spaced around you, none overlapping (the circle grows); drop a panel on another → it slides to a free place
-- [ ] LOOK: Sharpness, Panel Opacity, Foveated rendering, Sounds, Volume (no themes, accents, scanlines or grid)
-- [ ] Foveated rendering ON → the edges of the view get softer (VrApi `Fov=`); OFF (default) → sharp everywhere
-- [ ] Settings survive an app restart
+- [ ] Open any window (not a small card) → it has carved stone-metal corner pieces with a blue groove and a light node on each cut, slim rails between them, and a carved plate with a blue gem over the top centre; the blue only spills inward onto the glass; windows and buttons have no dark band round their edges, and the accent glow round a window's edge is still there
+- [ ] The glass is dark with a faint hex lattice; titles and buttons are in capitals; sliders and progress bars are segmented energy bars → nothing looks washed out or neutral
+- [ ] Buttons are dark blue slate plates with an engraved channel → dim blue at rest, bright when a finger or the ray is on them, full for the primary one (CD HERE) and red for a danger button; list rows and ghost buttons stay flat; text stays easy to read
+- [ ] The honeycomb and the points of the glass are on the surface → when you move your head sideways, nothing shifts inside the glass
+- [ ] Bring a fingertip slowly towards a window → a pool of light forms on the lattice under it and tightens as you come closer; the ray's cursor carries a light too
+- [ ] Lists (MQH > GESTURES, FILES, THREADS) → quiet rows; the chosen row floods with cyan from the left; hovered rows and buttons show a light crossing them
+- [ ] Headers → a bright block before the title, the line under it steps up two thirds along, a pulse runs in it; a ruler down the left edge of large windows; a thin conduit along the bottom right with a pulse
+- [ ] Look at a small card (a message, the voice HUD) and at a window or dialog → the card has no corner brackets; windows and dialogs do
 
-## 5. Files, Git, Browser
+Opening and closing (a window opens in 0.35 s and closes in 0.22 s):
 
-- [ ] FILES: /root, QUEST, / ; tap folders to open; CD HERE / VIEW / EDIT / PATH ⇥ act in the focused terminal
-- [ ] GIT: SCAN finds repos under /root (clone one first: `git clone https://github.com/SolidityDrone/MetaCodex /root/MetaCodex`)
-- [ ] GIT: branch, ahead/behind, changes, branches, metro history; FETCH, PULL, COMMIT… (keyboard), CHECKOUT (tap a branch)
-- [ ] WEB: the in-app browser window (section 23); ☰ LINKS: bookmarks add/remove; LOCAL SERVERS lists running ports
-- [ ] WEB: start `python3 -m http.server 8000` in a terminal → LINKS > SCAN shows :8000 → opens in the WEB window
-- [ ] Horizon system pages: HANDS > HORIZON HANDS ⚙, ABOUT > APP PERMISSIONS ⚙, FILES > FILES APP open them (section 35)
+- [ ] Open a window (DOCK, wrist menu or voice) → brackets lock on where it will be, with a faint outline; two thin rays run from the Whisp to a warm-white line that sweeps across, and the window is built behind the line (a honeycomb whose cells close and cool into glass, then the frame, buttons and text, hot for a moment); there is no filled fan of light; it ends exactly at rest, no pop
+- [ ] Close it → the line runs back and takes the window with it, a spark flies home to the Whisp, the brackets let go; nothing is left behind
+- [ ] Open and close quickly several times (a DOCK tile twice fast) → it reverses from where it is, never jumps, never stays half open
+- [ ] A terminal (TERMS, hide with –) and a 3D view are built and folded with their frame → their text and background appear behind the line, nothing shows before it
+- [ ] FILES, then FILES again from the DOCK while it is open → it pings (a flash, the brackets close in round it), it is not cast again
+- [ ] Open a dialog (CLIPBOARD > CLEAR ALL) and a callout → the dialog comes and goes with the transition; callouts, the voice card and the Whisp's menu squares have no brackets, open in 0.22 s and close in 0.12 s
+- [ ] Bent windows (bending on) → the brackets and lines follow the curve
 
-## 6. Lua scripts
+Opacity and bending:
 
-- [ ] SCRIPTS: + EXAMPLE → `double-clap` script; double clap → TERMINALS panel toggles
-- [ ] Edit `/mnt/quest/scripts/double-clap.lua` in the terminal (nano) → saved changes apply within a second
-- [ ] A broken script (syntax error) → ERROR in the list, toast; others keep working
-- [ ] DISABLE / ENABLE / DELETE a script; state survives a restart
+- [ ] CONTROL > LOOK & SOUND: PANEL OPACITY at 100 % → no part of a window is see-through: buttons, rows, tiles, the header
+- [ ] Put one window in front of another at 100 % → no text, icon or button of the window behind shows through
+- [ ] Around a window's edge and where it overlaps another window → no see-through line (fissure)
+- [ ] PANEL OPACITY below 75 % → windows behind show through faintly (as intended)
+- [ ] CONTROL > DISPLAY > Bend panels around you, in FIXED layout: walk closer and farther, drag a window → it curves smoothly (no steps or jumps); terminals stay flat
+- [ ] Point at a bent window's edges → the reticle sits on the curved surface, buttons near the edges react where the beam meets them; pokes with the fingertip work on bent windows
+- [ ] A text that changes fast (a working thread) on a bent window → it stays on the curve, never flashes flat
+
+Back from a native app (open the DOCK, THREAD and one more window in FIXED layout first; note where they are against a wall, the desk or a door):
+
+- [ ] Launch a native app from MetaCodex (LAUNCH), use it, close it with "Back to MetaCodex" → every panel is in the same place in the room (a few cm)
+- [ ] Same, but turn your head 90 degrees before coming back → the panels still stay in the room
+- [ ] `files/session_log.txt` → one line `room anchor: back in the room after the native app: panels moved X cm (most Y cm), turned Z deg, N open`; write X, Y, Z down (X near 0 while the panels still moved: the cause is not the room origin; send the log)
+- [ ] Look for `room anchor: ... too far` or `no room reference` in that log → neither shows (if one does, the stage origin does not hold here: send the log; see `docs/ui.md`)
+- [ ] Pause and resume with the system Home button, no native app → the panels stay where they were, no line about a move
+
+## Hands, gestures and scripts
+
+Hands:
+
+- [ ] Hover over a slider without pinching → it does not move; pinch and drag → it moves
+- [ ] Point a ray at a button and pinch, or poke it with the index fingertip → the button clicks
+- [ ] Pinch a window header and move → the window follows; release → it stays (fixed layout)
+- [ ] Close the hand (fist) while pointing at a window → the window moves with the hand
+- [ ] SELECT on → pinch-drag a rectangle (also over a window) → a dashed rectangle, "Selected … cm", and the tool turns itself off; SELECT on, then SELECT again (DOCK or CONTROL) → off
+- [ ] Palm towards you + pinch (the system quick actions, left-hand settings) → the windows stay where they are (the gesture hides nothing) and the quick-actions menu shows over them; when a system menu has opened and taken the app's focus, the windows step aside and come back when it closes
+- [ ] Make a V (index and middle up) for about 1 s and drop it → nothing happens
+- [ ] Hold the V for 2 s → Ambient Focus turns on; hold it again for 2 s → it turns off; BIND lists `victory` → FOCUS
+- [ ] Hold horns, thumbs up or call-me for 3 s → nothing opens
+- [ ] Make a V while the ray or the fingertip is on a window → nothing happens
+
+Gesture studio (CONTROL > MQH > GESTURES):
+
+- [ ] GESTURES > ALL on a fresh start → YOURS (0) with one dim line "none · RECORD a pose or ASK AN AGENT"; SYSTEM (7: pinch click, grab move · spin, point ray, open open hand, palm-up palm up, clap two hands, select select tool); ▸ EXAMPLES (4) folded; no ⟳ REFRESH button
+- [ ] Tap EXAMPLES → it opens (▾ EXAMPLES) with `core-poses`, `swipes`, `timers` and `calendar`; `core-poses` already says ADDED (the V shortcut uses it), the others say + ADD; tap it again: it folds
+- [ ] Pick a SYSTEM gesture → TEST ▶ and BIND work; SOURCE and DELETE POSE are greyed out and do nothing
+- [ ] Pick `swipes` under EXAMPLES → the right side lists its gestures and says "Not installed"; + ADD (the only lit button) → toast "Example swipes added …", the row says ADDED and its gestures appear indented under it; YOURS stays (0)
+- [ ] Swipe an open hand fast left / right after + ADD → swipe-left / swipe-right in LIVE's recent events
+- [ ] LIVE tab → finger bars move with your fingers (1 = straight); palm and thumb direction text; active gestures listed; the detector cost (right column) stays well under 1 ms
+- [ ] Make a thumbs up → LIVE shows `thumbs-up` (and `grab`); the GESTURES list marks it ● ACTIVE; MQH > PLUGINS lists Core poses
+- [ ] Thumbs down, victory (✌), horns (🤘), call-me (🤙) → each is recognised (LIVE, or a toast via a binding)
+- [ ] TEST ▶ on any gesture → a simulated event (toast "Simulated …")
+- [ ] BIND: pick `thumbs-up`, action "GIT", + ADD BINDING; then hold a thumbs up for 2 s → GIT opens; the binding can be switched on and off and deleted
+- [ ] BIND presets, in this order: TALK, TERMINALS, NEW TERMINAL, THREADS, FILES, WEB, GIT, KEYBOARD, SELECT, RECENTER, FOCUS, CTRL-C; bind `clap` to WEB → a clap opens the WEB window (not LINKS); bind `clap` to TALK → a clap starts listening, another stops; DELETE the bindings
+- [ ] A binding saved with an old preset (for example `toggle:browser` or `spin:40`) → still runs
+- [ ] BIND `palm-up` (left hand) to `voice:toggle` → hands-free TALK
+- [ ] RECORD: name "finger-gun", RIGHT, hold a finger gun, RECORD IN 3 s → "saved" + summary; the pose then fires; it appears under YOURS (✋ pose · my-poses); SOURCE and DELETE POSE are lit for it; DELETE POSE asks, then removes it
+- [ ] RECORD's right side → one dim line "Plugins: MQH > PLUGINS (+ NEW, or ask an agent)"; no + NEW PLUGIN… and no OPEN IN TERMINAL there
+- [ ] `mcx-ui plugin examples` → lists all four with installed=True/False; `mcx-ui plugin example swipes` → ok, swipes appear under EXAMPLES
+- [ ] `mcx-ui gesture list`, `mcx-ui gesture bind clap toggle:files`, `mcx-ui action open:git` → each answers; the binding shows in BIND
+- [ ] Ask an agent on the headset (`claude` or `opencode` in a terminal): "make me a gesture plugin: when I do a thumbs up with my right hand open git; push my palm away to close it" → the plugin appears with its own `poses/thumbs-up.json` and works on a fresh install, without + ADD
+- [ ] Update over an old install that had the starters, never edited, with no binding on them → after the first start `swipes` is gone from MQH > PLUGINS and from `/mnt/quest/plugins` (`ls -a` shows `.examples-v2` and still `.starter-installed`); `core-poses` stays (the V shortcut uses it); `my-poses` and your own plugins are still there
+- [ ] Update over an old install where a binding names `victory` (or a script or plugin reacts to `thumbs-up`) → `core-poses` stays under EXAMPLES, still working; an edited starter (one pose file changed) stays and shows under YOURS
+- [ ] Restart the app after + ADD of an example → it is still installed (the cleanup runs only once)
+
+Lua scripts (CONTROL > MQH > SCRIPTS):
+
+- [ ] SCRIPTS on a fresh start → one dim line "No scripts · + EXAMPLE, or ask an agent (skill quest-scripting)"; no plugin rows, no GESTURE MONITOR; + EXAMPLE → `double-clap` with the badge ON; double clap toggles TERMINALS
+- [ ] Edit `/mnt/quest/scripts/double-clap.lua` in the terminal (nano) → saved changes apply within a second, also while an agent works
+- [ ] A broken script (syntax error) → ERROR in the list, toast; the others keep working
+- [ ] DISABLE / ENABLE / DELETE a script → the state survives a restart
 - [ ] `mcx-ui script list`, `mcx-ui script eval 'return 1+1'` → 2
 
-## 7. Gestures studio and plugins
+## App plugins
 
-- [ ] MQH > GESTURES > ALL: YOURS, SYSTEM (7 built-ins), EXAMPLES folded; for the steps below + ADD `core-poses` and `swipes` first (since section 34 nothing is installed by itself)
-- [ ] LIVE tab: finger bars move with your fingers (1 = straight); palm / thumb direction text; active gestures listed
-- [ ] Make a thumbs up → LIVE shows `thumbs-up` (and `grab`); GESTURES list marks it ● ACTIVE
-- [ ] Thumbs down, victory (✌), horns (🤘), call-me (🤙) → each recognised (LIVE / toast via a binding)
-- [ ] Swipe an open hand fast left / right → swipe-left / swipe-right in LIVE's recent events
-- [ ] Detector cost (LIVE, right column) stays well under 1 ms
-- [ ] TEST ▶ on any gesture → simulated event (toast "Simulated …")
-- [ ] BIND: pick `victory`, action "GIT", + ADD BINDING → making ✌ opens GIT; ON/OFF and DELETE work
-- [ ] RECORD: name "finger-gun", RIGHT, hold a finger gun, RECORD IN 3 s → "saved" + summary; the pose then fires; it appears under plugin `my-poses`
-- [ ] MQH > PLUGINS > + NEW PLUGIN… "test-plugin" → folder in /mnt/quest/plugins; both palms up shows a toast
-- [ ] MQH > PLUGINS: enable/disable/reload/delete; detail shows poses, detectors, log
-- [ ] Ask an agent on the headset (claude or opencode in a terminal): "make me a gesture plugin: when I do a thumbs up with my right hand open git; push my palm away to close it" → plugin appears and works (the same request passed in the Editor test)
-- [ ] `mcx-ui plugin list`, `mcx-ui gesture list`, `mcx-ui gesture bind clap toggle:files`, `mcx-ui action open:git`
+- [ ] CONTROL > MQH > PLUGINS > + NEW PLUGIN… "test-plugin" → a folder in `/mnt/quest/plugins`; both palms up shows the toast "Both palms up" and opens nothing
+- [ ] MQH > PLUGINS: pick a plugin → the first button says DISABLE when it is on and ENABLE when it is off (dim with nothing picked); enable / disable / reload / delete work; the detail shows poses, detectors and log
+- [ ] `mcx-ui plugin list` → the plugins with their state
+- [ ] A plugin with `voice.command{...}` (skill quest-scripting) → its phrase works by voice; `mcx-ui voice match "<phrase>"` shows the command
+- [ ] Ask an agent for a small plugin with its own window and a menu button (skill `quest-plugins`) → the window and its tile appear without a rebuild or a restart, and load again at every start
+- [ ] Install the Timers example (CONTROL > MQH > GESTURES > EXAMPLES > + ADD, or `mcx-ui plugin example timers`) → a toast; a TIMER tile appears on the DOCK (and on the wrist menu's outer ring in WRIST mode); the tile opens the Timers window
+- [ ] In the Timers window, start a short timer with its buttons → the countdown runs; when it ends, the Whisp calls it out with a sound and says it; a tap on the callout opens the window
+- [ ] Install the Calendar example the same way → a CALENDAR tile and a window with a month grid; add an entry and a reminder → the reminder calls out at its time
+- [ ] Restart the app → both plugins load again, their windows and tiles come back, and their saved timers and entries are kept
+- [ ] DISABLE a plugin in MQH > PLUGINS → its window closes, its DOCK tile and its voice commands go away; ENABLE brings them back
+- [ ] `mcx-ui plugin check timers` → `loaded`, with its windows (builds, open), tiles, voice commands, timers and no warnings
 
-## 8. Agents and sign-in (MQH)
+## The Whisp
 
-- [ ] AGENTS lists providers (Claude Code, Codex, Pi, Cursor, opencode if installed) with READY / SIGN IN / INSTALL
-- [ ] Select Claude Code → SIGN IN ▶ → a new terminal runs `claude auth login`
-- [ ] The terminal prints a link → toast "Link in …" → `⇗` on that terminal opens it in the Horizon browser
+Look and states:
+
+- [ ] Start the app → a small prismatic crystal wisp appears up to the right of where you face, about half a metre away: a faceted crystal cluster with a breathing heart of light, four small shards in slow orbit and a soft halo; it reads in a bright room; no square of light round it; the first time a message says what it is
+- [ ] Move your head near it → its facets change hue with the angle you see them from; its edges glow
+- [ ] Idle → calm cyan, a slow turn, the light inside breathes (about 4 s a breath)
+- [ ] Listening starts (TALK) → a burst of white light and a ring of light runs out, the shards are thrown out and come back; then it is bright ice white, the shards gather in a ring that faces you, the light follows your voice, the HUD card stands beside it
+- [ ] It thinks → violet, it spins up, the shards race round it, the colours run
+- [ ] It speaks → the light pulses with every syllable and ripples leave it; a spoken answer comes from its direction
+- [ ] A thread waits for your approval or an answer → it is amber with a slow heartbeat, until you open its menu or the LOG
+- [ ] The first start's setup keeps the voice locked → it is dim steel and its shards turn like a spinner; it flares once when the voice is ready
+- [ ] Messages you have not read → up to four of its shards turn gold and larger
+- [ ] A window has to open out of view → the Whisp's tip turns to the window and its shards stream that way for about 2.5 s
+- [ ] The Whisp for a minute (idle, touch it for its menu, move round it, put a hand near and behind it) → no flat blocks, stripes or half discs on it, in any frame
+
+Place:
+
+- [ ] Glance left and right → it stays where it is in the room; turn your chair a quarter turn: after a moment it comes along round you, never through your face; walk two steps: it comes along
+- [ ] Idle, not looked at, no message → it is a little smaller; look at it or bring a hand close: it brightens and grows back; touching it still opens the menu
+- [ ] Open windows until one would be behind it → it moves to a free place; close that window: a few seconds later it goes back; no window covers its menu or its messages while they show, nor the Whisp while it listens, thinks or speaks
+- [ ] Pinch the Whisp between thumb and index and move the hand → it follows; let go: it stays there and keeps that place by you when you turn; quit and start again (MQH sync on): it is where you left it; menu > PLACE, restart: it chooses its own place
+- [ ] CONTROL > LOOK & SOUND > Whisp off (or voice: "turn the Whisp off") → it fades out; windows are cast from their left edge; messages float in the upper view; on again: it comes back
+- [ ] Frame rate with the Whisp and five windows → 72 fps; bring it close to your face (pinch it there): still 72 fps; with its menu open and in view: 72 fps
+
+Casting and messages:
+
+- [ ] It casts the windows → two thin rays run from the Whisp to the window's nearest edge and ride on the scan line; a window to the left of the Whisp is built from its right edge, one below it from its top; closing: a spark flies home to the Whisp
+- [ ] Any message (SELECT on and off gives two) → a card beside the Whisp, towards the middle of your view, joined to it by a thin rail; a second message takes that place and the first moves up; the Whisp flashes in the message's colour (green ok, amber warning, red error); messages stack on an arc round its right side, the newest lowest, the line of light runs along the arc; never on its left
+- [ ] A thread you are not looking at finishes → the Whisp says "The thread on <project> is done." with the callout; an approval asked: "An agent on <project> needs your approval."; a question: "… is asking you something."
+- [ ] An alert comes while you talk or while the Whisp speaks → it is said after, not over it
+- [ ] VOICE > "Say when a thread is done or needs you" off → callouts only, nothing said
+- [ ] TALK: "give me a status update on the ongoing threads", "how are my threads doing" → the Whisp says the answer, not only the text
+
+Its menu:
+
+- [ ] Touch the Whisp with a fingertip → its menu opens beside it: four plain squares on an arc round its left side, TALK, SPEAK, PLACE, LOG from the top, nothing else beside them; the gold shards go; touch it again: it closes; point at it with a ray and pinch: the same; the window behind it is not clicked
+- [ ] The squares have no frame (no outline box, no shadow box) → each is a square with its label; the gap between two neighbouring squares is the same all round the arc (about 8 mm at the menu's size); no square touches the Whisp; every square faces you; the labels read at arm's length without leaning in
+- [ ] The menu always sits on the Whisp's left, level with it, whichever way you look → never swapped; messages always rise on its right
+- [ ] Each square works → TALK starts and stops listening, SPEAK toggles spoken answers, PLACE makes the Whisp choose its own place again, LOG opens LOG · MESSAGES (`✉ n NEW` while messages are unread)
+- [ ] LOG · MESSAGES → the list; CLEAR ALL (red, as big as other buttons) asks "Clear all n messages?"; CANCEL keeps them, CLEAR ALL empties the list
+- [ ] The menu opens and closes with the light → a line of light crosses each square (there is no frame to light)
+- [ ] Read a window straight ahead, the Whisp up to its right, and touch the Whisp → the Whisp and its menu glide (no jump) to a place where nothing of them covers that window, still in view and reachable; close the menu: a moment later the Whisp goes back to its own place
+- [ ] While the menu is up, reach for a square → nothing moves under the finger; look at the menu itself: the Whisp does not run away from it
+
+## CONTROL and settings
+
+CONTROL:
+
+- [ ] Open CONTROL → one window with the rail on its left: THIS HEADSET (◧ DISPLAY, ◈ LOOK & SOUND, ◐ FOCUS, ✋ HANDS), AI (♫ VOICE, ◆ AGENTS, ⬡ MQH, ⚿ VAULT), LINUX & APP (⬢ SYSTEM, ✦ ABOUT); each row has its status (fixed, sound, on / off, ready, running, keys); the names are in the same narrow capitals as the group captions; nothing is cut off ("LOOK & SOUND" whole)
+- [ ] Tap AGENTS, MQH, VAULT, VOICE, SYSTEM in the rail → each takes the same place, the rail stays still; DISPLAY, LOOK & SOUND, FOCUS, HANDS and ABOUT only change SETTINGS' page
+- [ ] Click every category on the rail one after another → every window has the same size, the top-left corner and the rail never move, no window grows over a neighbour
+- [ ] Drag the window by its header → the rail comes along; pinch the rail's bar and move it: the window comes along
+- [ ] Press ✕ on the CONTROL window → the rail closes too; CONTROL on the menu brings back the last category; pressed again it closes
+- [ ] FLOAT layout, CONTROL open → CONTROL and its rail take one place on the ring, nothing overlaps them
+- [ ] With no agent signed in, look at the rail → AGENTS' status says "sign in" (not "set up")
+- [ ] Voice: "open the control panel", "open agents", "open git", "open the settings" → the right page opens with the rail
+- [ ] Voice or a binding with `ui.open("display")`, "look", "hands" or "about" (for example `mcx-ui action open:about` from a terminal) → CONTROL opens on that page; close it; CONTROL on the menu brings that page back
+- [ ] THREADS > ◆ AGENTS → CONTROL opens on AGENTS
+
+Pages:
+
+- [ ] Change the DISPLAY rows (LAYOUT, DISTANCE, FLOAT RADIUS = the carousel radius, UI SCALE) → each takes effect at once; "Bend panels around you" bends windows in FIXED too (terminals stay flat); "Main menu on the wrist" switches between the DOCK and the wrist menu
+- [ ] DISPLAY in FIXED → FLOAT RADIUS is dimmed with "FLOAT only" under its name; switch LAYOUT to FLOAT: FLOAT RADIUS is bright and DISTANCE is dimmed with "FIXED only"
+- [ ] Open and close windows for a while, change a slider, say a voice command → no window changes size by itself (they keep the UI SCALE)
+- [ ] LOOK & SOUND rows → PANEL OPACITY, FOVEATED, SOUNDS, VOLUME and the Whisp toggle ("Whisp: it casts the windows, speaks, and shows messages beside it"); no SHARPNESS or SHADOWS slider, no themes, accents, scanlines or grid, and no gap where a slider was; text is sharp (render scale 1.6)
+- [ ] FOVEATED on → the edges of the view get softer (VrApi `Fov=`); off (the default): sharp everywhere
+- [ ] SOUNDS → click, open, close and toast blips play; off: silent; VOLUME changes how loud they are
+- [ ] A settings file that still has "glow" loads → the app starts with its other settings (PANEL OPACITY keeps its value)
+- [ ] HANDS: click mode PINCH / POKE / BOTH → changes how buttons react
+- [ ] HANDS: set MOVE PANELS to PINCH HEADER, CLOSED HAND or BOTH → windows move only the way you chose
+- [ ] HANDS: POINT RAY ALWAYS / POINTING POSE → the ray shows only when you point
+- [ ] HANDS: change the PINCH AT slider, clap on / off, clap distance, and "Custom gestures from plugins" on / off → each changes how the hands react
+- [ ] HANDS: look at the button row → it reads SELECT AREA ⌖ | GESTURE STUDIO ▸ | the system's hand settings ⚙; the line at the top ends "GESTURE STUDIO: your own gestures."; GESTURE STUDIO opens MQH on GESTURES in HANDS' place; the third button opens the headset's own hand settings page
+- [ ] ABOUT → no raw log lines; LICENCES ▸ opens FILES at `/usr/share/doc/metacodex` (`LICENSES.md` is there); APP PERMISSIONS ⚙ opens the headset's own settings page for the app
+- [ ] Change a few settings, quit and start the app again → the settings are kept
+
+## Voice
+
+Reference: `docs/voice.md`.
+
+Panel and service:
+
+- [ ] CONTROL > VOICE → "AI service: ● running" within a few seconds (the first start unpacks the runtime: a few seconds more); the service button reads ▶ START or ■ STOP from the state
+- [ ] The models in VOICE (speech to text, commands, text to speech) → listed as installed (✓) from the first start; nothing to download
+- [ ] Open VOICE → everything fits inside the panel; the FEMALE and MALE voices stand in two aligned rows on the right
+- [ ] Kill the service (`mcx-ai log` shows its pid; or restart the app) → it restarts by itself
+- [ ] VOICE has no LANGUAGE row; say "open git" → GIT opens (speech is English only)
+- [ ] VOICE: pick a voice (F1-F5, M1-M5) → a sample sentence in that voice; spoken replies use it
+- [ ] VOICE > Spoken replies ON → the reply is also spoken (needs the voice model)
+- [ ] VOICE > TYPE… "close all windows" → same as saying it; SAY… → speaks the text
+- [ ] A tap on a COMMANDS row → it shows Say “…” first and at most one short line, never an id like open_panel
+- [ ] In a terminal: `mcx-ai status`; `mcx-ai say "hello" /tmp/h.wav && mcx-ai transcribe /tmp/h.wav` → "Hello."
+- [ ] `mcx-ui voice run "open the vault"` → JSON result, VAULT opens; `mcx-ui voice list` → the commands
+
+Saying commands:
+
+- [ ] TALK, say "open git" → the HUD above the DOCK: ● LISTENING with a level bar, then ✓ Opened GIT; GIT opens
+- [ ] "close all windows" → every panel closes (the DOCK and terminals stay)
+- [ ] "open the providers page" → AGENTS opens; "show me the source control" → GIT
+- [ ] "find the thread where we …" (words from a thread title) → THREAD opens on it
+- [ ] "switch to the workspace called <project>" → THREADS shows that project
+- [ ] "use the floating layout" / "fixed mode" → the layout changes; "recenter" → the windows come back
+- [ ] A phrasing no template knows ("I need to see which AI providers are signed in") → ◆ THINKING, then the right panel (about 2 s; the first one after the start a few seconds more)
+- [ ] "run ls" → a confirmation dialog in VR; RUN types it into the terminal
+- [ ] Silence after TALK → "no speech heard" after about 6 s; TALK twice → it stops and processes what was said
+- [ ] Speed: "open git" → done right after you stop talking (about 0.7 s pause + 0.6 s); an unusual phrasing → ◆ THINKING in under a second
+- [ ] Frame rate while talking → about 72 fps; VOICE shows the service's RAM
+- [ ] "never mind", "what can you do for me?" → nothing opens or toggles
+- [ ] "close the settings panel", then within 2 minutes "reopen it" → SETTINGS opens again; "close it" closes it; VOICE > LAST shows “reopen it” → “open settings”
+- [ ] "Open ambient focus" → CONTROL opens on the FOCUS page (also when heard as "fogus")
+- [ ] "Turn on ambient focus and set intensity to 0" → focus on, intensity 0, the slider moves
+- [ ] "Set the dome radius to two meters", "radius 50 centimeters", "set the blur to fifty percent", "make the windows bigger", "volume a bit less", "turn off the sounds" → each changes that setting
+- [ ] "Show the installed tools" → SYSTEM on TOOLS; "how much disk space is left" → SYSTEM on STORAGE
+- [ ] BLUR on, say a few voice commands → speech to text is about as fast as with BLUR off (VOICE history, asr ms)
+
+Questions about the session:
+
+- [ ] "How many captures did we take so far?", "how many screenshots do we have?" → a spoken count (and the newest one's time), not a recap; CLIPBOARD does not open; "open the clipboard" and "can I open the clipboard?" still open it
+- [ ] With a thread waiting for an approval, ask: "what is this command I'm asked to accept, is it safe?" → a spoken answer naming the thread, the command and its risks, never "it's safe"
+- [ ] Ask "do we have the rust toolchain?", "is this build stuck?" (during a long `cargo build`), "what has this thread done so far?" (pointing at THREAD) → short spoken answers; "open settings" still opens Settings
+- [ ] TALK: "what is this thread doing?", "is it stuck?" → a short spoken answer at once (no waiting for the model)
+- [ ] Ask "what happened while I was away?" → no placement, focus or menu settings in the answer; threads, approvals and builds are there
+- [ ] "Give me a recap of the <name> thread" (a thread that is not open) → "Let me look." at once (about 1.5 s after you stop talking), the HUD says ◆ LOOKING, then "The <name> thread is idle / working / waiting for you." and one more sentence; it is the thread you named, not the open one
+- [ ] "Summarize this thread", "catch me up", "what has it done so far" on the open thread → the first real sentence within about 4 s
+- [ ] A question the app needs the model for ("why did the build fail?") → "Let me look.", then the answer is spoken sentence by sentence while the HUD text still grows (◆ ANSWERING); STOP or TALK mid-answer: the voice stops and no later sentence plays
+- [ ] Ask a session question with a 2-sentence answer, also with an agent working → the first words come about 3-4 s after the text appears, with a short pause between sentences, and no gap between the first clip and the next; only 2 sentences / about 200 characters are spoken and the full answer stays on the HUD
+- [ ] While a reply speaks, press ■ STOP on the voice HUD (also try TALK, and a new question) → the voice stops at once and no later sentence plays
+- [ ] Ask "is it stuck?" on a working thread → durations are spoken as "3 minutes 20 seconds", not "three men"
+- [ ] During a long spoken answer → 72 fps holds and the voice has no gaps between words
+
+Voice effect and speech speed:
+
+- [ ] VOICE > SOUND shows OFF / AI / SHIP / COMM, with AI selected on a fresh install; pick each one → it says "Systems online. All panels ready." in that sound: AI is the same voice, slightly computer-like with a small room; SHIP is clearly synthetic with a longer tail; COMM is a narrow radio with a squelch at the start and the end; OFF is the plain voice
+- [ ] Play all four sounds → they are equally loud, never crackle or clip, and the first word starts without half a second of silence
+- [ ] Say "make your voice sound like a radio" → COMM is selected and replies sound like a radio; "give the assistant its normal voice back" → OFF; "switch the voice effect to starship" → SHIP
+- [ ] VOICE > SPEECH: FAST (3 steps) is selected on a fresh install; ask the same question with FAST and with CLEAR → FAST starts a little sooner; tell if FAST ever drops or swaps a word you notice (then CLEAR becomes the default)
+- [ ] With the voice effect on (AI, SHIP, COMM), FAST speech stays easy to understand → tell if a word is lost
+- [ ] Change VOICE > SOUND or SPEECH, then ask a recap → "Let me look." already has the new sound (or, the very first time, the answer comes without it)
+- [ ] Restart the app → the chosen SOUND and SPEECH are kept
+- [ ] A long spoken reply with SHIP → 72 fps holds (the effect runs off the main thread)
+
+
+### Hey Whisp (off by default)
+
+- [ ] CONTROL > VOICE shows "Hey Whisp" OFF on a fresh install; TALK works as before
+- [ ] Switch it on (the microphone dialog appears if the microphone was not allowed yet)
+- [ ] Say "Hey Whisp": the Whisp flares, TALK's sound plays, TALK listens; then a command runs as from the button
+- [ ] Say "Hey Whisp, open the files" in one breath: FILES opens
+- [ ] Say "Hey Whisp" and then nothing: TALK ends quietly, no error sound
+- [ ] Talk near the headset for a minute (not to it): no wake; 72 fps (Perf menu Snapshot) with the switch on and off
+- [ ] The TALK button still works with the switch on
+- [ ] Take the headset off: the control port's `voice wake` says it waits (off the head); on again: it listens again
+- [ ] `voice wake test /mnt/quest/hey.wav` with a recorded "Hey Whisp": a match, and the round trip about 0.3-0.4 s
+## Terminal and Linux
+
+Terminals:
+
+- [ ] Type with the system keyboard (⌨ on the frame) → text appears; Enter runs
+- [ ] Key bar: Esc, Tab, Ctrl, arrows, ⌨, paste → each does its job
+- [ ] Run `vim`, `less`, `htop` (or `top`) → they draw correctly, with colours; resize-free
+- [ ] `+` on the frame → a second terminal opens beside; tapping a frame focuses it (the key bar follows)
+- [ ] Press `✕` on a terminal and open TERMS → the terminal closes; the TERMS panel lists the terminals; FOCUS / CLOSE work
+- [ ] Press `–` on a terminal, then `✕` on the last one → `–` hides it (TERMS lists it as hidden; a tap shows it again); `✕` on the last terminal hides it instead of ending it, and the toast says "TERMS on the menu shows it"
+- [ ] Press `⎘` on a terminal's frame → the clipboard is pasted into that terminal
+- [ ] Run `ls /mnt/quest` → it shows `plugins/`, `scripts/`, `control.token`
+- [ ] Run `ls ~/.claude/skills` → it shows 49 skills: the 6 MetaCodex ones (quest-gesture-plugins, quest-plugins, quest-scripting, metacodex-context, quest-views, worktree-per-thread) and 43 third-party skills
+
+The system keyboard (the app has no keyboard of its own):
+
+- [ ] A text field (the WEB address, a search, an API key in VAULT) → the headset's system keyboard opens with the field's text; what you type shows in the field once (no doubled letters); Done keeps it; Cancel puts the old text back; a secret field shows dots
+- [ ] The first time the keyboard opens in a session → a toast: "the headset can lay this keyboard on a table. Settings > Experimental > Surface keyboard"; it does not show again until the app restarts
+- [ ] With Settings > Experimental > Surface keyboard on, rest both hands on a table when the keyboard opens → note where the system shows it (on the table or floating)
+- [ ] Terminal: KEYS on the DOCK or the wrist, the frame's ⌨, the key bar's ⌨ → the keyboard opens; type `ls`: the terminal shows `ls` once (not `lsls`), each letter at once; Backspace deletes one letter; Done runs the command; the same button again closes the keyboard
+- [ ] Voice "show the keyboard" → it opens; said again, it stays open; "open the table keyboard" opens the same keyboard
+- [ ] The wrist menu has no TABLE tile → KEYS is lit while the keyboard is open for the terminal
+- [ ] A Bluetooth keyboard (if paired) → typing, arrows and Ctrl-C work in the terminal and in a focused field; the key bar (Esc, Tab, arrows, Ctrl, Alt) works
+
+SYSTEM (CONTROL > SYSTEM):
+
+- [ ] SYSTEM > TOOLS → a plain list in groups, each with a header (AI AGENTS, JAVASCRIPT · TYPESCRIPT, PYTHON, NATIVE CODE, the native-app group, GIT, TERMINAL UTILITIES, EDITORS); a tile for each tool that is installed (git, node, npm, python3, curl, …) with its version; missing ones dimmed ("+ install"); no logos; no gh, php, ruby, lua or deno; the bottom row is ⟳ CHECK | PACKAGES… (no TERMINAL button)
+- [ ] Tap a missing tool (for example jq) → Install → a terminal runs the install; ⟳ CHECK → it shows as installed
+- [ ] PACKAGES… → the Debian packages you chose and the npm globals
+- [ ] TOOLS > the native-app group > ndk → install: downloads the NDK r27d for arm64 (about 120 MB), checks its sha256, installs it to `/opt/android-ndk`; a new terminal has `ANDROID_NDK_HOME`; the tile shows 27.3.13750724
+- [ ] In a terminal: `cat /mnt/quest/system/tools.json` and `mcx-ui system tools` → the same list with versions and paths
+- [ ] STORAGE → the headset bar (Linux, AI models, shared, apps + system, free) and Linux by folder; tap a cache: CLEAN; LINUX LIMIT below the current size: a warning
+
+## Files, git and web
+
+Files and git:
+
+- [ ] Open FILES (the shortcuts for /root, the shared folder `/mnt/quest`, and /) and tap folders → they open; CD HERE / VIEW / EDIT / PATH ⇥ act in the focused terminal; FILES APP at the end of the top row opens the headset's own Files app
+- [ ] Clone a repo first (`git clone https://github.com/SolidityDrone/MetaCodex /root/MetaCodex`), then press ⟳ SCAN in VAULT > GIT → it finds the repos under /root
+- [ ] Pick a repo in VAULT > GIT → it shows the branch, ahead / behind, changes, branches and the metro history; FETCH, PULL, COMMIT… (keyboard), PUSH, CHECKOUT (tap a branch) and TERMINAL work
+- [ ] Voice "open git" (or `mcx-ui action open:git`) → CONTROL > VAULT opens on its GIT tab
+
+WEB:
+
+- [ ] WEB on the DOCK or the wrist → a window opens beside the others on a start page (bookmarks, local servers); the app stays on, everything else stays visible
+- [ ] Type `localhost:8000` (with `python3 -m http.server 8000` running in a terminal) → GO: the page shows in the window; tap a link with a pinch and with a fingertip; drag the page to scroll; ◀ ▶ ⟳ work; the title and "loading %" show under the toolbar
+- [ ] ☰ LINKS → bookmarks add and remove; LOCAL SERVERS lists running ports; the bottom row has only ⟳ SCAN; start `python3 -m http.server 8000` in a terminal: LINKS > SCAN shows :8000 → it opens in the WEB window
+- [ ] Tap a text field on a page, ⌨, type, Done → the text is in the field; ⏎ submits, ⌫ deletes
+- [ ] A dev server link printed in a terminal (`⇗` on it) → it opens in the WEB window; a sign-in link (`claude auth login`) opens in the headset's own browser instead
+- [ ] ⇗ in WEB → the page opens in the headset's own browser; on a PC with USB adb, `chrome://inspect` lists the page (console, DOM)
+- [ ] Move the WEB window, close and reopen it → the page is still there; with "Bend panels" on it stays flat
+- [ ] WEB open on a scrolling page → 72 fps; closed: no cost
+
+CLIPBOARD (captures):
+
+- [ ] SELECT, then pinch-drag over a window (also at a low PANEL OPACITY) → CLIPBOARD has the capture, opaque, with nothing of the room or the hands and no orange border; the orange frame goes as soon as the capture is taken; no hitch at the moment of the capture (72 fps)
+- [ ] CLIPBOARD from the wrist (CLIP), the DOCK and by voice ("open the clipboard", "show the screenshots") → it opens
+- [ ] CLIPBOARD has a KEEP slider above its buttons → with more captures than KEEP (for example 5, or 21 captures at 20) the oldest go and the line says "n of 5"; the preview still shows whole
+- [ ] CLIPBOARD > CLEAR ALL pressed three times quickly → one dialog, parallel to CLIPBOARD, centred over it a few cm in front (never through it, never half off its edge); the extra taps delete nothing; CANCEL closes it
+
+## Agents and MQH
+
+MQH:
+
+- [ ] Start the app and wait half a minute → CONTROL > MQH > STATUS says "running in this headset's Linux", a message says "MQH is running in this headset", and AGENTS fills in by itself (nothing to connect)
+- [ ] MQH → the title reads MQH · SKILLS · PLUGINS · SCRIPTS · GESTURES; it opens on SKILLS; the last tab is STATUS (URL, token, sync, ⟳ RESTART); MQH has one entry in CONTROL, and the DOCK and the wrist menu have no SCRIPTS or GESTURE tile; SKILLS' three buttons are not cut off
+- [ ] Stop MQH (or wait for a failure) → AGENTS says "MQH > STATUS > RESTART tries again"
+- [ ] STATUS, sync on: change a setting (for example PANEL OPACITY) → `quest.settings` is updated in MQH; change it through the MQH API → the app follows within 5 s
+- [ ] STATUS: type a TOKEN → `grep -c mqhToken files/settings.json` shows an empty value; the MQH connection still works
+- [ ] MQH > SKILLS → the shipped skills say READ-ONLY and REMOVE refuses them; + NEW SKILL opens NEW THREAD, START puts the brief in the draft's composer (SEND starts it); ⌕ FIND finds skills, ⇣ INSTALL adds one under YOURS, REMOVE removes it
+- [ ] Frame rate with MQH running → 72 fps
+
+Agents:
+
+- [ ] Open AGENTS → it lists the agent providers with READY / SIGN IN / INSTALL
+- [ ] Pick one → SIGN IN ▶ → a new terminal runs its login (for example `claude auth login`)
+- [ ] The terminal prints a link → toast "Link in …" → `⇗` on that terminal opens it in the headset's own browser
 - [ ] Sign in in the browser; the redirect back to localhost completes the login (or paste the code with ⎘) → AGENTS ⟳ shows READY + account
-- [ ] Same for opencode (`opencode auth login`) and Codex (`codex login --device-auth`: device code flow)
-- [ ] GET installs a missing agent; UPDATE (installed agents only) updates it through MQH (or run `mcx-setup` in a terminal)
-- [ ] DISABLE (or ENABLE: the button says the one that applies) switches a provider in MQH
+- [ ] Sign in the same way with `opencode auth login` and `codex login --device-auth` (device code flow) → AGENTS shows READY for each
+- [ ] Press GET on a missing agent (for example `opencode`) → a terminal installs it in about a minute, the tile turns into "✓" with its version and it shows in the providers (the others the same way); UPDATE (installed agents only) updates it through MQH (or run `mcx-setup` in a terminal); MORE · COMING SOON cannot be pressed
+- [ ] Press DISABLE (or ENABLE: the button says the one that applies) → the provider is switched in MQH
+- [ ] Pick an installed agent → the second row reads DISABLE (or ENABLE) | NEW THREAD → | UPDATE; pick one that is not installed: no UPDATE; no OPEN LINK button; the hint says ⇗ on the sign-in terminal opens the link
+- [ ] ⚿ API KEY: pick your provider, copy your key (in WEB or the headset's browser), ⎘ PASTE, SAVE → "✓ … set for the agents"
+- [ ] NEW THREAD with `opencode` → it answers (with your key, no terminal login)
 
-## 9. Threads (MQH)
+Agent views:
 
+- [ ] Thread sidebar > VIEWS > DEMO → a "What agents can show" panel: stats, a line chart, a diagram, a donut, a checklist, choices and a physics shelf in front with balls and boxes
+- [ ] Push a ball with your index fingertip → it rolls; ❚❚ PAUSE / ▶ RUN / ⟲ RESET work; move the panel: the scene moves with it
+- [ ] Hover a chart → the value shows in its top-right corner; hover a diagram node: its edges light up
+- [ ] Ask a thread agent "show the architecture of this repo as a diagram" → a view opens by itself; the timeline shows `[▣ …]` instead of the code block
+- [ ] An agent view with choices → tap one: it arrives in the thread as your message
+- [ ] In a terminal: `mcx-ui view schema`, then `mcx-ui view show spec.json` (the skill's example) → the view opens; `mcx-ui view wait <id>` returns your tap
+
+## Threads
+
+Projects and the THREADS list:
+
+- [ ] Open THREADS → it shows NATIVE, DEFAULT, RESEARCH (dim headers, in that order); OTHER only when a project is outside `/root/metacodex-projects/` and has no type; a tap on a header folds it, a tap on a project folds it; threads stay under their project (and its worktree rows); the project row says how many run / need you; a tap on a thread opens it; each thread shows its status (running / error / NEEDS YOU) and the list refreshes
+- [ ] An empty type says "no … project yet: tap to make one" → the tap asks the name of a project of that type
 - [ ] THREADS: + PROJECT… → DEFAULT → name "My Test" → the project is listed under DEFAULT (`…/default/my-test`)
-- [ ] + NEW THREAD…: providers, then models for the chosen provider; PERMISSIONS EDITS/AUTO/FULL; WORKSPACE CHECKOUT/WORKTREE; no FIRST MESSAGE field
-- [ ] START → THREAD opens as "New thread · <project>" (NOT STARTED), the keyboard on the composer; first message "list the files and summarise the README" → SEND → the thread is made, its title is the start of that message, the timeline fills (you, agent, commands, tools)
-- [ ] Composer: type with the keyboard → SEND → message appears; agent answers
+- [ ] + PROJECT… asks NATIVE APP / DEFAULT / RESEARCH / EXISTING…, then the name on the keyboard (empty field, the hint in its caption) → "Weather App" makes `/root/metacodex-projects/native/weather-app`; EXISTING… picks a folder, then PROJECT TYPE: NATIVE APP, DEFAULT or RESEARCH, and the project is listed under that type
+- [ ] In a terminal: `cd /root/metacodex-projects/native/weather-app && git status && git config user.name && cat .metacodex/project.json && ls -la .claude/skills` → a git repository on `main`, an identity (yours when a global one is set, else MetaCodex), type native, the 13 `quest-native-*` links (`quest-native-art-direction` among them)
+- [ ] A Native project's folder → `.metacodex/project.json`, 13 links `.claude/skills/quest-native-*`, and `AGENTS.md` / `CLAUDE.md` with the native block; a DEFAULT one has none of them (`ls -la <folder> <folder>/.claude 2>&1`)
+- [ ] In a DEFAULT project ask an agent "what are your rules for apps?" → no word about launch requests or the app menu
+- [ ] A RESEARCH project → `AGENTS.md` and `CLAUDE.md` hold the research note (notes in Markdown, sources cited, no app build), no `.claude/skills`; ask its agent "what are your rules here?": it names those rules, nothing about apps
+- [ ] The same name again in the same type → a toast says the folder exists; nothing is made
+- [ ] Offline, never signed in to git: in a new project ask the agent to commit a file → the commit works
+- [ ] An old project with `"type": "general"` in `.metacodex/project.json` → it shows under DEFAULT
+- [ ] Voice: "create a research project called solar panels" → made under RESEARCH; "new project" → the type dialog; "make a native app project" → the name keyboard
+
+A new thread:
+
+- [ ] Press + NEW THREAD… → it offers providers, then models for the chosen provider; PERMISSIONS EDITS / AUTO / FULL; WORKSPACE CHECKOUT / WORKTREE; no FIRST MESSAGE field
+- [ ] START → THREAD opens as "New thread · <project>" (NOT STARTED), the keyboard on the composer; first message "list the files and summarise the README" → SEND: the thread is made, its title is the start of that message, the timeline fills (you, agent, commands, tools)
+- [ ] NEW THREAD > START, then close THREAD (✕) without a message → no new thread in THREADS, also not after ⟳ or a restart
+- [ ] NEW THREAD > START, then open another thread, or NEW THREAD > START again → the first draft is gone, nothing is made
+- [ ] In the draft: attach a capture (+ or CLIPBOARD > TO THE THREAD) and send the first message → the thread has the text and the capture
+- [ ] In the draft: change the model or the access on the chips before the first message → the new thread uses them
+- [ ] WORKSPACES > a worktree > NEW THREAD HERE… > START > first message → the thread works in that worktree
+- [ ] Voice: "start a thread to fix the login page" → a thread is made at once with that message (last agent and model chosen); "new thread" → the draft opens and waits
+
+The chat:
+
+- [ ] Composer: type with the keyboard → SEND: the message appears; the agent answers
+- [ ] Send a task → your message in a bubble on the right; under it `◐ Working` with the steps appearing one by one (thoughts, `$ commands`, `✎ files`)
+- [ ] While it thinks → "Thinking…" with its newest sentence under it; a tap on a thought opens its text
+- [ ] The status line under the chat → what it does now and for how long (`Running npm test · 0:45   turn 3:12 · live`)
+- [ ] Wait for the answer → it appears in full under the work and grows while it is written (a caret at its end); the work header closes to `⚙ Worked 4:31 · …` when it is done, a tap opens it again
+- [ ] Ask for something long (several commands) → when the steps push your prompt off the top, it stays pinned there; a tap on it scrolls back to it
+- [ ] Scroll up while it works → the view holds still, `↓ NEW` shows; a tap goes back to the end; a tap on a header opens and closes it
+- [ ] An approval row shows and goes → the chat keeps its place and text
 - [ ] With EDITS, a command needing approval → ALLOW ONCE / ALLOW SESSION / DENY buttons appear and work
-- [ ] ■ STOP stops a running turn
-- [ ] FILES / GIT / TERMINAL jump to the thread's workspace (worktree path for WORKTREE threads)
-- [ ] THREADS list shows status (running / error / NEEDS YOU) and refreshes
-- [ ] ▲ ▼ scroll the timeline of a long thread
+- [ ] ■ STOP stops a running turn → within 2 s the header leaves WORKING and the chat stops "writing"
+- [ ] Press ▲ ▼ on a long thread → the timeline scrolls
+- [ ] Press FILES, GIT or TERMINAL in a thread → each jumps to the thread's workspace (the worktree path for WORKTREE threads)
+- [ ] Look at the meta row → it shows the plan and the usage windows (for example 5 h · week · month); the CONTEXT ring's picker lists them with their resets
+- [ ] Chips under the composer: MODEL ▾ (models of the provider, then effort) → the next message uses it; ACCESS ▾ (Edits / Auto / Full access); the workspace chip; the CONTEXT ring with % (tap: compact or fork); ■ STOP
+- [ ] ⑂ FORK… → "Same agent": a new thread with the same conversation opens; FORK to another provider: a new thread in the same folder that knows what was said (it summarises where things stand)
+- [ ] ◉ beside SEND: say a message, pause → the words are typed into the composer (not sent); SEND sends them; the same ◉ works in a new thread's draft (the first message)
+- [ ] Stop a thread's provider mid-turn, or wait on a silent step → after about 2 min the status line turns amber ("may be stuck")
+- [ ] A thread finishes while its window is open → the frame pulses three times and the answer glows; the Whisp casts "✓ … answered: …"
+- [ ] A thread finishes while you do something else (its window closed) → within a few seconds the Whisp casts "✓ … answered"; a tap on the callout opens the thread
+- [ ] A thread asks for an approval in the background → the Whisp casts "… needs you" (amber)
+- [ ] A thread working; launch a built app, wait until the agent is done, Back → the thread says idle / done at once (no "WORKING", no "writing the answer")
+- [ ] A thread whose host is not connected → THREAD's header says OFFLINE (not NO HOST)
+- [ ] A thread with a working agent open → 72 fps
 
-## 10. Vault and secrets
+The message box (grow it, back to one row on SEND):
 
-- [ ] VAULT shows `key: Android Keystore · tee` (or strongbox) and `mqh.api-token` (policy ALLOW)
-- [ ] + ADD SECRET… `OPENAI_API_KEY` → the secure keyboard hides the value → "sealed in the vault"
+- [ ] Open THREAD → the composer is one row; a bar with three dots sits on its top edge; it lights up under the ray or a finger
+- [ ] Pinch the bar and drag up → the box grows upwards, the chat above gets shorter by the same amount, `+` `◉` `SEND ▶` stay on the bottom row
+- [ ] Poke the bar with a finger and push up, then drag down → the box shrinks, never below one row
+- [ ] Drag up as far as it goes → the box stops at about half the window; the chat keeps about 12 cm
+- [ ] A long message in a grown box → the text wraps; the last lines show, where the caret is; typing keeps the caret visible
+- [ ] Tap the box with a grown height → the keyboard opens and types into it
+- [ ] SEND (button) → the box is one row again and the chat has its full height; the message appears in the chat
+- [ ] Enter on the keyboard sends → the same reset
+- [ ] Grow the box, then open another thread (THREADS list) → one row
+- [ ] Grow the box, then + → ATTACH FILES → one row; the grip does nothing while the attach window is open; CANCEL leaves one row
+- [ ] Voice: "make the text box bigger" (one step), "shrink the composer" (one step), "reset the text box" (one row) → the box follows; "expand the message box" and "put the message box back to the default size" work too
+- [ ] While dragging, the chat changes a few times a second → no stutter; 72 fps with a working thread open
+
+Captures and files in a thread:
+
+- [ ] A thread: + → REFERENCE CAPTURE → the list inside the thread panel; pick two → two chips; + → ATTACH FILES → a Linux file; SEND → the agent sees the images and the file
+
+The sidebar (the details handle `›` on THREAD's right edge):
+
+- [ ] Open a thread → a handle `›` with PROJECT and the number of changed files on THREAD's right edge; tap it: the sidebar opens at the thread's right edge, tops level, bent with it (one curved screen); `‹` folds it
+- [ ] Drag THREAD → the sidebar comes along; pinch the sidebar's header: both move; FLOAT: the pair keeps one slot, nothing overlaps it
+- [ ] Open the sidebar on GIT in thread A, keep it folded in thread B → switching between them brings back each one's state; B never shows A's files
+- [ ] CHANGES in a repo → every file the agent changed, with its +added / −removed counts in green / red, also through commands (sed, npm), untracked new files included; the folder's other changes under ALSO CHANGED IN THIS FOLDER; the summary says against HEAD (or since the base branch in a worktree)
+- [ ] Tap a file → the diff reads like a code review: old / new numbers, + / − gutter, green / red lines, coloured code, `⋯ N unchanged lines` (tap: they open); readable at arm's length without leaning in
+- [ ] A long line → drag sideways to read it; WRAP breaks it over rows instead; ▲ PREV / ▼ NEXT walk the files; `@ ASK` puts the path in the composer
+- [ ] While the agent edits the open file → new files and counts, the list and the diff update by themselves within a few seconds, the view keeps its place
+- [ ] A big file (a lock file, a generated JSON) and an image → the big one shows only its changed part and says so, the image says binary; nothing stalls
+- [ ] FILES → the project's own folder (not /), breadcrumb `project › src`, a tap on a part goes back up, never above the project; changed files coloured; a file opens with line numbers and colours; EDIT opens nano in a terminal
+- [ ] GIT in a repo → branch, ahead / behind, status, recent commits; COMMIT… and PUSH work in the thread's folder; in a folder with no repo only NOT A GIT REPOSITORY + INIT GIT; INIT GIT works and the tab becomes a repo
+- [ ] STATUS → model, access, context %, what runs now and for how long, approvals waiting, usage, folder, MQH
+- [ ] A Bluetooth keyboard after touching the sidebar → ↑ ↓ / Page / Enter / Esc move and open in it; touch the terminal and the keys go there again
+- [ ] Voice: "open the sidebar on the git tab", "close the thread sidebar", "show the status tab of this thread", and in a folder with no repo "make this folder a git repository" → each does it
+- [ ] FIXED layout, a thread in front: tap the sidebar handle → the thread and its sidebar glide together until the pair is centred in front of you; fold it: the thread glides back; with another window just to its left the pair moves only up to that window, never over it; move the thread, then fold: it stays where you put it
+
+Workspaces (several threads in one project):
+
+- [ ] Start a thread in a project's CHECKOUT; while it works, open NEW THREAD on the same project → WORKTREE is chosen, the summary says who works in the checkout
+- [ ] Start that one in a WORKTREE → both work at once; THREADS shows the project's folders (▣ checkout, ⎇ the worktree's branch) with each thread under its own
+- [ ] Send a message to a second CHECKOUT thread while the first works → it does not start; THREAD says "⏸ Not started: “…” is working in this checkout" with ▶ SEND NOW; when the first is done it starts by itself
+- [ ] SEND NOW → it asks first, then both work (THREADS shows 2 WORKING ⚠ on the checkout)
+- [ ] ⎇ WORKSPACES → the worktree shows its branch, base, ahead / behind and changes; MERGE INTO MAIN on a clean branch merges (the checkout on main and clean); on a conflicting one it lists the files and ASK ITS AGENT sends the rebase request
+- [ ] REMOVE a finished worktree → its threads are archived and the folder goes; the branch is still in `git branch`
+- [ ] Voice "open the worktrees"; "what is this thread doing?" on a held thread → it says why it has not started
+
+Thread windows and groups (two projects in THREADS: project1 with 3 threads, project2 with 1 thread; FIXED layout first, then FLOAT):
+
+- [ ] Open the 1st thread of project1 → one window THREAD, free
+- [ ] Open the 2nd thread of project1 → a new window opens and joins the first one as a group (2x1); no jump, it slides into its place; the group title says "Group 1 · 2 threads"
+- [ ] Open the thread of project2 → a free window THREAD 3 beside the group
+- [ ] Open the 3rd thread of project1 → it joins the group; the group becomes 2x2 (3 windows); the windows slide, the frame fades to its new size
+- [ ] Tap a thread that is open already in THREADS → its window flashes and gets the dot (●); no new window
+- [ ] In each grouped window → the chat streams, you can scroll it, type and SEND, ◉ dictates into that window, an approval shows ALLOW / DENY in that window and the answer goes to that thread
+- [ ] Two threads working at the same time (one in the group, one free) → both chats update; the session log has no "[slow timeline]" storm
+- [ ] Ask "what is this thread doing?" while you point at one window, then at another → the answer is about the window you point at
+- [ ] An approval waits in a window that is not focused; ask "is anything waiting for me?" → the answer names that thread
+- [ ] RESIZE (bottom right of the group): pull it out and in → the windows get larger and smaller with the group; the top-left corner stays; the text stays readable at the smallest size
+- [ ] Pinch the group's title bar and move it → all its windows move with it
+- [ ] Pinch the title bar of a grouped window and release it on another window of the same group → the two change places (the target lights up first)
+- [ ] Pull a window out of the group (release it outside the group) → it comes out at its full size where you let it go; open its thread again from THREADS: it does not go back into the group
+- [ ] Release a free window on a window of the group → it joins at that place
+- [ ] Release a free window on another free window → the two make a new group (two groups at once: Group 1 and Group 2)
+- [ ] The ✕ of a grouped window (top right, large) → only that window closes; with one window left the group goes and that window is free
+- [ ] The details handle (›) of a grouped window → the sidebar opens at the right edge of the group, not inside the grid; drag the sidebar: the group comes with it
+- [ ] ⇲ UNGROUP → every window is free at its full size, side by side, sliding to its place
+- [ ] The group's ✕ → the group and all its windows close; THREADS still lists the threads
+- [ ] CENTER with a group and a free window → the group moves as one window, nothing overlaps
+- [ ] FLOAT → the group takes one place on the ring; a window pulled out takes its own place; the TURN bar turns them together
+- [ ] Voice: "put the open threads side by side", "break up the group", "switch to the other thread window", "close this thread window", "open the thread about <topic> in a new window" → each does it
+- [ ] 6 windows open → the 7th thread opens in the focused window (a message says so)
+- [ ] Open 4 thread windows, 2 of them working → 72 fps
+
+Held turns (two threads in one project checkout):
+
+- [ ] Thread A works in the checkout (a long task); send a message to thread B in the same checkout → B shows ⏸ Not started and ▶ SEND NOW
+- [ ] ▶ SEND NOW → the question "Start it now?" has SEND NOW, IN A WORKTREE and CANCEL, and its text says what IN A WORKTREE does
+- [ ] CANCEL → B keeps waiting; SEND NOW (on another try) → B starts in the checkout, the toast says it shares the folder
+- [ ] IN A WORKTREE → the toast says "Sent: the agent moves to its own worktree first"; B's first message in the chat starts with "This project's folder is busy with another agent..." and then your text
+- [ ] Let B's agent work → it runs `git worktree list` / `git worktree add` (skill worktree-per-thread), works in `<checkout>-wt-<name>` on `agent/<name>`, and ends with the path, the branch, the base and how to merge
+- [ ] A's files in the checkout → they did not change because of B (`git status` in the checkout shows only A's work)
+- [ ] Run `ls ~/.claude/skills` and open MQH > SKILLS → worktree-per-thread is there, shown read-only
+
+Archive, restore and delete:
+
+- [ ] Open a thread window, a NEW THREAD draft and an empty window → only the thread window shows ARCHIVE… and DELETE… at the top
+- [ ] Two windows open, focus window 1, press ARCHIVE… in window 2 → the question names window 2's thread; ARCHIVE: window 2 closes, window 1 stays; THREADS no longer lists it
+- [ ] A thread with a child thread (a sub-thread an agent spawned) → ARCHIVE… archives both; both windows close if open
+- [ ] THREADS > ▤ ARCHIVED → the archived threads, newest first, each with RESTORE ▸; ◂ ACTIVE goes back
+- [ ] Tap an archived row > RESTORE → it is back in THREADS and opens normally
+- [ ] DELETE… on a thread with no child → the question says it has no child threads; DELETE: the window closes, it is in neither list
+- [ ] DELETE… on a thread with child threads → the question says how many go too; DELETE removes them all
+- [ ] Archive a thread from another client (the MQH CLI: `mqh thread archive <id>`, or a second app) while its window is open → the window closes within about 10 s, with a toast
+- [ ] Voice: "archive this chat" (the focused window's thread), "archive the thread about <topic>", "bring back the chat about <topic>", "show my archived chats" → each does it
+- [ ] An archived thread that was working → the RUNNING count in THREADS drops, the Whisp does not report it as working
+
+## Local coder
+
+- [ ] AGENTS: the GET row has LOCAL CODER · GET 430 MB → tap: it counts up to 100 %, then "✓ ON HEADSET"; tap again: a hint how to use it
+- [ ] NEW THREAD with `claude`, model "Local coder (this headset, slow)" → ask anything small (a script, a fix, a small native app in a NATIVE project): it works in minutes; a thread on a normal model still uses your account
+- [ ] Install the local coder, then without restarting the app open NEW THREAD > `opencode` → it lists "⌂ Local coder (this headset, slow)" as the first row (LOCAL badge, "on this headset · offline · slow"), above its own models; `claude` the same; reopen the list once if the first look still shows the old list (MQH refreshes it in the background)
+- [ ] The same task with `opencode` on that row → the turn runs on the local model (the AI service log shows coder requests); `codex` does not offer the local coder
+- [ ] While a local coder thread works → TALK shows "⏸ LOCAL CODER WORKING" and does not record; 15 s after the turn ends TALK works again; 72 fps all the time
+- [ ] Say "remove the local coder" (confirm) → the tile says GET again, and the model is gone from the threads' model lists after a restart of MQH
+
+## Vault and secrets
+
+- [ ] Open VAULT → it shows `key: Android Keystore · tee` (or strongbox) and `mqh.api-token` (policy ALLOW); on a development build a warning about `run-as`
+- [ ] + ADD SECRET… `OPENAI_API_KEY` → the keyboard hides the value (dots) → "sealed in the vault"
 - [ ] In a terminal: `mcx-secret get OPENAI_API_KEY` → an approval dialog in VR → ALLOW ONCE → the value prints
 - [ ] Again → DENY → the command fails with "denied by the user"; the access log lists both
 - [ ] Policy ALLOW → no dialog; DENY → always refused; ONCE → first request only (RE-ARM in VAULT resets)
 - [ ] `mcx-secret env OPENAI_API_KEY -- sh -c 'echo ${#OPENAI_API_KEY}'` → prints the length, not the key
-- [ ] `→ MQH ENV` on OPENAI_API_KEY (MQH) → toast "set for agents"; an opencode/OpenAI thread can use it
+- [ ] `→ MQH ENV` on `OPENAI_API_KEY` → toast "set for agents"; a thread of a provider that reads that variable can use it
 - [ ] `grep -r sk- /root /mnt/quest 2>/dev/null` → the key is in no file of the Linux
-- [ ] Restart the app → secrets still there; `mcx-secret list` shows names and policies only
-
-## 11. Daemon settings (MQH)
-
-- [ ] Settings > DAEMON: ⟳ CONNECT → ● online, MQH version, plugin list; tap a plugin → ENABLE/DISABLE
-- [ ] Sync on: change the accent → `quest.settings` updated in MQH; change it through the MQH API → app follows within 5 s
-
-## 12. Performance and stability
-
-- [ ] All panels open + float layout + 2 terminals → still about 72 fps (status line); no stutter when gestures run
-- [ ] A long `apt install` / `npm install` in a terminal → app stays smooth (run it with `nice -n 10`)
-- [ ] Take the headset off and on, reopen the app → terminals and panels come back
-
-## 13. Voice and the local AI service (0.4)
-
-Reference: `docs/voice.md`. The models are not in the APK: install them once (530 MB, Wi-Fi).
-
-- [ ] Dock: two rows of 8, with ◉ TALK (highlighted) and ♫ VOICE
-- [ ] VOICE panel → "AI service: ● running" within a few seconds (the first start unpacks the runtime: a few seconds more)
-- [ ] INSTALL MODELS → three rows go from – to a percentage to ✓ (speech→text 78 MB, commands LLM 364 MB, text→speech 81 MB)
-- [ ] First TALK → Horizon OS asks for the microphone → ALLOW
-- [ ] TALK, say "open git" → HUD above the dock: ● LISTENING with a level bar, then ✓ Opened GIT; GIT opens
-- [ ] "close all windows" → every panel closes (dock and terminals stay)
-- [ ] "open the providers page" → AGENTS opens; "show me the source control" → GIT
-- [ ] "find the thread where we …" (words from a thread title) → THREAD opens on it (MQH)
-- [ ] "switch to the workspace called <project>" → THREADS shows that project (MQH)
-- [ ] "use the floating layout" / "fixed mode" → layout changes; "recenter" → panels come back
-- [ ] A phrasing no template knows ("I need to see which AI providers are signed in") → ◆ THINKING, then the right panel (LLM path, about 2 s; the first one after start a few seconds more)
-- [ ] "run ls" → a confirmation dialog in VR; RUN types it into the terminal
-- [ ] Silence after TALK → "no speech heard" after ~6 s; TALK twice → stops and processes what was said
-- [ ] VOICE > Spoken replies ON → the reply is also spoken (needs the voice model)
-- [ ] VOICE > TYPE… "close all windows" → same as saying it; SAY… → speaks the text
-- [ ] ~~LANGUAGE IT, say "apri git" → transcribed in Italian~~ (English only since 2026-11-12): VOICE has no LANGUAGE row; say "open git" → GIT opens
-- [ ] Frame rate while talking: the status line stays at about 72 fps; VOICE shows the service's RAM
-- [ ] VOICE: pick a voice (F1-F5, M1-M5) → a sample sentence in that voice; spoken replies use it
-- [ ] Speed: "open git" → done right after you stop talking (~0.7 s pause + ~0.6 s); an unusual phrasing → ◆ THINKING under a second
-- [ ] In a terminal: `mcx-ai status`, `mcx-ai say "hello" /tmp/h.wav && mcx-ai transcribe /tmp/h.wav` → "Hello."
-- [ ] `mcx-ui voice run "open the vault"` → JSON result, VAULT opens; `mcx-ui voice list` → commands
-- [ ] A plugin with `voice.command{...}` (skill quest-scripting) → its phrase works by voice; `mcx-ui voice match "<phrase>"`
-- [ ] Gestures > BIND: `palm-up` (left) → `voice:toggle` → hands-free TALK
-- [ ] Kill the service (`mcx-ai log` shows its pid; or restart the app) → it restarts by itself
-
-## 14. 0.6: threads, workspace, views, vault git, focus, system
-
-Threads and the workspace (MQH):
-- [ ] Dock: two rows of 9 (… SYSTEM / TALK, VOICE, VAULT, GIT, FOCUS, SELECT, KEYS, CENTER, SETUP)
-- [ ] THREADS: one list, each project folder in capitals with its threads under it (newest first); the project row says how many run / need you; a tap folds it; a tap on a thread opens it
-- [ ] THREAD opens with the WORKSPACE module on its right; drag the thread → the module follows; drag the module somewhere else → it stays there relative to the thread; close the thread → the module closes
-- [ ] FLOAT layout: the module rides right beside the thread on the ring; nothing overlaps; drag it away → it snaps back beside the thread
-- [ ] Ask the agent to edit two files → CHANGES: a tile per file appears and lights up while it is edited (green added, amber changed, red deleted); grey tiles = uncommitted files the thread did not touch
-- [ ] Tap a tile → the diff below (green / red lines); ▲ ▼ scroll; @ ASK puts the path into the composer
-- [ ] GIT tab: branch, ↑↓, status, branches, history; COMMIT… / PUSH work in the thread's folder
-- [ ] FILES tab: the folder tree (tap folders to open), preview of a file, EDIT opens nano in a terminal
-- [ ] Chips under the composer: MODEL ▾ (models of the provider, then effort) → the next message uses it; ACCESS ▾ (Edits / Auto / Full access); the workspace chip; the CONTEXT ring with % (tap: compact or fork); ■ STOP
-- [ ] ⑂ FORK… → "Same agent" → a new thread with the same conversation opens; FORK to another provider → a new thread in the same folder that knows what was said (it summarises where things stand)
-
-Agent views:
-- [ ] WORKSPACE > VIEWS > DEMO → a "What agents can show" panel: stats, a line chart, a diagram, a donut, a checklist, choices and a physics shelf in front with balls and boxes
-- [ ] Push a ball with your index fingertip → it rolls; ❚❚ PAUSE / ▶ RUN / ⟲ RESET work; move the panel → the scene moves with it
-- [ ] Hover a chart → the value shows in its top-right corner; hover a diagram node → its edges light up
-- [ ] Ask a thread agent "show the architecture of this repo as a diagram" → a view opens by itself; the timeline shows `[▣ …]` instead of the code block
-- [ ] An agent view with choices → tap one → it arrives in the thread as your message
-- [ ] In a terminal: `mcx-ui view schema`, then `mcx-ui view show spec.json` (the skill's example) → the view opens; `mcx-ui view wait <id>` returns your tap
-
-Vault > GIT:
-- [ ] GIT on the dock (or voice "open git") → VAULT opens on its GIT tab
-- [ ] TOKEN… (a GitHub token) → TEST → "● <your login>"; IDENTITY… sets name / email
-- [ ] GIT USES IT → `git push` to a github.com https remote works without asking for a password (the vault logs the request)
+- [ ] Restart the app → the secrets are still there; `mcx-secret list` shows names and policies only
+- [ ] VAULT > GIT: TOKEN… (a git host token) → TEST → "● <your login>"; IDENTITY… sets name / email
+- [ ] GIT USES IT → `git push` to an https remote of that host works without asking for a password (the vault logs the request)
 - [ ] → AGENTS → threads get GH_TOKEN (`gh auth status` in a thread)
 
-Ambient Focus:
-- [ ] FOCUS on the dock → the room fades except the floor near you; the panels stay bright; FOCUS again → back
-- [ ] Settings > FOCUS: RADIUS, INTENSITY, SOFTNESS change it live; BLACKOUT → black around you, only the windows
-- [ ] "focus mode on" / "focus mode off" by voice
-- [ ] Frame rate with focus on stays about 72 fps
+## Native apps
 
-SYSTEM:
-- [ ] SYSTEM > TOOLS: tiles for what is installed (git, node, npm, python3, curl, …) with versions; missing ones dimmed ("+ install")
-- [ ] Tap a missing tool (e.g. jq) → Install → a terminal runs the install; ⟳ CHECK → it shows as installed
-- [ ] PACKAGES… → Debian packages you chose and npm globals
-- [ ] STORAGE: the headset bar (Linux, AI models, shared, apps + system, free) and Linux by folder; tap a cache → CLEAN; LINUX LIMIT below the current size → warning
+Toolchain and build loop:
 
-## 15. 0.7: the owner's 0.6 bug list
-
-Look:
-- [ ] Every panel has the console look: chamfered corners (big cut top-left and bottom-right), dark glass with a faint hex pattern, a steel frame, a cyan energy bar under the title, titles and buttons in capitals (Rajdhani)
-- [ ] Buttons read as command cards (lit rim); sliders and progress as segmented energy bars; nothing looks washed out or neutral
-
-Opacity:
-- [ ] Settings > LOOK: PANEL OPACITY at 100 % → no part of a window is see-through: buttons, rows, tiles, the header
-- [ ] Put one window in front of another at 100 % → no text, icon or button of the window behind shows through
-- [ ] Around a window's edge and where its shadow falls on another window → no see-through line ("fissure")
-- [ ] PANEL OPACITY below 75 % → windows behind show through faintly again (as intended)
-
-Bending (Settings > LOOK > Bend panels, fixed layout):
-- [ ] Walk closer / farther, drag a panel → it curves smoothly (no steps or jumps)
-- [ ] Point at a bent window's edges → the reticle sits on the curved surface, buttons near the edges react where the beam meets them; pokes with the fingertip work on bent panels
-- [ ] A text that changes fast (Debug / Perf, a running terminal-linked thread) → it stays on the curve, never flashes flat
-
-Ambient Focus (branch feat/spatial-dome, no Space Setup needed):
-- [ ] First FOCUS → Horizon OS asks for "spatial data" (allow it); FOCUS tab: "depth: live", then "floor: measured under your feet (… cm from the Guardian floor)"
-- [ ] FOCUS on → a dome standing on the floor around you: walls, furniture and your hands near you stay visible, far ones fade (no dome "starting above")
-- [ ] Walk around: the dome follows you; nothing flickers at its edge while you stand still
-- [ ] RADIUS changes the dome's size live; SOFTNESS its edge; INTENSITY the darkness
-- [ ] BLUR above 0 → the room outside the dome is a soft image (darker with INTENSITY); at once all round you, also at the edges of your view and behind you (there frosted colours until the camera has looked, never the sharp room); 0 → darkness only
-- [ ] Hands always visible, also at BLACKOUT and with BLUR, and in front of a window
-- [ ] The cut-out around near things (your hands, a chair, a person) is clean and steady: no flicker, no blocky edge (FOCUS: "camera: live …")
-- [ ] Someone walks in front of a window, or you hold an object up → it stays visible in front of the window ("Real things in front of windows" on); off → the window covers it
-- [ ] Same with a window that has stood alone for 3 s or more (it is then marked clear): the person or object shows in front of it within about half a second
-- [ ] Both FOCUS depth settings on (Sharp depth, Real things in front): VrApi FPS near 72 with a few windows open; dictate into a thread chat several times → no lag during or after speech-to-text (the camera keeps running)
-- [ ] Turn Ambient Focus off and on again within a minute → no seconds of low frame rate (the depth and the camera stay on, idle, for 60 s)
-- [ ] Palm towards you + pinch (Horizon OS quick actions, left-hand settings) → the windows stay where they are (0.7.3: the gesture hides nothing); when a system menu has opened and taken the app's focus they step aside, and come back when it closes
-- [ ] Without the "spatial data" permission → the old floor-plane darkening still works
-- [ ] Frame rate with focus + blur on stays about 72 fps (Perf menu)
-
-SYSTEM > TOOLS:
-- [ ] Known tools show their own logo on their brand colour (git, node, python, rust, go, claude, …) with the version; tools without a logo show a glyph
-- [ ] In a terminal: `cat /mnt/quest/system/tools.json` and `mcx-ui system tools` → the same list with versions and paths
-
-Voice:
-- [ ] "Open ambient focus" → Settings opens on the FOCUS tab (also when heard as "fogus")
-- [ ] "Turn on ambient focus and set intensity to 0" → focus on, intensity 0, the slider moves
-- [ ] "Set the dome radius to two meters", "radius 50 centimeters", "set the blur to fifty percent", "make the windows bigger", "volume a bit less", "turn off the sounds" → each changes that setting
-- [ ] "Show the installed tools" → SYSTEM on TOOLS; "how much disk space is left" → SYSTEM on STORAGE
-
-## 16. 0.7.3: UI scale, tools, vault, blur, wrist menu
-
-- [ ] Open and close panels for a while, change a slider, say a voice command: no panel changes size by itself (they keep the UI SCALE)
-- [ ] VOICE: everything inside the panel; FEMALE and MALE voices in two aligned rows on the right
-- [ ] Settings > LOOK has no SHARPNESS; text is as sharp as before at 1.6
-- [ ] SYSTEM > TOOLS: groups with a header each (AI AGENTS, JAVASCRIPT · TYPESCRIPT, PYTHON, NATIVE CODE, ANDROID · QUEST, GIT, TERMINAL UTILITIES, EDITORS); every tile has its logo or a pictogram, centred on its badge, nothing stretched or cut; no php / ruby / lua / deno
-- [ ] ANDROID · QUEST > ndk → install: downloads the NDK r27d for arm64 (~120 MB), checks its sha256, `/opt/android-ndk`; a new terminal has `ANDROID_NDK_HOME`; the tile shows 27.3.13750724
-- [ ] VAULT: "key: Android Keystore · tee" (or strongbox); on this development build a warning about `run-as`
-- [ ] Settings > DAEMON > TOKEN typed → `grep -c mqhToken files/settings.json` shows an empty value; the MQH connection still works
-- [ ] BLUR 50 %: turn the head slowly: the soft room is there all around where you have looked, no rectangle edge, it does not move with the head
-- [ ] BLUR on: say a few voice commands: speech-to-text about as fast as with BLUR off (VOICE history, asr ms)
-- [ ] Settings > DISPLAY > Main menu on the wrist: the dock goes; look at the back of the left wrist: the core appears; touch it with the right index finger: the rings unfold; touch FILES, SETUP, TALK; look away: it folds and hides; off again: the dock comes back
-- [ ] Wrist menu: frame rate about 72 while it is open (Perf menu)
-- [ ] Palm towards you + pinch: nothing vanishes; the Horizon OS quick actions menu is visible over the windows (if it is not, tell: it would need another way than hiding the windows)
-
-## 17. 0.7.4-0.7.6: native apps, wrist menu, MQH, captures, session context
-
-- [ ] Native apps: in a terminal `mcx-app doctor` → all ok; `mcx-app run /root/apps/x` → Install asked once, the app opens; again → no prompt
-- [ ] Wrist menu: hold the left wrist as a watch; the rings stay whole, the hand behind them never cuts them; the right fingertip shows over a blade while pressing; windows still let hands and things in front show
-- [ ] Dock / wrist: one MQH entry (no SCRIPTS / GESTURE); MQH opens on SKILLS; the tabs PLUGINS, SCRIPTS, GESTURES, DAEMON work; Settings has no DAEMON tab
-- [ ] MQH > SKILLS: the shipped skills say READ-ONLY and REMOVE refuses them; + NEW SKILL opens NEW THREAD, START puts the brief in the draft's composer (SEND starts it); ⌕ FIND finds skills, ⇣ INSTALL adds one under YOURS, REMOVE removes it
-- [ ] SELECT, then pinch-drag over a window at low PANEL OPACITY: CLIPBOARD has the capture, opaque, nothing of the room or the hands; no hitch at the moment of the capture (72 fps)
-- [ ] CLIPBOARD from the wrist (CLIP), the dock and by voice ("open the clipboard", "show the screenshots"; Italian removed: English only since 2026-11-12); 21 captures with CLIPBOARD's KEEP at 20 → the oldest is gone
-- [ ] A thread: + → REFERENCE CAPTURE → the list inside the thread panel; pick two → two chips; + → ATTACH FILES → a Linux file; SEND: the agent sees the images and the file
-- [ ] Ask by voice, with a thread waiting for an approval: "what is this command I'm asked to accept, is it safe?" → spoken answer naming the thread, the command and its risks, never "it's safe"
-- [ ] Ask by voice: "do we have the rust toolchain?", "is this build stuck?" (during a long `cargo build`), "what has this thread done so far?" (pointing at THREAD) → short spoken answers; "open settings" still opens Settings
-
-## 18. After 0.7.6 (owner's feedback): questions, dialogs, captures, the new wrist menu
-
-- [ ] Voice: "how many captures we took so far?" / "how many screenshots do we have?" (Italian removed: English only since 2026-11-12) → a spoken count (and the newest's time); CLIPBOARD does not open. "open the clipboard" and "can I open the clipboard?" still open it
-- [ ] CLIPBOARD > CLEAR ALL pressed three times quickly: one dialog, parallel to CLIPBOARD, centred over it a few cm in front (never through it, never half off its edge); the extra taps delete nothing; CANCEL closes it
-- [ ] Any other window's dialog (MQH > SKILLS > REMOVE, a thread's dialogs) opens over that window, parallel to it; a dialog asked by voice opens in front of you
-- [ ] SELECT, pinch-drag over a window: the orange frame goes as soon as the capture is taken; the capture in CLIPBOARD has no orange border
-- [ ] Wrist menu, opening: look at the back of the left wrist → the watch face (the time, ticks, a warm seconds point) builds up with the projector rays from the wrist; touch it → a shock ring runs out, the inner tiles swing in one way and the outer the other, icons draw with a scan line, names type in; nothing pops in or out at once
-- [ ] Wrist menu, the left side: press FOCUS, CENTER, KEYS, SELECT with the right hand reaching over the left: the menu stays where it is and stays open, even when the left hand is lost for a moment; it does not run off
-- [ ] Wrist menu: slide the fingertip across the face on the way to the left tiles → nothing is pressed, the menu stays unfolded; a straight poke into a tile runs it once
-- [ ] Wrist menu: move the left arm around while looking at it → it stays on the wrist, no jitter when still, no lag when moving; turn the wrist away → it waits a moment, folds and fades; turn it back while it fades → it comes back from where it was
-- [ ] Settings > DISPLAY > wrist menu off while it is open → it folds and fades away, the dock comes back
-
-## 19. Window transitions and the void (owner 2026-11-09)
-
-- [ ] Open any window (dock, wrist, voice): a spark runs out into a line, corner brackets lock on, two scan lines unfold it, the glass builds from a lattice of light top-down, texts flicker in; it ends exactly as before (no offset, no wrong size, text sharp)
-- [ ] Close it: a surge, it collapses into a bright line, shrinks to a point, a flare; nothing left behind
-- [ ] Open and close quickly several times (dock button twice fast): it reverses smoothly, never jumps, never stays half open
-- [ ] FILES then FILES again from the dock while it is open: it pings (brackets flash round it), no re-opening
-- [ ] Dialogs (CLIPBOARD > CLEAR ALL) and toasts come and go with the transition; the voice HUD with the quick one
-- [ ] A terminal (TERM, hide with –) and a 3D view squash and unfold with their frame
-- [ ] Bent windows (Settings > DISPLAY, bending on): the brackets and lines follow the curve
-- [ ] Frame rate: open three windows at once and close them: no drop below 72 fps (Perf menu Snapshot)
-- [ ] Ambient Focus on (FOCUS preset): outside the dome deep blue-black space, a slow nebula, a few twinkling stars, a faint grid on the floor and walls just past the edge, a ring of light where the dome meets the floor; BLACKOUT: space around you, the windows stay; with BLUR 50 %: the blurred room with the grid and the ring
-- [ ] Ambient Focus while turning the head and walking: the nebula and stars stay with the room (no swimming), no flicker of the grid at the walls' edges
-
-## 20. Cast windows and the new look (owner 2026-11-10)
-
-Section 19's transition lines (the spark, the collapse into a line) are replaced by the cast below.
-
-- [ ] Open a window (wrist menu, dock or voice): brackets lock on where it will be with a faint outline, a warm-white line sweeps across and the window is built behind it (a glowing honeycomb whose cells close and cool into glass, then buttons and text, hot for a moment); it ends exactly at rest, no pop
-- [ ] Close it: the line runs back and takes the window with it, the brackets let go. Open and close quickly: it reverses from where it is, never jumps
-- [ ] A terminal (TERM) is built with its frame: its text and background appear behind the line, nothing shows before it
-- [ ] FILES then FILES again while it is open: it pings (a flash, the brackets close in round it), it is not cast again
-- [ ] The glass: move your head sideways in front of a window: the hexagon lattice shifts behind the surface (it is inside the glass), a second grid of points deeper; a soft sheen crosses the glass
-- [ ] Bring a fingertip slowly towards a window: a pool of light forms on the lattice under it and tightens as you come closer; the ray's cursor carries a light too
-- [ ] Lists (MQH > GESTURES, FILES, THREADS): quiet rows; the chosen row floods with cyan from the left; hovered rows and buttons show a light crossing them
-- [ ] Headers: a bright block before the title, the line under it steps up two thirds along, a pulse runs in it; a ruler down the left edge of large windows; a thin conduit along the bottom right with a pulse
-- [ ] Small cards (messages, the voice HUD) have no corner brackets; windows and dialogs do
-- [ ] Frame rate with five windows open: 72 fps (Perf menu Snapshot); the same while a window is cast
-
-## 21. The orb (owner 2026-11-10)
-
-- [ ] At start a sphere of energy ignites up to the right of where you face (about half a metre away): a white-hot core, plasma turning inside dark glass, three thin rings (two gold), small lights circling it; it reads in a bright room; no square of light round it. The first time a message says what it is
-- [ ] It has depth: move your head near it, the plasma and the rings shift like real things inside and round a glass ball
-- [ ] Glance left and right: it stays where it is in the room. Turn your chair a quarter turn: after a moment it comes along round you, never through your face. Walk two steps: it comes along
-- [ ] Open windows until one would be behind the orb: it moves to a free place; close that window: a few seconds later it goes back
-- [ ] It casts the windows: a fan of light opens from the orb to the window's nearest edge and rides on the scan line; its rings turn to face the window. A window to the left of the orb is built from its right edge, one below it from its top. Closing: a spark flies home to the orb
-- [ ] Voice (TALK): while it listens the orb is gold and its rings face you, the HUD card stands beside it; while it thinks it is violet and spins; a spoken answer comes from the orb's direction, the orb pulses with the words and ripples leave it
-- [ ] Any message (SELECT on and off gives two): a card beside the orb, towards the middle of your view, joined to it by a thin rail; a second message takes that place and the first moves up; the orb flashes in the message's colour (green ok, amber warning, red error); afterwards a larger gold spark circles the orb for each message not read yet
-- [ ] Touch the orb with a fingertip: its menu opens beside it (TALK, SPEAK, PLACE, CLEAR and the messages so far, the newest first, with their age; "N NEW"); the gold sparks go; touch it again: it closes. Point at the orb with a ray and pinch: the same; the window behind the orb is not clicked
-- [ ] Pinch the orb between thumb and index and move the hand: it follows; let go: it stays there and keeps that place by you when you turn. Its menu > PLACE: it goes back to choosing its own place
-- [ ] Settings > LOOK > Orb off (or voice "turn the orb off"): it fades out; windows are cast from their left edge; messages float in the upper view. On again: it ignites
-- [ ] Frame rate with the orb and five windows: 72 fps; bring the orb close to your face (pinch it there): still 72 fps
-
-## 22. Smart positions (owner 2026-11-10)
-
-- [ ] The first window opens in front of you; the next ones right beside it, none over another
-- [ ] SYSTEM > STORAGE > AI MODELS: VOICE opens right beside SYSTEM (also when you look elsewhere). THREADS > a thread: it opens beside THREADS
-- [ ] Close a window you had dragged somewhere and open it again: it is back there. Put another window in that place first: it opens beside instead. Turn right round and open it: it opens in front of you
-- [ ] Look down at the wrist menu held to your left and press FILES: it opens in front of your body, not off to the left
-- [ ] With UI SCALE 0.8 and DISTANCE 1.3 m, open six windows: one goes above the row (tilted towards you) rather than far to the side; none goes below
-- [ ] Stand 70 cm from a wall and open a window (depth on: Settings > FOCUS > Real things in front): it opens in front of the wall, not inside it
-
-## 23. 0.7.10: the orb's artifacts, hands in front of windows, flat glass, performance (owner 2026-11-10)
-
-- [ ] The orb, for a minute (idle, touch it for its menu, move round it, put a hand near and behind it): no flat cream blocks, stripes or half discs on it, in any frame; it looks as before (core, plasma, rings), with four motes
-- [ ] A hand in front of a window shows, also with Settings > FOCUS > "Real things in front of windows" OFF (your headset had it off): poke the orb's menu and a big window from in front, the finger stays visible over the glass
-- [ ] A hand behind a window stays hidden behind it (the cut-out does not punch through an opaque window)
-- [ ] The glass of the windows: the honeycomb and the points are on the surface; moving the head sideways, nothing shifts inside the glass any more
-- [ ] Hovering and pressing buttons in a big window (MQH, SETTINGS): no stutter; the light on a button still follows the hover and the click
-- [ ] Frame rate (Perf menu Snapshot) with five windows open and the orb in view: 72 fps
-
-The orb's billboard (same version):
-
-- [ ] The orb: touch it → a small billboard next to it (TALK, SPEAK, PLACE, LOG); LOG shows "n NEW" when messages came; it opens LOG · MESSAGES (the list, CLEAR ALL asks first)
-- [ ] ~~Wrist menu > TABLE: OPEN KEYBOARD shows the keyboard; TURN ON opens Settings~~ (TABLE removed 2026-11-13, section 43)
-
-The in-app browser, WEB (same version):
-
-- [ ] WEB on the dock or the wrist: a window opens beside the others on a start page (bookmarks, local servers); the app stays on, everything else stays visible
-- [ ] Type `localhost:8000` (with `python3 -m http.server 8000` running in a terminal) → GO: the page shows in the window; tap a link with a pinch and with a fingertip; drag the page to scroll; ◀ ▶ ⟳ work; the title and "loading %" show under the toolbar
-- [ ] Tap a text field on a page, ⌨, type, done: the text is in the field; ⏎ submits, ⌫ deletes
-- [ ] A Vite / dev server link printed in a terminal (`⇗` on it) opens in the WEB window; a sign-in link (`claude auth login`) opens in Horizon's browser instead, as before
-- [ ] ⇗ in WEB opens the page in Horizon's browser; on a PC with USB adb, `chrome://inspect` lists the page (console, DOM)
-- [ ] Moving the WEB window, closing and reopening it: the page is still there; with "Bend panels" on it stays flat
-- [ ] Frame rate with WEB open on a scrolling page: 72 fps; closed: no cost
-
-## 24. 0.7.11: MQH by itself, agents to GET, an API key pasted, MetaCodex's own keyboard (owner 2026-11-10; keyboard checks struck: removed 2026-11-13, section 43)
-
-- [ ] Start the app and wait half a minute: MQH > DAEMON says "running in this headset's Linux", a message says "MQH is running in this headset", AGENTS fills in by itself (nothing to connect)
-- [ ] AGENTS > GET OPENCODE: a terminal installs it (about a minute); the tile turns into "✓ 1.19.x"; opencode shows in the providers
-- [ ] ⚿ API KEY: pick your provider, copy your key (in WEB or Horizon's browser), ⎘ PASTE, SAVE: "✓ … set for the agents"
-- [ ] NEW THREAD with opencode: it answers (with your key, no terminal login)
-- [ ] GET CLAUDE CODE and GET CODEX install the same way; MORE · COMING SOON cannot be pressed
-- [ ] ~~Any text field: MetaCodex's keyboard floats in front of you~~ (removed)
-- [ ] ~~Rest both hands flat on a table: the keyboard lies down under them, the touchpad on its right~~ (removed)
-- [ ] ~~Type on the table: lift a finger and tap ...~~ (removed)
-- [ ] ~~KEYS on the dock or TABLE on the wrist: the keyboard types into the terminal~~ (removed; see section 43)
-- [ ] ~~Touchpad: the cursor moves over that window~~ (removed)
-- [ ] Frame rate with MQH running: 72 fps
-
-## 25. THREAD as a chat, the agent's state, voice into the composer (owner 2026-11-11)
-
-- [ ] Open an OpenCode thread and send a task: your message in a bubble on the right; under it `◐ Working` with the steps appearing one by one (thoughts, `$ commands`, `✎ files`)
-- [ ] While it thinks: "Thinking…" with its newest sentence under it; a tap on a thought opens its text
-- [ ] The status line under the chat says what it does now and for how long (`Running npm test · 0:45   turn 3:12 · live`)
-- [ ] The answer appears in full under the work and grows while it is written (a caret at its end); the work header closes to `⚙ Worked 4:31 · …` when it is done, a tap opens it again
-- [ ] Ask for something long (several commands): when the steps push your prompt off the top, it stays pinned there; a tap on it scrolls back to it
-- [ ] Scroll up while it works: the view holds still, `↓ NEW` shows; a tap goes back to the end
-- [ ] The meta row shows the plan and the usage windows (OpenCode Go: 5h · week · month); the CONTEXT ring's picker lists them with their resets
-- [ ] ◉ beside SEND: say a message, pause: the words are typed into the composer (not sent); SEND sends them. The same ◉ in a new thread's draft (the first message)
-- [ ] TALK: "what is this thread doing?" / "is it stuck?" (the Italian one removed: English only since 2026-11-12): a short spoken answer at once (no waiting for the model)
-- [ ] Stop a thread's provider mid-turn or wait on a silent step: after ~2 min the status line turns amber ("may be stuck")
-- [ ] A thread finishes while its window is open: the frame pulses three times and the answer glows; the orb casts “✓ … answered: …”
-- [ ] A thread finishes while you do something else (its window closed): within a few seconds the orb casts “✓ … answered”; a tap on the callout opens the thread
-- [ ] A thread asks for an approval in the background: the orb casts “… needs you” (amber)
-- [ ] Frame rate with a working thread open: 72 fps
-
-## 26. CONTROL and the calmer main menu (owner 2026-11-11)
-
-- [ ] The wrist menu: 6 inner tiles (TALK, TERM, FILES, THREADS, WEB, CONTROL) and 7 outer (TERMS, CLIP, FOCUS, SELECT, KEYS, TABLE, CENTER); easier to hit, nothing missing you use daily
-- [ ] CONTROL: one window with the rail on its left (ten categories, each with its status: fixed, sound, on / off, ready, running, keys)
-- [ ] Tap AGENTS, MQH, VAULT, VOICE, SYSTEM in the rail: each takes the same place, the rail stays still; DISPLAY / LOOK & SOUND / FOCUS / HANDS / ABOUT only change SETTINGS' page
-- [ ] Drag the window by its header: the rail comes along; pinch the rail's bar and move it: the window comes along
-- [ ] ✕ on the window closes the rail too; CONTROL on the menu brings back the last category; pressed again it closes
-- [ ] Voice: "open the control panel", "open agents", "open git", "open the settings" (Italian removed: English only since 2026-11-12) open the right page with the rail
-- [ ] THREADS > ◆ AGENTS opens CONTROL on AGENTS
-- [ ] With a terminal open, TERMS from the menu opens right beside it; with a thread open, CLIP opens beside the thread
-- [ ] FLOAT: CONTROL and its rail take one place on the ring, nothing overlaps them
-
-## 27. Workspaces: several threads in one project (owner 2026-11-11)
-
-- [ ] Start a thread in a project's CHECKOUT; while it works, open NEW THREAD on the same project: WORKTREE is chosen, the summary says who works in the checkout
-- [ ] Start that one in a WORKTREE: both work at once; THREADS shows the project's folders (▣ checkout, ⎇ the worktree's branch) with each thread under its own
-- [ ] Send a message to a second CHECKOUT thread while the first works: it does not start; THREAD says "⏸ Not started: “…” is working in this checkout" with ▶ SEND NOW; when the first is done it starts by itself
-- [ ] SEND NOW: asks first, then both work (THREADS shows 2 WORKING ⚠ on the checkout)
-- [ ] ⎇ WORKSPACES: the worktree shows its branch, base, ahead/behind and changes; MERGE INTO MAIN on a clean branch merges (the checkout on main and clean); on a conflicting one it lists the files and ASK ITS AGENT sends the rebase request
-- [ ] REMOVE a finished worktree: its threads are archived and the folder goes; the branch is still in `git branch`
-- [ ] Voice "open the worktrees"; "what is this thread doing?" on a held thread says why it has not started
-
-## 28. The orb's menu: plain squares, even gaps (owner 2026-11-13)
-
-The thread cards that stood beside the menu are gone. Their owner said they were bad UX.
-
-- [ ] Touch the orb: four squares on an arc round its left side, TALK, SPEAK, PLACE, LOG from the top; no cards beside them
-- [ ] The squares have no frame: no outline box and no shadow box round them, only each square with its label
-- [ ] The gap between two neighbouring squares is the same all round the arc, about 8 mm at the menu's size; no square touches the orb's rings
-- [ ] Each square works: TALK starts and stops listening, SPEAK toggles spoken answers, PLACE gives the orb its own place, LOG opens LOG · MESSAGES (`✉ n NEW` while messages are unread)
-- [ ] The menu opens and closes with the light: a line of light crosses each square (there is no frame to light)
-- [ ] The labels read at arm's length without leaning in, the same size as before
-- [ ] Frame rate with the menu open and the orb in view: 72 fps
-
-
-## 29. Native apps: builds off the frame loop, `mcx-app check`, the Runner (branch feat/native-horizon-building-and-install)
-
-Needs a MetaCodex build with this branch (overlay, MQH bundle, `MetaCodexAiService`). Plan and numbers:
-docs/native-build-and-install.md.
-
-- [ ] A terminal: `mcx-app doctor` → `ok` for mcx-build, mcx-buildd, aapt2, openssl, python3; `builds  through mcx-buildd (cores 0-2)`
+- [ ] Make the first native app (or open SYSTEM > TOOLS) → the native toolchain is offered (about 400 MB download, about 2.5 GB on disk) and installs only when you accept
+- [ ] `mcx-app doctor` → `ok` for mcx-build, mcx-buildd, aapt2, openssl, python3; `builds  through mcx-buildd (cores 0-2)`
 - [ ] `mcx-app new /root/apps/t1 --module --label "T1"`, then `mcx-app check /root/apps/t1` → `RESULT: check ok` in about 1 s
 - [ ] Break a line in `src/app.cpp` (remove a `;`), `mcx-app check` → `app.cpp:<line>:<col>: error: ...` and `RESULT: 1 error(s)`; fix it
-- [ ] `mcx-app runner` → Android asks to install "Runner" once: tap Install → `RESULT: installed`; "Runner" is in the Library
+- [ ] `mcx-app runner` → the system asks to install "Runner" once: tap Install → `RESULT: installed`; "Runner" is in the Library
 - [ ] `mcx-app dev /root/apps/t1` → the Runner opens with three turning cubes (`RESULT: running in the Runner`, about 3 s)
 - [ ] Back in MetaCodex, change a cube colour in `src/app.cpp`, `mcx-app dev` again → in the Runner the colour changes without the app restarting (about 2 s)
-- [ ] `mcx-app run /root/apps/t1` → Install once; "T1" opens by itself (its own Library icon) with the same cubes; Meta button > Quit; force-stop MetaCodex (Settings > Apps); open T1 from the Library: it still runs
-- [ ] Wear the headset, open the Perf menu, and in a terminal: `for i in 1 2 3 4 5; do touch /root/apps/t1/src/app.cpp; mcx-app build /root/apps/t1; done` → 72 fps the whole time (a build ~2 s), voice commands still answer
-- [ ] During those builds say "what is this build doing?" or use a thread: MQH answers normally
-- [ ] Settings > Apps > MetaCodex shows a running service / notification "Local services running" (the AI service is now a foreground service)
-- [ ] Open T1 (MetaCodex in the background) and stay in it 10 minutes; come back: MQH threads, the agents and voice still work without a restart (DAEMON says running, not "starting again")
-- [ ] Start `mcx-app build /root/apps/t1` from a thread and take the headset off for 2 minutes; back on: the build finished (log `RESULT: APK ...`)
-- [ ] Night Vision: `cp -r /opt/metacodex/quest-native/examples/nightvision /root/apps/nv`, `mcx-app build /root/apps/nv`, `mcx-app verify /root/apps/nv` → `RESULT: verify ok`; `mcx-app install` + `launch` → Android asks for spatial data once: Allow
-- [ ] Night Vision: the room in green; near things bright, far ones dark, outlines glowing; grain and scanlines; the HUD says `depth ... LIVE`, `room N objects`, `72 Hz`
-- [ ] Right pinch (or right trigger) cycles PHOSPHOR / EDGES / RANGE; left pinch (or A) turns the camera off (depth image alone) and on; stick up/down changes the gain; open the system menu: nothing reacts until you close it
-- [ ] Night Vision has its own icon (green goggles) and label in the Library; it runs with MetaCodex force-stopped
-- [ ] Switch between MetaCodex and an app built here 5 times; then Perf menu / `adb shell dumpsys meminfo com.pnncl.metacodex | grep "GL mtrack"`: MetaCodex's GPU memory does not climb by hundreds of MB per switch (11-11: 4.87 GB after ~6 switches + a sleep, lmkd then killed the AI process)
-- [ ] With MetaCodex in the background (an app built here in front) start a long build from a thread: `mcx-buildd status` shows `"budget": "paused (background budget)"` once it passes 15 % CPU over 5 min, and MetaCodex's AI process is not killed (no `excessive cpu` line in logcat)
+- [ ] `mcx-app run /root/apps/t1` → Install asked once, "T1" opens by itself (its own Library icon) with the same cubes; run it again: no prompt; system menu > Quit; force-stop MetaCodex (the headset's Apps settings); open T1 from the Library: it still runs
+- [ ] Wear the headset, and in a terminal: `for i in 1 2 3 4 5; do touch /root/apps/t1/src/app.cpp; mcx-app build /root/apps/t1; done` → 72 fps the whole time (a build takes about 2 s), voice commands still answer
+- [ ] During those builds say "what is this build doing?" or use a thread → MQH answers normally
+- [ ] Open T1 (MetaCodex in the background) and stay in it 10 minutes; come back → MQH threads, the agents and voice still work without a restart (MQH STATUS says running, not "starting again")
+- [ ] Start `mcx-app build /root/apps/t1` from a thread and take the headset off for 2 minutes → back on, the build finished (log `RESULT: APK ...`)
+- [ ] Switch between MetaCodex and an app built here 5 times, then `adb shell dumpsys meminfo com.pnncl.metacodex | grep -E "GL mtrack|TOTAL PSS"` (or `tools/gpu-switch-test.sh <package> 10` from the PC with the headset free) → MetaCodex's GPU memory does not climb by hundreds of MB per switch; note the numbers
+- [ ] With MetaCodex in the background (an app built here in front) start a long build from a thread → `mcx-buildd status` shows `"budget": "paused (background budget)"` once it passes 15 % CPU over 5 min, and MetaCodex's AI process is not killed (no `excessive cpu` line in logcat)
 
-## 30. The way back from built apps (2 minutes; needs the MetaCodex build after 0.7.14)
+Night Vision (an example app):
 
-- [ ] In a thread ask for any small native app (or `mcx-app new /root/apps/t2 --label "T2"` + `mcx-app run /root/apps/t2`): it opens
-- [ ] Left controller's menu button (or look at the left palm and pinch): the title says "opened from MetaCodex"; Back to MetaCodex, Report to MetaCodex, Quit, Close menu; point and pull the trigger (or pinch) to pick
-- [ ] Back to MetaCodex: MetaCodex is there at once (no loading screen, windows where they were), a toast "Back from T2", the launching thread in front; wait 60 s: no "T2 isn't responding" dialog; T2 is not in the recent apps (it closed)
-- [ ] Open T2 from the Library: the menu says "opened outside MetaCodex", only Quit (no MetaCodex items); Quit closes it, Home
-- [ ] Launch T2 from MetaCodex, press the Meta button > Home, reopen T2 from the Library: the menu has no MetaCodex items
-- [ ] Launch T2 from MetaCodex, open MetaCodex from the dock (no Back): wait 60 s: no "isn't responding" dialog; T2 still in the recent apps, opens again fine
-- [ ] Open the app again, menu > Report to MetaCodex: back in MetaCodex, the thread's composer says "Feedback on T2 1.0 (1):" with two chips (▣ the app's picture, ⎘ log T2); ◉ to say what you saw, SEND: the agent sees the picture and the log
-- [ ] Open the app again, quit it from the system menu (right hand / Meta button > Quit): does MetaCodex come forward by itself? (tell: best effort, Android may refuse)
-- [ ] After 5 app switches: `adb shell dumpsys meminfo com.pnncl.metacodex | grep -E "GL mtrack|TOTAL PSS"` (or `tools/gpu-switch-test.sh <package> 10` from the PC with the headset free); note the numbers
+- [ ] `cp -r /opt/metacodex/quest-native/examples/nightvision /root/apps/nv`, `mcx-app build /root/apps/nv`, `mcx-app verify /root/apps/nv` → `RESULT: verify ok`; `mcx-app install` + `launch` → the system asks for spatial data once: Allow
+- [ ] The room in green; near things bright, far ones dark, outlines glowing; grain and scanlines → the HUD says `depth ... LIVE`, `room N objects`, `72 Hz`
+- [ ] Right pinch (or right trigger) cycles PHOSPHOR / EDGES / RANGE; left pinch (or A) turns the camera off (depth image alone) and on; stick up / down changes the gain → open the system menu: nothing reacts until you close it
+- [ ] Night Vision has its own icon (green goggles) and label in the Library → it runs with MetaCodex force-stopped
 
-## 31. Launches by request, Native / General projects (0.7.16)
+The way back from a built app:
 
-- [ ] THREADS > + PROJECT… > EXISTING…: a folder, then PROJECT TYPE: NATIVE APP, DEFAULT or RESEARCH; the project is listed under that type (§ 41)
-- [ ] A Native project's folder has `.metacodex/project.json`, `.claude/skills/quest-native-*` (links) and AGENTS.md / CLAUDE.md with the native block; a General one has none of them (`ls -la <folder> <folder>/.claude 2>&1` in a terminal)
-- [ ] In a General project ask an agent "what are your rules for apps?": no word about launch requests or the app menu
-- [ ] In a Native project, with the thread in its most permissive approval mode, ask for a small app: the agent builds and verifies, then a dialog APP READY: <app>: LAUNCH / LATER appears in front of you (and a toast in MESSAGES); nothing opens by itself
-- [ ] LATER: the app does not open; say "launch the app" (Italian removed: English only since 2026-11-12): it opens; its menu's Back brings you to that thread
-- [ ] A brand-new app: the dialog says INSTALL first; INSTALL -> Android's dialog -> then APP READY with LAUNCH
-- [ ] Say "don't open the app" while one waits: the agent's `mcx-app status` says declined
+- [ ] In a thread ask for any small native app (or `mcx-app new /root/apps/t2 --label "T2"` + `mcx-app run /root/apps/t2`) → it opens
+- [ ] Left controller's menu button (or look at the left palm and pinch) → the title says "opened from MetaCodex"; the items are Back to MetaCodex, Report to MetaCodex, Quit, Close menu; point and pull the trigger (or pinch) to pick
+- [ ] Back to MetaCodex → MetaCodex is there at once (no loading screen, windows where they were), a toast "Back from T2", the launching thread in front; wait 60 s: no "T2 isn't responding" dialog; T2 is not in the recent apps (it closed)
+- [ ] Open T2 from the Library → the menu says "opened outside MetaCodex", only Quit (no MetaCodex items); Quit closes it, Home
+- [ ] Launch T2 from MetaCodex, press the system button > Home, reopen T2 from the Library → the menu has no MetaCodex items
+- [ ] Launch T2 from MetaCodex, open MetaCodex from the DOCK (no Back) → wait 60 s: no "isn't responding" dialog; T2 is still in the recent apps and opens again fine
+- [ ] Open the app again, menu > Report to MetaCodex → back in MetaCodex, the thread's composer says "Feedback on T2 1.0 (1):" with two chips (▣ the app's picture, ⎘ log T2); ◉ to say what you saw, SEND: the agent sees the picture and the log
+- [ ] Open the app again, quit it from the system menu → tell whether MetaCodex comes forward by itself (best effort, the system may refuse)
 
-## 32. Thread state after app switches, the orb's arcs, the orb off the watched window, the centred thread + sidebar (branch fix/thread-sidebar-and-orb, next build)
+Launches by request (Native projects):
 
-- [ ] A thread working; launch a built app, wait until the agent is done, Back: the thread says idle / done at once (no "WORKING", no "writing the answer")
-- [ ] A thread working: STOP: within 2 s the header leaves WORKING and the chat stops "writing"
-- [ ] The orb: messages always rise on its right; its menu (TALK, SPEAK, PLACE, LOG) always sits on its left, level with it, whichever way you look; never swapped
-- [ ] Idle, not looked at, no message: the orb is a little smaller; look at it or bring a hand close: it brightens and grows back; touching it still opens the menu
-- [ ] Touch the orb: TALK, SPEAK, PLACE, LOG sit on a small arc hugging its left side, as plain squares (see section 28); every square faces you; labels readable at arm's length without leaning in
-- [ ] Two or three messages in a row: they stack on an arc round the orb's right side, the newest lowest, the line of light runs along the arc; never on its left
-- [ ] Read a window straight ahead, the orb up to its right, and touch the orb: the orb and its menu glide (no jump) to a place where nothing of them covers that window, still in view and reachable; close the menu: a moment later the orb goes back to its own place
-- [ ] While the menu is up, reach for a square: nothing moves under the finger; look at the menu itself: the orb does not run away from it
-- [ ] FIXED layout, a thread in front: tap the sidebar handle: the thread and its sidebar glide together until the pair is centred in front of you; fold it: the thread glides back. With another window just to its left: the pair moves only up to that window, never over it. Move the thread, then fold: it stays where you put it
+- [ ] In a Native project, with the thread in its most permissive approval mode, ask for a small app → the agent builds and verifies, then a dialog APP READY: <app>: LAUNCH / LATER appears in front of you (and a toast in MESSAGES); nothing opens by itself
+- [ ] LATER → the app does not open; say "launch the app": it opens; its menu's Back brings you to that thread
+- [ ] A brand-new app → the dialog says INSTALL first; INSTALL → the system's dialog → then APP READY with LAUNCH
+- [ ] Say "don't open the app" while one waits → the agent's `mcx-app status` says declined
 
-## 33. THREAD's sidebar (branch fix/thread-sidebar-and-orb, next build; docs/thread-sidebar.md)
+## Ambient Focus and depth
 
-- [ ] Open a thread: a handle `›` with PROJECT and the number of changed files on THREAD's right edge; tap it: the sidebar opens at the thread's right edge, tops level, bent with it (one curved screen); `‹` folds it
-- [ ] Drag THREAD: the sidebar comes along; pinch the sidebar's header: both move; FLOAT: the pair keeps one slot, nothing overlaps it
-- [ ] Open the sidebar on GIT in thread A, keep it folded in thread B: switching between them brings back each one's state; B never shows A's files
-- [ ] CHANGES in a repo: every file the agent changed, also through commands (sed, npm), untracked new files included; the folder's other changes under ALSO CHANGED IN THIS FOLDER; the summary says against HEAD (or since the base branch in a worktree)
-- [ ] Tap a file: the diff reads like VS Code: old / new numbers, + / − gutter, green / red lines, coloured code, `⋯ N unchanged lines` (tap: they open); readable at arm's length without leaning in
-- [ ] A long line: drag sideways to read it; WRAP breaks it over rows instead; ▲ PREV / ▼ NEXT walk the files; `@ ASK` puts the path in the composer
-- [ ] While the agent edits the open file: the list and the diff update by themselves within a few seconds, the view keeps its place
-- [ ] A big file (a lock file, a generated JSON) and an image: the big one shows only its changed part and says so, the image says binary; nothing stalls
-- [ ] FILES: the project's own folder (not /), breadcrumb `project › src`, a tap on a part goes back up, never above the project; changed files coloured; a file opens with line numbers and colours
-- [ ] GIT in a repo: branch, ahead / behind, status, recent commits; in a folder with no repo only NOT A GIT REPOSITORY + INIT GIT; INIT GIT works and the tab becomes a repo
-- [ ] STATUS: model, access, context %, what runs now and for how long, approvals waiting, usage, folder, MQH
-- [ ] A Bluetooth keyboard after touching the sidebar: ↑ ↓ / Page / Enter / Esc move and open in it; touch the terminal and the keys go there again
-- [ ] Voice: "open the sidebar on the git tab", "close the thread sidebar" (Italian removed: English only since 2026-11-12), "show the status tab of this thread", and in a folder with no repo "make this folder a git repository"
-
-## 34. Gestures and scripts: a clean start (branch feat/polish)
-
-Replaces the section 7 steps that expect `core-poses` / `swipes` to be there, "Open vault" in BIND, + NEW PLUGIN… in RECORD, PLUGINS in the studio, and the SCRIPTS gesture monitor.
-
-- [ ] Fresh install (or the app's data cleared): MQH > GESTURES > ALL shows YOURS (0) with one dim line "none · RECORD a pose or ASK AN AGENT", SYSTEM (7) (pinch click, grab move · spin, point ray, open open hand, palm-up palm up, clap two hands, select select tool), ▸ EXAMPLES (2) folded; no ⟳ REFRESH button
-- [ ] Tap EXAMPLES: it opens (▾ EXAMPLES) with `core-poses` and `swipes`, each "+ ADD"; tap it again: it folds
-- [ ] Pick a SYSTEM gesture: TEST ▶ and BIND → work; SOURCE and DELETE POSE are greyed out and do nothing
-- [ ] Pick `core-poses` under EXAMPLES: the right side lists its 5 gestures and says "Not installed"; + ADD (the only lit button) → toast "Example core-poses added …", the row says ADDED and its gestures appear indented under it; YOURS stays (0)
-- [ ] Make a thumbs up after + ADD → LIVE shows `thumbs-up`; MQH > PLUGINS lists Core poses
-- [ ] `mcx-ui plugin examples` lists both with installed=True/False; `mcx-ui plugin example swipes` → ok, swipes appear under EXAMPLES
-- [ ] RECORD a pose "finger-gun" → it appears under YOURS (✋ pose · my-poses); SOURCE and DELETE POSE are lit for it; DELETE POSE asks, then removes it
-- [ ] RECORD's right side is one dim line "Plugins: MQH > PLUGINS (+ NEW, or ask an agent)"; no + NEW PLUGIN… and no OPEN IN TERMINAL there
-- [ ] MQH > PLUGINS > + NEW PLUGIN… "test-plugin" → both palms up shows the toast "Both palms up" and opens nothing
-- [ ] BIND: 12 presets in this order: TALK, TERMINALS, NEW TERMINAL, THREADS, FILES, WEB, GIT, KEYBOARD, SELECT, RECENTER, FOCUS, CTRL-C; bind `clap` to WEB → a clap opens the WEB window (not LINKS); bind `clap` to TALK → a clap starts listening, another stops; DELETE the bindings
-- [ ] A binding saved before this build with an old preset (e.g. `toggle:browser`, `spin:40`) still runs
-- [ ] MQH > SCRIPTS on a fresh install: one dim line "No scripts · + EXAMPLE, or ask an agent (skill quest-scripting)"; no plugin rows, no GESTURE MONITOR; + EXAMPLE → `double-clap` with badge ON; double clap toggles TERMINALS
-- [ ] Update over an old install that had the starters, never edited, no binding on them: after the first start `core-poses` and `swipes` are gone from MQH > PLUGINS and /mnt/quest/plugins (`ls -a` shows `.examples-v2` and still `.starter-installed`); my-poses and your own plugins are still there
-- [ ] Update over an old install where a binding names `victory` (or a script or plugin reacts to `thumbs-up`): `core-poses` stays (under EXAMPLES, still working); an edited starter (one pose file changed) stays and shows under YOURS
-- [ ] Restart the app after + ADD of an example: it is still installed (the cleanup runs only once)
-- [ ] Ask an agent on the headset for "a thumbs up with my right hand opens git" on a fresh install: its plugin has its own `poses/thumbs-up.json` and works without + ADD
-
-## 35. Menus and layout polish (branch feat/polish)
-
-Main menu (dock: Settings > DISPLAY, main menu on the wrist off; wrist: on):
-
-- [ ] Dock: TALK TERM FILES THREADS WEB CONTROL / TERMS CLIP FOCUS SELECT KEYS CENTER, the wrist's order without TABLE; the wrist still has TABLE on the outer ring
-- [ ] Dock: open FILES, THREADS, WEB, TERMS, CLIP from it: each tile stays selected (lit) while its window is open and goes dark when it closes (within a quarter second); CONTROL lit while CONTROL shows; FOCUS and SELECT lit while on; KEYS lit while the terminal keyboard is up (also on the wrist); TALK lit while listening
-- [ ] Watch the fps overlay with the dock open for a minute: 72 fps, no hitch every quarter second
-- [ ] ✕ on the last terminal: the toast says "TERMS on the menu shows it"
-
-CONTROL:
-
-- [ ] The rail reads THIS HEADSET: ◧ DISPLAY, ◈ LOOK & SOUND, ◐ FOCUS, ✋ HANDS / AI: ♫ VOICE, ◆ AGENTS, ⬡ MQH, ⚿ VAULT / LINUX & APP: ⬢ SYSTEM, ✦ ABOUT; row names in the same narrow capitals as CONTROL and the group captions; nothing cut off ("LOOK & SOUND" whole)
-- [ ] With no agent signed in, AGENTS' status on the rail says "sign in" (not "set up")
-- [ ] Click every category on the rail one after another: every window has the same size, the top-left corner and the rail never move, no window grows over a neighbour
-- [ ] Voice or a binding with `ui.open("display")`, "look", "hands", "about" (e.g. `mcx-ui action open:about` from a terminal): CONTROL opens on that page; close it; CONTROL on the menu brings that page back
-- [ ] HANDS: the button row reads SELECT AREA ⌖ | GESTURE STUDIO ▸ | HORIZON HANDS ⚙; the line at the top ends "GESTURE STUDIO: your own gestures."; GESTURE STUDIO opens MQH on GESTURES in HANDS' place; HORIZON HANDS opens Horizon's hand settings
-- [ ] DISPLAY in FIXED: FLOAT RADIUS dimmed with "FLOAT only" under its name; switch LAYOUT to FLOAT: FLOAT RADIUS bright, DISTANCE dimmed with "FIXED only"; no CLIPBOARD SIZE row any more
-- [ ] ABOUT: no raw log lines; LICENCES ▸ opens FILES at /usr/share/doc/metacodex (LICENSES.md there); APP PERMISSIONS ⚙ opens Horizon's settings for MetaCodex
-- [ ] MQH: the title reads MQH · SKILLS · PLUGINS · SCRIPTS · GESTURES; the last tab is STATUS (URL, token, sync, ⟳ RESTART); SKILLS' right side has no ", as bb does"; its three buttons are not cut off
-- [ ] MQH > PLUGINS: pick a plugin: the first button says DISABLE when it is on, ENABLE when it is off; with nothing picked it is dim
-- [ ] Stop MQH (or wait for a failure): AGENTS says "MQH > STATUS > RESTART tries again"
-- [ ] AGENTS: pick an installed agent: the second row reads DISABLE (or ENABLE) | NEW THREAD → | UPDATE; pick one that is not installed: no UPDATE; no OPEN LINK button; the hint says ⇗ on the sign-in terminal opens the link
-- [ ] SYSTEM > TOOLS: the bottom row is ⟳ CHECK | PACKAGES… (no TERMINAL)
-
-Work windows:
-
-- [ ] LINKS (WEB's ☰): the title is LINKS; the bottom row has only ⟳ SCAN
-- [ ] FILES: FILES APP at the end of the top row opens Horizon's Files app
-- [ ] CLIPBOARD: a KEEP slider above its buttons; set 5 with more captures: the oldest go, the line says "n of 5"; the preview still shows whole
-- [ ] Orb menu: ✥ PLACE and ✉ LOG (no more ⌖ / ☰ there); with unread messages ✉ n NEW
-- [ ] LOG: the window is titled LOG · MESSAGES; CLEAR ALL (red, as big as other buttons) asks "Clear all n messages?"; CANCEL keeps them, CLEAR ALL empties the list
-- [ ] Pinch the orb to a new place, let go; quit the app (with MQH sync on) and start it again: the orb is where you left it; menu > PLACE, restart: it chooses its own place
-- [ ] A thread whose host is not connected: THREAD's header says OFFLINE (not NO HOST)
-
-## 36. Spoken replies and the voice effect (branch feat/polish)
-
-- [ ] Ask a session question with a 2-sentence answer: the first words come about 3-4 s after the text appears (was 8-10 s), with a short pause between sentences; only 2 sentences / about 200 characters are spoken and the full answer stays on the HUD.
-- [ ] While a reply speaks, press ■ STOP on the voice HUD (also try TALK, and a new question): the voice stops at once and no later sentence plays.
-- [ ] Ask "is it stuck?" on a working thread: durations are spoken as "3 minutes 20 seconds", not "three men". ~~With VOICE > LANGUAGE IT an Italian reply says "3 minuti" with the Italian voice.~~ (English only since 2026-11-12)
-- [ ] VOICE panel: the service button reads ▶ START or ■ STOP from the state; a tap on a COMMANDS row shows Say “…” first and at most one short line, never an id like open_panel.
-- [ ] VOICE > SOUND shows OFF / AI / SHIP / COMM with AI selected on a fresh install. Pick each one: it says "Systems online. All panels ready." in that sound. AI is the same voice, slightly computer-like with a small room; SHIP is clearly synthetic with a longer tail; COMM is a narrow radio with a squelch at the start and the end; OFF is the plain voice.
-- [ ] All four are equally loud, never crackle or clip, and the first word starts without the old half-second of silence.
-- [ ] Say "make your voice sound like a radio" -> COMM is selected and replies sound like a radio; say "give the assistant its normal voice back" -> OFF; "switch the voice effect to starship" -> SHIP (the Italian one removed: English only since 2026-11-12).
-- [ ] VOICE > SPEECH: FAST (3 steps) is selected on a fresh install. Ask the same question with FAST and with CLEAR: FAST starts a little sooner; say if FAST ever drops or swaps a word you notice (then CLEAR becomes the default).
-- [ ] Faster voice (3 steps, shorter first clip, warm-up waits, agents at low priority): with an agent working, ask a session question. The first sound comes sooner than before (about 12 s measured before).
-- [ ] The same answer: no gap between the first clip and the next one (only the normal short pause).
-- [ ] With the voice effect on (AI, SHIP, COMM), FAST speech stays easy to understand; say if a word is lost.
-- [ ] Restart the app: the chosen SOUND and SPEECH are kept.
-- [ ] Watch fps during a long spoken reply with SHIP: 72 fps holds (the effect runs off the main thread).
-
-## 37. Fast recaps, streamed answers, the tools list (0.7.17)
-
-- [ ] Ask "give me a recap of the <name> thread" (a thread that is not open): "Let me look." at once (about 1.5 s after you stop talking), the HUD says ◆ LOOKING, then "The <name> thread is idle / working / waiting for you." and one more sentence; it is the thread you named, not the open one
-- [ ] Same with "summarize this thread", "catch me up", "what has it done so far" on the open thread: the first real sentence within about 4 s
-- [ ] "How many captures did we take so far?" answers the count (not a recap)
-- [ ] A question the app needs the model for ("why did the build fail?"): "Let me look.", then the answer is spoken sentence by sentence while the HUD text still grows (◆ ANSWERING); STOP or TALK mid-answer: the voice stops and no later sentence plays
-- [ ] During a long spoken answer: 72 fps holds, the voice has no gaps between words
-- [ ] Change VOICE > SOUND or SPEECH, then ask a recap: "Let me look." already has the new sound (or, the very first time, the answer comes without it)
-- [ ] VOICE has no LANGUAGE row; Italian phrases do nothing (English only)
-- [ ] "never mind", "what can you do for me?": nothing opens or toggles
-- [ ] SYSTEM > TOOLS: a grouped plain list (no logos, no gh); ABOUT > LICENCES opens /usr/share/doc/metacodex
-
-## 38. The local coder (branch local-coder, 0.7.18)
-
-- [ ] AGENTS: the GET row has LOCAL CODER · GET 430 MB; tap: it counts up to 100 %, then "✓ ON HEADSET"; tap again: a hint how to use it
-- [ ] NEW THREAD with Claude Code, model "Local coder (this headset, slow)": ask anything small (a script, a fix, a small native app in a NATIVE project): it works in minutes; a Claude Code thread on a normal model still uses your account as before
-- [ ] Without restarting the app after GET: NEW THREAD > OpenCode lists "⌂ Local coder (this headset, slow)" as the first row
-  (LOCAL badge, "on this headset · offline · slow"), above OpenCode's own models; Claude Code the same. Reopen the list once
-  if the first look still shows the old list (MQH refreshes it in the background)
-- [ ] The same task with OpenCode on that row: the turn runs on the local model (the AI service log shows coder requests);
-  Codex does not offer the local coder
-- [ ] While a local-coder thread works: TALK shows "⏸ LOCAL CODER WORKING" and does not record; 15 s after the turn ends TALK works again; 72 fps all the time
-- [ ] Say "remove the local coder" (confirm): the tile says GET again, the model is gone from the threads' model lists after a restart of MQH
-
-## 39. Stable frame rate: rendering options (branch perf/stable-fps, 0.7.18; docs/perf.md)
-
-- [ ] 72 fps (VrApi FPS, no stale frames) with 6+ windows open, during a long spoken reply, a native build in a terminal and a local-coder turn
-- [ ] Text at the edges of the view: sharp while nothing heavy runs; under load it may soften a little (dynamic foveation), never flickers
-- [ ] Ambient Focus, real things in front of windows (occlusion) and bent windows look as before (symmetric projection)
-- [ ] Move the head and hands fast: windows stay still in the room, the hand ray stays on the fingers (late latching)
-
-## 40. Stone-metal frames and buttons (branch feat/stone-ui)
-
-- [ ] Every window (not the small cards) has carved stone-metal corner pieces with a blue groove and a light node on each cut, slim rails between them, a carved plate with a blue gem over the top centre; the blue only spills inward onto the glass
-- [ ] Buttons are dark blue slate plates with an engraved channel: dim blue at rest, bright when a finger or the ray is on them, full for the primary (CD HERE) and red for a danger button; list rows and ghost buttons look as before; text stays easy to read
-- [ ] A window opening: the cast's brackets hand over to the stone corners without a jump; bent windows: the pieces bend with them
-- [ ] 72 fps with many windows open (the look is computed in the existing UI shader, no textures)
-
-## 41. Wrist menu glass follows PANEL OPACITY; no SHADOWS (branch fix/look-shadows)
-
-- [ ] Settings > LOOK: PANEL OPACITY at 50 % → the wrist menu's tiles and watch face are clearly more see-through than at 100 %; its lines, icons, ticks and sparks look as bright as before
-- [ ] PANEL OPACITY at 100 % → the wrist menu looks as it did before this change
-- [ ] PANEL OPACITY at 50 %: a hand behind the wrist menu is still hidden by its glass (the depth is unchanged)
-- [ ] Change PANEL OPACITY (the slider, or voice: "set the opacity to 60 percent") with the wrist menu open: its glass changes at once, the panels too, no restart
-- [ ] Settings > LOOK: the rows are PANEL OPACITY, FOVEATED, SOUNDS, VOLUME, the orb; no SHADOWS slider and no gap where it was
-- [ ] Windows and buttons have no dark band round their edges; the accent glow round a window's edge looks as before
-- [ ] An old settings file that still has "glow" loads: the app starts with its other settings (PANEL OPACITY keeps its value)
-
-## 42. Projects by type, threads made by their first message (branch fix/projects-threads)
-
-- [ ] THREADS shows NATIVE, DEFAULT, RESEARCH (dim headers, in that order); OTHER only when a project is outside `/root/metacodex-projects/` and has no type; a tap on a header folds it, a tap on a project folds it; threads stay under their project (and its worktree rows)
-- [ ] An empty type says "no … project yet: tap to make one"; the tap asks the name of a project of that type
-- [ ] + PROJECT… asks NATIVE APP / DEFAULT / RESEARCH / EXISTING…, then the name on the keyboard (empty field, the hint in its caption); "Weather App" makes `/root/metacodex-projects/native/weather-app`
-- [ ] In a terminal: `cd /root/metacodex-projects/native/weather-app && git status && git config user.name && cat .metacodex/project.json && ls -la .claude/skills`: a git repository on `main`, an identity (yours when a global one is set, else MetaCodex), type native, the quest-native links
-- [ ] A RESEARCH project: AGENTS.md and CLAUDE.md hold the research note (notes in Markdown, sources cited, no app build), no `.claude/skills`; ask its agent "what are your rules here?": it names those rules, nothing about apps
-- [ ] The same name again in the same type: a toast says the folder exists; nothing is made
-- [ ] Offline, never signed in to git: in a new project ask the agent to commit a file: the commit works
-- [ ] An old project with `"type": "general"` in `.metacodex/project.json` shows under DEFAULT
-- [ ] NEW THREAD > START, then close THREAD (✕) without a message: no new thread in THREADS, also not after ⟳ or a restart
-- [ ] NEW THREAD > START, then open another thread, or NEW THREAD > START again: the first draft is gone, nothing made
-- [ ] In the draft: attach a capture (+ or CLIPBOARD > TO THE THREAD) and send the first message: the thread has the text and the capture
-- [ ] In the draft: change the model or the access on the chips before the first message: the new thread uses them
-- [ ] WORKSPACES > a worktree > NEW THREAD HERE… > START > first message: the thread works in that worktree
-- [ ] Voice: "start a thread to fix the login page": a thread is made at once with that message (last agent and model chosen); "new thread": the draft opens and waits
-- [ ] Voice: "create a research project called solar panels": made under RESEARCH; "new project": the type dialog; "make a native app project": the name keyboard
-
-## 43. The system keyboard again; our table keyboard removed (branch fix/system-keyboard)
-
-- [ ] A text field (the WEB address, a search, an API key in VAULT): the headset's system keyboard opens with the field's text; what you type shows in the field once (no doubled letters); Done keeps it; Cancel puts the old text back; a secret field shows dots
-- [ ] The first time the keyboard opens in a session, a toast: "the headset can lay this keyboard on a table. Settings > Experimental > Surface keyboard"; it does not show again until the app restarts
-- [ ] With Settings > Experimental > Surface keyboard on: rest both hands on a table when the keyboard opens; note where Horizon OS shows it (on the table or floating)
-- [ ] Terminal: KEYS on the dock or the wrist, the frame's ⌨, the key bar's ⌨: the keyboard opens; type `ls`: the terminal shows `ls` once (not `lsls`), each letter at once; a Backspace deletes one letter; Done runs the command; the same button again closes the keyboard
-- [ ] Voice "show the keyboard" opens it; said again, it stays open; "open the table keyboard" opens the same keyboard
-- [ ] WEB: tap a text field on a page, ⌨, type, Done: the text is in the page's field once
-- [ ] The wrist menu has no TABLE tile; KEYS is lit while the keyboard is open for the terminal
-- [ ] A Bluetooth keyboard still types into the terminal and into a focused field; the key bar (Esc, Tab, arrows, Ctrl, Alt) works
-
-## 44. The orb speaks: status answers, thread alerts; "it"; the start splash (fix/fix-list, 2026-11-13)
-
-- [ ] TALK: "give me a status update on the ongoing threads" → the orb says the answer (not only the text); also "how are my threads doing"
-- [ ] A thread you are not looking at finishes → the orb says "The thread on <project> is done." with the callout; an approval asked → "An agent on <project> needs your approval."; a question → "... is asking you something."
-- [ ] An alert while you talk or while the orb speaks: said after, not over it
-- [ ] VOICE > "Say when a thread is done or needs you" off → callouts only, nothing said
-- [ ] "close the settings panel", then within 2 minutes "reopen it" → SETTINGS opens again; "close it" closes it; VOICE > LAST shows “reopen it” → “open settings”
-- [ ] Ask "what happened while I was away?": no orb placement, focus or menu settings in the answer; threads, approvals, builds are there
-- [ ] App start: the MetaCodex logo appears about a metre in front of you over the room (passthrough visible around it), comes in behind a scan line, stays fixed in the room (upright, facing you; turn your head: it stays), then breaks up into light after about 3 s; nothing of it stays
-
-
-## 45. No stutter while an agent codes (branch perf/gc-cpu)
-
-- [ ] Open a thread with a long conversation and let the agent work for 10 minutes: no stop of 1-3 s, 72 fps (Perf menu Snapshot)
-- [ ] The session log: `GC: incremental` at start; no `[slow callback]` line from the chat; no `[slow timeline]` above 40 ms
-- [ ] Scrolled up in the chat while it works: the view holds still, ↓ NEW shows; a tap on a header opens and closes it as before
-- [ ] An approval row shows and goes: the chat keeps its place and text
-- [ ] The sidebar on CHANGES while it works: new files and counts show within a few seconds
-- [ ] A script saved in the terminal still applies within about a second
-
-## 46. Pose hold and the V (2026-11-14)
-
-- [ ] Make a V (index and middle up) for about 1 s and drop it: nothing happens.
-- [ ] Hold the V for 2 s: Ambient Focus turns on; hold it again 2 s: it turns off.
-- [ ] Horns, thumbs up, call-me held for 3 s: nothing opens.
-- [ ] A V made while the ray or the fingertip is on a window does nothing.
-## 47. THREAD's message box: grow it, back to one row on SEND (branch feat/composer-resize; docs/thread-view.md)
-
-- [ ] THREAD: the composer is one row; a bar with three dots sits on its top edge; it lights up under the ray or a finger
-- [ ] Pinch the bar and drag up: the box grows upwards, the chat above gets shorter by the same amount, `+` `◉` `SEND ▶` stay on the bottom row
-- [ ] Poke the bar with a finger and push up, then drag down: the box shrinks, never below one row
-- [ ] Drag up as far as it goes: the box stops at about half the window; the chat keeps about 12 cm
-- [ ] A long message in a grown box: the text wraps; the last lines show, where the caret is; typing keeps the caret visible
-- [ ] Tap the box with a grown height: the keyboard opens and types into it as before
-- [ ] SEND (button): the box is one row again and the chat its full height; the message appears in the chat
-- [ ] Enter on the keyboard sends: the same reset
-- [ ] Grow the box, then open another thread (THREADS list): one row
-- [ ] Grow the box, then + → ATTACH FILES: one row; the grip does nothing while the attach window is open; CANCEL leaves one row
-- [ ] Voice: "make the text box bigger" (one step), "shrink the composer" (one step), "reset the text box" (one row); "expand the message box" and "put the message box back to the default size" work
-- [ ] While dragging the chat changes a few times a second, no stutter; 72 fps with a working thread open (Perf menu Snapshot)
-## 48. Back from a native app: the panels stay in the room (branch feat/return-anchor; docs/ui.md "Back from a native app")
-
-Setup: open the dock, THREAD and one more window in FIXED layout. Note where they are against a wall, the desk or a door.
-
-- [ ] Launch a native app from MetaCodex (LAUNCH), use it, close it with "Back to MetaCodex": every panel is in the same place in the room (a few cm)
-- [ ] Same, but turn your head 90 degrees before coming back: the panels still stay in the room
-- [ ] files/session_log.txt has one line `room anchor: back in the room after the native app: panels moved X cm (most Y cm), turned Z deg, N open`. Write X, Y, Z down. X near 0 while the panels still moved: the cause is not the room origin; send the log
-- [ ] A line `room anchor: ... too far` or `no room reference` shows: the Stage origin does not hold here; send the log (next step: Stationary or anchors, see docs/ui.md)
-- [ ] Pause and resume with the Home button, no native app: the panels stay where they were, no line about a move
-- [ ] RECENTER (wrist or ⟲) still puts the panels in front of you as before
-
-## 49. Thread windows and groups (branch feat/thread-groups; docs/thread-view.md "Thread windows and groups")
-
-Setup: two projects in THREADS, project1 with 3 threads, project2 with 1 thread. FIXED layout first, then FLOAT.
-
-- [ ] Open the 1st thread of project1: one window THREAD, free
-- [ ] Open the 2nd thread of project1: a new window opens and joins the first one as a group (2x1); no jump, it slides into its place; the group title says "Group 1 · 2 threads"
-- [ ] Open the thread of project2: a free window THREAD 3 beside the group
-- [ ] Open the 3rd thread of project1: it joins the group; the group becomes 2x2 (3 windows); the windows slide, the frame fades to its new size
-- [ ] Tap a thread that is open already in THREADS: its window flashes and gets the dot (●); no new window
-- [ ] In each grouped window: the chat streams, you can scroll it, type and SEND, ◉ dictates into that window, an approval shows ALLOW / DENY in that window and the answer goes to that thread
-- [ ] Two threads working at the same time (one in the group, one free): both chats update; the session log has no "[slow timeline]" storm
-- [ ] Ask the orb "what is this thread doing?" while you point at one window, then at another: the answer is about the window you point at
-- [ ] An approval waits in a window that is not focused: ask "is anything waiting for me?": the answer names that thread
-- [ ] RESIZE (bottom right of the group): pull it out and in; the windows get larger and smaller with the group; the top-left corner stays; the text stays readable at the smallest size
-- [ ] Pinch the group's title bar and move it: all its windows move with it
-- [ ] Pinch the title bar of a grouped window and release it on another window of the same group: the two change places (the target lights up first)
-- [ ] Pull a window out of the group (release it outside the group): it comes out at its full size where you let it go; open its thread again from THREADS: it does not go back into the group
-- [ ] Release a free window on a window of the group: it joins at that place
-- [ ] Release a free window on another free window: the two make a new group (two groups at once: Group 1 and Group 2)
-- [ ] The ✕ of a grouped window (top right, large): only that window closes; with one window left the group goes and that window is free
-- [ ] The details handle (›) of a grouped window: the sidebar opens at the right edge of the group, not inside the grid; drag the sidebar: the group comes with it
-- [ ] ⇲ UNGROUP: every window is free at its full size, side by side, sliding to its place
-- [ ] The group's ✕: the group and all its windows close; THREADS still lists the threads
-- [ ] RECENTER with a group and a free window: the group moves as one window, nothing overlaps
-- [ ] FLOAT: the group takes one place on the ring; a window pulled out takes its own place; the TURN bar turns them together
-- [ ] Voice: "put the open threads side by side", "break up the group", "switch to the other thread window", "close this thread window", "open the thread about <topic> in a new window"
-- [ ] 6 windows open: the 7th thread opens in the focused window (a message says so)
-- [ ] 72 fps with 4 windows open, 2 of them working (Perf menu Snapshot)
-
-## 50. Held turns IN A WORKTREE, archive / restore / delete (branch feat/held-turn-archive; docs/thread-view.md "Held turns and archive")
-
-Held turn (two threads in one project checkout):
-- [ ] Thread A works in the checkout (a long task). Send a message to thread B in the same checkout: B shows ⏸ Not started and ▶ SEND NOW
-- [ ] ▶ SEND NOW: the question "Start it now?" has SEND NOW, IN A WORKTREE and CANCEL, and its text says what IN A WORKTREE does
-- [ ] CANCEL: B keeps waiting. SEND NOW (on another try): B starts in the checkout, the toast says it shares the folder
-- [ ] IN A WORKTREE: the toast says "Sent: the agent moves to its own worktree first"; B's first message in the chat starts with "This project's folder is busy with another agent..." and then your text
-- [ ] B's agent runs `git worktree list` / `git worktree add` (worktree-per-thread skill), works in `<checkout>-wt-<name>` on `agent/<name>`, and ends with the path, the branch, the base and how to merge
-- [ ] A's files in the checkout did not change because of B (`git status` in the checkout shows only A's work)
-- [ ] `ls ~/.claude/skills` has worktree-per-thread; MQH > SKILLS shows it read-only
-
-Archive / restore / delete:
-- [ ] A thread window shows ARCHIVE… and DELETE… at the top; a NEW THREAD draft and an empty window do not
-- [ ] Two windows open, focus window 1, press ARCHIVE… in window 2: the question names window 2's thread; ARCHIVE: window 2 closes, window 1 stays; THREADS no longer lists it
-- [ ] A thread with a child thread (a sub-thread an agent spawned): ARCHIVE… archives both; both windows close if open
-- [ ] THREADS > ▤ ARCHIVED: the archived threads, newest first, each with RESTORE ▸; ◂ ACTIVE goes back
-- [ ] Tap an archived row > RESTORE: it is back in THREADS and opens normally
-- [ ] DELETE… on a thread with no child: the question says it has no child threads; DELETE: the window closes, it is in neither list
-- [ ] DELETE… on a thread with child threads: the question says how many go too; DELETE removes them all
-- [ ] Archive a thread from another client (the MQH CLI: `mqh thread archive <id>` or a second app) while its window is open: the window closes within about 10 s with a toast
-- [ ] Voice: "archive this chat" (the focused window's thread), "archive the thread about <topic>", "bring back the chat about <topic>", "show my archived chats"
-- [ ] An archived thread that was working: the RUNNING count in THREADS drops, the orb does not report it as working
-
-## 51. First start: the one-time SETUP panel, the locks, the tour (branch feat/first-run-tour; docs/ready-on-install.md)
-
-Uninstall first (`adb uninstall com.pnncl.metacodex`), then install and start: a clean first start.
-
-- [ ] After the splash, "FIRST START · ONE-TIME SETUP" in front at head height (not head-locked: turn away, it stays); the header says once, about a minute, nothing downloaded, stays on this headset
-- [ ] The steps come one at a time: STEP 1 OF 5 … 5 OF 5; each name an action while it runs, its line, its own bar from empty, a spinner that never stops while a step runs; steps 1 and 2 (done long before) each still show for a moment and get their ✓
-- [ ] Done steps listed with ✓ and a sane time (Linux about 9-12 s, MQH about 4 s); step 5 shows "N of 1,9xx examples" while it counts
-- [ ] Tap TALK on the dock (or the wrist menu, or the orb's menu) during the setup → one callout "🔒 TALK is ready after step 5 of 5 · one-time setup", no listening, no error; tapping again at once gives no second callout
-- [ ] THREADS / TERMS / FILES tiles show 🔒 dimmed; tapped → their callout (step 4 / 3); CONTROL > AGENTS dimmed with "🔒 step 4" and does not open; CONTROL, WEB, CLIP work
-- [ ] The locks lift by themselves: TERMS and FILES when the Linux is ready, THREADS and AGENTS when MQH runs, TALK at the end; TALK then listens
-- [ ] The end: "Setup done in N s" and "Ready now: …"; the panel closes itself about 6 s later
-- [ ] The tour starts with the panel: 1 open the main menu (dock: CLIP; wrist: the wrist menu) → ✓ and the next card; 2 the orb's menu; 3 move the SETUP window by its top bar; 4 CONTROL; 5 what comes next, FINISH ✓
-- [ ] A ring of light round CLIP / CONTROL on the dock (or the wrist), round the orb; the SETUP window's frame breathes on card 3; the cards sit beside their targets and come back if you turn away
-- [ ] SKIP STEP moves on; SKIP TOUR ends it; the tour never asks for a 🔒 feature
-- [ ] Frame rate during the setup and the tour: steady (perf lane: no stall > 50 ms; `[hitch]` lines in session_log.txt)
-- [ ] Quit and start again → no SETUP panel, no tour, nothing locked; CONTROL > ABOUT > TOUR plays the tour; voice "start the tour" too
-- [ ] `ui setup` on the control port lists the five steps with their times
+- [ ] FOCUS on the DOCK → the room fades around you, the windows stay bright; FOCUS again: back; "focus mode on" / "focus mode off" by voice
+- [ ] First FOCUS → the system asks for "spatial data" (allow it); CONTROL > FOCUS: "depth: live", then "floor: measured under your feet (… cm from the system's floor)"
+- [ ] FOCUS on → a dome standing on the floor around you: walls, furniture and your hands near you stay visible, far ones fade (no dome "starting above")
+- [ ] Walk around → the dome follows you; nothing flickers at its edge while you stand still
+- [ ] RADIUS changes the dome's size live, SOFTNESS its edge, INTENSITY the darkness; BLACKOUT → black around you, only the windows
+- [ ] BLUR above 0 → the room outside the dome is a soft image (darker with INTENSITY), at once all round you, also at the edges of your view and behind you (there frosted colours until the camera has looked, never the sharp room); 0: darkness only
+- [ ] BLUR 50 %, turn the head slowly → the soft room is there all around where you have looked, no rectangle edge, and it does not move with the head
+- [ ] Put your hands in view at BLACKOUT, with BLUR, and in front of a window → they are always visible
+- [ ] The cut-out around near things (your hands, a chair, a person) → clean and steady: no flicker, no blocky edge (FOCUS: "camera: live …")
+- [ ] Someone walks in front of a window, or you hold an object up → it stays visible in front of the window ("Real things in front of windows" on); off: the window covers it
+- [ ] A hand in front of a window shows, also with "Real things in front of windows" off → poke the Whisp's menu and a big window from in front: the finger stays visible over the glass
+- [ ] A hand behind a window → it stays hidden behind it (the cut-out does not punch through an opaque window)
+- [ ] The same with a window that has stood alone for 3 s or more (it is then marked clear) → the person or object shows in front of it within about half a second
+- [ ] Both FOCUS depth settings on (Sharp depth, Real things in front) → VrApi FPS near 72 with a few windows open; dictate into a thread chat several times: no lag during or after speech to text (the camera keeps running)
+- [ ] Turn Ambient Focus off and on again within a minute → no seconds of low frame rate (the depth and the camera stay on, idle, for 60 s)
+- [ ] On a first start, after "Setup done" → about 2 s later the depth starts and a hand in front of a window shows over it
+- [ ] Without the "spatial data" permission → the floor-plane darkening still works
+- [ ] Switch Ambient Focus on (the FOCUS preset) → outside the dome there is deep blue-black space, a slow nebula, a few twinkling stars, a faint grid on the floor and walls just past the edge, a ring of light where the dome meets the floor; BLACKOUT: space around you, the windows stay; with BLUR 50 %: the blurred room with the grid and the ring
+- [ ] Turn the head and walk → the nebula and stars stay with the room (no swimming), no flicker of the grid at the walls' edges
+- [ ] Frame rate with focus + blur on → about 72 fps

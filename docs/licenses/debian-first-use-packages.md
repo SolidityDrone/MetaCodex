@@ -1,6 +1,10 @@
-# Debian packages that `mcx-setup` installs on the headset at first use (not in the APK)
+# Debian packages beyond the official layer: the base step (in the APK's image) and `mcx-setup quest` (on request)
 
-Measured on 2026-11-12 by simulating `apt-get install --no-install-recommends` with apt on the image's own dpkg status (`/var/lib/dpkg/status` of `assets/linux/rootfs.tar`) against Debian trixie (13.7) arm64 main: **54 packages** for the base step (`ca-certificates curl git xz-utils python3 procps less nano`) and **144 more** for `mcx-setup quest` (`aapt zipalign apksigner default-jdk-headless unzip`), 198 in all, from 119 source packages. They are downloaded from Debian's mirrors by the user's own `apt` on the device; MetaCodex does not redistribute them. Each installed package carries its licence in `/usr/share/doc/<package>/copyright`, and its source is available from the same archive (`apt-get source`). The licences below are the `License:` fields of each source package's `debian/copyright` (read from sources.debian.org); where that file is free text rather than machine-readable, the licence families named in the text are listed (found by a keyword search, so read them as a hint and open the file).
+The 54 packages of the base step are installed in the ready Linux image by `tools/userland-image.sh`, so they ship in
+the APK (see [LICENSES.md](../LICENSES.md), section 3.6). The 144 packages of the quest step are downloaded by the
+user's own `apt` on the device only when `mcx-setup quest` runs.
+
+Measured on 2026-11-12 by simulating `apt-get install --no-install-recommends` with apt on the image's own dpkg status (`/var/lib/dpkg/status` of `assets/linux/rootfs.tar`) against Debian trixie (13.7) arm64 main: **54 packages** for the base step (`ca-certificates curl git xz-utils python3 procps less nano`) and **144 more** for `mcx-setup quest` (`aapt zipalign apksigner default-jdk-headless unzip`), 198 in all, from 119 source packages. Each installed package carries its licence in `/usr/share/doc/<package>/copyright`, and its source is available from the same archive (`apt-get source`). The licences below are the `License:` fields of each source package's `debian/copyright` (read from sources.debian.org); where that file is free text rather than machine-readable, the licence families named in the text are listed (found by a keyword search, so read them as a hint and open the file).
 
 | Source package | Version | Binary packages | Step | Licences (from `debian/copyright`) |
 |---|---|---|---|---|

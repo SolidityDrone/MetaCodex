@@ -15,7 +15,10 @@ and its `knowledge/LEARNINGS.md` (search it for your topic). Plan of record:
 - **Build an APK only when the owner says so**, and only after the self-test passed and its picture
   (`unity/Bench/selftest/terminal.png`) looks right. Grep the build log for `error CS` and `Shader error in`.
   Generated parts of the APK, refreshed before a build when their sources changed: `tools/local-ai-bundle.sh` (the
-  local AI), `tools/mqh-build.sh && tools/mqh-bundle.sh` (MQH for the headset's Linux), `userland/build-overlay.py`.
+  local AI), `tools/local-ai-models-pack.sh` (its four core models), `tools/userland-image.sh` (the ready Linux),
+  `tools/mqh-build.sh && tools/mqh-bundle.sh` (MQH for the headset's Linux), `userland/build-overlay.py`, and the
+  decision vectors after a voice-command change (`MCX_UITEST_ONLY=voicedecide`, see `docs/ready-on-install.md`).
+  `MCX_RELEASE=1` builds the release APK (not debuggable, optimised C++); `tools/release/make-release.sh` packs it.
 - Long commands (batch Editor, builds, `userland/g0-shell.sh`) run in the background; never wait in a
   foreground polling loop.
 - The headset: never scan the network for it. Ask for one USB plug-in, then Wi-Fi adb

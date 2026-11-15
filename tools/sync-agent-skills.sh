@@ -3,7 +3,7 @@
 #
 # Refreshes userland/agent-skills/: third-party skills bundled into the headset's Linux at
 # /root/.claude/skills (build-overlay.py), so agents there (Claude Code, opencode, MQH threads) can use
-# them next to MetaCodex's own skills (quest-gesture-plugins, quest-scripting, metacodex-context).
+# them next to MetaCodex's own skills (metacodex-context, quest-gesture-plugins, quest-plugins, quest-scripting, quest-views, worktree-per-thread).
 #   unity/  all of https://github.com/Unity-Technologies/skills (fresh shallow clone; Unity Companion
 #           License: "for Unity-dependent projects", which MetaCodex is)
 #   meta/   the Meta skills useful at runtime (hand tracking, interaction, comfort, UI, placement), copied
@@ -34,7 +34,7 @@ find "$DEST" -name '.DS_Store' -delete
   echo "# Agent skills bundled into the headset's Linux (/root/.claude/skills)"
   echo
   echo "Refreshed by \`tools/sync-agent-skills.sh\` on $(date -u +%Y-%m-%d). Do not edit these copies; MetaCodex's own"
-  echo "skills live in \`mqh/plugins/metacodex-guide/skills/\` (quest-gesture-plugins, quest-scripting, metacodex-context)."
+  echo "skills live in \`mqh/plugins/metacodex-guide/skills/\` (metacodex-context, quest-gesture-plugins, quest-plugins, quest-scripting, quest-views, worktree-per-thread)."
   echo
   echo "| Set | Source | Version | Licence | Skills |"
   echo "|---|---|---|---|---|"

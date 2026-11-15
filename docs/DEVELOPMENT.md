@@ -2,7 +2,7 @@
 
 This file holds the developer details that the [README](../README.md) leaves out.
 It names the tools, products and folders by their real names.
-Facts come from the working tree of 2026-11-12. Where a design document and the code differ, the code wins.
+Where a design document and the code differ, the code wins.
 
 ## Contents
 
@@ -39,6 +39,7 @@ The README uses neutral terms. This table maps them to the real names.
 | A Lua interpreter written in C# | MoonSharp |
 | A community Android build of proot | The Termux build of proot |
 | The shared folder | `Application.persistentDataPath`, mounted at `/mnt/quest` in the Linux |
+| The Whisp | The orb of the code: `UiOrb`, `ShellOrb`, the shader `MetaCodex/Orb`, the settings key `orb` |
 | A public skills site, a code host, a model host | skills.sh, GitHub, Hugging Face |
 | A terminal multiplexer | tmux |
 
@@ -51,7 +52,7 @@ The README uses neutral terms. This table maps them to the real names.
 | OpenXR | OpenXR plugin 1.18.0, vendor OpenXR plugin 2.6.1 |
 | Headset SDK | Meta XR SDK 205.0.0 (core, interaction, MR Utility Kit) |
 | Scripting | IL2CPP, ARM64 only, Vulkan, multithreaded rendering on |
-| Android | package `com.pnncl.metacodex`, versionName 0.7.16, versionCode 23, minSdk 32, targetSdk 34 |
+| Android | package `com.pnncl.metacodex`, versionName 0.7.19, versionCode 26, minSdk 32, targetSdk 34 |
 | Native pty library | C, Android NDK r27c (`native/pty/build.sh`) |
 | MQH | Node.js 24, TypeScript, SQLite |
 | Tests | .NET 8 (the version that the engine ships) |
@@ -63,31 +64,38 @@ Android 10 and later forbids `exec()` of files an app writes. Only files in `nat
 
 | Path | What | Language |
 |---|---|---|
-| `unity/` | The headset app. Runtime code in `Assets/MetaCodex/Runtime` (36,432 lines in 78 files: `AI/ App/ Hands/ Linux/ Scripting/ Security/ Shell/ Terminal/ UI/`). Editor tools and self-tests in `Assets/MetaCodex/Editor`. Java plugins in `Assets/Plugins/Android`. | C#, Java |
+| `unity/` | The headset app. Runtime code in `Assets/MetaCodex/Runtime` (`AI/ App/ Hands/ Linux/ Scripting/ Security/ Shell/ Terminal/ UI/`); the example app plugins in `Runtime/Scripting/Resources/PluginExamples`. Editor tools and self-tests in `Assets/MetaCodex/Editor`. Java plugins in `Assets/Plugins/Android`. | C#, Java |
 | `mqh/` | `apps/{server,host-daemon,cli}`, `packages/*`, `plugins/*` (including the `metacodex-guide` skills). | TypeScript, Node.js 24 |
 | `local-ai/` | The local AI service: `server/{main,engines,models,audio}.js`, `package.json`. | JavaScript (Bare) |
 | `userland/` | The proot and Debian fetchers, the overlay (`overlay/usr/local/bin/mcx-*`, `overlay/opt/metacodex/*`), `agent-skills/` (bundled third-party skills), `mqh/mqh-run`, `g0-shell.sh`. | shell, Python |
-| `native/` | `pty/`, `xr/` (`mcx_xr`), `hello-native/` (template), `examples/nightvision`, `runner/`, `module-template/`, `skills/` (5 native-app skills), `project/AGENTS.md`. | C, C++ |
-| `tests/` | `terminal/`, `typing/`, `sidebar/`. | C# (.NET 8) |
-| `tools/` | Compile check, batch Editor, device test, `qterm`, MQH build and bundle, `local-ai-bundle.sh`, `local-ai-dev.sh`, `voicebench/`, agent tests, `check-native-skills.py`, `return-test.sh`, `gpu-switch-test.sh`. | shell, Python |
+| `native/` | `pty/`, `xr/` (`mcx_xr`), `hello-native/` (template), `examples/nightvision`, `runner/`, `module-template/`, `skills/` (13 native-app skills), `project/AGENTS.md`. | C, C++ |
+| `tests/` | `terminal/`, `sidebar/`, `voicefx/`, `plugins/`. | C# (.NET 8), shell |
+| `tools/` | Compile check, batch Editor, device test, `qterm`, MQH build and bundle, `local-ai-bundle.sh`, `local-ai-dev.sh`, `local-ai-models-pack.sh`, `userland-image.sh`, `release/`, `voicebench/`, agent tests, `check-native-skills.py`, `comments-only-check.py`, `return-test.sh`, `gpu-switch-test.sh`. | shell, Python |
 | `docs/` | Design documents, licence inventory, diagrams. | Markdown |
 
 The build writes generated parts into `unity/Assets`:
-`Plugins/Android/libs/arm64-v8a/*.so`, `StreamingAssets/linux/{rootfs,overlay,mqh}.*` and `StreamingAssets/qvac/runtime.*`.
-The 30 MB rootfs is not in git. Rebuild it with `userland/fetch-rootfs.sh`.
+`Plugins/Android/libs/arm64-v8a/*.so`, `StreamingAssets/linux/{rootfs,overlay,mqh}.*`, `StreamingAssets/qvac/runtime.*`,
+`StreamingAssets/qvac/models/` with `models.json`, and `StreamingAssets/qvac/decider-vectors.bin`.
+The Linux archive and the models are not in git: `userland/fetch-rootfs.sh` and `tools/userland-image.sh` make the
+first, `tools/local-ai-models-pack.sh` packs the second ([ready-on-install.md](ready-on-install.md#building-it)).
 
 ## Commands
 
 Run all commands from the repository root, in a Linux shell (WSL on the development machine).
 
 ```bash
-export PATH="/home/drone/projects/unity-skill-set/bin:$PATH"      # adb = the Windows adb shim
+export PATH="<skill set>/bin:$PATH"     # on the development machine: adb is a shim to the Windows adb
 userland/fetch-proot.sh && userland/fetch-rootfs.sh && native/pty/build.sh && python3 -I userland/build-overlay.py
+tools/userland-image.sh             # the ready Linux of the APK (Debian layer + Node.js + base packages)
+tools/local-ai-models-pack.sh       # the four core models into the APK (--clean: a light development APK)
 tests/terminal/run-core-tests.sh    # ~10 s, no Editor: emulator vs tmux + extractor (ALL OK)
 tools/cscheck.sh                    # ~10 s, no Editor: compile check, Editor and device defines
 tools/unity-batch.sh BatchSetup     # headless: configure, scene, render self-test (unity/Bench/selftest/terminal.png)
 tools/unity-batch.sh BatchCheck 45  # headless: scene + terminal self-test + UI self-test (unity/Bench/selftest/ui-*.png)
 tools/unity-batch.sh BatchBuild 75  # APK -> unity/Builds/MetaCodex.apk (only when asked)
+tools/release/make-release.sh       # release/MetaCodex-<version>/: the APK, install scripts, INSTALL.md, SHA256SUMS
+tests/plugins/run-plugin-tests.sh --examples   # app plugins on the real script host with a fake app, no Editor
+python3 tools/comments-only-check.py <git-ref> # a C# change touched only comments and whitespace
 tools/mqh-build.sh && tools/mqh-dev.sh start   # MQH in WSL, isolated from a real bb (ports 38990/38991)
 tools/sync-agent-skills.sh          # refresh the bundled Unity + Meta agent skills (userland/agent-skills)
 tools/agent-plugin-test.sh          # a fresh agent writes a gesture plugin from the skills (replayed by the UI self-test)
@@ -99,12 +107,16 @@ tools/device-test.sh                # install the APK and drive the in-app termi
 Generated parts before a build:
 
 - `tools/local-ai-bundle.sh` packs the local AI service.
-- `tools/mqh-build.sh && tools/mqh-bundle.sh` pack MQH (server, host daemon, CLI and plugins, without the Claude Code provider and the Pi provider).
+- `tools/local-ai-models-pack.sh` packs the four core models.
+- `tools/userland-image.sh` makes the ready Linux.
+- The decision vectors: `tools/local-ai-dev.sh pc start && MCX_UITEST_ONLY=voicedecide tools/unity-batch.sh BatchUiTest`, again when the voice commands change.
+- `tools/mqh-build.sh && tools/mqh-bundle.sh` pack MQH (server, host daemon, CLI and plugins, without the Claude Code provider).
 - `userland/build-overlay.py` builds the overlay.
 
 Inside the headset, in a terminal:
 `mcx-app doctor|new|check|build|verify|install|launch|run|status|dev|runner|logs|info`, `mcx-setup [quest|ndk|agents|qvac|all]`,
-`mcx-ui ...`, `mcx-secret ...`, `mcx-ai ...`, `mcx-project type|set`, `mqh ...`.
+`mcx-ui ...` (for example `mcx-ui plugin example timers`, `mcx-ui plugin check <id>`), `mcx-secret ...`, `mcx-ai ...`,
+`mcx-project type|set`, `mqh ...`.
 
 ## Device test workflow
 
@@ -113,15 +125,14 @@ Inside the headset, in a terminal:
 - The app writes `files/session_log.txt`.
 - Dev AI service: `tools/local-ai-dev.sh device start` (on the headset, over adb) or `tools/local-ai-dev.sh pc start` (in WSL).
 - Return-path tests: `tools/return-test.sh <pkg> [report] [cold]` and `tools/gpu-switch-test.sh <pkg> 10`.
-- The checklist is [TEST_CHECKLIST.md](TEST_CHECKLIST.md). Sections 25 to 33 are still to tick.
+- App plugins on the headset: `tests/plugins/device-test.sh [timers|calendar]`.
+- The checklist is [TEST_CHECKLIST.md](TEST_CHECKLIST.md), by area.
 
 ## Release build and debuggable build
 
 - `tools/unity-batch.sh BatchBuild` makes a development (debuggable) APK. Anyone with `adb` can `run-as` the app and use its Keystore key.
-- `MCX_RELEASE=1 tools/unity-batch.sh BatchBuild` makes a release APK. Use it before you store real keys on a shared device.
-- The record does not say whether the newest APK is a release build.
+- `MCX_RELEASE=1 tools/unity-batch.sh BatchBuild` makes a release APK: not debuggable, with optimised C++ (IL2CPP Release; a development APK keeps the Debug configuration). Use it before you store real keys on a shared device, and for the release folder: `tools/release/make-release.sh` packs whatever `unity/Builds/MetaCodex.apk` is.
 - The manifest declares `REQUEST_INSTALL_PACKAGES`. A store build must not declare it.
-- The APK of 2026-11-11 is older than the foreground-service and wake-lock code (2026-11-12). Build again to test both.
 
 ## Test suites
 
@@ -129,25 +140,26 @@ Inside the headset, in a terminal:
 |---|---|---|
 | Terminal core (emulator vs tmux on 7 programs) | `tests/terminal/run-core-tests.sh` | 62 core checks |
 | Side bar | `tests/sidebar/run-sidebar-tests.sh` | not counted here |
-| Thread view, pure checks | see `thread-view.md` | 30 |
-| MQH type check | in `mqh/` | 61/61 |
+| Voice effect | `tests/voicefx/run-voicefx-tests.sh` | |
+| App plugins (real script host, fake app) | `tests/plugins/run-plugin-tests.sh --examples` | load, tiles, every button, 3 h of clock, voice lint, restart, unload |
+| MQH type check and tests | in `mqh/` | |
 | `concurrency-limit` plugin | in `mqh/` | 35 |
-| UI self-test (headless Editor) | `tools/unity-batch.sh BatchUiTest` | about 340 checks, needs 3 GB free |
+| UI self-test (headless Editor) | `tools/unity-batch.sh BatchUiTest` | 52 sections, needs 3 GB free |
 | Native-app skills | `python3 tools/check-native-skills.py` | every command, flag, path and code block |
+| Comment-only changes | `python3 tools/comments-only-check.py <git-ref>` | every changed `.cs` file |
 
 Run one UI section: `MCX_UITEST_ONLY=voice tools/unity-batch.sh BatchUiTest`.
-Sections include `decider`, `voiceexport,voicedecide`, `context`, `chat`, `sidebar`, `workspaces`, `control` and `syskeyboard`.
+Sections include `decider`, `context`, `chat`, `sidebar`, `workspaces`, `threadwindows`, `archive`, `firstrun`, `control` and `syskeyboard`; `voiceexport` and `voicedecide` run only when named.
 
 ## Voice bench
 
-- `python3 tools/voicebench/make_eval.py` makes the 180-sentence English set (the 175 Italian sentences were removed on 2026-11-12: voice is English only).
+- `python3 tools/voicebench/make_eval.py` makes the 180-sentence English set.
 - Export the registry from the Editor: `echo voiceexport > unity/Bench/uitest-only && tools/unity-batch.sh BatchUiTest 20`.
 - Start the PC AI service: `tools/local-ai-dev.sh pc start`. Then run `python3 tools/voicebench/llm_run.py`.
-- Compare routers: `~/mcxwork/voicebench/venv/bin/python tools/voicebench/bench.py`.
+- Compare routers: `tools/voicebench/bench.py`, in its own Python venv ([tools/voicebench/README.md](../tools/voicebench/README.md)).
 - Score the app run: `tools/voicebench/score_app.py`.
-- Results: `tools/voicebench/results/2026-11-09-app-decision-model.md`, `2026-11-09-router-vs-llm.md`, `2026-11-11-thread-sidebar.md`.
-- The decision model keeps 1,373 example sentences for 17 commands in the PC build of the bench. A cache file `voice-decider-vectors.bin` (about 2 MB) holds the vectors.
-- Earlier router comparison on the PC: MiniLM-L12 81 %, e5-small 78 to 79 %, English-only small encoders 64 to 74 %, static embedding models 69 to 75 %.
+- Results: `tools/voicebench/results/` (the latest: `2026-11-12-english-only.md`).
+- The vectors of every command example ship in the APK as `qvac/decider-vectors.bin`; the app keeps its own cache in `voice-decider-vectors.bin`. The router comparison is in [voice.md](voice.md#the-decision-model).
 
 ## Local AI service
 
@@ -160,8 +172,8 @@ Sections include `decider`, `voiceexport,voicedecide`, `context`, `chat`, `sideb
 - Models: `ggml-base-q8_0.bin` (81,768,585 bytes), `Qwen3-0.6B-Q4_0.gguf` (382,156,480), `multilingual-e5-small-q8_0.gguf` (132,439,008), `supertonic3-q4_0.gguf` (84,658,368). Each is pinned by revision and SHA-256 in `local-ai/server/models.js`.
 - API: `GET /health`, `GET /status`, `POST /v1/models/install`, `/v1/embeddings`, `/v1/audio/transcriptions`, `/v1/audio/speech`, `/v1/chat/completions`, `/v1/warmup`, `/config`, `/unload`, `/pause`, `/resume`, `/shutdown`, `GET /log`.
 - From the Linux: `mcx-ai status|install|transcribe f.wav|say "text"|chat "prompt"|env|log`.
-- The models install from VOICE > INSTALL MODELS. The first three took 72 s on the headset (2026-11-07).
-- GPU test of 2026-11-08 (app closed): the LLM made 13.8 tok/s on the Adreno GPU (OpenCL) against 37 on 2 CPU threads (57 on 6). Whisper base: 328 to 346 ms on the GPU against 430 to 450 ms on the CPU. The NPU is closed to apps. None of this is in the APK.
+- The four core models ship in the APK ([ready-on-install.md](ready-on-install.md)). VOICE > INSTALL MODELS downloads them into a development APK built without them.
+- A GPU test with the app closed: the LLM made 13.8 tok/s on the GPU (OpenCL) against 37 on 2 CPU threads (57 on 6). Whisper base: 328 to 346 ms on the GPU against 430 to 450 ms on the CPU. The NPU is closed to apps. The service stays on the CPU.
 
 ## MQH
 
@@ -174,7 +186,7 @@ Sections include `decider`, `voiceexport,voicedecide`, `context`, `chat`, `sideb
 - Plugin folders (15): `ask-user-question, automations, concurrency-limit, custom-instructions, environment-git-worktree, environment-personal-workspace, environment-project-checkout, git, github-pr-status, metacodex-guide, provider-acp, provider-claude-code, provider-codex, provider-retry, workflows`. `github-pr-status` is source only (the CLI compiles against its contract): it is not registered or bundled. Why each plugin stays or went: `docs/mqh.md`, "Plugins".
 - Agent CLIs: Codex (provider `codex`) and OpenCode (provider `acp-opencode` through ACP) work in MQH threads. Claude Code runs in a terminal. Cursor, Pi and other agents are switched off.
 - The app polls MQH over HTTP: the open thread every 0.8 s while the agent works (2.5 s idle), thread metadata every 2 s or 3 s, other threads every 5 s or 15 s.
-- Per-project native-app skills: `mcx-project set <dir> native` links `quest-native-apps`, `-xr`, `-recipes`, `-dev-loop` and `-debug` into `<project>/.claude/skills`. It writes a managed block into `AGENTS.md` and `CLAUDE.md` between `<!-- metacodex:native-app -->` markers. `research` writes a research note between `<!-- metacodex:research -->` markers (notes in Markdown, sources cited, no app build); `default` (old name `general`) removes both. New projects live in `/root/metacodex-projects/{native,default,research}/<name>`, each a git repository.
+- Per-project native-app skills: `mcx-project set <dir> native` links the 13 `quest-native-*` skills into `<project>/.claude/skills`. It writes a managed block into `AGENTS.md` and `CLAUDE.md` between `<!-- metacodex:native-app -->` markers. `research` writes a research note between `<!-- metacodex:research -->` markers (notes in Markdown, sources cited, no app build); `default` (old name `general`) removes both. New projects live in `/root/metacodex-projects/{native,default,research}/<name>`, each a git repository.
 
 ## How the terminal works
 
@@ -191,7 +203,7 @@ App: TerminalView (TMP rows + cell mesh) <- VtTerminal (xterm emulator) <- pty b
 - `--link2symlink` fakes a hard link as a symlink to a hidden `.l2s.<name>` file that holds the absolute host path. Start proot with the path `/data/data/<pkg>/...`, not `/data/user/0/...`.
 - The editor-only classes `TcpTerminalSession` (a WSL pty server) and `EchoSession` exist for tests.
 - Debian's `/etc/profile` resets root's PATH. A drop-in at `/etc/profile.d/metacodex.sh` adds `~/.local/bin` again.
-- Rootfs fetch: `debian:trixie-slim`, linux/arm64, layer digest `sha256:acd43e9b...`, fetched 2026-11-06 (`unity/Assets/StreamingAssets/linux/rootfs.json`).
+- The official layer: `debian:trixie-slim`, linux/arm64, layer digest `sha256:acd43e9b...` (the field `base` of `unity/Assets/StreamingAssets/linux/rootfs.json`).
 
 ## Machine guards
 
@@ -206,28 +218,23 @@ App: TerminalView (TMP rows + cell mesh) <- VtTerminal (xterm emulator) <- pty b
 
 | Document | Content |
 |---|---|
-| [ui.md](ui.md) | Spatial UI, hands, gestures, panels, Ambient Focus. |
-| [voice.md](voice.md) | The voice path, models, measurements. |
+| [ready-on-install.md](ready-on-install.md) | What the APK carries, the first start, the release folder. |
+| [perf.md](perf.md) | Frame rate: rendering options, the first start, main thread, depth, UI shader. |
+| [ui.md](ui.md) | Spatial UI, the Whisp, windows, hands, gestures, layouts, Ambient Focus. |
+| [control-center.md](control-center.md) | CONTROL and the main menu. |
+| [scripting.md](scripting.md) | Lua scripts, gesture plugins and app plugins: the API, limits, tests. |
+| [thread-view.md](thread-view.md), [thread-sidebar.md](thread-sidebar.md), [workspaces.md](workspaces.md) | Thread windows and groups, the side bar, workspaces. |
+| [voice.md](voice.md) | The voice path, the registry, the decision model, spoken replies. |
 | [local-ai.md](local-ai.md) | The local AI runtime and why it runs in its own process. |
-| [mqh.md](mqh.md) | The agent harness. |
-| [mqh-spatial.md](mqh-spatial.md) | Design of `spatial.json` panels (not rendered yet). |
-| [secrets.md](secrets.md) | The vault, policies and the threat model. |
+| [local-coder.md](local-coder.md) | The local coding model. |
 | [session-context.md](session-context.md) | The session context (CSCP). |
+| [mqh.md](mqh.md) | The agent harness. |
+| [mqh-spatial.md](mqh-spatial.md) | The `spatial.json` format of plugin panels (served, not rendered). |
+| [secrets.md](secrets.md) | The vault, policies and the threat model. |
 | [native-build-and-install.md](native-build-and-install.md) | The native app pipeline, background behaviour and guards. |
-| [thread-view.md](thread-view.md), [thread-sidebar.md](thread-sidebar.md), [workspaces.md](workspaces.md), [control-center.md](control-center.md) | Thread view, side bar, workspaces, control center. |
-| [VOICE_DECISION_RESEARCH.md](VOICE_DECISION_RESEARCH.md) | Research behind the decision model. |
-| [core-v0-spec.md](core-v0-spec.md) | Core v0, the superseded prototype. |
+| [TEST_CHECKLIST.md](TEST_CHECKLIST.md) | The headset checklist, by area. |
 | [LICENSES.md](LICENSES.md) | Licence inventory. |
 | [diagrams/README.md](diagrams/README.md) | The diagram kit that draws the README images. |
-
-Known differences between these documents and the code (the code wins):
-
-- `mqh.md` says MQH uses HTTP and a WebSocket. The app polls over HTTP only.
-- `session-context.md` says the memory is not in a file in the Linux. The app saves `session-context.jsonl` in the shared folder.
-- `voice.md` lists 17 commands and some old idle times. The code registers 25 commands and unloads speech and the LLM after 30 min.
-- `local-ai.md` says MQH and the agents share cores 3-5. Since 2026-11-10 they run under `:ai` on cores 0-2.
-- `LICENSES.md` says MQH is not in the APK. `mqh.tar.gz` is in the APK.
-- `secrets.md` says "StrongBox or TEE". On the test headset the key is in the TEE.
 
 ## Third-party parts
 

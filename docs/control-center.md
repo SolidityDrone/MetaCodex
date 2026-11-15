@@ -1,8 +1,7 @@
 # CONTROL: one place for settings, and a calmer main menu
 
-Owner, 2026-11-11: the radial (wrist menu) is overwhelming (19 tiles); MQH, agents and providers are not "in
-settings"; wanted a comprehensive control panel with a sidebar of categories, windows merged and placed smartly,
-rich but intuitive and organized, without merging too much and without oversimplifying.
+CONTROL is one window for everything that sets the app up, with a rail of categories beside it. The main menu keeps
+only the work windows and the quick actions.
 
 ## The split: work windows stay windows, setup goes into CONTROL
 
@@ -14,7 +13,7 @@ rich but intuitive and organized, without merging too much and without oversimpl
 Setup is not merged into one big window: each category keeps its own window (its tabs, its tests), and a sidebar
 rides on its left. That keeps the pages as rich as they are (MQH's five tabs, the gesture studio, the vault's git, the
 voice models), while the user sees one control center. The six windows have one size (`ControlPageW` x
-`ControlPageH`, 0.76 x 0.66 m; branch feat/polish): a category taking another's place covers the same rectangle, so it
+`ControlPageH`, 0.76 x 0.66 m): a category taking another's place covers the same rectangle, so it
 never grows over a neighbour and the view does not jump.
 
 ## CONTROL (`Shell/ShellControl.cs`)
@@ -38,18 +37,20 @@ never grows over a neighbour and the view does not jump.
 - **Where it opens**: in front of the user, with room for the rail on its left (the placement reserves it). It comes
   back where it was while that place is free and in view.
 - Every old id still opens its page (`agents`, `mqh`, `vault`, `git`, `skills`, `gestures`, `daemon` (MQH > STATUS),
-  `focus`, `storage`, ...), now with the rail; voice also knows "control panel", "control center".
+  `focus`, `storage`, ...), with the rail; voice also knows "control panel", "control center".
 - **Cross links**: HANDS > GESTURE STUDIO ▸ opens MQH on GESTURES; SYSTEM > STORAGE > AI MODELS opens VOICE; ABOUT >
   LICENCES ▸ opens FILES at `/usr/share/doc/metacodex`. System pages of Horizon OS sit where they belong: HORIZON
   HANDS ⚙ on HANDS, APP PERMISSIONS ⚙ on ABOUT (LINKS keeps only ⟳ SCAN; FILES has FILES APP).
 
-## The main menu (wrist and dock): 19 -> 13
+## The main menu (DOCK and wrist menu): 11 tiles
 
-- One table builds both (`MainMenuItems`, `Shell/ShellWrist.cs`): glyph, line icon, label, action, lit state.
-- Inner ring (most used): TALK, TERM, FILES, THREADS, WEB, CONTROL
-- Outer ring: TERMS, CLIP, FOCUS (on / off), SELECT, KEYS, CENTER (TABLE is gone with the table keyboard,
-  2026-11-13; KEYS opens the system keyboard)
-- The dock (when the wrist menu is off): the same in the same order, two rows of six. Its tiles show what is on as the wrist's do (selected while TALK listens, FILES / THREADS / WEB /
+- One table builds both (`MainMenuItems`, `Shell/ShellWrist.cs`): glyph, line icon, label, action, lit state, and the
+  first start's lock step.
+- Inner ring (most used): TALK, TERMS, FILES, THREADS, WEB, CONTROL.
+- Outer ring: CLIP, FOCUS (on / off), SELECT, KEYS (the system keyboard for the terminal), CENTER.
+- App plugins can add up to 6 tiles of their own (`menu.add`), on the DOCK and on the wrist menu's outer ring.
+- The DOCK is the default main menu; the wrist menu is made only when DISPLAY's "Main menu on the wrist" is on. The DOCK shows
+  the same tiles in the same order. Its tiles show what is on as the wrist's do (selected while TALK listens, FILES / THREADS / WEB /
   TERMS / CLIP are open, CONTROL shows, FOCUS and SELECT are on, the keyboard is up): a state-only change, 4 times a
   second.
 - Gone from the menu (inside CONTROL): AGENTS, MQH, SYSTEM, VOICE, VAULT, GIT, SETUP. THREADS gets a ◆ AGENTS button
@@ -68,6 +69,6 @@ where it was while that place is free and in view.
   its page, category swaps in place, old ids, the close link, FLOAT room, the reserved place, statuses, contextual
   openers; then `ControlPolish`: page ids, `control` toggled and closed, one size, HANDS' row and the studio link, MQH's
   title and STATUS, DISPLAY's dimmed controls, ABOUT's buttons, LINKS / FILES / SYSTEM rows, AGENTS' buttons, LOG's
-  CLEAR ALL, the dock's lit tiles, ShowTerminalKeyboard. Updated: `wrist`, `web`, `mqh`, `placement` (the five-panel
-  scene and the opened-from-a-button scene).
-- Headset: docs/TEST_CHECKLIST.md sections 26 and 35.
+  CLEAR ALL, the dock's lit tiles, ShowTerminalKeyboard. Sections `wrist`, `web`, `mqh` and `placement` (the
+  five-panel scene and the opened-from-a-button scene) check CONTROL too.
+- Headset: [TEST_CHECKLIST.md](TEST_CHECKLIST.md), areas "CONTROL and settings" and "Main menu: DOCK and wrist menu".

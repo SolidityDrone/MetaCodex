@@ -1,7 +1,7 @@
 # Agent skills bundled into the headset's Linux (/root/.claude/skills)
 
 Refreshed by `tools/sync-agent-skills.sh` on 2026-11-07. Do not edit these copies; MetaCodex's own
-skills live in `mqh/plugins/metacodex-guide/skills/` (quest-gesture-plugins, quest-scripting, metacodex-context).
+skills live in `mqh/plugins/metacodex-guide/skills/` (metacodex-context, quest-gesture-plugins, quest-plugins, quest-scripting, quest-views, worktree-per-thread).
 
 | Set | Source | Version | Licence | Skills |
 |---|---|---|---|---|
