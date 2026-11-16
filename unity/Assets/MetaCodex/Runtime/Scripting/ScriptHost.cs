@@ -901,6 +901,26 @@ namespace MetaCodex.Scripting
             return null;
         }
 
+        /// The full window ids of a plugin's windows (ui.panel): `main` first, then the others in the order they were made.
+        public IReadOnlyList<string> WindowsOf(Entry e)
+        {
+            var ids = new List<string>();
+            for (int i = 0; i < _windows.Count; i++)
+            {
+                var w = _windows[i];
+                if (w.Owner != e) continue;
+                if (w.LocalId == "main") ids.Insert(0, w.FullId); else ids.Add(w.FullId);
+            }
+            return ids;
+        }
+
+        /// Opens one of a plugin's windows as ui.open does (its spec is sent first when the app has not got it yet).
+        public bool OpenWindowOf(Entry e, string fullId)
+        {
+            var w = FindWindow(fullId);
+            return w != null && w.Owner == e && ShowOwn(w, 1);
+        }
+
         private void RemoveOwnedUi(Entry e)
         {
             _wallTimers.RemoveAll(t => t.Owner == e);
