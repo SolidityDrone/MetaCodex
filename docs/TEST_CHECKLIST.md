@@ -436,7 +436,12 @@ Files and git:
 WEB:
 
 - [ ] WEB on the DOCK or the wrist → a window opens beside the others on a start page (bookmarks, local servers); the app stays on, everything else stays visible
-- [ ] Type `localhost:8000` (with `python3 -m http.server 8000` running in a terminal) → GO: the page shows in the window; tap a link with a pinch and with a fingertip; drag the page to scroll; ◀ ▶ ⟳ work; the title and "loading %" show under the toolbar
+- [ ] Type `localhost:8000` (with `python3 -m http.server 8000` running in a terminal) → GO: the page shows in the window (if it says "Plain http pages are blocked by the app's network settings", the build packs a network security config without cleartext: `enableNSCConfig` in `Assets/Oculus/OculusProjectConfig.asset`); tap a link with a pinch and with a fingertip; drag the page to scroll (on this localhost page the drag scrolls with the wheel); ◀ ▶ ⟳ work; while a page loads ⟳ is ✕ and a line under the toolbar fills
+- [ ] A page with a plain video file (not YouTube: a sample .mp4, a news site's player) → it plays smoothly, with sound, well past the first seconds; its full-screen button → the video fills the page area, EXIT FULL SCREEN (or ◀) → back to the page; close the WEB window → the sound stops, open it → the page is there
+- [ ] logcat tag `MetaCodexWeb` shows `capture=virtual-display` (not `capture=canvas`); the session log shows `web: capture display`
+- [ ] A long page: a quick drag flings on and slows down; - and + zoom; an address that does not exist → "This page did not open" with the reason and the address, ⟳ tries again
+- [ ] A page that asks for the camera or the microphone → refused, a toast says so; a download link → a toast, nothing saved; an alert or a confirm on a page → the app's dialog over WEB, OK / CANCEL reach the page
+- [ ] Copy a line in a terminal, tap a field on a page, ⎘ → the line is in the field; with a Bluetooth keyboard: tap the page, type, Ctrl+A, Shift+arrows, Ctrl+V, Esc → all reach the page and nothing types into the terminal; tap a terminal → the keyboard types there again
 - [ ] ☰ LINKS → bookmarks add and remove; LOCAL SERVERS lists running ports; the bottom row has only ⟳ SCAN; start `python3 -m http.server 8000` in a terminal: LINKS > SCAN shows :8000 → it opens in the WEB window
 - [ ] Tap a text field on a page, ⌨, type, Done → the text is in the field; ⏎ submits, ⌫ deletes
 - [ ] A dev server link printed in a terminal (`⇗` on it) → it opens in the WEB window; a sign-in link (`claude auth login`) opens in the headset's own browser instead
