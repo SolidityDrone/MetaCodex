@@ -9,28 +9,36 @@ namespace MetaCodex.Shell
 {
     /// WEB: the in-app browser window (owner 2026-11-10: "it's boring to have the system browser turn the app off";
     /// Horizon OS cannot show its browser beside an immersive app: even its Web Tasks send the app to the background).
-    /// On the headset the page is Android's own WebView (MetaCodexWebView.java: the content of a hardware-accelerated
-    /// window on a private virtual display that renders into an ImageReader, so video plays and the page animates at the
-    /// display's rate; each new frame is copied into one buffer, 60 a second at most, nothing while the page is still;
-    /// the old off-screen canvas path if that display cannot be made), uploaded here into a texture on a flat quad (the
-    /// window never bends: ShellLayout.StaysFlat, so the page and the pointer agree). A ray's pinch or a fingertip is a
-    /// touch, a drag scrolls, the pointer over the page hovers, ⌨ types into the page's focused field, ⏎ and ⌫ are
-    /// the keys. Every page the app opens (GO, bookmarks, local servers, terminal links, voice, Lua browser.open) opens
-    /// here; ⇗ sends the page to Horizon OS's browser (sign-in pages that refuse embedded browsers). Remote debugging is
-    /// on: chrome://inspect on the PC (adb) shows the page's console. In the Editor there is no WebView: the window works,
-    /// the page area says so.
+    /// On the headset the page is Android's own WebView (MetaCodexWebView.java): the content of a hardware-accelerated
+    /// window on a private virtual display that renders into an ImageReader (video plays, the page animates at the
+    /// display's rate); each new frame is copied into one buffer (60 a second at most, nothing while the page is still),
+    /// uploaded here into a texture on a flat quad (the window never bends: ShellLayout.StaysFlat, so the page and the
+    /// pointer agree). If that display cannot be made, the old path draws the page off screen into the same buffer.
+    /// A ray's pinch or a fingertip is a touch, a drag scrolls (a quick one flings), the pointer over the page hovers,
+    /// ⌨ types into the page's focused field, ⏎ and ⌫ are the keys, - and + zoom. ⟳ is ✕ (stop) while a page loads, a
+    /// line under the toolbar shows how far it is; a page that fails shows why, ⟳ tries again. A page's full screen
+    /// (video) fills the page area and EXIT FULL SCREEN takes the address's place. Page dialogs (alert, confirm) open
+    /// as the app's dialogs; downloads, file pickers, other apps' links and camera, microphone or location requests
+    /// are refused with a toast. Every page the app opens (GO, bookmarks, local servers, terminal links, voice, Lua
+    /// browser.open) opens here; ⇗ sends the page to Horizon OS's browser (sign-in pages that refuse embedded browsers).
+    /// Remote debugging is on: chrome://inspect on the PC (adb) shows the page's console. In the Editor there is no
+    /// WebView: the window works, the page area says so.
     public sealed partial class MetaCodexShell
     {
         public const int WebW = 1280, WebH = 800;
+        private static readonly Color32 WebDarkFill = new Color32(6, 16, 28, 255);
         private UiPanel _web;
         private UiTextField _webUrl;
         private UiLabel _webTitle, _webNote;
-        private UiButton _webBack, _webFwd;
+        private UiButton _webBack, _webFwd, _webReload, _webGo, _webZoomOut, _webZoomIn, _webExitFull;
+        private UiProgress _webProgress;
         private WebPage _webPage;
         private Texture2D _webTex;
         private Mesh _webQuad;
-        private string _webCurrent = "", _webError = "", _webMode = "";
-        private bool _webOnStart;
+        private string _webCurrent = "", _webError = "", _webMode = "", _webTitleShown, _webNoteShown;
+        private bool _webOnStart, _webLoading, _webFull, _webDark, _webReadState;
+        private int _webProgressShown = -1, _webJsShown, _webJsAnswered, _webJsDismissed;
+        private (int id, bool ok) _webLastJsAnswer;
         private float _webNextState;
         private Vector2 _webLastHover = new Vector2(-1f, -1f);
         private (int action, Vector2 page) _webLastTouch = (-1, default);
@@ -72,20 +80,31 @@ namespace MetaCodex.Shell
                 x += w + t.Gap;
                 return b;
             }
-            _webBack = B("◀", () => WebCall("back"), sq);
+            _webBack = B("◀", () => WebCall("back"), sq);       // in full screen: leaves it
             _webFwd = B("▶", () => WebCall("forward"), sq);
-            B("⟳", () => WebCall("reload"), sq);
-            float right = 0.056f + (sq + t.Gap) * 5f; // GO, then ⌨ ⏎ ⌫ ☰ ⇗
-            _webUrl = p.Add(new UiTextField("", "", u => OpenBrowser(u), "a URL, or localhost:5173") { Rect = new Rect(x, c.y, c.xMax - right - x - t.Gap, bh) });
+            _webReload = B("⟳", () => WebCall(_webLoading ? "stop" : "reload"), sq); // ✕ while a page loads: stops it
+            float right = 0.056f + (sq + t.Gap) * 7f; // GO, then ⌨ ⏎ ⌫ - + ☰ ⇗
+            float urlX = x;
+            _webUrl = p.Add(new UiTextField("", "", u => OpenBrowser(u), "an address, or words to search") { Rect = new Rect(urlX, c.y, c.xMax - right - urlX - t.Gap, bh) });
             x = c.xMax - right;
-            B("GO", () => OpenBrowser(_webUrl.Text), 0.056f, UiButtonStyle.Primary);
+            _webGo = B("GO", () => OpenBrowser(_webUrl.Text), 0.056f, UiButtonStyle.Primary);
+            // a page in full screen: one button where the address and GO are
+            _webExitFull = p.Add(new UiButton("EXIT FULL SCREEN", () => WebCall("exitFullscreen"), UiButtonStyle.Primary) { Rect = new Rect(urlX, c.y, c.xMax - right + 0.056f - urlX, bh) });
+            _webExitFull.SetVisible(false);
             B("⌨", WebType, sq);
             B("⏎", () => WebKey(66), sq);  // KEYCODE_ENTER
             B("⌫", () => WebKey(67), sq);  // KEYCODE_DEL
+            _webZoomOut = B("-", () => WebCallInt("zoom", -1), sq);
+            _webZoomIn = B("+", () => WebCallInt("zoom", 1), sq);
             B("☰", () => OpenPanel("links"), sq); // bookmarks and local servers, beside this window
             B("⇗", () => OpenSystemBrowser(_webCurrent), sq);
+            // how far the page has loaded: a line under the toolbar, only while it loads
+            _webProgress = p.Add(new UiProgress(0f) { Rect = new Rect(c.x, c.y + bh + 0.0008f, c.width, 0.0022f) });
+            _webProgress.SetVisible(false);
+            _webProgressShown = -1;
             float titleY = c.y + bh + t.Gap * 0.5f, top = titleY + 0.016f;
             _webTitle = p.Add(new UiLabel("", t.SmallSize) { Rect = new Rect(c.x, titleY, c.width, 0.016f), Color = t.TextDim });
+            _webTitleShown = null;
             float pw = c.width, ph = pw * WebH / WebW;
             if (top + ph > c.yMax) { ph = c.yMax - top; pw = ph * WebW / WebH; }
             var area = new Rect(c.x + (c.width - pw) * 0.5f, top, pw, ph);
@@ -93,16 +112,16 @@ namespace MetaCodex.Shell
             if (_webTex == null) // kept when the panels are rebuilt (accent colour)
             {
                 _webTex = new Texture2D(WebW, WebH, TextureFormat.RGBA32, false, false) { name = "web page", wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
-                var fill = new Color32[WebW * WebH];
-                for (int i = 0; i < fill.Length; i++) fill[i] = new Color32(6, 16, 28, 255);
-                _webTex.SetPixels32(fill);
-                _webTex.Apply(false, false);
+                WebFillDark();
             }
             AddWebQuad(p, area);
-            _webNote = p.Add(new UiLabel("", t.BodySize) { Rect = new Rect(area.x + 0.03f, area.y + area.height * 0.4f, area.width - 0.06f, 0.06f), Align = TextAlignmentOptions.Center, Color = t.TextDim, Wrap = true });
-#if UNITY_EDITOR
-            _webNote.Set("The page shows on the headset (Android's WebView). ⇗ opens it in your browser here.");
-#endif
+            // the Editor's hint, a fatal error, or the page that did not open (its text over the darkened page)
+            _webNote = p.Add(new UiLabel("", t.BodySize) { Rect = new Rect(area.x + 0.03f, area.y + area.height * 0.25f, area.width - 0.06f, area.height * 0.5f), Align = TextAlignmentOptions.Center, Color = t.TextDim, Wrap = true });
+            _webNoteShown = null;
+            _webFull = false;
+            _webLoading = false;
+            _webReadState = true; // a rebuilt window (accent colour) takes the page's state at once
+            WebRefreshNote();
             p.Tick += _ => TickWeb();
             p.Opened += _ =>
             {
@@ -110,7 +129,7 @@ namespace MetaCodex.Shell
                 WebCallBool("setPaused", false);
                 if (string.IsNullOrEmpty(_webCurrent)) { WebStartPage(); ProbeLocalServers(); }
             };
-            p.Closed += _ => WebCallBool("setPaused", true); // no drawing, no copying while closed
+            p.Closed += _ => WebCallBool("setPaused", true); // the page's media pause; no drawing, no copying while closed
         }
 
         /// The page's quad, 1 mm in front of the window, its rows top first (the WebView's order).
@@ -138,6 +157,16 @@ namespace MetaCodex.Shell
             p.TagRenderer(mr, Vector3.zero); // the window's slot: the page is cast with it
             mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             mr.receiveShadows = false;
+        }
+
+        /// The page area in the window's dark colour (at start, and under a page that did not open). Writes into the
+        /// texture's own memory: no array.
+        private void WebFillDark()
+        {
+            if (_webTex == null) return;
+            var px = _webTex.GetPixelData<Color32>(0);
+            for (int i = 0; i < px.Length; i++) px[i] = WebDarkFill;
+            _webTex.Apply(false, false);
         }
 
         /// What a typed address means: a scheme is kept; localhost, a LAN IP or a host with a port is http; a word with
@@ -216,6 +245,7 @@ namespace MetaCodex.Shell
             else foreach (var l in local) sb.Append("<a href=\"").Append(Escape(l)).Append("\">").Append(Escape(l)).Append("</a>");
             sb.Append("</body></html>");
             _webTitle?.Set("start page");
+            _webTitleShown = "start page";
             _webUrl?.Set("");
             WebCall("loadHtml", sb.ToString(), "about:blank");
         }
@@ -272,7 +302,7 @@ namespace MetaCodex.Shell
                 _wvHover = WebMethod("hover", "(FF)V");
                 return true;
             }
-            catch (Exception ex) { Log("web: " + ex.Message); _webError = "webview: " + ex.Message; _wv = null; return false; }
+            catch (Exception ex) { Log("web: " + ex.Message); _webError = "webview: " + ex.Message; _wv = null; WebRefreshNote(); return false; }
 #else
             return true; // the Editor: the window works without a page
 #endif
@@ -325,6 +355,7 @@ namespace MetaCodex.Shell
         /// state when it changed (four times a second at most).
         private void TickWeb()
         {
+            WebDialogTick();
 #if UNITY_ANDROID && !UNITY_EDITOR
             if (_wv == null || _webTex == null || _wvPoll == IntPtr.Zero) return;
             IntPtr obj = _wv.GetRawObject();
@@ -332,38 +363,116 @@ namespace MetaCodex.Shell
             if (!WebJniOk()) return;
             if ((bits & 1) != 0) // a new frame, the buffer locked until endRead
             {
-                bool upload = _wvPixels.IsCreated && _wvPixels.Length >= WebW * WebH * 4;
+                bool upload = !_webDark && _wvPixels.IsCreated && _wvPixels.Length >= WebW * WebH * 4;
                 try { if (upload) _webTex.LoadRawTextureData(_wvPixels); }
                 catch (Exception ex) { upload = false; Log("web frame: " + ex.Message); }
                 finally { AndroidJNI.CallVoidMethod(obj, _wvEndRead, WvNoArgs); WebJniOk(); }
                 if (upload) _webTex.Apply(false, false);
             }
-            if ((bits & 2) == 0 || Time.unscaledTime < _webNextState) return;
+            if (((bits & 2) == 0 && !_webReadState) || Time.unscaledTime < _webNextState) return;
             _webNextState = Time.unscaledTime + 0.25f;
-            string[] st;
-            try { st = (_wv.Call<string>("state") ?? "").Split('\t'); } catch (Exception) { return; }
+            _webReadState = false;
+            string state;
+            try { state = _wv.Call<string>("state"); } catch (Exception) { return; }
+            WebApplyState(state);
+#endif
+        }
+
+        private static string WebField(string[] st, int i) => i < st.Length ? st[i] : "";
+
+        /// The page's state (MetaCodexWebView.state(): tab separated) onto the toolbar, the note and the dialogs. Only
+        /// when it changed; labels only when their text changes.
+        private void WebApplyState(string state)
+        {
+            var st = (state ?? "").Split('\t');
             if (st.Length < 7) return;
-            if (st.Length > 7 && st[7].Length > 0) // a link on the page to a sign-in page: not followed here
+            string signIn = WebField(st, 7), notice = WebField(st, 8);
+            if (signIn.Length > 0) // a link on the page to a sign-in page: not followed here
             {
                 Toast("Sign-in pages open in the system browser: MetaCodex keeps no sign-in sessions", "info");
-                OpenSystemBrowser(st[7]);
+                OpenSystemBrowser(signIn);
             }
-            if (st.Length > 8 && st[8].Length > 0) Toast(st[8], "info"); // a download, a refused permission, another app's link
-            if (st.Length > 10 && st[10].Length > 0 && st[10] != _webMode)
-            {
-                _webMode = st[10];
-                Log(_webMode == "display" ? "web: capture display (the page renders on its own virtual display)"
-                    : "web: capture " + _webMode + " (fallback: video may stop after a few frames; logcat tag MetaCodexWeb says why)");
-            }
+            if (notice.Length > 0) Toast(notice, "info"); // a download, a refused permission, another app's link
             string url = st[0];
             if (url.Length > 0 && url != _webCurrent && !url.StartsWith("data:") && url != "about:blank") { _webCurrent = url; _webOnStart = false; _webUrl?.Set(url); }
+            bool loading = st[5] == "1";
+            if (loading != _webLoading) { _webLoading = loading; _webReload?.SetText(loading ? "✕" : "⟳"); _webProgress?.SetVisible(loading); }
             int.TryParse(st[2], out int progress);
-            _webTitle?.Set((st[5] == "1" ? $"loading {progress} % · " : "") + (_webOnStart ? "start page" : st[1]));
-            _webBack?.SetEnabled(st[3] == "1" || (st.Length > 9 && st[9] == "1")); // in full screen ◀ leaves it
+            if (progress != _webProgressShown) { _webProgressShown = progress; _webProgress?.Set(progress / 100f); }
+            string title = (loading ? "loading · " : "") + (_webOnStart ? "start page" : st[1]);
+            if (title != _webTitleShown) { _webTitleShown = title; _webTitle?.Set(title); }
+            _webBack?.SetEnabled(st[3] == "1" || WebField(st, 9) == "1");
             _webFwd?.SetEnabled(st[4] == "1");
+            WebFullscreen(WebField(st, 9) == "1");
+            string mode = WebField(st, 10);
+            if (mode.Length > 0 && mode != _webMode)
+            {
+                _webMode = mode;
+                Log(mode == "display" ? "web: capture display (the page renders on its own virtual display)"
+                    : "web: capture " + mode + " (fallback: video may stop after a few frames; logcat tag MetaCodexWeb says why)");
+            }
             if (!_webError.StartsWith("webview:")) _webError = st[6];
-            _webNote?.Set(_webError.Length > 0 ? "⚠ " + _webError : "");
+            WebRefreshNote();
+            int.TryParse(WebField(st, 12), out int jsId);
+            WebDialog(WebField(st, 11), jsId, WebField(st, 13));
+        }
+
+        /// A page in full screen (a video's ⛶): EXIT FULL SCREEN where the address and GO are; ◀ leaves it too.
+        private void WebFullscreen(bool on)
+        {
+            if (on == _webFull) return;
+            _webFull = on;
+            _webUrl?.SetVisible(!on);
+            _webGo?.SetVisible(!on);
+            _webExitFull?.SetVisible(on);
+            _webZoomOut?.SetEnabled(!on);
+            _webZoomIn?.SetEnabled(!on);
+        }
+
+        /// The note over the page: a page that did not open (why, its address, what to do; the page under it dark and
+        /// not updated until the next page starts), a WebView that could not be made, or the Editor's hint.
+        private void WebRefreshNote()
+        {
+            bool fatal = _webError.StartsWith("webview:");
+            bool failed = !fatal && _webError.Length > 0;
+            if (failed != _webDark) { _webDark = failed; if (failed) WebFillDark(); }
+            string note = fatal ? "⚠ " + _webError
+                : failed ? "⚠ This page did not open\n" + _webError + "\n\n" + _webCurrent + "\n\n⟳ tries again · ◀ goes back"
+                : Application.isEditor ? "The page shows on the headset (Android's WebView). ⇗ opens it in your browser here." : "";
+            if (note == _webNoteShown) return;
+            _webNoteShown = note;
+            _webNote?.Set(note);
+        }
+
+        /// The page's alert or confirm as the app's dialog over the window; OK or CANCEL is the page's answer, a dialog
+        /// closed with its ✕ answers CANCEL (the page waits for an answer).
+        private void WebDialog(string kind, int id, string message)
+        {
+            if (kind.Length == 0 || id == 0 || id == _webJsShown || Router == null) return;
+            _webJsShown = id;
+            string text = message.Length > 400 ? message.Substring(0, 400) + "…" : message;
+            var dlg = UiModal.Show(Router, Head, "THE PAGE SAYS", text, kind == "confirm" ? new[] { "OK", "CANCEL" } : new[] { "OK" },
+                k => WebAnswer(id, k == 0), _root, _web);
+            // closed by any means (its buttons close it before they answer): no answer by the next frame is CANCEL
+            if (dlg != null) dlg.Closed += _ => _webJsDismissed = id;
+        }
+
+        private void WebAnswer(int id, bool ok)
+        {
+            if (_webJsAnswered == id) return;
+            _webJsAnswered = id;
+            _webLastJsAnswer = (id, ok);
+#if UNITY_ANDROID && !UNITY_EDITOR
+            if (_wv != null) try { _wv.Call("jsAnswer", id, ok); } catch (Exception ex) { Log("web jsAnswer: " + ex.Message); }
 #endif
+        }
+
+        private void WebDialogTick()
+        {
+            if (_webJsDismissed == 0) return;
+            int id = _webJsDismissed;
+            _webJsDismissed = 0;
+            if (_webJsAnswered != id) WebAnswer(id, false);
         }
 
         /// Self-tests: the page the window has, the last touch sent to the page, a panel point in page pixels.
@@ -372,5 +481,14 @@ namespace MetaCodex.Shell
         public (int action, Vector2 page) WebLastTouchForTest => _webLastTouch;
         public Rect WebPageRectForTest => _webPage != null ? _webPage.Rect : default;
         public Texture2D WebTextureForTest => _webTex;
+        /// Self-tests: the page's state as the WebView reports it (no WebView in the Editor), a frame of the window, what
+        /// the window shows, the last answer to a page dialog.
+        public void WebApplyStateForTest(string state) => WebApplyState(state);
+        public void WebTickForTest() => TickWeb();
+        public bool WebFullscreenForTest => _webFull;
+        public bool WebErrorShownForTest => _webDark;
+        public string WebNoteForTest => _webNoteShown ?? "";
+        public string WebTitleForTest => _webTitleShown ?? "";
+        public (int id, bool ok) WebLastDialogAnswerForTest => _webLastJsAnswer;
     }
 }
