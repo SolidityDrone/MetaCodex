@@ -38,7 +38,8 @@ report at start says "Symmetric Projection: True".
   once. Self-tests and batch runs build everything in one call from the same list (`BuildSteps`), which must name the
   same window builders as `BuildPanels`.
 - **The wrist menu is made only in WRIST mode.** Its icon atlas is drawn on a background thread when WRIST is first
-  chosen; the DOCK stays until the wrist menu is ready (`wrist menu: built in N frames`).
+  chosen (`wrist menu: built in N frames`). At the start no DOCK shows meanwhile: the wrist menu is on the wrist, out of
+  view, and works once it is ready. Only a switch from DOCK to WRIST later keeps the DOCK until then.
 - **The Linux starts at once** (`MetaCodexApp.Start`). Its unpack and the AI runtime's unpack run on dedicated
   threads at nice 10 (`LowPriority.Run`). The copies out of the APK stay on the engine's web-request thread (0.9 s
   for the models, about 2 s for the Linux archive). The install writes one log line per percent.

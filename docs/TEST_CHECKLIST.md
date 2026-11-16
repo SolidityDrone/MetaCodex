@@ -17,6 +17,7 @@ Commands such as `mcx-ui`, `mcx-app` and `mcx-secret` run in a terminal of the a
 First start (clean install, then start):
 
 - [ ] The splash shows at once and animates, with no freeze → the logo about a metre in front of you over the room (passthrough visible around it) comes in behind a scan line, stays fixed in the room (upright, facing you; turn your head: it stays), then breaks up into light once the shell is built; nothing of it stays
+- [ ] Start the app seated at a desk → the splash, the guide card and the first windows are in front of your eyes, never on the floor (log: `start: placed at eye y=…` with your eye height, about 1.1-1.3 m seated; a `start: re-placed` line only if you moved or recentered during the start)
 - [ ] The guide card opens about 0.3 s after the splash, in front of you (0.4 m wide, as tall as its text) → it never touches the DOCK, the Whisp or an open window, and moves aside smoothly if one comes near
 - [ ] The setup strip on top of the card → a spinner while a step runs, the step in plain words (unpacking the models, starting the local AI, unpacking the Linux workstation, starting MQH, teaching the voice your commands), STEP 1 OF 5 … 5 OF 5, one bar with a percentage that never goes back, and "One-time setup: only on this first start, nothing is downloaded"
 - [ ] Turn Wi-Fi off before the first start → the setup finishes the same (nothing is downloaded)
@@ -59,6 +60,7 @@ The DOCK (the default main menu):
 The wrist menu (CONTROL > DISPLAY > Main menu on the wrist):
 
 - [ ] The wrist menu has the same 11 tiles: 6 inner (TALK, TERMS, FILES, THREADS, WEB, CONTROL) and 5 outer (CLIP, FOCUS, SELECT, KEYS, CENTER) → easy to hit, nothing missing that you use daily
+- [ ] Start the app with the wrist menu on → no DOCK at any time during the start (log: `wrist menu: built in N frames (M ms): no DOCK was shown`); a second or two after the splash, look at the back of your left wrist: the core appears
 - [ ] Switch the setting on → the DOCK stays until the wrist menu is ready (no freeze), then goes; look at the back of your left wrist: the core appears; touch it with the right index finger: the rings unfold; touch FILES and TALK; look away: it folds and hides; switch the setting off again: the DOCK comes back
 - [ ] Hold the left wrist as a watch → the rings stay whole, the hand behind them never cuts them; the right fingertip shows over a blade while pressing; windows still let hands and things in front show
 - [ ] Look at the back of the left wrist → the watch face (the time, ticks, a warm seconds point) builds up with the projector rays from the wrist; touch it: a shock ring runs out, the inner tiles swing in one way and the outer the other, icons draw with a scan line, names type in; nothing pops in or out at once

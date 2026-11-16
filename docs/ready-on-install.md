@@ -22,7 +22,7 @@ when the first native app needs it, or from SYSTEM > TOOLS); the local coder (AG
 
 ## The first start
 
-1. The splash shows in the first frame. Every runtime permission (microphone, spatial data, headset camera) is asked
+1. The splash shows as soon as the head is tracked (it is made in the first frame). Every runtime permission (microphone, spatial data, headset camera) is asked
    once, together; the headset shows its dialogs one after another. A refused one is asked again by its feature.
    `tools/release/install-metacodex.sh` grants them at install time, so then nothing is asked.
 2. Behind the splash, the shell is built in small pieces (see [perf.md](perf.md#first-start)).
