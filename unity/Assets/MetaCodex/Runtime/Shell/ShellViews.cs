@@ -193,8 +193,8 @@ namespace MetaCodex.Shell
             var t = UiTheme.Current;
             string pid = v.PanelId;
             bool had = _panels.TryGetValue(pid, out var old);
-            Vector3 pos = default; Quaternion rot = default; bool wasOpen = false;
-            if (had) { pos = old.transform.position; rot = old.transform.rotation; wasOpen = old.IsOpen; DestroyViewPanel(pid); }
+            Vector3 pos = default; Quaternion rot = default; bool wasOpen = false; float bend = 0f;
+            if (had) { pos = old.transform.position; rot = old.transform.rotation; wasOpen = old.IsOpen; bend = old.BendNow; DestroyViewPanel(pid); }
             v.Live.Clear();
             bool plugin = v.Source == "plugin";
             var comps = ViewComponents(v.Spec);
@@ -218,6 +218,9 @@ namespace MetaCodex.Shell
             float contentH = rowsH.Sum() + t.Gap * Mathf.Max(0, rowsH.Count - 1);
             float h = size != null && size.Length > 1 ? Mathf.Clamp(size[1], 0.18f, 0.9f) : Mathf.Clamp(contentH + t.HeaderHeight + 2 * t.Padding, 0.2f, 0.86f);
             var p = Panel<UiPanel>(pid, plugin ? v.Title : "View · " + v.Title, w, h);
+            // a rebuilt window keeps the curve it is drawn with: a new panel starts flat, and its flat frames were the flash
+            // on every tap (owner 2026-11-16). The layout eases it to its own curve after this; SnapBend keeps it until then.
+            if (had) { p.SetBend(bend); p.SnapBend(); }
             if (plugin) HookPluginWindow(v, p); // before any open below: its Opened event reaches the plugin
             p.BaseScale = Vector3.one * UiScaleNow;
             var c0 = p.Content;
