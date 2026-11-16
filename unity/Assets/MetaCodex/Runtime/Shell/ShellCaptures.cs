@@ -643,6 +643,7 @@ namespace MetaCodex.Shell
             if (_askShown) ShowAsk();
             RenderTimeline();
             RefreshAttachRow();
+            FitComposerToText(); // the message box fits its text again (ShellThreadComposer)
         }
 
         private void ShowAttachModalList()

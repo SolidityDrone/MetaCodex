@@ -486,16 +486,20 @@ namespace MetaCodex.UI
         /// The system keyboard opens with Enter for new lines (a text that can hold several lines).
         public bool Multiline;
         /// Wraps the text over its lines and shows the last lines (where the caret is). Off: one line, cut at its end.
-        /// A box taller than one row shows its text from the top (THREAD's composer: its grip makes the box taller).
+        /// A box taller than one row shows its text from the top (THREAD's composer: its grip makes the box taller, and
+        /// it grows to fit its text, PreferredBoxHeight).
         public bool Wrap;
         public Action<string> OnSubmit;
         public Action<string> OnChanged;
+        /// Runs once each time the text changes, whatever changed it (Set, the keyboard, dictation), after the label has
+        /// the new text and before its page is picked. Never per frame (THREAD's composer measures its text here).
+        public Action<UiTextField> TextChanged;
         public float CaptionWidth = 0.17f;
         public override bool Interactive => true;
         private int _box;
         private UiText _text, _caption;
         private bool _editing;
-        private string _pagedText;
+        private string _pagedText, _changedText;
         private Rect _pagedRect = new Rect(0f, 0f, -1f, -1f);
 
         public UiTextField(string caption, string text, Action<string> onSubmit, string placeholder = "")
@@ -540,8 +544,27 @@ namespace MetaCodex.UI
             _text.Color = empty ? Theme.TextDim : Theme.Text;
             Panel.Shapes.SetTint(_box, _editing ? Theme.Accent : Theme.Frame);
             Panel.Shapes.SetState(_box, _editing ? 0.6f : Hover ? 0.3f : 0f);
+            // the same string while nothing changed (the keyboard and Set assign a new one): a reference compare per frame
+            if (TextChanged != null && _changedText != Text) { _changedText = Text; TextChanged(this); }
             if (Wrap) ShowLastPage();
         }
+
+        /// The height this box needs to show all of its text at its width (wrapped, its font and size, room for the
+        /// caret), in panel metres; `oneRow` while the text fits one row. TMP's preferred height on the field's own label
+        /// (its shown text is parsed again at its next mesh, so the label is unchanged): once per change, never per frame.
+        public float PreferredBoxHeight(float oneRow)
+        {
+            if (_text == null || !Wrap || Secure || string.IsNullOrEmpty(Text)) return oneRow;
+            float w = BoxRect.width - 0.016f;
+            if (w <= 0f) return oneRow;
+            // + 2 mm: TMP starts a new page as soon as the lines are a hair taller than the box
+            float h = _text.Tmp.GetPreferredValues("<noparse>" + Text + "</noparse>▌", w, 0f).y + 0.002f;
+            return h <= oneRow ? oneRow : h + 0.008f; // a tall box insets its text 4 mm at the top and the bottom (Relayout)
+        }
+
+        /// Self-tests: the text's pages at the box's size now (1: all of it shows) and the one shown.
+        public int PageCountForTest => _text != null && _text.Tmp.textInfo != null ? _text.Tmp.textInfo.pageCount : 0;
+        public int PageShownForTest => _text != null ? _text.Tmp.pageToDisplay : 0;
 
         /// Shows the last page (the last lines, with the caret). Only when the text or the box changed: the mesh is
         /// built twice then (TMP needs the page count first).

@@ -207,7 +207,7 @@ namespace MetaCodex.Shell
 
         private void ResetThreadChat()
         {
-            ResetComposerHeight(); // another thread (or a new draft) opens: the message box is one row again
+            ResetComposerToText(); // another thread (or a new draft) opens: the grip's height goes, a text kept in the box still shows in full
             _tlTag = null;
             _tlInFlight = false;
             _tlModel = new ThreadTimeline();
