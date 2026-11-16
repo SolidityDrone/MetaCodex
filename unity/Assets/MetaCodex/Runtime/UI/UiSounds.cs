@@ -6,23 +6,45 @@ using UnityEngine;
 namespace MetaCodex.UI
 {
     /// The app's short sounds, made in code (UiSoundSynth: no audio assets): click, hover, open, close, orb-on, orb-off,
-    /// wake, ping, toast, alert, error. One AudioSource, PlayOneShot. The samples are made on a worker thread at start
-    /// (pure float math: 10-20 ms on one PC core, more on the headset; none of it on the main thread); Update turns each
-    /// into an AudioClip as it arrives (AudioClip.Create / SetData must run on the main thread) and switches itself off
-    /// when all are there. A sound asked for before its clip exists does not play.
+    /// wake, ping, toast, alert, error, in one of four styles (Style: hud, holo, core, classic). One AudioSource,
+    /// PlayOneShot. The samples are made on a worker thread (pure float math, ~10-20 ms on one PC core, more on the
+    /// headset; none of it on the main thread), starting in Start with the Style set by then; Update turns each into an
+    /// AudioClip (AudioClip.Create / SetData must run on the main thread) and switches itself off when all are there.
+    /// At start each clip plays as soon as it exists (a sound asked for before does not play). A new Style is made the
+    /// same way while the old one keeps playing; when all eleven are there they replace the old clips (destroyed: only
+    /// one style is in memory) and a "ping" in the new style plays.
     public sealed class UiSounds : MonoBehaviour
     {
         public static UiSounds Current { get; private set; }
         public bool Enabled = true;
         public float Volume = 0.35f;
         private AudioSource _src;
-        private readonly Dictionary<string, AudioClip> _clips = new Dictionary<string, AudioClip>();
-        private readonly ConcurrentQueue<KeyValuePair<string, float[]>> _made = new ConcurrentQueue<KeyValuePair<string, float[]>>();
-        private volatile bool _done, _stop;
+        private Dictionary<string, AudioClip> _clips = new Dictionary<string, AudioClip>();
+        private Dictionary<string, AudioClip> _next; // a new style's clips until all are there
+        private readonly ConcurrentQueue<Made> _made = new ConcurrentQueue<Made>();
+        private string _style = UiSoundSynth.Styles[0];
+        private bool _started;
+        private volatile int _gen, _doneGen = -1;
         private volatile string _failed;
         private double _makeMs;
         private int _samples;
         private float _lastPlay;
+
+        private struct Made { public int Gen; public string Name; public float[] Data; }
+
+        /// The style (UiSoundSynth.Styles; anything else is hud). Set before Start: the first clips are made in it; set
+        /// later: that style is made on the worker and replaces the clips when it is complete.
+        public string Style
+        {
+            get => _style;
+            set
+            {
+                string s = UiSoundSynth.StyleOf(value);
+                if (s == _style) return;
+                _style = s;
+                if (_started) Begin();
+            }
+        }
 
         private void Awake()
         {
@@ -31,44 +53,77 @@ namespace MetaCodex.UI
             _src.playOnAwake = false;
             _src.spatialBlend = 0f;
             _src.priority = 200;
-            Task.Run(Make);
+        }
+
+        private void Start() { _started = true; Begin(); }
+
+        /// Starts making the current style (a newer request makes an older one stop and drop what it made).
+        private void Begin()
+        {
+            int gen = ++_gen;
+            if (_next != null) foreach (var c in _next.Values) Destroy(c);
+            _next = _clips.Count > 0 ? new Dictionary<string, AudioClip>() : null; // nothing yet (start): fill _clips directly
+            _failed = null;
+            enabled = true;
+            string style = _style;
+            Task.Run(() => Make(gen, style));
         }
 
         /// On a worker thread: every sound's samples, in UiSoundSynth.Names order (the ones needed first, first).
-        private void Make()
+        private void Make(int gen, string style)
         {
             var sw = System.Diagnostics.Stopwatch.StartNew();
             try
             {
                 foreach (var name in UiSoundSynth.Names)
                 {
-                    if (_stop) break;
-                    _made.Enqueue(new KeyValuePair<string, float[]>(name, UiSoundSynth.Render(name)));
+                    if (gen != _gen) return; // a newer style was asked for
+                    _made.Enqueue(new Made { Gen = gen, Name = name, Data = UiSoundSynth.Render(style, name) });
                 }
             }
-            catch (System.Exception ex) { _failed = ex.GetType().Name + ": " + ex.Message; }
+            catch (System.Exception ex) { if (gen == _gen) _failed = ex.GetType().Name + ": " + ex.Message; }
+            if (gen != _gen) return;
             _makeMs = sw.Elapsed.TotalMilliseconds;
-            _done = true;
+            _doneGen = gen;
         }
 
         private void Update()
         {
-            while (_made.TryDequeue(out var kv))
+            while (_made.TryDequeue(out var m))
             {
-                var clip = AudioClip.Create("mcx-" + kv.Key, kv.Value.Length, 1, UiSoundSynth.Rate, false);
-                clip.SetData(kv.Value, 0);
-                _clips[kv.Key] = clip;
-                _samples += kv.Value.Length;
+                if (m.Gen != _gen || m.Data == null) continue;
+                var clip = AudioClip.Create("mcx-" + _style + "-" + m.Name, m.Data.Length, 1, UiSoundSynth.Rate, false);
+                clip.SetData(m.Data, 0);
+                var into = _next ?? _clips;
+                if (into.TryGetValue(m.Name, out var old)) Destroy(old);
+                into[m.Name] = clip;
             }
-            if (!_done || !_made.IsEmpty) return;
-            if (_failed != null) Debug.LogWarning("[MetaCodex] sounds: made " + _clips.Count + " of " + UiSoundSynth.Names.Length + ", then " + _failed);
-            else Debug.Log($"[MetaCodex] sounds: {_clips.Count} made off the main thread in {_makeMs:F1} ms ({_samples} samples, {_samples * 4 / 1024} KB)");
+            if (_doneGen != _gen || !_made.IsEmpty) return;
+            if (_failed != null)
+            {
+                Debug.LogWarning("[MetaCodex] sounds: " + _style + " stopped after " + (_next ?? _clips).Count + " of " + UiSoundSynth.Names.Length + ": " + _failed);
+                if (_next != null) { foreach (var c in _next.Values) Destroy(c); _next = null; } // keep the old style
+            }
+            else
+            {
+                bool swap = _next != null;
+                if (swap)
+                {
+                    foreach (var c in _clips.Values) Destroy(c);
+                    _clips = _next;
+                    _next = null;
+                }
+                _samples = 0;
+                foreach (var c in _clips.Values) _samples += c.samples;
+                Debug.Log($"[MetaCodex] sounds: {_style}, {_clips.Count} made off the main thread in {_makeMs:F1} ms ({_samples} samples, {_samples * 4 / 1024} KB)");
+                if (swap) Play("ping"); // the new style, heard at once
+            }
             enabled = false;
         }
 
         private void OnDestroy()
         {
-            _stop = true;
+            _gen++; // a worker still running stops
             if (Current == this) Current = null;
         }
 
