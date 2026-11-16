@@ -183,8 +183,11 @@ namespace MetaCodex.Shell
             return true;
         }
 
-        /// Adds the plugins' tiles to the main menu table (MainMenuItems). The outer ring of the wrist menu.
-        private void AddPluginMenuItems(List<MainMenuItem> list, bool outer)
+        /// Adds the app plugins' tiles to the main menu's catalog (MenuCatalog), by default on the outer ring of the wrist
+        /// menu. Only APPS plugins (PluginKindOf) have tiles on the menu (owner 2026-11-16: "installed plugins, not gesture
+        /// plugins, just app-level plugins like the timer"). A tile's icon: the user's pick (CONTROL > WRIST MENU, `ws`),
+        /// else the plugin's if it is one of the generic icons (UiIconAtlas.PluginIcons), else the puzzle piece "plugin".
+        private void AddPluginMenuItems(List<MainMenuItem> list, bool outer, WristMenuSettings ws)
         {
             var tiles = _pluginTiles;
             _pluginTilesApplied = tiles;
@@ -192,6 +195,10 @@ namespace MetaCodex.Shell
             {
                 var tile = tiles[i];
                 string owner = tile.Owner, id = tile.Id;
+                var entry = FindPluginEntry(owner);
+                if (entry != null && PluginKindOf(entry) != KindApps) continue;
+                string itemId = PluginTileId(owner, id);
+                string own = PluginIconOrDefault(tile.Icon);
                 Func<bool> lit = null;
                 if (!string.IsNullOrEmpty(tile.Window))
                 {
@@ -200,14 +207,40 @@ namespace MetaCodex.Shell
                 }
                 list.Add(new MainMenuItem
                 {
+                    Id = itemId,
                     Glyph = string.IsNullOrEmpty(tile.Glyph) ? "◆" : tile.Glyph,
-                    Icon = string.IsNullOrEmpty(tile.Icon) ? "mark" : tile.Icon,
+                    Icon = PluginIconOrDefault(ws?.IconOf(itemId) ?? own),
+                    OwnIcon = own,
                     Label = string.IsNullOrEmpty(tile.Label) ? id : tile.Label,
                     Act = () => Scripts?.TileTapped(owner, id),
                     Lit = lit,
                     Outer = outer,
+                    Plugin = true,
+                    Source = entry != null && !string.IsNullOrEmpty(entry.Title) ? entry.Title : owner,
                 });
             }
+        }
+
+        /// A plugin tile's id in the saved layout.
+        public static string PluginTileId(string plugin, string tile) => "plugin:" + plugin + "/" + tile;
+
+        /// The icon a plugin's tile shows: one of the generic icons, else the puzzle piece.
+        public static string PluginIconOrDefault(string icon) =>
+            !string.IsNullOrEmpty(icon) && Array.IndexOf(UiIconAtlas.PluginIcons, icon) >= 0 ? icon : "plugin";
+
+        /// The plugin (else the script) of that name: a tile's owner.
+        private ScriptHost.Entry FindPluginEntry(string name)
+        {
+            if (Scripts == null || string.IsNullOrEmpty(name)) return null;
+            var all = Scripts.Entries;
+            ScriptHost.Entry script = null;
+            for (int i = 0; i < all.Count; i++)
+            {
+                if (all[i].Name != name) continue;
+                if (all[i].Kind == "plugin") return all[i];
+                script ??= all[i];
+            }
+            return script;
         }
 
         private void TickPluginUi()
@@ -233,7 +266,16 @@ namespace MetaCodex.Shell
         private void ApplyPluginTiles()
         {
             if (SameTiles(_pluginTiles, _pluginTilesApplied)) return;
-            // the dock: destroyed and built again from the same table; pose and open state stay
+            RebuildMainMenus();
+            OnMenuCatalogChanged(); // the WRIST MENU page, when it shows, takes the new tiles into its copy
+        }
+
+        /// The main menu's table changed (a plugin's tile, the user's layout or icons): the dock and the wrist menu are built
+        /// again from it. The dock is destroyed and built again (pose and open state stay); the wrist menu takes the new items
+        /// in place, after the dock is gone (so its mode switch leaves the dock's state alone), and only while it is the main
+        /// menu (else when the user switches to it).
+        private void RebuildMainMenus()
+        {
             bool hadDock = false, dockOpen = false;
             Vector3 pos = default; Quaternion rot = default;
             if (_panels.TryGetValue("dock", out var old) && old != null)
@@ -242,7 +284,6 @@ namespace MetaCodex.Shell
                 pos = old.transform.position; rot = old.transform.rotation; dockOpen = old.IsOpen;
                 DestroyViewPanel("dock"); // the generic panel teardown (router, slots, tables)
             }
-            // the wrist menu (built after the dock is gone, so its mode switch leaves the dock's state alone)
             if (Wrist != null)
             {
                 if (Settings.wristMenu) RebuildWrist();
@@ -250,6 +291,7 @@ namespace MetaCodex.Shell
             }
             if (hadDock)
             {
+                _selectButton = _focusButton = null; // the new dock sets them again unless the user took SELECT / FOCUS off the menu
                 BuildDock();
                 if (_panels.TryGetValue("dock", out var nd) && nd != null)
                 {

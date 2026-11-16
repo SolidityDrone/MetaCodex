@@ -9,9 +9,9 @@ using UnityEngine;
 namespace MetaCodex.Shell
 {
     /// CONTROL (owner 2026-11-11, docs/control-center.md): one place for everything that sets the workbench up. Each
-    /// category keeps its own window (SETTINGS' pages, VOICE, AGENTS, MQH, VAULT, SYSTEM: their tabs and tests);
-    /// a sidebar rides on the left of the one shown, with the ten categories in three groups and a live status each.
-    /// One category at a time: another one takes the shown window's place (same left and top edges, and since all six
+    /// category keeps its own window (SETTINGS' pages, WRIST MENU, VOICE, AGENTS, MQH, VAULT, SYSTEM: their tabs and tests);
+    /// a sidebar rides on the left of the one shown, with the eleven categories in three groups and a live status each.
+    /// One category at a time: another one takes the shown window's place (same left and top edges, and since all seven
     /// windows have one size, ControlPageW x ControlPageH, the same rectangle), the rail stays.
     /// Work windows (terminals, files, threads, web, clipboard) stay windows of their own.
     public sealed partial class MetaCodexShell
@@ -25,9 +25,9 @@ namespace MetaCodex.Shell
 
         public const string ControlId = "control";
         public const float RailW = 0.17f, RailGap = 0.010f, RailYaw = 12f;
-        public static readonly string[] ControlPages = { "settings", "voice", "agents", "mqh", "vault", "system" };
+        public static readonly string[] ControlPages = { "settings", "voice", "agents", "mqh", "vault", "system", WristSettingsId };
         public static bool IsControlPage(string id) => id != null && Array.IndexOf(ControlPages, id) >= 0;
-        /// The one size of CONTROL's six windows: a category taking another's place never grows over a neighbour.
+        /// The one size of CONTROL's seven windows: a category taking another's place never grows over a neighbour.
         public const float ControlPageW = 0.76f, ControlPageH = 0.66f;
 
         private UiPanel _rail;
@@ -54,6 +54,8 @@ namespace MetaCodex.Shell
                 new ControlCategory { Key = "display", Label = "DISPLAY", Glyph = "◧", Group = "THIS HEADSET", Panel = "settings", Tab = SetDisplay,
                     Blurb = "Where windows go and how big they are: fixed or floating layout, distance, scale, bending, the main menu, saved layouts.",
                     Status = () => Settings.layout == "float" ? "float" : "fixed" },
+                new ControlCategory { Key = "wrist", Label = "WRIST MENU", Glyph = "◔", Group = "THIS HEADSET", Panel = WristSettingsId,
+                    Status = WristRailStatus }, // its own window (ShellWristSettings): the rings, size, text, glass, core
                 new ControlCategory { Key = "look", Label = "LOOK & SOUND", Glyph = "◈", Group = "THIS HEADSET", Panel = "settings", Tab = SetLook,
                     Blurb = "How the glass looks and sounds: opacity, foveation, sounds and volume, the Whisp.",
                     Status = () => Settings.sounds ? "sound" : "muted" },
@@ -83,6 +85,7 @@ namespace MetaCodex.Shell
 
         private void BuildControl()
         {
+            BuildWristSettingsPanel(); // CONTROL > WRIST MENU's window (ShellWristSettings), before the rail that names it
             DefineCategories();
             _railRows.Clear();
             var t = UiTheme.Current;
