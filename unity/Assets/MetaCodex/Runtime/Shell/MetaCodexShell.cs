@@ -1200,26 +1200,7 @@ namespace MetaCodex.Shell
                 case "view": return ViewCommand(arg);
                 case "system": return SystemCommand(arg);
                 case "capture": return CaptureCommand(arg);
-                case "plugin":
-                {
-                    var parts = arg.Split(new[] { ' ' }, 2, StringSplitOptions.RemoveEmptyEntries);
-                    string sub = parts.Length > 0 ? parts[0] : "list";
-                    string id = parts.Length > 1 ? parts[1].Trim() : "";
-                    switch (sub)
-                    {
-                        case "list": return string.Join("\n", Scripts.Entries.Where(e => e.Kind == "plugin").Select(e => $"{e.Name} v{e.Version} enabled={e.Enabled} poses={e.Poses} detectors={e.Detectors} handlers={e.Handlers} error={e.Error ?? "-"}"));
-                        case "new": { var e = NewPlugin(id.Length > 0 ? id : "my-gestures"); return "ok, /mnt/quest/plugins/" + e.Name; }
-                        case "examples": return string.Join("\n", GestureExampleIds.Select(x => $"{x} installed={Scripts.Find("plugin/" + x) != null} gestures={string.Join(",", GestureNamesIn(ExamplePlugins[x]))}"));
-                        case "example": { var err = InstallGestureExample(id); return err == null ? "ok, /mnt/quest/plugins/" + id.Trim().ToLowerInvariant() : "error: " + err; }
-                        case "enable": Scripts.SetEnabled("plugin/" + id, true); return "ok";
-                        case "disable": Scripts.SetEnabled("plugin/" + id, false); return "ok";
-                        case "reload": Scripts.ReloadAll(); return "ok";
-                        case "log": { var e = Scripts.Find("plugin/" + id); return e == null ? "error: no plugin " + id : string.Join("\n", e.Log); }
-                        case "delete": return Scripts.Delete("plugin/" + id) ? "ok" : "error: no plugin " + id;
-                        case "dir": return Scripts.PluginsDir;
-                        default: return "error: plugin list | new <id> | examples | example <id> | enable <id> | disable <id> | reload | log <id> | delete <id> | dir";
-                    }
-                }
+                case "plugin": return PluginCommand(arg); // ShellMqh: projects of the three kinds and older folders
                 default: return null;
             }
         }

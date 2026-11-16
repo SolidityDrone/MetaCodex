@@ -126,9 +126,11 @@ namespace MetaCodex.Shell
                 Directory.CreateDirectory(pdir);
                 var marker = Path.Combine(pdir, VictoryFocusMarker);
                 if (File.Exists(marker)) return;
-                if (!Directory.Exists(Path.Combine(pdir, "core-poses")))
+                if (!Directory.Exists(Path.Combine(pdir, "core-poses")) && Scripts.Find("plugin/core-poses") == null)
                 {
-                    var err = InstallGestureExample("core-poses");
+                    // the one example the app adds by itself stays an older-style folder in /mnt/quest/plugins (made at the
+                    // first start, before the Linux and MQH are up; no project nobody asked for)
+                    var err = InstallGestureExample("core-poses", asProject: false);
                     if (err != null) { Log("gesture V -> focus: " + err); return; }
                 }
                 if (!Settings.bindings.Any(b => b.gesture == "victory" && b.action == "focus")) AddBinding("victory", "focus");
@@ -275,9 +277,12 @@ end)
             return names;
         }
 
-        /// Installs one example plugin (GESTURES > EXAMPLES > + ADD, `plugin example <id>`, voice). null = ok, else
-        /// the error. An existing folder of that name is never overwritten: it is only enabled again.
-        public string InstallGestureExample(string id)
+        /// Installs one example plugin (MQH > PLUGINS > EXAMPLES TO ADD and GESTURES > EXAMPLES > + ADD, `plugin example
+        /// <id>`, voice). null = ok, else the error. It becomes a plugin project (plugins/apps/timers, plugins/gestures/
+        /// swipes: the example's files, AGENTS.md, the marker, git, a THREADS project), so a thread on it lets an agent
+        /// change it; asProject false (the V shortcut's core-poses at the first start), or no Linux: an older-style folder
+        /// in /mnt/quest/plugins. A plugin of that id that is there already is never overwritten: it is only enabled again.
+        public string InstallGestureExample(string id, bool asProject = true)
         {
             id = (id ?? "").Trim().ToLowerInvariant();
             if (!ExamplePlugins.TryGetValue(id, out var files)) return $"no example '{id}' (examples: {string.Join(", ", GestureExampleIds)})";
@@ -286,10 +291,20 @@ end)
                 Directory.CreateDirectory(Scripts.PluginsDir);
                 var marker = Path.Combine(Scripts.PluginsDir, ExamplesMarker);
                 if (!File.Exists(marker)) File.WriteAllText(marker, "gesture examples are opt-in; the old starter copies were checked " + DateTime.UtcNow.ToString("o") + "\n");
-                if (Directory.Exists(Path.Combine(Scripts.PluginsDir, id)))
+                var have = Scripts.Find("plugin/" + id);
+                if (have != null || Directory.Exists(Path.Combine(Scripts.PluginsDir, id)))
                 {
                     Scripts.SetEnabled("plugin/" + id, true);
-                    Log($"gesture example {id}: already in /mnt/quest/plugins, enabled");
+                    Log($"example {id}: already in {have?.LinuxDir ?? "/mnt/quest/plugins/" + id}, enabled");
+                }
+                else if (asProject && !string.IsNullOrEmpty(Scripts.ProjectsDir) && (Application.isEditor || Directory.Exists(AndroidPathOf("/root") ?? "")))
+                {
+                    string name = ExampleName(files, id);
+                    string r = CreatePluginProject(ExampleKind(id), name, files, id);
+                    if (r.StartsWith("error")) return r.Substring(Math.Min(r.Length, 7)).Trim();
+                    var e = Scripts.Find("plugin/" + id);
+                    if (e?.Error != null) return e.Error;
+                    Log($"example {id} added as a plugin project ({e?.LinuxDir}): {e?.Poses} poses, {e?.Detectors} detectors");
                 }
                 else
                 {
@@ -303,12 +318,20 @@ end)
             return null;
         }
 
+        /// An example's name (plugin.json "name"), else its id.
+        private static string ExampleName(IReadOnlyDictionary<string, string> files, string id)
+        {
+            try { return (string)Newtonsoft.Json.Linq.JObject.Parse(files["plugin.json"])["name"] ?? id; } catch (Exception) { return id; }
+        }
+
         /// True when the plugin folder holds exactly one of the given file sets (same files, same text; CRLF = LF).
-        public static bool SameFiles(string dir, IReadOnlyDictionary<string, string> files)
+        /// projectFiles: a plugin project's own files (AGENTS.md, CLAUDE.md, .metacodex/, .git/) are not counted.
+        public static bool SameFiles(string dir, IReadOnlyDictionary<string, string> files, bool projectFiles = false)
         {
             if (!Directory.Exists(dir)) return false;
             var onDisk = Directory.GetFiles(dir, "*", SearchOption.AllDirectories)
-                .Select(f => f.Substring(dir.Length).TrimStart('/', '\\').Replace('\\', '/')).ToList();
+                .Select(f => f.Substring(dir.Length).TrimStart('/', '\\').Replace('\\', '/'))
+                .Where(f => !projectFiles || !PluginProject.IsProjectFile(f)).ToList();
             if (onDisk.Count != files.Count || onDisk.Any(f => !files.ContainsKey(f))) return false;
             foreach (var kv in files)
             {
@@ -442,40 +465,10 @@ end)
             var e = Scripts.Find("plugin/" + id);
             if (e == null) return false;
             if (_exampleState.TryGetValue(id, out var c) && c.mtime == e.Mtime) return c.untouched;
-            var dir = Path.Combine(Scripts.PluginsDir, id);
-            bool same = SameFiles(dir, ExamplePlugins[id]) || (StarterV1.TryGetValue(id, out var starter) && SameFiles(dir, starter));
+            var dir = e.PluginDir;
+            bool same = SameFiles(dir, ExamplePlugins[id], e.Project) || (StarterV1.TryGetValue(id, out var starter) && SameFiles(dir, starter, e.Project));
             _exampleState[id] = (e.Mtime, same);
             return same;
-        }
-
-        public const string PluginTemplateLua =
-@"-- description: my gesture plugin (edit me: the app reloads this file within a second)
--- Pose files in poses/*.json define named hand shapes; gesture.define adds Lua detectors;
--- gesture.on / gesture.sequence react to any gesture. Skill for agents: quest-gesture-plugins.
-
--- a detector: both palms facing up for a moment
-gesture.define(""both-palms-up"", { hand = ""both"", hold = 0.3, cooldown = 1.0, description = ""both hands open, palms up"" }, function(l, r)
-  return l.open and r.open and l.palmFacing == ""up"" and r.palmFacing == ""up""
-end)
-
--- the reaction: a toast only, so a new plugin changes nothing until you say what it does
--- (e.g. app.action(""toggle:threads""); actions: the skill quest-gesture-plugins)
-gesture.on(""both-palms-up"", function(e)
-  if e.phase == ""start"" then
-    ui.toast(""Both palms up"")
-  end
-end)
-";
-
-        /// Scaffolds a plugin folder from the template (CONTROL > MQH > PLUGINS > + NEW PLUGIN…, control port `plugin new`).
-        public ScriptHost.Entry NewPlugin(string id)
-        {
-            id = ScriptHost.Sanitize(id);
-            return Scripts.SavePlugin(id, new Dictionary<string, string>
-            {
-                ["plugin.json"] = "{\n  \"id\": \"" + id + "\",\n  \"name\": \"" + id + "\",\n  \"version\": \"0.1.0\",\n  \"kind\": \"gesture\",\n  \"description\": \"both palms up shows a toast (a template: edit main.lua)\"\n}\n",
-                ["main.lua"] = PluginTemplateLua,
-            });
         }
 
         // ------------------------------------------------------------------ recording
@@ -601,9 +594,9 @@ end)
             _gTabs.AddTo(3, new UiSlider("HOLD", 0f, 1f, _gHold, v => _gHold = v) { Rect = rec.Next(0.032f), LabelWidth = 0.12f, Format = "0.00 s" });
             AddRow(_gTabs, 3, rec.Next(t.ButtonHeight), new (string, Action)[] { ("● RECORD IN 3 s", StartRecording) }, primary: 0);
             _gRecordStatus = _gTabs.AddTo(3, new UiLabel("", t.SmallSize) { Rect = rec.Rest(), Wrap = true, Align = TextAlignmentOptions.TopLeft });
-            // plugins have one home (CONTROL > MQH > PLUGINS: + NEW PLUGIN…, FOLDER); here only where to find it
+            // plugins have one home (CONTROL > MQH > PLUGINS: + NEW PLUGIN…, a thread on its project); here only where to find it
             var tpl = new UiStack(new Rect(area.x + area.width * 0.57f, area.y, area.width * 0.43f, area.height), t.Gap);
-            _gTabs.AddTo(3, new UiLabel("Plugins: CONTROL > MQH > PLUGINS (+ NEW, or ask an agent)", t.SmallSize) { Rect = tpl.Next(0.04f), Wrap = true, Color = t.TextDim, Align = TextAlignmentOptions.TopLeft });
+            _gTabs.AddTo(3, new UiLabel("New gestures of your own: MQH > PLUGINS > + NEW PLUGIN > GESTURE, then a thread on it asks an agent", t.SmallSize) { Rect = tpl.Next(0.04f), Wrap = true, Color = t.TextDim, Align = TextAlignmentOptions.TopLeft });
 
             _gTabs.OnChanged = _ => RefreshGesturesPanel();
             RefreshGesturesPanel();
@@ -670,7 +663,7 @@ end)
             };
 
             items.Add(Header("YOURS", $"YOURS  ({yours.Count})"));
-            if (yours.Count == 0) items.Add(new UiListItem { Icon = "", Title = "none · RECORD a pose or ASK AN AGENT", TitleColor = t.TextDim, Tag = null });
+            if (yours.Count == 0) items.Add(new UiListItem { Icon = "", Title = "none · RECORD a pose, or MQH > PLUGINS > + NEW PLUGIN", TitleColor = t.TextDim, Tag = null });
             foreach (var c in yours) items.Add(Row(c, 0));
 
             items.Add(Header("SYSTEM", $"SYSTEM  ({GestureEngine.Names.Length})"));
@@ -822,10 +815,10 @@ end)
             var files = ExamplePlugins[id];
             string desc = ExampleDescription(files);
             var gnames = GestureNamesIn(files);
-            bool installed = Scripts.Find("plugin/" + id) != null;
+            var have = Scripts.Find("plugin/" + id);
             _gDetail.Set($"<size=130%><b>{id}</b></size>  <color=#7FA9BF>EXAMPLE</color>\n{desc}\n\n<color=#7FA9BF>GESTURES</color>\n  " + (gnames.Count > 0 ? string.Join("\n  ", gnames) : "none: a plugin window, opened from its menu tile") + "\n\n" +
-                (installed ? "<color=#4DFFA6>● added</color> in /mnt/quest/plugins/" + id + ": bind its gestures in BIND; remove it in CONTROL > MQH > PLUGINS."
-                           : "Not installed: nothing runs. + ADD puts it in /mnt/quest/plugins/" + id + "."), t.Text);
+                (have != null ? "<color=#4DFFA6>● added</color> in " + ProjectKinds.ShortPath(have.LinuxDir) + ": bind its gestures in BIND; change it with a thread on it, remove it in MQH > PLUGINS."
+                              : "Not installed: nothing runs. + ADD makes it a plugin project (…/plugins/" + PluginProject.FolderOf(ExampleKind(id)) + "/" + id + ")."), t.Text);
         }
 
         private static string BuiltInHelp(string n)
@@ -866,7 +859,7 @@ end)
             if (owner == null || !IsYoursGesture(_gSelected)) return; // SOURCE is for YOURS only
             var e = Scripts.Find(owner);
             if (e == null) return;
-            string linux = e.Kind == "plugin" ? "/mnt/quest/plugins/" + e.Name : "/mnt/quest/scripts/" + e.Name + ".lua";
+            string linux = e.Kind == "plugin" ? e.LinuxDir : "/mnt/quest/scripts/" + e.Name + ".lua";
             TerminalSend(e.Kind == "plugin" ? $"cd {GitService.Quote(linux)} && ls -R\r" : $"less {GitService.Quote(linux)}\r");
         }
 
