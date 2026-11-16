@@ -588,10 +588,31 @@ namespace MetaCodex.UI
         /// The lean drawn now (degrees).
         public float TiltNow => _tiltCurrent;
 
+        private bool _inside; // this window is inside another (a thread group's member): the other's lean is its own
+
         public void SetTilt(float degrees)
         {
-            _tiltTarget = Mathf.Max(0f, degrees);
+            _tiltTarget = _inside ? 0f : Mathf.Max(0f, degrees);
             if (!Application.isPlaying) SnapTilt(); // Editor self-tests: no frame loop to ease it
+        }
+
+        /// A window put inside another carries that window's lean and leans none of its own (its lean is dropped here,
+        /// so the parent's lean is not doubled); one taken out is levelled at once, so the lean it carried does not stay on
+        /// it (ShellThreadGroups moves them; FaceUser keeps the pitch it finds, so this comes first).
+        private void OnTransformParentChanged() => ParentChanged();
+
+        /// Self-tests: the parent changed (the callback above, for Editor code that re-parents a window).
+        public void ParentChangedForTest() => ParentChanged();
+
+        private void ParentChanged()
+        {
+            bool inside = transform.parent != null && transform.parent.GetComponentInParent<UiPanel>() != null;
+            if (inside) { _inside = true; _leaning = false; _tiltTarget = 0f; _tiltCurrent = 0f; return; }
+            if (!_inside) return;
+            _inside = false;
+            var fwd = transform.forward;
+            fwd.y = 0f;
+            if (fwd.sqrMagnitude > 1e-8f) transform.rotation = Quaternion.LookRotation(fwd, Vector3.up);
         }
 
         /// Jump to the target lean now (tests).

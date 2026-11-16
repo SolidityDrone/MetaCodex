@@ -3831,6 +3831,14 @@ end)
             tall.transform.position = eye + Vector3.forward * 1f;
             tall.SetTilt(MetaCodexShell.LayoutTilt(tall, eye));
             Check(tall.TiltNow == 0f && Vector3.Angle(tall.transform.up, Vector3.up) < 0.01f, "curve lean: a tall window centred at eye level is upright");
+            // inside another window (a thread group's member) it leans none of its own; taken out again it is upright at once
+            tall.transform.SetParent(half.transform, true);
+            tall.ParentChangedForTest();
+            tall.SetTilt(MetaCodexShell.TiltMaxDeg);
+            Check(tall.TiltTarget == 0f && tall.TiltNow == 0f, "curve lean: a window inside another window leans none of its own");
+            tall.transform.SetParent(root, true);
+            tall.ParentChangedForTest();
+            Check(Vector3.Angle(tall.transform.up, Vector3.up) < 0.01f, "curve lean: a window taken out of another window is upright at once");
             // a ray at a button on the leaning window hits the button where it is drawn (flat, then bent)
             tall.transform.position = eye + Vector3.forward * 1f + Vector3.up * 0.6f;
             tall.SetTilt(MetaCodexShell.LayoutTilt(tall, eye));
