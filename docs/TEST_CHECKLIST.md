@@ -67,8 +67,23 @@ The wrist menu (CONTROL > DISPLAY > Main menu on the wrist):
 - [ ] Move the left arm around while looking at it → it stays on the wrist, no jitter when still, no lag when moving; turn the wrist away: it waits a moment, folds and fades; turn it back while it fades: it comes back from where it was
 - [ ] Switch the wrist menu off in CONTROL > DISPLAY while it is open → it folds and fades away, the DOCK comes back
 - [ ] The wrist menu open → about 72 fps
-- [ ] PANEL OPACITY at 100 % → the wrist menu glass is solid; at 50 % the tiles and the watch face are clearly more see-through, while their lines, icons, ticks and sparks stay as bright; a hand behind the menu is still hidden by its glass
-- [ ] Change PANEL OPACITY (the slider, or voice: "set the opacity to 60 percent") with the wrist menu open → its glass changes at once, the panels too, no restart
+- [ ] GLASS (CONTROL > WRIST MENU) at 100 % → the wrist menu glass is solid; at 50 % the tiles and the watch face are clearly more see-through, while their lines, icons, ticks and sparks stay as bright; a hand behind the menu is still hidden by its glass
+- [ ] Change PANEL OPACITY with the wrist menu open → the panels change, the wrist menu's glass does not (it has its own GLASS)
+- [ ] Look at the back of the left wrist → the battery (outline, fill, percentage) and the Wi-Fi bars sit in one row above the time, well inside the core's glass and readable at arm's length; unfold: every tile's name is easy to read and none runs over its tile's edge
+
+CONTROL > WRIST MENU (◔ in THIS HEADSET):
+
+- [ ] Open it from the rail, or say "open the wrist menu settings" → a line says how to open the wrist menu; the inner and outer rings are rows of buttons in order; on the right a copy of the wrist menu stands unfolded on the page; the menu on your wrist does not change while you edit
+- [ ] Pick FOCUS, then MOVE ▸, TO INNER, HIDE → the copy changes at once each time (the chosen tile lit, its name in the copy's core); the bottom line says the change is not on your wrist yet
+- [ ] Pick CONTROL, press HIDE → it stays and a message says why; with 3 tiles on the inner ring, TO OUTER and HIDE refuse the same way
+- [ ] Tap a row under OFF THE MENU → it goes to the end of the outer ring; the outer ring's caption says how many more fit (12 at most)
+- [ ] With the Timers example installed, pick TIMER → ICON ◂ ▸ steps through the generic icons on the copy; PLUGIN'S gives the timer icon back
+- [ ] Move MENU SIZE, TEXT SIZE and GLASS; switch BATTERY, NETWORK, CLOCK and "Fold the rings after a tap" → the copy follows (the names once the TEXT SIZE slider rests); at the largest TEXT SIZE long names shrink to fit their tile
+- [ ] CANCEL → the copy is your wrist menu again; make a change and close the page, open it again → the change is gone
+- [ ] Make changes and press APPLY → your wrist menu is as on the copy (rings, size, names, glass, core); with "Main menu on the wrist" off the DOCK shows the same order without the hidden tiles
+- [ ] RESET LAYOUT, then APPLY → the default 6 + 5 tiles come back
+- [ ] Voice: "make the wrist menu bigger", "set the wrist menu glass to 60 percent", "hide the battery on my wrist", "turn off the clock on my wrist" → the wrist menu changes at once; "turn off the wrist menu" still switches to the DOCK
+- [ ] The page open with its copy → about 72 fps; close it → the copy folds away with the page
 
 ## Windows, placement and layouts
 
@@ -245,8 +260,8 @@ Its menu:
 
 CONTROL:
 
-- [ ] Open CONTROL → one window with the rail on its left: THIS HEADSET (◧ DISPLAY, ◈ LOOK & SOUND, ◐ FOCUS, ✋ HANDS), AI (♫ VOICE, ◆ AGENTS, ⬡ MQH, ⚿ VAULT), LINUX & APP (⬢ SYSTEM, ✦ ABOUT); each row has its status (fixed, sound, on / off, ready, running, keys); the names are in the same narrow capitals as the group captions; nothing is cut off ("LOOK & SOUND" whole)
-- [ ] Tap AGENTS, MQH, VAULT, VOICE, SYSTEM in the rail → each takes the same place, the rail stays still; DISPLAY, LOOK & SOUND, FOCUS, HANDS and ABOUT only change SETTINGS' page
+- [ ] Open CONTROL → one window with the rail on its left: THIS HEADSET (◧ DISPLAY, ◔ WRIST MENU, ◈ LOOK & SOUND, ◐ FOCUS, ✋ HANDS), AI (♫ VOICE, ◆ AGENTS, ⬡ MQH, ⚿ VAULT), LINUX & APP (⬢ SYSTEM, ✦ ABOUT); each row has its status (fixed, sound, on / off, ready, running, keys); the names are in the same narrow capitals as the group captions; nothing is cut off ("LOOK & SOUND" whole)
+- [ ] Tap WRIST MENU, AGENTS, MQH, VAULT, VOICE, SYSTEM in the rail → each takes the same place, the rail stays still; DISPLAY, LOOK & SOUND, FOCUS, HANDS and ABOUT only change SETTINGS' page
 - [ ] Click every category on the rail one after another → every window has the same size, the top-left corner and the rail never move, no window grows over a neighbour
 - [ ] Drag the window by its header → the rail comes along; pinch the rail's bar and move it: the window comes along
 - [ ] Press ✕ on the CONTROL window → the rail closes too; CONTROL on the menu brings back the last category; pressed again it closes

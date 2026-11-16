@@ -218,6 +218,8 @@ namespace MetaCodex.Shell
         public float uiScale = 1f;
         /// MAIN MENU: false = the DOCK panel in front of you, true = the WRIST menu (look at the back of your left wrist).
         public bool wristMenu = true; // the radial menu on the left wrist is the main menu by default (owner 2026-11-15); the DOCK in CONTROL > DISPLAY
+        /// The wrist menu's own settings: its rings (the DOCK's order too), size, text size, glass, core (CONTROL > WRIST MENU).
+        public WristMenuSettings wrist = new WristMenuSettings();
         /// Render resolution x (supersampling). Fixed at MetaCodexShell.RenderScale (1.6, owner 2026-11-09: no SHARPNESS
         /// slider any more); kept so older settings files and MQH's copy still load.
         public float renderScale = 1.6f;

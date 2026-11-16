@@ -155,7 +155,7 @@ namespace MetaCodex.Shell
         private JArray _voicePrefix;
         private int _voicePrefixRev = -1;
         private string _voiceGrammar;
-        public static readonly string[] VoicePanels = { "terminals", "files", "git", "agents", "threads", "web", "links", "clipboard", "mqh", "skills", "plugins", "scripts", "gestures", "vault", "settings", "voice", "system", "focus", "storage", "tools", "messages", "workspaces", "control", "display", "look", "hands", "about" };
+        public static readonly string[] VoicePanels = { "terminals", "files", "git", "agents", "threads", "web", "links", "clipboard", "mqh", "skills", "plugins", "scripts", "gestures", "vault", "settings", "voice", "system", "focus", "storage", "tools", "messages", "workspaces", "control", "display", "look", "hands", "about", WristSettingsId };
 
         private AudioSource _voiceAudio;
         private UiPanel _vHud;
@@ -1138,8 +1138,12 @@ namespace MetaCodex.Shell
                 ["disk"] = "storage", ["disk space"] = "storage", ["space"] = "storage", ["installed tools"] = "tools", ["packages"] = "tools", ["linux"] = "system",
                 ["ambient focus"] = "focus", ["focus mode"] = "focus", ["focus settings"] = "focus", ["ambient"] = "focus", ["the dome"] = "focus",
                 ["console"] = "terminals", ["commit"] = "git", ["branch"] = "git", ["account"] = "agents", ["accounts"] = "agents", ["chat"] = "threads", ["password"] = "vault",
+                // CONTROL > WRIST MENU (ShellWristSettings); a bare "wrist menu" stays the on / off setting (set_setting wrist_menu)
+                ["wrist menu settings"] = WristSettingsId, ["radial menu settings"] = WristSettingsId, ["wrist settings"] = WristSettingsId,
+                ["radial settings"] = WristSettingsId, ["watch menu settings"] = WristSettingsId, ["wrist menu options"] = WristSettingsId,
+                ["radial menu options"] = WristSettingsId, ["wrist menu layout"] = WristSettingsId, ["radial menu layout"] = WristSettingsId,
             };
-            string Label(string id) => id.ToUpperInvariant();
+            string Label(string id) => id == WristSettingsId ? "WRIST MENU" : id.ToUpperInvariant();
 
             Voice.Register(new VoiceCommand
             {
@@ -1174,7 +1178,8 @@ namespace MetaCodex.Shell
                 Description = "Open a panel to see or manage something: terminals (open terminals), files (folders), git (repositories, branches, commits), " +
                     "agents (AI providers: which are signed in, logins, accounts, models), threads (agent conversations, workspaces, projects), web (the browser: web pages, localhost), links (bookmarks and local dev servers), " +
                     "clipboard (captures, screenshots of windows), mqh (skills, plugins, scripts, gestures, the harness), skills (the agents' skills), plugins (MQH and gesture plugins), scripts (Lua scripts), " +
-                    "gestures (hand gestures), vault (secrets, API keys), settings (look, layout, hands), voice (voice control, AI models), workspaces (the folders threads work in: checkout, worktrees, merging), control (the control center, on its last page), display (layout, distance, scale, the wrist menu), look (look and sound: opacity, sounds, the Whisp), hands (click, pinch, ray, clap, the select tool), about (version, licences, app permissions)",
+                    "gestures (hand gestures), vault (secrets, API keys), settings (look, layout, hands), voice (voice control, AI models), workspaces (the folders threads work in: checkout, worktrees, merging), control (the control center, on its last page), display (layout, distance, scale, the wrist menu), look (look and sound: opacity, sounds, the Whisp), hands (click, pinch, ray, clap, the select tool), about (version, licences, app permissions), " +
+                    "wrist-settings (the wrist menu's settings: its two rings and what is on them, its size, text size, glass, what its core shows)",
                 Parameters = VoiceCommands.Schema(("panel", "string", VoicePanels, "the panel to open", true)),
                 Synonyms = new Dictionary<string, Dictionary<string, string>> { ["panel"] = panelSyn },
                 Phrases = new[]
@@ -1187,6 +1192,7 @@ namespace MetaCodex.Shell
                 Samples = new[]
                 {
                     "let me see my files", "pull up the git history", "i want to check the agents", "take me to the settings page", "display the vault",
+                    "i want to rearrange the tiles of my wrist menu",
                 },
                 Run = a => { string id = (string)a["panel"]; return OpenPanel(id) ? "Opened " + Label(id) : "error: no panel " + id; },
             });
@@ -1407,12 +1413,14 @@ namespace MetaCodex.Shell
                     ("make the room completely dark", "set_setting focus_intensity 100"), ("set the dome to two meters", "set_setting focus_radius 2"),
                     ("make the windows bigger", "set_setting ui_scale +"), ("mute the clicks", "set_setting sounds off"),
                     ("make your voice sound like a radio", "set_setting voice_effect comm"),
+                    ("make the wrist menu a bit bigger", "set_setting wrist_menu_size +"), ("hide the battery on my wrist", "set_setting wrist_battery off"),
                 },
                 Samples = new[]
                 {
                     "set the volume to 30 percent", "silence the interface sounds", "make the text larger", "lower the opacity", "increase the blur",
                     "set the radius to 2 meters", "turn off the hand rays", "dim the room more",
                     "switch the voice effect to starship", "give the assistant its normal voice back",
+                    "make the text on the radial menu larger", "stop showing the clock on my wrist",
                 },
                 Check = a => VoiceSettingFits((string)a["setting"], (string)a["value"]) ? null : "that value does not fit " + (string)a["setting"],
                 Run = a => SetSettingByVoice((string)a["setting"], (string)a["value"]),
@@ -1669,6 +1677,21 @@ namespace MetaCodex.Shell
             new VoiceSetting { Id = "foveation", Key = "foveation", Kind = "bool", Label = "Foveated rendering", Names = new[] { "foveation", "foveated rendering" } },
             new VoiceSetting { Id = "views_auto_open", Key = "viewsAutoOpen", Kind = "bool", Label = "Agent views open by themselves", Names = new[] { "auto open views", "agent views auto open", "views auto open" } },
             new VoiceSetting { Id = "wrist_menu", Key = "wristMenu", Kind = "bool", Label = "Main menu on the wrist", Names = new[] { "wrist menu", "menu on the wrist", "radial menu", "watch menu" } },
+            // the wrist menu's own settings (ShellSettings.wrist, CONTROL > WRIST MENU)
+            new VoiceSetting { Id = "wrist_menu_size", Key = "wrist.size", Kind = "number", Min = WristMenuSettings.MinSize, Max = WristMenuSettings.MaxSize, Unit = "x", Label = "Wrist menu size",
+                Names = new[] { "wrist menu size", "radial menu size", "size of the wrist menu", "watch menu size" } },
+            new VoiceSetting { Id = "wrist_text_size", Key = "wrist.textSize", Kind = "number", Min = WristMenuSettings.MinText, Max = WristMenuSettings.MaxText, Unit = "x", Label = "Wrist menu text size",
+                Names = new[] { "wrist menu text", "wrist menu text size", "radial menu text", "text on the wrist menu", "text on the radial menu", "wrist text size" } },
+            new VoiceSetting { Id = "wrist_opacity", Key = "wrist.opacity", Kind = "number", Min = WristMenuSettings.MinOpacity, Max = WristMenuSettings.MaxOpacity, Unit = "%", Label = "Wrist menu glass",
+                Names = new[] { "wrist menu opacity", "wrist menu glass", "radial menu opacity", "wrist glass" } },
+            new VoiceSetting { Id = "wrist_battery", Key = "wrist.battery", Kind = "bool", Label = "Battery on the wrist menu",
+                Names = new[] { "battery on the wrist", "battery on my wrist", "wrist battery", "battery on the wrist menu", "battery level on the wrist" } },
+            new VoiceSetting { Id = "wrist_network", Key = "wrist.network", Kind = "bool", Label = "Network on the wrist menu",
+                Names = new[] { "network on the wrist", "wifi on the wrist", "wifi on my wrist", "wrist network", "signal on the wrist", "wifi signal on the wrist menu" } },
+            new VoiceSetting { Id = "wrist_clock", Key = "wrist.clock", Kind = "bool", Label = "Clock on the wrist menu",
+                Names = new[] { "clock on the wrist", "clock on my wrist", "time on the wrist", "wrist clock", "clock on the wrist menu" } },
+            new VoiceSetting { Id = "wrist_close_tap", Key = "wrist.closeAfterTap", Kind = "bool", Label = "Fold the wrist menu after a tap",
+                Names = new[] { "fold after a tap", "close after a tap", "close the wrist menu after a tap", "fold the wrist menu after a tap" } },
             new VoiceSetting { Id = "orb", Key = "orb", Kind = "bool", Label = "Whisp", Names = new[] { "whisp", "the whisp", "wisp", "the wisp", "orb", "the orb", "energy sphere", "sphere", "companion" } },
             new VoiceSetting { Id = "wake_word", Key = "voice.wakeWord", Kind = "bool", Label = "Hey Whisp", Names = new[] { "hey whisp", "wake word", "wake phrase", "hands free talk", "listening for its name" } },
             new VoiceSetting { Id = "voice_effect", Key = "voice.fx", Kind = "choice", Label = "Voice effect", Options = VoiceFx.Names, OptionLabels = new[] { "off", "AI", "ship", "comm" }, Values = VoiceEffectValues,
@@ -1731,9 +1754,11 @@ namespace MetaCodex.Shell
         /// what it is now.
         public string SetSettingByVoice(string id, string value)
         {
+            value = MoreOrLess(value);
+            // "make the wrist menu bigger": its size (CONTROL > WRIST MENU), not the on / off switch of the main menu's mode
+            if (id == "wrist_menu" && (value == "+" || value == "-")) id = "wrist_menu_size";
             var vs = VoiceSettingsCatalog.FirstOrDefault(x => x.Id == id);
             if (vs == null) return "error: no setting " + id;
-            value = MoreOrLess(value);
             string v = VoiceCommands.Normalize(value ?? "");
             if (vs.Kind == "bool")
             {
