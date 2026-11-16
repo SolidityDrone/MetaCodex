@@ -426,6 +426,7 @@ The repository holds neither the Debian layer nor the model files.
 | [docs/voice.md](docs/voice.md) | The voice path, the command registry, the decision model, spoken replies. |
 | [docs/local-ai.md](docs/local-ai.md) | The local AI service: its process, cores, API and frame-rate rules. |
 | [docs/local-coder.md](docs/local-coder.md) | The local coding model for agent threads. |
+| [docs/ide.md](docs/ide.md) | The code editor: a full IDE from the Linux in the WEB window, installed on request, signed in by the app. |
 | [docs/session-context.md](docs/session-context.md) | The session context (CSCP). |
 | [docs/mqh.md](docs/mqh.md) | The agent harness. |
 | [docs/mqh-spatial.md](docs/mqh-spatial.md) | The `spatial.json` format of plugin panels. |

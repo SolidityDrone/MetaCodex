@@ -1475,6 +1475,7 @@ namespace MetaCodex.Shell
                 Run = a => { var err = InstallGestureExample((string)a["example"]); return err != null ? "error: " + err : "Added the " + (string)a["example"] + " example"; },
             });
             RegisterLocalCoderVoice();
+            RegisterIdeVoice(); // open_code_editor, stop_code_editor (ShellIde)
             Voice.Register(new VoiceCommand
             {
                 Name = "show_keyboard",

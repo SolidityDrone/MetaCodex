@@ -464,6 +464,18 @@ namespace MetaCodex.EditorTools
             bool outerMax = outer.Count == UiWristMenu.MaxOuter && off.SequenceEqual(new[] { "plugin:p/4", "plugin:p/5" }) && outer.Contains("control");
             Check(def && saved && innerMax && innerMin && outerMax,
                 $"wrist layout rules: default ({def}); saved order, unknown ids skipped, new ones at the end of the outer ring, CONTROL never off ({saved}); inner ring {UiWristMenu.MinInner}-{UiWristMenu.MaxInner} ({innerMin}, {innerMax}); outer ring {UiWristMenu.MaxOuter}, the rest off ({outerMax})");
+            // off by default (the CODE tile, ShellIde): off in the default layout and in a saved one that does not name it,
+            // where the user put it in a saved one
+            var withCode = ids.Concat(new[] { "code" }).ToList();
+            var outerCode = outerDef.Concat(new[] { true }).ToList();
+            var offCode = withCode.Select(x => x == "code").ToList();
+            WristLayout.Resolve(withCode, outerCode, "control", null, null, null, inner, outer, off, offCode);
+            bool codeDef = inner.SequenceEqual(ids.Take(6)) && outer.SequenceEqual(ids.Skip(6)) && off.SequenceEqual(new[] { "code" });
+            WristLayout.Resolve(withCode, outerCode, "control", new[] { "talk", "terms", "files" }, new[] { "clip" }, null, inner, outer, off, offCode);
+            bool codeSaved = off.SequenceEqual(new[] { "code" }) && !outer.Contains("code") && outer.Contains("threads");
+            WristLayout.Resolve(withCode, outerCode, "control", new[] { "talk", "terms", "files" }, new[] { "code" }, null, inner, outer, off, offCode);
+            bool codeKept = outer.FirstOrDefault() == "code" && off.Count == 0;
+            Check(codeDef && codeSaved && codeKept, $"an item off by default (CODE): off in the default layout ({codeDef}) and in a saved one that does not name it ({codeSaved}); where the user put it ({codeKept})");
 
             // the page (flat: the drags below map twin points to page points on a flat page)
             foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);

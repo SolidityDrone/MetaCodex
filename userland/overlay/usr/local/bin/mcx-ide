@@ -1,0 +1,273 @@
+#!/bin/bash
+# mcx-ide: the app's CODE EDITOR: an open-source browser IDE server (code-server, MIT, docs/ide.md and
+# docs/LICENSES.md) in this Linux, shown in the app's WEB window. Nothing is installed or runs until the user asks.
+#   mcx-ide install          download the pinned release for arm64 into /opt/ide, check its sha256 (a mismatch is
+#                            refused), unpack it (about 225 MB to download, 645 MB on disk)
+#   mcx-ide start            start it and print its URL and port: through the app's background service when the app
+#                            answers (it keeps running when this terminal closes), else in this terminal's background
+#   mcx-ide run              run it in the foreground (what the app's background service runs; one at a time)
+#   mcx-ide stop | status | log | version
+#   mcx-ide password         print the password, to sign in from another browser (the app signs its window in itself)
+#   mcx-ide uninstall [--all]  remove the program (--all: also its settings, extensions and password; never your files)
+# It listens on 127.0.0.1 only (port 47820, or the next free one up to 47829), always with a password: every app on
+# the headset can reach 127.0.0.1, and the editor is a shell in this Linux. The password is random, made once
+# (/root/.local/share/mcx-ide/password, mode 600, inside the app's private storage). Telemetry and update checks are
+# off; it runs at low priority (nice 10). Log: /root/.local/share/mcx-ide/mcx-ide.log.
+# Shipped by the app (overlay); edits are overwritten. The app reads: /opt/ide/VERSION (installed), run/pid, run/port,
+# run/server.log (the server's own log of this run) and the password file.
+set -euo pipefail
+
+# the release (keep IdeVersion in unity/Assets/MetaCodex/Runtime/Shell/ShellIde.cs the same)
+VERSION=4.145.2
+URL=${MCX_IDE_URL:-https://github.com/coder/code-server/releases/download/v$VERSION/code-server-$VERSION-linux-arm64.tar.gz}
+SHA256=${MCX_IDE_SHA256:-e867a34416e2da4a83496b09580001893e7a4e5bb58a0624c4fcd22819e7d53d}  # the asset's digest on GitHub, 2026-11-16
+SIZE_MB=225                           # the download: 233,639,045 bytes
+DISK_MB=645                           # unpacked: 675,891,723 bytes in 6,033 files (measured 2026-11-16)
+
+# MCX_IDE_ROOT, MCX_IDE_URL, MCX_IDE_SHA256, MCX_IDE_LOCAL, MCX_IDE_PORT: for tests/ide/run-mcx-ide-tests.sh; unset on the headset
+R=${MCX_IDE_ROOT:-}
+IDE=$R/opt/ide
+DIR=$IDE/code-server-$VERSION-linux-arm64
+DATA=$R/root/.local/share/mcx-ide
+RUN=$DATA/run
+LOG=$DATA/mcx-ide.log
+PASS=$DATA/password
+FOLDER=${MCX_IDE_FOLDER:-$R/root/metacodex-projects}
+PORT0=${MCX_IDE_PORT:-47820}
+NAME="code editor"
+
+say() { if [ -t 1 ]; then printf '\033[1;36m==> %s\033[0m\n' "$*"; else printf '==> %s\n' "$*"; fi; }
+die() { echo "mcx-ide: $1" >&2; log "error: $1"; exit "${2:-1}"; }
+log() { mkdir -p "$DATA" 2>/dev/null && printf '%s %s\n' "$(date '+%F %T')" "$*" >> "$LOG" 2>/dev/null || true; }
+
+installed() { [ -f "$IDE/VERSION" ] && [ -x "$(bin_of "$(cat "$IDE/VERSION")")" ]; }
+bin_of() { echo "$IDE/code-server-$1-linux-arm64/bin/code-server"; }
+port_busy() { (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null; }
+healthy() { curl -fsS -m 3 "http://127.0.0.1:$1/healthz" 2>/dev/null | grep -q '"status"'; }
+pid_now() { local p; p=$(cat "$RUN/pid" 2>/dev/null || true); [[ "$p" =~ ^[0-9]+$ ]] && kill -0 "$p" 2>/dev/null && echo "$p"; }
+port_now() { cat "$RUN/port" 2>/dev/null || echo "$PORT0"; }
+# ours and answering: its process is alive, its log says it listens on that port, and /healthz answers
+running() { local p; p=$(port_now); [ -n "$(pid_now)" ] && grep -q "listening on http://127.0.0.1:$p" "$RUN/server.log" 2>/dev/null && healthy "$p"; }
+
+ensure_password() {
+  mkdir -p "$DATA"
+  if [ ! -s "$PASS" ]; then
+    (umask 077; head -c 32 /dev/urandom | od -An -v -tx1 | tr -d ' \n' > "$PASS.tmp" && mv -f "$PASS.tmp" "$PASS")
+    log "made a new password"
+  fi
+  chmod 600 "$PASS"
+}
+
+# the defaults for a headset (written once: the user's own changes stay): no blinking cursor and no animations (each
+# change of the page is a new frame the app copies into VR), autosave (Ctrl+S needs a keyboard), larger text, no
+# telemetry, no update checks, no startup page, the app name out of the window title, the built-in AI chat off (it
+# needs an account of its own; the app has its agents)
+write_settings() {
+  local f=$DATA/User/settings.json
+  [ -f "$f" ] && return 0
+  mkdir -p "$DATA/User"
+  cat > "$f" <<'JSON'
+{
+  "workbench.startupEditor": "none",
+  "workbench.colorTheme": "Default Dark Modern",
+  "workbench.reduceMotion": "on",
+  "workbench.tips.enabled": false,
+  "window.title": "${dirty}${activeEditorShort}${separator}${rootName}",
+  "editor.fontSize": 16,
+  "editor.cursorBlinking": "solid",
+  "editor.smoothScrolling": false,
+  "editor.minimap.enabled": false,
+  "terminal.integrated.fontSize": 15,
+  "keyboard.dispatch": "keyCode",
+  "terminal.integrated.cursorBlinking": false,
+  "files.autoSave": "afterDelay",
+  "files.watcherExclude": { "**/node_modules/**": true, "**/.git/objects/**": true, "**/build/**": true, "**/.gradle/**": true },
+  "search.followSymlinks": false,
+  "telemetry.telemetryLevel": "off",
+  "update.mode": "none",
+  "extensions.autoCheckUpdates": false,
+  "extensions.autoUpdate": false,
+  "extensions.ignoreRecommendations": true,
+  "security.workspace.trust.enabled": false,
+  "git.autofetch": false,
+  "chat.disableAIFeatures": true,
+  "typescript.tsserver.maxTsServerMemory": 1024
+}
+JSON
+}
+
+# Android refuses apps the netlink request behind os.networkInterfaces() (EACCES since Android 11: "uv_interface_addresses
+# returned Unknown system error 13"): an empty list instead of a crash, in every node process of the editor
+write_netfix() {
+  cat > "$IDE/mcx-netfix.js" <<'JS'
+// written by mcx-ide (MetaCodex): os.networkInterfaces() fails on Android (EACCES); an empty list instead
+"use strict";
+const os = require("os");
+const real = os.networkInterfaces;
+os.networkInterfaces = function () { try { return real.apply(os, arguments); } catch (e) { return {}; } };
+JS
+}
+
+cmd_install() {
+  if [ -z "${MCX_IDE_URL:-}" ] && [ "$(uname -m)" != aarch64 ]; then die "this release is for arm64 (the headset); this is $(uname -m)"; fi
+  if installed && [ "$(cat "$IDE/VERSION")" = "$VERSION" ] && [ "${1:-}" != --force ]; then
+    say "$NAME $VERSION is installed ($DIR)"; return 0
+  fi
+  mkdir -p "$IDE"
+  local avail need=$(( (SIZE_MB + DISK_MB) * 1024 ))
+  avail=$(df -Pk "$IDE" | awk 'NR==2 {print $4}')
+  if [ -n "$avail" ] && [ "$avail" -lt "$need" ]; then
+    die "not enough space: needs about $((SIZE_MB + DISK_MB)) MB, $((avail / 1024)) MB free (SYSTEM > STORAGE)"
+  fi
+  local tgz=$IDE/.download-$VERSION.tar.gz
+  local progress=-sS; [ -t 1 ] && progress=--progress-bar
+  if [ -f "$tgz" ] && echo "$SHA256  $tgz" | sha256sum -c --quiet - >/dev/null 2>&1; then
+    say "$NAME $VERSION: downloaded already"
+  else
+    say "$NAME $VERSION: downloading $SIZE_MB MB (resumes if it was cut)"
+    log "install $VERSION: download $URL"
+    if ! nice -n 10 curl -fL --retry 3 --retry-delay 3 -C - $progress -o "$tgz" "$URL"; then
+      # a broken partial file makes curl's resume fail: once more from the start
+      rm -f "$tgz"
+      nice -n 10 curl -fL --retry 3 --retry-delay 3 $progress -o "$tgz" "$URL" || die "download failed (offline?): run mcx-ide install again"
+    fi
+  fi
+  say "checking its sha256"
+  if ! echo "$SHA256  $tgz" | sha256sum -c --quiet - >/dev/null 2>&1; then
+    local got; got=$(sha256sum "$tgz" | cut -d' ' -f1)
+    rm -f "$tgz"
+    die "wrong sha256: refused and deleted (expected $SHA256, got $got)"
+  fi
+  say "unpacking into $DIR (about a minute)"
+  rm -rf "$DIR.part" && mkdir -p "$DIR.part"
+  nice -n 10 tar -xzf "$tgz" -C "$DIR.part" --strip-components=1 --no-same-owner || { rm -rf "$DIR.part"; die "unpacking failed"; }
+  [ -x "$DIR.part/bin/code-server" ] || { rm -rf "$DIR.part"; die "the archive has no bin/code-server"; }
+  rm -rf "$DIR" && mv "$DIR.part" "$DIR"
+  rm -f "$tgz"
+  # older versions go (their settings and extensions are in $DATA and stay)
+  for d in "$IDE"/code-server-*-linux-arm64; do [ "$d" != "$DIR" ] && [ -d "$d" ] && rm -rf "$d"; done
+  write_netfix
+  echo "$VERSION" > "$IDE/VERSION" # last: the app reads this file as "installed"
+  log "installed $VERSION ($(du -sm "$DIR" | cut -f1) MB)"
+  say "$NAME $VERSION installed ($(du -sm "$DIR" | cut -f1) MB). Open it from the app (CODE, or SYSTEM > TOOLS), or: mcx-ide start"
+}
+
+# The server in the foreground (the app's background service runs `exec mcx-ide run`). Its pid is this script's pid:
+# exec keeps it.
+cmd_run() {
+  installed || die "not installed: mcx-ide install" 4
+  if running; then die "already running: $(cat "$RUN/url" 2>/dev/null)" 5; fi
+  local v; v=$(cat "$IDE/VERSION")
+  local bin; bin=$(bin_of "$v")
+  ensure_password
+  write_settings
+  [ -f "$IDE/mcx-netfix.js" ] || write_netfix
+  mkdir -p "$RUN" "$DATA/extensions" "$FOLDER"
+  local port=$PORT0 last=$((PORT0 + 9))
+  while port_busy "$port"; do
+    port=$((port + 1))
+    [ "$port" -le "$last" ] || die "ports $PORT0-$last are all taken"
+  done
+  # our own config file: code-server would otherwise make ~/.config/code-server/config.yaml with a password of its own
+  printf 'bind-addr: 127.0.0.1:%s\nauth: password\ncert: false\n' "$port" > "$DATA/config.yaml"
+  echo $$ > "$RUN/pid"
+  echo "$port" > "$RUN/port"
+  echo "http://127.0.0.1:$port/" > "$RUN/url"
+  : > "$RUN/server.log"
+  log "run $v on 127.0.0.1:$port (pid $$)"
+  # the password's sha256 is what code-server compares the session cookie with (HASHED_PASSWORD without "$argon":
+  # its SHA256 method); the app computes the same value from the password file and sets the cookie in its WebView
+  HASHED_PASSWORD=$(tr -d '\n' < "$PASS" | sha256sum | cut -d' ' -f1)
+  export HASHED_PASSWORD
+  unset PASSWORD
+  export NODE_OPTIONS="--require=$IDE/mcx-netfix.js${NODE_OPTIONS:+ $NODE_OPTIONS}"
+  exec >> "$RUN/server.log" 2>&1
+  exec nice -n 10 "$bin" \
+    --config "$DATA/config.yaml" \
+    --bind-addr "127.0.0.1:$port" \
+    --auth password \
+    --disable-telemetry \
+    --disable-update-check \
+    --disable-workspace-trust \
+    --disable-getting-started-override \
+    --user-data-dir "$DATA" \
+    --extensions-dir "$DATA/extensions" \
+    --app-name "Code editor" \
+    "$FOLDER"
+}
+
+cmd_start() {
+  installed || die "not installed: mcx-ide install (about $SIZE_MB MB)" 4
+  if running; then say "$NAME is running: $(cat "$RUN/url")  (port $(port_now))"; return 0; fi
+  local how=""
+  # through the app: its background service runs it off the frame loop's cores, and it outlives this terminal
+  if [ -z "${MCX_IDE_LOCAL:-}" ] && command -v mcx-ui >/dev/null && [ -r /mnt/quest/control.token ]; then
+    local r; r=$(mcx-ui system ide start 2>&1 || true)
+    case "$r" in ok*) how=app ;; *) echo "mcx-ide: the app did not start it ($r): starting it here" >&2 ;; esac
+  fi
+  if [ -z "$how" ]; then
+    how=here
+    local T=""; taskset -c 0-2 true 2>/dev/null && T="taskset -c 0-2"
+    $T setsid nohup "$0" run > /dev/null 2>&1 < /dev/null &
+  fi
+  say "starting $NAME ($( [ "$how" = app ] && echo "in the app's background service" || echo "in this terminal's background: it stops when this terminal closes"))"
+  local i
+  for i in $(seq 1 240); do
+    if running; then
+      say "$NAME is running: $(cat "$RUN/url")  (port $(port_now))"
+      echo "   password: mcx-ide password   (the app's WEB window signs in by itself)"
+      return 0
+    fi
+    sleep 0.5
+  done
+  die "it did not answer within 2 minutes: mcx-ide log"
+}
+
+cmd_stop() {
+  local p; p=$(pid_now || true)
+  if [ -z "$p" ]; then say "$NAME is not running"; rm -f "$RUN/pid"; return 0; fi
+  kill -TERM "$p" 2>/dev/null || true
+  local i
+  for i in $(seq 1 20); do kill -0 "$p" 2>/dev/null || break; sleep 0.5; done
+  if kill -0 "$p" 2>/dev/null; then kill -KILL "$p" 2>/dev/null || true; fi
+  # what it started (extension host, file watcher, language servers) goes with it
+  pkill -TERM -f "$IDE/code-server-" 2>/dev/null || true
+  rm -f "$RUN/pid"
+  log "stopped (pid $p)"
+  say "$NAME stopped"
+}
+
+cmd_status() {
+  if ! installed; then echo "$NAME: not installed (mcx-ide install: about $SIZE_MB MB)"; return 4; fi
+  local v; v=$(cat "$IDE/VERSION")
+  echo "$NAME $v in $IDE$( [ "$v" != "$VERSION" ] && echo " (this app brings $VERSION: mcx-ide install)")"
+  if running; then
+    echo "running: $(cat "$RUN/url")  port $(port_now)  pid $(pid_now)"
+    echo "data: $DATA   folder: $FOLDER   log: $LOG"
+    return 0
+  fi
+  echo "stopped   (log: $LOG)"
+  return 3
+}
+
+cmd_uninstall() {
+  cmd_stop >/dev/null || true
+  rm -rf "$IDE"
+  log "uninstalled"
+  if [ "${1:-}" = --all ]; then rm -rf "$DATA"; say "$NAME removed, with its settings, extensions and password (your projects stay)"
+  else say "$NAME removed (its settings and extensions stay in $DATA; --all removes them; your projects stay)"; fi
+}
+
+cmd=${1:-}; shift || true
+case "$cmd" in
+  install) cmd_install "$@" ;;
+  run) cmd_run ;;
+  start) cmd_start ;;
+  stop) cmd_stop ;;
+  status) cmd_status ;;
+  uninstall) cmd_uninstall "$@" ;;
+  version) installed && cat "$IDE/VERSION" || { echo "not installed"; exit 4; } ;;
+  password) installed || die "not installed: mcx-ide install" 4; ensure_password; cat "$PASS"; echo ;;
+  log) tail -n "${1:-60}" "$RUN/server.log" 2>/dev/null; echo "--- $LOG"; tail -n 20 "$LOG" 2>/dev/null || true ;;
+  *) sed -n 2,13p "$0" >&2; exit 2 ;;
+esac

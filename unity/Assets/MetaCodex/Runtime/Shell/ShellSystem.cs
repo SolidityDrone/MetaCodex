@@ -48,7 +48,7 @@ namespace MetaCodex.Shell
             ("android", "ANDROID · QUEST", "build native apps for this headset (NDK, android.jar, OpenXR, APK tools, adb, Vulkan shaders)", 3),
             ("git", "GIT", "version control: history, branches, remotes on any git server", 4),
             ("terminal", "TERMINAL UTILITIES", "download, connect, search, sessions, data", 7),
-            ("editors", "EDITORS", "edit files right in the terminal", 5),
+            ("editors", "EDITORS", "edit files in the terminal, or in a full code editor in the WEB window", 5),
         };
 
         /// The native Quest app tools come from `mcx-setup` (one place pins every download and its sha256): the NDK alone
@@ -108,6 +108,8 @@ namespace MetaCodex.Shell
             new ToolDef("nano", "editors", "nano --version", "apt:nano"),
             new ToolDef("vim", "editors", "vim --version", "apt:vim", "apt:vim", "apt:vim"),
             new ToolDef("nvim", "editors", "nvim --version", "apt:neovim", "apt:neovim", "apt:neovim"),
+            // the code editor (ShellIde, userland mcx-ide): its row opens its own menu (install, open, stop, remove)
+            new ToolDef(IdeToolName, "editors", "mcx-ide version", "mcx-ide install", "mcx-ide install", "mcx-ide uninstall", check: IdeMarker),
         };
 
         /// What each tool does, in a few plain words: the list row and agents' tools.json show it (no logos, so the
@@ -153,6 +155,7 @@ namespace MetaCodex.Shell
             ["nano"] = "simple text editor",
             ["vim"] = "modal text editor",
             ["nvim"] = "Neovim: a modern vim",
+            [IdeToolName] = "a full IDE in the WEB window: files, search, git, terminal",
         };
 
         public static string AboutOf(string tool) => tool != null && ToolAbout.TryGetValue(tool, out var a) ? a : null;
@@ -480,9 +483,10 @@ namespace MetaCodex.Shell
                         kv.TryGetValue("version", out var vv) ? vv : null, kv.TryGetValue("thread", out var th) ? th : null, null);
                 }
                 case "first-use": return FirstUseStatus;
+                case "ide": return IdeCommand(parts.Length > 1 ? parts[1] : ""); // the code editor (ShellIde); mcx-ide start sends `ide start`
                 case "bench-first-run": return BenchFirstRun();
                 case "bench-first-run-result": return _benchFirstRun.Length > 0 ? _benchFirstRun.ToString() : "not run yet";
-                default: return "error: system bench-first-run | bench-first-run-result | tools [json] | refresh | storage | inventory | install-apk <apk> | install-status | can-install | app <package> | launch <package> [thread <id>] [label <w>] [version <v>] | launch-status <package> | first-use";
+                default: return "error: system bench-first-run | bench-first-run-result | tools [json] | refresh | storage | inventory | install-apk <apk> | install-status | can-install | app <package> | launch <package> [thread <id>] [label <w>] [version <v>] | launch-status <package> | first-use | ide start|open [folder]|stop|status";
             }
         }
 
@@ -633,6 +637,7 @@ namespace MetaCodex.Shell
         private void ToolPicked(UiToolList.Row tile)
         {
             if (!(tile?.Tag is ToolInfo tool)) return;
+            if (tool.Name == IdeToolName) { IdePicked(tool); return; } // install, open, stop, remove (ShellIde)
             var items = new List<UiListItem>();
             if (!tool.Found && tool.Install == "agents") items.Add(new UiListItem { Icon = "◆", Title = "Install from AGENTS", Sub = "the provider's own installer", Tag = "agents" });
             else if (!tool.Found && tool.Install != null) items.Add(new UiListItem { Icon = "⇣", Title = "Install " + tool.Name, Sub = Cut(Cmd(tool.Install, "install"), 60), Tag = "install" });

@@ -98,10 +98,12 @@ namespace MetaCodex.Shell
         /// puts the rest off). Saved: its rings in its order; ids that are not there any more (an uninstalled plugin) are
         /// skipped; items it does not name (a new system item, a new plugin's tile) go to the end of the outer ring. Then the
         /// limits: the inner ring keeps MinInner..MaxInner (its overflow goes to the start of the outer ring; too few: it
-        /// takes the outer ring's first), the outer ring keeps MaxOuter (its overflow goes off the menu).
+        /// takes the outer ring's first), the outer ring keeps MaxOuter (its overflow goes off the menu). `offByDefault`
+        /// (optional): items that start off the menu (the default layout puts them off, a saved layout that does not name
+        /// them too): the user adds them from the WRIST MENU page (the CODE tile, ShellIde).
         public static void Resolve(IReadOnlyList<string> ids, IReadOnlyList<bool> outerByDefault, string pinned,
             IReadOnlyList<string> savedInner, IReadOnlyList<string> savedOuter, IReadOnlyList<string> savedHidden,
-            List<string> inner, List<string> outer, List<string> off)
+            List<string> inner, List<string> outer, List<string> off, IReadOnlyList<bool> offByDefault = null)
         {
             inner.Clear();
             outer.Clear();
@@ -112,7 +114,7 @@ namespace MetaCodex.Shell
             if (fresh)
             {
                 for (int i = 0; i < ids.Count; i++)
-                    if (placed.Add(ids[i])) (outerByDefault[i] ? outer : inner).Add(ids[i]);
+                    if (placed.Add(ids[i])) (OffByDefault(offByDefault, i) ? off : outerByDefault[i] ? outer : inner).Add(ids[i]);
             }
             else
             {
@@ -120,7 +122,7 @@ namespace MetaCodex.Shell
                 Take(savedOuter, outer, known, placed);
                 Take(savedHidden, off, known, placed);
                 for (int i = 0; i < ids.Count; i++)
-                    if (placed.Add(ids[i])) outer.Add(ids[i]); // new since the layout was saved: the end of the outer ring
+                    if (placed.Add(ids[i])) (OffByDefault(offByDefault, i) ? off : outer).Add(ids[i]); // new since the layout was saved: the end of the outer ring
             }
             if (pinned != null && off.Remove(pinned)) inner.Add(pinned); // never off the menu: the user could not come back here
             while (inner.Count > UiWristMenu.MaxInner)
@@ -142,6 +144,8 @@ namespace MetaCodex.Shell
                 outer.RemoveAt(k);
             }
         }
+
+        private static bool OffByDefault(IReadOnlyList<bool> offByDefault, int i) => offByDefault != null && i < offByDefault.Count && offByDefault[i];
 
         private static void Take(IReadOnlyList<string> from, List<string> to, HashSet<string> known, HashSet<string> placed)
         {
@@ -192,6 +196,7 @@ namespace MetaCodex.Shell
             var all = MenuCatalog(ws);
             var ids = new List<string>(all.Count);
             var outerDef = new List<bool>(all.Count);
+            var offDef = new List<bool>(all.Count);
             var byId = new Dictionary<string, MainMenuItem>(all.Count);
             foreach (var m in all)
             {
@@ -199,11 +204,12 @@ namespace MetaCodex.Shell
                 byId[m.Id] = m;
                 ids.Add(m.Id);
                 outerDef.Add(m.Outer);
+                offDef.Add(m.DefaultOff);
             }
             var inner = new List<string>();
             var outer = new List<string>();
             var offIds = new List<string>();
-            WristLayout.Resolve(ids, outerDef, ControlItemId, ws.inner, ws.outer, ws.hidden, inner, outer, offIds);
+            WristLayout.Resolve(ids, outerDef, ControlItemId, ws.inner, ws.outer, ws.hidden, inner, outer, offIds, offDef);
             var list = new List<MainMenuItem>(inner.Count + outer.Count);
             foreach (var id in inner) { var m = byId[id]; m.Outer = false; list.Add(m); }
             foreach (var id in outer) { var m = byId[id]; m.Outer = true; list.Add(m); }
@@ -570,14 +576,16 @@ namespace MetaCodex.Shell
             _wsById.Clear();
             var ids = new List<string>(all.Count);
             var outerDef = new List<bool>(all.Count);
+            var offDef = new List<bool>(all.Count);
             foreach (var m in all)
             {
                 if (m.Id == null || _wsById.ContainsKey(m.Id)) continue;
                 _wsById[m.Id] = m;
                 ids.Add(m.Id);
                 outerDef.Add(m.Outer);
+                offDef.Add(m.DefaultOff);
             }
-            WristLayout.Resolve(ids, outerDef, ControlItemId, _wd.inner, _wd.outer, _wd.hidden, _wsInner, _wsOuter, _wsOff);
+            WristLayout.Resolve(ids, outerDef, ControlItemId, _wd.inner, _wd.outer, _wd.hidden, _wsInner, _wsOuter, _wsOff, offDef);
             if (_wsSel != null && !_wsInner.Contains(_wsSel) && !_wsOuter.Contains(_wsSel)) _wsSel = null;
             RefreshPalette();
             RefreshSelection();
@@ -891,9 +899,10 @@ namespace MetaCodex.Shell
         {
             var ids = new List<string>();
             var outerDef = new List<bool>();
-            foreach (var m in MenuCatalog(_wd)) { if (m.Id == null || ids.Contains(m.Id)) continue; ids.Add(m.Id); outerDef.Add(m.Outer); }
+            var offDef = new List<bool>();
+            foreach (var m in MenuCatalog(_wd)) { if (m.Id == null || ids.Contains(m.Id)) continue; ids.Add(m.Id); outerDef.Add(m.Outer); offDef.Add(m.DefaultOff); }
             List<string> di = new List<string>(), dout = new List<string>(), doff = new List<string>();
-            WristLayout.Resolve(ids, outerDef, ControlItemId, null, null, null, di, dout, doff);
+            WristLayout.Resolve(ids, outerDef, ControlItemId, null, null, null, di, dout, doff, offDef);
             return WristMenuSettings.Same(inner, di) && WristMenuSettings.Same(outer, dout) && WristMenuSettings.Same(off, doff);
         }
 
