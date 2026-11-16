@@ -3907,8 +3907,11 @@ end)
             Check(tags.SequenceEqual(new[] { "g:native", "p:p1", "w:p1|checkout", "t:t1", "w:p1|wt:feat/x", "t:t2", "g:default", "n:default", "g:research", "p:p2", "t:t3", "g:other", "p:p3", "p:p3" })
                   && list.Items[0].Title == "NATIVE" && list.Items[0].Badge == "1 RUNNING" && list.Items[8].Badge == "1 NEED YOU" && list.Items[11].Title == "OTHER"
                   && list.Items[1].Indent == 1 && list.Items[2].Indent == 2 && list.Items[3].Indent == 3 && list.Items[10].Indent == 2
-                  && list.Items[1].Badge == "1 RUNNING" && list.Items[9].Badge == "1 NEED YOU" && list.Items[4].Title == "feat/x" && list.Items[1].Sub == "…/native/metacodex",
-                "THREADS grouped by type, then project, then folder (checkout, worktrees) when a project has a worktree, newest first, with running / needs-you badges: " + string.Join(" ", tags));
+                  && list.Items[1].Badge == "2" && list.Items[9].Badge == "1" && list.Items[4].Title == "feat/x" && list.Items[1].Sub == "…/native/metacodex"
+                  // the rows' kinds: a type band, a project (its caption under it, a divider), a thread (compact, a status dot: t2 runs)
+                  && list.Items[0].Kind == UiListKind.Band && list.Items[1].Kind == UiListKind.Stacked && list.Items[1].Divider && list.Items[3].Kind == UiListKind.Compact
+                  && list.Items[5].Dot != null && list.Items[5].DotLit && list.Items[3].Dot != null && !list.Items[3].DotLit,
+                "THREADS grouped by type, then project, then folder (checkout, worktrees) when a project has a worktree, newest first; bands, captions, status dots, one count per row: " + string.Join(" ", tags));
             shell.PickThreadRowForTest("p:p1");
             Check(shell.ThreadListForTest.Items.Count == 10 && shell.ThreadListForTest.Items[1].Icon == "▸", "tapping a project folds it");
             shell.PickThreadRowForTest("p:p1");
