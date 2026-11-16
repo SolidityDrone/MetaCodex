@@ -62,12 +62,16 @@ installed ones are projects in `/root/metacodex-projects/plugins/apps/timers` an
 1. **Plan, then wait for the user's OK.** Say what the user will see and do: the window and its buttons, the menu
    tile's label, the gestures (in body words), the voice commands, what is saved, and how to undo it. Write nothing
    before the OK.
-2. Write complete files in the project folder (no placeholders). Raise `version` in `plugin.json`.
+2. Write complete files in the project folder (no placeholders). Raise the minor number of `version` in `plugin.json`
+   (0.1.0 -> 0.2.0, 1.0.0 -> 1.1.0).
 3. Check: `mcx-ui plugin check <id>` must say `loaded`, show your windows, tiles and voice commands, and
    `warnings: 0`. Fix every `ERROR` and `warn` line, save, check again (`mcx-ui plugin log <id>`: the whole log).
 4. Try it:
    - a window: `mcx-ui view open plugin-<id>-main` opens it; `mcx-ui ui click view-plugin-<id>-main START` presses
-     a button by its label; `mcx-ui plugin check <id>` again (it must still say `loaded`);
+     a button by its label; `mcx-ui plugin event <id> <type> <component id> [value]` sends what a tap or a sent text
+     sends: `plugin event todo input add buy milk`, `plugin event todo cell item-3`, `plugin event todo toggle sound
+     true`, `plugin event todo button start` (`<id>`: the plugin, for its main window, or a full window id); then
+     `mcx-ui plugin check <id>` again (it must still say `loaded`);
    - a gesture: `mcx-ui gesture list` shows its name; `mcx-ui gesture <name> right start` (or `both start`; a clap:
      `mcx-ui gesture clap`) simulates it: the reaction must happen (`mcx-ui ui list` shows open panels);
    - a voice command: `mcx-ui voice decide "<a sample>"` picks it; `mcx-ui voice run "<a sample>"` runs it.
@@ -143,7 +147,12 @@ Tones: `ok` (green), `warn` (amber), `error` (red), `accent` (the app's colour: 
 Rules:
 - Button labels: short verbs in capitals, 14 characters or fewer (over 18 is a warning): `START`, `+5 MIN`, `SKIP`.
   At most one `accent` button in the window: the main action (START, +1, TODAY); `error` only for something that deletes.
-- A list longer than about 8 rows: show the first ones and say "+3 more". Text over 600 characters is a warning.
+- The app does not cut lists: your `render()` shows the first rows (about 8) and a dim "+3 more" line. Text over
+  600 characters is a warning.
+- Any rebuild (after a button, a toggle, a new item) empties the `input` fields: a half-typed text is lost, so keep
+  the input for whole entries sent with SEND.
+- Symbols: the ones in the glyph list below (`◆ ◉ ▤ ◫ ☰ ◎ ▣ ◐ ⌖ ◷ ◔ ✓ ★`) show everywhere; others may show as boxes.
+  Keep cell and button text to a few words.
 - A cell without `id` is not tappable (week day headers, blanks: `{ text = "", tone = "dim" }`). Give tappable things
   stable ids (`"d-2026-11-20"`, `"alarm-3"`), never list positions that shift.
 - Do not draw your own frame, header or close button: the app does. One symbol in a label is fine; no emoji walls.
@@ -174,7 +183,8 @@ menu.remove("drink")
   icon in CONTROL > WRIST MENU; that choice wins.
 - Exactly one of `panel` (one of your windows; `ui.panel` may come before or after `menu.add`) or `run`.
 - The menu holds 6 plugin tiles in all: `menu.add` returns false when it is full (the log says so): tell the user.
-- Keep a tile's `id` the same across versions: the user's menu layout remembers tiles by it.
+- Keep a tile's `id` the same across versions: the user's menu layout remembers tiles by it (its label, glyph and
+  icon may change).
 
 ## APP: time (wall clock, not session time)
 
@@ -313,6 +323,10 @@ voice.command{
 - **Month grid**: 7 header cells without id, blanks without id (tone `dim`), one cell a day with id `"d-YYYY-MM-DD"`,
   `tone = "accent"` for today, `sub = "•"` for days with entries.
 - **More than one window**: `ui.panel{id="settings", ...}` and a button that calls `ui.open("settings")`.
+- **A list you act on** (to-do, shopping, habits): a `grid` with `columns = 1`, one cell a row, its id from a number
+  kept in the item (`"item-" .. it.n`, `S.next` counts up; never the list position); a tap on a cell (`e.type ==
+  "cell"`) ticks it (`tone = "dim"` and a `✓` for done ones); an `input` adds an item; delete with a toggle "Delete mode"
+  (a tap then removes) or a `CLEAR DONE` button (`error` tone), and an `UNDO` button for the last delete.
 
 ---
 
@@ -349,14 +363,17 @@ end)
 
 1. Read `plugin.json`, all of `main.lua` and `git log --oneline` first. Find the state (`store` keys and the table
    saved in them), the window ids, the tile ids, the gesture names and the voice command names.
-2. Change only what was asked. Keep ids the same: window ids, tile ids (the user's menu layout keeps them), gesture
-   names (the user's bindings use them), voice command names.
+2. Change only what was asked. When the plugin already does part of it, say so in the plan and change only what is
+   missing (relabel or extend what is there; no second button for the same thing). Keep ids the same: window ids,
+   tile ids (the user's menu layout keeps them), gesture names (the user's bindings use them), voice command names.
 3. Keep the saved state readable: add new fields with defaults (`load()` copies saved fields over the defaults, so
    an old store just lacks the new ones); never rename or change the type of a saved field without converting the
-   old value in `load()`.
+   old value in `load()`. A saved value made from a constant you change (a phase's length saved with the phase) keeps
+   the old number: recompute or convert it in `load()`.
 4. Keep the voice commands in step with the window: a new button that does something new gets a command (or a new
    option of a command); a removed feature takes its command with it.
-5. Raise `version` (1.0.0 -> 1.1.0), then the loop: check, try, commit, report.
+5. Raise `version` (1.0.0 -> 1.1.0), then the loop: check, try (every new or changed button, cell, toggle, input,
+   and the voice commands that changed), commit, report.
 - Any change of the spec other than LIVE texts rebuilds the window: fine after a tap, never every second.
 
 ## Turn off or remove
@@ -373,7 +390,8 @@ end)
 - [ ] The user said OK to the plan; you wrote only in the plugin's project folder; the marker is untouched.
 - [ ] `plugin.json`: valid JSON, `id` = the folder's name, `kind` = the project's kind, `version` raised.
 - [ ] `mcx-ui plugin check <id>`: `loaded`, the windows, the tile (apps only), the voice commands, `warnings: 0`.
-- [ ] Every button pressed once with `mcx-ui ui click`; every gesture simulated; `check` still says `loaded`.
+- [ ] Every button pressed once (`mcx-ui ui click`), every input, cell and toggle sent once (`mcx-ui plugin event`),
+      every gesture simulated; `check` still says `loaded`.
 - [ ] A countdown or clock is a LIVE text; nothing else in the spec changes every second.
 - [ ] State in `store` as JSON; saved times are `app.clock()` times; `load()` handles a missing or older store.
 - [ ] Alarms and timers are set again on load; what ended while the app was closed is told once.
