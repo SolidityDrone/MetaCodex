@@ -236,6 +236,7 @@ namespace MetaCodex.Shell
         {
             WebSetLarge(large);
             OpenBrowser(url);
+            WebApplyScale(); // after opening: the window has its large scale at once
         }
 
         /// The window's size (large or not): the page's pixels follow (the WebView gets a display of that size, the

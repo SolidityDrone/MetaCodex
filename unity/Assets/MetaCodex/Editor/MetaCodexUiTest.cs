@@ -2349,7 +2349,9 @@ end)
 
         /// WEB, the in-app browser (owner 2026-11-10: "it's boring to have the system browser turn the app off"):
         /// every page the app opens goes to this window, beside the rest; it never bends; a pointer on the page
-        /// becomes a touch at the right page pixel. (No WebView in the Editor: the page itself is a headset check.)
+        /// becomes a touch at the right page pixel; the toolbar follows the page's state (loading, full screen, a failed
+        /// page, its dialogs, its notices); ⎘ pastes; a touch on the page takes the hardware keyboard; a large window has a
+        /// larger page. (No WebView in the Editor: the page itself is a headset check.)
         private static void WebSection(MetaCodexShell shell, Transform head)
         {
             foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
@@ -2420,6 +2422,111 @@ end)
             bool Near(Vector2 a, float x, float y) => Mathf.Abs(a.x - x) < 1f && Mathf.Abs(a.y - y) < 1f;
             Check(page != null && down.action == 0 && Near(down.page, 640f, 400f) && move.action == 2 && Near(move.page, 320f, 600f) && up.action == 1 && Near(up.page, 320f, 600f),
                 $"a pinch at the page's centre touches page pixel ({down.page.x:F0}, {down.page.y:F0}); dragged to a quarter across and three quarters down: ({move.page.x:F0}, {move.page.y:F0}); lifted there");
+
+            // the toolbar (2026-11-16): ◀ ▶ ⟳, the address (a search too), GO, ⌨ ⎘ ⏎ ⌫, - +, ☰ ⇗; EXIT FULL SCREEN and the
+            // loading line only when they apply
+            var wbs = wp.Elements.OfType<UiButton>().ToList();
+            UiButton Btn(string text) => wbs.FirstOrDefault(b => b.Text == text);
+            var reload = Btn("⟳");
+            var exitFull = Btn("EXIT FULL SCREEN");
+            var goBtn = Btn("GO");
+            var loadLine = wp.Elements.OfType<UiProgress>().FirstOrDefault();
+            var addr = wp.Elements.OfType<UiTextField>().FirstOrDefault();
+            Check(Btn("◀") != null && Btn("▶") != null && reload != null && goBtn != null && Btn("⌨") != null && Btn("⎘") != null && Btn("⏎") != null && Btn("⌫") != null
+                && Btn("-") != null && Btn("+") != null && Btn("☰") != null && Btn("⇗") != null && exitFull != null && !exitFull.Visible
+                && loadLine != null && !loadLine.Visible && addr != null && addr.Visible && addr.Placeholder.Contains("search"),
+                "WEB's toolbar: ◀ ▶ ⟳, the address (a search too), GO, ⌨ ⎘ ⏎ ⌫, - +, ☰ ⇗; EXIT FULL SCREEN and the loading line hidden");
+
+            // the page's state as the WebView reports it (MetaCodexWebView.state(), tab separated; no WebView in the Editor)
+            string St(string url, string title, int progress, bool back, bool loading, string error = "", bool full = false, string kind = "", int id = 0, string msg = "", string notice = "") =>
+                string.Join("\t", url, title, progress.ToString(), back ? "1" : "0", "0", loading ? "1" : "0", error, "", notice, full ? "1" : "0", "display", kind, id.ToString(), msg);
+            shell.WebApplyStateForTest(St("https://example.org/a", "Example", 40, true, true));
+            bool loadingShown = reload.Text == "✕" && loadLine.Visible && Mathf.Abs(loadLine.Value - 0.4f) < 0.01f && shell.WebTitleForTest == "loading · Example"
+                && shell.WebUrlForTest == "https://example.org/a" && addr.Text == "https://example.org/a" && Btn("◀").Enabled && !Btn("▶").Enabled;
+            shell.WebApplyStateForTest(St("https://example.org/a", "Example", 100, true, false));
+            Check(loadingShown && reload.Text == "⟳" && !loadLine.Visible && shell.WebTitleForTest == "Example",
+                $"while a page loads ⟳ is ✕ (stop) and the line under the toolbar is at 40 % ({loadingShown}); loaded: ⟳ again, no line, the title “{shell.WebTitleForTest}”");
+
+            // a video in full screen: EXIT FULL SCREEN where the address and GO are; ◀ leaves it too
+            shell.WebApplyStateForTest(St("https://example.org/a", "Example", 100, false, false, full: true));
+            bool fsBar = shell.WebFullscreenForTest && exitFull.Visible && !addr.Visible && !goBtn.Visible && !Btn("+").Enabled && !Btn("-").Enabled && Btn("◀").Enabled;
+            shell.WebApplyStateForTest(St("https://example.org/a", "Example", 100, false, false));
+            Check(fsBar && !shell.WebFullscreenForTest && !exitFull.Visible && addr.Visible && goBtn.Visible && Btn("+").Enabled,
+                $"a page in full screen: EXIT FULL SCREEN in the address's place, - + off, ◀ on ({fsBar}); out of it: the address and GO again");
+
+            // a page that does not open: why, its address and what to do, over the page area in the window's dark colour
+            shell.WebApplyStateForTest(St("https://nowhere.invalid/", "", 100, true, false, "The address was not found (net::ERR_NAME_NOT_RESOLVED)"));
+            var mid = tex.GetPixel(MetaCodexShell.WebW / 2, MetaCodexShell.WebH / 2);
+            string failNote = shell.WebNoteForTest;
+            bool errShown = shell.WebErrorShownForTest && failNote.Contains("did not open") && failNote.Contains("ERR_NAME_NOT_RESOLVED") && failNote.Contains("nowhere.invalid")
+                && failNote.Contains("⟳ tries again") && Mathf.Abs(mid.r - 6f / 255f) < 0.01f && Mathf.Abs(mid.b - 28f / 255f) < 0.01f;
+            shell.WebApplyStateForTest(St("https://example.org/b", "", 10, true, true));
+            Check(errShown && !shell.WebErrorShownForTest && !shell.WebNoteForTest.Contains("did not open"),
+                $"a page that fails: the page area dark, why, its address, “⟳ tries again” ({errShown}: {failNote.Replace("\n", " | ")}); the next page starts: gone");
+
+            // a notice from the page (a refused camera, a download) is a toast
+            shell.WebApplyStateForTest(St("https://example.org/b", "B", 100, true, false, notice: "The page asked for the camera: refused"));
+            Check(shell.Toasts.Last == "The page asked for the camera: refused", "a page's notice is a toast: " + shell.Toasts.Last);
+
+            // the page's alert and confirm: the app's dialog over WEB; the page gets OK or CANCEL, a dialog closed by its ✕ is CANCEL
+            float grace0 = UiModal.InputGrace;
+            UiModal.InputGrace = 0f;
+            int open0 = UiModal.OpenCount;
+            shell.WebApplyStateForTest(St("https://example.org/b", "B", 100, true, false, kind: "confirm", id: 7, msg: "Leave this page?"));
+            var ask = UiModal.OpenPanels.LastOrDefault();
+            bool asked = UiModal.OpenCount == open0 + 1 && ask != null && ask.Elements.OfType<UiLabel>().Any(l => l.Text == "Leave this page?");
+            shell.WebApplyStateForTest(St("https://example.org/b", "B", 100, true, false, kind: "confirm", id: 7, msg: "Leave this page?"));
+            bool once = UiModal.OpenCount == open0 + 1;
+            ask?.Elements.OfType<UiButton>().FirstOrDefault(b => b.Text == "CANCEL")?.Click();
+            shell.WebTickForTest();
+            var a7 = shell.WebLastDialogAnswerForTest;
+            shell.WebApplyStateForTest(St("https://example.org/b", "B", 100, true, false, kind: "alert", id: 8, msg: "Saved"));
+            var alertDlg = UiModal.OpenPanels.LastOrDefault();
+            bool okOnly = alertDlg != null && alertDlg.Elements.OfType<UiButton>().Count() == 1;
+            alertDlg?.Close(); // its ✕
+            shell.WebTickForTest();
+            var a8 = shell.WebLastDialogAnswerForTest;
+            shell.WebApplyStateForTest(St("https://example.org/b", "B", 100, true, false, kind: "confirm", id: 9, msg: "Delete it?"));
+            UiModal.OpenPanels.LastOrDefault()?.Elements.OfType<UiButton>().FirstOrDefault(b => b.Text == "OK")?.Click();
+            shell.WebTickForTest();
+            var a9 = shell.WebLastDialogAnswerForTest;
+            UiModal.InputGrace = grace0;
+            Check(asked && once && a7 == (7, false) && okOnly && a8 == (8, false) && a9 == (9, true) && UiModal.OpenCount == open0,
+                $"a page's confirm opens one dialog over WEB ({asked}, once: {once}); CANCEL -> {a7}; an alert has only OK ({okOnly}), its ✕ -> {a8}; OK -> {a9}");
+
+            // ⎘ pastes the clipboard (terminals and CLIP fill it) into the page
+            string clip0 = GUIUtility.systemCopyBuffer;
+            GUIUtility.systemCopyBuffer = "pasted into the page";
+            Btn("⎘")?.Click();
+            string pasted = shell.WebLastPasteForTest;
+            GUIUtility.systemCopyBuffer = clip0;
+            Check(pasted == "pasted into the page", $"⎘ sends the clipboard to the page: “{pasted}”");
+
+            // a touch on the page gives it the hardware keyboard (the terminal's keyboard input is off meanwhile); a
+            // terminal focused or the window closed gives the keys back
+            var termInput = shell.App != null ? shell.App.Input : null;
+            bool termOn0 = termInput == null || termInput.enabled;
+            page?.OnPress(new UiPointerEvent { Point = r.center, PressPoint = r.center });
+            page?.OnRelease(new UiPointerEvent { Point = r.center, PressPoint = r.center }, true);
+            bool keysToPage = shell.WebHasKeysForTest && (termInput == null || !termInput.enabled);
+            if (shell.App != null && shell.App.Active != null) shell.App.Focus(shell.App.Active); else shell.WebTakeKeysForTest(false);
+            Check(keysToPage && !shell.WebHasKeysForTest && (termInput == null || termInput.enabled == termOn0),
+                $"a touch on the page takes the hardware keyboard ({keysToPage}, terminal input {(termInput == null ? "none here" : "off")}); a terminal focused gives it back ({!shell.WebHasKeysForTest})");
+
+            // OpenBrowser(url, large): the window 1.25 times larger with a 1600 x 1000 page (as sharp, more of the page);
+            // a pinch at its centre is page pixel (800, 500); back to the usual size
+            shell.OpenBrowser("localhost:5173", true);
+            var big = shell.WebPageSizeForTest;
+            float bigScale = wp.BaseScale.x / Mathf.Max(1e-4f, shell.UiScaleNow);
+            page?.OnPress(new UiPointerEvent { Point = r.center, PressPoint = r.center });
+            var bigTouch = shell.WebLastTouchForTest;
+            page?.OnRelease(new UiPointerEvent { Point = r.center, PressPoint = r.center }, true);
+            bool bigTex = tex.width == 1600 && tex.height == 1000;
+            shell.WebSetLarge(false);
+            shell.WebTakeKeysForTest(false);
+            Check(big == new Vector2Int(1600, 1000) && bigTex && Mathf.Abs(bigScale - 1.25f) < 0.01f && Near(bigTouch.page, 800f, 500f)
+                && shell.WebPageSizeForTest == new Vector2Int(1280, 800) && tex.width == 1280 && tex.height == 800 && Mathf.Abs(wp.BaseScale.x - shell.UiScaleNow) < 1e-3f,
+                $"large: page {big.x}x{big.y}, texture {(bigTex ? "1600x1000" : "wrong")}, window x{bigScale:F2}, centre -> ({bigTouch.page.x:F0}, {bigTouch.page.y:F0}); back: {shell.WebPageSizeForTest.x}x{shell.WebPageSizeForTest.y}, x{wp.BaseScale.x / Mathf.Max(1e-4f, shell.UiScaleNow):F2}");
 
             // it never bends (the page is one flat picture), when the other windows do
             bool bend0 = shell.Settings.bendPanels;
