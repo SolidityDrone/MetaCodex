@@ -464,6 +464,7 @@ namespace MetaCodex.UI
         private void ResizeItemArrays()
         {
             int n = Inner.Count + Outer.Count;
+            if (_hoverAmt.Length == n) { Array.Clear(_hoverAmt, 0, n); Array.Clear(_flash, 0, n); return; } // same count: kept (the twin re-lays often)
             _hoverAmt = new float[n];
             _flash = new float[n];
             _iconRect = new Vector4[n];
