@@ -878,7 +878,9 @@ namespace MetaCodex.Shell
                         lift = 0.015f;
                         return true;
                     }
-                    if (_tourStep == 5 || !Settings.wristMenu || Wrist == null || Wrist.Expanded) return false;
+                    // the ring marks the wrist only until the menu shows there: then its 12 pale dots sat just behind the
+                    // menu's face, a second layer of white circles (owner 2026-11-16)
+                    if (_tourStep == 5 || !Settings.wristMenu || Wrist == null || Wrist.Expanded || Wrist.Visible) return false;
                     var st = Gestures?.Get(Handedness.Left);
                     if (st == null || !st.Tracked) return false;
                     at = st.Frame.Wrist;
