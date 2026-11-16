@@ -39,6 +39,17 @@ log state changes in the app (the layer already logs: session states, `passthrou
 | environment depth runs on Quest 3 / 3S only | supportedDevices `quest3\|quest3s` |
 | no com.oculus.supportedDevices | `<meta-data android:name="com.oculus.supportedDevices" android:value="quest2\|questpro\|quest3\|quest3s" />` |
 
+After the static checks, `mcx-app verify` reads the app's last start from its log (the app logs its permission and its
+hand trackers at each start). These lines are the hands state on the headset; they are not fixed in the code:
+
+| Line | Cause / fix |
+|---|---|
+| `hands on the headset (last start): HAND_TRACKING granted, hand trackers ready` | nothing to fix: the hands work |
+| `PROBLEM: ... HAND_TRACKING is not granted` | the installed copy lacks the grant (it is install-time): the user uninstalls the app in the Library, then `mcx-app install` again; quest-native-hands-first |
+| `PROBLEM: ... HAND_TRACKING granted but no hand trackers` | `mcx-app logs <dir>`: the `hands:` lines and `xrCreateHandTrackerEXT failed: N`; then restart the app |
+| `hands on the headset: no log of ...` / `... has no permission line` | the app has not started since the last build: launch it (`mcx-app launch`), or the build predates this check: build, install and launch again |
+| `hint: the menu gesture needs XR_FB_hand_tracking_aim ...` | this device gives no hand aim: the app menu opens with the left controller only; the headset's system menu still works |
+
 ## Install (`mcx-app install`)
 
 The `RESULT:` and `hint:` lines say what happened; the full table of codes is in quest-native-apps
@@ -60,10 +71,13 @@ another signing key or installer (the user uninstalls the old copy); `VERSION_DO
 | no depth effect | `depth: waiting for the spatial data permission` / `provider not created` | the user denied spatial data: Settings > Apps > <Label> > Permissions; USE_SCENE in the manifest |
 | room empty | `scene: 0 objects` | no Space Setup done in the headset, or permission missing |
 | hands or controllers do nothing | `session state 5` never reached (FOCUSED) | input works only with focus: the system menu is open, or the app reads input outside `f.focused` |
+| hands do nothing, the HUD shows `-` for both hands | the `hands on the headset` lines of `mcx-app verify` | HAND_TRACKING not granted (reinstall) or the hand is out of view; quest-native-hands-first, "Pinch does not work" |
+| a pinch does nothing, the HUD shows `PINCH` or `palm` | the app's own log lines of its toggle | `palm`: the palm faces the user, so no pinch counts (hands-first, rule 4); otherwise the toggle reads `pinching` on every frame instead of `pinchStarted` (hands-first, rule 6) |
 | jerky, hot | | frame budget: quest-native-recipes recipe 5 |
 | a line `extension X: not offered` | | the manifest lacks its entry, or the device has no such hardware (face/eye tracking on a 3S) |
 | "<App> isn't responding" (Close app / Wait) after Back or in the background | | the app was built with mcx_xr before the fix (it kept waiting for frames after Back): rebuild it (`mcx-app build` + `install`); an app with its own OpenXR loop: rebuild it on `mcx::App` (`mcx-app verify` says so) |
-| "the menu does not open" | no `menu opened` | the app is not on `mcx::App`, or it opens with the right hand's gesture (that one is the system menu): left menu button / left hand |
+| "the menu does not open" | no `menu opened` in `mcx-app logs` | the menu gesture is the left hand's, palm towards your face, then pinch (or the left controller's button); without the hand aim extension the log says `menu: the menu gesture needs XR_FB_hand_tracking_aim`, and then only the controller opens it; an app not on `mcx::App` has no menu at all (rebuild it). The headset's own system menu always works |
+| "the menu opens, but a pinch does not pick an item" | `menu: <item>` appears only when a pinch picks one | a pinch of either hand picks the item the pointing hand points at (the pinching hand points); `palm`: no pinch counts; the app predates this fix (its log has no `permission` line): rebuild and install it |
 | "there is no Back to MetaCodex" | `launched from outside MetaCodex` / `reopened from outside MetaCodex` | opened from the Library (or reopened from there): only Quit is offered by design; start it with `mcx-app launch` |
 | "Back did nothing" / landed in Home | `back: ... could not be started` | MetaCodex not installed; the user opens MetaCodex from the dock (an app cannot bring MetaCodex forward after a crash: the overlay permission that allows it is prohibited by Meta) |
 | a report with no picture | `report: the picture could not be read` | the attachment list has only the log; ask for a description |

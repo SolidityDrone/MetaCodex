@@ -22,7 +22,8 @@
 //   Display/perf XR_FB_display_refresh_rate, XR_FB_foveation(_configuration), XR_EXT_performance_settings
 //   Permissions  Activity.checkSelfPermission / requestPermissions through JNI (polled: NativeActivity gets no result)
 //   Text         mcx::Text: a monospaced font (DejaVu Sans Mono) and filled rectangles drawn in 3D
-//   App menu     built in, always there: the left controller's menu button or the left hand's menu gesture opens
+//   App menu     built in, always there: the left controller's menu button or a hand's menu gesture (needs the hand
+//                aim extension) opens it; a pinch of either hand selects, the hand that pinches or points aims.
 //                Back to MetaCodex / Report to MetaCodex (opened from MetaCodex), your items (App::menuItems),
 //                Quit, Close menu.
 //                "Back" starts MetaCodex again (warm: nothing reloads) and ends this app; "Report" sends MetaCodex
@@ -407,6 +408,7 @@ private:
     Config cfg_;
     bool menuOpen_ = false, menuPrevL_ = false, menuPrevH_ = false, returned_ = false, metacodexInstalled_ = false;
     int menuHover_ = -1, reportFrames_ = -1;
+    int menuHand_ = -1;         // the hand whose aim points at the menu (-1: none; the pinching hand wins)
     double testReturnAt_ = -1.0;
     bool fromMetaCodex_ = false; // launched by MetaCodex (CALLER + a launch id); false after a resume from outside
     bool pausedOnce_ = false;
@@ -425,6 +427,8 @@ private:
     XrSessionState state_ = XR_SESSION_STATE_UNKNOWN;
     bool running_ = false, exit_ = false, resumed_ = false, frameBegun_ = false, depthAsked_ = false;
     double t0_ = -1.0, last_ = 0.0, permCheck_ = 0.0;
+    double handsCheck_ = 0.0;   // last try to start hands that waited for the permission
+    int handsTries_ = 0;
     struct Swap
     {
         XrSwapchain chain = XR_NULL_HANDLE;

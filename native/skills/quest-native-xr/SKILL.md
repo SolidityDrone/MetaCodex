@@ -45,11 +45,11 @@ are the eyes; the head = their midpoint. `mcx::Mat4::FromPose(pose)` places thin
 
 | Feature | Turn on / use | AndroidManifest.xml needs | Status |
 |---|---|---|---|
-| App menu, way back, report (**always, never removed**) | built in: the left controller's menu button or the non-dominant hand's menu gesture opens it. Opened from MetaCodex (`app.FromMetaCodex()`): Back to MetaCodex, Report to MetaCodex, your items, Quit; otherwise your items and Quit. Back and Quit close the app. Add items with `app.menuItems.push_back({"Label", [&] { ... }})`; `app.ReturnToCaller(report)`, `app.Quit()`, `app.MenuOpen()` | nothing | Back ran on headset with 0.7.15 (it then froze the app: fixed, see quest-native-debug) |
+| App menu, way back, report (**always, never removed**) | built in: the left controller's menu button, or a hand's menu gesture (left hand: palm towards your face, then pinch; it needs the hand aim extension) opens it. A pinch of either hand picks an item. Opened from MetaCodex (`app.FromMetaCodex()`): Back to MetaCodex, Report to MetaCodex, your items, Quit; otherwise your items and Quit. Back and Quit close the app. Add items with `app.menuItems.push_back({"Label", [&] { ... }})`; `app.ReturnToCaller(report)`, `app.Quit()`, `app.MenuOpen()` | nothing | Back ran on headset with 0.7.15 (it then froze the app: fixed, see quest-native-debug) |
 | Lifecycle, system menu | `app.Pump()`, `f.focused` (false while a system menu has focus: pause, take no input), `app.Visible()`, `app.Resumed()` | NativeActivity block as in the template | ran on headset |
 | Passthrough (mixed reality) | `cfg.passthrough = true`; `app.passthrough.Start()/Pause()`, styles; clear alpha 0 | `<uses-feature android:name="com.oculus.feature.PASSTHROUGH" android:required="true" />` | builds on headset; extension offered |
 | Environment depth | `cfg.depth = true`; `f.depth` each frame (`valid`, `texture`, `viewProj[eye]`, `Linear(d)`) | `<uses-permission android:name="com.oculus.permission.USE_SCENE" />`; supportedDevices `quest3\|quest3s` | builds on headset; extension offered; runtime permission |
-| Hands, pinch, aim | `cfg.hands` (default on); `app.hands.hand[0/1]` | `<uses-permission android:name="com.oculus.permission.HAND_TRACKING" />` + `<uses-feature android:name="oculus.software.handtracking" android:required="false" />` | builds on headset; extension offered |
+| Hands, pinch, aim | `cfg.hands` (default on); `app.hands.hand[0/1]` | `<uses-permission android:name="com.oculus.permission.HAND_TRACKING" />` + `<uses-feature android:name="oculus.software.handtracking" android:required="false" />` | builds on headset; extension offered. Pinch of EITHER hand (`pinchStarted && !systemGesture`); the rules, the triage and the permission check are in quest-native-hands-first |
 | Controllers | `cfg.controllers` (default on); `app.controllers.ctl[0/1]`, `app.controllers.Haptic(hand, amplitude, seconds)` | nothing | builds on headset |
 | Room (scene) | `cfg.scene = true`; `app.spatial.QueryScene()` once the permission is granted; `app.spatial.scene` | `USE_SCENE` (as depth) | builds on headset; extension offered |
 | Anchors | `cfg.anchors = true`; `app.spatial.CreateAnchor(...)`, `LoadAnchors()`, `app.spatial.anchors` | `<uses-permission android:name="com.oculus.permission.USE_ANCHOR_API" />` | builds on headset; extension offered |
@@ -70,21 +70,24 @@ symbols, a missing icon, and depth apps listing Quest 2 / Pro. Fix every `PROBLE
 
 - On Horizon OS only **USE_SCENE** (spatial data: depth, the room) is a runtime permission. `app.Init` asks for it
   when `cfg.depth` or `cfg.scene` is set (`cfg.askPermissions`); the system dialog shows in the app; depth starts by
-  itself within a second of the grant. `HAND_TRACKING` and `USE_ANCHOR_API` are granted at install.
+  itself within a second of the grant. `HAND_TRACKING` and `USE_ANCHOR_API` are granted at install. The app logs its
+  HAND_TRACKING state at each start, and it makes the hand trackers when that grant comes later (quest-native-hands-first).
 - Check: `app.HasPermission(mcx::kPermScene)`. Denied: the app must still run (no depth, no room); show a line such as
   "allow spatial data: Settings > Apps > <Label> > Permissions" on a text panel and tell the user the same.
 
 ## Pitfalls
 
-- Never take the left controller's menu button or the non-dominant hand's menu gesture for your own controls: they
-  open the app menu (Meta: the app menu's buttons). While it is open `f.focused` is false: your app gets no input.
+- Never take the left controller's menu button or a hand's menu gesture for your own controls: they open the app menu.
+  The headset's system gestures (the palm towards your face) are the system's, not yours (quest-native-hands-first,
+  rules 2 and 3). While the menu is open `f.focused` is false: your app gets no input.
 - Never your own exit or OpenXR loop: `mcx::App` ends the session and finishes the activity (Back, Quit); it renders
   no frame while leaving or paused, so the app never freezes in the background (`mcx-app verify` checks it).
 
 - Output colour is premultiplied when passthrough is on: write `vec4(rgb * a, a)`; where nothing is drawn, alpha 0.
 - Never put text or panels on the head (head-locked): place them in the room, 1-1.5 m away, following lazily
   (recipe in quest-native-recipes).
-- Input only while `f.focused`; a pinch while the system gesture is active is not yours (`hand.systemGesture`).
+- Input only while `f.focused`; a pinch while the palm faces you (`hand.systemGesture`) does not count: the pinch code
+  checks `pinchStarted`, which is false then (quest-native-hands-first, rule 4).
 - `f.depth.valid` is false for the first frames and whenever the provider has no new map: draw without it.
 - Depth texture: `GL_TEXTURE_2D_ARRAY`, layer = eye, values in [0, 1] (OpenGL convention, far plane may be
   infinite): metres with `f.depth.Linear(d)` on the CPU or the same formula in the shader (recipes).

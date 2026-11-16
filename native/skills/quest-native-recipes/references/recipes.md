@@ -66,7 +66,7 @@ void android_main(android_app* android)
     {
         mcx::Frame f;
         if (!app.BeginFrame(f)) continue;
-        if (f.focused && (app.hands.hand[1].pinchStarted || app.controllers.ctl[1].triggerPressed)) seconds = !seconds;
+        if (f.focused && ((app.hands.hand[0].pinchStarted || app.hands.hand[1].pinchStarted) || app.controllers.ctl[1].triggerPressed)) seconds = !seconds;
         Follow(panel, Head(f), f.dt);
         time_t now = time(nullptr);
         tm local{};
@@ -96,22 +96,29 @@ void android_main(android_app* android)
 ## 2. Pinch and controller buttons: one "select" for both
 
 ```cpp
-// true once per press: right index pinch, right trigger, or A
+// true once per press: an index pinch of either hand (the frame it starts, not with the palm towards you), the
+// right trigger, or A
 bool Select(const mcx::App& app, const mcx::Frame& f)
 {
     if (!f.focused) return false;
-    const mcx::Hand& h = app.hands.hand[1];
     const mcx::Controller& c = app.controllers.ctl[1];
-    return (h.pinchStarted && !h.systemGesture) || c.triggerPressed || c.primaryPressed;
+    bool pinch = false;
+    for (int k = 0; k < 2; k++) pinch = pinch || (app.hands.hand[k].pinchStarted && !app.hands.hand[k].systemGesture);
+    return pinch || c.triggerPressed || c.primaryPressed;
 }
 
-// the pointing ray of the right hand or controller (false when neither is tracked)
+// the pointing ray: the right controller, else a hand with an aim (a pinching hand first); false when none is tracked
 bool Pointer(const mcx::App& app, XrPosef& ray)
 {
     const mcx::Controller& c = app.controllers.ctl[1];
-    const mcx::Hand& h = app.hands.hand[1];
     if (c.active) { ray = c.aim; return true; }
-    if (h.aimValid) { ray = h.aim; return true; }
+    const mcx::Hand* pick = nullptr;
+    for (int k = 0; k < 2; k++)
+    {
+        const mcx::Hand& h = app.hands.hand[k];
+        if (h.aimValid && (!pick || h.pinching)) pick = &h;
+    }
+    if (pick) { ray = pick->aim; return true; }
     return false;
 }
 
@@ -174,7 +181,7 @@ Text on the table: `app.text.Draw(eye.viewProj, OnPlane(*Find(app, "TABLE")), "h
 saved ones (their poses arrive in `anchor.pose` when `located`).
 
 ```cpp
-// drop a persistent anchor where the right hand or controller points, 1 m ahead
+// drop a persistent anchor where a hand or the right controller points, 1 m ahead (Pointer above)
 void DropAnchor(mcx::App& app, const mcx::Frame& f, const XrPosef& ray)
 {
     XrVector3f d = mcx::Forward(ray);

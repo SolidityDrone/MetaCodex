@@ -13,7 +13,8 @@ quest-native-performance.
 
 Always:
 - **Hands only, mixed reality** (skill quest-native-hands-first, mandatory): passthrough on, `cfg.controllers = false`,
-  every action done with the hands (pinch, poke, aim ray, grab). Controllers or full VR only when the user explicitly
+  every action done with the hands (pinch, poke, aim ray, grab); a pinch accepts either hand, and the system gestures and
+  the app menu are never an action (quest-native-hands-first, rules 1-3). Controllers or full VR only when the user explicitly
   asks for them; never ask the user which. List each action and its hand input before you say the app is done.
 - **A curated app, not a few lines** (skills quest-native-quality and quest-native-art-direction, mandatory): write
   `DESIGN.md` first with its look card, build in passes (blockout, look, motion, UI, polish, self-review), use the kits

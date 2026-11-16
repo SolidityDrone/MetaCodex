@@ -435,6 +435,7 @@ void Hands::Update(XrSpace base, XrTime time)
         Hand& hd = hand[h];
         bool was = hd.pinching;
         hd.tracked = false;
+        hd.pinching = false; // a hand that is not located is not pinching (it would stay stuck otherwise)
         hd.pinchStarted = false;
         if (!trackers_[h]) continue;
         XrHandTrackingAimStateFB aim{XR_TYPE_HAND_TRACKING_AIM_STATE_FB};
@@ -1041,14 +1042,18 @@ bool App::Init(android_app* android, const Config& cfg)
     }
     Log("starting %s", cfg.name);
     ReadLaunch();
-    // runtime permissions first: the dialog shows while the app starts; depth and scene start once granted
+    // runtime permissions first: the dialog shows while the app starts; depth and scene start once granted.
+    // HAND_TRACKING is install-time on Horizon OS (granted at install when the manifest declares it; docs/
+    // native-build-and-install.md): the request is the fallback, and the log says which state this start had.
     std::vector<const char*> ask;
+    bool handsOk = !cfg.hands || Permissions::Granted(act, kPermHands);
     if (cfg.askPermissions)
     {
         if ((cfg.depth || cfg.scene) && !Permissions::Granted(act, kPermScene)) ask.push_back(kPermScene);
-        if (cfg.hands && !Permissions::Granted(act, kPermHands)) ask.push_back(kPermHands);
+        if (!handsOk) ask.push_back(kPermHands);
         if (!ask.empty()) Permissions::Request(act, ask);
     }
+    if (cfg.hands) Log("permission %s: %s", kPermHands, handsOk ? "granted" : "not granted at start (hands wait for it)");
 
     PFN_xrInitializeLoaderKHR initLoader = Proc<PFN_xrInitializeLoaderKHR>(XR_NULL_HANDLE, "xrInitializeLoaderKHR");
     if (!initLoader) { Log("no OpenXR loader"); return false; }
@@ -1111,6 +1116,10 @@ bool App::Init(android_app* android, const Config& cfg)
     // features
     if (cfg.passthrough && ext.Has("XR_FB_passthrough") && passthrough.Init(instance, session)) { passthrough.Start(); projectionFlags = XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT; }
     if (cfg.hands && ext.Has("XR_EXT_hand_tracking")) hands.Init(instance, session, ext.Has("XR_FB_hand_tracking_aim"));
+    if (cfg.hands && !ext.Has("XR_EXT_hand_tracking"))
+        Log("hands: XR_EXT_hand_tracking not enabled: its manifest entries or the hand tracking permission were missing at start");
+    if (cfg.hands && hands.Available() && !ext.Has("XR_FB_hand_tracking_aim"))
+        Log("menu: the menu gesture needs XR_FB_hand_tracking_aim, not enabled here: the app menu opens with the left controller's button only");
     if (cfg.controllers && controllers.Init(instance, session, ext))
     {
         XrSessionActionSetsAttachInfo ai{XR_TYPE_SESSION_ACTION_SETS_ATTACH_INFO};
@@ -1360,6 +1369,7 @@ void App::OpenMenu(bool open)
     if (open == menuOpen_) return;
     menuOpen_ = open;
     menuHover_ = -1;
+    menuHand_ = -1;
     if (!open) return;
     // the menu stays where it opened: 0.9 m ahead of the head, at its height, turned to it
     XrPosef head = views_[0].pose;
@@ -1390,21 +1400,32 @@ static const float kRowH = 0.075f, kMenuW = 0.56f;
 
 void App::MenuInput(const Frame& f)
 {
-    // the left controller's menu button or the menu gesture of the non-dominant hand (Meta: "Open/Close app menu:
-    // Menu button / System gesture left hand"; the dominant hand's gesture is the system menu)
-    bool l = controllers.ctl[0].menu, h = hands.hand[0].menuGesture || hands.hand[1].menuGesture; // the non-dominant hand sends it
+    // the left controller's menu button, or the menu gesture of either hand (the aim state's MENU_PRESSED bit, one
+    // frame; it exists only with XR_FB_hand_tracking_aim). The system's own gestures are not the app's.
+    bool l = controllers.ctl[0].menu, h = hands.hand[0].menuGesture || hands.hand[1].menuGesture;
     bool press = (l && !menuPrevL_) || (h && !menuPrevH_);
     menuPrevL_ = l;
     menuPrevH_ = h;
-    if (press && Focused()) OpenMenu(!menuOpen_);
+    if (press && Focused())
+    {
+        OpenMenu(!menuOpen_);
+        return; // a pinch that came with the gesture must not select on the same frame
+    }
     if (!menuOpen_ || !Focused()) return;
-    // pointer: the right controller, else the right hand's aim, else the left's
+    // pointer: the right controller; else the hand that points (the one pinching, else the one that pointed last, else
+    // any hand with an aim); else the left controller
+    int pointer = -1;
+    for (int k = 1; k >= 0 && pointer < 0; k--)
+        if (hands.hand[k].aimValid && hands.hand[k].pinching) pointer = k;
+    if (pointer < 0 && menuHand_ >= 0 && hands.hand[menuHand_].aimValid) pointer = menuHand_;
+    for (int k = 1; k >= 0 && pointer < 0; k--)
+        if (hands.hand[k].aimValid) pointer = k;
+    menuHand_ = pointer;
     XrPosef ray;
     bool have = true;
     if (controllers.ctl[1].active) ray = controllers.ctl[1].aim;
-    else if (hands.hand[1].aimValid) ray = hands.hand[1].aim;
+    else if (pointer >= 0) ray = hands.hand[pointer].aim;
     else if (controllers.ctl[0].active) ray = controllers.ctl[0].aim;
-    else if (hands.hand[0].aimValid) ray = hands.hand[0].aim;
     else have = false;
     menuRayHit_ = false;
     int rows = (int)menuShown_.size();
@@ -1427,6 +1448,7 @@ void App::MenuInput(const Frame& f)
             menuHover_ = (fabsf(lp.x) <= kMenuW * 0.5f && row >= 0 && row < rows) ? row : -1;
         }
     }
+    if (have && !menuRayHit_) menuHover_ = -1; // the ray points away from the menu: no row is under it any more
     // controllers without pointing: the stick moves, A selects
     const Controller& cr = controllers.ctl[1];
     static float stickHold = 0.f;
@@ -1436,8 +1458,9 @@ void App::MenuInput(const Frame& f)
         stickHold -= f.dt;
     }
     else stickHold = 0.f;
-    bool select = cr.triggerPressed || cr.primaryPressed || controllers.ctl[0].triggerPressed || (hands.hand[1].pinchStarted && !hands.hand[1].systemGesture) ||
-                  (!hands.hand[1].tracked && hands.hand[0].pinchStarted);
+    // select: a fresh pinch of either hand (pinchStarted is the frame the pinch starts; never with the system gesture)
+    auto pinch = [this](int k) { return hands.hand[k].pinchStarted && !hands.hand[k].systemGesture; };
+    bool select = cr.triggerPressed || cr.primaryPressed || controllers.ctl[0].triggerPressed || pinch(0) || pinch(1);
     if (select && menuHover_ >= 0 && menuHover_ < rows)
     {
         auto action = menuShown_[menuHover_].action;
@@ -1670,6 +1693,16 @@ bool App::Pump()
     // a permission granted while running (the dialog, or Settings): start what waited for it
     double now = Now();
     if (cfg_.depth && !depth.Running() && now - permCheck_ > 1.0) { permCheck_ = now; TryStartDepth(); }
+    // hands that waited for the permission: the trackers are made once it is granted (checked once a second, 10 tries)
+    if (cfg_.hands && session != XR_NULL_HANDLE && !hands.Available() && ext.Has("XR_EXT_hand_tracking") && handsTries_ < 10 &&
+        now - handsCheck_ > 1.0 &&
+        Permissions::Granted(android_->activity, kPermHands))
+    {
+        handsCheck_ = now;
+        handsTries_++;
+        hands.Destroy();
+        if (hands.Init(instance, session, ext.Has("XR_FB_hand_tracking_aim"))) Log("hands: started, the permission is granted now");
+    }
     return !exit_;
 }
 

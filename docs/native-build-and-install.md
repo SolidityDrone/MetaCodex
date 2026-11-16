@@ -52,8 +52,9 @@ JDK; about 400 MB to download and 2.5 GB on disk, each download pinned by SHA-25
   and LATER, a callout kept in MESSAGES, and the voice commands `launch_pending_app` / `decline_pending_app` (enabled
   only while a request waits). `mcx-app launch|install|run` return at once with `RESULT: requested ...`; `mcx-app
   status` reads pending, launched, declined, installing or failed. An allowed first install turns into a LAUNCH offer.
-- **The app menu.** Every app on `mcx::App` has a built-in menu on the left controller's menu button and on the
-  non-dominant hand's menu gesture: Back to MetaCodex and Report to MetaCodex (only when MetaCodex launched the app),
+- **The app menu.** Every app on `mcx::App` has a built-in menu on the left controller's menu button and on a hand's
+  menu gesture (left hand: palm towards your face, then pinch; it needs the hand aim extension): Back to MetaCodex and
+  Report to MetaCodex (only when MetaCodex launched the app),
   the app's own items, Quit and Close menu. `mcx-app verify` fails an app that is not on `mcx::App` or has its own
   exit or OpenXR loop.
 - **Back** starts MetaCodex's launch intent (`NEW_TASK | REORDER_TO_FRONT`) while the app is still in front, then
@@ -127,7 +128,7 @@ probe app with these manifest entries: Runner log) < **ran on headset** (observe
 `native/examples/nightvision`: environment depth -> per-eye full-screen pass that reprojects the depth map through the
 depth camera's view-projection, green phosphor brightness from distance, edges from depth discontinuities, grain,
 scanlines; three modes (PHOSPHOR, EDGES, RANGE); passthrough underneath, turned green by a mono -> RGBA colour map,
-toggled; right pinch / trigger = mode, left pinch / A = passthrough, stick = gain, left grip = drop an anchor; HUD panel
+toggled; a pinch of either hand (or the right trigger) = mode, both hands pinching together (or A) = passthrough, stick = gain, left grip = drop an anchor; HUD panel
 (text) following the head lazily; scene query and anchor count in the HUD; foveation 2, CPU/GPU sustained high.
 
 | Step on the Quest 3S | Result |

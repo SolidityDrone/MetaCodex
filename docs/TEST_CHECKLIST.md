@@ -677,13 +677,13 @@ Night Vision (an example app):
 
 - [ ] `cp -r /opt/metacodex/quest-native/examples/nightvision /root/apps/nv`, `mcx-app build /root/apps/nv`, `mcx-app verify /root/apps/nv` → `RESULT: verify ok`; `mcx-app install` + `launch` → the system asks for spatial data once: Allow
 - [ ] The room in green; near things bright, far ones dark, outlines glowing; grain and scanlines → the HUD says `depth ... LIVE`, `room N objects`, `72 Hz`
-- [ ] Right pinch (or right trigger) cycles PHOSPHOR / EDGES / RANGE; left pinch (or A) turns the camera off (depth image alone) and on; stick up / down changes the gain → open the system menu: nothing reacts until you close it
+- [ ] A pinch of either hand (or right trigger) cycles PHOSPHOR / EDGES / RANGE; both hands pinching together (or A) turns the passthrough off and on; stick up / down changes the gain; the HUD's hands line shows PINCH when a pinch counts, and `palm` when your palm faces you (no pinch counts then) → open the system menu: nothing reacts until you close it
 - [ ] Night Vision has its own icon (green goggles) and label in the Library → it runs with MetaCodex force-stopped
 
 The way back from a built app:
 
 - [ ] In a thread ask for any small native app (or `mcx-app new /root/apps/t2 --label "T2"` + `mcx-app run /root/apps/t2`) → it opens
-- [ ] Left controller's menu button (or look at the left palm and pinch) → the title says "opened from MetaCodex"; the items are Back to MetaCodex, Report to MetaCodex, Quit, Close menu; point and pull the trigger (or pinch) to pick
+- [ ] Left controller's menu button, or the left hand's menu gesture (palm towards your face, then pinch) → the title says "opened from MetaCodex"; the items are Back to MetaCodex, Report to MetaCodex, Quit, Close menu; point and pull the trigger (or pinch) to pick
 - [ ] Back to MetaCodex → MetaCodex is there at once (no loading screen, windows where they were), a toast "Back from T2", the launching thread in front; wait 60 s: no "T2 isn't responding" dialog; T2 is not in the recent apps (it closed)
 - [ ] Open T2 from the Library → the menu says "opened outside MetaCodex", only Quit (no MetaCodex items); Quit closes it, Home
 - [ ] Launch T2 from MetaCodex, press the system button > Home, reopen T2 from the Library → the menu has no MetaCodex items

@@ -7,7 +7,9 @@
 #   mcx-app check [dir]                       compile check only (seconds): errors as file:line:col: error: ...
 #   mcx-app build [dir]                       -> <dir>/build/<dir name>.apk, incremental, on cores 0-2 (the headset keeps 72 fps)
 #   mcx-app verify [dir]                      static checks of the built APK: manifest entries the Meta APIs in use need,
-#                                             unresolved symbols, the OpenXR extensions asked for, icon, devices
+#                                             unresolved symbols, the OpenXR extensions asked for, icon, devices;
+#                                             then the hands of its last start on the headset (from its log:
+#                                             HAND_TRACKING granted? trackers ready?; launch the app first)
 #   mcx-app install [dir|apk]                 Android's installer; tells you what to ask the user; waits up to 5 min
 #   mcx-app launch [dir|package]              asks the user to open the app (LAUNCH in MetaCodex); returns at once
 #   mcx-app run [dir]                         build + install + launch request
@@ -248,6 +250,7 @@ install_app() {
     echo "RESULT: $r"
     ask "The app is ready: tap INSTALL in MetaCodex when you want it (Android asks once more), then LAUNCH."
     echo "check later: mcx-app status ${d:-$apk}   (a first install waits for the user's tap; nothing else to do now)"
+    [ -n "${d:-}" ] && echo "hint: hands need HAND_TRACKING, which the headset grants at install; after the first launch, mcx-app verify $d shows the hands of that start"
     return 0
   fi
   [[ "$r" == installing* ]] || { echo "RESULT: $r"; hint "$r"; return 1; }
@@ -259,7 +262,9 @@ install_app() {
     last=$st
     case "$st" in
       waiting*) (( asked )) || { ask "Android asks to install the app in the headset: tap Install (Update for a new version)."; asked=1; } ;;
-      success*) echo "RESULT: installed. $st"; return 0 ;;
+      success*) echo "RESULT: installed. $st"
+        [ -n "${d:-}" ] && echo "hint: hands need HAND_TRACKING, which the headset grants at install; after the first launch, mcx-app verify $d shows the hands of that start"
+        return 0 ;;
       failure*) echo "RESULT: $st"; hint "$st"; return 1 ;;
     esac
   done
@@ -282,7 +287,7 @@ launch_app() {
   fi
   if [[ "$r" == ok* ]]; then
     echo "RESULT: started $pkg"
-    ask "The app is open in the headset. Its menu (left controller's menu button, or the left hand's menu gesture: look at your left palm and pinch) has Back to MetaCodex and Report to MetaCodex: a report brings a picture and the app's log back into this thread."
+    ask "The app is open in the headset. Its menu (left controller's menu button, or the left hand's menu gesture: palm towards your face, then pinch) has Back to MetaCodex and Report to MetaCodex: a report brings a picture and the app's log back into this thread. The headset's own menu always works too."
     echo "its log: mcx-app logs $pkg"
   else
     echo "RESULT: $r"; return 1
@@ -297,6 +302,32 @@ logs_app() {
   start_logd
   if [ ! -f "$f" ]; then echo "no log lines from $pkg yet (it sends them while it runs, from its first LOG line; start it with mcx-app launch)"; return 0; fi
   if (( follow )); then tail -n 50 -f "$f"; else tail -n 200 "$f"; fi
+}
+
+# the hands of the app's last start, read from its own log (the app logs its permission and its hand trackers at each
+# start). HAND_TRACKING is install-time on Horizon OS (docs/native-build-and-install.md): granted at install when the
+# manifest declares it, so "not granted" means the installed copy lacks it, and the fix is a reinstall.
+hands_state() {
+  local pkg f perm hand menu
+  pkg=$(pkg_of "$(dir_of "${1:-.}")")
+  f="$LOGDIR/$pkg.log"
+  if [ ! -f "$f" ]; then echo "hands on the headset: no log of $pkg yet (launch the app, then mcx-app verify again)"; return 0; fi
+  # the last start only: its log begins at the app's "starting" line
+  local last
+  last=$(awk '/starting /{buf=""} {buf=buf $0 "\n"} END{printf "%s", buf}' "$f")
+  perm=$(grep -a "permission com.oculus.permission.HAND_TRACKING:" <<<"$last" | tail -n 1)
+  hand=$(grep -a "hands: " <<<"$last" | tail -n 1)
+  menu=$(grep -a "menu: the menu gesture" <<<"$last" | tail -n 1)
+  if [ -z "$perm" ]; then echo "hands on the headset: the last log of $pkg has no permission line (built before this check?): build, install and launch it again"; return 0; fi
+  if [[ "$hand" == *"trackers ready"* || "$hand" == *"hands: started"* ]]; then
+    echo "hands on the headset (last start): HAND_TRACKING granted, hand trackers ready"
+  elif [[ "$perm" == *"not granted"* ]]; then
+    echo "PROBLEM: hands on the headset (last start): HAND_TRACKING is not granted, so the app has no hands. It is granted at install: ask the user to uninstall the app (Library > the app > ... > Uninstall), then mcx-app install it again"
+  else
+    echo "PROBLEM: hands on the headset (last start): HAND_TRACKING granted but no hand trackers (last hands line: ${hand#*: }); mcx-app logs $pkg shows the rest"
+  fi
+  [ -n "$menu" ] && echo "hint: ${menu#*: }"
+  return 0
 }
 
 cmd=${1:-}
@@ -316,7 +347,7 @@ case "$cmd" in
     launch_app "${1:-.}" ;;
   status) echo "$(ui system launch-status "$(pkg_arg "${1:-}")")" ;;
   dev) dev_app "${1:-.}" ;;
-  verify) "$MCX_BUILD" --verify "$(dir_of "${1:-.}")" ;;
+  verify) rc=0; "$MCX_BUILD" --verify "$(dir_of "${1:-.}")" || rc=$?; hands_state "${1:-.}"; exit $rc ;;
   runner) runner_app ;;
   logs) logs_app "$@" ;;
   info) echo "$(ui system app "$(pkg_arg "${1:-}")")" ;;
