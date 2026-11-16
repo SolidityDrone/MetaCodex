@@ -176,8 +176,8 @@ namespace MetaCodex.Shell
             g.Panel = p;
             p.HideCloseButton();
             float bh = t.HeaderHeight - 0.008f;
-            p.Add(new UiButton("⇲ UNGROUP", () => Ungroup(g)) { Rect = new Rect(w - 0.088f - t.Gap - 0.15f, 0.004f, 0.15f, bh), TextSize = t.SmallSize * 1.1f });
-            p.Add(new UiButton("✕", () => { if (g.Panel != null) g.Panel.Close(); }, UiButtonStyle.Danger) { Rect = new Rect(w - 0.088f, 0.004f, 0.082f, bh), TextSize = t.BodySize * 1.35f });
+            var close = p.AddHeaderClose(() => { if (g.Panel != null) g.Panel.Close(); }, UiPanel.CloseWideW); // pressed beyond what it draws
+            p.Add(new UiButton("⇲ UNGROUP", () => Ungroup(g)) { Rect = new Rect(close.Rect.x - t.Gap - 0.15f, 0.004f, 0.15f, bh), TextSize = t.SmallSize * 1.1f }); // left of the ✕'s hit rect
             p.Add(new UiLabel("the title bar moves the group · a window's title bar: drag it out to free it, onto another window to swap", t.SmallSize)
                 { Rect = new Rect(GroupPad, h - GroupFooter + 0.006f, w - GroupPad - 0.2f, GroupFooter - 0.012f), Color = t.TextDim });
             p.Add(new UiResizeGrip

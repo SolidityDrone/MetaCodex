@@ -80,10 +80,7 @@ namespace MetaCodex.UI
                 _title = UiText.Create(this, new Rect(Theme.Padding + 0.006f, 0.006f, width - 0.1f, Theme.HeaderHeight - 0.010f),
                     ConsoleTitle(title), Theme.Display, Theme.TitleSize, Theme.TextAccent, TextAlignmentOptions.MidlineLeft);
                 _title.Tmp.characterSpacing = 5f;
-                _close = Add(new UiButton("✕", () => Close(), UiButtonStyle.Danger) // red, as the thread and group windows' ✕ (owner 2026-11-16)
-                {
-                    Rect = new Rect(width - 0.044f, 0.006f, 0.036f, Theme.HeaderHeight - 0.010f),
-                });
+                _close = AddHeaderClose(() => Close()); // red, as the thread and group windows' ✕ (owner 2026-11-16); larger, hit beyond what it draws
             }
         }
 
@@ -163,6 +160,56 @@ namespace MetaCodex.UI
 
         /// Hides the title bar's own close button (terminal frames have their own buttons there).
         public void HideCloseButton() => _close?.SetVisible(false);
+
+        // ------------------------------------------------------------------ the header's ✕
+
+        /// The header ✕ (owner 2026-11-16: "with curved panels I often struggle to close the panels: the close icon should
+        /// be bigger"). Drawn CloseW wide (1.4 times the old 36 mm) and as tall as the header's bar allows (34 mm, was 30),
+        /// CloseRight in from the frame's right edge, its glyph CloseGlyph (1.4 times the old one). It takes presses on a
+        /// larger rect than it draws (UiCloseButton): CloseHitLeft more on its left, out to the frame's right edge and up to
+        /// its top, plus the RaySlack beyond both where a ray that just misses the frame still lands on the window
+        /// (Raycast), down to the header's bottom: 75 x 44 mm for the 50 mm one, 1.5 times its width and the header's full
+        /// height. Hits are found on the drawn surface (Intersect, then SurfaceToPanel: the arc length on a bent window), so
+        /// on a curved window the rect is where the ✕ is drawn, at the edge too.
+        public const float CloseW = 0.050f, CloseRight = 0.008f, CloseHitLeft = 0.013f, RaySlack = 0.004f;
+        /// The thread and group windows' wide ✕ (owner 2026-11-14: easy to hit, also shrunk in a group).
+        public const float CloseWideW = 0.082f;
+        /// The ✕'s glyph (line height, m).
+        public static float CloseGlyph => UiTheme.Current.BodySize * 1.4f;
+
+        /// The header ✕ Init made (null without a header; hidden where a window builds its own: HideCloseButton).
+        public UiButton CloseButton => _close;
+
+        /// Where a header ✕ `drawW` wide is drawn (panel coordinates): inside the header's bar, 1 mm off its top and bottom.
+        public Rect HeaderCloseDrawn(float drawW = CloseW) => new Rect(Width - CloseRight - drawW, 0.005f, drawW, Theme.HeaderHeight - 0.006f);
+
+        /// Where that ✕ takes presses (panel coordinates).
+        public Rect HeaderCloseHit(float drawW = CloseW)
+        {
+            var d = HeaderCloseDrawn(drawW);
+            return Rect.MinMaxRect(d.xMin - CloseHitLeft, -RaySlack, Width + RaySlack, Theme.HeaderHeight);
+        }
+
+        /// Adds a header ✕, red (Init's; the thread and group windows', which close their own way, with CloseWideW). The
+        /// title is cut before its hit rect; a window with more buttons in its header puts them left of its Rect.
+        public UiButton AddHeaderClose(Action onClick, float drawW = CloseW)
+        {
+            var b = Add(new UiCloseButton(onClick, HeaderCloseDrawn(drawW)) { Rect = HeaderCloseHit(drawW), TextSize = CloseGlyph });
+            TitleEndsBefore(b.Rect.x);
+            return b;
+        }
+
+        /// The title ends (cut with …) 6 mm before `x` (panel coordinates); it is never made longer here.
+        public void TitleEndsBefore(float x)
+        {
+            if (_title == null) return;
+            var r = _title.Rect;
+            float w = Mathf.Max(0.02f, x - 0.006f - r.x);
+            if (w < r.width) _title.SetRect(new Rect(r.x, r.y, w, r.height));
+        }
+
+        /// Self-tests: the title's rect (panel coordinates).
+        public Rect TitleRectForTest => _title != null ? _title.Rect : default;
 
         /// Ray against the panel's drawn surface (its plane, or its cylinder when bent); the panel point when the
         /// ray hits inside the frame. Pointers land where the panel is drawn, not on its flat projection.
@@ -759,6 +806,27 @@ namespace MetaCodex.UI
             foreach (var e in Elements) if (e.Visible) e.Update();
             Shapes.Flush();
             foreach (var t in GetComponentsInChildren<TextMeshPro>(true)) t.ForceMeshUpdate();
+        }
+    }
+
+    /// A header ✕ (UiPanel.AddHeaderClose): red, drawn in `Drawn`, and pressed anywhere on its Rect, which is larger
+    /// (the panel's hit test and the router's "released inside" both read Rect, so a press and its release count on all
+    /// of it). The highlight shows on the drawn part.
+    public sealed class UiCloseButton : UiButton
+    {
+        /// What is drawn (panel coordinates), inside Rect.
+        public Rect Drawn;
+
+        public UiCloseButton(Action onClick, Rect drawn) : base("✕", onClick, UiButtonStyle.Danger) { Drawn = drawn; }
+
+        protected override void Build() { base.Build(); FitDrawn(); }
+
+        protected override void Relayout() { base.Relayout(); FitDrawn(); }
+
+        private void FitDrawn()
+        {
+            if (_shape >= 0) Panel.Shapes.SetRect(_shape, Panel.PanelToLocal(Drawn.center), Drawn.size);
+            _label?.SetRect(Drawn);
         }
     }
 
