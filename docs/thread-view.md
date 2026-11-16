@@ -104,8 +104,8 @@ Each thread opens in a full window, and windows can be grouped.
 
 - Up to 6 THREAD windows are open at the same time. Their ids are `thread`, then `thread-2` to `thread-6`.
 - Each window has its own thread, chat, status line, composer, chips, approvals, attachments and draft.
-- The FOCUSED window is the last window that you touched or opened. Its title has a dot (● THREAD 2) when more than
-  one window is open. Voice commands, the clipboard's TO THE THREAD and the session context use the focused window.
+- The FOCUSED window is the last window that you touched or opened. Its title has a dot (● PROJECT · THREAD TITLE) when more than
+  one window is open. A window's title is its project and its thread's title (`UpdateWindowTitle`). Voice commands, the clipboard's TO THE THREAD and the session context use the focused window.
 - Where a thread opens:
   - A thread that is open already: its window gets the focus.
   - Else the focused window, when it is closed or empty.
