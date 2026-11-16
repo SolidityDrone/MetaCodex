@@ -88,7 +88,7 @@ The test headset has 6 cores and 7.9 GB RAM.
 | Voice commands in the registry | 34 | Each one has a schema, synonyms, phrases and examples. |
 | Thread windows | 6 | Open at the same time. Groups of 2x1, 2x2 or 3x2 move as one window. |
 | Agent skills shipped | 49 + 13 | 49 for every project, 6 of them written for MetaCodex. 13 more for native-app projects. |
-| App plugins | 2 examples | A Lua plugin adds its own windows, menu tiles and voice commands while the app runs. Timers and Calendar ship as examples. |
+| Plugins | 2 app examples | A plugin is a project with a fixed kind: an app (its own windows, menu tiles and voice commands), gestures or a behaviour. It runs while the app runs; a thread on its project lets an agent change it. Timers and Calendar ship as examples. |
 | Project types | 3 | NATIVE, DEFAULT and RESEARCH. A project made in the app is a git repository. |
 | Default gesture | Pinch | Selects, drags and scrolls. No gesture opens or closes a window by default. |
 | Dock and wrist menu tiles | 11 | The same tiles in both places. Plugins can add up to 6 more. |

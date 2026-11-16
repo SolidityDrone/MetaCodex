@@ -186,8 +186,8 @@ Gesture studio (CONTROL > MQH > GESTURES):
 - [ ] A binding saved with an old preset (for example `toggle:browser` or `spin:40`) → still runs
 - [ ] BIND `palm-up` (left hand) to `voice:toggle` → hands-free TALK
 - [ ] RECORD: name "finger-gun", RIGHT, hold a finger gun, RECORD IN 3 s → "saved" + summary; the pose then fires; it appears under YOURS (✋ pose · my-poses); SOURCE and DELETE POSE are lit for it; DELETE POSE asks, then removes it
-- [ ] RECORD's right side → one dim line "Plugins: CONTROL > MQH > PLUGINS (+ NEW, or ask an agent)"; no + NEW PLUGIN… and no OPEN IN TERMINAL there
-- [ ] `mcx-ui plugin examples` → lists all four with installed=True/False; `mcx-ui plugin example swipes` → ok, swipes appear under EXAMPLES
+- [ ] RECORD's right side → one dim line "New gestures of your own: MQH > PLUGINS > + NEW PLUGIN > GESTURE, then a thread on it asks an agent"; no + NEW PLUGIN… and no OPEN IN TERMINAL there
+- [ ] `mcx-ui plugin examples` → lists all four with installed=True/False and their kind; `mcx-ui plugin example swipes` → `ok, /root/metacodex-projects/plugins/gestures/swipes`; swipes appear under EXAMPLES (ADDED) and THREADS > PLUGINS
 - [ ] `mcx-ui gesture list`, `mcx-ui gesture bind clap toggle:files`, `mcx-ui action open:git` → each answers; the binding shows in BIND
 - [ ] Ask an agent on the headset (`claude` or `opencode` in a terminal): "make me a gesture plugin: when I do a thumbs up with my right hand open git; push my palm away to close it" → the plugin appears with its own `poses/thumbs-up.json` and works on a fresh install, without + ADD
 - [ ] Update over an old install that had the starters, never edited, with no binding on them → after the first start `swipes` is gone from CONTROL > MQH > PLUGINS and from `/mnt/quest/plugins` (`ls -a` shows `.examples-v2` and still `.starter-installed`); `core-poses` stays (the V shortcut uses it); `my-poses` and your own plugins are still there
@@ -202,20 +202,31 @@ Lua scripts (CONTROL > MQH > SCRIPTS):
 - [ ] DISABLE / ENABLE / DELETE a script → the state survives a restart
 - [ ] `mcx-ui script list`, `mcx-ui script eval 'return 1+1'` → 2
 
-## App plugins
+## Plugins (projects with a fixed kind)
 
-- [ ] CONTROL > MQH > PLUGINS > + NEW PLUGIN… "test-plugin" → a folder in `/mnt/quest/plugins`; both palms up shows the toast "Both palms up" and opens nothing
-- [ ] CONTROL > MQH > PLUGINS: pick a plugin → the first button says DISABLE when it is on and ENABLE when it is off (dim with nothing picked); enable / disable / reload / delete work; the detail shows poses, detectors and log
+- [ ] THREADS > + PROJECT… → NATIVE APP · DEFAULT · RESEARCH · PLUGIN · EXISTING…; PLUGIN → APP · GESTURE · BEHAVIOUR; APP, name "Test app" → a toast; THREADS shows it under PLUGINS (…/plugins/apps/test-app); a TEST-APP tile is on the menu and opens a window with +1 and RESET; the count stays after a restart
+- [ ] CONTROL > MQH > PLUGINS > SHOW GESTURES > + NEW PLUGIN… → straight to the name (no kind question); "Test gesture" → it is listed under GESTURES with the kind "gesture"; both palms up shows the toast "Both palms up" and opens nothing; SHOW ALL > + NEW PLUGIN… asks the kind
+- [ ] In the Linux: `ls -la /root/metacodex-projects/plugins/apps/test-app/.metacodex` → `project.json` is `-r--r--r--`; `cd` there, `git log --oneline` → one commit; `mcx-project type .` → plugins, `mcx-project kind .` → app; `mcx-project set . default` → refused
+- [ ] Edit `"kind": "gesture"` into that project's `plugin.json` → it stays under APPS; `mcx-ui plugin check test-app` → `kind: app (fixed …)` and a warning about the kind
+- [ ] `mkdir -p /root/metacodex-projects/plugins/apps/bare && cp /root/metacodex-projects/plugins/apps/test-app/{plugin.json,main.lua} /root/metacodex-projects/plugins/apps/bare/` → `bare` is not listed; `mcx-ui plugin check bare` says "not loaded: no marker"
+- [ ] An older plugin folder in `/mnt/quest/plugins` (for example core-poses, made by the V shortcut) → still listed, its row says "older folder", NEW THREAD ▸ is dim
+- [ ] Pick the project plugin → THREADS under its detail says "No threads yet"; NEW THREAD ▸ → NEW THREAD with that project chosen; START a thread and ask "add a RESET ALL button" → the thread shows in the plugin's THREADS list (newest first, agent, status, last activity); a tap on it opens the thread in its window; ▤ ARCHIVED shows its archived threads
+- [ ] No ASK AN AGENT and no FOLDER button in MQH > PLUGINS
+- [ ] CONTROL > MQH > PLUGINS: pick a plugin → the first button says DISABLE when it is on and ENABLE when it is off (dim with nothing picked); enable / disable / reload work; the detail shows its kind, folder, poses, detectors and log
+- [ ] DELETE a project plugin → a dialog says the folder, its git history and its project with its threads go; DELETE → it leaves the list, THREADS and `/root/metacodex-projects/plugins/apps/`
+- [ ] `mcx-project new plugins --kind app "Voice made"` in a terminal → the app makes it (a toast; listed under APPS; in THREADS)
+- [ ] Say "make me an app plugin called water log" → made at once; "create a gesture plugin" → the name keyboard; "add a plugin" → the kind dialog
 - [ ] `mcx-ui plugin list` → the plugins with their state
 - [ ] A plugin with `voice.command{...}` (skill quest-scripting) → its phrase works by voice; `mcx-ui voice match "<phrase>"` shows the command
 - [ ] Ask an agent for a small plugin with its own window and a menu button (skill `quest-plugins`) → the window and its tile appear without a rebuild or a restart, and load again at every start
 - [ ] CONTROL > MQH > PLUGINS (no PLUGINS row of its own on the rail) → SHOW ALL lists APPS, GESTURES, BEHAVIOURS, MQH and EXAMPLES TO ADD; SHOW APPS lists only apps and the timers / calendar examples; GESTURES > ALL > EXAMPLES lists only gesture examples (core-poses, swipes)
-- [ ] Install the Timers example (CONTROL > MQH > PLUGINS > timers > + ADD, or `mcx-ui plugin example timers`) → a toast; a TIMER tile appears on the DOCK (and on the wrist menu's outer ring in WRIST mode); the tile opens the Timers window
+- [ ] Install the Timers example (CONTROL > MQH > PLUGINS > timers > + ADD, or `mcx-ui plugin example timers`) → a toast; a TIMER tile appears on the DOCK (and on the wrist menu's outer ring in WRIST mode); the tile opens the Timers window; THREADS > PLUGINS lists Timers (…/plugins/apps/timers, with AGENTS.md and one commit)
 - [ ] In the Timers window, start a short timer with its buttons → the countdown runs; when it ends, the Whisp calls it out with a sound and says it; a tap on the callout opens the window
 - [ ] Install the Calendar example the same way → a CALENDAR tile and a window with a month grid; add an entry and a reminder → the reminder calls out at its time
 - [ ] Restart the app → both plugins load again, their windows and tiles come back, and their saved timers and entries are kept
 - [ ] DISABLE a plugin in CONTROL > MQH > PLUGINS → its window closes, its DOCK tile and its voice commands go away; ENABLE brings them back
-- [ ] `mcx-ui plugin check timers` → `loaded`, with its windows (builds, open), tiles, voice commands, timers and no warnings
+- [ ] `mcx-ui plugin check timers` → `loaded`, with its kind (app, fixed), folder, windows (builds, open), tiles, voice commands, timers and no warnings
+- [ ] `mcx-ui plugin event timers button start` → ok, the countdown starts in the window; `mcx-ui plugin event nosuch button x` → an error naming the window
 
 ## The Whisp
 
@@ -473,7 +484,7 @@ Agent views:
 
 Projects and the THREADS list:
 
-- [ ] Open THREADS → it shows NATIVE, DEFAULT, RESEARCH (dim headers, in that order); OTHER only when a project is outside `/root/metacodex-projects/` and has no type; a tap on a header folds it, a tap on a project folds it; threads stay under their project (and its worktree rows); the project row says how many run / need you; a tap on a thread opens it; each thread shows its status (running / error / NEEDS YOU) and the list refreshes
+- [ ] Open THREADS → it shows NATIVE, DEFAULT, RESEARCH, PLUGINS (dim headers, in that order); OTHER only when a project is outside `/root/metacodex-projects/` and has no type; a tap on a header folds it, a tap on a project folds it; threads stay under their project (and its worktree rows); the project row says how many run / need you; a tap on a thread opens it; each thread shows its status (running / error / NEEDS YOU) and the list refreshes
 - [ ] An empty type says "no … project yet: tap to make one" → the tap asks the name of a project of that type
 - [ ] THREADS: + PROJECT… → DEFAULT → name "My Test" → the project is listed under DEFAULT (`…/default/my-test`)
 - [ ] + PROJECT… asks NATIVE APP / DEFAULT / RESEARCH / EXISTING…, then the name on the keyboard (empty field, the hint in its caption) → "Weather App" makes `/root/metacodex-projects/native/weather-app`; EXISTING… picks a folder, then PROJECT TYPE: NATIVE APP, DEFAULT or RESEARCH, and the project is listed under that type
