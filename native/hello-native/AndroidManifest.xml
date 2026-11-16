@@ -15,7 +15,7 @@
     <uses-feature android:name="android.hardware.vr.headtracking" android:required="true" android:version="1" />
     <uses-feature android:glEsVersion="0x00030001" android:required="true" />
 
-    <!-- hand tracking (mcx_xr turns it on by default; the app menu also opens with the left hand's menu gesture) -->
+    <!-- hand tracking (mcx_xr turns it on by default; the app menu also opens with a hand's menu gesture) -->
     <uses-permission android:name="com.oculus.permission.HAND_TRACKING" />
     <uses-feature android:name="oculus.software.handtracking" android:required="false" />
     <!-- the Khronos OpenXR loader finds the runtime through its broker (from the loader's own manifest) -->

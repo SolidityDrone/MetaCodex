@@ -6,7 +6,8 @@ description: Make a native Meta Quest app (Quest 3 / 3S, Horizon OS) on this hea
 # Native Quest apps: from "I want an app that ..." to an app in the Library
 
 > **Always.** Every app runs on `mcx::App` (`#include <mcx_xr.h>`, the template's loop) and keeps its built-in app
-> menu (left controller's menu button / left palm pinch). Opened from MetaCodex, the menu has **Back to MetaCodex**
+> menu (the left hand's menu gesture, or the left controller's menu button; the hand rules are in quest-native-hands-first,
+> rule 3). Opened from MetaCodex, the menu has **Back to MetaCodex**
 > and **Report to MetaCodex**, and Back **always closes the app** (MetaCodex starts, the app finishes); **Quit** closes
 > it too. Never remove, disable or take over the menu input, never write your own exit path (`ANativeActivity_finish`,
 > `xrRequestExitSession`, `exit`) or your own OpenXR loop; add your items with `app.menuItems`. Why: an app that only
@@ -24,7 +25,8 @@ The user says what the app should do; you do everything else. Their only jobs: t
 `mcx-app` command; lines starting `>>> ASK THE USER` are for the user (say them short, then let the command wait);
 `RESULT:` lines are outcomes; `PROBLEM:` lines (verify) must be fixed.
 
-Mandatory with this one: **quest-native-hands-first** (hands only, mixed reality), **quest-native-quality** (the
+Mandatory with this one: **quest-native-hands-first** (hands only, mixed reality, a pinch of either hand, the app menu
+and the system gestures, the HAND_TRACKING check), **quest-native-quality** (the
 brief, the passes, the self-review: how an app gets curated) and **quest-native-art-direction** (pick a look and keep
 it: palette, light, materials, motion, what reads over the room). The kits next to `mcx_xr.h` and their skills:
 **quest-native-rendering** (`mcx_gfx.h`: lit materials, shadows, glow sprites, particles, trails, easing; effects in its
@@ -65,18 +67,23 @@ example and short recipes), **quest-native-dev-loop** (the Runner: seconds per e
    not use. Draw with the kits (quest-native-rendering, -ui-design, -physics, -3d-models), and build in the passes of
    quest-native-quality (blockout, look, motion, UI, polish, self-review), steps 6-8 after each pass. Install and
    launch (steps 9-10) only after the self-review: the first launch is the user's first impression, so it must
-   already look designed. Never hand over a greybox.
+   already look designed. Never hand over a greybox. The first screen says how to open the app's menu and that the
+   headset's own menu always works (quest-native-hands-first, rule 3).
 6. **`mcx-app check <dir>`** (about 1 s): fix every `file:line:col: error:` and check again.
 7. **`mcx-app build <dir>`** (about 2 s after the first build): `RESULT: APK ...`.
 8. **`mcx-app verify <dir>`**: every `PROBLEM:` is a missing manifest entry, an unresolved symbol, a
-   missing icon or a wrong device list: fix and build again until `RESULT: verify ok`.
+   missing icon or a wrong device list: fix and build again until `RESULT: verify ok`. After the first launch (step 10)
+   the same command also reads the app's last start from its log: `HAND_TRACKING granted, hand trackers ready` is the
+   state to see before you say the app is done; a `PROBLEM:` line about HAND_TRACKING means a reinstall (see
+   quest-native-hands-first, the permission).
 9. **Tell the user in one sentence what the app will do**, then `mcx-app install <dir>`. A new app:
    `RESULT: requested install of ...`: MetaCodex offers INSTALL to the user, then Android's dialog, then LAUNCH; nothing
    more for you to run. An update of an app MetaCodex installed goes through silently (`RESULT: installed`).
 10. **`mcx-app launch <dir>`**: `RESULT: requested launch of ...`: MetaCodex offers LAUNCH / LATER. Say "ready:
-    tap LAUNCH in MetaCodex", what to look at and try (controls, what should appear), and how to come back: **"the left menu button (or look at
-    your left palm and pinch) opens the app's menu: Back to MetaCodex closes it and brings you here, Report to
-    MetaCodex also sends me a picture and its log"**. Every app on `mcx::App` has that menu built in. Opened from the
+    tap LAUNCH in MetaCodex", what to look at and try (controls, what should appear), and how to come back: **"the app's
+    menu opens with your left hand: palm towards your face, then pinch (or the left controller's menu button). Back to
+    MetaCodex closes it and brings you here, Report to MetaCodex also sends me a picture and its log. The headset's own
+    menu always works too"**. Every app on `mcx::App` has that menu built in. Opened from the
     Library (or reopened from there), the menu has only the app's items and Quit: Quit closes it, the headset goes Home.
 11. **When they are back**: MetaCodex brings this thread forward. A **report** arrives as a draft in this thread's
     composer, "Feedback on <Label> <version>:", with two attachments (a picture of the app, `log <Label>`): the user
@@ -84,7 +91,9 @@ example and short recipes), **quest-native-dev-loop** (the Runner: seconds per e
     `mcx-app logs <dir>` and ask what they saw. Then 6-10 again (`mcx-app run <dir>` = build + install +
     launch).
 
-**Done** = `verify ok`, installed, launched, the user saw it work, and you told them the app's name in the Library.
+**Done** = `verify ok`, installed, launched, `HAND_TRACKING granted, hand trackers ready` in `mcx-app verify` after the
+first start, the user saw it work, you listed every action with its hand input, and you told them the app's name in the
+Library.
 
 ## Common requests: the path through the skills
 
@@ -123,7 +132,7 @@ Decide these yourself; do not ask. Base = the nightvision example (hands, passth
 | `mcx-app new <dir> [--module \| --example nightvision] [--package <id>] [--label <name>]` | a new app folder |
 | `mcx-app check [dir]` | compile check only |
 | `mcx-app build [dir]` | incremental build -> `<dir>/build/<dir name>.apk` |
-| `mcx-app verify [dir]` | static checks of the APK (manifest vs the Meta APIs used, symbols, icon, devices) |
+| `mcx-app verify [dir]` | static checks of the APK (manifest vs the Meta APIs used, symbols, icon, devices); then the hands of the last start (HAND_TRACKING granted, trackers ready) from the app's log |
 | `mcx-app install [dir\|apk]` | Android's installer, waits up to 5 min for the user |
 | `mcx-app launch [dir\|package]` | asks the user to open the app (LAUNCH in MetaCodex); returns at once |
 | `mcx-app run [dir]` | build + install (+ launch request) |

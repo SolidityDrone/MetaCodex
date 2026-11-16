@@ -38,9 +38,10 @@ Pick the look first: quest-native-art-direction.
   depth's Laplacian; green phosphor, grain, scanlines; three modes.
 - **Passthrough**: green through `app.passthrough.SetMonoToRgba(...)`; toggled with `Start()`/`Pause()` and
   `app.projectionFlags`; output premultiplied (`vec4(col * v * a, a)`).
-- **Input** (only when `f.focused`): right `pinchStarted` or right `triggerPressed` = next mode, left `pinchStarted`
-  or A/X `primaryPressed` = passthrough on/off, `stick.y` = gain, left `squeeze` = `CreateAnchor` at the grip;
-  `app.controllers.Haptic(1, 0.4f, 0.05f)` as feedback.
+- **Input** (only when `f.focused`): a `pinchStarted` of either hand or the right `triggerPressed` = next mode; both
+  hands pinching together (the edge) or A/X `primaryPressed` = passthrough on/off; `stick.y` = gain; left `squeeze` =
+  `CreateAnchor` at the grip; `app.controllers.Haptic(1, 0.4f, 0.05f)` as feedback. This is the example's rule
+  (quest-native-hands-first, rule 1); a pinch with the palm towards you does not count.
 - **HUD**: `PlaceHud` (lazy follow, 1.2 m ahead, 25 cm low, head yaw only) + `app.text.Rect` + `app.text.Draw`,
   showing the state of depth, hands, controllers, room and anchors.
 - **Room / anchors**: `QueryScene()` once `app.HasPermission(mcx::kPermScene)`; `LoadAnchors()` at start.

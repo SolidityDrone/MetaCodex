@@ -41,7 +41,8 @@ namespace phys = mcx::phys;
 struct Scene
 {
     phys::World world;                 // 1/90 s fixed step
-    phys::Grabber grab;                // pinch to grab, release to throw
+    phys::Grabber grab;                // pinch to grab, release to throw (either hand)
+    int grabHand = 1;                  // 0 left, 1 right: the hand that holds the grab
     std::vector<phys::BodyId> bodies;  // the dynamic bodies, for drawing
     mcx::Lit lit;
     mcx::Mesh box, sphere;             // unit size; each body scales its copy
@@ -75,7 +76,9 @@ bool InitScene(Scene& s, float floorY)
 void UpdateScene(Scene& s, mcx::App& app, const mcx::Frame& f)
 {
     s.world.Step(f.dt);                                       // 0 to 4 fixed steps of 1/90 s
-    s.grab.UpdateHand(s.world, app.hands.hand[1], f.seconds); // right hand: pinch to grab, release to throw
+    // either hand: the left takes the grab when only it pinches; the grab stays with its hand until the release
+    if (!s.grab.Holding()) s.grabHand = (app.hands.hand[0].pinching && !app.hands.hand[1].pinching) ? 0 : 1;
+    s.grab.UpdateHand(s.world, app.hands.hand[s.grabHand], f.seconds); // pinch to grab, release to throw
 }
 
 // Per eye, between BeginEye and EndEye: each body at its interpolated pose.
@@ -130,7 +133,8 @@ void RunScene(mcx::App& app, Scene& s)
 
 ## 3. Grab and throw with the hands
 
-- Call `grab.UpdateHand(world, app.hands.hand[1], f.seconds)` once per frame (the loop uses the right hand).
+- Call `grab.UpdateHand(world, app.hands.hand[h], f.seconds)` once per frame, with `h` the hand that pinches (either
+  hand; the loop keeps the grab with the hand that took it, as in `UpdateScene`).
   The pinch point is the midpoint of the thumb and index tips. A new pinch grabs the body within 4 cm of it.
 - Feedback (hands have no haptics): tint `grab.hovered` (the loop uses the accent `0x35D0FF`). Scale `grab.held` by
   `1 + 0.08 * grab.pulse`. `pulse` goes from 1 at the grab to 0 in 0.25 s.

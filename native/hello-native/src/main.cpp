@@ -1,7 +1,8 @@
 // Hello Native: the smallest native Quest app MetaCodex builds and installs, and the template of `mcx-app new`.
 // C++ on MetaCodex's native XR layer (mcx_xr.h: OpenXR + OpenGL ES 3, the session, input and the app menu).
 // It shows a dark space with three slowly turning coloured cubes in front of you.
-// The app menu is built in: the left controller's menu button or the left hand's menu gesture opens Back to
+// The app menu is built in: the left controller's menu button or a hand's menu gesture (left hand: palm towards your
+// face, then pinch) opens Back to
 // MetaCodex / Report to MetaCodex / Restart / Quit. Build: `mcx-app build` (in MetaCodex's Linux).
 #include <mcx_xr.h>
 #include <cmath>

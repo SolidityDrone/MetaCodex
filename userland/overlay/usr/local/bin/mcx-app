@@ -284,7 +284,7 @@ launch_app() {
   fi
   if [[ "$r" == ok* ]]; then
     echo "RESULT: started $pkg"
-    ask "The app is open in the headset. Its menu (left controller's menu button, or the left hand's menu gesture: look at your left palm and pinch) has Back to MetaCodex and Report to MetaCodex: a report brings a picture and the app's log back into this thread."
+    ask "The app is open in the headset. Its menu (left controller's menu button, or the left hand's menu gesture: palm towards your face, then pinch) has Back to MetaCodex and Report to MetaCodex: a report brings a picture and the app's log back into this thread. The headset's own menu always works too."
     echo "its log: mcx-app logs $pkg"
   else
     echo "RESULT: $r"; return 1

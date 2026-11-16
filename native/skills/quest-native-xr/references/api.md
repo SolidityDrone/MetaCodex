@@ -40,9 +40,12 @@ All in `namespace mcx`, header `/opt/metacodex/quest-native/xr/mcx_xr.h`. Each c
 
 ## The app menu and the way back (built into `App`)
 
-- Opens with the left controller's menu button or the non-dominant hand's menu gesture (palm facing you, pinch);
-  a panel 0.9 m ahead; point with the right controller or hand and pull the trigger / pinch, or move with the stick
-  and press A. While it is open `Frame::focused` is false and `app.MenuOpen()` is true.
+- Opens with the left controller's menu button or a hand's menu gesture (left hand: palm towards your face, then
+  pinch; it needs the hand aim extension, and the log says so when it is missing); a panel 0.9 m ahead. Point with the
+  hand that pinches, else the hand that pointed last, else either hand with an aim, or with the right controller. A pinch
+  of either hand picks the row under the pointer (a pinch that starts with the palm towards you does not count); the
+  controller's trigger or A picks too, and its stick moves. While it is open `Frame::focused` is false and
+  `app.MenuOpen()` is true.
 - Items, opened from MetaCodex (`app.FromMetaCodex()`: launched by MetaCodex with a launch id): **Back to MetaCodex**,
   **Report to MetaCodex**, `app.menuItems` (yours, `MenuItem{label, action}`), **Quit**, **Close menu**. Opened from
   the Library or anything else, or reopened after a pause: `app.menuItems`, **Quit**, **Close menu**. The title line
