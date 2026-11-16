@@ -590,7 +590,8 @@ namespace MetaCodex.Shell
             return (null, bestG);
         }
 
-        /// A window let go: swap, join, group or come out (see the class comment).
+        /// A window let go: swap, join, group or come out (see the class comment). A drop groups across projects: the
+        /// only project rule is AutoGroup (on open).
         private void Dropped(ThreadWindow w, Transform head)
         {
             var (tw, tg) = DropTarget(w, head);
@@ -603,12 +604,13 @@ namespace MetaCodex.Shell
                     if (a >= 0 && b >= 0) { ms[a] = tw; ms[b] = w; } // they glide to each other's cells
                     return;
                 }
+                LogGroupDrop(w, tw, null);
                 if (tw.Group != null) { _pulledOut.Remove(w.threadOpen ?? ""); MoveToGroup(w, tw.Group, tw.Group.Members.IndexOf(tw)); FocusWindow(w); return; }
                 if (w.Group != null) RemoveFromGroup(w, false);
                 if (WinOpen(tw) && tw.Group == null) { _pulledOut.Remove(w.threadOpen ?? ""); MakeGroup(tw, w); FocusWindow(w); }
                 return;
             }
-            if (tg != null) { _pulledOut.Remove(w.threadOpen ?? ""); MoveToGroup(w, tg, -1); FocusWindow(w); return; }
+            if (tg != null) { LogGroupDrop(w, null, tg); _pulledOut.Remove(w.threadOpen ?? ""); MoveToGroup(w, tg, -1); FocusWindow(w); return; }
             if (w.Group == null) return;
             // let go over its own group: it goes back to its cell; outside it: it comes out where it was let go
             var g = w.Group;
@@ -619,6 +621,16 @@ namespace MetaCodex.Shell
                 inside = dir.sqrMagnitude > 1e-4f && g.Panel.Raycast(new Ray(head.position, dir.normalized), out _, out _);
             }
             if (!inside) RemoveFromGroup(w, true);
+        }
+
+        /// The drop in the session log: which window was let go, on what, and the projects of both (owner 2026-11-16:
+        /// a drag across projects was reported as not grouping; this line shows what the drop did on the headset).
+        private void LogGroupDrop(ThreadWindow w, ThreadWindow onto, ThreadGroup group)
+        {
+            var with = onto ?? group?.Members.FirstOrDefault(m => m != w);
+            string from = ProjectNameOf(w.threadOpenProject ?? w.draft?.ProjectId) ?? "no project";
+            string to = ProjectNameOf(with?.threadOpenProject ?? with?.draft?.ProjectId) ?? "no project";
+            Log($"thread group: {w.Id} ({from}) let go on {(onto != null ? onto.Id : group.Id)} ({to})");
         }
 
         // ------------------------------------------------------------------ voice (the command registry)

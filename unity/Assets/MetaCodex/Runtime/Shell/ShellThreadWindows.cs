@@ -279,17 +279,43 @@ namespace MetaCodex.Shell
             if (was != w) { RefreshWindowTitles(); UpdateSidebarVoice(); UpdateThreadWindowVoice(); }
         }
 
-        /// Window titles: THREAD, THREAD 2 ...; with more than one open, the focused one is marked (voice and the
-        /// session context mean that one).
+        /// Window titles: "<project> · <thread title>" (owner 2026-11-16: the project and the thread on the header); with
+        /// more than one window open, the focused one is marked (voice and the session context mean that one).
         private void RefreshWindowTitles()
         {
             int open = Tws.Count(WinOpen);
-            foreach (var w in Tws)
-            {
-                if (w.Panel == null || w.Dead) continue;
-                string name = w.Number == 1 ? "Thread" : "Thread " + w.Number;
-                w.Panel.SetTitle(open > 1 && w == _twFocus ? "● " + name : name);
-            }
+            foreach (var w in Tws) UpdateWindowTitle(w, open);
+        }
+
+        /// One window's header, set only when its text changed. Called on events (a poll that read the thread or its
+        /// project, a thread opened, a focus change, a window closed), never per frame. The header's ellipsis (UiText)
+        /// keeps a long title inside the header.
+        private void UpdateWindowTitle(ThreadWindow w, int open = -1)
+        {
+            if (w.Panel == null || w.Dead) return;
+            if (open < 0) open = Tws.Count(WinOpen);
+            string text = WindowTitleText(w);
+            string title = open > 1 && w == _twFocus ? "● " + text : text;
+            if (w.Panel.Title != title) w.Panel.SetTitle(title);
+        }
+
+        /// The text of a window's header: the project's name (cut to 20 characters) and the thread's title; the title is
+        /// "New thread" until MQH has one (and for a draft). No project known: the title alone.
+        private string WindowTitleText(ThreadWindow w)
+        {
+            string projectId = w.threadOpen != null ? (string)w.threadInfo?["projectId"] ?? w.threadOpenProject : w.draft?.ProjectId;
+            string thread = w.threadOpen != null ? (string)w.threadInfo?["title"] ?? (string)w.threadInfo?["titleFallback"] : null;
+            string name = string.IsNullOrWhiteSpace(thread) ? "New thread" : thread.Trim();
+            string project = ProjectNameOf(projectId);
+            return project == null ? name : Cut(project, 20) + " · " + name;
+        }
+
+        /// A project's name from MQH's list (null when the project is not in it).
+        private string ProjectNameOf(string projectId)
+        {
+            if (string.IsNullOrEmpty(projectId)) return null;
+            string name = (string)_projects.FirstOrDefault(p => (string)p["id"] == projectId)?["name"];
+            return string.IsNullOrWhiteSpace(name) ? null : name.Trim();
         }
 
         public int ThreadWindowCount => Tws.Count(WinOpen);
@@ -333,6 +359,7 @@ namespace MetaCodex.Shell
         {
             var w = _tw;
             if (w.Panel == null) return;
+            UpdateWindowTitle(w); // the thread it shows now (also when it joins a group below)
             if (w.Group != null) { if (!w.Group.Panel.IsOpen) w.Group.Panel.Open(); w.Panel.Ping(); return; }
             if (!w.Panel.IsOpen && Settings != null) w.Panel.BaseScale = Vector3.one * UiScaleNow; // closed while it was in a group: its full size again
             _threadAliasOff = true; // its own id ("thread" is also the focused window's alias in OpenPanel)

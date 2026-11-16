@@ -104,8 +104,8 @@ Each thread opens in a full window, and windows can be grouped.
 
 - Up to 6 THREAD windows are open at the same time. Their ids are `thread`, then `thread-2` to `thread-6`.
 - Each window has its own thread, chat, status line, composer, chips, approvals, attachments and draft.
-- The FOCUSED window is the last window that you touched or opened. Its title has a dot (● THREAD 2) when more than
-  one window is open. Voice commands, the clipboard's TO THE THREAD and the session context use the focused window.
+- The FOCUSED window is the last window that you touched or opened. Its title has a dot (● PROJECT · THREAD TITLE) when more than
+  one window is open. A window's title is its project and its thread's title (`UpdateWindowTitle`). Voice commands, the clipboard's TO THE THREAD and the session context use the focused window.
 - Where a thread opens:
   - A thread that is open already: its window gets the focus.
   - Else the focused window, when it is closed or empty.
@@ -124,9 +124,9 @@ Each thread opens in a full window, and windows can be grouped.
 - A group is a window that holds thread windows in a grid: 2 windows in 2x1, 3 or 4 in 2x2, 5 or 6 in 3x2.
 - The windows in a group are smaller, but they keep their full chat and composer. They work as free windows do.
 - Make a group: pinch the title bar of a window, move it onto another window and release it. The target window
-  lights up while the carried window is over it.
-- Automatic groups: when a thread opens and a window of the same project is open, the new window joins that group.
-  Two free windows of one project make a new group.
+  lights up while the carried window is over it. Any project: a drop groups windows of different projects too.
+- Automatic groups (the only rule by project): when a thread opens and a window of the same project is open, the new
+  window joins that group. Two free windows of one project make a new group.
 - In a group:
   - Release a window on another window of the same group: the two windows change places.
   - Release a window on a window of another group: it moves to that group, at that place.

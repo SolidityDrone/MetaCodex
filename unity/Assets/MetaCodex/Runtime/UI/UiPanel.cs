@@ -80,7 +80,7 @@ namespace MetaCodex.UI
                 _title = UiText.Create(this, new Rect(Theme.Padding + 0.006f, 0.006f, width - 0.1f, Theme.HeaderHeight - 0.010f),
                     ConsoleTitle(title), Theme.Display, Theme.TitleSize, Theme.TextAccent, TextAlignmentOptions.MidlineLeft);
                 _title.Tmp.characterSpacing = 5f;
-                _close = Add(new UiButton("✕", () => Close(), UiButtonStyle.Ghost)
+                _close = Add(new UiButton("✕", () => Close(), UiButtonStyle.Danger) // red, as the thread and group windows' ✕ (owner 2026-11-16)
                 {
                     Rect = new Rect(width - 0.044f, 0.006f, 0.036f, Theme.HeaderHeight - 0.010f),
                 });

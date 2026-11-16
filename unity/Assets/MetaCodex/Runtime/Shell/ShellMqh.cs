@@ -409,7 +409,9 @@ namespace MetaCodex.Shell
         private JArray _pluginProjects;
         private UiList _pluginThreads;
         private UiLabel _pluginThreadsHead;
-        private UiButton _pluginThreadsArch, _pluginNewThread, _pluginDelete;
+        private UiButton _pluginThreadsArch, _pluginNewThread, _pluginDelete, _pluginOpen;
+        private UiButton[] _pluginRow;          // ENABLE, OPEN ▸, ⟳ RELOAD, DELETE: the row the shown ones share
+        private Rect _pluginRowRect;
         private bool _pluginThreadsArchived;
         /// The project whose threads the list shows, and a counter that drops answers for an earlier pick.
         private string _pluginThreadsFor;
@@ -418,7 +420,8 @@ namespace MetaCodex.Shell
         /// MQH > PLUGINS (owner 2026-11-16): the list by kind on the left; on the right the picked plugin's detail, its
         /// THREADS (the threads of its project, newest first; a tap opens one like THREADS does), and the buttons:
         /// ENABLE / DISABLE, ⟳ RELOAD, DELETE; + NEW PLUGIN… (the NEW PROJECT flow at the kind question, or straight to
-        /// the name when SHOW is APPS, GESTURES or BEHAVIOURS) and NEW THREAD ▸ (a thread on the plugin's project).
+        /// the name when SHOW is APPS, GESTURES or BEHAVIOURS) and NEW THREAD ▸ (a thread on the plugin's project). OPEN ▸
+        /// (owner 2026-11-16) is in the action row for an app plugin only: its main window.
         private void BuildPluginsTab(Rect area)
         {
             var t = UiTheme.Current;
@@ -440,16 +443,21 @@ namespace MetaCodex.Shell
             _pluginThreadsHead = _mqhTabs.AddTo(page, new UiLabel("THREADS", t.SmallSize) { Rect = new Rect(hr.x, hr.y, hr.width - abw - t.Gap, hr.height), Color = t.TextAccent });
             _pluginThreadsArch = _mqhTabs.AddTo(page, new UiButton("▤ ARCHIVED", () => { _pluginThreadsArchived = !_pluginThreadsArchived; _pluginThreadsArch.SetSelected(_pluginThreadsArchived); _pluginThreadsFor = null; ShowPluginDetail(); }) { Rect = new Rect(hr.xMax - abw, hr.y, abw, hr.height), TextSize = t.SmallSize * 0.95f });
             _pluginThreads = _mqhTabs.AddTo(page, new UiList(0.028f, (item, idx) => PluginThreadPicked(item)) { Rect = pr.Next(rest * 0.54f - headH - t.Gap) });
-            var row1 = AddRow(_mqhTabs, page, pr.Next(t.ButtonHeight), new (string, Action)[]
+            _pluginRowRect = pr.Next(t.ButtonHeight);
+            _pluginRow = AddRow(_mqhTabs, page, _pluginRowRect, new (string, Action)[]
             {
                 ("ENABLE", TogglePickedPlugin),
+                ("OPEN ▸", OpenPickedPlugin),
                 ("⟳ RELOAD", () => { Scripts.ReloadAll(); RefreshMqhPlugins(); }),
                 ("DELETE", DeletePickedPlugin),
-            }, danger: 2);
+            }, danger: 3);
             // ENABLE or DISABLE (or + ADD for an example): the one that applies to the picked row (ShowPluginDetail)
-            _pluginToggle = row1[0];
-            _pluginDelete = row1[2];
+            _pluginToggle = _pluginRow[0];
+            _pluginOpen = _pluginRow[1];
+            _pluginDelete = _pluginRow[3];
             _pluginToggle.SetEnabled(false);
+            _pluginOpen.SetVisible(false); // shown for an app plugin only (ShowPluginDetail)
+            LayPluginRow();
             var row2 = AddRow(_mqhTabs, page, pr.Next(t.ButtonHeight), new (string, Action)[]
             {
                 ("+ NEW PLUGIN…", NewPluginFromTab),
@@ -606,6 +614,9 @@ namespace MetaCodex.Shell
             bool? on = tag is ScriptHost.Entry pe ? pe.Enabled : tag is JObject pm ? (pm["enabled"]?.Value<bool>() ?? (string)pm["status"] != "disabled") : (bool?)null;
             _pluginNewThread?.SetEnabled(tag is ScriptHost.Entry pp && pp.Project);
             _pluginDelete?.SetEnabled(tag is ScriptHost.Entry || tag is JObject);
+            // OPEN ▸ for an app plugin only (its window); the row closes up when it is hidden
+            bool app = tag is ScriptHost.Entry pa && PluginKindOf(pa) == KindApps;
+            if (_pluginOpen != null && _pluginOpen.Visible != app) { _pluginOpen.SetVisible(app); LayPluginRow(); }
             if (tag is GestureExampleRow ex)
             {
                 _pluginToggle?.SetText("+ ADD");
@@ -740,6 +751,28 @@ namespace MetaCodex.Shell
                 ArchivedRowPicked(tag.Substring(2));
                 After(3f, () => { _pluginThreadsFor = null; ShowPluginDetail(); }); // a RESTORE moves it back
             }
+        }
+
+        /// OPEN ▸ (an app plugin): its main window (the one it made with ui.panel, `main` first), opened as ui.open does.
+        private void OpenPickedPlugin()
+        {
+            if (!(SelectedPluginTag() is ScriptHost.Entry e) || Scripts == null) { Toast("Pick a plugin", "warn"); return; }
+            if (PluginKindOf(e) != KindApps) { Toast("This plugin has no window: it is not an app plugin", "warn"); return; }
+            var windows = Scripts.WindowsOf(e);
+            if (windows.Count == 0) { Toast("This plugin has no window yet", "info"); return; }
+            if (!Scripts.OpenWindowOf(e, windows[0])) Toast("The plugin's window did not open", "error");
+        }
+
+        /// The action row of PLUGINS: the shown buttons share its width (OPEN ▸ is hidden unless an app plugin is picked).
+        private void LayPluginRow()
+        {
+            if (_pluginRow == null) return;
+            var t = UiTheme.Current;
+            var shown = _pluginRow.Where(b => b.Visible).ToArray();
+            if (shown.Length == 0) return;
+            float bw = (_pluginRowRect.width - t.Gap * (shown.Length - 1)) / shown.Length;
+            for (int i = 0; i < shown.Length; i++)
+                shown[i].SetRect(new Rect(_pluginRowRect.x + i * (bw + t.Gap), _pluginRowRect.y, bw, _pluginRowRect.height));
         }
 
         /// NEW THREAD ▸: NEW THREAD with the plugin's project chosen (its project is added to MQH first when it is not there).

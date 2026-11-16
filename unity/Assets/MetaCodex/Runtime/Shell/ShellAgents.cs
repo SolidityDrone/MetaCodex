@@ -357,6 +357,7 @@ namespace MetaCodex.Shell
             {
                 if (pr == null) { _threadsStatus.Set("⚠ " + (Mqh.LastError ?? "MQH not reachable"), UiTheme.Current.Danger); return; }
                 _projects = pr as JArray ?? new JArray();
+                RefreshWindowTitles(); // a renamed project: its windows' headers
                 if (_projectSel == null || !_projects.Any(x => (string)x["id"] == _projectSel))
                     _projectSel = _projects.Any(x => (string)x["id"] == Settings.lastProject) ? Settings.lastProject : (string)_projects.FirstOrDefault()?["id"];
                 RefreshThreadList();
@@ -1028,6 +1029,7 @@ namespace MetaCodex.Shell
         private void ShowThreadHeader()
         {
             UpdateThreadActions();
+            UpdateWindowTitle(_tw); // the window's header: the thread's title and project as this read has them
             if (_threadOpen == null && _draft != null) { ShowDraftHeader(); return; }
             var x = _threadInfo;
             var t = UiTheme.Current;
