@@ -115,7 +115,8 @@ namespace MetaCodex.App
 
         // ------------------------------------------------------------------ terminals
 
-        /// A new terminal next to the active one, with its own shell.
+        /// A new terminal with its own shell. The shell frames it and places the frame where no window is (MetaCodexShell
+        /// OpenTerminalFrame); without the shell (or before it is up) its bare view goes right of the active one.
         public TerminalInstance NewTerminal()
         {
             var go = new GameObject("Terminal " + (_numbers + 1));
