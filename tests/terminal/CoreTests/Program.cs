@@ -17,6 +17,7 @@ internal static class Program
         string rootfs = args.Length > 1 ? args[1] : null;
         string synthTar = args.Length > 2 ? args[2] : null;
         Unit();
+        TextAndLinks();
         Corpus(corpus);
         if (synthTar != null && File.Exists(synthTar)) SyntheticTar(synthTar);
         if (rootfs != null && File.Exists(rootfs))
@@ -130,6 +131,89 @@ internal static class Program
 
         Check(Wcwidth.Of('a') == 1 && Wcwidth.Of(0x4E2D) == 2 && Wcwidth.Of(0x0301) == 0 && Wcwidth.Of(0x1F680) == 2 && Wcwidth.Of(0x2500) == 1, "wcwidth");
         Check(TarGzExtractor.SafeRelative("./usr/bin/x") == "usr/bin/x" && TarGzExtractor.SafeRelative("../x") == null && TarGzExtractor.SafeRelative("/etc/p") == "etc/p" && TarGzExtractor.SafeRelative("./") == null, "tar path safety");
+    }
+
+    /// Copying out of a terminal (TerminalText.Selection), the links on it (sign-in links wrapped by the terminal or broken
+    /// by the program itself) and OSC 52 (a program puts text on the clipboard).
+    private static void TextAndLinks()
+    {
+        var t = Run(new string('a', 80) + "b");
+        Check(TerminalText.Continues(t.GetRow(0)) && !TerminalText.Continues(t.GetRow(1)), "a row the text ran past is marked wrapped");
+        t = Run("abc\r\n");
+        Check(!TerminalText.Continues(t.GetRow(0)), "a line ended by CR LF is not wrapped");
+
+        t = Run("");
+        for (int i = 0; i < 30; i++) t.Feed($"line {i}\r\n");
+        Check(t.LinesScrolled == 7 && VtTerminal.RowText(TerminalText.Line(t, 0)) == "line 0" && VtTerminal.RowText(TerminalText.Line(t, 7)) == "line 7"
+              && TerminalText.Line(t, 7) == t.GetRow(0) && TerminalText.Line(t, 31) == null, "line numbers: scrollback then screen", $"scrolled={t.LinesScrolled}");
+        Check(TerminalText.Selection(t, 2, 0, 3, 5) == "line 2\nline 3", "selection in the scrollback", TerminalText.Selection(t, 2, 0, 3, 5));
+        Check(TerminalText.Selection(t, 6, 2, 8, 3) == "ne 6\nline 7\nline", "selection from the scrollback onto the screen", TerminalText.Selection(t, 6, 2, 8, 3));
+        long before = t.LinesScrolled;
+        t.Feed("more\r\n");
+        Check(t.LinesScrolled == before + 1 && TerminalText.Selection(t, 2, 0, 2, 9) == "line 2", "a line keeps its number while the screen scrolls");
+
+        t = new VtTerminal(10, 20);
+        t.Feed("hello world\r\nsecond line\r\nthird");
+        long l0 = t.LinesScrolled;
+        string sel = TerminalText.Selection(t, l0, 6, l0 + 1, 5);
+        Check(sel == "world\nsecond", "selection across two lines", sel);
+        Check(TerminalText.Selection(t, l0 + 1, 5, l0, 6) == sel, "selection dragged backwards: the same text");
+        Check(TerminalText.Selection(t, l0, 0, l0, 19) == "hello world", "blanks at a line's end are dropped");
+        Check(TerminalText.Selection(t, l0 + 2, 0, l0 + 4, 19) == "third", "empty lines at the end of a selection add nothing", TerminalText.Selection(t, l0 + 2, 0, l0 + 4, 19).Replace("\n", "\\n"));
+
+        t = new VtTerminal(10, 20);
+        t.Feed("abcdefghijklmnopqrstuvwxyz\r\nnext");
+        l0 = t.LinesScrolled;
+        sel = TerminalText.Selection(t, l0, 0, l0 + 2, 3);
+        Check(sel == "abcdefghijklmnopqrstuvwxyz\nnext", "a wrapped line copies as one line", sel);
+
+        t = new VtTerminal(5, 20);
+        t.Feed("中文x");
+        sel = TerminalText.Selection(t, t.LinesScrolled, 1, t.LinesScrolled, 4);
+        Check(sel == "中文x", "a selection starting on half of a wide character takes all of it", sel);
+
+        // links
+        string url = "https://claude.ai/oauth/authorize?code=true&client_id=9d1c250a-e61b-44d9-88ed-5944d1962f5e&response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A54545%2Fcallback&scope=user%3Ainference&state=abc123";
+        t = new VtTerminal(30, 40);
+        t.Feed("Use the url below to sign in:\r\n\r\n" + url + "\r\n\r\nPaste code here > ");
+        Check(TerminalText.LastUrl(t) == url, "a link the terminal wrapped is found whole", TerminalText.LastUrl(t));
+
+        // a TUI that breaks the line itself at its width (1 column of margin each side): no wrap mark on the rows
+        t = new VtTerminal(30, 40);
+        var sbu = new StringBuilder("\r\n Browser didn't open? Use the url below:\r\n\r\n");
+        for (int i = 0; i < url.Length; i += 38) sbu.Append(' ').Append(url.Substring(i, Math.Min(38, url.Length - i))).Append("\r\n");
+        sbu.Append("\r\n Paste code here if prompted >");
+        t.Feed(sbu.ToString());
+        Check(TerminalText.LastUrl(t) == url, "a link a program broke at its own width is joined", TerminalText.LastUrl(t));
+
+        // the same in a box: borders at both edges
+        t = new VtTerminal(30, 40);
+        sbu.Clear().Append("╭──────────────────────────────────────╮\r\n");
+        for (int i = 0; i < url.Length; i += 36) sbu.Append("│ ").Append(url.Substring(i, Math.Min(36, url.Length - i)).PadRight(36)).Append(" │\r\n");
+        sbu.Append("╰──────────────────────────────────────╯\r\n");
+        t.Feed(sbu.ToString());
+        Check(TerminalText.LastUrl(t) == url, "a link broken inside a box is joined", TerminalText.LastUrl(t));
+
+        // a link that ends near the edge is not glued to the words on the next line; one far from the edge stays alone
+        t = new VtTerminal(30, 40);
+        t.Feed("open https://example.com/a/b/c/d/eeeee\r\nPress Enter to continue\r\nsee https://example.org/x\r\n/root/work\r\n");
+        var all = TerminalText.Urls(t);
+        Check(all.Count == 2 && all[0] == "https://example.com/a/b/c/d/eeeee" && all[1] == "https://example.org/x", "links are not glued to the next line's words", string.Join(" | ", all));
+
+        // the shell's prompt (the cursor on it) after a link that ends at the edge is not part of the link
+        t = new VtTerminal(30, 40);
+        string edge = "https://example.com/" + new string('x', 18);
+        t.Feed(edge + "\r\nroot@quest:~#");
+        Check(TerminalText.LastUrl(t) == edge, "the prompt after a link at the edge stays out of it", TerminalText.LastUrl(t));
+
+        // the first rows of a link scrolled into the history: found with the history lines
+        t = new VtTerminal(4, 40);
+        t.Feed(url + "\r\n1\r\n2\r\n3");
+        Check(TerminalText.LastUrl(t, 0) != url && TerminalText.LastUrl(t, 12) == url, "a link partly in the history is found with it", TerminalText.LastUrl(t, 12));
+
+        // OSC 52: a program puts text on the clipboard; a query is never answered
+        t = Run("\x1b]52;c;" + Convert.ToBase64String(Encoding.UTF8.GetBytes("copied ✓")) + "\x07\x1b]52;c;?\x07");
+        Check(t.ClipboardText == "copied ✓" && t.ClipboardVersion == 1 && t.TakeReplies() == null, "OSC 52 sets the clipboard text, a query gets nothing", t.ClipboardText);
     }
 
     private static void Corpus(string dir)
