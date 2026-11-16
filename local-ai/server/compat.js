@@ -4,7 +4,11 @@
 //   OpenCode      OpenAI chat completions      POST /v1/chat/completions  (main.js; model "local-coder")
 //   Codex         OpenAI Responses API          POST /v1/responses        (wire_api = "responses"; chat is gone)
 //   Claude Code   Anthropic Messages API        POST /v1/messages         (ANTHROPIC_BASE_URL)
-// Each takes "stream": true (server-sent events in that API's own event format). Tool calls go both ways.
+// Each takes "stream": true (server-sent events in that API's own event format). Tool calls go both ways: the
+// model's calls are parsed in toolcalls.js (tagged, fenced, bare JSON) and go out as tool_calls / function_call items /
+// tool_use blocks, never as text (docs/local-coder.md, "Tool calls in the model's text").
+
+const { familyOf } = require('./toolcalls')
 
 const CODER_NAMES = /coder|qwen3-1\.7b|local/i
 
@@ -20,6 +24,87 @@ function text (v) {
 }
 
 const newId = (p) => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
+
+// Claude Code asks for temperature 1: a 0.5B model then writes more broken JSON and wanders. The coder runs at most at
+// this temperature (service config coderMaxTemperature).
+function coderTemperature (t, cfg) {
+  const max = cfg && cfg.coderMaxTemperature != null ? Number(cfg.coderMaxTemperature) : 0.2
+  return t == null ? undefined : Math.min(Number(t), max)
+}
+
+/** What a parse left out or changed, for the log line: " (echo as text)", " (broken call)". */
+function parseNote (r) {
+  return (r && r.echoed ? ' (echo as text)' : '') + (r && r.broken ? ' (broken call)' : '') + (r && r.repeatStopped ? ' (repeat stopped)' : '')
+}
+
+// ---------------------------------------------------------------- OpenAI chat completions (OpenCode; the app's LLM)
+
+/**
+ * POST /v1/chat/completions for both engines: the app's interface LLM, and the local coder when `model` names it
+ * (OpenCode's provider, model "local-coder"). ctx: { engines, send, log, cfg, ids: { llm, coder } } (model ids).
+ */
+async function chatCompletions (req, res, j, ctx) {
+  const { engines, send, log } = ctx
+  const cfg = ctx.cfg || {}
+  if (!Array.isArray(j.messages) || !j.messages.length) throw Object.assign(new Error('messages is required'), { status: 400 })
+  const coder = wantsCoder(j.model)
+  // the local coder gets the slim profile (slim): a short system prompt, the core tools (OpenCode threads)
+  if (coder && cfg.coderSlim !== false) Object.assign(j, slim({ messages: j.messages.map((m) => Object.assign({}, m, { content: Array.isArray(m.content) ? m.content.map((p) => typeof p === 'string' ? p : p.text || '').join('') : m.content })), tools: j.tools || [] }))
+  const opts = { max_tokens: j.max_tokens, temperature: coder ? coderTemperature(j.temperature, cfg) : j.temperature, grammar: j.grammar, engine: coder ? 'coder' : 'llm' }
+  const model = (ctx.ids || {})[coder ? 'coder' : 'llm'] || j.model
+  const tag = coder ? 'coder chat' : 'llm'
+  if (j.stream) return chatCompletionsStream(req, res, j, ctx, opts, model, tag)
+  const r = await engines.chat(j.messages, Array.isArray(j.tools) ? j.tools : [], opts)
+  const calls = r.tool_calls.map((c, i) => ({ id: 'call_' + Date.now().toString(36) + i, type: 'function', function: { name: c.name, arguments: JSON.stringify(c.arguments || {}) } }))
+  const st = r.stats || {}
+  log(`${tag} ${r.ms} ms (first ${r.firstMs} ms, prompt ${st.promptTokens || '?'} tok)${parseNote(r)}: ${calls.length ? calls.map((c) => c.function.name + c.function.arguments).join(' ') : JSON.stringify(r.content).slice(0, 120)}`)
+  send(res, 200, {
+    id: 'chatcmpl-' + Date.now().toString(36),
+    object: 'chat.completion',
+    created: Math.floor(Date.now() / 1000),
+    model,
+    choices: [{ index: 0, message: Object.assign({ role: 'assistant', content: r.content || null }, calls.length ? { tool_calls: calls } : {}), finish_reason: calls.length ? 'tool_calls' : 'stop' }],
+    usage: { prompt_tokens: st.promptTokens || 0, completion_tokens: st.generatedTokens || 0, total_tokens: (st.promptTokens || 0) + (st.generatedTokens || 0) },
+    timings: { ms: r.ms, firstMs: r.firstMs, tps: st.TPS || null }
+  })
+}
+
+/** stream: true -> text/event-stream, OpenAI chunk format: a role chunk, one delta.content per decoded token (no
+ * <think> block, no <tool_call> text; the coder's text from a possible call on is held, engines.chat), a final chunk
+ * with finish_reason (and parsed tool_calls), then [DONE]. The client closing the connection cancels the generation
+ * (a queued one is skipped). */
+async function chatCompletionsStream (req, res, j, { engines, log }, opts, model, tag) {
+  const id = 'chatcmpl-' + Date.now().toString(36)
+  const created = Math.floor(Date.now() / 1000)
+  const abort = { aborted: false, onabort: null }
+  const gone = () => { if (abort.aborted) return; abort.aborted = true; if (abort.onabort) abort.onabort() }
+  // the socket, not the request: bare-http1 closes the request object once its body has been read
+  try { if (req.socket) req.socket.on('close', gone) } catch {}
+  res.statusCode = 200
+  res.setHeader('Content-Type', 'text/event-stream')
+  res.setHeader('Cache-Control', 'no-cache')
+  const chunk = (delta, finish, extra) => {
+    if (abort.aborted) return
+    const o = { id, object: 'chat.completion.chunk', created, model, choices: [{ index: 0, delta, finish_reason: finish || null }] }
+    try { res.write('data: ' + JSON.stringify(Object.assign(o, extra || {})) + '\n\n') } catch { gone() }
+  }
+  chunk({ role: 'assistant' })
+  let r
+  try {
+    r = await engines.chat(j.messages, Array.isArray(j.tools) ? j.tools : [], Object.assign({}, opts, { abort, onToken: (t) => chunk({ content: t }) }))
+  } catch (e) {
+    chunk({}, 'error', { error: String(e.message || e) })
+    try { res.end('data: [DONE]\n\n') } catch {}
+    throw Object.assign(e, { streamed: true })
+  }
+  const calls = r.tool_calls.map((c, i) => ({ index: i, id: 'call_' + Date.now().toString(36) + i, type: 'function', function: { name: c.name, arguments: JSON.stringify(c.arguments || {}) } }))
+  const st = r.stats || {}
+  log(`${tag} stream ${r.ms} ms (first ${r.firstMs} ms, prompt ${st.promptTokens || '?'} tok)${r.cancelled ? ' cancelled' : ''}${parseNote(r)}: ${calls.length ? calls.map((c) => c.function.name).join(' ') + ' ' : ''}${JSON.stringify(r.content).slice(0, 120)}`)
+  chunk(calls.length ? { tool_calls: calls } : {}, calls.length ? 'tool_calls' : 'stop', {
+    usage: { prompt_tokens: st.promptTokens || 0, completion_tokens: st.generatedTokens || 0 }, timings: { ms: r.ms, firstMs: r.firstMs, tps: st.TPS || null }
+  })
+  try { res.end('data: [DONE]\n\n') } catch {}
+}
 
 // ---------------------------------------------------------------- OpenAI Responses API (Codex)
 
@@ -69,10 +154,10 @@ async function responses (req, res, j, { engines, send, sse, log, cfg }) {
   const { messages, tools } = slim(responsesToChat(j), !cfg || cfg.coderSlim !== false)
   const id = newId('resp_')
   const model = j.model || 'local-coder'
-  const opts = { engine: 'coder', max_tokens: j.max_output_tokens, temperature: j.temperature }
+  const opts = { engine: 'coder', max_tokens: j.max_output_tokens, temperature: coderTemperature(j.temperature, cfg) }
   if (!j.stream) {
     const r = await engines.chat(messages, tools, opts)
-    log(`coder responses ${r.ms} ms, prompt ${(r.stats || {}).promptTokens || '?'} tok: ${r.tool_calls.length ? r.tool_calls.map((c) => c.name).join(' ') : JSON.stringify(r.content).slice(0, 80)}`)
+    log(`coder responses ${r.ms} ms, prompt ${(r.stats || {}).promptTokens || '?'} tok${parseNote(r)}: ${r.tool_calls.length ? r.tool_calls.map((c) => c.name).join(' ') : JSON.stringify(r.content).slice(0, 80)}`)
     return send(res, 200, responseObject(id, model, r))
   }
   const ev = sse(req, res)
@@ -110,7 +195,7 @@ async function responses (req, res, j, { engines, send, sse, log, cfg }) {
     index++
   }
   emit('response.completed', { response: final })
-  log(`coder responses stream ${r.ms} ms, prompt ${(r.stats || {}).promptTokens || '?'} tok${r.cancelled ? ' cancelled' : ''}: ${final.output.map((o) => o.type === 'function_call' ? o.name : 'text').join(' ')}`)
+  log(`coder responses stream ${r.ms} ms, prompt ${(r.stats || {}).promptTokens || '?'} tok${r.cancelled ? ' cancelled' : ''}${parseNote(r)}: ${final.output.map((o) => o.type === 'function_call' ? o.name : 'text').join(' ')}`)
   ev.end()
 }
 
@@ -154,12 +239,12 @@ async function messagesApi (req, res, j, { engines, send, sse, log, cfg }) {
   const { messages, tools } = slim(anthropicToChat(j), !cfg || cfg.coderSlim !== false)
   const id = newId('msg_')
   const model = j.model || 'local-coder'
-  const opts = { engine: 'coder', max_tokens: j.max_tokens, temperature: j.temperature }
+  const opts = { engine: 'coder', max_tokens: j.max_tokens, temperature: coderTemperature(j.temperature, cfg) }
   if (!j.stream) {
     const r = await engines.chat(messages, tools, opts)
     const st = r.stats || {}
     const content = anthropicContent(r)
-    log(`coder messages ${r.ms} ms, prompt ${(r.stats || {}).promptTokens || '?'} tok: ${content.map((b) => b.type === 'tool_use' ? b.name : 'text').join(' ')}`)
+    log(`coder messages ${r.ms} ms, prompt ${(r.stats || {}).promptTokens || '?'} tok${parseNote(r)}: ${content.map((b) => b.type === 'tool_use' ? b.name : 'text').join(' ')}`)
     return send(res, 200, { id, type: 'message', role: 'assistant', model, content, stop_reason: content.some((b) => b.type === 'tool_use') ? 'tool_use' : 'end_turn', stop_sequence: null, usage: { input_tokens: st.promptTokens || 0, output_tokens: st.generatedTokens || 0 } })
   }
   const ev = sse(req, res)
@@ -184,7 +269,7 @@ async function messagesApi (req, res, j, { engines, send, sse, log, cfg }) {
   const st = r.stats || {}
   ev.event('message_delta', { type: 'message_delta', delta: { stop_reason: uses.length ? 'tool_use' : 'end_turn', stop_sequence: null }, usage: { output_tokens: st.generatedTokens || 0 } })
   ev.event('message_stop', { type: 'message_stop' })
-  log(`coder messages stream ${r.ms} ms, prompt ${(r.stats || {}).promptTokens || '?'} tok${r.cancelled ? ' cancelled' : ''}: ${uses.length ? uses.map((b) => b.name).join(' ') : 'text'}`)
+  log(`coder messages stream ${r.ms} ms, prompt ${(r.stats || {}).promptTokens || '?'} tok${r.cancelled ? ' cancelled' : ''}${parseNote(r)}: ${uses.length ? uses.map((b) => b.name).join(' ') : 'text'}`)
   ev.end()
 }
 
@@ -199,44 +284,95 @@ function countTokens (j) {
 
 // Owner 2026-11-12: "if using local shall use slim agent profiles". A harness sends a long system prompt and many
 // tools (Claude Code's first turn: 11,071 prompt tokens, 300 s to read on the PC, 10-20 min on the headset); a small
-// model gets lost in it anyway. For the local coder the system prompt becomes a short one plus the harness's own
-// environment facts (working folder, platform, date), and only the core file / shell tools go, their descriptions cut.
+// model gets lost in it anyway. For the local coder the system prompt becomes a short one (slimHeader) plus the
+// harness's own environment facts (working folder, platform, date) and the first part of the project's instructions,
+// and only the core file / shell tools go, their descriptions cut and only their required arguments kept.
+// The harness's prompt is replaced, not cut to its first N characters: those are its identity and style rules, which
+// a 0.5B model cannot follow. The tool list itself is written by the model's own chat template (Qwen2.5-Coder's
+// GGUF: <tools> with one JSON schema a line, then "return ... within <tool_call></tool_call> tags").
 // The 0.5B coder (2026-11-13) picked "edit" for a file that did not exist and looped on the error: only three tools
 // now, shell, read and write (a whole file), so every task has one obvious way.
+// 2026-11-16 (owner: "I asked a question and it answered with a JSON to echo a hello world"): the prompt says first
+// that a question gets a plain answer with no tool, and names the tools as the request does (Claude Code: Bash).
 const SLIM_TOOLS = /^(read|write|bash|read_file|write_file|shell|exec_command)$/i
-const SLIM_SYSTEM = [
-  'You are a coding agent running on a small local model on a VR headset. Work in small steps.',
-  'Tools: bash runs a shell command; read reads a file; write writes a whole file (new or changed). To create or change a file, use write with its full content.',
-  'Call one tool at a time. Use paths inside the working directory. When the task is done, say in one or two sentences what you did.'
-].join('\n')
+const SLIM_KEEP_SYSTEM_CHARS = 1200 // a request with no tools (a title, a summary): its system prompt, up to this
+const PROJECT_NOTES_CHARS = 1500 // the project's instructions (CLAUDE.md, AGENTS.md) the coder keeps: the first part
+const TOOL_LINES = { shell: 'runs a shell command', read: 'reads a file', write: 'writes a whole file (new or changed); give its full content' }
 
-function slimSystem (text) {
+/** The coder's own short system prompt, naming the request's tools. */
+function slimHeader (tools) {
+  const lines = [
+    'You are a coding assistant on a small local model on a VR headset.',
+    'If the user asks a question or just talks, answer in plain text and call no tool.'
+  ]
+  if (tools.length) {
+    lines.push('When the user asks you to create or change files or to run something, use a tool, one call at a time:')
+    for (const t of tools) lines.push(`- ${t.function.name}: ${TOOL_LINES[familyOf(t.function.name)] || t.function.description}`)
+    lines.push('Use paths inside the working directory. When the task is done, say in one or two sentences what you did.')
+  }
+  return lines.join('\n')
+}
+
+function slimSystem (text, tools) {
+  text = String(text || '')
+  if (!tools.length) return text.length <= SLIM_KEEP_SYSTEM_CHARS ? text : cut(text, SLIM_KEEP_SYSTEM_CHARS)
   const facts = []
-  for (const m of String(text || '').matchAll(/<env>[\s\S]*?<\/env>/g)) facts.push(m[0])
+  for (const m of text.matchAll(/<env>[\s\S]*?<\/env>/g)) facts.push(m[0])
   if (!facts.length) {
-    for (const line of String(text || '').split('\n')) {
+    for (const line of text.split('\n')) {
       if (/working directory|current directory|\bcwd\b|platform|operating system|today'?s date|is a git repo/i.test(line) && line.length < 300) facts.push(line.trim())
       if (facts.length >= 8) break
     }
   }
-  return SLIM_SYSTEM + (facts.length ? '\n\n' + facts.join('\n') : '')
+  // OpenCode puts the project's instructions in its system prompt ("Instructions from: <path>" + the file)
+  const notes = []
+  for (const m of text.matchAll(/(^|\n)Instructions from: [^\n]*\n[\s\S]*?(?=\n\nInstructions from: |$)/g)) notes.push(m[0].trim())
+  return slimHeader(tools) + (facts.length ? '\n\n' + facts.join('\n') : '') + (notes.length ? '\n\n' + cut(notes.join('\n\n'), PROJECT_NOTES_CHARS) : '')
 }
 
 function cut (s, n) { s = String(s || ''); return s.length > n ? s.slice(0, n).replace(/\s+\S*$/, '') + '…' : s }
 
+// the order a small model writes a tool's arguments in (the tool grammar of the model's template holds it to the
+// schema's order): the command or the path first, then the content
+const ARG_ORDER = [/^(command|cmd)$/, /path|file/i, /^(content|contents|text)$/]
+const argRank = (k) => { const i = ARG_ORDER.findIndex((re) => re.test(k)); return i < 0 ? ARG_ORDER.length : i }
+
+/** A tool's schema with its required arguments only (all its arguments when none is required), short descriptions. */
+function slimParams (p) {
+  if (!p || typeof p !== 'object' || !p.properties) return p || { type: 'object', properties: {} }
+  const names = Object.keys(p.properties)
+  const req = Array.isArray(p.required) ? p.required.filter((k) => k in p.properties) : []
+  const keep = (req.length ? req : names).slice().sort((a, b) => argRank(a) - argRank(b))
+  const properties = {}
+  for (const k of keep) {
+    const s = p.properties[k] || {}
+    properties[k] = typeof s.description === 'string' ? Object.assign({}, s, { description: cut(s.description.split('\n')[0], 100) }) : s
+  }
+  return Object.assign({ type: 'object', properties, required: req.length ? keep : [] }, p.additionalProperties === false ? { additionalProperties: false } : {})
+}
+
+/** The project's instructions in a user turn, cut to their first part. */
+function capNotes (text) {
+  if (text.length <= PROJECT_NOTES_CHARS) return text
+  const close = /<\/(system-reminder|INSTRUCTIONS)>\s*$/.exec(text)
+  return cut(text, PROJECT_NOTES_CHARS) + '\n(the rest of the project instructions is left out)' + (close ? '\n' + close[0].trim() + '\n' : '')
+}
+
 /** The slim profile for one request: a short system prompt with the environment facts, the core tools only. */
 function slim ({ messages, tools }, on = true) {
   if (!on) return { messages, tools }
-  // harness reminders inside user turns (Claude Code: <system-reminder> blocks with skill lists, todos) go too, except
-  // the project's own instructions (CLAUDE.md / AGENTS.md: e.g. how a native app is built and installed here)
-  const msgs = messages.map((m) => m.role === 'system' ? { role: 'system', content: slimSystem(m.content) }
-    : m.role === 'user' && typeof m.content === 'string' ? Object.assign({}, m, { content: m.content.replace(/<system-reminder>[\s\S]*?<\/system-reminder>\s*/g, (r) => /claudeMd|Contents of [^\n]*(CLAUDE|AGENTS)\.md/.test(r) ? r : '').trim() || m.content }) : m)
   let kept = (tools || []).filter((t) => SLIM_TOOLS.test(((t.function || t).name) || ''))
   if (!kept.length) kept = (tools || []).slice(0, 6)
   kept = kept.map((t) => {
     const f = t.function || t
-    return { type: 'function', function: { name: f.name, description: cut((f.description || '').split('\n')[0], 200), parameters: f.parameters } }
+    return { type: 'function', function: { name: f.name, description: cut((f.description || '').split('\n')[0], 200), parameters: slimParams(f.parameters) } }
   })
+  // harness reminders inside user turns (Claude Code: <system-reminder> blocks with skill lists, todos) go too, except
+  // the project's own instructions (CLAUDE.md / AGENTS.md: e.g. how a native app is built and installed here), cut
+  const msgs = mergeSystem(messages).map((m) => m.role === 'system' ? { role: 'system', content: slimSystem(m.content, kept) }
+    : m.role === 'user' && typeof m.content === 'string' ? Object.assign({}, m, { content: m.content.replace(/<system-reminder>[\s\S]*?<\/system-reminder>\s*/g, (r) => /claudeMd|Contents of [^\n]*(CLAUDE|AGENTS)\.md/.test(r) ? capNotes(r) + '\n' : '').replace(/<INSTRUCTIONS>[\s\S]*?<\/INSTRUCTIONS>/g, capNotes).trim() || m.content }) : m)
+  // no system prompt at all: the short one, so a question still gets a plain answer
+  if (kept.length && !msgs.some((m) => m.role === 'system')) msgs.unshift({ role: 'system', content: slimHeader(kept) })
   return { messages: fitHistory(msgs), tools: kept }
 }
 
@@ -284,4 +420,4 @@ function mergeSystem (messages) {
   return sys.length ? [{ role: 'system', content: sys.join('\n\n') }, ...rest] : rest
 }
 
-module.exports = { wantsCoder, responses, messagesApi, countTokens, responsesToChat, anthropicToChat, mergeSystem, slim }
+module.exports = { wantsCoder, chatCompletions, responses, messagesApi, countTokens, responsesToChat, anthropicToChat, mergeSystem, slim }

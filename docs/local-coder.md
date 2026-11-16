@@ -2,7 +2,7 @@
 
 The local coder lets an agent thread run with no network: a small coding model in the local AI service, reached by
 the agent CLIs through the APIs they already speak. It is a demonstration that agents can run offline, not a strong
-coder.
+coder: a 0.5B model handles small tasks (one small file, one command) and simple questions, not long agent work.
 
 ## What it is
 
@@ -43,20 +43,70 @@ recording.
 
 Every coder request is slimmed in the service (`compat.slim`):
 
-- the harness's system prompt is replaced by a short one plus its environment facts (`<env>` block, working folder,
-  platform, date);
-- the `<system-reminder>` blocks of user turns are removed, except the project's own instructions (CLAUDE.md /
-  AGENTS.md, for example how native apps are built here);
-- only three tools are offered: bash, read and write, with one-line descriptions (a small model picks `edit` for a
-  file that does not exist and loops on the error);
+- the harness's system prompt is replaced by a short one: a question or a chat gets a plain answer with no tool;
+  the tools are named as the request names them (Claude Code: `Bash`, `Read`, `Write`; OpenCode: `bash`, `read`,
+  `write`; Codex: `exec_command`), one line each; then the harness's environment facts (`<env>` block, working folder,
+  platform, date). It is replaced, not cut to its first characters: those are the harness's identity and style rules,
+  which a 0.5B model cannot follow. The tool list itself is written by the model's own chat template (the GGUF's:
+  `<tools>` with one JSON schema a line, then "return ... within `<tool_call></tool_call>` tags");
+- the project's own instructions stay, cut to their first 1,500 characters: Claude Code's CLAUDE.md / AGENTS.md
+  `<system-reminder>`, OpenCode's `Instructions from: <path>` blocks, Codex's `<INSTRUCTIONS>`; the other
+  `<system-reminder>` blocks of user turns (skill lists, todos) are removed;
+- only three tools are offered: shell, read and write, with one-line descriptions (a small model picks `edit` for a
+  file that does not exist and loops on the error), and only their required arguments, command or path first, then
+  the content (the template's tool grammar holds the model to the schema's order);
+- a request with no tools (a title, a summary) keeps its system prompt, up to 1,200 characters;
+- the temperature is at most 0.2 (`coderMaxTemperature`; Claude Code asks for 1, and a 0.5B model then writes more
+  broken JSON);
 - the history stays under about 9k tokens (36,000 characters), so a long thread still fits the 16k context with the
   tools and the answer: a tool result longer than 4,000 characters is cut, then the oldest turns after the task (the
   first user message) go, a turn at a time (an assistant message stays with its tool results), never the last two; a
   short note in their place says that earlier steps were left out.
 
 A turn whose tool calls repeat the previous successful ones exactly ends with "Done." (`stopRepeat` in `engines.js`).
-Bare JSON calls in the text (`{"name": "bash", "arguments": {...}}`, without `<tool_call>` tags) count when they name
-one of the request's tools.
+
+## Tool calls in the model's text (`local-ai/server/toolcalls.js`)
+
+Owner, 2026-11-16: "it only answers with JSON: I asked a question and it answered with a JSON to echo a hello world".
+The path of a question: harness -> endpoint (`compat.js`: chat completions, Responses, Messages) -> `compat.slim` ->
+`engines.chat` (the model's chat template renders the tools) -> the model's text -> `parseAssistant` -> tool calls or
+text in the API's own format. The 0.5B model often writes a call without the template's `<tool_call>` tags, and the
+text leaked in two places:
+
+- **the name**: a bare or fenced `{"name": "bash", ...}` counted only when the name was exactly one of the request's
+  tools. Claude Code's tool is `Bash`, Codex's `exec_command`: the call went back to the user as text (for both, every
+  bare or fenced call did). A tagged call went out as `bash`, which Claude Code does not have;
+- **the stream**: all three harnesses stream. Only `<tool_call>` text was held back, so a bare JSON call reached the
+  user token by token before the parse made it a call (OpenCode showed the JSON and then ran it).
+
+Now, for the local coder:
+
+- a call counts in any of the forms the model writes: `<tool_call>` tags (also with a ```` ```json ```` block
+  inside), a ```` ```json ```` block, a bare JSON object; `name` / `function` / `tool`, `arguments` / `parameters` /
+  `args` / `input`, the OpenAI `{"type": "function", "function": {...}}` shape, arguments as a JSON string;
+- the name is matched in any case and through its usual words (`bash`, `shell`, `run` -> the request's shell tool;
+  `read_file`, `cat` -> its read tool; `write_file`, `create_file` -> its write tool); a read or write call when the
+  request has only a shell tool (Codex) becomes the same work as a shell command (`cat`, `printf`);
+- the arguments are fitted to the tool's schema: `path` -> `file_path` / `filePath`, `cmd` <-> `command`, a missing
+  required `description` (OpenCode's bash) from the command; keys a strict schema does not declare are dropped;
+- broken JSON is repaired (a stray quote after a number, as in a 2026-11-12 Codex run, trailing commas, a missing
+  closing brace, raw line breaks in strings, single quotes); a call cut off inside a string (the output limit) is not
+  run, and a short note replaces it: never the JSON;
+- a lone `echo` call (no redirection, pipe, variable or second command) is returned as its text: it only prints, and
+  the extra tool turn costs minutes on the headset;
+- not a call: JSON that names no tool of the request (a `package.json`, an example of another API) unless it is the
+  whole answer (then it goes to the harness, which says the tool does not exist: the model wrote `edit` calls out of
+  habit), a call-shaped example inside an answer longer than 400 characters, any JSON when the request has no tools;
+- the stream: text goes out as it comes until a point where a call could start (a `{`, a code fence, a tag); from
+  there it is held to the end of the answer, and only what the parse leaves as text goes out (`callGuard`). Prose
+  with a code block arrives in one piece from the block on.
+
+The app's own voice LLM uses the same parser without these coder rules (exact tool names, as before).
+
+Check: `tests/local-coder/run-local-coder-tests.sh` (Node, no install, under a second): 21 model outputs through the
+three endpoints, streamed and not (126 cases), plus the slim prompt, the parser pieces and the voice LLM's rules.
+Before the change, the same outputs gave raw JSON as the answer for Claude Code and Codex in every bare and fenced
+case, and OpenCode streamed the JSON before running the call.
 
 ## Memory
 
@@ -76,7 +126,8 @@ install is deleted when the service starts (`legacy` in `models.js`).
 
 On the PC (x64, 3 cores; the headset is about 6-9 times slower), OpenCode with the provider as the app writes it:
 "Create a file named hello.txt that contains the word hi." -> `write hello.txt` with "hi"; the prompt is 741 tokens
-with the three tools (1,990 with seven). The slim profile cuts Claude Code's first prompt from 11,071 to 3,363
+with the three tools (1,990 with seven; both before the 2026-11-16 prompt change, which keeps only the required
+arguments and adds the question rule: not measured again). The slim profile cuts Claude Code's first prompt from 11,071 to 3,363
 tokens. Reading the prompt is the main cost; the service keeps a repeated prefix while the model is loaded, so a
 later turn reads only its new tokens.
 
