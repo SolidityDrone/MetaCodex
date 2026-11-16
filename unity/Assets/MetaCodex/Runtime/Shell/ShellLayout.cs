@@ -74,7 +74,8 @@ namespace MetaCodex.Shell
             _slots.Clear();
             ArrangeRing();
             EnsureRingBar();
-            if (!_ringBar.IsOpen) _ringBar.Open();
+            // a bar already open (a recenter while floating) keeps its yaw and follows from there: no jump
+            if (!_ringBar.IsOpen) { _barYaw = _baseYaw; _barYawVel = 0f; _barFollowing = false; _ringBar.Open(); }
         }
 
         private const float RingGap = 4f;     // degrees between neighbours
@@ -169,12 +170,23 @@ namespace MetaCodex.Shell
         }
 
         // ---- FLOAT's TURN bar (owner 2026-11-13: "keep the stuff fixed in the rig, follow us, and add a scroll bar below to
-        // rotate the rig; the float should not rotate by itself"): a bar under the ring, fixed to the rig (it turns with the
-        // body, not with the ring); its slider turns the ring. No gesture turns the ring any more.
+        // rotate the rig; the float should not rotate by itself"): a bar under the ring; its slider turns the ring. No
+        // gesture turns the ring any more. It does not spin with the ring; it follows the head's yaw lazily (owner
+        // 2026-11-16: "if it is fixed we have to turn all around to select and turn. Not locked to the camera, but a smooth
+        // follow"): it stays put while the user looks within BarDeadZoneDeg of it, beyond that it eases round the ring to
+        // where they face (critically damped, no overshoot), and it holds still while a hand aims at it or holds it.
         private UiPanel _ringBar;
         private UiSlider _ringTurn;
+        private float _barYaw, _barYawVel; // the bar's world yaw (degrees) and its follow speed (degrees/s)
+        private bool _barFollowing;
         /// The body may move this far (metres) before the ring follows it.
         public const float RigDeadZone = 0.30f;
+        /// The TURN bar stays put while the user's yaw is within this many degrees of it; beyond, it follows.
+        public const float BarDeadZoneDeg = 25f;
+        /// The follow's smooth time (s; Mathf.SmoothDampAngle: critically damped, it arrives in about this long).
+        public const float BarFollowTime = 1.5f;
+        /// The follow ends this close to where the user faces (degrees); then the dead zone holds the bar again.
+        private const float BarSettleDeg = 1f;
 
         private void EnsureRingBar()
         {
@@ -186,16 +198,35 @@ namespace MetaCodex.Shell
             _ringTurn = _ringBar.Add(new UiSlider("TURN", -360f, 360f, 0f, v => { _spin = v; _spinVel = 0f; }) { Rect = _ringBar.Content, Format = "0", LabelWidth = 0.09f });
         }
 
-        /// The bar sits below the windows' row, at the front of the rig (its angle is the rig's, not the ring's); its
-        /// slider shows the turn (shown wrapped to -360..360: a full turn is the same ring).
-        private void UpdateRingBar(Vector3 c, float r)
+        /// The bar sits below the windows' row on the ring's radius, facing the user, at its own yaw (not the ring's: the
+        /// ring's spin does not move it), which follows the head lazily; its slider shows the turn (shown wrapped to
+        /// -360..360: a full turn is the same ring). Per frame: a few float ops, no allocation.
+        private void UpdateRingBar(Vector3 c, float r, float dt)
         {
             if (_ringBar == null) return;
-            float a = _baseYaw * Mathf.Deg2Rad;
+            // a hand holds its slider (or presses on it), or aims at it: the bar holds still, and the follow restarts from rest
+            bool held = Router != null && (Router.IsPressing(_ringBar) || Router.HandRayPanel(0) == _ringBar || Router.HandRayPanel(1) == _ringBar);
+            var head = Head;
+            if (held) _barYawVel = 0f;
+            else if (head != null && dt > 0f)
+            {
+                var f = head.forward;
+                if (f.x * f.x + f.z * f.z > 0.04f) // looking almost straight up or down the yaw is noise: the bar waits
+                {
+                    float face = Mathf.Atan2(f.x, f.z) * Mathf.Rad2Deg;
+                    if (!_barFollowing && Mathf.Abs(Mathf.DeltaAngle(_barYaw, face)) > BarDeadZoneDeg) _barFollowing = true;
+                    if (_barFollowing)
+                    {
+                        _barYaw = Mathf.Repeat(Mathf.SmoothDampAngle(_barYaw, face, ref _barYawVel, BarFollowTime, Mathf.Infinity, dt), 360f);
+                        if (Mathf.Abs(Mathf.DeltaAngle(_barYaw, face)) < BarSettleDeg) { _barFollowing = false; _barYawVel = 0f; }
+                    }
+                }
+            }
+            float a = _barYaw * Mathf.Deg2Rad;
             var dir = new Vector3(Mathf.Sin(a), 0f, Mathf.Cos(a));
             _ringBar.transform.SetPositionAndRotation(new Vector3(c.x, _carouselY - 0.36f, c.z) + dir * r, Quaternion.LookRotation(dir, Vector3.up));
             float shown = Mathf.Repeat(_spin + 360f, 720f) - 360f;
-            if (_ringTurn != null && !Router.IsDragging(_ringBar) && Mathf.Abs(shown - _ringTurn.Value) > 0.5f) _ringTurn.Set(shown);
+            if (_ringTurn != null && !held && Mathf.Abs(shown - _ringTurn.Value) > 0.5f) _ringTurn.Set(shown);
         }
 
         /// Windows that never bend: terminals (their text grid cannot bend yet) and WEB (the page is one flat picture,
@@ -326,7 +357,7 @@ namespace MetaCodex.Shell
                 p.SetBend(Settings.bendPanels && !StaysFlat(p) ? LayoutBend(p, r) : 0f);
                 p.SetTilt(0f); // the ring stands upright: its poses are set above, every frame (no lean from FIXED)
             }
-            UpdateRingBar(_carousel.position, r); // the bar under the ring: fixed to the rig
+            UpdateRingBar(_carousel.position, r, dt); // the bar under the ring: follows the head's yaw lazily
             UpdateControlRail(); // after the ring moved its window
             UpdateSidebarLink(); // after the ring moved the thread
 
