@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace MetaCodex.UI
 {
-    /// Short console sounds made in code (no audio assets): click, open, close, ping, toast, alert, error, the orb.
+    /// Short console sounds made in code (no audio assets): click, open, close, ping, wake, toast, alert, error, the orb.
     /// Open and close follow a panel's cast (UiPanelFx): two ticks as the brackets lock on, a rising sweep with a
     /// shimmer as the scan line crosses, a low thump and a clear note as it settles; a surge, a falling sweep as the
     /// line runs back, a quick rise as the spark flies home to the orb.
@@ -47,6 +47,8 @@ namespace MetaCodex.UI
                 + Mathf.Sin(2f * Mathf.PI * 1568f * t) * Decay(t, 0.42f, 9f) * 0.06f);
             Make("orb-off", 0.42f, (t, d) =>
                 (Mathf.Sin(2f * Mathf.PI * (587f * t - 260f * t * t)) + 0.6f * Mathf.Sin(2f * Mathf.PI * (880f * t - 390f * t * t))) * Win(t, 0f, 0.42f) * 0.13f);
+            // "Hey Whisp" was heard: two quick soft rising notes (short: the user speaks right after it)
+            Make("wake", 0.20f, (t, d) => (Mathf.Sin(2f * Mathf.PI * 1318.5f * t) * Decay(t, 0f, 30f) + Mathf.Sin(2f * Mathf.PI * 1975.5f * t) * Decay(t, 0.07f, 24f)) * 0.2f);
             Make("ping", 0.22f, (t, d) => (Chirp(t, 0f, 0.08f, 1800f, 2600f) * Decay(t, 0f, 30f) + Chirp(t, 0.09f, 0.1f, 2400f, 3200f) * Decay(t, 0.09f, 26f)) * 0.22f);
             Make("toast", 0.11f, (t, d) => (t < d * 0.5f ? Tone(t, 1320f, 1320f, d) : Tone(t, 1760f, 1760f, d)) * Env(t, d, 0.004f, 0.09f) * 0.35f);
             Make("alert", 0.32f, (t, d) => ((int)(t / 0.08f) % 2 == 0 ? Tone(t, 880f, 880f, d) : Tone(t, 1175f, 1175f, d)) * Env(t, d, 0.005f, 0.3f) * 0.45f);

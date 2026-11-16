@@ -57,7 +57,7 @@ namespace MetaCodex.UI
         private float _appear, _appearTarget, _energy = 0.35f, _pulse, _kick, _spin = 1f, _aim, _aimHold, _shield, _shieldAt = 1f, _flashT = 1f, _flashLen = 1f, _time, _lastRipple = -10f, _loud;
         private Color _tint = Color.cyan, _flash = Color.white;
         private Vector3 _pointDir = Vector3.back;
-        private float _pointHold;
+        private float _pointHold, _flareAt = -10f;
         private bool _placed;
         private readonly float[] _phA = new float[3], _phB = new float[3], _ringTilt = new float[3], _ringPhase = new float[3], _mote = new float[4];
         private float _rotA, _rotB;
@@ -141,9 +141,12 @@ namespace MetaCodex.UI
             _shield = 1f; _shieldAt = 0f;
         }
 
-        /// "Hey Whisp" was heard (and TALK starts): a bright flash of ice white, a ripple, the shield's wave.
+        /// "Hey Whisp" was heard (and TALK starts): a bright flash of ice white, a ripple, the shield's wave. A second
+        /// call within 0.8 s is the same flare (the wake and TALK's listening both call it).
         public void WhispFlare()
         {
+            if (_time - _flareAt < 0.8f) return;
+            _flareAt = _time;
             Flash(new Color(0.86f, 0.97f, 1f), 0.7f);
             _kick = 1f;
             Ripple();
