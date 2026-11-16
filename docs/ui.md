@@ -54,6 +54,8 @@ curvature eases in and out (about 0.3 s) instead of jumping. Rays and pokes hit 
 cylinder intersection), so the reticle sits where the beam meets the window. A thread group bends too; its windows
 have no curve of their own and lie on the curve of the group (docs/thread-view.md).
 
+**Lean.** In curve mode a window taller than 0.6 m leans its top towards the eyes (`ShellLayout.LayoutTilt`: full at 1.0 m, at most 25°, none when its centre is level with the eyes or below); with bending off, or in the float layout, it stays upright.
+
 **Opening and closing: a window is cast** (`UiPanelFx`, `McxPanelFx.hlsl`). It is drawn with light, like a hologram
 being printed, by its caster (`UiPanelFx.Caster`: the Whisp, when it is on). Opening (0.35 s): four corner brackets
 fly in and lock on where the window will be, with a faint outline of it; two thin rays run from the caster to a hot
