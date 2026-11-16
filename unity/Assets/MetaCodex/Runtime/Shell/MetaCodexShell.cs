@@ -228,7 +228,7 @@ namespace MetaCodex.Shell
             {
                 Sounds = new GameObject("UiSounds").AddComponent<UiSounds>(); // its clips are made in code, on a worker thread (UiSoundSynth)
                 Sounds.transform.SetParent(_root, false);
-                if (Sounds != null) { Sounds.Enabled = Settings.sounds; Sounds.Volume = Mathf.Clamp01(Settings.soundVolume); }
+                if (Sounds != null) { Sounds.Enabled = Settings.sounds; Sounds.Volume = Mathf.Clamp01(Settings.soundVolume); Sounds.Style = Settings.soundStyle; }
             }));
             s.Add(("vault", () =>
             {
@@ -415,7 +415,7 @@ namespace MetaCodex.Shell
                 if (UiTheme.Current != null) shapeMaterial.SetVector("_Accent", UiTheme.Lin(UiTheme.Current.Accent)); // conduits, the cast's heat, the pointers' light
             }
             if (Wrist != null) Wrist.GlassOpacity = PanelOpacity; // the wrist menu's glass has its own material: the same value
-            if (Sounds != null) { Sounds.Enabled = Settings.sounds; Sounds.Volume = Mathf.Clamp01(Settings.soundVolume); }
+            if (Sounds != null) { Sounds.Enabled = Settings.sounds; Sounds.Volume = Mathf.Clamp01(Settings.soundVolume); Sounds.Style = Settings.soundStyle; }
             ApplyDisplaySettings();
         }
 

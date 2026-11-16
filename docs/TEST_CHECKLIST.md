@@ -282,6 +282,7 @@ Pages:
 - [ ] DISPLAY in FIXED → FLOAT RADIUS is dimmed with "FLOAT only" under its name; switch LAYOUT to FLOAT: FLOAT RADIUS is bright and DISTANCE is dimmed with "FIXED only"
 - [ ] Open and close windows for a while, change a slider, say a voice command → no window changes size by itself (they keep the UI SCALE)
 - [ ] LOOK & SOUND rows → PANEL OPACITY, FOVEATED, SOUNDS, VOLUME and the Whisp toggle ("Whisp: it casts the windows, speaks, and shows messages beside it"); no SHARPNESS or SHADOWS slider, no themes, accents, scanlines or grid, and no gap where a slider was; text is sharp (render scale 1.6)
+- [ ] LOOK & SOUND > SOUND: HUD (default), HOLO, CORE, CLASSIC → a ping in the new style within a second; clicks, window casts, toasts and the Whisp use it; the choice stays after a restart; voice "use the hologram sounds" picks HOLO
 - [ ] FOVEATED on → the edges of the view get softer (VrApi `Fov=`); off (the default): sharp everywhere
 - [ ] SOUNDS → click, open, close and toast blips play; off: silent; VOLUME changes how loud they are
 - [ ] A settings file that still has "glow" loads → the app starts with its other settings (PANEL OPACITY keeps its value)
