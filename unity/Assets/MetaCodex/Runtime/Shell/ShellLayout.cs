@@ -203,9 +203,28 @@ namespace MetaCodex.Shell
         /// windows lie on its curve (ShellThreadGroups.FitGroupMembers).
         public static bool StaysFlat(UiPanel p) => p.Id.StartsWith("term-") || p.Id == "web";
 
+        // ---- curve mode's lean (owner 2026-11-16: "a very high window ... tilts ... so it is easy to read, because it faces
+        // slightly toward my y position"): a tall bent window leans its top towards the eyes.
+
+        /// The world height (m) from which a bent window leans, the height at which it leans in full, and the most it
+        /// leans (degrees). Between the first two the lean ramps up.
+        public const float TiltFromHeight = 0.6f, TiltFullHeight = 1.0f, TiltMaxDeg = 25f;
+
+        /// The lean (degrees) of a window in curve mode: 0 when it is shorter than TiltFromHeight or its centre is not above
+        /// the eyes; else the ramp k (0 at TiltFromHeight, 1 at TiltFullHeight) times the angle its centre rises above the
+        /// eyes as they see it, at most TiltMaxDeg. The yaw is not touched; the panel leans its top towards the user.
+        public static float LayoutTilt(UiPanel p, Vector3 eye)
+        {
+            float k = Mathf.Clamp01((p.Height * p.RestLossyScale.y - TiltFromHeight) / (TiltFullHeight - TiltFromHeight));
+            var d = p.transform.position - eye;
+            if (k <= 0f || d.y <= 0f) return 0f;
+            return Mathf.Min(TiltMaxDeg, k * Mathf.Atan2(d.y, new Vector2(d.x, d.z).magnitude) * Mathf.Rad2Deg);
+        }
+
         /// Fixed layout with "Bend panels": each panel curves towards you around its own distance (bent on the GPU,
         /// eased by the panel, so it follows you smoothly). Terminals and WEB stay flat (StaysFlat). A thread group gets
-        /// the same curve in its own units (LayoutBend); its windows are not layout panels, they follow it.
+        /// the same curve in its own units (LayoutBend); its windows are not layout panels, they follow it. A bent
+        /// window also leans its top to the eyes (LayoutTilt); with bending off nothing leans.
         public void UpdateFixedBend()
         {
             if (Floating || Settings == null) return;
@@ -213,10 +232,11 @@ namespace MetaCodex.Shell
             foreach (var p in LayoutPanels())
             {
                 if (p == null) continue;
-                if (!Settings.bendPanels || StaysFlat(p) || head == null) { p.SetBend(0f); continue; }
+                if (!Settings.bendPanels || StaysFlat(p) || head == null) { p.SetBend(0f); p.SetTilt(0f); continue; }
                 var d = p.transform.position - head.position;
                 float dist = Mathf.Max(0.45f, new Vector2(d.x, d.z).magnitude);
                 p.SetBend(LayoutBend(p, dist)); // the GPU bends; the panel eases towards it (no steps)
+                p.SetTilt(LayoutTilt(p, head.position)); // its centre as the eyes see it now; the panel eases towards it too
             }
         }
 
@@ -302,6 +322,7 @@ namespace MetaCodex.Shell
                 var pos = new Vector3(c.x, _carouselY + slot.height, c.z) + dir * r;
                 t.SetPositionAndRotation(Vector3.Lerp(t.position, pos, 1f - Mathf.Exp(-dt * 12f)), Quaternion.LookRotation(dir, Vector3.up));
                 p.SetBend(Settings.bendPanels && !StaysFlat(p) ? LayoutBend(p, r) : 0f);
+                p.SetTilt(0f); // the ring stands upright: its poses are set above, every frame (no lean from FIXED)
             }
             UpdateRingBar(_carousel.position, r); // the bar under the ring: fixed to the rig
             UpdateControlRail(); // after the ring moved its window

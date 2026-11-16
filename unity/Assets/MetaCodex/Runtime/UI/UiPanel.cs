@@ -570,6 +570,67 @@ namespace MetaCodex.UI
             BendChanged?.Invoke(this);
         }
 
+        // ------------------------------------------------------------------ lean (curve mode)
+
+        // A bent window in curve mode may lean: its top towards the user, so a tall one faces the eyes (ShellLayout
+        // .LayoutTilt sets the target on every layout tick). The lean is a pitch about the panel's own horizontal axis,
+        // written to the transform: the shaders bend in object space and the ray maths go through the transform, so both
+        // follow it with no change of their own. The yaw is kept: the level pose is rebuilt from the azimuth of the
+        // forward direction, which a pitch does not change. A window that never leans is never written (its placement
+        // pose stays as it was).
+        private float _tiltTarget, _tiltCurrent; // degrees
+        private bool _leaning;                    // the transform carries our lean
+        private float _leanWritten;               // the lean we last wrote (degrees)
+        private Quaternion _leanRot = Quaternion.identity; // the rotation we last wrote
+
+        /// The lean the layout asked for (degrees; 0 = upright). What is drawn eases towards it (TiltNow).
+        public float TiltTarget => _tiltTarget;
+        /// The lean drawn now (degrees).
+        public float TiltNow => _tiltCurrent;
+
+        public void SetTilt(float degrees)
+        {
+            _tiltTarget = Mathf.Max(0f, degrees);
+            if (!Application.isPlaying) SnapTilt(); // Editor self-tests: no frame loop to ease it
+        }
+
+        /// Jump to the target lean now (tests).
+        public void SnapTilt()
+        {
+            _tiltCurrent = _tiltTarget;
+            ApplyTilt();
+        }
+
+        private void EaseTilt(float dt)
+        {
+            if (!_leaning && _tiltTarget <= 0f) return; // flat, and asked to stay flat: the transform is not touched
+            if (_tiltCurrent != _tiltTarget)
+            {
+                _tiltCurrent = Mathf.Lerp(_tiltCurrent, _tiltTarget, 1f - Mathf.Exp(-dt * 9f)); // the bend's rate
+                if (Mathf.Abs(_tiltCurrent - _tiltTarget) < 0.01f) _tiltCurrent = _tiltTarget;
+            }
+            ApplyTilt();
+        }
+
+        /// Writes the lean unless the transform already shows it. A transform turned by someone else since (a drag's
+        /// FaceTowards, a glide's yaw) keeps its yaw: the lean is rebuilt on top of it.
+        private void ApplyTilt()
+        {
+            var cur = transform.rotation;
+            if (_leaning && _tiltCurrent == _leanWritten && Quaternion.Angle(cur, _leanRot) < 0.01f) return;
+            if (!_leaning && _tiltCurrent <= 0f) return;
+            var fwd = cur * Vector3.forward;
+            fwd.y = 0f;
+            if (fwd.sqrMagnitude < 1e-8f) return;
+            var level = Quaternion.LookRotation(fwd, Vector3.up);
+            // the top goes towards -z (the user's side), so the front faces the eyes more
+            var q = _tiltCurrent > 0f ? Quaternion.AngleAxis(-_tiltCurrent, level * Vector3.right) * level : level;
+            transform.rotation = q;
+            _leaning = _tiltCurrent > 0f;
+            _leanRot = q;
+            _leanWritten = _tiltCurrent;
+        }
+
         /// The bend of every panel to the shaders (once a frame; self-tests call it before rendering).
         public static void PushBendGlobals()
         {
@@ -656,6 +717,7 @@ namespace MetaCodex.UI
         protected virtual void Update()
         {
             EaseBend(Time.unscaledDeltaTime);
+            EaseTilt(Time.unscaledDeltaTime);
             _presented = true;
             StepTransition(Time.unscaledDeltaTime);
             if (this == null || !gameObject.activeSelf) return; // gone this frame
