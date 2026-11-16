@@ -99,23 +99,30 @@ namespace MetaCodex.AI
             if (_buf.Length != n * ch) _buf = new float[n * ch];
             _clip.GetData(_buf, _readPos); // wraps around the ring buffer by itself
             _readPos = pos;
-            double sum = 0;
-            for (int i = 0; i < n; i++)
+            // judged in pieces of ~32 ms: a start from audio already captured ("Hey Whisp", StartAt) reads a second or
+            // more at once, and the quiet after the speech in it counts as quiet
+            int piece = Mathf.Max(64, _rate / 32);
+            for (int p0 = 0; p0 < n; p0 += piece)
             {
-                float v = 0f;
-                for (int c = 0; c < ch; c++) v += _buf[i * ch + c];
-                v /= ch;
-                _samples.Add(v);
-                sum += v * v;
+                int p1 = Mathf.Min(n, p0 + piece);
+                double sum = 0;
+                for (int i = p0; i < p1; i++)
+                {
+                    float v = 0f;
+                    for (int c = 0; c < ch; c++) v += _buf[i * ch + c];
+                    v /= ch;
+                    _samples.Add(v);
+                    sum += v * v;
+                }
+                float rms = Mathf.Sqrt((float)(sum / (p1 - p0)));
+                float chunk = (p1 - p0) / (float)_rate;
+                Level = Mathf.Clamp01(Mathf.Max(rms * 8f, Level * 0.85f));
+                // end-of-speech: speech is clearly above the room's noise floor, which follows the quietest chunks
+                bool speaking = rms > Mathf.Max(0.012f, _noise * 3.5f);
+                if (speaking) { _speech += chunk; _silence = 0f; if (_speech > 0.15f) HeardSpeech = true; }
+                else { _silence += chunk; _noise = Mathf.Lerp(_noise, rms, 0.05f); }
+                if (rms < _noise) _noise = Mathf.Lerp(_noise, rms, 0.3f);
             }
-            float rms = Mathf.Sqrt((float)(sum / n));
-            float chunk = n / (float)_rate;
-            Level = Mathf.Clamp01(Mathf.Max(rms * 8f, Level * 0.85f));
-            // end-of-speech: speech is clearly above the room's noise floor, which follows the quietest chunks
-            bool speaking = rms > Mathf.Max(0.012f, _noise * 3.5f);
-            if (speaking) { _speech += chunk; _silence = 0f; if (_speech > 0.15f) HeardSpeech = true; }
-            else { _silence += chunk; _noise = Mathf.Lerp(_noise, rms, 0.05f); }
-            if (rms < _noise) _noise = Mathf.Lerp(_noise, rms, 0.3f);
 
             if (AutoStop && HeardSpeech && _silence >= SilenceSeconds) Finish();
             else if (Seconds >= MaxSeconds) Finish();
@@ -169,6 +176,8 @@ namespace MetaCodex.AI
         /// The capture's sample rate and the length of its loop (samples); 0 when closed.
         public int Rate => _clip != null ? _rate : 0;
         public int LoopSamples => _clip != null ? _clip.samples : 0;
+        /// Where the last recording stopped reading in the loop (a start from there loses nothing of the shared capture).
+        public int ReadPos => _readPos;
         /// Where the microphone writes now in its loop (-1 when it is not open).
         public int Position => _clip != null && (Recording || Shared) ? Microphone.GetPosition(_device) : -1;
 

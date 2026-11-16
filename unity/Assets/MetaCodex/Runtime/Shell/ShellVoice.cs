@@ -106,7 +106,19 @@ namespace MetaCodex.Shell
         /// The wake phrase was heard (after the Whisp's flare, before TALK listens).
         public event Action WakeHeard;
         private bool _wakeTalk;            // this TALK was started by "Hey Whisp": the phrase is dropped, no speech ends quietly
+        private bool _wakeAgain;           // this wake already listened once more after a transcript of only the phrase
         private float _wakeQuietAt = -10f; // the last time TALK ran or the app spoke (the wake gate waits a moment after)
+        private bool _wakePerm, _wakeWasPaused;
+        private float _wakePermAt = -10f;
+        private int _vHudKey = -1;         // what the listening HUD's line shows now (set only when it changes)
+        // the TALK under way: 0 by the button; after "Hey Whisp": the phrase alone, the command with it, listening once more
+        private const int WakeAlone = 1, WakeWithCommand = 2, WakeAgain = 3;
+        /// After "Hey Whisp": how long it waits for the command to start (from the cue), the quiet that ends the command,
+        /// and the wait when it listens once more (only the phrase came). TALK by the button ends after TalkSilenceSeconds.
+        public const float WakeWaitSeconds = 6f, WakeSilenceSeconds = 1f, WakeAgainSeconds = 5f, TalkSilenceSeconds = 0.7f;
+        // the listening HUD's line after "Hey Whisp", made once: the seconds left to start, then dots that follow the voice
+        private static readonly string[] WakeWaitTexts = { "Say a command", "Say a command · 1 s", "Say a command · 2 s", "Say a command · 3 s", "Say a command · 4 s", "Say a command · 5 s", "Say a command · 6 s", "Say a command · 7 s" };
+        private static readonly string[] HearingTexts = { "Hearing you  ○○○○○", "Hearing you  ●○○○○", "Hearing you  ●●○○○", "Hearing you  ●●●○○", "Hearing you  ●●●●○", "Hearing you  ●●●●●" };
         public readonly List<VoiceResult> VoiceRecent = new List<VoiceResult>();
         public JObject QvacStatus { get; private set; }
 
@@ -184,6 +196,7 @@ namespace MetaCodex.Shell
             Wake = new WakeListener { Blocked = WakeBlocked };
             Wake.Check = (wav, query, cb) => { if (Qvac?.Client == null) cb(null, "no AI service"); else Qvac.Client.WakeCheck(wav, query, cb); };
             Wake.Heard += OnWakeHeard;
+            Wake.NearMiss += text => Log($"wake: near miss \"{text}\" (a word like the name, no wake)");
             Wake.SetOn(Settings.voice.wakeWord, Recorder);
             Decider = new VoiceDecider(Voice, (texts, done) =>
             {
@@ -329,7 +342,7 @@ namespace MetaCodex.Shell
                 if (Recorder.Recording)
                 {
                     _vHudLevel?.Set(Recorder.Level);
-                    _vHudText?.Set($"{Recorder.Seconds:F1} s" + (Recorder.HeardSpeech ? " · hearing you" : " · speak now") + "   (TALK again to stop)");
+                    UpdateListeningText();
                 }
             }
             if (_vHudCloseAt > 0f && Time.unscaledTime > _vHudCloseAt && (Recorder == null || !Recorder.Recording) && (VoiceState == "done" || VoiceState == "error" || VoiceState == "idle"))
@@ -425,6 +438,7 @@ namespace MetaCodex.Shell
                 return;
             }
             if (Settings.voice.wakeWord != on) { Settings.voice.wakeWord = on; OnSettingsChanged(); }
+            _wakePermAt = -10f; // the permission may have just been given: look again at once
             Wake?.SetOn(on, Recorder);
             SyncSettingsControls();
             Log("wake: Hey Whisp " + (on ? "on" : "off"));
@@ -434,12 +448,21 @@ namespace MetaCodex.Shell
         private string WakeBlocked()
         {
             float now = Time.unscaledTime;
-            if (!Application.isFocused) return "paused";
+            if (!Application.isFocused)
+            {
+                // the session log gets the counters once per pause (a missed try shows as a near miss or a drop)
+                if (!_wakeWasPaused && Wake != null && Wake.Checks + Wake.Dropped > 0) Log("wake: " + Wake.Describe());
+                _wakeWasPaused = true;
+                return "paused";
+            }
+            _wakeWasPaused = false;
 #if UNITY_ANDROID && !UNITY_EDITOR
             if (OVRManager.instance != null && !OVRManager.instance.isUserPresent) return "off head";
             if (OVRManager.instance != null && !OVRManager.hasInputFocus) return "no focus"; // the system menu is open
 #endif
             if (SetupLocked(5)) return "setup"; // the first start's setup: voice is not ready yet
+            if (now >= _wakePermAt) { _wakePermAt = now + 3f; _wakePerm = VoiceRecorder.HasPermission; } // not asked here: TALK or the switch asks
+            if (!_wakePerm) return "microphone permission";
             if (Recorder.Recording || Dictating || VoiceState == "listening" || VoiceState == "transcribing" || VoiceState == "thinking" || Speaking)
             {
                 _wakeQuietAt = now;
@@ -450,30 +473,82 @@ namespace MetaCodex.Shell
             return null;
         }
 
-        /// The wake phrase was heard: the Whisp flares, and TALK listens as from the button (its sound, the HUD). The
-        /// command in the same breath ("Hey Whisp, open the terminal"): TALK takes the audio from the start of that
-        /// segment and drops the phrase from what it heard; the phrase alone: TALK takes what follows it.
+        /// The wake phrase was heard: at once the Whisp flares and turns gold, a short sound, and the HUD by the Whisp
+        /// says it listens (seconds left to start, then dots that follow the voice). Nothing is spoken first. The phrase
+        /// alone: TALK takes the audio from the end of the phrase and waits up to WakeWaitSeconds for the command to
+        /// start, then ends after WakeSilenceSeconds of quiet. The command in the same breath ("Hey Whisp, open the
+        /// terminal"): TALK takes the audio from the start of the phrase, already has the quiet after it, and ends
+        /// soon; the phrase is dropped from what it heard (WakeWord.Command).
         private void OnWakeHeard(WakeHit hit)
         {
             if (Recorder.Recording) return;
             WhispFlare(); // ShellOrb; TALK's listening starts the same flare (one flare)
-            Log($"wake: heard \"{hit.Text}\" ({hit.AudioMs} ms of audio, check {hit.ServiceMs} ms, round trip {hit.RoundTripMs} ms){(hit.Continues ? ", the command follows" : "")}");
+            bool with = hit.Continues;
+            Log($"wake: heard \"{hit.Text}\" ({hit.AudioMs} ms of audio, check {hit.ServiceMs} ms, round trip {hit.RoundTripMs} ms"
+                + (hit.ReactMs >= 0 ? $", {hit.ReactMs} ms after the phrase ended" : "") + ")" + (with ? ", the command came with it" : ", listening for the command"));
             WakeHeard?.Invoke();
-            int from = hit.StartPos < 0 ? -1 : hit.Continues ? hit.StartPos : hit.EndPos;
+            int from = hit.StartPos < 0 ? -1 : with ? hit.StartPos : hit.EndPos;
             _wakeTalk = true;
+            _wakeAgain = false;
             // no status round trip first: the service drops a wake check while the local coder holds the cores, so
             // this one passed that check a moment ago
-            VoiceListen(true, from);
+            VoiceListen(true, from, with ? WakeWithCommand : WakeAlone);
             if (!Recorder.Recording) _wakeTalk = false; // it did not start (an error says why)
         }
 
-        /// A TALK that "Hey Whisp" started heard nothing after the phrase: it ends without the error sound or a red HUD.
-        private void WakeQuietEnd()
+        /// The transcript was only the phrase ("a whisp,", "Hey Whisper."): listen once more for the command, from where
+        /// the recording stopped (what was said while it transcribed is kept). False: it already did, or cannot.
+        private bool WakeListenAgain(string heard)
+        {
+            if (_wakeAgain || Recorder.Recording) return false;
+            _wakeAgain = true;
+            Log($"wake: only the phrase came (\"{heard}\"); listening once more");
+            _wakeTalk = true;
+            VoiceListen(true, Recorder.SharedOpen ? Recorder.ReadPos : -1, WakeAgain);
+            if (!Recorder.Recording) { _wakeTalk = false; return false; }
+            return true;
+        }
+
+        /// A TALK that "Hey Whisp" started heard no command: no error sound and no red HUD; a short "Didn't catch that"
+        /// (`cue` false: the user stopped it).
+        private void WakeQuietEnd(string why, bool cue = true)
         {
             _wakeTalk = false;
-            Log("wake: nothing followed the phrase");
-            SetVoiceState("idle", "", "");
-            if (_vHud != null && _vHud.IsOpen) _vHud.Close();
+            Log("wake: nothing followed the phrase" + why);
+            if (!cue) { SetVoiceState("idle", "", ""); if (_vHud != null && _vHud.IsOpen) _vHud.Close(); return; }
+            SetVoiceState("idle", "Didn't catch that", "Say \"Hey Whisp\" again, or press TALK");
+            _vHudCloseAt = Time.unscaledTime + 2.2f;
+            Sounds?.Play("close", 0.6f);
+            _wakeQuietAt = Time.unscaledTime - 0.4f; // the gate listens again in 0.6 s (the soft sound's end), not 1 s
+        }
+
+        /// The listening HUD's second line, set only when it changes: after "Hey Whisp" the seconds left to start and
+        /// then dots that follow the voice (strings made once); TALK by the button its seconds (ten changes a second).
+        private void UpdateListeningText()
+        {
+            if (_vHudText == null) return;
+            int key;
+            string text = null;
+            if (_wakeTalk && !Recorder.HeardSpeech)
+            {
+                int left = Mathf.Clamp(Mathf.CeilToInt(Recorder.NoSpeechSeconds - Recorder.Seconds), 0, WakeWaitTexts.Length - 1);
+                key = 200 + left;
+                if (key != _vHudKey) text = WakeWaitTexts[left];
+            }
+            else if (_wakeTalk)
+            {
+                int lv = Mathf.Clamp(Mathf.RoundToInt(Recorder.Level * 5f), 0, HearingTexts.Length - 1);
+                key = 100 + lv;
+                if (key != _vHudKey) text = HearingTexts[lv];
+            }
+            else
+            {
+                key = 1000 + Mathf.FloorToInt(Recorder.Seconds * 10f) * 2 + (Recorder.HeardSpeech ? 1 : 0);
+                if (key != _vHudKey) text = $"{Recorder.Seconds:F1} s" + (Recorder.HeardSpeech ? " · hearing you" : " · speak now") + "   (TALK again to stop)";
+            }
+            if (text == null) return;
+            _vHudKey = key;
+            _vHudText.Set(text);
         }
 
         private void RegisterWakeVoiceCommand()
@@ -518,11 +593,11 @@ namespace MetaCodex.Shell
             else VoiceListen();
         }
 
-        public void VoiceListen() { _wakeTalk = false; VoiceListen(false); }
+        public void VoiceListen() { _wakeTalk = false; _wakeAgain = false; VoiceListen(false); }
 
         /// The local coder holds the AI cores (an agent on the local model is working): voice waits for its turn to end
         /// instead of queueing behind it (owner 2026-11-12). The service enforces it too; this tells the user at once.
-        private void VoiceListen(bool coderChecked, int fromPos = -1)
+        private void VoiceListen(bool coderChecked, int fromPos = -1, int wake = 0)
         {
             if (Recorder.Recording) return;
             if (SetupBlocks(5, "TALK")) return; // the first start's setup: the decision model is not ready (ShellSetupLocks)
@@ -538,7 +613,7 @@ namespace MetaCodex.Shell
                         Sounds?.Play("error");
                         return;
                     }
-                    VoiceListen(true, fromPos);
+                    VoiceListen(true, fromPos, wake);
                 });
                 return;
             }
@@ -547,17 +622,23 @@ namespace MetaCodex.Shell
             {
                 VoiceRecorder.RequestPermission(ok => _main.Enqueue(() =>
                 {
-                    if (ok) VoiceListen(true, fromPos);
+                    if (ok) VoiceListen(true, fromPos, wake);
                     else VoiceDone(new VoiceResult { Error = "microphone permission denied (Horizon settings > Apps > MetaCodex)" }, null);
                 }));
                 return;
             }
-            Recorder.AutoStop = Settings.voice.autoStop;
-            Recorder.MaxSeconds = Mathf.Clamp(Settings.voice.maxSeconds, 3f, 30f);
+            // hands-free ends by itself; after the phrase alone it waits for the command to start (from the cue: the
+            // audio from the phrase's end is already ~0.4 s old) and allows a longer pause inside it
+            Recorder.AutoStop = Settings.voice.autoStop || wake != 0;
+            Recorder.SilenceSeconds = wake == WakeAlone || wake == WakeAgain ? WakeSilenceSeconds : TalkSilenceSeconds;
+            Recorder.NoSpeechSeconds = wake == WakeAlone ? WakeWaitSeconds + 0.5f : wake == WakeAgain ? WakeAgainSeconds : 6f;
+            Recorder.MaxSeconds = Mathf.Clamp(Settings.voice.maxSeconds, 3f, 30f) + (wake != 0 ? WakeWaitSeconds : 0f);
             if (!Recorder.StartAt(fromPos)) { VoiceDone(new VoiceResult { Error = "microphone: " + Recorder.LastError }, null); return; } // -1: from now (the button)
             StopSpeaking(); // TALK interrupts a reply: nothing of it plays on top of the new question
-            SetVoiceState("listening", "● LISTENING", "speak now");
-            Sounds?.Play("open");
+            SetVoiceState("listening", "● LISTENING", wake != 0 ? "Say a command" : "speak now");
+            _vHudKey = -1;
+            if (wake == WakeAlone || wake == WakeWithCommand) Sounds?.Play("wake"); // short: the user speaks right after it
+            else if (wake == 0) Sounds?.Play("open");
             // load the LLM and its prompt cache once the voice is idle again (TickVoice), not while the user speaks:
             // it would run through speech-to-text and the spoken answer
             bool llmMayAnswer = Settings.voice.useLlm && (Settings.voice.llmFallback || !Settings.voice.decide || Decider == null || !Decider.Usable);
@@ -570,7 +651,7 @@ namespace MetaCodex.Shell
             if (Dictating) { StopDictation(); return; } // ◉ dictation into a text field (ShellThreadView)
             bool heard = Recorder.HeardSpeech;
             var wav = Recorder.Stop();
-            if (wav == null && _wakeTalk) { WakeQuietEnd(); return; }
+            if (wav == null && _wakeTalk) { WakeQuietEnd(" (stopped)", false); return; }
             if (wav == null) { VoiceDone(new VoiceResult { Error = heard ? "too short" : "nothing recorded" }, null); return; }
             VoiceProcessWav(wav, null);
         }
@@ -588,7 +669,7 @@ namespace MetaCodex.Shell
         private void OnRecorderFinished(byte[] wav)
         {
             if (Dictating) { DictationWav(wav); return; }
-            if (wav == null && _wakeTalk) { WakeQuietEnd(); return; } // "Hey Whisp" and then nothing: harmless
+            if (wav == null && _wakeTalk) { WakeQuietEnd($" (no speech in {Recorder.NoSpeechSeconds:F1} s)"); return; } // "Hey Whisp" and then nothing: harmless
             if (wav == null) { VoiceDone(new VoiceResult { Error = "no speech heard" }, null); return; }
             VoiceProcessWav(wav, null);
         }
@@ -610,12 +691,18 @@ namespace MetaCodex.Shell
             {
                 int asr = (int)((Time.realtimeSinceStartup - t0) * 1000f);
                 if (e != null) { VoiceDone(new VoiceResult { Started = t0, AsrMs = asr, Error = "speech-to-text: " + e }, done); return; }
-                string text = (string)r["text"] ?? "";
-                if (fromWake)
+                string heard = (string)r["text"] ?? "";
+                // the phrase and its mis-hearings dropped from the front ("a whisper, open the panels" -> "open the
+                // panels"); only the phrase is never a command (it ran set_wake_word: session log 2026-11-16)
+                string text = WakeWord.Command(heard, fromWake);
+                if (text.Length == 0 && (fromWake || WakeWord.IsOnlyPhrase(heard)))
                 {
-                    text = WakeWord.Strip(text); // "Hey Whisp, open the terminal" -> "open the terminal"
-                    if (text.Trim().Length == 0) { WakeQuietEnd(); return; }
+                    if (done != null) { VoiceDone(new VoiceResult { Started = t0, AsrMs = asr, Transcript = heard.Trim(), Error = "only the wake phrase, no command" }, done); return; }
+                    if (WakeListenAgain(heard)) return;
+                    WakeQuietEnd($" (heard only \"{heard.Trim()}\")");
+                    return;
                 }
+                if (text != heard.Trim()) Log($"wake: command \"{text}\" (heard \"{heard.Trim()}\")");
                 VoiceProcessText(text, done, asr, t0);
             });
         }

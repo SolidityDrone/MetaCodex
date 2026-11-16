@@ -431,29 +431,61 @@ vocabulary prompt fixes names ("MetaCodex", not "MedicoDex").
 | Lua API | `Runtime/Scripting/ScriptHost.cs` (`voice.*`) |
 | Userland | `userland/overlay/usr/local/bin/mcx-ai`, `mcx-ui voice ...` |
 
-## Hey Whisp (wake phrase, off by default)
+## Hey Whisp (wake phrase)
 
-- Switch it on in CONTROL > VOICE ("Hey Whisp: say it to start TALK; the microphone stays on"), by voice ("turn on
-  the wake word": `set_wake_word on|off`, also `set_setting wake_word`) or on the control port (`voice wake on|off`).
-- "Hey Whisp": the Whisp flares, TALK plays its sound and listens as from the button. "Hey Whisp, open the
-  terminal" in one breath runs the command: TALK takes the audio from the start of the phrase and drops the
-  phrase. The phrase and then nothing: TALK ends quietly.
-- How: one shared microphone capture (TALK marks stretches of it); an energy gate in C# (WakeGate, no allocation)
-  cuts voiced stretches of 0.4-2.5 s, with 0.25 s before and 0.1 s after; each one goes to `POST /v1/audio/wake`,
-  the cheapest decode (a 256-frame window, the prompt "Hey Whisp.", 8 tokens, one greedy pass); `WakeWord.Match`
-  decides with a tolerant word list.
-- It yields: not while TALK records or works, while the app speaks (and 1 s after), during the first start's setup,
-  or without the AI service; the app paused, the headset off or the system menu open close the microphone. One
-  check at a time, at most 3 in a row, then one per 5 s. The service drops a check, never queues it, when any job
-  runs, the local coder holds the cores, or an answer is spoken.
-- Nothing leaves the headset. The service log keeps the times of the checks, not their text. `GET /status` has
-  `wake {checks, ms, skipped}`; config keys `wakeMinAudioCtx`, `wakePrompt`, `wakeMaxTokens`.
-- Estimated cost (not measured on the headset yet): in a quiet room about 10-30 us a frame and no service work;
-  with people talking nearby at most 12 checks a minute of about 0.3 s on the AI cores (about 6 % of their time);
-  the render cores are not used.
+- Switch: CONTROL > VOICE ("Hey Whisp: say it to start TALK; the microphone stays on"), by voice ("turn on the
+  wake word": `set_wake_word on|off`, also `set_setting wake_word`) or on the control port (`voice wake on|off`).
+- Say "Hey Whisp". At once the Whisp flares and turns gold, a short two-note sound plays, and the card by the Whisp
+  shows "● LISTENING" and "Say a command · 6 s", counting down. When it hears speech the card shows "Hearing you"
+  with dots and a bar that follow the voice. Nothing is spoken before it listens.
+- The phrase alone: TALK takes the audio from the end of the phrase, waits up to 6 s for the command to start, and
+  ends after 1 s of quiet (at most the TALK limit + 6 s). Nothing comes: the card says "Didn't catch that" for 2 s
+  with a soft sound; no error.
+- The command in the same breath ("Hey Whisp, open the threads"): TALK takes the audio from the start of the
+  phrase. The quiet after it already counts, so the command runs about 0.2 s after the wake.
+- The phrase is never a command. `WakeWord.Command` drops it and its mis-hearings ("a whisp", "a whisper", "hey
+  this", a lone "Hey,") from the front of the transcript. A transcript that is only the phrase, or the noise the
+  speech model writes after it ("Thank you."), listens once more for 5 s from where TALK stopped, then ends
+  quietly. TALK by the button does the same with a transcript that is only the phrase, and drops the phrase in
+  front of a command. "Hey Whisp off" stays a command (`set_wake_word off`).
+- What wakes it (`WakeWord.Match`): a hey-word (hey, hi, he, a, ok, ...) and the name or a near miss of it (whisp,
+  wisp, whisper, whisk, whist, wis, wesp, any word one letter off "whisp", "wisp" or "whisper" that starts with w);
+  or the name first ("Whisp, ..."); up to two fillers before it ("Oh, hey Whisp"). Everyday words heard for the
+  name (this, with, wish, west, wise), and "a" before the name, count only when the phrase ends there: "Hey,
+  this." wakes, "Hey, this is Tom" and "a wisp of smoke" do not. A repeated phrase is one phrase. Cases:
+  `WakeWord.Cases` and `CommandCases`; PC tests: `tests/voicefx/run-voicefx-tests.sh` (`WakeTests.cs`: the
+  owner's transcripts, the mis-hearings, 50 everyday sentences, the gate on made-up audio, the rate).
+- How: one shared microphone capture (TALK marks stretches of it) and an energy gate in C# (`WakeGate`, no
+  allocation). A piece of speech ends after 0.22 s of quiet. A piece of 0.3-2.5 s goes with 0.25 s before it and
+  0.2 s after it; a piece still going at 2.5 s goes as its first 2.5 s. A phrase said in two pieces is caught
+  whole: a piece too short alone ("hey") joins the next one that starts within 0.5 s, and a short piece right
+  after a checked one goes again with that one. Each segment goes to `POST /v1/audio/wake`, the cheapest decode (a
+  256-frame window, the prompt "Hey Whisp.", 8 tokens, one greedy pass).
+- Reaction: the gate's 0.22 s of quiet plus the check (about 0.3 s on the headset), about 0.5 s after the phrase
+  ends. The log line gives it for each wake.
+- It yields: not while TALK records or works, while the app speaks (and 1 s after; 0.6 s after "Didn't catch
+  that"), during the first start's setup, without the microphone permission (it never asks: TALK and the switch
+  ask), or without the AI service. The app paused, the headset off or the system menu open close the microphone.
+  One check at a time: a segment that comes meanwhile waits for the reply (the newest only, 1.5 s at most). At
+  most 4 checks in a row, then one per 4 s; the last one is kept for a segment the size of the phrase (1.6 s of
+  speech at most, not cut). The service drops a check, never queues it, when any job runs, the local coder holds
+  the cores, or an answer is spoken. An error rests it 10 s. After 20 min without a check one silent check keeps
+  the speech model loaded (the service unloads it after 30 idle minutes, and a cold load costs 1-4 s).
+- Cost (from the code, not measured on the headset): in a quiet room the gate only (about 10-30 us a frame) and
+  one 0.3 s check per 20 min. With people talking nearby without a pause: at most 0.25 checks a second of about
+  0.3 s each, 7.5 % of the speech engine's time (2 threads on the 3 AI cores). The render cores are not used.
+- Nothing leaves the headset. The service log keeps the times of the checks, not their text. The app's session
+  log keeps the text of a wake and of a near miss (a check with a word like the name that did not wake), not other
+  speech. `GET /status` has `wake {checks, ms, skipped}`; config keys `wakeMinAudioCtx`, `wakePrompt`,
+  `wakeMaxTokens`.
+- Session log lines: `wake: heard "Hey Whisp." (830 ms of audio, check 254 ms, round trip 260 ms, 520 ms after the
+  phrase ended), listening for the command` (or `, the command came with it`); `wake: command "open the threads"
+  (heard "Hey Whisp, open the threads.")`; `wake: only the phrase came ("a whisp,"); listening once more`; `wake:
+  nothing followed the phrase (no speech in 6.5 s)`; `wake: near miss "..."`; and once per pause `wake: hey whisp
+  ..., checks N, wakes N, near misses N, ...` (the counters, also `voice wake` on the control port).
 - Measure it: put a recorded "Hey Whisp" WAV in the shared folder and run `voice wake test /mnt/quest/hey.wav` on
-  the control port (gate time and, per segment, the round trip, the decode time, the text, the match and the
-  rest of the command); `voice wake` shows the counters while it runs.
+  the control port (gate time and, per segment, whether it was joined over a pause, the round trip, the decode
+  time, the text, the match, the rest and the command); `voice wake` shows the counters while it runs.
 
 ## Speech has priority
 

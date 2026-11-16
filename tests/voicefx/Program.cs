@@ -1,5 +1,6 @@
 // Spoken-reply tests without Unity: the sentence splitter, the spoken units and the shortening of replies
-// (Runtime/AI/SpokenText.cs), and the voice effect (Runtime/AI/VoiceFx.cs, VoiceFxTests.cs). Build + run: tests/voicefx/run-voicefx-tests.sh (also run by tests/terminal/run-core-tests.sh).
+// (Runtime/AI/SpokenText.cs), the voice effect (Runtime/AI/VoiceFx.cs, VoiceFxTests.cs), and "Hey Whisp" (the matcher,
+// the gate and the check rate: Runtime/AI/WakeWord.cs, WakeGate.cs, WakeTests.cs). Build + run: tests/voicefx/run-voicefx-tests.sh (also run by tests/terminal/run-core-tests.sh).
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -16,6 +17,7 @@ internal static partial class Program
         Speakable();
         ForSpeech();
         VoiceFxTests(); // VoiceFxTests.cs
+        WakeTests(); // WakeTests.cs: "Hey Whisp" (Runtime/AI/WakeWord.cs, WakeGate.cs)
         int si = Array.IndexOf(args, "--samples");
         if (si >= 0 && si + 1 < args.Length) VoiceFxSamples(args[si + 1]); // the service's own replies, when the script found them
         Console.WriteLine(_fails == 0 ? $"voicefx: ALL OK ({_passes} checks)" : $"voicefx: {_fails} FAILED, {_passes} passed");

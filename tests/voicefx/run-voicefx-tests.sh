@@ -5,7 +5,8 @@
 # tests/voicefx/*.cs with Unity's own Roslyn against netstandard 2.1 (the API Unity scripts get), then runs it on
 # Unity's bundled .NET 8: the sentence splitter, spoken units, reply shortening, and the voice effect (levels, edge
 # inputs, determinism, WAV, allocations, chain time; with the service's own replies when MCX_VOICEFX_SAMPLES or
-# C:\Users\<user>\mcx-voicefx-samples has them). tests/terminal/run-core-tests.sh runs it too.
+# C:\Users\<user>\mcx-voicefx-samples has them), and "Hey Whisp" (WakeWord.cs, WakeGate.cs: the match, the command
+# after the phrase, the gate on made-up audio, the check rate). tests/terminal/run-core-tests.sh runs it too.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 VER=$(sed -n 's/^m_EditorVersion: //p' "$ROOT/unity/ProjectSettings/ProjectVersion.txt")
@@ -22,6 +23,7 @@ fi
 
 SRC=(unity/Assets/MetaCodex/Runtime/AI/SpokenText.cs)
 [[ -f "$ROOT/unity/Assets/MetaCodex/Runtime/AI/VoiceFx.cs" ]] && SRC+=(unity/Assets/MetaCodex/Runtime/AI/VoiceFx.cs)
+SRC+=(unity/Assets/MetaCodex/Runtime/AI/WakeWord.cs unity/Assets/MetaCodex/Runtime/AI/WakeGate.cs) # "Hey Whisp" (WakeTests.cs)
 for f in "$ROOT"/tests/voicefx/*.cs; do SRC+=("${f#$ROOT/}"); done
 RSP="$OUT/voicefx.rsp"
 {
