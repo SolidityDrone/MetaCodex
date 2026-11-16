@@ -11,7 +11,7 @@ the others are `app`, a window and a menu tile, and `behaviour`): the folder, th
 (`mcx-ui plugin check <id>`) and the removal are the same for every kind and are in the skill `quest-plugins`.
 A plugin can be of one kind and still use the others' calls (a gesture plugin may open a window). A plugin is a
 folder of plain files; the app loads it within a second of any change, with no rebuild and no restart. You write
-files; you never touch Unity or C#. The user sees it in CONTROL > PLUGINS (GESTURES) and in the GESTURES tab.
+files; you never touch Unity or C#. The user sees it in CONTROL > MQH > PLUGINS (GESTURES) and in the GESTURES tab.
 
 Read this whole file before writing anything. Details: `reference/hand-model.md` (numbers, axes),
 `reference/lua-api.md` (every function), `reference/recipes.md` (complete working plugins),
@@ -66,7 +66,7 @@ headset: write to the folder the user or the test harness gives you, same layout
 ```
 
 Only `id`/`name`/`version`/`description` are read today (`main` and `poses` override the defaults
-`main.lua` and `poses/`). Keep the description one line: CONTROL > PLUGINS shows it.
+`main.lua` and `poses/`). Keep the description one line: CONTROL > MQH > PLUGINS shows it.
 
 ## 2. Pose files (static shapes)
 
@@ -176,7 +176,7 @@ Panels: `dock` `terminals` `files` `git` `web` (the in-app browser window) `brow
    should happen (`mcx-ui ui list` shows `open=True`). Fix and repeat until clean.
 6. Tell the user, in one short message: the gesture to make (in body words), what it triggers, how to
    watch it live (MQH > GESTURES > LIVE shows finger bars and active gestures), how to turn it off
-   (CONTROL > PLUGINS, or `mcx-ui plugin disable <id>`), and the plugin folder.
+   (CONTROL > MQH > PLUGINS, or `mcx-ui plugin disable <id>`), and the plugin folder.
 
 The simulation proves the wiring, not the recognition: real recognition needs the user's hands. When a
 pose does not fire for the user, ask them to record it (GESTURES > RECORD makes `my-poses/poses/<name>.json`

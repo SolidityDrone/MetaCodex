@@ -456,7 +456,7 @@ namespace MetaCodex.Shell
         private UiButton _scriptToggle;
 
         /// SCRIPTS (a tab of MQH): the Lua scripts in /mnt/quest/scripts, live. Plugins (their main.lua too) are in
-        /// CONTROL > PLUGINS; the hands' live view is GESTURES > LIVE.
+        /// CONTROL > MQH > PLUGINS; the hands' live view is GESTURES > LIVE.
         private void BuildScriptsTab(UiTabs tabs, int page, Rect area)
         {
             var t = UiTheme.Current;

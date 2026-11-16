@@ -58,7 +58,7 @@ description: Where you are when you run inside MetaCodex - a Meta Quest headset 
   a message (the + in a thread), you get them as images / files with their Linux paths. `mcx-ui capture list` lists
   the captures (JSON, newest first).
 - Skills and plugins: the user manages them in CONTROL (on the wrist menu): MQH > SKILLS lists what every agent has
-  (theirs, removable; the ones that came with MetaCodex or MQH, read-only); CONTROL > PLUGINS lists every plugin by
+  (theirs, removable; the ones that came with MetaCodex or MQH, read-only); CONTROL > MQH > PLUGINS lists every plugin by
   kind (APPS, GESTURES, BEHAVIOURS, MQH's own) with the examples to add (Timers, Calendar, gesture examples); the
   GESTURES tab is the studio for gesture plugins (record poses, bindings); SCRIPTS lists the Lua scripts. New skills go to `~/.mqh/skills/<name>/` (skill `skill-creator`);
   never edit the shipped ones.

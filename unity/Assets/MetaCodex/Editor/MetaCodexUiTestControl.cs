@@ -35,10 +35,10 @@ namespace MetaCodex.EditorTools
             Check(dock.SequenceEqual(wristOrder) && !outer.Contains("TABLE") && shell.MainMenuItems().Count == inner.Count + outer.Count,
                 $"dock and wrist from one table: dock {string.Join(" ", dock)} = wrist {string.Join(" ", wristOrder)}");
             var cats = shell.ControlCategories;
-            Check(cats.Count == 11 && cats.Select(c => c.Group).Distinct().Count() == 3 && new[] { "agents", "mqh", "plugins", "vault", "voice", "system", "display", "focus", "hands", "look", "about" }.All(k => cats.Any(c => c.Key == k)),
-                "CONTROL has eleven categories in three groups: " + string.Join(", ", cats.Select(c => c.Group + "/" + c.Label)));
+            Check(cats.Count == 10 && cats.Select(c => c.Group).Distinct().Count() == 3 && new[] { "agents", "mqh", "vault", "voice", "system", "display", "focus", "hands", "look", "about" }.All(k => cats.Any(c => c.Key == k)),
+                "CONTROL has ten categories in three groups: " + string.Join(", ", cats.Select(c => c.Group + "/" + c.Label)));
             string groups = string.Join(" / ", cats.GroupBy(c => c.Group).Select(g => g.Key + ": " + string.Join(", ", g.Select(c => c.Key))));
-            Check(groups == "THIS HEADSET: display, look, focus, hands / AI: voice, agents, mqh, plugins, vault / LINUX & APP: system, about"
+            Check(groups == "THIS HEADSET: display, look, focus, hands / AI: voice, agents, mqh, vault / LINUX & APP: system, about"
                 && cats.First(c => c.Key == "focus").Glyph == "◐" && cats.First(c => c.Key == "look").Glyph == "◈",
                 $"the rail's groups and glyphs (FOCUS ◐ as on the menu, LOOK & SOUND ◈): {groups}");
 

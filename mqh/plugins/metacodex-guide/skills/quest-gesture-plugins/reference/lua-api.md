@@ -52,7 +52,7 @@ Every call is limited to 200 000 instructions; going over stops the plugin (erro
 | `app.time()` | seconds since the app started |
 | `app.after(seconds, fn)` / `app.every(seconds, fn)` | timers; return an id for `app.cancel(id)` |
 | `app.action("verb:arg")` | same actions as bindings: `open:` `close:` `toggle:<panel>`, `toast:`, `run:`, `type:`, `url:`, `layout:`, `spin:`, `select[:on|off]`, `keyboard`, `terminal:new`, `recenter`, `gesture:<name>`, `lua:<code>`; returns true or an error string |
-| `log(...)` / `print(...)` | a line in the plugin's log (`mcx-ui plugin log <id>`, CONTROL > PLUGINS) |
+| `log(...)` / `print(...)` | a line in the plugin's log (`mcx-ui plugin log <id>`, CONTROL > MQH > PLUGINS) |
 | `plugin.id` `plugin.name` `plugin.version` `plugin.dir` | (plugins only) |
 
 ## voice

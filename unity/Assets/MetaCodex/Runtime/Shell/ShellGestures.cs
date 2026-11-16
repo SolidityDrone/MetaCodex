@@ -467,7 +467,7 @@ gesture.on(""both-palms-up"", function(e)
 end)
 ";
 
-        /// Scaffolds a plugin folder from the template (CONTROL > PLUGINS > + NEW PLUGIN…, control port `plugin new`).
+        /// Scaffolds a plugin folder from the template (CONTROL > MQH > PLUGINS > + NEW PLUGIN…, control port `plugin new`).
         public ScriptHost.Entry NewPlugin(string id)
         {
             id = ScriptHost.Sanitize(id);
@@ -520,7 +520,7 @@ end)
 
         // ------------------------------------------------------------------ the panel
 
-        /// GESTURES (a tab of MQH): the studio, with its own tabs. Its plugin list is CONTROL > PLUGINS now.
+        /// GESTURES (a tab of MQH): the studio, with its own tabs. Its plugin list is CONTROL > MQH > PLUGINS now.
         private void BuildGesturesTab(UiTabs outer, int outerPage, Rect c)
         {
             var t = UiTheme.Current;
@@ -601,9 +601,9 @@ end)
             _gTabs.AddTo(3, new UiSlider("HOLD", 0f, 1f, _gHold, v => _gHold = v) { Rect = rec.Next(0.032f), LabelWidth = 0.12f, Format = "0.00 s" });
             AddRow(_gTabs, 3, rec.Next(t.ButtonHeight), new (string, Action)[] { ("● RECORD IN 3 s", StartRecording) }, primary: 0);
             _gRecordStatus = _gTabs.AddTo(3, new UiLabel("", t.SmallSize) { Rect = rec.Rest(), Wrap = true, Align = TextAlignmentOptions.TopLeft });
-            // plugins have one home (CONTROL > PLUGINS: + NEW PLUGIN…, FOLDER); here only where to find it
+            // plugins have one home (CONTROL > MQH > PLUGINS: + NEW PLUGIN…, FOLDER); here only where to find it
             var tpl = new UiStack(new Rect(area.x + area.width * 0.57f, area.y, area.width * 0.43f, area.height), t.Gap);
-            _gTabs.AddTo(3, new UiLabel("Plugins: CONTROL > PLUGINS (+ NEW, or ask an agent)", t.SmallSize) { Rect = tpl.Next(0.04f), Wrap = true, Color = t.TextDim, Align = TextAlignmentOptions.TopLeft });
+            _gTabs.AddTo(3, new UiLabel("Plugins: CONTROL > MQH > PLUGINS (+ NEW, or ask an agent)", t.SmallSize) { Rect = tpl.Next(0.04f), Wrap = true, Color = t.TextDim, Align = TextAlignmentOptions.TopLeft });
 
             _gTabs.OnChanged = _ => RefreshGesturesPanel();
             RefreshGesturesPanel();
@@ -677,7 +677,7 @@ end)
             foreach (var n in GestureEngine.Names)
                 items.Add(new UiListItem { Icon = "◆", IconColor = t.Accent, Title = n, Sub = BuiltInRole(n), Badge = BindingBadge(n), BadgeColor = t.Ok, Tag = n });
 
-            // gesture examples only: the app-plugin examples (a window and a menu tile: timers, calendar) are under CONTROL > PLUGINS
+            // gesture examples only: the app-plugin examples (a window and a menu tile: timers, calendar) are under CONTROL > MQH > PLUGINS
             var ids = GestureExampleIds.Where(id => !IsAppPluginExample(id)).ToList();
             var exHeader = Header("EXAMPLES", $"EXAMPLES  ({ids.Count})");
             exHeader.Icon = _gExamplesOpen ? "▾" : "▸"; // folds like THREADS' projects
@@ -824,7 +824,7 @@ end)
             var gnames = GestureNamesIn(files);
             bool installed = Scripts.Find("plugin/" + id) != null;
             _gDetail.Set($"<size=130%><b>{id}</b></size>  <color=#7FA9BF>EXAMPLE</color>\n{desc}\n\n<color=#7FA9BF>GESTURES</color>\n  " + (gnames.Count > 0 ? string.Join("\n  ", gnames) : "none: a plugin window, opened from its menu tile") + "\n\n" +
-                (installed ? "<color=#4DFFA6>● added</color> in /mnt/quest/plugins/" + id + ": bind its gestures in BIND; remove it in CONTROL > PLUGINS."
+                (installed ? "<color=#4DFFA6>● added</color> in /mnt/quest/plugins/" + id + ": bind its gestures in BIND; remove it in CONTROL > MQH > PLUGINS."
                            : "Not installed: nothing runs. + ADD puts it in /mnt/quest/plugins/" + id + "."), t.Text);
         }
 

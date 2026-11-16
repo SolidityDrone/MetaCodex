@@ -26,7 +26,7 @@ machines, permissions and environments; the app replaces the web app as its clie
 | Threads, timeline, interactions, queue | source of truth, API + change events | renders; sends tell / approve / deny / answer / stop |
 | Providers, **ACP providers**, models | settings + provider plugins | settings panels (forms from the settings schema) |
 | Machines | permissions, environments, host policy | panel |
-| Plugins | install / enable / run (host code) | lists them (CONTROL > PLUGINS), enables and disables them |
+| Plugins | install / enable / run (host code) | lists them (CONTROL > MQH > PLUGINS), enables and disables them |
 | Skills | index, per-agent install, create-skill flow | lists; starts "create skill" / "create plugin" threads |
 | Appearance, gestures | stores them in a `quest.*` settings namespace (agents and the CLI can change them) | owns their meaning: applies appearance live, recognises gestures |
 | Gestures | maps gesture ids to actions (bindings are data); custom gestures arrive as plugins (data: pose templates) | recognises hand poses at frame rate, emits gesture ids |

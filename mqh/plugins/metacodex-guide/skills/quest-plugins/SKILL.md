@@ -13,7 +13,7 @@ The app draws the window from your component list with its own UI kit, so it alw
 ## Kinds of plugin
 
 Every plugin has the same folder, manifest, checks and removal (this skill). `plugin.json` `"kind"` says which kind
-it is; the user finds it under that kind in CONTROL > PLUGINS (SHOW: APPS, GESTURES, BEHAVIOURS).
+it is; the user finds it under that kind in CONTROL > MQH > PLUGINS (SHOW: APPS, GESTURES, BEHAVIOURS).
 
 | Kind | What it adds | Read |
 |---|---|---|

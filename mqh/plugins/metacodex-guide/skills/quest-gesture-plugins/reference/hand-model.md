@@ -57,7 +57,7 @@ Several can be active at once (`grab` is also true during `thumbs-up`: the finge
 
 ## Examples (NOT installed; copy their fields into your own plugin)
 
-The app ships two gesture example plugins that are off by default (CONTROL > PLUGINS or GESTURES > ALL > EXAMPLES, + ADD; or, after the
+The app ships two gesture example plugins that are off by default (CONTROL > MQH > PLUGINS or GESTURES > ALL > EXAMPLES, + ADD; or, after the
 user's OK, `mcx-ui plugin example core-poses|swipes`). Never assume they are there.
 
 - `core-poses` (poses only): `thumbs-up`, `thumbs-down`, `victory`, `horns`, `call-me`.

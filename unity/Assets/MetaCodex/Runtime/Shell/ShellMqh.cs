@@ -45,7 +45,6 @@ namespace MetaCodex.Shell
         private void RefreshMqhTab(int tab)
         {
             if (!_panels.TryGetValue("mqh", out var p) || !p.IsOpen) return;
-            RefreshRail(); // MQH or PLUGINS lit on CONTROL's rail
             switch (tab)
             {
                 case MqhSkillsTab: if (_skillsRegistry) ShowSkillRows(); else RefreshSkills(); break;
@@ -546,7 +545,7 @@ namespace MetaCodex.Shell
             catch (Exception) { return KindGestures; }
         }
 
-        /// PLUGINS with one kind shown (0 ALL, 1 APPS, 2 GESTURES, 3 BEHAVIOURS, 4 MQH): CONTROL > PLUGINS, voice, tests.
+        /// PLUGINS with one kind shown (0 ALL, 1 APPS, 2 GESTURES, 3 BEHAVIOURS, 4 MQH): voice, tests.
         public void ShowPluginKind(int i)
         {
             _pluginKind = Mathf.Clamp(i, 0, PluginKinds.Length - 1);

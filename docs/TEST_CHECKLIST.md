@@ -158,7 +158,7 @@ Gesture studio (CONTROL > MQH > GESTURES):
 - [ ] Pick `swipes` under EXAMPLES → the right side lists its gestures and says "Not installed"; + ADD (the only lit button) → toast "Example swipes added …", the row says ADDED and its gestures appear indented under it; YOURS stays (0)
 - [ ] Swipe an open hand fast left / right after + ADD → swipe-left / swipe-right in LIVE's recent events
 - [ ] LIVE tab → finger bars move with your fingers (1 = straight); palm and thumb direction text; active gestures listed; the detector cost (right column) stays well under 1 ms
-- [ ] Make a thumbs up → LIVE shows `thumbs-up` (and `grab`); the GESTURES list marks it ● ACTIVE; CONTROL > PLUGINS lists Core poses
+- [ ] Make a thumbs up → LIVE shows `thumbs-up` (and `grab`); the GESTURES list marks it ● ACTIVE; CONTROL > MQH > PLUGINS lists Core poses
 - [ ] Thumbs down, victory (✌), horns (🤘), call-me (🤙) → each is recognised (LIVE, or a toast via a binding)
 - [ ] TEST ▶ on any gesture → a simulated event (toast "Simulated …")
 - [ ] BIND: pick `thumbs-up`, action "GIT", + ADD BINDING; then hold a thumbs up for 2 s → GIT opens; the binding can be switched on and off and deleted
@@ -166,11 +166,11 @@ Gesture studio (CONTROL > MQH > GESTURES):
 - [ ] A binding saved with an old preset (for example `toggle:browser` or `spin:40`) → still runs
 - [ ] BIND `palm-up` (left hand) to `voice:toggle` → hands-free TALK
 - [ ] RECORD: name "finger-gun", RIGHT, hold a finger gun, RECORD IN 3 s → "saved" + summary; the pose then fires; it appears under YOURS (✋ pose · my-poses); SOURCE and DELETE POSE are lit for it; DELETE POSE asks, then removes it
-- [ ] RECORD's right side → one dim line "Plugins: CONTROL > PLUGINS (+ NEW, or ask an agent)"; no + NEW PLUGIN… and no OPEN IN TERMINAL there
+- [ ] RECORD's right side → one dim line "Plugins: CONTROL > MQH > PLUGINS (+ NEW, or ask an agent)"; no + NEW PLUGIN… and no OPEN IN TERMINAL there
 - [ ] `mcx-ui plugin examples` → lists all four with installed=True/False; `mcx-ui plugin example swipes` → ok, swipes appear under EXAMPLES
 - [ ] `mcx-ui gesture list`, `mcx-ui gesture bind clap toggle:files`, `mcx-ui action open:git` → each answers; the binding shows in BIND
 - [ ] Ask an agent on the headset (`claude` or `opencode` in a terminal): "make me a gesture plugin: when I do a thumbs up with my right hand open git; push my palm away to close it" → the plugin appears with its own `poses/thumbs-up.json` and works on a fresh install, without + ADD
-- [ ] Update over an old install that had the starters, never edited, with no binding on them → after the first start `swipes` is gone from CONTROL > PLUGINS and from `/mnt/quest/plugins` (`ls -a` shows `.examples-v2` and still `.starter-installed`); `core-poses` stays (the V shortcut uses it); `my-poses` and your own plugins are still there
+- [ ] Update over an old install that had the starters, never edited, with no binding on them → after the first start `swipes` is gone from CONTROL > MQH > PLUGINS and from `/mnt/quest/plugins` (`ls -a` shows `.examples-v2` and still `.starter-installed`); `core-poses` stays (the V shortcut uses it); `my-poses` and your own plugins are still there
 - [ ] Update over an old install where a binding names `victory` (or a script or plugin reacts to `thumbs-up`) → `core-poses` stays under EXAMPLES, still working; an edited starter (one pose file changed) stays and shows under YOURS
 - [ ] Restart the app after + ADD of an example → it is still installed (the cleanup runs only once)
 
@@ -184,17 +184,17 @@ Lua scripts (CONTROL > MQH > SCRIPTS):
 
 ## App plugins
 
-- [ ] CONTROL > PLUGINS > + NEW PLUGIN… "test-plugin" → a folder in `/mnt/quest/plugins`; both palms up shows the toast "Both palms up" and opens nothing
-- [ ] CONTROL > PLUGINS: pick a plugin → the first button says DISABLE when it is on and ENABLE when it is off (dim with nothing picked); enable / disable / reload / delete work; the detail shows poses, detectors and log
+- [ ] CONTROL > MQH > PLUGINS > + NEW PLUGIN… "test-plugin" → a folder in `/mnt/quest/plugins`; both palms up shows the toast "Both palms up" and opens nothing
+- [ ] CONTROL > MQH > PLUGINS: pick a plugin → the first button says DISABLE when it is on and ENABLE when it is off (dim with nothing picked); enable / disable / reload / delete work; the detail shows poses, detectors and log
 - [ ] `mcx-ui plugin list` → the plugins with their state
 - [ ] A plugin with `voice.command{...}` (skill quest-scripting) → its phrase works by voice; `mcx-ui voice match "<phrase>"` shows the command
 - [ ] Ask an agent for a small plugin with its own window and a menu button (skill `quest-plugins`) → the window and its tile appear without a rebuild or a restart, and load again at every start
-- [ ] CONTROL > PLUGINS → the rail lights PLUGINS; SHOW ALL lists APPS, GESTURES, BEHAVIOURS, MQH and EXAMPLES TO ADD; SHOW APPS lists only apps and the timers / calendar examples; GESTURES > ALL > EXAMPLES lists only gesture examples (core-poses, swipes)
-- [ ] Install the Timers example (CONTROL > PLUGINS > timers > + ADD, or `mcx-ui plugin example timers`) → a toast; a TIMER tile appears on the DOCK (and on the wrist menu's outer ring in WRIST mode); the tile opens the Timers window
+- [ ] CONTROL > MQH > PLUGINS (no PLUGINS row of its own on the rail) → SHOW ALL lists APPS, GESTURES, BEHAVIOURS, MQH and EXAMPLES TO ADD; SHOW APPS lists only apps and the timers / calendar examples; GESTURES > ALL > EXAMPLES lists only gesture examples (core-poses, swipes)
+- [ ] Install the Timers example (CONTROL > MQH > PLUGINS > timers > + ADD, or `mcx-ui plugin example timers`) → a toast; a TIMER tile appears on the DOCK (and on the wrist menu's outer ring in WRIST mode); the tile opens the Timers window
 - [ ] In the Timers window, start a short timer with its buttons → the countdown runs; when it ends, the Whisp calls it out with a sound and says it; a tap on the callout opens the window
 - [ ] Install the Calendar example the same way → a CALENDAR tile and a window with a month grid; add an entry and a reminder → the reminder calls out at its time
 - [ ] Restart the app → both plugins load again, their windows and tiles come back, and their saved timers and entries are kept
-- [ ] DISABLE a plugin in CONTROL > PLUGINS → its window closes, its DOCK tile and its voice commands go away; ENABLE brings them back
+- [ ] DISABLE a plugin in CONTROL > MQH > PLUGINS → its window closes, its DOCK tile and its voice commands go away; ENABLE brings them back
 - [ ] `mcx-ui plugin check timers` → `loaded`, with its windows (builds, open), tiles, voice commands, timers and no warnings
 
 ## The Whisp
