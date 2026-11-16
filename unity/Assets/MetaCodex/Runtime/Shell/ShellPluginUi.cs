@@ -111,13 +111,50 @@ namespace MetaCodex.Shell
             {
                 try
                 {
-                    BuildViewPanel(v, open);
-                    if (back && _panels.TryGetValue(v.PanelId, out var np) && np != null) { np.transform.SetPositionAndRotation(gone.pos, gone.rot); _placed.Add(v.PanelId); }
+                    // a built window whose new spec has the same shape (only texts differ) takes the texts in place: no
+                    // rebuild, so its panel, its bend and any press on it stay as they are
+                    int set = _panels.ContainsKey(v.PanelId) ? TryUpdateInPlace(v, spec) : -1;
+                    if (set >= 0)
+                    {
+                        if (open && !PluginPanelOpen(v)) OpenPanel(v.PanelId);
+                        if (set > 0) Log("plugin window " + windowId + ": updated in place (" + set + " texts)");
+                    }
+                    else
+                    {
+                        BuildViewPanel(v, open);
+                        if (back && _panels.TryGetValue(v.PanelId, out var np) && np != null) { np.transform.SetPositionAndRotation(gone.pos, gone.rot); _placed.Add(v.PanelId); }
+                    }
                 }
                 catch (Exception ex) { v.Error = ex.Message; Log("plugin window " + windowId + " failed: " + ex); }
             }
             TrimViewPanels();
             RefreshWorkspaceViews();
+        }
+
+        /// Sets the built texts of a window whose new spec has the built shape (ShellViews.ShapeOf). Returns the labels
+        /// changed (0: same texts), or -1 when the window must be rebuilt. A text that would outgrow its row rebuilds too
+        /// (the rows were laid out for the built text). Nothing is set unless every changed text fits.
+        private int TryUpdateInPlace(AgentView v, JObject spec)
+        {
+            if (v.Shape == null || ShapeOf(spec) != v.Shape) return -1;
+            var comps = ViewComponents(spec);
+            int changed = 0;
+            foreach (var s in v.Texts)
+            {
+                if (s.Label == null || s.Index < 0 || s.Index >= comps.Count) return -1;
+                string shown = MdLite(ViewText(comps[s.Index]));
+                if (shown == s.Label.Text) continue;
+                bool fits = s.Big ? shown.Length <= s.Label.Text.Length : DesiredHeight(comps[s.Index], s.Width) <= s.Height + 0.002f;
+                if (!fits) return -1;
+                changed++;
+            }
+            if (changed == 0) return 0;
+            foreach (var s in v.Texts)
+            {
+                string shown = MdLite(ViewText(comps[s.Index]));
+                if (s.Label.Text != shown) s.Label.Set(shown);
+            }
+            return changed;
         }
 
         /// LIVE texts: sets the labels of a built window (and keeps the spec current for the next build). False: not built.
