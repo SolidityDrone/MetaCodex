@@ -134,7 +134,10 @@ menu.add{ id = "drink", label = "+1", glyph = "+", run = function() add_glass() 
 menu.remove("drink")
 ```
 `label`: capitals, 8 characters at most. `glyph`: one simple symbol for the dock, like the app's own
-(`◆ ◉ ▤ ◫ ☰ ◎ ▣ ◐ ⌖ ◷ ◔ ✓ ★`). `icon`: optional wrist icon name.
+(`◆ ◉ ▤ ◫ ☰ ◎ ▣ ◐ ⌖ ◷ ◔ ✓ ★`). `icon`: optional line icon on the wrist menu, one of `timer`, `calendar`,
+`bell`, `star`, `heart`, `note`, `check`, `chart`, `book`, `bolt`, `music`, `plugin`; without one (or with a name not in
+that list) the tile shows `plugin`, a puzzle piece. The user can pick another icon for the tile in CONTROL > WRIST MENU,
+and that choice wins.
 Exactly one of `panel` (one of your windows: `ui.panel` may come before or after `menu.add` in `main.lua`) or
 `run`. The menu holds 6 plugin tiles in
 all: `menu.add` returns false when it is full (the log says so); then tell the user.

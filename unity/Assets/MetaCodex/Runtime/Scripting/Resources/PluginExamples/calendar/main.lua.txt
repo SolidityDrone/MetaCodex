@@ -379,7 +379,7 @@ voice.command{
 
 ------------------------------------------------------------------ load
 
-menu.add{ id = "calendar", label = "CALENDAR", glyph = "▦", icon = "mark", panel = "main" }
+menu.add{ id = "calendar", label = "CALENDAR", glyph = "▦", icon = "calendar", panel = "main" }
 
 loadEntries()
 sel = keyOf()

@@ -10,7 +10,7 @@ namespace MetaCodex.UI
     /// round caps and joins, like a hand-drawn instrument panel.
     public static class UiIconAtlas
     {
-        public const int Cell = 96, Cols = 8, Rows = 4;
+        public const int Cell = 96, Cols = 8, Rows = 5;
         /// Canvas units from a cell's centre to its edge: the icon (-1..1) plus room for its glow.
         public const float Extent = 1.32f;
         /// Distance stored (canvas units): 0.5 at a stroke's edge, 1 this far inside, 0 this far outside.
@@ -26,6 +26,11 @@ namespace MetaCodex.UI
         public static byte[] Pixels { get { Ensure(); return _pixels; } }
         private static byte[] _pixels;
         public static IEnumerable<string> Names => Icons.Keys;
+        /// Whether the atlas has an icon by that name (no texture is drawn for this).
+        public static bool Has(string name) => !string.IsNullOrEmpty(name) && Icons.ContainsKey(name);
+        /// The generic icons a plugin's tile can name (`menu.add{icon = ...}`, the WRIST MENU page's ICON); "plugin" is the
+        /// one a tile without an icon gets.
+        public static readonly string[] PluginIcons = { "plugin", "timer", "calendar", "bell", "star", "heart", "note", "check", "chart", "book", "bolt", "music" };
 
         /// An icon's rectangle in the atlas (uv offset in xy, size in zw); false when there is none by that name.
         public static bool TryGet(string name, out Vector4 rect)
@@ -289,6 +294,46 @@ namespace MetaCodex.UI
             d["mark"] = new Icon().Ngon(0f, 0f, 0.86f, 6, 90f).Ngon(0f, 0f, 0.44f, 6, 0f).Disc(0f, 0f, 0.10f);
             // close
             d["close"] = new Icon().Line(-0.46f, -0.46f, 0.46f, 0.46f).Line(-0.46f, 0.46f, 0.46f, -0.46f);
+
+            // the generic icons for plugins' tiles (PluginIcons)
+            // a plugin: a puzzle piece, its knobs on the top and the right
+            d["plugin"] = new Icon().Line(-0.62f, -0.62f, 0.50f, -0.62f).Line(-0.62f, -0.62f, -0.62f, 0.50f)
+                .Line(-0.62f, 0.50f, -0.16f, 0.50f).Arc(-0.06f, 0.66f, 0.20f, -60f, 240f).Line(0.04f, 0.50f, 0.50f, 0.50f)
+                .Line(0.50f, 0.50f, 0.50f, 0.04f).Arc(0.66f, -0.06f, 0.20f, 210f, 510f).Line(0.50f, -0.16f, 0.50f, -0.62f);
+            // a timer: a stopwatch with its button and one hand
+            d["timer"] = new Icon().Circle(0f, -0.10f, 0.70f).Line(0f, 0.60f, 0f, 0.80f).Line(-0.20f, 0.86f, 0.20f, 0.86f)
+                .Line(0f, -0.10f, 0.32f, 0.22f).Disc(0f, -0.10f, 0.08f);
+            // a calendar: a sheet with two rings and a grid of days
+            var cal = new Icon().Box(0f, -0.08f, 0.82f, 0.70f, 0.12f).Line(-0.82f, 0.28f, 0.82f, 0.28f).Line(-0.42f, 0.52f, -0.42f, 0.84f).Line(0.42f, 0.52f, 0.42f, 0.84f);
+            foreach (float cy in new[] { -0.06f, -0.42f })
+                foreach (float cx in new[] { -0.42f, 0f, 0.42f }) cal.Disc(cx, cy, 0.075f);
+            d["calendar"] = cal;
+            // a bell with its clapper
+            d["bell"] = new Icon().Arc(0f, 0.12f, 0.46f, 0f, 180f).Line(-0.46f, 0.12f, -0.62f, -0.42f).Line(0.46f, 0.12f, 0.62f, -0.42f)
+                .Line(-0.78f, -0.42f, 0.78f, -0.42f).Arc(0f, -0.56f, 0.16f, 180f, 360f).Line(0f, 0.58f, 0f, 0.76f);
+            // a star: five points
+            var starXy = new float[20];
+            for (int k = 0; k < 10; k++) { float a = (90f + 36f * k) * Mathf.Deg2Rad, r = k % 2 == 0 ? 0.86f : 0.36f; starXy[2 * k] = Mathf.Cos(a) * r; starXy[2 * k + 1] = Mathf.Sin(a) * r; }
+            d["star"] = new Icon().Poly(true, starXy);
+            // a heart: two lobes and the point
+            d["heart"] = new Icon().Arc(-0.34f, 0.24f, 0.36f, 0f, 215f).Arc(0.34f, 0.24f, 0.36f, -35f, 180f)
+                .Line(-0.635f, 0.034f, 0f, -0.74f).Line(0.635f, 0.034f, 0f, -0.74f);
+            // a note: a page with a folded corner and three lines
+            d["note"] = new Icon().Poly(true, -0.56f, 0.82f, 0.26f, 0.82f, 0.60f, 0.48f, 0.60f, -0.82f, -0.56f, -0.82f).Poly(false, 0.26f, 0.82f, 0.26f, 0.48f, 0.60f, 0.48f)
+                .Line(-0.30f, 0.18f, 0.34f, 0.18f).Line(-0.30f, -0.12f, 0.34f, -0.12f).Line(-0.30f, -0.42f, 0.10f, -0.42f);
+            // a check mark in a circle
+            d["check"] = new Icon().Circle(0f, 0f, 0.84f).Poly(false, -0.40f, 0.0f, -0.10f, -0.32f, 0.44f, 0.30f);
+            // a chart: two axes and four bars
+            d["chart"] = new Icon().Poly(false, -0.82f, 0.80f, -0.82f, -0.78f, 0.84f, -0.78f)
+                .Line(-0.46f, -0.60f, -0.46f, -0.10f).Line(-0.08f, -0.60f, -0.08f, 0.30f).Line(0.30f, -0.60f, 0.30f, 0.00f).Line(0.66f, -0.60f, 0.66f, 0.56f);
+            // a book, open: two pages on a spine
+            d["book"] = new Icon().Poly(true, 0f, 0.56f, -0.40f, 0.70f, -0.86f, 0.62f, -0.86f, -0.58f, -0.40f, -0.50f, 0f, -0.62f)
+                .Poly(true, 0f, 0.56f, 0.40f, 0.70f, 0.86f, 0.62f, 0.86f, -0.58f, 0.40f, -0.50f, 0f, -0.62f);
+            // a bolt of lightning
+            d["bolt"] = new Icon().Poly(true, 0.18f, 0.88f, -0.52f, -0.08f, -0.04f, -0.08f, -0.20f, -0.88f, 0.52f, 0.12f, 0.04f, 0.12f);
+            // music: two notes on a double beam
+            d["music"] = new Icon().Ellipse(-0.42f, -0.56f, 0.24f, 0.17f).Ellipse(0.48f, -0.40f, 0.24f, 0.17f)
+                .Line(-0.20f, -0.52f, -0.20f, 0.66f).Line(0.70f, -0.36f, 0.70f, 0.82f).Line(-0.20f, 0.66f, 0.70f, 0.82f).Line(-0.20f, 0.42f, 0.70f, 0.58f);
             return d;
         }
     }

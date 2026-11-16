@@ -425,7 +425,7 @@ voice.command{
 
 ------------------------------------------------------------------ load
 
-menu.add{ id = "timers", label = "TIMER", glyph = "◷", icon = "mark", panel = "main" }
+menu.add{ id = "timers", label = "TIMER", glyph = "◷", icon = "timer", panel = "main" }
 
 st = loadState()
 rollDay()
