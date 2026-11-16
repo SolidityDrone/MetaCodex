@@ -20,6 +20,7 @@ SRC=(
   unity/Assets/MetaCodex/Runtime/Terminal/VtTerminal.cs
   unity/Assets/MetaCodex/Runtime/Terminal/Wcwidth.cs
   unity/Assets/MetaCodex/Runtime/Terminal/KeyEncoder.cs
+  unity/Assets/MetaCodex/Runtime/Terminal/TerminalText.cs
   unity/Assets/MetaCodex/Runtime/Linux/TarGzExtractor.cs
   unity/Assets/MetaCodex/Runtime/Linux/RootfsSetup.cs
   unity/Assets/MetaCodex/Runtime/Linux/PtyNative.cs

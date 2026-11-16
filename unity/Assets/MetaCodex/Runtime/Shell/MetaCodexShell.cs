@@ -68,6 +68,8 @@ namespace MetaCodex.Shell
             {
                 app.TerminalCreated += WrapTerminal;
                 app.TerminalClosed += OnTerminalClosed;
+                app.ProgramCopied += OnProgramCopied; // OSC 52: a program in a terminal copied text (ShellTerminals)
+                if (app.Input != null) app.Input.CopySelection = () => CopyTerminalSelection(app.Active); // Ctrl+Shift+C
                 app.FocusChanged += OnFocusChanged;
                 app.ExtraCommand = ControlCommand;
                 app.AsyncCommand = (line, reply) => VoiceAsyncCommand(line, reply) || SecretCommand(line, reply) || ViewAsyncCommand(line, reply);
@@ -786,42 +788,43 @@ namespace MetaCodex.Shell
 
         // ------------------------------------------------------------------ terminal frames
 
-        private void WrapTerminal(TerminalInstance inst)
+        /// The first terminal's frame goes where the app put its view (in front, at the start); every other one takes a free
+        /// place like any window that opens (OpenTerminalFrame).
+        private void WrapTerminal(TerminalInstance inst) => WrapTerminal(inst, app == null || app.Terminals.Count == 0 || app.Terminals[0] == inst);
+
+        private void WrapTerminal(TerminalInstance inst, bool keepPlace)
         {
             if (!_shellUp || _frames.ContainsKey(inst) || inst.View == null) return; // made during the start: wrapped when the shell is up
             var t = UiTheme.Current;
-            float bezel = 0.012f;
+            float bezel = 0.012f, k = TerminalGridScale;
             var v = inst.View;
-            float w = v.Width + 2 * bezel, h = v.Height + t.HeaderHeight + bezel * 2;
+            float vw = v.Width * k, vh = v.Height * k; // the grid as the frame shows it (cols x rows stay: the pty keeps its size)
+            float w = vw + 2 * bezel, h = vh + t.HeaderHeight + bezel * 2;
             var frame = UiPanel.Create<UiPanel>("term-" + inst.Number, "TERMINAL " + inst.Number, w, h, _root);
             frame.Closable = false;
             frame.HideCloseButton(); // ✕ below ends the terminal (or hides the last one); – hides it
-            // reparent: keep the view's world pose -> derive the frame pose from it
+            frame.BaseScale = Vector3.one * UiScaleNow; // the UI SCALE, as every window (ApplyTerminalScales)
+            // the frame's middle where the view's middle was (the first terminal: the app placed it in front of the user)
             var viewTr = v.transform;
-            Vector3 topLeftWorld = viewTr.position;
             var rot = viewTr.rotation;
-            frame.transform.rotation = rot;
-            var localTopLeft = frame.PanelToLocal(new Vector2(bezel, t.HeaderHeight + bezel), -0.004f);
-            frame.transform.position = topLeftWorld - rot * localTopLeft;
-            viewTr.SetParent(frame.transform, true);
-            viewTr.localPosition = localTopLeft;
+            Vector3 viewMid = viewTr.TransformPoint(new Vector3(v.Width * 0.5f, -v.Height * 0.5f, 0f));
+            var localMid = frame.PanelToLocal(new Vector2(bezel + vw * 0.5f, t.HeaderHeight + bezel + vh * 0.5f));
+            frame.transform.SetPositionAndRotation(viewMid - rot * Vector3.Scale(localMid, frame.BaseScale), rot);
+            viewTr.SetParent(frame.transform, false);
+            viewTr.localPosition = frame.PanelToLocal(new Vector2(bezel, t.HeaderHeight + bezel), -0.004f);
             viewTr.localRotation = Quaternion.identity;
+            viewTr.localScale = new Vector3(k, k, 1f); // depth kept: the cells, the selection and the text keep their layers
             if (!v.gameObject.activeSelf) v.gameObject.SetActive(true); // hidden during the start (BuildSteps): the frame shows or hides it now
             inst.Frame = frame.transform;
-            float bx = w - 0.044f;
-            frame.Add(new UiButton("✕", () => CloseOrHideTerminal(inst), UiButtonStyle.Danger) { Rect = new Rect(bx, 0.006f, 0.036f, t.HeaderHeight - 0.010f) });
-            frame.Add(new UiButton("–", () => HideTerminal(inst), UiButtonStyle.Ghost) { Rect = new Rect(bx - 0.042f, 0.006f, 0.036f, t.HeaderHeight - 0.010f) });
-            frame.Add(new UiButton("+", () => app?.NewTerminal(), UiButtonStyle.Ghost) { Rect = new Rect(bx - 0.084f, 0.006f, 0.036f, t.HeaderHeight - 0.010f) });
-            frame.Add(new UiButton("⌨", () => app.Input?.ToggleSystemKeyboard(), UiButtonStyle.Ghost) { Rect = new Rect(bx - 0.126f, 0.006f, 0.036f, t.HeaderHeight - 0.010f) });
-            frame.Add(new UiButton("⎘", () => { app?.Focus(inst); app?.Input?.Paste(GUIUtility.systemCopyBuffer); }, UiButtonStyle.Ghost) { Rect = new Rect(bx - 0.168f, 0.006f, 0.036f, t.HeaderHeight - 0.010f) });
-            var link = frame.Add(new UiButton("⇗", () => OpenTerminalLink(inst), UiButtonStyle.Ghost) { Rect = new Rect(bx - 0.210f, 0.006f, 0.036f, t.HeaderHeight - 0.010f) });
-            _linkButtons[inst] = link;
-            // a tap on the terminal area focuses it
-            frame.Add(new UiHitArea(() => app?.Focus(inst)) { Rect = new Rect(bezel, t.HeaderHeight + bezel, v.Width, v.Height) });
+            AddTerminalButtons(frame, inst, w);
+            // the text: a tap focuses this terminal, a pinch dragged over it selects (COPY copies it)
+            frame.Add(new UiTerminalSurface(v, k, () => app?.Focus(inst), () => OnTerminalSelected(inst)) { Rect = new Rect(bezel, t.HeaderHeight + bezel, vw, vh) });
+            v.SelectionChanged += () => RefreshTerminalCopy(inst);
             _frames[inst] = frame;
             Router.Register(frame);
-            if (_hideFirstTerminal) { _hideFirstTerminal = false; frame.gameObject.SetActive(false); } // runs hidden: TERMS lists it, a tap shows it
-            else frame.Open();
+            if (!keepPlace) OpenTerminalFrame(frame); // a new terminal: a free place, never on another window
+            else if (_hideFirstTerminal) { _hideFirstTerminal = false; frame.gameObject.SetActive(false); } // runs hidden: TERMS lists it, a tap shows it
+            else { frame.Open(); _termPlaced.Add(frame); }
             OnFocusChanged(app != null ? app.Active : inst);
             RefreshTerminalsPanel();
         }
@@ -833,7 +836,7 @@ namespace MetaCodex.Shell
         {
             if (SetupBlocks(3, "TERMINALS")) return; // the first start's setup (ShellSetupLocks)
             if (inst == null || !_frames.TryGetValue(inst, out var f)) return;
-            if (!f.IsOpen) { PlaceDefault(f.Id, f); f.Open(); OnOpenedFloating(f); }
+            if (!f.IsOpen) OpenTerminalFrame(f);
             app?.Focus(inst);
         }
 
@@ -864,10 +867,13 @@ namespace MetaCodex.Shell
 
         public UiPanel WrapForTest(TerminalInstance inst) { _hideFirstTerminal = false; WrapTerminal(inst); return _frames.TryGetValue(inst, out var f) ? f : null; }
 
+        /// Self-tests: frame a terminal as a new one (+, TERMS > + NEW, voice): it takes a free place.
+        public UiPanel NewTerminalFrameForTest(TerminalInstance inst) { _hideFirstTerminal = false; WrapTerminal(inst, false); return _frames.TryGetValue(inst, out var f) ? f : null; }
+
         private void OnTerminalClosed(TerminalInstance inst)
         {
-            if (_frames.TryGetValue(inst, out var f)) { Router.Unregister(f); _frames.Remove(inst); }
-            _linkButtons.Remove(inst); _links.Remove(inst); _linkVersion.Remove(inst);
+            if (_frames.TryGetValue(inst, out var f)) { Router.Unregister(f); _frames.Remove(inst); _termPlaced.Remove(f); }
+            _linkButtons.Remove(inst); _links.Remove(inst); _linkVersion.Remove(inst); _termCopy.Remove(inst); _termCopyLink.Remove(inst);
             RefreshTerminalsPanel();
         }
 
@@ -994,6 +1000,7 @@ namespace MetaCodex.Shell
             ApplyMaterialSettings();
             foreach (var p in _panels.Values) p.BaseScale = Vector3.one * UiScaleNow;
             ApplyGroupScales(); // a group's windows are scaled by their group, not again by the UI scale
+            ApplyTerminalScales(); // the terminals' frames too (ShellTerminals)
             ApplyMainMenuMode();
             ApplyOrbSetting();
             // FIXED: the frame loop bends panels only while "Bend panels" is on, so turning it off any way (voice, a

@@ -62,7 +62,7 @@ namespace MetaCodex.Shell
             p.Add(new UiButton("NEW THREAD →", () => OpenNewThread(_agentSel)) { Rect = new Rect(r2.x + bw2 + t.Gap, r2.y, bw2, r2.height) });
             _agentUpdate = p.Add(new UiButton("UPDATE", () => InstallAgent(_agentSel)) { Rect = new Rect(r2.x + (bw2 + t.Gap) * 2, r2.y, bw2, r2.height) });
             _agentUpdate.SetVisible(false);
-            _agentHint = p.Add(new UiLabel("GET installs an agent here. API KEY: paste your provider's key once (sealed in the vault, given to the agents MQH starts). SIGN IN runs the provider's own login in a new terminal: ⇗ on that terminal opens its link in the system browser, codes go back with ⎘ PASTE; those logins stay in the CLI's own files, MetaCodex never reads them.", t.SmallSize) { Rect = rs.Rest(), Wrap = true, Color = t.TextDim, Align = TextAlignmentOptions.TopLeft });
+            _agentHint = p.Add(new UiLabel("GET installs an agent here. API KEY: paste your provider's key once (sealed in the vault, given to the agents MQH starts). SIGN IN runs the provider's own login in a new terminal: ⇗ on that terminal opens its link in the system browser (COPY LINK copies it), codes go back with ⎘ PASTE; those logins stay in the CLI's own files, MetaCodex never reads them.", t.SmallSize) { Rect = rs.Rest(), Wrap = true, Color = t.TextDim, Align = TextAlignmentOptions.TopLeft });
         }
 
         /// MQH's provider id (acp-opencode, codex, claude-code) -> the GET agent it is (opencode, codex, claude).
@@ -1837,12 +1837,13 @@ namespace MetaCodex.Shell
         private readonly Dictionary<TerminalInstance, UiButton> _linkButtons = new Dictionary<TerminalInstance, UiButton>();
         private readonly Dictionary<TerminalInstance, string> _links = new Dictionary<TerminalInstance, string>();
 
-        /// Twice a second: the newest http(s) link on each changed terminal screen (sign-in flows print one).
+        /// Twice a second: the newest http(s) link on each changed terminal (sign-in flows print one), for the terminals
+        /// in a frame (where ⇗ and COPY LINK are).
         private void ScanTerminalLinks()
         {
-            if (app == null || Time.unscaledTime < _nextLinkScan) return;
+            if (Time.unscaledTime < _nextLinkScan) return;
             _nextLinkScan = Time.unscaledTime + 0.5f;
-            foreach (var inst in app.Terminals)
+            foreach (var inst in _frames.Keys)
             {
                 if (inst.Terminal == null) continue;
                 long v = inst.Terminal.Version;
@@ -1852,14 +1853,15 @@ namespace MetaCodex.Shell
                 if (url == null || _links.TryGetValue(inst, out var old) && old == url) continue;
                 _links[inst] = url;
                 LastLink = url;
-                if (_linkButtons.TryGetValue(inst, out var b)) { b.SetEnabled(true); b.SetSelected(true); }
-                Toast("Link in " + inst.Name + ": tap ⇗ to open it", "info");
+                LightTerminalLink(inst, true); // ⇗ and COPY LINK (ShellTerminals)
+                Toast("Link in " + inst.Name + ": ⇗ opens it, COPY LINK copies it", "info");
             }
         }
 
         private void OpenTerminalLink(TerminalInstance inst)
         {
-            if (inst != null && _links.TryGetValue(inst, out var url)) OpenBrowser(url);
+            string url = TerminalLinkOf(inst); // the kept one, or one on the screen before the scan ran
+            if (url != null) OpenBrowser(url);
             else Toast("No link on this terminal yet", "warn");
         }
     }
@@ -1933,45 +1935,14 @@ namespace MetaCodex.Shell
             "New thread · " + (string.IsNullOrWhiteSpace(projectName) ? "no project" : projectName.Trim());
     }
 
-    /// Finds URLs on a terminal screen, joining rows the terminal wrapped (a full row continues on the next).
+    /// Finds URLs on a terminal (TerminalText.Urls): the screen and the last History lines scrolled above it (a long link's
+    /// first rows may have scrolled off), rows the terminal wrapped joined, a link a program broke at its own width too.
     public static class TerminalLinks
     {
-        private static readonly Regex Url = new Regex(@"https?://[^\s""'<>`│┃]+", RegexOptions.Compiled);
+        public const int History = 12;
 
-        public static string Last(VtTerminal t)
-        {
-            var text = ScreenText(t);
-            string last = null;
-            foreach (Match m in Url.Matches(text)) last = m.Value;
-            return last?.TrimEnd('.', ',', ')', ']', ';', ':', '\'', '"');
-        }
+        public static string Last(VtTerminal t) => TerminalText.LastUrl(t, History);
 
-        public static List<string> All(VtTerminal t)
-        {
-            var list = new List<string>();
-            foreach (Match m in Url.Matches(ScreenText(t))) list.Add(m.Value.TrimEnd('.', ',', ')', ']', ';', ':', '\'', '"'));
-            return list;
-        }
-
-        public static string ScreenText(VtTerminal t)
-        {
-            var sb = new StringBuilder(t.Rows * (t.Cols + 1));
-            for (int r = 0; r < t.Rows; r++)
-            {
-                var row = t.GetRow(r);
-                int last = -1;
-                for (int c = 0; c < row.Length; c++) if (row[c].Rune != 0 && row[c].Rune != ' ') last = c;
-                for (int c = 0; c <= last; c++)
-                {
-                    int rune = row[c].Rune;
-                    if (rune == 0) sb.Append(' ');
-                    else if (rune < 0x10000) sb.Append((char)rune);
-                    else sb.Append(char.ConvertFromUtf32(rune));
-                }
-                bool full = last == row.Length - 1; // wrapped: the text continues on the next row
-                if (!full) sb.Append('\n');
-            }
-            return sb.ToString();
-        }
+        public static List<string> All(VtTerminal t) => TerminalText.Urls(t, History);
     }
 }

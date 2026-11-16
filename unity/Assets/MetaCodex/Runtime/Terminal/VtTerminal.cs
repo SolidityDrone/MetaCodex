@@ -18,6 +18,7 @@ namespace MetaCodex.Terminal
         Strike = 1 << 7,
         WideHead = 1 << 8, // first cell of a double-width character
         WideTail = 1 << 9, // second cell of it (draws nothing)
+        Wrapped = 1 << 10, // on a row's last cell: the text ran past it (autowrap) and goes on in the next row
     }
 
     /// One character cell. Colours: -1 default, 0..255 palette index, 0x1000000 | 0xRRGGBB true colour.
@@ -65,6 +66,13 @@ namespace MetaCodex.Terminal
         public int BellCount { get; private set; }
         public long Version { get; private set; } // bumps on every visible change
         public int ScrollbackCount => _sbCount;
+        /// Lines pushed off the top of the main screen since the start (into the scrollback, or dropped when it is full):
+        /// screen row r is line LinesScrolled + r, scrollback line i is LinesScrolled - ScrollbackCount + i, so a line keeps
+        /// its number while it scrolls (a selection stays on its text, TerminalText).
+        public long LinesScrolled { get; private set; }
+        /// The last text a program put on the clipboard (OSC 52: vim, tmux, a CLI's "copy"); ClipboardVersion counts them.
+        public string ClipboardText { get; private set; }
+        public int ClipboardVersion { get; private set; }
         public int ScrollbackCapacity { get; }
         public int DefaultFgRgb { get; set; } = 0xD8DEE9;
         public int DefaultBgRgb { get; set; } = 0x10141C;
@@ -646,7 +654,19 @@ namespace MetaCodex.Terminal
                 case "11": OscColor(11, arg); break;
                 case "12": OscColor(12, arg); break;
                 case "104": ResetPalette(); MarkAllDirty(); break;
+                case "52": if (s.Length < 8192) OscClipboard(arg); break; // a longer one was cut: never half a text
             }
+        }
+
+        /// OSC 52 ; targets ; base64: a program puts text on the clipboard. Only setting it: a query ("?") is never
+        /// answered (a program may not read the user's clipboard), an empty one (clear) is ignored.
+        private void OscClipboard(string arg)
+        {
+            int semi = arg.IndexOf(';');
+            string data = semi < 0 ? arg : arg.Substring(semi + 1);
+            if (data.Length == 0 || data == "?") return;
+            try { ClipboardText = Encoding.UTF8.GetString(Convert.FromBase64String(data)); ClipboardVersion++; }
+            catch (FormatException) { }
         }
 
         private void OscColor(int which, string arg)
@@ -720,6 +740,7 @@ namespace MetaCodex.Terminal
             _lastPrinted = c;
             if (_wrapPending && _autowrap)
             {
+                MarkWrapped(_cy);
                 _cx = 0;
                 LineFeed();
             }
@@ -729,6 +750,7 @@ namespace MetaCodex.Terminal
                 if (_autowrap && Cols > 1)
                 {
                     if (_cx == Cols - 1) PutBlank(_cy, _cx);
+                    MarkWrapped(_cy);
                     _cx = 0;
                     LineFeed();
                 }
@@ -750,6 +772,9 @@ namespace MetaCodex.Terminal
         }
 
         private void PutBlank(int r, int c) { _screen[r][c] = Cell.BlankWith(_bg); Touch(r); }
+
+        /// The row's text goes on in the next row (copy and link detection join the two without a line break).
+        private void MarkWrapped(int r) { var row = _screen[r]; row[row.Length - 1].Attr |= CellAttr.Wrapped; }
 
         // Overwriting half of a wide character blanks its other half.
         private void ClearWideAt(Cell[] row, int c)
@@ -810,6 +835,7 @@ namespace MetaCodex.Terminal
         /// Stores a line that scrolled off the top; returns the evicted oldest line for reuse (or null).
         private Cell[] PushScrollback(Cell[] row)
         {
+            LinesScrolled++;
             if (ScrollbackCapacity == 0) return row;
             Cell[] evicted = _sbCount == ScrollbackCapacity ? _scrollback[_sbHead] : null;
             _scrollback[_sbHead] = row;

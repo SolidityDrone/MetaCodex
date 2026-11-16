@@ -395,10 +395,13 @@ Terminals:
 - [ ] Type with the system keyboard (⌨ on the frame) → text appears; Enter runs
 - [ ] Key bar: Esc, Tab, Ctrl, arrows, ⌨, paste → each does its job
 - [ ] Run `vim`, `less`, `htop` (or `top`) → they draw correctly, with colours; resize-free
-- [ ] `+` on the frame → a second terminal opens beside; tapping a frame focuses it (the key bar follows)
+- [ ] `+` on the frame → a second terminal opens beside it, not on it; TERMS > + NEW and voice "new terminal" → each opens where no window is; tapping a frame focuses it (the key bar follows)
+- [ ] A terminal at UI SCALE 1.0 is about THREAD's size and its text is easy to read; move CONTROL > DISPLAY > UI SCALE → the terminal grows and shrinks with the other windows (key bar and status line too)
+- [ ] Hide a terminal (`–`), put another window where it was, show it again from TERMS → it opens in a free place, not on that window
 - [ ] Press `✕` on a terminal and open TERMS → the terminal closes; the TERMS panel lists the terminals; FOCUS / CLOSE work
 - [ ] Press `–` on a terminal, then `✕` on the last one → `–` hides it (TERMS lists it as hidden; a tap shows it again); `✕` on the last terminal hides it instead of ending it, and the toast says "TERMS on the menu shows it"
-- [ ] Press `⎘` on a terminal's frame → the clipboard is pasted into that terminal
+- [ ] Press `⎘ PASTE` on a terminal's frame → the clipboard is pasted into that terminal
+- [ ] Pinch and drag over a terminal's text → the cells light blue from where you pinched to where you are; let go → it stays; COPY (lit now) → toast "Copied N characters"; ⎘ PASTE in another terminal pastes it; CLIP lists it (☰, N characters); a tap on the text clears the selection
 - [ ] Run `ls /mnt/quest` → it shows `plugins/`, `scripts/`, `control.token`
 - [ ] Run `ls ~/.claude/skills` → it shows 49 skills: the 6 MetaCodex ones (quest-gesture-plugins, quest-plugins, quest-scripting, metacodex-context, quest-views, worktree-per-thread) and 43 third-party skills
 
@@ -464,7 +467,7 @@ Agents:
 
 - [ ] Open AGENTS → it lists the agent providers with READY / SIGN IN / INSTALL
 - [ ] Pick one → SIGN IN ▶ → a new terminal runs its login (for example `claude auth login`)
-- [ ] The terminal prints a link → toast "Link in …" → `⇗` on that terminal opens it in the headset's own browser
+- [ ] The terminal prints a link → toast "Link in …", `⇗` and COPY LINK light up → `⇗` opens it in the headset's own browser; COPY LINK → toast "Link copied", the whole link (also when it wraps over several rows) pastes into WEB's address or the system keyboard
 - [ ] Sign in in the browser; the redirect back to localhost completes the login (or paste the code with ⎘) → AGENTS ⟳ shows READY + account
 - [ ] Sign in the same way with `opencode auth login` and `codex login --device-auth` (device code flow) → AGENTS shows READY for each
 - [ ] Press GET on a missing agent (for example `opencode`) → a terminal installs it in about a minute, the tile turns into "✓" with its version and it shows in the providers (the others the same way); UPDATE (installed agents only) updates it through MQH (or run `mcx-setup` in a terminal); MORE · COMING SOON cannot be pressed

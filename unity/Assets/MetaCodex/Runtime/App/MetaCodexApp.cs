@@ -21,6 +21,7 @@ namespace MetaCodex.App
         public Transform Frame;
         internal byte[] Carry;
         internal bool WaitingRestart;
+        internal int ClipSeen; // the last OSC 52 copy taken (VtTerminal.ClipboardVersion)
     }
 
     /// Milestone 1, "the terminal": Linux shells running on the headset, shown and typed into from VR.
@@ -63,6 +64,9 @@ namespace MetaCodex.App
         public bool StartHidden;
         public event Action<TerminalInstance> TerminalClosed;
         public event Action<TerminalInstance> FocusChanged;
+        /// A program in a terminal put text on the clipboard (OSC 52: vim, tmux, a CLI's "copy"); the shell copies it (the
+        /// system clipboard and CLIPBOARD) and says so. Without a listener the text goes straight to the system clipboard.
+        public event Action<TerminalInstance, string> ProgramCopied;
         /// Extra control-port commands (the shell adds ui/script/gesture commands).
         public Func<string, string, string> ExtraCommand;
         /// Control-port commands answered later (secret approvals): (line, reply) -> handled.
@@ -115,7 +119,8 @@ namespace MetaCodex.App
 
         // ------------------------------------------------------------------ terminals
 
-        /// A new terminal next to the active one, with its own shell.
+        /// A new terminal with its own shell. The shell frames it and places the frame where no window is (MetaCodexShell
+        /// OpenTerminalFrame); without the shell (or before it is up) its bare view goes right of the active one.
         public TerminalInstance NewTerminal()
         {
             var go = new GameObject("Terminal " + (_numbers + 1));
@@ -347,8 +352,18 @@ namespace MetaCodex.App
             {
                 PumpSession(t, budget);
                 t.View.Render();
+                if (t.Terminal.ClipboardVersion != t.ClipSeen) TakeProgramCopy(t);
             }
             UpdateStatus();
+        }
+
+        private void TakeProgramCopy(TerminalInstance t)
+        {
+            t.ClipSeen = t.Terminal.ClipboardVersion;
+            string text = t.Terminal.ClipboardText ?? "";
+            SessionLog.Log($"terminal {t.Number}: a program copied {text.Length} characters (OSC 52)");
+            if (ProgramCopied != null) ProgramCopied(t, text);
+            else GUIUtility.systemCopyBuffer = text;
         }
 
         private void PumpSession(TerminalInstance t, int budget)
