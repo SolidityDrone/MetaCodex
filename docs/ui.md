@@ -51,7 +51,8 @@ The wrist menu's glass has its own opacity (CONTROL > WRIST MENU > GLASS): its t
 a global table (`_PanelBend`, 128 slots) and every renderer of the panel (shapes, text, sub-meshes, icons)
 carries its slot, so text that changes every frame bends with the panel and never flashes flat. The
 curvature eases in and out (about 0.3 s) instead of jumping. Rays and pokes hit the curved surface (ray-
-cylinder intersection), so the reticle sits where the beam meets the window.
+cylinder intersection), so the reticle sits where the beam meets the window. A thread group bends too; its windows
+have no curve of their own and lie on the curve of the group (docs/thread-view.md).
 
 **Opening and closing: a window is cast** (`UiPanelFx`, `McxPanelFx.hlsl`). It is drawn with light, like a hologram
 being printed, by its caster (`UiPanelFx.Caster`: the Whisp, when it is on). Opening (0.35 s): four corner brackets

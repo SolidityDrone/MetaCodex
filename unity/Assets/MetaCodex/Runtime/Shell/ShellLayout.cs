@@ -199,11 +199,13 @@ namespace MetaCodex.Shell
         }
 
         /// Windows that never bend: terminals (their text grid cannot bend yet) and WEB (the page is one flat picture,
-        /// so a bent frame around it would not match where the pointer touches the page).
-        public static bool StaysFlat(UiPanel p) => p.Id.StartsWith("term-") || p.Id == "web" || p.Id.StartsWith("tgroup-"); // a thread group: its windows are flat children
+        /// so a bent frame around it would not match where the pointer touches the page). A thread group bends; its
+        /// windows lie on its curve (ShellThreadGroups.FitGroupMembers).
+        public static bool StaysFlat(UiPanel p) => p.Id.StartsWith("term-") || p.Id == "web";
 
         /// Fixed layout with "Bend panels": each panel curves towards you around its own distance (bent on the GPU,
-        /// eased by the panel, so it follows you smoothly). Terminals and WEB stay flat (StaysFlat).
+        /// eased by the panel, so it follows you smoothly). Terminals and WEB stay flat (StaysFlat). A thread group gets
+        /// the same curve in its own units (LayoutBend); its windows are not layout panels, they follow it.
         public void UpdateFixedBend()
         {
             if (Floating || Settings == null) return;
@@ -214,7 +216,7 @@ namespace MetaCodex.Shell
                 if (!Settings.bendPanels || StaysFlat(p) || head == null) { p.SetBend(0f); continue; }
                 var d = p.transform.position - head.position;
                 float dist = Mathf.Max(0.45f, new Vector2(d.x, d.z).magnitude);
-                p.SetBend(dist); // the GPU bends; the panel eases towards it (no steps)
+                p.SetBend(LayoutBend(p, dist)); // the GPU bends; the panel eases towards it (no steps)
             }
         }
 
@@ -299,7 +301,7 @@ namespace MetaCodex.Shell
                 var dir = new Vector3(Mathf.Sin(a), 0f, Mathf.Cos(a));
                 var pos = new Vector3(c.x, _carouselY + slot.height, c.z) + dir * r;
                 t.SetPositionAndRotation(Vector3.Lerp(t.position, pos, 1f - Mathf.Exp(-dt * 12f)), Quaternion.LookRotation(dir, Vector3.up));
-                p.SetBend(Settings.bendPanels && !StaysFlat(p) ? r : 0f);
+                p.SetBend(Settings.bendPanels && !StaysFlat(p) ? LayoutBend(p, r) : 0f);
             }
             UpdateRingBar(_carousel.position, r); // the bar under the ring: fixed to the rig
             UpdateControlRail(); // after the ring moved its window

@@ -139,6 +139,8 @@ Each thread opens in a full window, and windows can be grouped.
   corner stays where it is. The scale is between 0.4 and 1.2.
 - The sidebar of a window in a group opens at the right edge of the group, not inside the grid.
 - Placement, RECENTER and the FLOAT ring move a group as one window.
+- With "Bend panels around you" on, a group bends like any window. Its windows have no curve of their own: they lie
+  on the curve of the group, and a ray or a fingertip hits the element that is drawn under it.
 - Moves are smooth: a window that joins, leaves or changes place moves to its new place in about 0.25 s.
 - Voice: "put the open threads side by side" (`thread_windows group`), "break up the group" (`ungroup`), "close the
   whole group of threads" (`close_group`).
@@ -155,6 +157,10 @@ Each thread opens in a full window, and windows can be grouped.
 - There is one sidebar. It belongs to the window that opened it last (`_sbOwner`), and it sits beside that window or
   its group (`SbAnchor`).
 - A group's windows are children of the group's panel. They are not in the layout lists (`IsGroupedPanel`).
+- Bent group: `CellPose` puts each window on the arc of the group at the angle of its cell, 1 cm in front (`CellDepth`),
+  turned to the axis of the group. `FitMemberBend` gives it the radius of the group in its own units, so the two
+  surfaces have the same axis. `FitGroupMembers` runs every frame and on `UiPanel.BendChanged` (the same frame the
+  bend of the group eases). A window that leaves the group gets its own bend again.
 - Self-test section `threadwindows` (`Editor/MetaCodexUiTestThreadWindows.cs`).
 
 ## Held turns and archive

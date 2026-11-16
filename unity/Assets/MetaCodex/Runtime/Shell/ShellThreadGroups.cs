@@ -21,12 +21,17 @@ namespace MetaCodex.Shell
     /// - A thread of a project that has a window open joins that window's group when it opens (AutoGroup), unless the
     ///   user took that thread out of a group by hand while its window was open.
     /// - Moves are eased (about 0.25 s): a window joining, leaving or changing place glides to its cell and size.
+    /// - Bent ("Bend panels"): the group bends like any window; its windows have no curve of their own, they lie on the
+    ///   group's (CellPose, FitMemberBend), so rays and pokes hit them where they are drawn.
     /// Simplified: groups are not kept across restarts; a group's grid size changes by making its frame again (its old
     /// frame fades out, the new one fades in; the windows glide).
     public sealed partial class MetaCodexShell
     {
         public const float GroupPad = 0.02f, GroupGap = 0.02f, GroupFooter = 0.05f, GroupScaleMin = 0.4f, GroupScaleMax = 1.2f;
         public const int GroupMax = 6;
+        /// A window sits this far in front of its group's surface (group units, along the surface's normal; < 0: towards
+        /// the user): the nearest panel along a ray is the window inside its cell, the group in its bar, frame and gaps.
+        public const float CellDepth = -0.01f;
 
         private sealed class ThreadGroup
         {
@@ -39,6 +44,7 @@ namespace MetaCodex.Shell
             public int Cols, Rows;
             public Vector3 ResizeAnchor;
             public float ResizeFrom, ResizeScale0;
+            public float FitR; // the group's drawn bend its windows were last put on (FitGroupMembers)
             public ThreadGroup(int n) { Number = n; }
         }
 
@@ -76,6 +82,82 @@ namespace MetaCodex.Shell
 
         private static string GroupTitle(ThreadGroup g) => $"✥ Group {g.Number} · {g.Members.Count} threads";
 
+        // ------------------------------------------------------------------ the group's curve (Bend panels)
+
+        /// Where cell `i` is drawn in its group (group-local), `depth` off the surface along its normal. Bent (radius
+        /// `bend`, the group's units): on the group's arc at the cell centre's angle, turned to face the group's axis;
+        /// flat: the cell's centre, not turned.
+        private static void CellPose(ThreadGroup g, int i, float bend, float depth, out Vector3 pos, out Quaternion rot)
+        {
+            var c = g.Panel.PanelToLocal(CellRect(g, i).center, depth);
+            if (bend <= 0f) { pos = c; rot = Quaternion.identity; return; }
+            float a = c.x / bend, rr = bend + depth; // the same arc as UiPanel.SurfacePoint
+            pos = new Vector3(rr * Mathf.Sin(a), c.y, -bend + rr * Mathf.Cos(a));
+            rot = Quaternion.Euler(0f, a * Mathf.Rad2Deg, 0f);
+        }
+
+        /// A grouped window's bend: no curve of its own, the group's. Placed by CellPose (CellDepth in front) and bent
+        /// with the group's radius less that depth, in the window's units (its scale in the group), its axis is the
+        /// group's axis: the two surfaces are concentric, the window lies on the group's curve edge to edge, and its own
+        /// ray maths (UiPanel.Intersect) is the surface it is drawn on.
+        private static void FitMemberBend(UiPanel m, float groupBend)
+        {
+            float s = Mathf.Max(1e-4f, m.transform.localScale.x);
+            float r = groupBend > 0f ? (groupBend + CellDepth) / s : 0f;
+            if (r < 0.05f) r = 0f; // UiPanel.SetBend's floor: never asked again every frame
+            if (m.BendRadius == r && m.BendNow == r) return;
+            m.SetBend(r);
+            m.SnapBend(); // never eased on its own: it follows the group's easing
+        }
+
+        /// The group's windows on its surface, with its curve. A window in its cell (where the group's last curve put it)
+        /// follows the new curve exactly; one still gliding to its cell moves by `k` (0: not this time). Called every
+        /// frame (TickThreadGroups) and when the group's drawn bend changes (UiPanel.BendChanged: in the same tick it
+        /// eases, so a window is never a frame off the curve). No allocation.
+        private void FitGroupMembers(ThreadGroup g, float k)
+        {
+            var gp = g.Panel;
+            if (gp == null) return;
+            float bend = gp.BendNow, was = g.FitR;
+            g.FitR = bend;
+            for (int i = 0; i < g.Members.Count; i++)
+            {
+                var m = g.Members[i];
+                if (m.Panel == null || m.Panel.transform.parent != gp.transform) continue;
+                var t = m.Panel.transform;
+                if (!m.Dragging)
+                {
+                    CellPose(g, i, bend, CellDepth, out var lp, out var lq);
+                    var wp = lp;
+                    var wq = lq;
+                    if (was != bend) CellPose(g, i, was, CellDepth, out wp, out wq);
+                    bool inCell = (t.localPosition - wp).sqrMagnitude < 1e-7f && Quaternion.Angle(t.localRotation, wq) < 0.2f;
+                    if (inCell)
+                    {
+                        if (t.localPosition != lp) t.localPosition = lp;
+                        if (t.localRotation != lq) t.localRotation = lq;
+                    }
+                    else if (k > 0f)
+                    {
+                        var d = t.localPosition - lp;
+                        if (d.sqrMagnitude > 1e-8f) t.localPosition = d.sqrMagnitude < 1e-7f ? lp : Vector3.Lerp(t.localPosition, lp, k);
+                        if (t.localRotation != lq) t.localRotation = Quaternion.Angle(t.localRotation, lq) < 0.2f ? lq : Quaternion.Slerp(t.localRotation, lq, k);
+                    }
+                }
+                FitMemberBend(m.Panel, bend);
+            }
+        }
+
+        /// A layout panel's bend for a radius in the layout's units (UpdateFixedBend, the FLOAT ring): a group is drawn at
+        /// its own scale (its windows at their full layout, shrunk by it), so the curve of the windows beside it is a
+        /// larger radius in its units.
+        private float LayoutBend(UiPanel p, float radius)
+        {
+            if (_groups.Count == 0) return radius;
+            var g = GroupOfPanel(p);
+            return g != null ? radius / Mathf.Max(0.05f, g.Scale) : radius;
+        }
+
         // ------------------------------------------------------------------ the group's window
 
         /// Makes the group's window (again: a new grid size, RebuildPanels) and puts its thread windows in it. `rebuilt`:
@@ -106,15 +188,27 @@ namespace MetaCodex.Shell
                 OnReleaseAt = () => ResizeEnd(g),
             });
             p.Closed += _ => OnGroupClosed(g, p);
+            p.BendChanged += _ => { if (g.Panel == p) FitGroupMembers(g, 0f); }; // its windows follow its curve as it eases
             p.BaseScale = Vector3.one * UiScaleNow * g.Scale;
-            if (hadOld) p.transform.SetPositionAndRotation(old.transform.position, old.transform.rotation);
-            else if (_newGroupAt != null && _newGroupAt.Panel != null && g.Members.Contains(_newGroupAt))
+            bool made = !hadOld && _newGroupAt != null && _newGroupAt.Panel != null && g.Members.Contains(_newGroupAt);
+            // bent: curved from the start like the frame it replaces (a new grid) or the window it is made on, the same
+            // curve in the world (the layout eases it from there, not from flat)
+            var curveFrom = hadOld ? old : made ? _newGroupAt.Panel : null;
+            if (curveFrom != null && curveFrom.BendNow > 0f && Settings != null && Settings.bendPanels)
             {
-                // a new group: the window it was made on keeps its place (its cell is where it was)
-                var at = _newGroupAt.Panel.transform;
-                p.transform.rotation = at.rotation;
-                p.transform.position = at.position - p.transform.TransformVector(p.PanelToLocal(CellRect(g, g.Members.IndexOf(_newGroupAt)).center));
+                p.SetBend(curveFrom.BendNow * curveFrom.RestLossyScale.x / Mathf.Max(1e-5f, p.RestLossyScale.x));
+                p.SnapBend();
             }
+            if (hadOld) p.transform.SetPositionAndRotation(old.transform.position, old.transform.rotation);
+            else if (made)
+            {
+                // a new group: the window it was made on keeps its place (its cell is where it was, on the curve when bent)
+                var at = _newGroupAt.Panel.transform;
+                CellPose(g, g.Members.IndexOf(_newGroupAt), p.BendNow, 0f, out var cp, out var cq);
+                p.transform.rotation = at.rotation * Quaternion.Inverse(cq);
+                p.transform.position = at.position - p.transform.TransformVector(cp);
+            }
+            g.FitR = p.BendNow; // a rebuilt group's windows are put on this curve at once (AttachToGroup)
             for (int i = 0; i < g.Members.Count; i++) AttachToGroup(g.Members[i], g, rebuilt);
             if (hadOld)
             {
@@ -159,16 +253,15 @@ namespace MetaCodex.Shell
             w.Group = g;
             _groupedPanels.Add(w.Panel);
             w.Gliding = false;
-            w.Panel.SetBend(0f);
-            w.Panel.SnapBend();
             if (snap)
             {
-                int i = g.Members.IndexOf(w);
-                t.localPosition = g.Panel.PanelToLocal(CellRect(g, Mathf.Max(0, i)).center, -0.01f);
-                t.localRotation = Quaternion.identity;
+                CellPose(g, Mathf.Max(0, g.Members.IndexOf(w)), g.Panel.BendNow, CellDepth, out var lp, out var lq);
+                t.localPosition = lp;
+                t.localRotation = lq;
                 w.Panel.BaseScale = Vector3.one;
             }
             else w.Panel.BaseScale = Vector3.one * (float.IsNaN(rel) || rel <= 0f ? 1f : rel);
+            FitMemberBend(w.Panel, g.Panel.BendNow); // no curve of its own from now: the group's (flat group: flat)
         }
 
         /// A window leaves its group's window: it stays where it is in the world and eases back to its full size.
@@ -184,6 +277,9 @@ namespace MetaCodex.Shell
             t.SetParent(_root, true);
             // open: it keeps its size in the world and eases to its full size; closed: at its full size at once
             w.Panel.BaseScale = Vector3.one * (!w.Panel.IsOpen || float.IsNaN(world) || world <= 0f ? UiScaleNow : world);
+            // its own bend again: the layout's from the next frame, eased from the group's curve (its radius in the world is
+            // kept by the new scale); "Bend panels" off: flat now (the frame loop bends nothing then)
+            if (Settings == null || !Settings.bendPanels) { w.Panel.SetBend(0f); w.Panel.SnapBend(); }
             FaceUser(w.Panel);
             if (w.Panel.IsOpen) _placed.Add(w.Id);
             if (Floating && _carousel != null && w.Panel.IsOpen) Slot(t);
@@ -450,21 +546,8 @@ namespace MetaCodex.Shell
                     }
                 }
             }
-            for (int gi = 0; gi < _groups.Count; gi++)
-            {
-                var g = _groups[gi];
-                if (g.Panel == null) continue;
-                for (int i = 0; i < g.Members.Count; i++)
-                {
-                    var m = g.Members[i];
-                    if (m.Panel == null || m.Dragging || m.Panel.transform.parent != g.Panel.transform) continue;
-                    var t = m.Panel.transform;
-                    var lp = g.Panel.PanelToLocal(CellRect(g, i).center, -0.01f);
-                    var d = t.localPosition - lp;
-                    if (d.sqrMagnitude > 1e-8f) t.localPosition = d.sqrMagnitude < 1e-7f ? lp : Vector3.Lerp(t.localPosition, lp, k);
-                    if (t.localRotation != Quaternion.identity) t.localRotation = Quaternion.Angle(t.localRotation, Quaternion.identity) < 0.2f ? Quaternion.identity : Quaternion.Slerp(t.localRotation, Quaternion.identity, k);
-                }
-            }
+            // the windows glide to their cells, on the group's curve, with its bend in their units (after their scale eased)
+            for (int gi = 0; gi < _groups.Count; gi++) FitGroupMembers(_groups[gi], k);
         }
 
         private void LightDrop(UiPanel p)
