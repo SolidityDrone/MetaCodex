@@ -3,9 +3,9 @@
 #
 # Compiles the UI sounds (unity/Assets/MetaCodex/Runtime/UI/UiSoundSynth.cs, Unity-free) plus tests/sounds/*.cs with
 # Unity's own Roslyn against netstandard 2.1 (the API Unity scripts get), runs it on Unity's bundled .NET 8: renders
-# every sound, new and old (polish/base, OldSounds.cs), to WAV in MCX_SOUNDS_OUT (default: MetaCodex-sounds in the
-# Windows user folder this checkout lives in: new/ and old/), prints a table, checks levels, fades, DC, durations,
-# high partials, loudness, determinism and the time to make them. Tiered compilation is off: every method is compiled
+# every sound of every style to WAV in MCX_SOUNDS_OUT (default: MetaCodex-sounds in the Windows user folder this
+# checkout lives in: hud/, holo/, core/, classic/), prints a table per style, checks levels, fades, DC, durations,
+# high partials, loudness, determinism, classic against polish/base (OldSounds.cs), and the time to make each style. Tiered compilation is off: every method is compiled
 # optimised at once, as IL2CPP's C++ is, so the times are not those of unoptimised first-pass code.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"

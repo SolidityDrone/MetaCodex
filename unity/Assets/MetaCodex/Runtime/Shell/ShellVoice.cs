@@ -1391,9 +1391,9 @@ namespace MetaCodex.Shell
             Voice.Register(new VoiceCommand
             {
                 Name = "set_setting",
-                Description = "Change a setting: on / off, a number (percent, metres), more / less, the voice effect (off, adjutant, starship, comm) or the speech quality (fast, clear)",
+                Description = "Change a setting: on / off, a number (percent, metres), more / less, the voice effect (off, adjutant, starship, comm), the speech quality (fast, clear) or the interface sound style (hud, holo, core, classic)",
                 Parameters = VoiceCommands.Schema(("setting", "string", VoiceSettingsCatalog.Select(x => x.Id).ToArray(), "which setting", true),
-                    ("value", "string", null, "on, off, a number, + or -; voice_effect: off, adjutant (AI), starship (ship) or comm (radio); speech_quality: fast or clear", true)),
+                    ("value", "string", null, "on, off, a number, + or -; voice_effect: off, adjutant (AI), starship (ship) or comm (radio); speech_quality: fast or clear; sound_style: hud (crisp digital), holo (soft hologram), core (deep reactor) or classic (the first sounds)", true)),
                 // English names first: a name two settings share keeps its first (English) meaning
                 Synonyms = new Dictionary<string, Dictionary<string, string>> { ["setting"] = VoiceSettingsCatalog.SelectMany(x => x.Names.Select(n => (n, x.Id)))
                     .Concat(VoiceSettingsCatalog.SelectMany(x => x.Other.Select(n => (n, x.Id)))).GroupBy(x => x.n).ToDictionary(g => g.Key, g => g.First().Id) },
@@ -1413,6 +1413,7 @@ namespace MetaCodex.Shell
                     ("make the room completely dark", "set_setting focus_intensity 100"), ("set the dome to two meters", "set_setting focus_radius 2"),
                     ("make the windows bigger", "set_setting ui_scale +"), ("mute the clicks", "set_setting sounds off"),
                     ("make your voice sound like a radio", "set_setting voice_effect comm"),
+                    ("make the interface sound like a hologram", "set_setting sound_style holo"),
                     ("make the wrist menu a bit bigger", "set_setting wrist_menu_size +"), ("hide the battery on my wrist", "set_setting wrist_battery off"),
                 },
                 Samples = new[]
@@ -1421,6 +1422,8 @@ namespace MetaCodex.Shell
                     "set the radius to 2 meters", "turn off the hand rays", "dim the room more",
                     "switch the voice effect to starship", "give the assistant its normal voice back",
                     "make the text on the radial menu larger", "stop showing the clock on my wrist",
+                    "switch the interface sounds to the reactor style", "use the classic sounds again", "change the sound style to holo",
+                    "give the menus the crisp digital sounds",
                 },
                 Check = a => VoiceSettingFits((string)a["setting"], (string)a["value"]) ? null : "that value does not fit " + (string)a["setting"],
                 Run = a => SetSettingByVoice((string)a["setting"], (string)a["value"]),
@@ -1635,6 +1638,18 @@ namespace MetaCodex.Shell
             ["fast"] = "fast", ["faster"] = "fast", ["quick"] = "fast", ["quicker"] = "fast", ["sooner"] = "fast", ["speedy"] = "fast", ["low"] = "fast",
             ["clear"] = "clear", ["clearer"] = "clear", ["best"] = "clear", ["high"] = "clear", ["exact"] = "clear", ["precise"] = "clear", ["slow"] = "clear", ["quality"] = "clear",
         };
+        /// sound_style: what people call each style (UiSoundSynth.Styles).
+        private static readonly Dictionary<string, string> SoundStyleValues = new Dictionary<string, string>
+        {
+            ["hud"] = "hud", ["h u d"] = "hud", ["hood"] = "hud", ["heads up"] = "hud", ["heads up display"] = "hud", ["digital"] = "hud", ["crisp"] = "hud",
+            ["workstation"] = "hud", ["default"] = "hud", ["standard"] = "hud", ["computer"] = "hud", ["sci fi"] = "hud", ["scifi"] = "hud",
+            ["holo"] = "holo", ["halo"] = "holo", ["hologram"] = "holo", ["holographic"] = "holo", ["soft"] = "holo", ["softer"] = "holo", ["airy"] = "holo",
+            ["dreamy"] = "holo", ["shimmer"] = "holo",
+            ["core"] = "core", ["reactor"] = "core", ["deep"] = "core", ["deeper"] = "core", ["heavy"] = "core", ["low"] = "core", ["engine"] = "core",
+            ["mechanical"] = "core", ["servo"] = "core", ["bass"] = "core",
+            ["classic"] = "classic", ["old"] = "classic", ["original"] = "classic", ["previous"] = "classic", ["first"] = "classic", ["simple"] = "classic",
+            ["the old ones"] = "classic", ["the first ones"] = "classic", ["retro"] = "classic",
+        };
         private static readonly Dictionary<string, string> VoiceEffectValues = new Dictionary<string, string>
         {
             ["off"] = "off", ["none"] = "off", ["normal"] = "off", ["plain"] = "off", ["clean"] = "off", ["natural"] = "off", ["dry"] = "off", ["no effect"] = "off",
@@ -1670,6 +1685,8 @@ namespace MetaCodex.Shell
             new VoiceSetting { Id = "bend", Key = "bendPanels", Kind = "bool", Label = "Bend panels", Names = new[] { "bend", "bending", "bend panels", "curved panels", "curve" } },
             new VoiceSetting { Id = "sounds", Key = "sounds", Kind = "bool", Label = "Sounds", Names = new[] { "sounds", "sound", "ui sounds", "clicks" } },
             new VoiceSetting { Id = "volume", Key = "soundVolume", Kind = "number", Min = 0f, Max = 1f, Unit = "%", Label = "Volume", Names = new[] { "volume", "sound volume" } },
+            new VoiceSetting { Id = "sound_style", Key = "soundStyle", Kind = "choice", Label = "Sound style", Options = UiSoundSynth.Styles, OptionLabels = new[] { "HUD", "holo", "core", "classic" }, Values = SoundStyleValues,
+                Names = new[] { "sound style", "interface sound style", "ui sound style", "sound theme", "sound palette", "sound set", "style of the sounds" } },
             new VoiceSetting { Id = "speak", Key = "voice.speak", Kind = "bool", Label = "Spoken answers", Names = new[] { "spoken answers", "speak answers", "spoken replies", "voice replies", "talking back" } },
             new VoiceSetting { Id = "speak_alerts", Key = "voice.speakAlerts", Kind = "bool", Label = "Spoken thread alerts", Names = new[] { "spoken alerts", "thread alerts", "spoken notifications", "voice alerts", "announcements" } },
             new VoiceSetting { Id = "clap", Key = "gestures.clapEnabled", Kind = "bool", Label = "Clap gesture", Names = new[] { "clap", "clap gesture", "clapping" } },
@@ -1820,6 +1837,10 @@ namespace MetaCodex.Shell
                     else if (e is UiToggle tg) { var k = toggles.FirstOrDefault(kv => (tg.Text ?? "").StartsWith(kv.Key)); if (k.Value != null) tg.Set(Settings.Get(k.Value) == "true"); }
                 }
             _focusButton?.SetSelected(Settings.focusEnabled);
+            // LOOK & SOUND > SOUND follows soundStyle
+            if (_panels.TryGetValue("settings", out var stp))
+                foreach (var sg in stp.Elements.OfType<UiSegmented>())
+                    if (sg.Text == "SOUND") { int si = Math.Max(0, Array.IndexOf(UiSoundSynth.Styles, UiSoundSynth.StyleOf(Settings.soundStyle))); if (sg.Selected != si) sg.Set(si); }
             // VOICE > SOUND follows voice.fx (voice, MQH, the control port)
             if (_panels.TryGetValue("voice", out var vp))
                 foreach (var sg in vp.Elements.OfType<UiSegmented>())

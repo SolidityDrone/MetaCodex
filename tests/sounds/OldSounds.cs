@@ -1,5 +1,6 @@
-// The UI sounds of polish/base f2dcaca (UiSounds.cs before UiSoundSynth), formula for formula, so the owner can hear
-// old and new side by side. Mathf below stands in for UnityEngine.Mathf (float math, Sign(0) = 1 like Unity's).
+// The UI sounds of polish/base f2dcaca (UiSounds.cs before UiSoundSynth), formula for formula: the reference that
+// UiSoundSynth's classic style must match sample for sample. Mathf below stands in for UnityEngine.Mathf (float math,
+// Sign(0) = 1 like Unity's).
 using System;
 using System.Collections.Generic;
 
