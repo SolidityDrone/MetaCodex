@@ -435,6 +435,7 @@ void Hands::Update(XrSpace base, XrTime time)
         Hand& hd = hand[h];
         bool was = hd.pinching;
         hd.tracked = false;
+        hd.pinching = false; // a hand that is not located is not pinching (it would stay stuck otherwise)
         hd.pinchStarted = false;
         if (!trackers_[h]) continue;
         XrHandTrackingAimStateFB aim{XR_TYPE_HAND_TRACKING_AIM_STATE_FB};
@@ -1360,6 +1361,7 @@ void App::OpenMenu(bool open)
     if (open == menuOpen_) return;
     menuOpen_ = open;
     menuHover_ = -1;
+    menuHand_ = -1;
     if (!open) return;
     // the menu stays where it opened: 0.9 m ahead of the head, at its height, turned to it
     XrPosef head = views_[0].pose;
@@ -1390,21 +1392,32 @@ static const float kRowH = 0.075f, kMenuW = 0.56f;
 
 void App::MenuInput(const Frame& f)
 {
-    // the left controller's menu button or the menu gesture of the non-dominant hand (Meta: "Open/Close app menu:
-    // Menu button / System gesture left hand"; the dominant hand's gesture is the system menu)
-    bool l = controllers.ctl[0].menu, h = hands.hand[0].menuGesture || hands.hand[1].menuGesture; // the non-dominant hand sends it
+    // the left controller's menu button, or the menu gesture of either hand (the aim state's MENU_PRESSED bit, one
+    // frame; it exists only with XR_FB_hand_tracking_aim). The system's own gestures are not the app's.
+    bool l = controllers.ctl[0].menu, h = hands.hand[0].menuGesture || hands.hand[1].menuGesture;
     bool press = (l && !menuPrevL_) || (h && !menuPrevH_);
     menuPrevL_ = l;
     menuPrevH_ = h;
-    if (press && Focused()) OpenMenu(!menuOpen_);
+    if (press && Focused())
+    {
+        OpenMenu(!menuOpen_);
+        return; // a pinch that came with the gesture must not select on the same frame
+    }
     if (!menuOpen_ || !Focused()) return;
-    // pointer: the right controller, else the right hand's aim, else the left's
+    // pointer: the right controller; else the hand that points (the one pinching, else the one that pointed last, else
+    // any hand with an aim); else the left controller
+    int pointer = -1;
+    for (int k = 1; k >= 0 && pointer < 0; k--)
+        if (hands.hand[k].aimValid && hands.hand[k].pinching) pointer = k;
+    if (pointer < 0 && menuHand_ >= 0 && hands.hand[menuHand_].aimValid) pointer = menuHand_;
+    for (int k = 1; k >= 0 && pointer < 0; k--)
+        if (hands.hand[k].aimValid) pointer = k;
+    menuHand_ = pointer;
     XrPosef ray;
     bool have = true;
     if (controllers.ctl[1].active) ray = controllers.ctl[1].aim;
-    else if (hands.hand[1].aimValid) ray = hands.hand[1].aim;
+    else if (pointer >= 0) ray = hands.hand[pointer].aim;
     else if (controllers.ctl[0].active) ray = controllers.ctl[0].aim;
-    else if (hands.hand[0].aimValid) ray = hands.hand[0].aim;
     else have = false;
     menuRayHit_ = false;
     int rows = (int)menuShown_.size();
@@ -1427,6 +1440,7 @@ void App::MenuInput(const Frame& f)
             menuHover_ = (fabsf(lp.x) <= kMenuW * 0.5f && row >= 0 && row < rows) ? row : -1;
         }
     }
+    if (have && !menuRayHit_) menuHover_ = -1; // the ray points away from the menu: no row is under it any more
     // controllers without pointing: the stick moves, A selects
     const Controller& cr = controllers.ctl[1];
     static float stickHold = 0.f;
@@ -1436,8 +1450,9 @@ void App::MenuInput(const Frame& f)
         stickHold -= f.dt;
     }
     else stickHold = 0.f;
-    bool select = cr.triggerPressed || cr.primaryPressed || controllers.ctl[0].triggerPressed || (hands.hand[1].pinchStarted && !hands.hand[1].systemGesture) ||
-                  (!hands.hand[1].tracked && hands.hand[0].pinchStarted);
+    // select: a fresh pinch of either hand (pinchStarted is the frame the pinch starts; never with the system gesture)
+    auto pinch = [this](int k) { return hands.hand[k].pinchStarted && !hands.hand[k].systemGesture; };
+    bool select = cr.triggerPressed || cr.primaryPressed || controllers.ctl[0].triggerPressed || pinch(0) || pinch(1);
     if (select && menuHover_ >= 0 && menuHover_ < rows)
     {
         auto action = menuShown_[menuHover_].action;
