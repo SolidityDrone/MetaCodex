@@ -253,6 +253,10 @@ namespace MetaCodex.Shell
             next.transform.SetPositionAndRotation(pt.TransformPoint(local), pt.rotation);
             next.SetBend(prev.BendRadius);
             next.SnapBend();
+            // and its lean (curve mode): the rotation above carries it; taken as the window's own, it is not levelled and
+            // eased back over the next frames (the rail on it would swing with it). Upright windows: nothing changes.
+            next.SetTilt(prev.TiltNow);
+            next.SnapTilt();
             if (Floating && _carousel != null && _slots.TryGetValue(pt, out var ps))
             {
                 float r = Mathf.Max(_ringRadius, FloatRadius());
