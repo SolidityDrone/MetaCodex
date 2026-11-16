@@ -1,15 +1,16 @@
 # Recipes (complete, tested patterns)
 
-Each block is a whole file. Change names and reactions; keep the structure.
+Each block is a whole file in the plugin project (`/root/metacodex-projects/plugins/gestures/<id>/`; the paths below
+are relative to it). Change names and reactions; keep the structure. `plugin.json` is the project's (kind `gesture`).
 
 ## 1. A pose only: "finger gun" opens the web panel (no Lua)
 
-`/mnt/quest/plugins/finger-gun/plugin.json`
+`plugin.json` (project `finger-gun`)
 ```json
 { "id": "finger-gun", "name": "Finger gun", "version": "1.0.0", "kind": "gesture",
   "description": "thumb up + index forward opens the web panel" }
 ```
-`/mnt/quest/plugins/finger-gun/poses/finger-gun.json`
+`poses/finger-gun.json`
 ```json
 { "name": "finger-gun", "hand": "any",
   "fingers": { "thumb": 0, "index": 0, "middle": 1, "ring": 1, "little": 1 },
@@ -23,16 +24,16 @@ Then bind it without code: `mcx-ui gesture bind finger-gun open:web`
 
 The plugin brings its own two poses (the `core-poses` example is not installed on a fresh headset).
 
-`/mnt/quest/plugins/thumbs-git/poses/thumbs-up.json`
+`poses/thumbs-up.json` (project `thumbs-git`)
 ```json
 { "name": "thumbs-up", "hand": "any", "description": "fist, thumb pointing up",
   "fingers": { "thumb": 0, "index": 1, "middle": 1, "ring": 1, "little": 1 },
   "tolerance": 0.35, "thumbPointing": "up", "hold": 0.15, "cooldown": 0.5 }
 ```
-`/mnt/quest/plugins/thumbs-git/poses/thumbs-down.json`: the same with `"name": "thumbs-down"`,
+`poses/thumbs-down.json`: the same with `"name": "thumbs-down"`,
 `"thumbPointing": "down"`.
 
-`/mnt/quest/plugins/thumbs-git/main.lua`
+`main.lua`
 ```lua
 -- description: thumbs up opens git, thumbs down closes it (poses in this plugin's poses/)
 gesture.on("thumbs-up", function(e) if e.phase == "start" then ui.open("git") end end)
@@ -69,6 +70,24 @@ gesture.define("frame", { hand = "both", hold = 0.3, cooldown = 1.5, description
   end)
 gesture.on("frame", function(e) if e.phase == "start" then ui.select(true) end end)
 ```
+
+## 4b. Both hands in the same shape, held still: two fists open THREADS
+
+A fist alone moves windows and spins the carousel, so ask for both hands at once, held still for a moment. The name
+starts with the plugin id (here `fists`).
+
+```lua
+-- description: both hands in a fist, held still for half a second, opens THREADS
+local NAME = plugin.id .. "-both-fists"
+gesture.define(NAME, { hand = "both", hold = 0.5, cooldown = 1.5, description = "both hands closed in a fist, held still" },
+  function(l, r)
+    return l.grabbing and r.grabbing and l.speed < 0.3 and r.speed < 0.3
+  end)
+gesture.on(NAME, function(e)
+  if e.phase == "start" then ui.open("threads") end
+end)
+```
+Simulate it: `mcx-ui gesture fists-both-fists both start`.
 
 ## 5. A wave (state machine inside the detector, no allocations)
 

@@ -5,9 +5,16 @@ description: Change how the MetaCodex headset app behaves while it runs - gestur
 
 # Quest scripting: live behaviours in the MetaCodex app
 
-The app (Unity, on the headset) runs Lua scripts from **`/mnt/quest/scripts/*.lua`**. Write or edit a
-file there and the app loads it within a second: no rebuild, no restart. Files persist across restarts.
-Each script is sandboxed (no `io`, `os`, `require`, `load`) and talks to the app only through the API below.
+The app (Unity, on the headset) runs Lua in two forms, with the same API (this skill is its one home):
+- **plugins**: plugin projects with a fixed kind (app, gesture, behaviour) in
+  `/root/metacodex-projects/plugins/<apps|gestures|behaviours>/<id>/`, made by the user (THREADS > + PROJECT > PLUGIN)
+  with git and a thread to work in: skill `quest-plugins` (start there for anything with a window, a menu tile,
+  gestures of its own, or more than one small reaction);
+- **scripts**: single files **`/mnt/quest/scripts/*.lua`** for one small reaction (below).
+
+Write or edit a file and the app loads it within a second: no rebuild, no restart. Files persist across restarts.
+Each runs sandboxed (no `io`, `require`, `load`; `os` has only `time`, `clock`, `date`) and talks to the app only
+through the API below.
 
 ## Procedure
 
@@ -46,12 +53,10 @@ Handler argument `e`: `name`, `hand` (`left` | `right` | `both`), `phase` (`star
 | `gesture.define(name, opts, detect)` / `gesture.pose(name, spec)` | new gestures: see the skill `quest-gesture-plugins` |
 | `hands.get("left"\|"right")` (alias `hands.state`) | `{tracked, pinch, pinching, grabbing, pointing, open, palmUp, x, y, z, curl = {thumb, index, middle, ring, little}, rel, vel, speed, palmFacing, thumbPointing, ...}` |
 
-A new window or a button in the menu (a timer, a calendar, a tool) belongs in a **plugin** too: skill
-`quest-plugins`.
-New gestures (hand poses, swipes, two-hand shapes) belong in a **gesture plugin**: one kind of plugin
-(`/mnt/quest/plugins/<id>/`, `"kind": "gesture"`; skill `quest-plugins` for every plugin, `quest-gesture-plugins`
-for the gesture details); a script can react to them by name, but only to
-names `mcx-ui gesture list` shows: a script never assumes a plugin's gesture is installed.
+A new window or a button in the menu (a timer, a calendar, a tool) is an **app plugin**: skill `quest-plugins`.
+New gestures (hand poses, swipes, two-hand shapes) are a **gesture plugin** (a plugin project of kind gesture; skill
+`quest-plugins` first, then `quest-gesture-plugins`); a script can react to them by name, but only to names
+`mcx-ui gesture list` shows: a script never assumes a plugin's gesture is installed.
 
 ## App API
 
@@ -60,13 +65,13 @@ names `mcx-ui gesture list` shows: a script never assumes a plugin's gesture is 
 | `ui.toast(text[, "info"\|"ok"\|"warn"\|"error"])` | a short message in front of the user |
 | `ui.open(id)` `ui.close(id)` `ui.toggle(id)` | panels: `dock`, `terminals`, `files`, `git`, `web` (browser window), `browser` (its LINKS page), `scripts`, `gestures`, `agents`, `threads`, `thread`, `thread-new`, `vault`, `settings`, `voice`, `term-1`... |
 | `ui.panels()` | ids of all panels |
-| `ui.modal(title, text, {"YES","NO"}, fn)` | a dialog; `fn(index, label)` with the answer |
-| `ui.panel{id, title, components, on=fn}` | the script's or plugin's own window (view components; events to `fn(e)`): skill `quest-plugins` |
-| `menu.add{id, label, glyph, panel=\|run=}` / `menu.remove(id)` | a button on the DOCK and the wrist menu (6 plugin tiles at most): skill `quest-plugins` |
+| `ui.modal(title, text, {"YES","NO"}, fn)` | a dialog; `fn(index, label)` with the answer (index from 1) |
+| `ui.panel{id, title, components, on=fn}` | the plugin's own window (view components; events to `fn(e)`; 4 a plugin): skill `quest-plugins` |
+| `menu.add{id, label, glyph, icon, panel=\|run=}` / `menu.remove(id)` | a tile on the DOCK and the wrist menu (app plugins only; 6 plugin tiles at most): skill `quest-plugins` |
 | `ui.notify{text, tone, sound, speak, panel}` / `ui.sound(name)` | a callout by the Whisp (a tap opens `panel`) / a short app sound (`click` `open` `close` `ping` `toast` `alert` `error`) |
 | `ui.select(true\|false)` | the select tool (pinch-drag a rectangle on a panel) |
 | `terminal.send(text)` / `terminal.run(cmd)` / `terminal.new()` | type into the active terminal (`run` adds Enter) / open a new one |
-| `browser.open(url)` | the Horizon OS browser at a URL (also `http://127.0.0.1:<port>` for local web apps) |
+| `browser.open(url)` | the app's WEB window at a URL (also `http://127.0.0.1:<port>` for local web apps; sign-in pages open in the system browser) |
 | `keyboard.open()` | the system keyboard for the terminal |
 | `settings.get(key)` / `settings.set(key, value)` | app settings (strings in and out), saved and synced to MQH |
 | `store.get(key)` / `store.set(key, value)` | this script's own persistent strings (tables: `json.encode` / `json.decode`) |
@@ -78,7 +83,8 @@ names `mcx-ui gesture list` shows: a script never assumes a plugin's gesture is 
 | `voice.command{...}` | a voice command (below); removed when the script is disabled or deleted |
 | `voice.say(text)` / `voice.run(text)` / `voice.listen()` / `voice.list()` | speak with the local voice / run text as if spoken / start listening / enabled command names |
 | `voice.remove(name)` / `voice.registry()` | remove one of this script's commands / the whole registry as JSON text (every enabled command, its schema, samples, warnings) |
-| `log(...)` / `print(...)` | lines in the script log (`mcx-ui script log <name>`) |
+| `log(...)` / `print(...)` | lines in the log (`mcx-ui script log <name>`; a plugin's: `mcx-ui plugin log <id>`) |
+| `plugin.id` `plugin.name` `plugin.version` `plugin.kind` `plugin.dir` | plugins only: its id, `plugin.json` name and version, its fixed kind (`""` for an older folder) and its Linux folder |
 
 Settings keys: `gestures.clickMode` (0 pinch, the default; the app shows no switch for it: change it only when the
 user asks for fingertip pokes: 1 poke, 2 both), `gestures.pointMode` (0 ray always, 1 only in the pointing pose),
@@ -174,7 +180,8 @@ verb ("and the softness to half a metre") repeats the previous command with its 
 
 - **Review first.** Before you create, change, enable or delete a script, a plugin, a gesture or a voice command,
   show the user what will change (file, behaviour, commands added or removed, how to undo) and wait for their
-  OK. Then write it, test it as above and report the result.
+  OK. Then write it, test it as above and report the result. In a plugin project, commit each working step.
+- Remove a script: delete its file (or MQH > SCRIPTS > DELETE). Plugins: skill `quest-plugins`, "Turn off or remove".
 - One behaviour per file; keep callbacks short. A callback that runs more than 200,000 Lua instructions is
   stopped and the script disabled (shown as ERROR in the Scripts panel): no busy loops, use `app.every`.
 - Never put secrets in scripts. Scripts can type into the terminal, so they run with the user's rights.
