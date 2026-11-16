@@ -126,6 +126,9 @@ namespace MetaCodex.Shell
             public bool Outer, WristOnly;
             /// The first start's setup step it waits for (ShellSetupLocks; 0: none): dimmed with 🔒 until that step is over.
             public int LockStep;
+            /// Off the menu until the user adds it (CONTROL > WRIST MENU): the default layout and a saved one that does not
+            /// name it leave it off (WristLayout.Resolve's offByDefault).
+            public bool DefaultOff;
         }
 
         /// The main menu as the user arranged it (CONTROL > WRIST MENU; the app's default until then): the inner ring's items
@@ -142,8 +145,8 @@ namespace MetaCodex.Shell
         {
             var t = UiTheme.Current;
             var list = new List<MainMenuItem>();
-            void I(bool outer, string glyph, string icon, string label, Action act, Func<bool> lit = null, Color? tint = null, bool wristOnly = false, int lockStep = 0) =>
-                list.Add(new MainMenuItem { Id = label.ToLowerInvariant(), Outer = outer, Glyph = glyph, Icon = icon, Label = label, Act = act, Lit = lit, Tint = tint, WristOnly = wristOnly, LockStep = lockStep });
+            void I(bool outer, string glyph, string icon, string label, Action act, Func<bool> lit = null, Color? tint = null, bool wristOnly = false, int lockStep = 0, bool defaultOff = false) =>
+                list.Add(new MainMenuItem { Id = label.ToLowerInvariant(), Outer = outer, Glyph = glyph, Icon = icon, Label = label, Act = act, Lit = lit, Tint = tint, WristOnly = wristOnly, LockStep = lockStep, DefaultOff = defaultOff });
             // lockStep: the first start's setup step each waits for (ShellSetupLocks): voice 5, MQH 4, the Linux 3
             I(false, "◉", "mic", "TALK", () => VoiceToggle(), () => VoiceState == "listening" || VoiceState == "transcribing", t.Danger, lockStep: 5);
             // the terminals: one tile (owner 2026-11-13: TERM next to TERMS was redundant); TERMINALS lists them, hidden ones
@@ -160,6 +163,8 @@ namespace MetaCodex.Shell
             // the system keyboard for the terminal (Horizon OS can lay it on a table: Settings > Experimental > Surface keyboard)
             I(true, "⌨", "keyboard", "KEYS", () => OpenKeyboard(), () => app?.Input != null && app.Input.SystemKeyboardOpen);
             I(true, "⟲", "recenter", "CENTER", () => app?.Recenter());
+            // the code editor (ShellIde): off the menu until the user adds it on the WRIST MENU page
+            I(true, "{}", "code", "CODE", () => ToggleIde(), () => IdeShowing, lockStep: 3, defaultOff: true);
             AddPluginMenuItems(list, outer: true, ws); // the app plugins' tiles (menu.add; ShellPluginUi)
             return list;
         }

@@ -334,6 +334,9 @@ namespace MetaCodex.UI
             // music: two notes on a double beam
             d["music"] = new Icon().Ellipse(-0.42f, -0.56f, 0.24f, 0.17f).Ellipse(0.48f, -0.40f, 0.24f, 0.17f)
                 .Line(-0.20f, -0.52f, -0.20f, 0.66f).Line(0.70f, -0.36f, 0.70f, 0.82f).Line(-0.20f, 0.66f, 0.70f, 0.82f).Line(-0.20f, 0.42f, 0.70f, 0.58f);
+            // code: two angle brackets around a slash (the CODE tile: the code editor, ShellIde)
+            d["code"] = new Icon().Poly(false, -0.36f, 0.56f, -0.86f, 0f, -0.36f, -0.56f).Poly(false, 0.36f, 0.56f, 0.86f, 0f, 0.36f, -0.56f)
+                .Line(0.18f, 0.74f, -0.18f, -0.74f);
             return d;
         }
     }
