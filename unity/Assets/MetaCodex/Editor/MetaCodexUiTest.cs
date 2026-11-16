@@ -3789,6 +3789,85 @@ end)
             shell.Settings.panelOpacity = opacity0;
             shell.OnSettingsChanged();
             settings.gameObject.SetActive(false);
+            CurveTiltCheck(shell, head); // 5) curve mode's lean (UiPanel.SetTilt, ShellLayout.LayoutTilt)
+        }
+
+        /// Curve mode's lean: a tall window above the eyes leans its top towards them (and keeps its yaw), a window centred
+        /// at eye level or a short one does not, the ramp lies between, a ray at a button on the leaning window hits that
+        /// button (flat and bent), and with bending off no window of the layout leans.
+        private static void CurveTiltCheck(MetaCodexShell shell, Transform head)
+        {
+            shell.SetLayout("fixed");
+            bool bend0 = shell.Settings.bendPanels;
+            var eye = head.position;
+            var root = head.parent; // the test's root: the panels go away with it
+            // a 1.2 m window, its centre 0.6 m above the eyes and 1.0 m ahead (the panel's front faces the user: -z)
+            var tall = UiPanel.Create<UiPanel>("tilt-tall", "TILT", 0.6f, 1.2f, root);
+            tall.transform.SetPositionAndRotation(eye + Vector3.forward * 1f + Vector3.up * 0.6f, Quaternion.identity);
+            float facingBefore = Vector3.Angle(Vector3.back, eye - tall.transform.position);
+            float lean = MetaCodexShell.LayoutTilt(tall, eye);
+            Check(Mathf.Abs(lean - MetaCodexShell.TiltMaxDeg) < 0.01f, $"curve lean: a 1.2 m window 0.6 m above the eyes leans its maximum ({lean:F1}°)");
+            tall.SetTilt(lean); // Editor: at once
+            var mid = tall.transform.position;
+            var topMid = tall.SurfacePoint(new Vector2(tall.Width * 0.5f, 0f));
+            float dMid = new Vector2(mid.x - eye.x, mid.z - eye.z).magnitude, dTop = new Vector2(topMid.x - eye.x, topMid.z - eye.z).magnitude;
+            Check(dTop < dMid - 0.15f, $"curve lean: the top of the tall window comes towards the eyes ({dMid:F2} m -> {dTop:F2} m)");
+            float facingAfter = Vector3.Angle(-tall.transform.forward, eye - mid);
+            Check(facingAfter < facingBefore - 15f, $"curve lean: the window faces the eyes more ({facingBefore:F0}° off -> {facingAfter:F0}°)");
+            var fwd = tall.transform.forward;
+            fwd.y = 0f;
+            Check(Vector3.Angle(fwd, Vector3.forward) < 0.5f, "curve lean: the lean keeps the window's yaw");
+            // the ramp: a 0.8 m window (half way between 0.6 and 1.0 m) leans half as much
+            var half = UiPanel.Create<UiPanel>("tilt-half", "TILT", 0.6f, 0.8f, root);
+            half.transform.SetPositionAndRotation(eye + Vector3.forward * 1f + Vector3.up * 0.6f, Quaternion.identity);
+            float ramp = 0.5f * Mathf.Atan2(0.6f, 1f) * Mathf.Rad2Deg;
+            Check(Mathf.Abs(MetaCodexShell.LayoutTilt(half, eye) - ramp) < 0.05f, $"curve lean: a 0.8 m window leans half-way ({MetaCodexShell.LayoutTilt(half, eye):F2}°, {ramp:F2}° expected)");
+            // a short window above the eyes does not lean
+            var shortWin = UiPanel.Create<UiPanel>("tilt-short", "TILT", 0.6f, 0.5f, root);
+            shortWin.transform.SetPositionAndRotation(eye + Vector3.forward * 1f + Vector3.up * 0.6f, Quaternion.identity);
+            shortWin.SetTilt(MetaCodexShell.LayoutTilt(shortWin, eye));
+            Check(shortWin.TiltNow == 0f && Quaternion.Angle(shortWin.transform.rotation, Quaternion.identity) < 0.01f, "curve lean: a 0.5 m window above the eyes stays upright");
+            // a tall window centred at eye level does not lean: it goes back upright
+            tall.transform.position = eye + Vector3.forward * 1f;
+            tall.SetTilt(MetaCodexShell.LayoutTilt(tall, eye));
+            Check(tall.TiltNow == 0f && Vector3.Angle(tall.transform.up, Vector3.up) < 0.01f, "curve lean: a tall window centred at eye level is upright");
+            // inside another window (a thread group's member) it leans none of its own; taken out again it is upright at once
+            tall.transform.SetParent(half.transform, true);
+            tall.ParentChangedForTest();
+            tall.SetTilt(MetaCodexShell.TiltMaxDeg);
+            Check(tall.TiltTarget == 0f && tall.TiltNow == 0f, "curve lean: a window inside another window leans none of its own");
+            tall.transform.SetParent(root, true);
+            tall.ParentChangedForTest();
+            Check(Vector3.Angle(tall.transform.up, Vector3.up) < 0.01f, "curve lean: a window taken out of another window is upright at once");
+            // a ray at a button on the leaning window hits the button where it is drawn (flat, then bent)
+            tall.transform.position = eye + Vector3.forward * 1f + Vector3.up * 0.6f;
+            tall.SetTilt(MetaCodexShell.LayoutTilt(tall, eye));
+            var btn = tall.Add(new UiButton("GO", () => { }, UiButtonStyle.Normal) { Rect = new Rect(0.2f, 0.3f, 0.2f, 0.08f) });
+            Check(TiltRayHits(tall, btn, eye), "curve lean: a ray at a button on the leaning window hits that button");
+            tall.SetBend(0.8f); // Editor: at once
+            tall.ForceRefresh();
+            Check(TiltRayHits(tall, btn, eye), "curve lean, bent: a ray at a button on the leaning, bent window hits that button");
+            tall.SetBend(0f);
+            // the layout: with bending on, each layout window leans by LayoutTilt; with bending off, none does
+            shell.Settings.bendPanels = true;
+            shell.UpdateFixedBend();
+            var settings = shell.PanelsById["settings"];
+            Check(Mathf.Abs(settings.TiltTarget - MetaCodexShell.LayoutTilt(settings, eye)) < 0.01f, $"curve lean: the layout sets a window's lean from its place ({settings.TiltTarget:F1}°)");
+            shell.Settings.bendPanels = false;
+            shell.UpdateFixedBend();
+            bool anyLean = false;
+            foreach (var p in shell.PanelsById.Values) if (p.TiltNow != 0f || p.TiltTarget != 0f) anyLean = true;
+            Check(!anyLean, "curve lean: with bending off no window leans");
+            shell.Settings.bendPanels = bend0;
+            foreach (var p in new[] { tall, half, shortWin }) UnityEngine.Object.DestroyImmediate(p.gameObject);
+        }
+
+        /// A ray from the eyes at the spot where button `b` is drawn on `p` lands on the button (the panel's own ray maths).
+        private static bool TiltRayHits(UiPanel p, UiButton b, Vector3 eye)
+        {
+            var target = b.Rect.center;
+            var ray = new Ray(eye, (p.SurfacePoint(target) - eye).normalized);
+            return p.Raycast(ray, out var hit, out _) && Vector2.Distance(hit, target) < 0.002f && p.HitTest(hit) == b;
         }
 
         private static JObject Row(string kind, int seq, JObject fields) { var o = new JObject { ["kind"] = kind, ["sourceSeqEnd"] = seq, ["id"] = "r" + seq }; foreach (var p in fields.Properties()) o[p.Name] = p.Value; return o; }
