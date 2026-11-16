@@ -9,8 +9,10 @@ namespace MetaCodex.Shell
 {
     /// WEB: the in-app browser window (owner 2026-11-10: "it's boring to have the system browser turn the app off";
     /// Horizon OS cannot show its browser beside an immersive app: even its Web Tasks send the app to the background).
-    /// On the headset the page is Android's own WebView (MetaCodexWebView.java: laid out off screen, drawn into an
-    /// ImageReader only when the page changes, copied into one buffer), uploaded here into a texture on a flat quad (the
+    /// On the headset the page is Android's own WebView (MetaCodexWebView.java: the content of a hardware-accelerated
+    /// window on a private virtual display that renders into an ImageReader, so video plays and the page animates at the
+    /// display's rate; each new frame is copied into one buffer, 60 a second at most, nothing while the page is still;
+    /// the old off-screen canvas path if that display cannot be made), uploaded here into a texture on a flat quad (the
     /// window never bends: ShellLayout.StaysFlat, so the page and the pointer agree). A ray's pinch or a fingertip is a
     /// touch, a drag scrolls, the pointer over the page hovers, ⌨ types into the page's focused field, ⏎ and ⌫ are
     /// the keys. Every page the app opens (GO, bookmarks, local servers, terminal links, voice, Lua browser.open) opens
@@ -27,7 +29,7 @@ namespace MetaCodex.Shell
         private WebPage _webPage;
         private Texture2D _webTex;
         private Mesh _webQuad;
-        private string _webCurrent = "", _webError = "";
+        private string _webCurrent = "", _webError = "", _webMode = "";
         private bool _webOnStart;
         private float _webNextState;
         private Vector2 _webLastHover = new Vector2(-1f, -1f);
@@ -35,6 +37,12 @@ namespace MetaCodex.Shell
 #if UNITY_ANDROID && !UNITY_EDITOR
         private AndroidJavaObject _wv;
         private Unity.Collections.NativeArray<byte> _wvPixels; // a view of the Java buffer (no copy, no unsafe code)
+        // the calls made every frame (poll, endRead) or per pointer move (touch, hover): raw JNI with the method ids
+        // looked up once and one argument array, so they allocate nothing (AndroidJavaObject.Call builds a signature
+        // string and boxes its arguments on every call)
+        private IntPtr _wvPoll, _wvEndRead, _wvTouch, _wvHover;
+        private readonly jvalue[] _wvArgs = new jvalue[3];
+        private static readonly jvalue[] WvNoArgs = new jvalue[0];
 #endif
 
         /// The page area: a pointer on it, in page pixels (top-left origin), goes to the page.
@@ -223,7 +231,12 @@ namespace MetaCodex.Shell
         {
             _webLastTouch = (action, page);
 #if UNITY_ANDROID && !UNITY_EDITOR
-            if (_wv != null) try { _wv.Call("touch", action, page.x, page.y); } catch (Exception) { }
+            if (_wv == null || _wvTouch == IntPtr.Zero) return;
+            _wvArgs[0].i = action;
+            _wvArgs[1].f = page.x;
+            _wvArgs[2].f = page.y;
+            AndroidJNI.CallVoidMethod(_wv.GetRawObject(), _wvTouch, _wvArgs);
+            WebJniOk();
 #endif
         }
 
@@ -232,7 +245,11 @@ namespace MetaCodex.Shell
             if ((page - _webLastHover).sqrMagnitude < 4f) return; // only when it moved two pixels
             _webLastHover = page;
 #if UNITY_ANDROID && !UNITY_EDITOR
-            if (_wv != null) try { _wv.Call("hover", page.x, page.y); } catch (Exception) { }
+            if (_wv == null || _wvHover == IntPtr.Zero) return;
+            _wvArgs[0].f = page.x;
+            _wvArgs[1].f = page.y;
+            AndroidJNI.CallVoidMethod(_wv.GetRawObject(), _wvHover, _wvArgs);
+            WebJniOk();
 #endif
         }
 
@@ -249,6 +266,10 @@ namespace MetaCodex.Shell
                     _wv = new AndroidJavaObject("com.pnncl.metacodex.web.MetaCodexWebView", activity, WebW, WebH);
                 _wv.Call("setExternal", string.Join("\n", SignInHosts), string.Join("\n", SignInPaths));
                 using (var buf = _wv.Call<AndroidJavaObject>("pixels")) _wvPixels = AndroidJNI.GetDirectByteBuffer(buf.GetRawObject());
+                _wvPoll = WebMethod("poll", "()I");
+                _wvEndRead = WebMethod("endRead", "()V");
+                _wvTouch = WebMethod("touch", "(IFF)V");
+                _wvHover = WebMethod("hover", "(FF)V");
                 return true;
             }
             catch (Exception ex) { Log("web: " + ex.Message); _webError = "webview: " + ex.Message; _wv = null; return false; }
@@ -256,6 +277,26 @@ namespace MetaCodex.Shell
             return true; // the Editor: the window works without a page
 #endif
         }
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+        /// A Java exception left by a raw JNI call is cleared (the next JNI call would fail otherwise).
+        private static bool WebJniOk()
+        {
+            IntPtr ex = AndroidJNI.ExceptionOccurred();
+            if (ex == IntPtr.Zero) return true;
+            AndroidJNI.ExceptionClear();
+            AndroidJNI.DeleteLocalRef(ex);
+            return false;
+        }
+
+        private IntPtr WebMethod(string name, string signature)
+        {
+            IntPtr id = AndroidJNI.GetMethodID(_wv.GetRawClass(), name, signature);
+            if (WebJniOk() && id != IntPtr.Zero) return id;
+            Log("web: no method " + name + signature);
+            return IntPtr.Zero;
+        }
+#endif
 
         private void WebCall(string method, params object[] args)
         {
@@ -279,22 +320,25 @@ namespace MetaCodex.Shell
 #endif
         }
 
-        /// While the window is open: a new frame of the page into the texture (only when the page changed), the
-        /// toolbar from the page's state four times a second.
+        /// While the window is open, each frame: a new frame of the page into the texture (only when there is one; never
+        /// waits: while the copy thread writes, the frame comes next time; nothing allocated), the toolbar from the page's
+        /// state when it changed (four times a second at most).
         private void TickWeb()
         {
 #if UNITY_ANDROID && !UNITY_EDITOR
-            if (_wv == null || _webTex == null) return;
-            bool fresh = false;
-            try
+            if (_wv == null || _webTex == null || _wvPoll == IntPtr.Zero) return;
+            IntPtr obj = _wv.GetRawObject();
+            int bits = AndroidJNI.CallIntMethod(obj, _wvPoll, WvNoArgs);
+            if (!WebJniOk()) return;
+            if ((bits & 1) != 0) // a new frame, the buffer locked until endRead
             {
-                fresh = _wv.Call<bool>("beginRead");
-                if (fresh && _wvPixels.IsCreated && _wvPixels.Length >= WebW * WebH * 4) _webTex.LoadRawTextureData(_wvPixels);
+                bool upload = _wvPixels.IsCreated && _wvPixels.Length >= WebW * WebH * 4;
+                try { if (upload) _webTex.LoadRawTextureData(_wvPixels); }
+                catch (Exception ex) { upload = false; Log("web frame: " + ex.Message); }
+                finally { AndroidJNI.CallVoidMethod(obj, _wvEndRead, WvNoArgs); WebJniOk(); }
+                if (upload) _webTex.Apply(false, false);
             }
-            catch (Exception ex) { fresh = false; Log("web frame: " + ex.Message); }
-            finally { try { _wv.Call("endRead"); } catch (Exception) { } }
-            if (fresh) _webTex.Apply(false, false);
-            if (Time.unscaledTime < _webNextState) return;
+            if ((bits & 2) == 0 || Time.unscaledTime < _webNextState) return;
             _webNextState = Time.unscaledTime + 0.25f;
             string[] st;
             try { st = (_wv.Call<string>("state") ?? "").Split('\t'); } catch (Exception) { return; }
@@ -304,11 +348,18 @@ namespace MetaCodex.Shell
                 Toast("Sign-in pages open in the system browser: MetaCodex keeps no sign-in sessions", "info");
                 OpenSystemBrowser(st[7]);
             }
+            if (st.Length > 8 && st[8].Length > 0) Toast(st[8], "info"); // a download, a refused permission, another app's link
+            if (st.Length > 10 && st[10].Length > 0 && st[10] != _webMode)
+            {
+                _webMode = st[10];
+                Log(_webMode == "display" ? "web: capture display (the page renders on its own virtual display)"
+                    : "web: capture " + _webMode + " (fallback: video may stop after a few frames; logcat tag MetaCodexWeb says why)");
+            }
             string url = st[0];
             if (url.Length > 0 && url != _webCurrent && !url.StartsWith("data:") && url != "about:blank") { _webCurrent = url; _webOnStart = false; _webUrl?.Set(url); }
             int.TryParse(st[2], out int progress);
             _webTitle?.Set((st[5] == "1" ? $"loading {progress} % · " : "") + (_webOnStart ? "start page" : st[1]));
-            _webBack?.SetEnabled(st[3] == "1");
+            _webBack?.SetEnabled(st[3] == "1" || (st.Length > 9 && st[9] == "1")); // in full screen ◀ leaves it
             _webFwd?.SetEnabled(st[4] == "1");
             if (!_webError.StartsWith("webview:")) _webError = st[6];
             _webNote?.Set(_webError.Length > 0 ? "⚠ " + _webError : "");
