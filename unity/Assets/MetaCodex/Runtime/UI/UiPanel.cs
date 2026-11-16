@@ -378,6 +378,9 @@ namespace MetaCodex.UI
         /// 0 = flat. The radius the layout asked for; BendNow is what is drawn (it eases towards this).
         public float BendRadius => _bendTarget;
         public float BendNow => _bendCurrent;
+        /// The drawn bend (BendNow) changed: eased, snapped, or flattened for a capture. What rides on this panel's curve
+        /// follows in the same tick, so it is never a frame behind (a thread group's windows, ShellThreadGroups).
+        public event Action<UiPanel> BendChanged;
 
         private void ClaimSlot()
         {
@@ -548,8 +551,10 @@ namespace MetaCodex.UI
         /// Jump to the target bend now (tests, rebuilt panels).
         public void SnapBend()
         {
+            bool changed = _bendCurrent != _bendTarget;
             _bendCurrent = _bendTarget;
             if (Slot >= 0) BendData[Slot] = new Vector4(_bendCurrent, 0f, 0f, 0f);
+            if (changed) BendChanged?.Invoke(this);
         }
 
         private void EaseBend(float dt)
@@ -562,6 +567,7 @@ namespace MetaCodex.UI
             _bendCurrent = k > 1e-3f ? 1f / k : 0f;
             if (k == k1) _bendCurrent = _bendTarget;
             if (Slot >= 0) BendData[Slot] = new Vector4(_bendCurrent, 0f, 0f, 0f);
+            BendChanged?.Invoke(this);
         }
 
         /// The bend of every panel to the shaders (once a frame; self-tests call it before rendering).
@@ -619,13 +625,18 @@ namespace MetaCodex.UI
             var keepScan = ScanData[Slot];
             bool light = _fx != null && _fx.Renderer != null && _fx.Renderer.enabled;
             if (light) _fx.Renderer.enabled = false;
+            // what rides on its curve (a thread group's windows) goes flat with it for the render, and back after
+            float keepBend = _bendCurrent;
+            bool followers = keepBend > 0f && BendChanged != null;
             BendData[Slot] = Vector4.zero;
             FxData[Slot] = Vector4.zero;
             ScanData[Slot] = Vector4.zero;
+            if (followers) { _bendCurrent = 0f; BendChanged(this); }
             PushBendGlobals();
             try { render(); }
             finally
             {
+                if (followers) { _bendCurrent = keepBend; BendChanged?.Invoke(this); }
                 BendData[Slot] = keep;
                 FxData[Slot] = keepFx;
                 ScanData[Slot] = keepScan;
