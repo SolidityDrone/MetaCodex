@@ -19,9 +19,14 @@ the cursor of a hand's ray, is a point of light on the lattice and the frame (`_
 the router every frame); the pool tightens as the finger comes closer, so it also shows how far the glass still is. Lattice
 lines fade out with distance before they get thinner than a pixel (no shimmer). Titles and buttons use Rajdhani SemiBold in capitals with letter spacing (the console voice), body text
 Inter, code DejaVu Sans Mono. All OFL / free licences. Short UI sounds are synthesised in code, no audio files
-(`UiSoundSynth`; `UiSounds` makes them on a worker thread at start and plays them): one family in G major pentatonic
-(struck glass, soft bells, filtered air, a low body, beads of light, one small room), one loudness for all (hover
-well under), little above 6 kHz, 0.02-0.68 s each. `tests/sounds/` renders them to WAV and checks them.
+(`UiSoundSynth`; `UiSounds` makes them on a worker thread and plays them), in one of four styles: LOOK & SOUND >
+SOUND, setting `soundStyle`, voice `set_setting sound_style hud|holo|core|classic`. HUD (the default): a sci-fi
+workstation's HUD, crisp and digital (pulse blips, resonant saw sweeps, a ring-modulated zap, a sub thump, an
+acknowledgement chirp, a slap echo, a light rate / bit reduction). HOLO: softer and airy (FM glints, wavering
+triangle chords, air, a longer darker echo). CORE: deeper, a reactor and its servos (low saws, a servo whine, metal
+latches, more sub). CLASSIC: the first sounds (plain sine chirps). A new style is made while the old one plays, then
+replaces it and plays a ping; only one style is in memory. HUD, HOLO and CORE have one loudness (hover well under),
+little above 6 kHz, 0.02-0.68 s each. `tests/sounds/` renders all four to WAV and checks them.
 
 Everything is drawn by one shader, `MetaCodex/SciFiUI`: each panel, button, header, bar, line, dot and
 selection frame is a quad whose shape is computed per pixel from vertex data (size, chamfer, fill style,
@@ -31,7 +36,7 @@ uploads those two streams; only a change of size, place or visibility rebuilds t
 hover and every frame of a click's flash rebuilt the whole mesh, thousands of vertices on a big panel). Text is TextMeshPro
 with runtime SDF fonts drawn by `MetaCodex/TextBend` (TMP mobile SDF plus the panel bend). No logos or
 pictures of third-party software anywhere. LOOK settings (the render scale is fixed at 1.6): panel opacity,
-foveated rendering (off by default; it blurs the edges of the view), sounds and volume.
+foveated rendering (off by default; it blurs the edges of the view), sounds, their style and volume.
 
 **Opacity.** Passthrough is an underlay: the eye buffer's alpha decides how much of the room shows. Every UI
 shader blends its alpha as `One OneMinusSrcAlpha` (coverage only adds), so a glow over a window
@@ -75,10 +80,10 @@ slot when a cast starts (`TagForeign`). The line leaves from the caster's side (
 top or bottom, whichever edge is nearest to it) and comes back to it; without a caster it crosses from the left. A
 small overlay mesh in the window's own space draws the light itself with `MetaCodex/WristArt` (the flying
 brackets, the scan line, its two rays, the spark), bent like the window; on a bent window a horizontal line is an
-arc. Captures render a window at rest. Sounds follow the cast: two glass ticks as
-the brackets lock on, a rising stream of air and light with beads in it as the scan line crosses, a low body and a
-clear G5 + D6 as it settles; a surge, a falling stream as the line runs back, a tick as the brackets let go, a quick
-rise as the spark flies home and a soft body as it is taken in.
+arc. Captures render a window at rest. Sounds follow the cast (HUD, HOLO, CORE): two blips or latches as the
+brackets lock on, a rising filter sweep as the scan line crosses, a sub thump and a confirmation as it settles; a
+surge, a falling sweep as the line runs back, a tick as the brackets let go, a quick rise as the spark flies home and
+a thump as it is taken in. CLASSIC keeps its own, longer timing.
 
 ## The Whisp
 
@@ -175,7 +180,7 @@ cast from their left edge and messages float in the upper view.
 | Voice | the local AI service (state, RAM), models (install with progress, loaded or not), TALK, TYPE… (a command as text), SAY… (text to speech), spoken replies, LLM fallback, auto stop, threads, the command list (shell + plugins), the last requests with timings (`docs/voice.md`) |
 | Voice HUD | above the dock while a voice request runs: listening level, transcript, result; STOP |
 | CONTROL ([control-center.md](control-center.md)) | one place for setup: a rail on the left of the shown window with ten categories in three groups and a live status each (THIS HEADSET: DISPLAY, LOOK & SOUND, FOCUS, HANDS; AI: VOICE, AGENTS, MQH, VAULT; LINUX & APP: SYSTEM, ABOUT), in the display font. One category at a time: another one takes the window's place (the six windows have one size, 0.76 x 0.66 m: same rectangle, the rail stays); drag the window or the rail's bar, the other follows; ✕ closes both; FLOAT gives the pair one slot. SETTINGS' pages have ids (display, look, focus, hands, about); `control` opens the last category; old ids still open their page (agents, mqh, vault, git, skills, gestures, daemon, storage, ...); voice: "control panel", "control center" |
-| Settings (CONTROL's DISPLAY, LOOK & SOUND, FOCUS, HANDS and ABOUT; no tab bar of its own: a line says what the page is for) | HANDS (tab GESTURES: clicks and moves are a pinch, no choice; ray mode, hand rays, PINCH AT, clap and its distance, plugin gestures on/off; SELECT AREA ⌖, GESTURE STUDIO ▸ (MQH > GESTURES), HORIZON HANDS ⚙; the live hand line), DISPLAY (layout fixed/float, DISTANCE (dimmed in FLOAT: "FIXED only"), FLOAT RADIUS (dimmed in FIXED: "FLOAT only"), UI SCALE 0.5-1.8 (default 1.0), bending (both layouts, off by default), the main menu on the wrist, save / load named layouts, recenter), FOCUS (Ambient Focus: on/off, radius, intensity, softness, blur, real things in front, sharp depth, presets SUBTLE / FOCUS / BLACKOUT), LOOK & SOUND (opacity, 100 % by default; foveation, sounds and volume, the Whisp), ABOUT (version, licences: LICENCES ▸ opens FILES at /usr/share/doc/metacodex; APP PERMISSIONS ⚙). The link to MQH is MQH > STATUS. CLIPBOARD's size is CLIPBOARD's own KEEP slider |
+| Settings (CONTROL's DISPLAY, LOOK & SOUND, FOCUS, HANDS and ABOUT; no tab bar of its own: a line says what the page is for) | HANDS (tab GESTURES: clicks and moves are a pinch, no choice; ray mode, hand rays, PINCH AT, clap and its distance, plugin gestures on/off; SELECT AREA ⌖, GESTURE STUDIO ▸ (MQH > GESTURES), HORIZON HANDS ⚙; the live hand line), DISPLAY (layout fixed/float, DISTANCE (dimmed in FLOAT: "FIXED only"), FLOAT RADIUS (dimmed in FIXED: "FLOAT only"), UI SCALE 0.5-1.8 (default 1.0), bending (both layouts, off by default), the main menu on the wrist, save / load named layouts, recenter), FOCUS (Ambient Focus: on/off, radius, intensity, softness, blur, real things in front, sharp depth, presets SUBTLE / FOCUS / BLACKOUT), LOOK & SOUND (opacity, 100 % by default; foveation, sounds, SOUND (HUD, HOLO, CORE, CLASSIC) and volume, the Whisp), ABOUT (version, licences: LICENCES ▸ opens FILES at /usr/share/doc/metacodex; APP PERMISSIONS ⚙). The link to MQH is MQH > STATUS. CLIPBOARD's size is CLIPBOARD's own KEEP slider |
 
 ## Hands
 
