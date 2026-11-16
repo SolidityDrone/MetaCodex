@@ -338,13 +338,18 @@ Voice effect and speech speed:
 - [ ] A long spoken reply with SHIP → 72 fps holds (the effect runs off the main thread)
 
 
-### Hey Whisp (off by default)
+### Hey Whisp (on by default)
 
-- [ ] CONTROL > VOICE shows "Hey Whisp" OFF on a fresh install; TALK works as before
-- [ ] Switch it on (the microphone dialog appears if the microphone was not allowed yet)
-- [ ] Say "Hey Whisp": the Whisp flares, TALK's sound plays, TALK listens; then a command runs as from the button
-- [ ] Say "Hey Whisp, open the files" in one breath: FILES opens
-- [ ] Say "Hey Whisp" and then nothing: TALK ends quietly, no error sound
+- [ ] CONTROL > VOICE shows "Hey Whisp" ON on a fresh install (after the first start's setup); TALK works as before
+- [ ] During the first start's setup it does not listen (the microphone is not opened)
+- [ ] Say "Hey Whisp": within about half a second the Whisp flares gold, a two-note sound plays and the card by it says
+  "● LISTENING · Say a command · N s"; wait 3-4 s, then say "open the threads" → THREADS opens
+- [ ] While you speak the card says "Hearing you" with dots that move with your voice
+- [ ] Say "Hey Whisp, open the files" in one breath: FILES opens at once
+- [ ] Say "Hey Whisp" and then nothing: after about 6 s the card says "Didn't catch that", a soft sound, no error
+- [ ] Say "hey wisp", "hey whisper", "a whisp" (sloppy): each wakes it; "hey Whisp" alone never runs set_wake_word or
+  another command
+- [ ] Say "a wisp of smoke" or "hey, this is Tom" near it: no wake
 - [ ] Talk near the headset for a minute (not to it): no wake; 72 fps (Perf menu Snapshot) with the switch on and off
 - [ ] The TALK button still works with the switch on
 - [ ] Take the headset off: the control port's `voice wake` says it waits (off the head); on again: it listens again

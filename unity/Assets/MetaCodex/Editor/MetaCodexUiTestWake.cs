@@ -6,7 +6,7 @@ using MetaCodex.Shell;
 namespace MetaCodex.EditorTools
 {
     /// Self-test section `wake` ("Hey Whisp", docs/voice.md): the tolerant match (WakeWord.SelfCheck), the voice gate on
-    /// made-up audio (a phrase, a click, a far voice, a long sentence), the switch off by default, its registry command
+    /// made-up audio (a phrase, a click, a far voice, a long sentence), the switch on by default, its registry command
     /// and the orb setting answering to "whisp". No microphone, no AI service.
     public static partial class MetaCodexUiTest
     {
@@ -55,8 +55,8 @@ namespace MetaCodex.EditorTools
                     $"wake gate: a long sentence goes as its first {g.MaxSeconds} s (cut), once");
             Check(segs.Count >= 1 && WavLooks16k(g, segs[0]), "wake gate: the segment WAV is 16 kHz mono 16-bit");
 
-            // the switch: off by default; the command and set_setting reach it; the orb setting answers to "whisp"
-            Check(!shell.WakeWordOn && !shell.Settings.voice.wakeWord && shell.Wake != null && !shell.Wake.On, "Hey Whisp is off by default (the microphone is not opened)");
+            // the switch: on by default (owner 2026-11-16); the command and set_setting reach it; the orb setting answers to "whisp"
+            Check(shell.WakeWordOn && new ShellSettings().voice.wakeWord && shell.Wake != null, "Hey Whisp is on by default");
             var cmd = shell.Voice.Find("set_wake_word");
             var lint = cmd != null ? VoiceCommands.Lint(cmd) : new List<string> { "missing" };
             Check(cmd != null && lint.Count == 0, "set_wake_word is registered, lint clean" + (lint.Count > 0 ? ": " + string.Join("; ", lint) : ""));
