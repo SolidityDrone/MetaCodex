@@ -1466,7 +1466,7 @@ namespace MetaCodex.Shell
             if (o.perm != null) extra["permissionMode"] = o.perm;
             Mqh.SendMessage(_threadOpen, msg, extra, hasAtt ? AttachmentInputs(sent) : null, Bind<JToken>(r =>
             {
-                if (r == null) { Toast("Not sent: " + Mqh.LastError, "error"); return; }
+                if (r == null) { Toast("Not sent: " + Mqh.LastError, "error"); FitComposerToText(); return; } // the text stays: in full again
                 _thComposer.Set("");
                 if (sent != null) { foreach (var a in sent) att.Remove(a); RefreshAttachRow(); }
                 Toast((string)r["delivery"] == "queued" ? "Queued (the agent is busy)" : "Sent", "ok");
@@ -1765,7 +1765,11 @@ namespace MetaCodex.Shell
                     if (r == null)
                     {
                         Toast("Thread not started: " + Mqh.LastError, "error");
-                        if (_draft == d && _thComposer != null && string.IsNullOrWhiteSpace(_thComposer.Text)) _thComposer.Set(msg); // to send again
+                        if (_draft == d && _thComposer != null)
+                        {
+                            if (string.IsNullOrWhiteSpace(_thComposer.Text)) _thComposer.Set(msg); // to send again
+                            else FitComposerToText(); // still there: in full again (SEND put the box at one row)
+                        }
                         return;
                     }
                     string id = (string)r["id"];

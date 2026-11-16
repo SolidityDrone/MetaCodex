@@ -82,6 +82,7 @@ namespace MetaCodex.Shell
             public UiDragGrip thGrip;
             public float thComposerMax;
             public float thComposerWant;
+            public float thComposerFit;       // the growth its text needs (ShellThreadComposer.FitComposerToText)
             public float thComposerApplied;
             public float thChatApplied;
             public UiEdgeHandle thHandle;
@@ -161,6 +162,7 @@ namespace MetaCodex.Shell
         private UiDragGrip _thGrip { get => _tw.thGrip; set => _tw.thGrip = value; }
         private float _thComposerMax { get => _tw.thComposerMax; set => _tw.thComposerMax = value; }
         private float _thComposerWant { get => _tw.thComposerWant; set => _tw.thComposerWant = value; }
+        private float _thComposerFit { get => _tw.thComposerFit; set => _tw.thComposerFit = value; }
         private float _thComposerApplied { get => _tw.thComposerApplied; set => _tw.thComposerApplied = value; }
         private float _thChatApplied { get => _tw.thChatApplied; set => _tw.thChatApplied = value; }
         private UiEdgeHandle _thHandle { get => _tw.thHandle; set => _tw.thHandle = value; }

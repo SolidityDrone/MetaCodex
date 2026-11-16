@@ -11,7 +11,7 @@ namespace MetaCodex.EditorTools
     /// Self-test section `chat` (owner 2026-11-11, docs/thread-view.md): THREAD as a chat. A finished exchange (work
     /// closed under one header, the answer in markdown-lite), a live one (work open, reads grouped, a command running,
     /// the status line), the sticky prompt, opening and closing, the view holding still while new lines come, MQH's
-    /// deltas, the usage limits, dictation into the composer, the message box's grip, voice and reset on SEND, and the session context's answer from the pulse.
+    /// deltas, the usage limits, dictation into the composer, the message box's grip, its fit to a long (dictated) text, voice and reset on SEND, and the session context's answer from the pulse.
     public static partial class MetaCodexUiTest
     {
         private static JObject ChatRow(string kind, string id, long start, JObject f)
@@ -186,6 +186,29 @@ namespace MetaCodex.EditorTools
             shell.SendComposerForTest(comp.Text);
             Check(Mathf.Abs(shell.ComposerExtraForTest) < 1e-5f && Mathf.Abs(comp.Rect.height - box0) < 1e-4f && Mathf.Abs(chat.Rect.height - chat0) < 1e-3f && Layered(),
                 "SEND: the message box is one row again, the chat its old height");
+            comp.Set("");
+            // the box fits its text (owner 2026-11-16): a long dictated text grows it until all of it shows (not sent); a
+            // shorter one shrinks it, never below the grip's height; past the most it stops and shows the text's end
+            string sentence = "please add a short section about the status line and its timers to the docs, with one example for each state. ";
+            string longSaid = string.Concat(Enumerable.Repeat(sentence, 4)).Trim();
+            shell.DictateTextForTest(comp, longSaid);
+            float fit = shell.ComposerExtraForTest;
+            Check(comp.Text == longSaid && fit > 0.01f && fit < shell.ComposerMaxExtraForTest - 1e-4f && comp.PageCountForTest == 1 && Layered(),
+                $"a long dictated text ({longSaid.Length} chars): the box grew {fit * 1000f:F0} mm and shows all of it ({comp.PageCountForTest} page), not sent");
+            comp.Set("ok");
+            Check(Mathf.Abs(shell.ComposerExtraForTest) < 1e-5f && Layered(), "the text gets short: the box is one row again");
+            Drag(0.06f);
+            comp.Set(longSaid);
+            Check(Mathf.Abs(shell.ComposerExtraForTest - Mathf.Max(0.06f, fit)) < 1e-3f && Layered(),
+                $"grip 60 mm, the long text again: the box is the taller of the two ({shell.ComposerExtraForTest * 1000f:F0} mm)");
+            comp.Set("ok");
+            Check(Mathf.Abs(shell.ComposerExtraForTest - 0.06f) < 1e-3f && Layered(), "the text gets short: back to the grip's 60 mm, not below");
+            Drag(-1f);
+            comp.Set(string.Concat(Enumerable.Repeat(sentence, 40)));
+            Check(Mathf.Abs(shell.ComposerExtraForTest - shell.ComposerMaxExtraForTest) < 1e-4f && comp.PageCountForTest > 1 && comp.PageShownForTest == comp.PageCountForTest && Layered(),
+                $"a text past the most: the box stops at the most, the chat keeps {chat.Rect.height * 1000f:F0} mm, it shows its last lines (page {comp.PageShownForTest} of {comp.PageCountForTest})");
+            shell.SendComposerForTest(comp.Text);
+            Check(Mathf.Abs(shell.ComposerExtraForTest) < 1e-5f && Mathf.Abs(comp.Rect.height - box0) < 1e-4f && Layered(), "SEND with a long text: one row again at once");
             comp.Set("");
             var lintBox = VoiceCommands.Lint(shell.Voice.Find("thread_composer"));
             Check(lintBox.Count == 0, lintBox.Count == 0 ? "registry: thread_composer is complete (lint clean)" : "registry: " + string.Join("; ", lintBox));
