@@ -74,7 +74,9 @@ installed ones are projects in `/root/metacodex-projects/plugins/apps/timers` an
      `mcx-ui plugin check <id>` again (it must still say `loaded`);
    - a gesture: `mcx-ui gesture list` shows its name; `mcx-ui gesture <name> right start` (or `both start`; a clap:
      `mcx-ui gesture clap`) simulates it: the reaction must happen (`mcx-ui ui list` shows open panels);
-   - a voice command: `mcx-ui voice decide "<a sample>"` picks it; `mcx-ui voice run "<a sample>"` runs it.
+   - a voice command: `mcx-ui voice decide "<a sample>"` picks it; `mcx-ui voice run "<a sample>"` runs it;
+   - a restart: `mcx-ui plugin disable <id>` then `mcx-ui plugin enable <id>` runs `main.lua` again from the saved
+     store, as at a start (timers set again, windows made again).
 5. Commit: `git add -A && git commit -m "<what changed>"`. One commit per working step: the user can go back.
 6. Tell the user in a few short lines: the tile in the menu, the gesture to make, what to say; what changed; how to
    undo (`git revert`, `mcx-ui plugin disable <id>`).
@@ -145,7 +147,8 @@ Tones: `ok` (green), `warn` (amber), `error` (red), `accent` (the app's colour: 
 (grey: blanks, past). Ids: letters, digits, `-`, `_`; unique in the window (a repeated id is refused).
 
 Rules:
-- Button labels: short verbs in capitals, 14 characters or fewer (over 18 is a warning): `START`, `+5 MIN`, `SKIP`.
+- Button labels: short verbs in capitals, 14 characters or fewer (style; `check` warns only above 18): `START`,
+  `+5 MIN`, `SKIP`.
   At most one `accent` button in the window: the main action (START, +1, TODAY); `error` only for something that deletes.
 - The app does not cut lists: your `render()` shows the first rows (about 8) and a dim "+3 more" line. Text over
   600 characters is a warning.
@@ -182,7 +185,7 @@ menu.remove("drink")
   `book`, `bolt`, `music`, `plugin`; any other name (or none) shows `plugin`, a puzzle piece. The user can pick another
   icon in CONTROL > WRIST MENU; that choice wins.
 - Exactly one of `panel` (one of your windows; `ui.panel` may come before or after `menu.add`) or `run`.
-- The menu holds 6 plugin tiles in all: `menu.add` returns false when it is full (the log says so): tell the user.
+- `menu.add` returns true; false when the menu is full (6 plugin tiles in all; the log says so): tell the user.
 - Keep a tile's `id` the same across versions: the user's menu layout remembers tiles by it (its label, glyph and
   icon may change).
 
@@ -230,8 +233,9 @@ It works at any time, also while `main.lua` loads. Use it for things that end or
 
 ## APP: voice commands
 
-Each command is complete (rules: `quest-scripting`, "Voice commands"): `name` (snake_case, starting with your plugin
-id), `description` (what it does and every option), typed `params` (`type`, `description`, `required`; `min` / `max`
+Each command is complete (rules: `quest-scripting`, "Voice commands"): `name` (`^[a-z][a-z0-9_]{1,47}$`, starting
+with your plugin id, `-` as `_`: plugin `to-do-list` -> `to_do_list_add`; another name is refused with an error),
+`description` (what it does and every option), typed `params` (`type`, `description`, `required`; `min` / `max`
 / `unit` for numbers; `enum` for closed sets with `synonyms`), `phrases`, 4 or more `samples` in English covering
 every option, `run` returning a short sentence (`"error: why"` when it fails). A command without options leaves
 `params` out. Spoken numbers arrive parsed ("twenty minutes" -> 20), but a `{param}` capture can still hold extra

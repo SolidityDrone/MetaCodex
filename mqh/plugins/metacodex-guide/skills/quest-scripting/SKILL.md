@@ -14,7 +14,8 @@ The app (Unity, on the headset) runs Lua in two forms, with the same API (this s
 
 Write or edit a file and the app loads it within a second: no rebuild, no restart. Files persist across restarts.
 Each runs sandboxed (no `io`, `require`, `load`; `os` has only `time`, `clock`, `date`) and talks to the app only
-through the API below.
+through the API below. The Lua is 5.2 (MoonSharp): no `utf8` library and no `//`; `#` and `string.len` count bytes;
+every number is a double (`json.decode` too): `math.floor(n)` or `string.format("%d", n)` for whole numbers.
 
 ## Procedure
 
