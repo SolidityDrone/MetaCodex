@@ -56,17 +56,22 @@ never grows over a neighbour and the view does not jump.
 
 The wrist menu's own page in CONTROL, its own window of CONTROL's size. Settings `wrist` in the settings file:
 
-- **Rings**: the inner ring (3 to 8 tiles) and the outer ring (up to 12) as rows of buttons in order; pick one, then
-  ◂ MOVE / MOVE ▸ (round its ring), TO INNER, TO OUTER, HIDE. OFF THE MENU lists the system items and app plugins'
-  tiles that are not on it: a tap puts one at the end of the outer ring. The rings share their circle evenly, however
-  many tiles they hold. CONTROL never leaves the menu. A plugin that is gone is skipped; a new item or a new plugin's
-  tile goes to the end of the outer ring.
+- **Rings, by drag and drop** on a copy of the wrist menu (the twin): pinch a tile and drag it to another place, the
+  other ring, or off the copy to take it off the menu; the copy shows where it lands (an empty slot, the other tiles
+  move aside) and its core says INNER, OUTER or TAKE OFF. The inner ring holds 3 to 8 tiles, the outer up to 12; the
+  rings share their circle evenly. CONTROL never leaves the menu (dropped off, it goes back, with the reason). A tap on
+  a tile of the copy chooses it.
+- **The palette**: SYSTEM and APPS tiles off the menu (glyph and name); drag one onto the copy to add it at that place,
+  a tap adds it at the end of the outer ring. App plugins that are off show dimmed (turn them on in MQH > PLUGINS). A
+  plugin that is gone is skipped; a new item or a new plugin's tile goes to the end of the outer ring.
+- **Input**: the router's pinch drag (the element under the pinch gets it every frame until it is let go), with the
+  hand ray at the page's distance; the ray meets the copy's own plane; picking is generous (anywhere in a ring's band).
 - **ICON** (a plugin's tile): ◂ ▸ through the generic icons (`UiIconAtlas.PluginIcons`); PLUGIN'S gives back the
   plugin's own.
 - **Look**: MENU SIZE (0.8-1.3 x), TEXT SIZE (0.8-1.4 x, the names and the time; a name still fits its tile), GLASS
   (its own opacity, not PANEL OPACITY), CORE: BATTERY / NETWORK / CLOCK, "Fold the rings after a tap".
-- **A twin**: every change shows on a copy of the wrist menu on the page; APPLY makes it the wrist menu (and the
-  DOCK's order), CANCEL drops it, RESET LAYOUT sets the copy's rings back to the default (APPLY still needed).
+- **APPLY**: every change shows on the copy; APPLY makes it the wrist menu (and the DOCK's order), CANCEL drops it,
+  RESET LAYOUT sets the copy's rings back to the default (APPLY still needed).
   Closing the page drops what was not applied. The copy exists only while the page is open.
 - **Voice**: open_panel `wrist-settings` ("wrist menu settings", "radial menu settings"); set_setting
   `wrist_menu_size`, `wrist_text_size`, `wrist_opacity`, `wrist_battery`, `wrist_network`, `wrist_clock`,
@@ -92,6 +97,6 @@ where it was while that place is free and in view.
   openers; then `ControlPolish`: page ids, `control` toggled and closed, one size, HANDS' row and the studio link, MQH's
   title and STATUS, DISPLAY's dimmed controls, ABOUT's buttons, LINKS / FILES / SYSTEM rows, AGENTS' buttons, LOG's
   CLEAR ALL, the dock's lit tiles, ShowTerminalKeyboard; then `WristMenuPage`: the layout rules, the page with its
-  twin, HIDE / CANCEL / APPLY / RESET LAYOUT, and the voice settings. Sections `wrist`, `web`, `mqh` and `placement` (the
+  twin, drags on and off the twin and from the palette, CANCEL / APPLY / RESET LAYOUT, and the voice settings. Sections `wrist`, `web`, `mqh` and `placement` (the
   five-panel scene and the opened-from-a-button scene) check CONTROL too.
 - Headset: [TEST_CHECKLIST.md](TEST_CHECKLIST.md), areas "CONTROL and settings" and "Main menu: DOCK and wrist menu".

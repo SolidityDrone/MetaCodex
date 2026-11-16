@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using MetaCodex.UI;
 using TMPro;
 using UnityEngine;
@@ -157,11 +158,13 @@ namespace MetaCodex.Shell
     }
 
     /// CONTROL > WRIST MENU (page `wrist-settings`, its own window of CONTROL's size; owner 2026-11-16): the wrist menu's
-    /// layout and look, edited on a copy of the menu (the twin, UiWristMenu in Preview mode) on the page. Every change shows
-    /// on the twin; APPLY makes it the real menu (and the DOCK's order), CANCEL drops it, RESET LAYOUT puts the twin's rings
-    /// back to the default (APPLY still needed). Closing the page drops what was not applied. The twin exists only while
-    /// the page is open: made when it opens (in small steps on the headset), folded and destroyed when it closes; nothing
-    /// of it runs while the page is closed.
+    /// layout and look, edited on a copy of the menu (the twin, UiWristMenu in Preview mode) on the page. The layout is drag
+    /// and drop (owner, after the first test: "more like drag and drop ... better than the buttons to move"): pinch a tile on
+    /// the twin and drag it to another place, the other ring, or off the twin; drag a tile from the palette (SYSTEM and APPS
+    /// tiles off the menu) onto the twin. Every change shows on the twin; APPLY makes it the real menu (and the DOCK's
+    /// order), CANCEL drops it, RESET LAYOUT puts the twin's rings back to the default (APPLY still needed). Closing the page
+    /// drops what was not applied. The twin exists only while the page is open: made when it opens (in small steps on the
+    /// headset), folded and destroyed when it closes; nothing of it runs while the page is closed.
     public sealed partial class MetaCodexShell
     {
         public const string WristSettingsId = "wrist-settings";
@@ -254,30 +257,43 @@ namespace MetaCodex.Shell
 
         // ------------------------------------------------------------------ the page
 
-        // panel coordinates (metres from the top-left, y down): the left column (the rings, the actions, ADD), the right
-        // column (the twin, the look), the bottom row (RESET LAYOUT, CANCEL, APPLY)
+        // panel coordinates (metres from the top-left, y down): the left column (the palette of tiles off the menu, the chosen
+        // tile, its icon), the right column (the twin, the look), the bottom row (RESET LAYOUT, CANCEL, APPLY)
         private const float WsLeftX = 0.014f, WsLeftW = 0.39f, WsRightX = 0.418f, WsRightW = 0.328f;
         /// The twin's centre and its size at MENU SIZE 1: at the largest MENU SIZE its drifting arcs (0.088 m from the centre at
         /// scale 1) still fit the 0.30 m square above the sliders.
         private static readonly Vector2 WsTwinAt = new Vector2(0.582f, 0.240f);
         private const float WsTwinBase = 1.31f, WsTwinLift = 0.02f;
         private const int WsTwinQueue = 2995; // after the page's glass (SciFiUI 2990), before the texts (3000)
+        /// A pinch that moves this far (m, on the page) before it is let go is a drag; less is a tap.
+        private const float WsDragStart = 0.012f;
+        private const int WsSysPool = 12, WsAppPool = 8;
 
         private UiPanel _wsPage;
         private bool _wsBuilt;
         private UiWristMenu _wsTwin;
         private WristMenuSettings _wd, _wsBase; // the draft, and the settings it started from
-        private string _wsSel;                   // the chosen item's id
+        private string _wsSel;                   // the chosen item's id (its icon can be picked)
         private float _wsTextDue = -1f;          // TEXT SIZE reaches the twin not before this time (0.15 s after the slider's last step)
         private readonly List<string> _wsInner = new List<string>(), _wsOuter = new List<string>(), _wsOff = new List<string>();
         private readonly Dictionary<string, MainMenuItem> _wsById = new Dictionary<string, MainMenuItem>();
-        private readonly List<UiButton> _wsInnerBtns = new List<UiButton>(), _wsOuterBtns = new List<UiButton>();
-        private UiLabel _wsInnerCap, _wsOuterCap, _wsSelLine, _wsAddCap, _wsState, _wsIconCap, _wsIconName, _wsIconNote;
-        private UiButton _wsLeft, _wsRight, _wsToInner, _wsToOuter, _wsHide, _wsIconPrev, _wsIconNext, _wsIconReset;
+        /// The twin's items by id, kept between re-layouts (each remembers where it is drawn, so it eases to its new place).
+        private readonly Dictionary<string, UiWristMenu.Item> _wsTwinItems = new Dictionary<string, UiWristMenu.Item>();
+        private readonly List<WsTile> _wsSysTiles = new List<WsTile>(), _wsAppTiles = new List<WsTile>();
+        private WsDragArea _wsTwinArea;
+        private UiLabel _wsSysCap, _wsAppCap, _wsSysNote, _wsAppNote, _wsSelLine, _wsState, _wsIconCap, _wsIconName, _wsIconNote;
+        private UiButton _wsIconPrev, _wsIconNext, _wsIconReset;
         private UiButton _wsBattery, _wsNetwork, _wsClock, _wsApply, _wsCancel, _wsReset;
         private UiSlider _wsSize, _wsText, _wsGlass;
         private UiToggle _wsCloseTap;
-        private UiList _wsAdd;
+
+        // a drag (one at a time): the tile, where it came from, whether it moved far enough, where it would land now and why
+        // it cannot (null: it can), the element that holds the pinch, and the twin's rings while it moves
+        private string _wsDragId, _wsDropWhy;
+        private bool _wsDragging, _wsDragFromMenu;
+        private int _wsDropRing = -2, _wsDropIndex;
+        private UiElement _wsDragOwner;
+        private readonly List<string> _wsPrevInner = new List<string>(), _wsPrevOuter = new List<string>();
 
         /// Called from BuildControl (start and RebuildPanels): the page's window, empty; its content is made the first time it
         /// opens (the start does not pay for it).
@@ -287,8 +303,10 @@ namespace MetaCodex.Shell
             _wsTwin = null;
             _wd = _wsBase = null;
             _wsSel = null;
-            _wsInnerBtns.Clear();
-            _wsOuterBtns.Clear();
+            _wsDragId = null;
+            _wsSysTiles.Clear();
+            _wsAppTiles.Clear();
+            _wsTwinItems.Clear();
             var p = Panel<UiPanel>(WristSettingsId, "WRIST MENU", ControlPageW, ControlPageH); // CONTROL's one size
             p.Opened += _ => OnWristPageOpened();
             p.Closed += _ => OnWristPageClosed();
@@ -312,6 +330,7 @@ namespace MetaCodex.Shell
 
         private void OnWristPageClosed()
         {
+            WsDragReset();
             _wd = _wsBase = null; // what was not applied is dropped
             _wsSel = null;
             if (_wsTwin == null) return;
@@ -325,11 +344,13 @@ namespace MetaCodex.Shell
             if (_wsTwin == null) return;
             var go = _wsTwin.gameObject;
             _wsTwin = null;
+            _wsTwinItems.Clear();
             if (Application.isPlaying) UnityEngine.Object.Destroy(go); else UnityEngine.Object.DestroyImmediate(go);
         }
 
-        /// While the page is open: the twin stays on the page's surface (a bent page too), and takes the draft's TEXT SIZE once
-        /// the slider rests (its labels are made again: not on every step of a drag).
+        /// While the page is open: the twin stays on the page's surface (a bent page too), takes the draft's TEXT SIZE once the
+        /// slider rests (its labels are refitted: not on every step of a drag), and a drag whose pinch was lost (the hand left
+        /// the cameras' view: no release) is dropped.
         private void TickWristPage()
         {
             if (!_wsBuilt || _wd == null) { OnWristPageOpened(); return; } // shown without Open (RebuildPanels)
@@ -338,6 +359,12 @@ namespace MetaCodex.Shell
             {
                 float text = TextScaleOf(_wd);
                 if (!Mathf.Approximately(_wsTwin.TextScale, text)) _wsTwin.TextScale = text;
+            }
+            if (_wsDragId != null && _wsDragOwner != null && !_wsDragOwner.Pressed)
+            {
+                bool moved = _wsDragging;
+                WsDragReset();
+                if (moved) RefreshWristPage();
             }
         }
 
@@ -360,25 +387,34 @@ namespace MetaCodex.Shell
             if (whole) tw.Build(); else tw.BuildStaged();
         }
 
-        /// The twin takes the draft: its rings, its look, the chosen tile.
+        /// The twin takes the draft: its rings, its look, the chosen tile; no drag shown.
         private void FillTwin()
         {
             var tw = _wsTwin;
             if (tw == null || _wd == null) return;
-            var t = UiTheme.Current;
-            tw.Inner.Clear();
-            tw.Outer.Clear();
-            foreach (var id in _wsInner) tw.Inner.Add(TwinItem(id, t));
-            foreach (var id in _wsOuter) tw.Outer.Add(TwinItem(id, t));
-            tw.RebuildItems();
+            FillTwinRings(_wsInner, _wsOuter);
+            tw.PreviewHole = null;
+            tw.GhostItem = null;
+            tw.PreviewCoreText = null;
             ApplyLookTo(tw, _wd, WsTwinBase, text: false); // the text size: TickWristPage
             tw.PreviewSelected = SelectedPart();
         }
 
-        private UiWristMenu.Item TwinItem(string id, UiTheme t)
+        private void FillTwinRings(List<string> inner, List<string> outer)
         {
-            var m = _wsById[id];
-            return new UiWristMenu.Item { Glyph = m.Glyph, Icon = m.Icon, Label = m.Label, LitTint = t.Ok };
+            var tw = _wsTwin;
+            tw.Inner.Clear();
+            tw.Outer.Clear();
+            foreach (var id in inner) tw.Inner.Add(TwinItem(id));
+            foreach (var id in outer) tw.Outer.Add(TwinItem(id));
+            tw.RebuildItems();
+        }
+
+        private UiWristMenu.Item TwinItem(string id)
+        {
+            if (!_wsTwinItems.TryGetValue(id, out var it)) _wsTwinItems[id] = it = new UiWristMenu.Item { LitTint = UiTheme.Current.Ok };
+            if (_wsById.TryGetValue(id, out var m)) { it.Glyph = m.Glyph; it.Icon = m.Icon; it.Label = m.Label; }
+            return it;
         }
 
         /// The chosen item's index on the twin (inner ring first), -1 for none.
@@ -411,8 +447,26 @@ namespace MetaCodex.Shell
             if (tt.localRotation != rot) tt.localRotation = rot;
         }
 
-        /// The page's controls, made once (the first time it opens). Pools of buttons for the rings (8 + 12), shown and
-        /// labelled as the draft needs: the page's mesh never grows while the user edits.
+        /// Where a pointer is on the twin's plane (twin-local metres before its scale): a hand ray or the mouse meets the
+        /// plane the twin floats in (not the page 2 cm behind it, so it is exact from the side too); a fingertip is taken
+        /// where it is; else (tests) the page point lifted to the twin's plane.
+        private bool TwinPoint(UiPointerEvent e, out Vector2 q)
+        {
+            q = default;
+            if (_wsTwin == null || _wsPage == null) return false;
+            var t = _wsTwin.transform;
+            var ptr = e.Pointer;
+            Vector3 world;
+            if (ptr != null && ptr.Kind == PointerKind.Poke) world = ptr.Tip;
+            else if (ptr != null && ptr.Kind != PointerKind.Test && new Plane(t.forward, t.position).Raycast(ptr.Ray, out float d)) world = ptr.Ray.GetPoint(d);
+            else world = _wsPage.SurfacePoint(e.Point, -WsTwinLift);
+            var l = t.InverseTransformPoint(world);
+            q = new Vector2(l.x, l.y);
+            return true;
+        }
+
+        /// The page's controls, made once (the first time it opens): pools of palette tiles (shown and labelled as the draft
+        /// needs: the page's mesh never grows while the user edits), the twin's drag surface, the look, the bottom row.
         private void EnsureWristPage()
         {
             if (_wsBuilt || _wsPage == null) return;
@@ -422,82 +476,80 @@ namespace MetaCodex.Shell
             var c = p.Content;
             float y = c.y;
             p.Add(new UiLabel("Look at the back of your left wrist as at a watch, then touch its core with your right index finger. "
-                + "Changes show on the copy on the right; APPLY puts them on your wrist.", t.SmallSize)
+                + "Edit on the copy on the right; APPLY puts it on your wrist.", t.SmallSize)
             { Rect = new Rect(c.x, y, c.width, 0.032f), Wrap = true, Color = t.TextDim, Align = TextAlignmentOptions.TopLeft });
             y += 0.036f;
 
-            // the rings: a button per place, in order (clockwise from 12)
-            const float slotH = 0.032f, slotGap = 0.005f, capH = 0.018f;
-            float slotW = (WsLeftW - 3f * slotGap) / 4f;
-            _wsInnerCap = p.Add(new UiLabel("", t.SmallSize) { Rect = new Rect(WsLeftX, y, WsLeftW, capH), UseDisplay = true, Color = t.TextAccent });
-            y += capH + 0.002f;
-            for (int k = 0; k < UiWristMenu.MaxInner; k++)
+            // the palette: what is off the menu, in two groups; pinch one and drag it onto the copy (a tap adds it at the end)
+            const float capH = 0.018f, tileH = 0.042f, tileGap = 0.005f, noteH = 0.020f;
+            float tileW = (WsLeftW - 3f * 0.006f) / 4f;
+            WsTile Tile(int k, float top)
             {
-                int slot = k;
-                _wsInnerBtns.Add(p.Add(new UiButton("", () => WsPick(false, slot)) { Rect = new Rect(WsLeftX + (k % 4) * (slotW + slotGap), y + (k / 4) * (slotH + slotGap), slotW, slotH), TextSize = 0.0125f }));
+                var b = p.Add(new WsTile { Rect = new Rect(WsLeftX + (k % 4) * (tileW + 0.006f), top + (k / 4) * (tileH + tileGap), tileW, tileH), TextSize = 0.0112f });
+                b.Down = WsTileDown;
+                b.Drag = (tile, e) => WsDragMove(e);
+                b.Up = WsTileUp;
+                return b;
             }
-            y += 2 * (slotH + slotGap) + 0.002f;
-            _wsOuterCap = p.Add(new UiLabel("", t.SmallSize) { Rect = new Rect(WsLeftX, y, WsLeftW, capH), UseDisplay = true, Color = t.TextAccent });
+            _wsSysCap = p.Add(new UiLabel("SYSTEM · OFF THE MENU", t.SmallSize) { Rect = new Rect(WsLeftX, y, WsLeftW, capH), UseDisplay = true, Color = t.TextAccent });
             y += capH + 0.002f;
-            for (int k = 0; k < UiWristMenu.MaxOuter; k++)
-            {
-                int slot = k;
-                _wsOuterBtns.Add(p.Add(new UiButton("", () => WsPick(true, slot)) { Rect = new Rect(WsLeftX + (k % 4) * (slotW + slotGap), y + (k / 4) * (slotH + slotGap), slotW, slotH), TextSize = 0.0125f }));
-            }
-            y += 3 * (slotH + slotGap) + 0.002f;
-
-            // what is chosen, and what can be done with it
+            _wsSysNote = p.Add(new UiLabel("", t.SmallSize) { Rect = new Rect(WsLeftX, y, WsLeftW, tileH), Color = t.TextDim });
+            for (int k = 0; k < WsSysPool; k++) _wsSysTiles.Add(Tile(k, y));
+            y += 3 * (tileH + tileGap) + 0.002f;
+            _wsAppCap = p.Add(new UiLabel("APPS · OFF THE MENU", t.SmallSize) { Rect = new Rect(WsLeftX, y, WsLeftW, capH), UseDisplay = true, Color = t.TextAccent });
+            y += capH + 0.002f;
+            for (int k = 0; k < WsAppPool; k++) _wsAppTiles.Add(Tile(k, y));
+            y += 2 * (tileH + tileGap);
+            _wsAppNote = p.Add(new UiLabel("", t.SmallSize) { Rect = new Rect(WsLeftX, y, WsLeftW, noteH), Color = t.TextDim });
+            y += noteH + 0.004f;
+            p.Add(new UiLabel("Pinch a tile on the copy and drag it: to another place, to the other ring, or off the copy to take it off. "
+                + "Drag a tile from here onto the copy to add it there.", t.SmallSize)
+            { Rect = new Rect(WsLeftX, y, WsLeftW, 0.044f), Wrap = true, Color = t.TextDim, Align = TextAlignmentOptions.TopLeft });
+            y += 0.048f;
+            // the chosen tile (a tap on the copy) and, for a plugin's tile, its icon: one of the generic icons, or the plugin's
             _wsSelLine = p.Add(new UiLabel("", t.SmallSize) { Rect = new Rect(WsLeftX, y, WsLeftW, 0.022f), Color = t.Text });
             y += 0.026f;
-            float actW = (WsLeftW - 4f * 0.005f) / 5f;
-            UiButton Act(int k, string text, Action a) => p.Add(new UiButton(text, a) { Rect = new Rect(WsLeftX + k * (actW + 0.005f), y, actW, slotH), TextSize = 0.0118f });
-            _wsLeft = Act(0, "◂ MOVE", () => WsMove(-1));
-            _wsRight = Act(1, "MOVE ▸", () => WsMove(1));
-            _wsToInner = Act(2, "TO INNER", WsToInner);
-            _wsToOuter = Act(3, "TO OUTER", WsToOuter);
-            _wsHide = Act(4, "HIDE", WsHide);
-            y += slotH + 0.006f;
-            // a plugin tile's icon: one of the generic icons (the twin shows it), or the plugin's own
-            _wsIconCap = p.Add(new UiLabel("ICON", t.SmallSize) { Rect = new Rect(WsLeftX, y, 0.05f, slotH), UseDisplay = true, Color = t.TextDim });
-            _wsIconPrev = p.Add(new UiButton("◂", () => WsIcon(-1)) { Rect = new Rect(WsLeftX + 0.05f, y, 0.04f, slotH) });
-            _wsIconName = p.Add(new UiLabel("", t.SmallSize * 1.1f) { Rect = new Rect(WsLeftX + 0.094f, y, 0.11f, slotH), UseDisplay = true, Align = TextAlignmentOptions.Center });
-            _wsIconNext = p.Add(new UiButton("▸", () => WsIcon(1)) { Rect = new Rect(WsLeftX + 0.208f, y, 0.04f, slotH) });
-            _wsIconReset = p.Add(new UiButton("PLUGIN'S", () => WsIcon(0)) { Rect = new Rect(WsLeftX + 0.256f, y, WsLeftW - 0.256f, slotH), TextSize = 0.0118f });
-            _wsIconNote = p.Add(new UiLabel("Icons: choose a plugin's tile to give it one.", t.SmallSize) { Rect = new Rect(WsLeftX, y, WsLeftW, slotH), Color = t.TextDim });
-            y += slotH + 0.006f;
-            // what is off the menu: a tap puts it back (at the end of the outer ring)
-            _wsAddCap = p.Add(new UiLabel("", t.SmallSize) { Rect = new Rect(WsLeftX, y, WsLeftW, capH), UseDisplay = true, Color = t.TextAccent });
-            y += capH + 0.002f;
-            float bottomY = c.yMax - t.ButtonHeight;
-            _wsAdd = p.Add(new UiList(0.030f, (item, idx) => { if (item?.Tag is string id) WsAdd(id); })
-            { Rect = new Rect(WsLeftX, y, WsLeftW, bottomY - 0.008f - y), EmptyText = "Everything is on the menu." });
+            const float rowH = 0.032f;
+            _wsIconCap = p.Add(new UiLabel("ICON", t.SmallSize) { Rect = new Rect(WsLeftX, y, 0.05f, rowH), UseDisplay = true, Color = t.TextDim });
+            _wsIconPrev = p.Add(new UiButton("◂", () => WsIcon(-1)) { Rect = new Rect(WsLeftX + 0.05f, y, 0.04f, rowH) });
+            _wsIconName = p.Add(new UiLabel("", t.SmallSize * 1.1f) { Rect = new Rect(WsLeftX + 0.094f, y, 0.11f, rowH), UseDisplay = true, Align = TextAlignmentOptions.Center });
+            _wsIconNext = p.Add(new UiButton("▸", () => WsIcon(1)) { Rect = new Rect(WsLeftX + 0.208f, y, 0.04f, rowH) });
+            _wsIconReset = p.Add(new UiButton("PLUGIN'S", () => WsIcon(0)) { Rect = new Rect(WsLeftX + 0.256f, y, WsLeftW - 0.256f, rowH), TextSize = 0.0118f });
+            _wsIconNote = p.Add(new UiLabel("Icons: tap a plugin's tile on the copy to give it one.", t.SmallSize) { Rect = new Rect(WsLeftX, y, WsLeftW, rowH), Color = t.TextDim });
 
-            // the right column: the twin above (nothing of the page is drawn there), the look under it
+            // the right column: the twin above (its drag surface: nothing else of the page is there), the look under it
+            _wsTwinArea = p.Add(new WsDragArea { Rect = new Rect(WsRightX, WsTwinAt.y - 0.152f, WsRightW, 0.304f) });
+            _wsTwinArea.Down = WsTwinDown;
+            _wsTwinArea.Drag = WsDragMove;
+            _wsTwinArea.Up = WsTwinUp;
+            _wsTwinArea.Over = WsTwinOver;
+            _wsTwinArea.Left = () => { if (_wsTwin != null) _wsTwin.PreviewHover = -1; };
             float ry = WsTwinAt.y + 0.15f + 0.008f;
-            const float rowH = 0.030f, rowGap = 0.005f;
+            const float lookH = 0.030f, lookGap = 0.005f;
             // the sliders move in steps of 0.05 (the thumb snaps to the value kept)
-            _wsSize = p.Add(new UiSlider("MENU SIZE", WristMenuSettings.MinSize, WristMenuSettings.MaxSize, 1f, v => WsLook(() => { _wd.size = Steps(v); _wsSize.Set(_wd.size); })) { Rect = new Rect(WsRightX, ry, WsRightW, rowH), LabelWidth = 0.11f });
-            ry += rowH + rowGap;
+            _wsSize = p.Add(new UiSlider("MENU SIZE", WristMenuSettings.MinSize, WristMenuSettings.MaxSize, 1f, v => WsLook(() => { _wd.size = Steps(v); _wsSize.Set(_wd.size); })) { Rect = new Rect(WsRightX, ry, WsRightW, lookH), LabelWidth = 0.11f });
+            ry += lookH + lookGap;
             _wsText = p.Add(new UiSlider("TEXT SIZE", WristMenuSettings.MinText, WristMenuSettings.MaxText, 1f, v =>
             {
                 if (_wd == null) return;
                 _wd.textSize = Steps(v);
                 _wsText.Set(_wd.textSize);
-                _wsTextDue = Time.unscaledTime + 0.15f; // the twin makes its labels again once the slider rests (TickWristPage)
+                _wsTextDue = Time.unscaledTime + 0.15f; // the twin refits its labels once the slider rests (TickWristPage)
                 RefreshWristState();
-            }) { Rect = new Rect(WsRightX, ry, WsRightW, rowH), LabelWidth = 0.11f });
-            ry += rowH + rowGap;
-            _wsGlass = p.Add(new UiSlider("GLASS", WristMenuSettings.MinOpacity, WristMenuSettings.MaxOpacity, 1f, v => WsLook(() => { _wd.opacity = Steps(v); _wsGlass.Set(_wd.opacity); })) { Rect = new Rect(WsRightX, ry, WsRightW, rowH), LabelWidth = 0.11f });
-            ry += rowH + rowGap;
-            p.Add(new UiLabel("CORE", t.SmallSize) { Rect = new Rect(WsRightX, ry, 0.06f, rowH), UseDisplay = true, Color = t.TextDim });
+            }) { Rect = new Rect(WsRightX, ry, WsRightW, lookH), LabelWidth = 0.11f });
+            ry += lookH + lookGap;
+            _wsGlass = p.Add(new UiSlider("GLASS", WristMenuSettings.MinOpacity, WristMenuSettings.MaxOpacity, 1f, v => WsLook(() => { _wd.opacity = Steps(v); _wsGlass.Set(_wd.opacity); })) { Rect = new Rect(WsRightX, ry, WsRightW, lookH), LabelWidth = 0.11f });
+            ry += lookH + lookGap;
+            p.Add(new UiLabel("CORE", t.SmallSize) { Rect = new Rect(WsRightX, ry, 0.06f, lookH), UseDisplay = true, Color = t.TextDim });
             float coreW = (WsRightW - 0.06f - 2f * 0.005f) / 3f;
-            _wsBattery = p.Add(new UiButton("BATTERY", () => WsLook(() => _wd.battery = !_wd.battery)) { Rect = new Rect(WsRightX + 0.06f, ry, coreW, rowH), TextSize = 0.0115f });
-            _wsNetwork = p.Add(new UiButton("NETWORK", () => WsLook(() => _wd.network = !_wd.network)) { Rect = new Rect(WsRightX + 0.06f + coreW + 0.005f, ry, coreW, rowH), TextSize = 0.0115f });
-            _wsClock = p.Add(new UiButton("CLOCK", () => WsLook(() => _wd.clock = !_wd.clock)) { Rect = new Rect(WsRightX + 0.06f + 2f * (coreW + 0.005f), ry, coreW, rowH), TextSize = 0.0115f });
-            ry += rowH + rowGap;
-            _wsCloseTap = p.Add(new UiToggle("Fold the rings after a tap", false, v => WsLook(() => _wd.closeAfterTap = v)) { Rect = new Rect(WsRightX, ry, WsRightW, rowH) });
+            _wsBattery = p.Add(new UiButton("BATTERY", () => WsLook(() => _wd.battery = !_wd.battery)) { Rect = new Rect(WsRightX + 0.06f, ry, coreW, lookH), TextSize = 0.0115f });
+            _wsNetwork = p.Add(new UiButton("NETWORK", () => WsLook(() => _wd.network = !_wd.network)) { Rect = new Rect(WsRightX + 0.06f + coreW + 0.005f, ry, coreW, lookH), TextSize = 0.0115f });
+            _wsClock = p.Add(new UiButton("CLOCK", () => WsLook(() => _wd.clock = !_wd.clock)) { Rect = new Rect(WsRightX + 0.06f + 2f * (coreW + 0.005f), ry, coreW, lookH), TextSize = 0.0115f });
+            ry += lookH + lookGap;
+            _wsCloseTap = p.Add(new UiToggle("Fold the rings after a tap", false, v => WsLook(() => _wd.closeAfterTap = v)) { Rect = new Rect(WsRightX, ry, WsRightW, lookH) });
 
             // the bottom row
+            float bottomY = c.yMax - t.ButtonHeight;
             _wsState = p.Add(new UiLabel("", t.SmallSize) { Rect = new Rect(WsLeftX, bottomY, WsLeftW, t.ButtonHeight), Color = t.TextDim });
             const float bGap = 0.014f;
             float bw = (WsRightW - 2f * bGap) / 3f;
@@ -509,10 +561,11 @@ namespace MetaCodex.Shell
         private static float Steps(float v) => Mathf.Round(v / 0.05f) * 0.05f;
 
         /// The draft's rings from the catalog (the app's items and the app plugins' tiles, with the draft's icons), then every
-        /// control and the twin.
+        /// control and the twin. A drag going on is dropped (the lists it was made from changed).
         private void RefreshWristPage()
         {
             if (_wd == null || !_wsBuilt) return;
+            WsDragReset();
             var all = MenuCatalog(_wd);
             _wsById.Clear();
             var ids = new List<string>(all.Count);
@@ -526,56 +579,60 @@ namespace MetaCodex.Shell
             }
             WristLayout.Resolve(ids, outerDef, ControlItemId, _wd.inner, _wd.outer, _wd.hidden, _wsInner, _wsOuter, _wsOff);
             if (_wsSel != null && !_wsInner.Contains(_wsSel) && !_wsOuter.Contains(_wsSel)) _wsSel = null;
-
-            FillSlots(_wsInnerBtns, _wsInner);
-            FillSlots(_wsOuterBtns, _wsOuter);
-            _wsInnerCap.Set($"INNER RING · {_wsInner.Count} ({UiWristMenu.MinInner} to {UiWristMenu.MaxInner})");
-            int more = UiWristMenu.MaxOuter - _wsOuter.Count;
-            _wsOuterCap.Set($"OUTER RING · {_wsOuter.Count} · " + (more > 0 ? more + " MORE FIT" : "FULL"));
+            RefreshPalette();
             RefreshSelection();
-            var add = new List<UiListItem>(_wsOff.Count);
-            foreach (var id in _wsOff)
-            {
-                var m = _wsById[id];
-                add.Add(new UiListItem { Icon = m.Glyph, Title = m.Label, Sub = m.Plugin ? "plugin · " + m.Source : "app", Badge = "+ ADD", Tag = id });
-            }
-            _wsAdd.SelectedIndex = -1; // a tap adds the row's item: no row stays chosen
-            _wsAdd.SetItems(add, keepScroll: true);
-            _wsAddCap.Set(_wsOff.Count > 0 ? $"OFF THE MENU · {_wsOff.Count} · TAP ONE TO ADD IT" : "OFF THE MENU");
             FillTwin();
             RefreshWristState();
         }
 
-        private void FillSlots(List<UiButton> pool, List<string> ring)
+        /// The palette: SYSTEM and APPS tiles off the menu (each with its glyph and name, draggable), then the app plugins that
+        /// are off or stopped by an error (dimmed: they have no tile until they run).
+        private void RefreshPalette()
         {
-            for (int k = 0; k < pool.Count; k++)
+            int s = 0, a = 0, appsOn = 0, stopped = 0;
+            foreach (var id in _wsInner) if (_wsById[id].Plugin) appsOn++;
+            foreach (var id in _wsOuter) if (_wsById[id].Plugin) appsOn++;
+            foreach (var id in _wsOff)
             {
-                var b = pool[k];
-                bool has = k < ring.Count;
-                b.SetVisible(has);
-                if (!has) continue;
-                var m = _wsById[ring[k]];
-                b.SetText(m.Glyph + " " + m.Label);
-                b.SetSelected(ring[k] == _wsSel);
+                var m = _wsById[id];
+                if (!m.Plugin) { if (s < _wsSysTiles.Count) ShowTile(_wsSysTiles[s++], id, m.Glyph, m.Label, false); }
+                else if (a < _wsAppTiles.Count) ShowTile(_wsAppTiles[a++], id, m.Glyph, m.Label, false);
             }
+            int appsOff = a;
+            if (Scripts != null)
+                foreach (var e in Scripts.Entries)
+                {
+                    if (e.Kind != "plugin" || e.Enabled && e.Error == null || PluginKindOf(e) != KindApps) continue;
+                    stopped++;
+                    if (a < _wsAppTiles.Count) ShowTile(_wsAppTiles[a++], null, "◇", (e.Title.Length > 0 ? e.Title : e.Name).ToUpperInvariant(), true);
+                }
+            for (int k = s; k < _wsSysTiles.Count; k++) _wsSysTiles[k].SetVisible(false);
+            for (int k = a; k < _wsAppTiles.Count; k++) _wsAppTiles[k].SetVisible(false);
+            _wsSysNote.Set(s == 0 ? "Every system tile is on the menu: drag one off the copy to take it off." : "");
+            _wsAppNote.Set(stopped > 0 ? "Dimmed: the plugin is off. Turn it on in MQH > PLUGINS."
+                : appsOff + appsOn == 0 ? "No app plugins yet: MQH > PLUGINS has examples (timers, calendar)."
+                : appsOff == 0 ? "Every app tile is on the menu." : "");
         }
 
-        /// The chosen item's line, the actions it allows (dimmed ones say why when pressed), its icon row.
+        private static void ShowTile(WsTile b, string id, string glyph, string label, bool dimmed)
+        {
+            b.ItemId = id;
+            b.SetVisible(true);
+            b.SetText(glyph + "\n" + label);
+            b.SetDimmed(dimmed);
+            b.SetSelected(false);
+        }
+
+        /// The chosen item's line and its icon row.
         private void RefreshSelection()
         {
             var t = UiTheme.Current;
             int ii = _wsSel != null ? _wsInner.IndexOf(_wsSel) : -1, oi = _wsSel != null ? _wsOuter.IndexOf(_wsSel) : -1;
             bool any = ii >= 0 || oi >= 0;
             var m = any ? _wsById[_wsSel] : null;
-            if (!any) _wsSelLine.Set("Choose a tile above: then move it, take it to the other ring, or hide it.", t.TextDim);
+            if (!any) _wsSelLine.Set("Tap a tile on the copy to choose it.", t.TextDim);
             else _wsSelLine.Set(UiChatView.Esc(m.Label) + " · " + (ii >= 0 ? $"inner ring, {ii + 1} of {_wsInner.Count}" : $"outer ring, {oi + 1} of {_wsOuter.Count}")
                 + (m.Plugin ? " · plugin " + UiChatView.Esc(m.Source) : ""), t.Text);
-            int ringCount = ii >= 0 ? _wsInner.Count : _wsOuter.Count;
-            _wsLeft.SetDimmed(!any || ringCount < 2);
-            _wsRight.SetDimmed(!any || ringCount < 2);
-            _wsToInner.SetDimmed(oi < 0 || _wsInner.Count >= UiWristMenu.MaxInner);
-            _wsToOuter.SetDimmed(ii < 0 || _wsInner.Count <= UiWristMenu.MinInner || _wsOuter.Count >= UiWristMenu.MaxOuter);
-            _wsHide.SetDimmed(!any || _wsSel == ControlItemId || ii >= 0 && _wsInner.Count <= UiWristMenu.MinInner);
             bool icon = any && m.Plugin;
             _wsIconCap.SetVisible(icon);
             _wsIconPrev.SetVisible(icon);
@@ -617,18 +674,200 @@ namespace MetaCodex.Shell
             _wsCloseTap.Set(_wd.closeAfterTap);
         }
 
-        // ------------------------------------------------------------------ the page's actions (all on the draft)
+        // ------------------------------------------------------------------ drag and drop (the router's pinch drag)
 
-        private void WsPick(bool outer, int slot)
+        // The router gives an element the pinch that starts on it (OnPress), every frame while it is held (OnDrag, the
+        // pointer as it is now, also off the element and off the page) and its end (OnRelease): the twin's surface and each
+        // palette tile are such elements. A pinch that moves WsDragStart is a drag: the tile follows the pointer on the twin,
+        // the twin shows where it lands (its neighbours make room) and the core says what a drop does; let go, it lands
+        // there. A pinch that does not move is a tap: on the twin it chooses the tile, on the palette it adds it at the end
+        // of the outer ring. Nothing here allocates per frame: a drag re-lays the twin only when the place changes.
+
+        private void WsTwinDown(UiPointerEvent e)
         {
-            var ring = outer ? _wsOuter : _wsInner;
-            if (_wd == null || slot >= ring.Count) return;
-            _wsSel = ring[slot];
-            FillSlots(_wsInnerBtns, _wsInner);
-            FillSlots(_wsOuterBtns, _wsOuter);
-            RefreshSelection();
-            _wsTwin?.Ping(SelectedPart());
+            if (_wd == null || _wsTwin == null || !TwinPoint(e, out var q)) return;
+            int part = _wsTwin.PickTile(q);
+            if (part < 0 || part >= _wsInner.Count + _wsOuter.Count) return; // the core or around it: a tap there chooses nothing
+            WsDragBegin(part < _wsInner.Count ? _wsInner[part] : _wsOuter[part - _wsInner.Count], true, _wsTwinArea);
         }
+
+        private void WsTwinUp(UiPointerEvent e, bool inside)
+        {
+            if (_wsDragId == null)
+            {
+                if (_wsSel != null) { _wsSel = null; RefreshSelection(); } // a tap on the core or a gap: nothing chosen
+                return;
+            }
+            WsDragEnd();
+        }
+
+        private void WsTwinOver(UiPointerEvent e)
+        {
+            if (_wsTwin == null || _wsDragId != null) return;
+            int part = TwinPoint(e, out var q) ? _wsTwin.PickTile(q) : -1;
+            if (_wsTwin.PreviewHover != part) _wsTwin.PreviewHover = part;
+        }
+
+        private void WsTileDown(WsTile tile, UiPointerEvent e)
+        {
+            if (_wd == null) return;
+            if (tile.ItemId == null) return; // a plugin that is off: its tap says where to turn it on
+            WsDragBegin(tile.ItemId, false, tile);
+        }
+
+        private void WsTileUp(WsTile tile, UiPointerEvent e, bool inside)
+        {
+            if (tile.ItemId == null)
+            {
+                if (inside) { UiSounds.Fire("click"); Toast("That plugin is off: turn it on in CONTROL > MQH > PLUGINS, then its tile is here.", "info"); }
+                return;
+            }
+            if (_wsDragId == null) return;
+            if (!_wsDragging) { WsDragReset(); if (inside) { UiSounds.Fire("click"); WsAdd(tile.ItemId); } return; } // a tap: at the end
+            WsDragEnd();
+        }
+
+        private void WsDragBegin(string id, bool fromMenu, UiElement owner)
+        {
+            WsDragReset();
+            _wsDragId = id;
+            _wsDragFromMenu = fromMenu;
+            _wsDragOwner = owner;
+        }
+
+        /// Every frame of a held pinch: past WsDragStart the tile is picked up; then the ghost follows the pointer and, when the
+        /// place under it changes, the twin is laid out again with the tile there.
+        private void WsDragMove(UiPointerEvent e)
+        {
+            if (_wsDragId == null || _wd == null || _wsTwin == null) return;
+            if (!_wsDragging)
+            {
+                if ((e.Point - e.PressPoint).sqrMagnitude < WsDragStart * WsDragStart) return;
+                _wsDragging = true;
+                UiSounds.Fire("click");
+                _wsTwin.GhostItem = TwinItem(_wsDragId);
+                _wsTwin.PreviewHover = -1;
+                _wsTwin.PreviewSelected = -1;
+                foreach (var tl in _wsSysTiles) if (tl.ItemId == _wsDragId) tl.SetSelected(true);
+                foreach (var tl in _wsAppTiles) if (tl.ItemId == _wsDragId) tl.SetSelected(true);
+            }
+            if (!TwinPoint(e, out var q)) return;
+            _wsTwin.GhostAt = q;
+            int ring = UiWristMenu.DropRing(q);
+            bool fromInner = _wsInner.Contains(_wsDragId), fromOuter = _wsOuter.Contains(_wsDragId);
+            int innerOthers = _wsInner.Count - (fromInner ? 1 : 0), outerOthers = _wsOuter.Count - (fromOuter ? 1 : 0);
+            int index = ring >= 0 ? UiWristMenu.DropIndex(q, ring == 0, ring == 0 ? innerOthers : outerOthers) : 0;
+            if (ring == _wsDropRing && index == _wsDropIndex) return; // the same place: nothing to lay out again
+            _wsDropRing = ring;
+            _wsDropIndex = index;
+            _wsDropWhy = DropRefusal(_wsDragId, ring, fromInner, innerOthers, outerOthers);
+            LayDragPreview(fromInner || fromOuter);
+        }
+
+        /// Why the dragged tile cannot land on `ring` (null: it can).
+        private static string DropRefusal(string id, int ring, bool fromInner, int innerOthers, int outerOthers)
+        {
+            if (ring < 0 && id == ControlItemId) return "CONTROL stays on the menu: it is the way back to this page.";
+            if (ring == 0 && innerOthers >= UiWristMenu.MaxInner) return $"The inner ring holds {UiWristMenu.MaxInner} at most.";
+            if (ring == 1 && outerOthers >= UiWristMenu.MaxOuter) return $"The outer ring holds {UiWristMenu.MaxOuter} at most.";
+            if (ring != 0 && fromInner && innerOthers < UiWristMenu.MinInner) return $"The inner ring keeps {UiWristMenu.MinInner} at least.";
+            return null;
+        }
+
+        /// The twin while a tile is dragged: the rings without it, and it at the place under the pointer (an empty, lit slot);
+        /// where it cannot land, the rings as they are with its own place lit (it goes back there).
+        private void LayDragPreview(bool onMenu)
+        {
+            var tw = _wsTwin;
+            string id = _wsDragId;
+            _wsPrevInner.Clear();
+            _wsPrevOuter.Clear();
+            UiWristMenu.Item hole = null;
+            if (_wsDropWhy != null)
+            {
+                _wsPrevInner.AddRange(_wsInner);
+                _wsPrevOuter.AddRange(_wsOuter);
+                if (onMenu) hole = TwinItem(id);
+            }
+            else
+            {
+                foreach (var x in _wsInner) if (x != id) _wsPrevInner.Add(x);
+                foreach (var x in _wsOuter) if (x != id) _wsPrevOuter.Add(x);
+                if (_wsDropRing >= 0)
+                {
+                    var ring = _wsDropRing == 0 ? _wsPrevInner : _wsPrevOuter;
+                    ring.Insert(Mathf.Clamp(_wsDropIndex, 0, ring.Count), id);
+                    hole = TwinItem(id);
+                }
+            }
+            FillTwinRings(_wsPrevInner, _wsPrevOuter);
+            tw.PreviewHole = hole;
+            tw.GhostWarn = _wsDropWhy != null;
+            tw.PreviewCoreText = _wsDropWhy != null ? (id == ControlItemId && _wsDropRing < 0 ? "STAYS" : "NO ROOM")
+                : _wsDropRing == 0 ? "INNER" : _wsDropRing == 1 ? "OUTER" : onMenu ? "TAKE OFF" : "";
+        }
+
+        /// The pinch is let go: the tile lands where the twin showed it, goes off the menu, or goes back (with the reason).
+        private void WsDragEnd()
+        {
+            string id = _wsDragId, why = _wsDropWhy;
+            bool dragged = _wsDragging, fromMenu = _wsDragFromMenu;
+            int ring = _wsDropRing, index = _wsDropIndex;
+            WsDragReset();
+            if (id == null || _wd == null) return;
+            if (!dragged)
+            {
+                if (!fromMenu) return;
+                _wsSel = id; // a tap on the twin chooses the tile (its icon, for a plugin's)
+                RefreshSelection();
+                _wsTwin?.Ping(SelectedPart());
+                return;
+            }
+            if (ring == -2) { FillTwin(); return; }
+            if (why != null)
+            {
+                UiSounds.Fire("error");
+                Toast(why, "warn");
+                FillTwin();
+                return;
+            }
+            if (ring < 0 && !fromMenu) { FillTwin(); return; } // a palette tile let go away from the rings: nothing changes
+            UiSounds.Fire("ping");
+            WsEdit((inner, outer, off) =>
+            {
+                inner.Remove(id);
+                outer.Remove(id);
+                off.Remove(id);
+                if (ring < 0)
+                {
+                    off.Insert(0, id);
+                    if (_wsSel == id) _wsSel = null;
+                    return null;
+                }
+                var r = ring == 0 ? inner : outer;
+                r.Insert(Mathf.Clamp(index, 0, r.Count), id);
+                _wsSel = id;
+                return null;
+            });
+        }
+
+        /// No drag any more: the twin shows the draft again (when a drag was shown), the palette's picked tile goes dark.
+        private void WsDragReset()
+        {
+            bool shown = _wsDragging;
+            _wsDragId = null;
+            _wsDropWhy = null;
+            _wsDragging = false;
+            _wsDropRing = -2;
+            _wsDropIndex = 0;
+            _wsDragOwner = null;
+            if (!shown) return;
+            foreach (var tl in _wsSysTiles) tl.SetSelected(false);
+            foreach (var tl in _wsAppTiles) tl.SetSelected(false);
+            if (_wsTwin != null) { _wsTwin.GhostItem = null; _wsTwin.PreviewHole = null; _wsTwin.PreviewCoreText = null; _wsTwin.GhostWarn = false; }
+        }
+
+        // ------------------------------------------------------------------ the page's actions (all on the draft)
 
         /// A change of the rings: made on copies of the resolved lists, refused with a reason, else written into the draft
         /// (as the default when it is the default again) and shown.
@@ -658,66 +897,7 @@ namespace MetaCodex.Shell
             return WristMenuSettings.Same(inner, di) && WristMenuSettings.Same(outer, dout) && WristMenuSettings.Same(off, doff);
         }
 
-        private void WsMove(int dir)
-        {
-            if (_wsSel == null) { Toast("Choose a tile first.", "info"); return; }
-            string id = _wsSel;
-            WsEdit((inner, outer, off) =>
-            {
-                var ring = inner.Contains(id) ? inner : outer;
-                if (ring.Count < 2) return "It is the only tile on its ring.";
-                int i = ring.IndexOf(id), j = (i + dir + ring.Count) % ring.Count;
-                ring.RemoveAt(i);
-                ring.Insert(j, id); // past either end it goes round to the other end, as on the ring
-                return null;
-            });
-        }
-
-        private void WsToInner()
-        {
-            if (_wsSel == null) { Toast("Choose a tile first.", "info"); return; }
-            string id = _wsSel;
-            WsEdit((inner, outer, off) =>
-            {
-                if (inner.Contains(id)) return "It is on the inner ring already.";
-                if (inner.Count >= UiWristMenu.MaxInner) return $"The inner ring holds {UiWristMenu.MaxInner} at most: move one out first.";
-                outer.Remove(id);
-                inner.Add(id);
-                return null;
-            });
-        }
-
-        private void WsToOuter()
-        {
-            if (_wsSel == null) { Toast("Choose a tile first.", "info"); return; }
-            string id = _wsSel;
-            WsEdit((inner, outer, off) =>
-            {
-                if (outer.Contains(id)) return "It is on the outer ring already.";
-                if (inner.Count <= UiWristMenu.MinInner) return $"The inner ring keeps {UiWristMenu.MinInner} at least.";
-                if (outer.Count >= UiWristMenu.MaxOuter) return $"The outer ring holds {UiWristMenu.MaxOuter} at most: hide one first.";
-                inner.Remove(id);
-                outer.Add(id);
-                return null;
-            });
-        }
-
-        private void WsHide()
-        {
-            if (_wsSel == null) { Toast("Choose a tile first.", "info"); return; }
-            string id = _wsSel;
-            if (id == ControlItemId) { Toast("CONTROL stays on the menu: it is the way back to this page.", "warn"); return; }
-            WsEdit((inner, outer, off) =>
-            {
-                if (inner.Contains(id) && inner.Count <= UiWristMenu.MinInner) return $"The inner ring keeps {UiWristMenu.MinInner} at least.";
-                inner.Remove(id);
-                outer.Remove(id);
-                off.Insert(0, id);
-                _wsSel = null;
-                return null;
-            });
-        }
-
+        /// A palette tile's tap: at the end of the outer ring (else the inner ring), the shortcut for a drag.
         private void WsAdd(string id)
         {
             WsEdit((inner, outer, off) =>
@@ -725,7 +905,7 @@ namespace MetaCodex.Shell
                 if (!off.Remove(id)) return null;
                 if (outer.Count < UiWristMenu.MaxOuter) outer.Add(id);
                 else if (inner.Count < UiWristMenu.MaxInner) inner.Add(id);
-                else { off.Insert(0, id); return "Both rings are full: hide a tile first."; }
+                else { off.Insert(0, id); return "Both rings are full: drag a tile off the copy first."; }
                 _wsSel = id;
                 return null;
             });
@@ -746,7 +926,7 @@ namespace MetaCodex.Shell
             _wsTwin?.Ping(SelectedPart());
         }
 
-        /// MENU SIZE, GLASS, the core's parts, the fold after a tap: the twin takes them at once (no labels made again).
+        /// MENU SIZE, GLASS, the core's parts, the fold after a tap: the twin takes them at once (no labels refitted).
         private void WsLook(Action change)
         {
             if (_wd == null) return;
@@ -787,7 +967,7 @@ namespace MetaCodex.Shell
             RefreshWristState();
         }
 
-        /// The plugins' tiles changed: an open page takes them into its copy.
+        /// The plugins' tiles changed: an open page takes them into its copy and its palette.
         private void OnMenuCatalogChanged()
         {
             if (_wd != null) RefreshWristPage();
@@ -798,5 +978,43 @@ namespace MetaCodex.Shell
         public UiWristMenu WristTwinForTest => _wsTwin;
         public WristMenuSettings WristDraftForTest => _wd;
         public void WristPageSelectForTest(string id) { _wsSel = id; RefreshWristPage(); }
+        /// The twin's drag surface, and the palette tile of an item (null: not in the palette).
+        public UiElement WristTwinAreaForTest => _wsTwinArea;
+        public UiElement WristPaletteTileForTest(string id) => _wsSysTiles.Concat(_wsAppTiles).FirstOrDefault(x => x.Visible && x.ItemId == id);
+        /// The page point over a point of the twin (twin-local metres before its scale; a flat page).
+        public Vector2 WristTwinToPageForTest(Vector2 local)
+        {
+            var world = _wsTwin.transform.TransformPoint(new Vector3(local.x, local.y, 0f));
+            return _wsPage.LocalToPanel(_wsPage.transform.InverseTransformPoint(world));
+        }
+    }
+
+    /// The WRIST MENU page's twin surface: an element that hands the router's pinch (press, every frame of the drag,
+    /// release) and the ray's hover to the page.
+    internal sealed class WsDragArea : UiElement
+    {
+        public Action<UiPointerEvent> Down, Drag, Over;
+        public Action<UiPointerEvent, bool> Up;
+        public Action Left;
+        public override bool Interactive => true;
+        protected override void Build() { }
+        public override void OnPress(UiPointerEvent e) => Down?.Invoke(e);
+        public override void OnDrag(UiPointerEvent e) => Drag?.Invoke(e);
+        public override void OnHover(UiPointerEvent e) => Over?.Invoke(e);
+        public override void OnRelease(UiPointerEvent e, bool inside) => Up?.Invoke(e, inside);
+        protected override void OnInteractionChanged() { if (!Hover && !Pressed) Left?.Invoke(); }
+    }
+
+    /// A palette tile on the WRIST MENU page: a button whose pinch can be dragged onto the twin (ItemId null: a plugin that
+    /// is off, shown dimmed). A pinch that does not move is a tap.
+    internal sealed class WsTile : UiButton
+    {
+        public string ItemId;
+        public Action<WsTile, UiPointerEvent> Down, Drag;
+        public Action<WsTile, UiPointerEvent, bool> Up;
+        public WsTile() : base("") { }
+        public override void OnPress(UiPointerEvent e) { base.OnPress(e); Down?.Invoke(this, e); }
+        public override void OnDrag(UiPointerEvent e) => Drag?.Invoke(this, e);
+        public override void OnRelease(UiPointerEvent e, bool inside) => Up?.Invoke(this, e, inside);
     }
 }

@@ -35,7 +35,14 @@ namespace MetaCodex.UI
     {
         /// One tile. Locked: drawn dimmed while it returns true (the first start's setup, ShellSetupLocks); a touch still runs
         /// Act, which says why it waits.
-        public sealed class Item { public string Glyph, Label, Icon; public Action Act; public Func<bool> Lit, Locked; public Color LitTint; }
+        public sealed class Item
+        {
+            public string Glyph, Label, Icon; public Action Act; public Func<bool> Lit, Locked; public Color LitTint;
+            // Preview only: where the tile is drawn now (it eases to its place when tiles make room): ring (1 inner, 2 outer),
+            // centre angle and width in degrees
+            internal int AnimRing;
+            internal float AnimAng, AnimWedge;
+        }
 
         public readonly List<Item> Inner = new List<Item>(), Outer = new List<Item>();
         /// How many tiles a ring holds (ShellWristSettings keeps a layout inside these): the inner ring MinInner..MaxInner,
@@ -74,6 +81,15 @@ namespace MetaCodex.UI
         /// its name in the core. Set before Build.
         public bool Preview;
         public int PreviewSelected = -1;
+        /// Preview: the tile a ray or fingertip is over (lit like PreviewSelected, its name in the core; -1: none).
+        public int PreviewHover = -1;
+        /// Preview, while a tile is dragged: the place it would land (drawn as an empty, lit slot; its neighbours make room),
+        /// the tile itself following the pointer (GhostItem at GhostAt, menu-local metres before Scale; GhostWarn: it cannot
+        /// go there), and what the core says instead of a name (null: as usual).
+        public Item PreviewHole, GhostItem;
+        public Vector2 GhostAt;
+        public bool GhostWarn;
+        public string PreviewCoreText;
         /// The light's render queue (-1: the shader's, Transparent-20). The copy on the page draws after the page's glass.
         public int ArtQueue = -1;
         /// Where it floats: this far off the back of the wrist, and this far from the wrist towards the eyes (metres).
@@ -182,6 +198,9 @@ namespace MetaCodex.UI
         private static readonly (float start, float len)[] ArcsOuter = { (20f, 64f), (128f, 36f), (214f, 92f) };
         private static readonly (float start, float len)[] ArcsInner = { (60f, 22f), (250f, 30f), (318f, 12f) };
         private int _timeMinute = -1;
+        private float _frameDt;          // Preview: this frame's dt, for the tiles easing to their places
+        private TextMeshPro _ghostLabel; // Preview: the dragged tile's name (made at the first drag)
+        private Item _ghostShown;
         private string _timeText = "";
         // the status row in the core (UiDeviceStatus): read when the menu appears, then every few seconds while it shows
         private TextMeshPro _status;
@@ -298,6 +317,18 @@ namespace MetaCodex.UI
                 _depthMr.receiveShadows = false;
                 _depthMr.enabled = false;
             }
+        }
+
+        /// A tile's label takes its item's name and size again, fitted to its place (RebuildItems).
+        private void RefitLabel(int i)
+        {
+            var l = _labels[i];
+            if (l == null) return;
+            string text = ItemAt(i).Label ?? "";
+            l.fontSize = (Theme ?? UiTheme.Current).FontSizeFor((i < Inner.Count ? InnerLine : OuterLine) * _textScale) * 1.12f;
+            l.characterSpacing = 6f;
+            if (l.text != text) l.text = text;
+            _labelDx[i] = FitTileLabel(l, i);
         }
 
         /// Makes the labels not made yet (the face, the hint, then one per tile): at most `max`, and, with a budget, no more
@@ -433,6 +464,7 @@ namespace MetaCodex.UI
         private void ResizeItemArrays()
         {
             int n = Inner.Count + Outer.Count;
+            if (_hoverAmt.Length == n) { Array.Clear(_hoverAmt, 0, n); Array.Clear(_flash, 0, n); return; } // same count: kept (the twin re-lays often)
             _hoverAmt = new float[n];
             _flash = new float[n];
             _iconRect = new Vector4[n];
@@ -473,14 +505,24 @@ namespace MetaCodex.UI
             catch (Exception ex) { Debug.LogWarning("[MetaCodex] wrist menu: Built handler: " + ex.Message); }
         }
 
-        /// The item lists changed (a tile came or went in Inner / Outer): makes the tile labels again from them, and sizes the
-        /// per-tile arrays and icon rectangles to match. The face, hint, mesh, materials, particles and atlas stay. Cheap
+        /// The item lists changed (a tile came, went or moved in Inner / Outer): the tile labels take the new names (the ones
+        /// there are reused, missing ones made), and the per-tile arrays and icon rectangles are sized to match. The face, hint, mesh, materials, particles and atlas stay. Cheap
         /// enough to call whenever the table changes. Before Ready it only notes that the lists changed: the staged build
         /// uses the new lists when it makes the labels, and makes them again at the end if they changed after.
         public void RebuildItems()
         {
             if (!_ready) { _itemsVersion++; return; }
-            DestroyTileLabels();
+            // the labels there are take the new names (making text objects is what costs: the twin re-lays its rings live
+            // while a tile is dragged); only missing ones are made, extra ones go
+            int n = Inner.Count + Outer.Count;
+            while (_labels.Count > n)
+            {
+                int k = _labels.Count - 1;
+                if (_labels[k] != null) KillObject(_labels[k].gameObject);
+                _labels.RemoveAt(k);
+                _labelDx.RemoveAt(k);
+            }
+            for (int i = 0; i < _labels.Count; i++) RefitLabel(i);
             MakeLabels(int.MaxValue, 0.0);
             ResizeItemArrays();
             FillIconRects();
@@ -681,6 +723,7 @@ namespace MetaCodex.UI
             if (_faceText != null && _faceText.gameObject.activeSelf != on) _faceText.gameObject.SetActive(on);
             if (_hint != null && _hint.gameObject.activeSelf != on) _hint.gameObject.SetActive(on);
             if (_status != null && _status.gameObject.activeSelf != on) _status.gameObject.SetActive(on);
+            if (_ghostLabel != null && _ghostLabel.gameObject.activeSelf != on) _ghostLabel.gameObject.SetActive(on);
             if (_motes != null) { if (on && !_motes.isPlaying) _motes.Play(); else if (!on && _motes.isPlaying) _motes.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear); }
         }
 
@@ -835,6 +878,7 @@ namespace MetaCodex.UI
         private void TickPreview(float dt)
         {
             _time += dt;
+            _frameDt = dt;
             _tipOk = false;
             _emitterOk = false;
             Engaged = false;
@@ -848,7 +892,8 @@ namespace MetaCodex.UI
             _present = Mathf.MoveTowards(_present, keepFace ? 1f : 0f, dt / (keepFace ? AppearTime : VanishTime));
             transform.localScale = Vector3.one * Scale;
             int n = Inner.Count + Outer.Count;
-            Hover = PreviewSelected >= 0 && PreviewSelected < n ? PreviewSelected : -1;
+            int lit = PreviewHover >= 0 ? PreviewHover : PreviewSelected;
+            Hover = lit >= 0 && lit < n ? lit : -1;
             for (int i = 0; i < _hoverAmt.Length; i++)
             {
                 _hoverAmt[i] = Mathf.MoveTowards(_hoverAmt[i], Hover == i ? 1f : 0f, dt * 10f);
@@ -873,6 +918,41 @@ namespace MetaCodex.UI
             _wave = 0f;
             var w = transform.InverseTransformPoint(WorldOf(part));
             _waveCenter = new Vector2(w.x, w.y);
+        }
+
+        /// Preview (the WRIST MENU page's twin, reached with a ray from a metre away): the tile nearest to a point, generously:
+        /// anywhere in a ring's band, gaps included (0.. inner ring first, then outer; -1: neither ring). Menu-local metres
+        /// before Scale.
+        public int PickTile(Vector2 q)
+        {
+            float r = q.magnitude, a = Mathf.Atan2(q.y, q.x) * Mathf.Rad2Deg, mid = (InR1 + OutR0) * 0.5f;
+            if (r >= CoreHit && r <= mid && Inner.Count > 0) return Nearest(a, Inner.Count, StartDeg(true));
+            if (r > mid && r <= OutR1 + 0.008f && Outer.Count > 0) return Inner.Count + Nearest(a, Outer.Count, StartDeg(false));
+            return -1;
+        }
+
+        /// Where a tile dropped at q goes: 0 the inner ring (its band and the core), 1 the outer ring (its band and a little
+        /// beyond), -1 off the menu (further out).
+        public static int DropRing(Vector2 q)
+        {
+            float r = q.magnitude;
+            return r <= (InR1 + OutR0) * 0.5f ? 0 : r <= OutR1 + 0.014f ? 1 : -1;
+        }
+
+        /// The place (0..others) a tile dropped at q takes in a ring that holds `others` tiles besides it: the slot nearest to
+        /// q when the ring holds others + 1.
+        public static int DropIndex(Vector2 q, bool inner, int others)
+        {
+            int n = Mathf.Max(1, others + 1);
+            float spacing = Spacing(n), start = inner ? InStart : 90f - spacing * 0.5f;
+            return Nearest(Mathf.Atan2(q.y, q.x) * Mathf.Rad2Deg, n, start);
+        }
+
+        private static int Nearest(float a, int n, float start)
+        {
+            float step = 360f / n;
+            int i = Mathf.RoundToInt(-Mathf.DeltaAngle(start, a) / step);
+            return ((i % n) + n) % n;
         }
 
         /// What a point of the menu's surface is over (menu-local, metres before Scale).
@@ -1051,10 +1131,23 @@ namespace MetaCodex.UI
                 if (e <= 0.001f) { HideLabel(label); continue; }
                 float eo = EaseOut(e), eb = EaseOutBack(e);
                 float spacing = Spacing(cnt), gap = inner ? InGapDeg : OutGapDeg;
-                float half = (WedgeDeg(cnt, inner) * 0.5f - gap * 0.5f) * Mathf.Clamp01(eo * 1.05f);
-                float centre = (inner ? startIn : startOut) - j * spacing + (inner ? 38f : -38f) * (1f - eo);
-                float h = _hoverAmt[i], f = _flash[i];
                 var item = ItemAt(i);
+                float place = (inner ? startIn : startOut) - j * spacing, wedge = WedgeDeg(cnt, inner);
+                if (Preview)
+                {
+                    // the twin: a tile that changes place eases there (tiles make room for a dragged one); one new to its ring
+                    // grows from nothing at its place
+                    int ring = inner ? 1 : 2;
+                    if (item.AnimRing != ring) { item.AnimRing = ring; item.AnimAng = place; item.AnimWedge = 0f; }
+                    float k = _frameDt > 0f ? 1f - Mathf.Exp(-16f * _frameDt) : 1f; // no frames yet (tests): at its place
+                    item.AnimAng = Mathf.LerpAngle(item.AnimAng, place, k);
+                    item.AnimWedge = Mathf.Lerp(item.AnimWedge, wedge, k);
+                    place = item.AnimAng;
+                    wedge = item.AnimWedge;
+                }
+                float half = (wedge * 0.5f - gap * 0.5f) * Mathf.Clamp01(eo * 1.05f);
+                float centre = place + (inner ? 38f : -38f) * (1f - eo);
+                float h = _hoverAmt[i], f = _flash[i];
                 bool locked = item.Locked != null && item.Locked();
                 bool lit = !locked && item.Lit != null && item.Lit();
                 Color col = locked ? LockedTint : lit ? item.LitTint : accent;
@@ -1064,6 +1157,13 @@ namespace MetaCodex.UI
                 float alpha = Seg(B, s0, s0 + 0.16f) * P;
                 float prox = Hover == i && _tipOk ? Mathf.Clamp01(1f + _tipLocal.z / 0.03f) : 0f;
                 float state = Mathf.Clamp01(h * 0.75f + f);
+                if (item == PreviewHole)
+                {
+                    // where the dragged tile lands: an empty slot, its edge lit
+                    Tile(r0, r1, centre - half, centre + half, inner ? 10 : 6, z, accent, alpha * 0.30f, 1f, 0f, 0f, 0f);
+                    HideLabel(label);
+                    continue;
+                }
                 Tile(r0, r1, centre - half, centre + half, inner ? 10 : 6, z, col, alpha * (inner ? 1f : 0.92f), state, prox, lit ? 1f : 0f, f);
                 // the icon draws itself with a scan line, then the name types in under it
                 float ar = centre * Mathf.Deg2Rad, rm = (r0 + r1) * 0.5f;
@@ -1130,6 +1230,8 @@ namespace MetaCodex.UI
                 IconQuad(new Vector2(0f, -FaceR * 0.42f * faceScale), 0.0042f, -0.0008f, _closeRect, accent, Seg(B, 0.6f, 1f) * P * (0.55f + 0.45f * _coreHover), 1f, _coreHover, 0.6f);
             StatusRow(t, Seg(P, 0.6f, 1f), uiHide); // over the glass of the face (drawn after it: not darkened by it)
 
+            if (Preview) Ghost(t, accent, uiHide);
+
             if (_wave < 1f)
             {
                 float w = 1f - Mathf.Pow(1f - _wave, 3f);
@@ -1147,7 +1249,8 @@ namespace MetaCodex.UI
 
             // the face's text: the time (unless the core hides it), or the name of what the fingertip is over while unfolded;
             // the hint while folded
-            string want = B > 0.5f && Hover >= 0 ? ItemAt(Hover).Label ?? "" : B > 0.5f && Hover == -2 ? "CLOSE" : ShowClock ? TimeText(now) : "";
+            string want = Preview && PreviewCoreText != null ? PreviewCoreText
+                : B > 0.5f && Hover >= 0 ? ItemAt(Hover).Label ?? "" : B > 0.5f && Hover == -2 ? "CLOSE" : ShowClock ? TimeText(now) : "";
             if (want != _faceShown) { _faceShown = want; _faceText.text = want; _faceTyped = 0f; }
             int faceChars = Mathf.CeilToInt(want.Length * Mathf.Min(_faceTyped, Seg(P, 0.6f, 1f) * 1.0001f));
             if (_faceText.maxVisibleCharacters != faceChars) _faceText.maxVisibleCharacters = faceChars;
@@ -1167,6 +1270,38 @@ namespace MetaCodex.UI
         }
 
         private static void HideLabel(TextMeshPro l) { var c = l.color; if (c.a != 0f) { c.a = 0f; l.color = c; } }
+
+        /// Preview: the dragged tile under the pointer: a small tile of glass with its icon and name, in front of the rings,
+        /// in the warning tone where it cannot go.
+        private void Ghost(UiTheme t, Color accent, float uiHide)
+        {
+            var it = GhostItem;
+            if (it == null) { if (_ghostLabel != null) HideLabel(_ghostLabel); return; }
+            const float hw = 0.0125f, hh = 0.0115f, z = -0.006f;
+            var col = GhostWarn ? t.Warn : accent;
+            RectTile(GhostAt, new Vector2(hw, hh), z, col, 0.95f * _present, 0.85f);
+            if (TryRect(it.Icon, out var rect) || TryRect("plugin", out rect))
+                IconQuad(GhostAt + new Vector2(0f, 0.0028f), 0.0100f, z - 0.0005f, rect, col, _present, 1f, 0.8f, 1f);
+            if (_ghostLabel == null)
+            {
+                _ghostLabel = Label("ghost", "", OuterLine, Theme?.Display);
+                _ghostLabel.characterSpacing = 3f;
+            }
+            if (_ghostShown != it)
+            {
+                _ghostShown = it;
+                _ghostLabel.text = it.Label ?? "";
+                _ghostLabel.maxVisibleCharacters = 99;
+                float size = (Theme ?? UiTheme.Current).FontSizeFor(OuterLine) * 1.12f;
+                _ghostLabel.fontSize = size;
+                float w = _ghostLabel.GetPreferredValues(_ghostLabel.text).x, room = hw * 2f - 0.002f;
+                if (w > room) _ghostLabel.fontSize = size * Mathf.Max(0.6f, room / w);
+            }
+            _ghostLabel.rectTransform.localPosition = new Vector3(GhostAt.x, GhostAt.y - 0.0062f, z - 0.0007f);
+            var lc = Color.Lerp(GhostWarn ? t.Warn : t.TextAccent, Color.white, 0.5f);
+            lc.a = _present * (1f - uiHide);
+            if (_ghostLabel.color != lc) _ghostLabel.color = lc;
+        }
 
         // ------------------------------------------------------------------ the status row in the core
 
@@ -1317,6 +1452,23 @@ namespace MetaCodex.UI
                 Vert(new Vector3(cx * r1, sy * r1, z), lin, new Vector2(width, k * l1), new Vector4(width, l1, 0f, state), ex);
             }
             Strip(b, segs);
+        }
+
+        /// A rectangle of the tiles' glass (kind 0, its corners rounded): the dragged tile on the twin.
+        private void RectTile(Vector2 c, Vector2 half, float z, Color col, float strength, float state)
+        {
+            if (strength <= 0.002f) return;
+            var lin = col.linear;
+            lin.a = strength;
+            float w = half.x * 2f, l = half.y * 2f;
+            var ex = new Vector4(Mathf.Min(Corner * 1.5f, w * 0.3f, l * 0.3f), 0f, 0f, 0f);
+            var info = new Vector4(w, l, 0f, state);
+            int b = _v.Count;
+            Vert(new Vector3(c.x - half.x, c.y - half.y, z), lin, new Vector2(0f, 0f), info, ex);
+            Vert(new Vector3(c.x + half.x, c.y - half.y, z), lin, new Vector2(w, 0f), info, ex);
+            Vert(new Vector3(c.x - half.x, c.y + half.y, z), lin, new Vector2(0f, l), info, ex);
+            Vert(new Vector3(c.x + half.x, c.y + half.y, z), lin, new Vector2(w, l), info, ex);
+            Strip(b, 1);
         }
 
         /// An arc of light (kind 1) of width w around radius r, with room for its glow; dashes along it if asked.

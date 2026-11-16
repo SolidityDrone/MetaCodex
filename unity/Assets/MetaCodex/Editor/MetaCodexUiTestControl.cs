@@ -280,8 +280,10 @@ namespace MetaCodex.EditorTools
         }
 
         /// CONTROL > WRIST MENU (owner 2026-11-16): the layout rules (WristLayout, pure), then the page: it opens with the rail
-        /// and a twin of the menu; edits change the twin only; CONTROL cannot be hidden; CANCEL drops; APPLY changes the wrist
-        /// menu and the DOCK; RESET LAYOUT + APPLY gives the default back; closing the page takes the twin away.
+        /// and a twin of the menu; tiles are dragged on the twin, off it and from the palette onto it (the router's press, drag
+        /// and release events); edits change the twin only; CONTROL cannot be taken off; CANCEL drops; APPLY changes the wrist
+        /// menu and the DOCK; a palette tap adds at the end; RESET LAYOUT + APPLY gives the default back; closing the page
+        /// takes the twin away.
         private static void WristMenuPage(MetaCodexShell shell)
         {
             // the rules
@@ -305,8 +307,10 @@ namespace MetaCodex.EditorTools
             Check(def && saved && innerMax && innerMin && outerMax,
                 $"wrist layout rules: default ({def}); saved order, unknown ids skipped, new ones at the end of the outer ring, CONTROL never off ({saved}); inner ring {UiWristMenu.MinInner}-{UiWristMenu.MaxInner} ({innerMin}, {innerMax}); outer ring {UiWristMenu.MaxOuter}, the rest off ({outerMax})");
 
-            // the page
+            // the page (flat: the drags below map twin points to page points on a flat page)
             foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
+            bool bendW = shell.Settings.bendPanels;
+            shell.Settings.bendPanels = false;
             shell.Settings.wrist = new WristMenuSettings();
             shell.OnSettingsChanged();
             shell.OpenControl("wrist");
@@ -319,31 +323,55 @@ namespace MetaCodex.EditorTools
             bool opened = page.IsOpen && shell.ControlRailPage == MetaCodexShell.WristSettingsId && shell.ControlCategoryNow() == "wrist" && twin != null && twin.Preview && twin.Ready
                 && twin.Inner.Count == menu.Count(x => !x.Outer) && twin.Outer.Count == menu.Count(x => x.Outer) && twin.GetComponent<MeshRenderer>().sharedMaterial.renderQueue == 2995;
             Check(opened, $"WRIST MENU opens beside the rail with a twin of the menu ({twin?.Inner.Count} + {twin?.Outer.Count}, drawn after the page's glass)");
-            if (twin == null) return;
+            if (twin == null) { shell.Settings.bendPanels = bendW; shell.OnSettingsChanged(); return; }
             twin.PoseTimelineForTest(1f, 1f);
             RenderPanel(page, "ui-wrist-settings.png");
-            shell.WristPageSelectForTest("focus");
-            Btn("HIDE").Click();
-            bool twinOnly = !HasFocus(twin.Outer) && shell.MainMenuItems().Any(x => x.Label == "FOCUS") && shell.Settings.wrist.IsDefaultLayout;
-            shell.WristPageSelectForTest("control");
-            Btn("HIDE").Click();
+            // drag and drop, as the router delivers it (press, drag frames, release; page points over the twin)
+            var area = shell.WristTwinAreaForTest;
+            UiPointerEvent Ev(Vector2 pt, Vector2 press) => new UiPointerEvent { Point = pt, PressPoint = press };
+            Vector2 LocalOf(int part) { var l = twin.transform.InverseTransformPoint(twin.WorldOf(part)); return new Vector2(l.x, l.y); }
+            int PartOf(string label) { int i = twin.Inner.FindIndex(x => x.Label == label); return i >= 0 ? i : twin.Outer.FindIndex(x => x.Label == label) is int o && o >= 0 ? twin.Inner.Count + o : -1; }
+            void Drag(UiElement from, Vector2 a, Vector2 toLocal)
+            {
+                var b = shell.WristTwinToPageForTest(toLocal);
+                from.OnPress(Ev(a, a));
+                from.OnDrag(Ev(Vector2.Lerp(a, b, 0.5f), a));
+                from.OnDrag(Ev(b, a));
+                from.OnRelease(Ev(b, a), true);
+            }
+            void DragTile(string label, Vector2 toLocal) { int part = PartOf(label); if (part >= 0) Drag(area, shell.WristTwinToPageForTest(LocalOf(part)), toLocal); }
+            var offTheMenu = new Vector2(0.11f, 0f);                     // beyond the outer ring
+            Vector2 outerTop = new Vector2(0f, 0.0595f), innerBottom = new Vector2(0f, -0.035f);
+            DragTile("FOCUS", offTheMenu);
+            bool twinOnly = !HasFocus(twin.Outer) && shell.MainMenuItems().Any(x => x.Label == "FOCUS") && shell.Settings.wrist.IsDefaultLayout
+                && shell.WristDraftForTest.hidden.Contains("focus") && shell.WristPaletteTileForTest("focus") != null;
+            DragTile("CONTROL", offTheMenu);
             bool controlStays = twin.Inner.Any(x => x.Label == "CONTROL");
+            DragTile("FILES", outerTop);
+            bool toOuter = twin.Outer.Any(x => x.Label == "FILES") && !twin.Inner.Any(x => x.Label == "FILES");
+            var focusTile = shell.WristPaletteTileForTest("focus");
+            if (focusTile != null) Drag(focusTile, focusTile.Rect.center, innerBottom);
+            bool fromPalette = twin.Inner.Any(x => x.Label == "FOCUS");
             Btn("CANCEL").Click();
-            bool cancelled = HasFocus(twin.Outer);
-            shell.WristPageSelectForTest("focus");
-            Btn("HIDE").Click();
+            bool cancelled = HasFocus(twin.Outer) && twin.Inner.Any(x => x.Label == "FILES");
+            DragTile("FOCUS", offTheMenu);
             Btn("APPLY").Click();
             var dock = shell.PanelsById["dock"].Elements.OfType<UiButton>().Select(b => (b.Text ?? "").Split('\n').Last()).ToList();
             bool applied = !shell.MainMenuItems().Any(x => x.Label == "FOCUS") && !dock.Contains("FOCUS") && shell.Settings.wrist.hidden.Contains("focus");
+            var tap = shell.WristPaletteTileForTest("focus");
+            if (tap != null) { tap.OnPress(Ev(tap.Rect.center, tap.Rect.center)); tap.OnRelease(Ev(tap.Rect.center, tap.Rect.center), true); }
+            bool tapAdds = twin.Outer.Count > 0 && twin.Outer[twin.Outer.Count - 1].Label == "FOCUS";
             Btn("RESET LAYOUT").Click();
             bool resetOnTwin = HasFocus(twin.Outer) && !shell.MainMenuItems().Any(x => x.Label == "FOCUS");
             Btn("APPLY").Click();
             bool reset = shell.Settings.wrist.IsDefaultLayout && shell.MainMenuItems().Any(x => x.Label == "FOCUS");
+            bool noButtons = !page.Elements.OfType<UiButton>().Any(b => b.Text == "HIDE" || b.Text == "TO INNER" || b.Text == "TO OUTER" || b.Text.Contains("MOVE"));
             shell.ClosePanel(MetaCodexShell.WristSettingsId);
             bool gone = shell.WristTwinForTest == null;
-            Check(twinOnly && controlStays && cancelled && applied && resetOnTwin && reset && gone,
-                $"WRIST MENU: HIDE changes the twin only ({twinOnly}); CONTROL stays ({controlStays}); CANCEL drops ({cancelled}); APPLY changes the menu and the DOCK ({applied}); "
-                + $"RESET LAYOUT on the twin ({resetOnTwin}), applied ({reset}); the twin goes with the page ({gone})");
+            Check(twinOnly && controlStays && toOuter && fromPalette && cancelled && applied && tapAdds && resetOnTwin && reset && noButtons && gone,
+                $"WRIST MENU by drag and drop: FOCUS dragged off the twin goes to the palette, the wrist unchanged ({twinOnly}); CONTROL dragged off snaps back ({controlStays}); "
+                + $"FILES dragged to the outer ring ({toOuter}); FOCUS dragged from the palette onto the inner ring ({fromPalette}); CANCEL drops ({cancelled}); APPLY changes the menu and the DOCK ({applied}); "
+                + $"a tap on a palette tile adds it at the end ({tapAdds}); RESET LAYOUT on the twin ({resetOnTwin}), applied ({reset}); no MOVE / HIDE buttons ({noButtons}); the twin goes with the page ({gone})");
 
             // voice: the page's names, the glass (its own value), "bigger" = the menu's size (not the DOCK / WRIST switch)
             var vOpen = shell.Voice.FastMatch("open the radial menu settings");
@@ -354,6 +382,7 @@ namespace MetaCodex.EditorTools
             Check((string)vOpen?.Args["panel"] == MetaCodexShell.WristSettingsId && Mathf.Abs(glass - 0.5f) < 1e-3f && shell.Settings.wrist.size > 1.01f && shell.Settings.wristMenu == mode0,
                 $"voice: “open the radial menu settings” -> {(string)vOpen?.Args["panel"]}; wrist_opacity 50 % -> the wrist glass {glass:F2}; “make the wrist menu bigger” -> {bigger}");
             shell.Settings.wrist = new WristMenuSettings();
+            shell.Settings.bendPanels = bendW;
             shell.OnSettingsChanged();
             foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
             shell.TickLayoutForTest(0.02f, 1);
