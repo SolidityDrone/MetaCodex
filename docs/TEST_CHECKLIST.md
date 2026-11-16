@@ -73,11 +73,16 @@ The wrist menu (CONTROL > DISPLAY > Main menu on the wrist):
 
 CONTROL > WRIST MENU (◔ in THIS HEADSET):
 
-- [ ] Open it from the rail, or say "open the wrist menu settings" → a line says how to open the wrist menu; the inner and outer rings are rows of buttons in order; on the right a copy of the wrist menu stands unfolded on the page; the menu on your wrist does not change while you edit
-- [ ] Pick FOCUS, then MOVE ▸, TO INNER, HIDE → the copy changes at once each time (the chosen tile lit, its name in the copy's core); the bottom line says the change is not on your wrist yet
-- [ ] Pick CONTROL, press HIDE → it stays and a message says why; with 3 tiles on the inner ring, TO OUTER and HIDE refuse the same way
-- [ ] Tap a row under OFF THE MENU → it goes to the end of the outer ring; the outer ring's caption says how many more fit (12 at most)
-- [ ] With the Timers example installed, pick TIMER → ICON ◂ ▸ steps through the generic icons on the copy; PLUGIN'S gives the timer icon back
+- [ ] Open it from the rail, or say "open the wrist menu settings" → a line says how to open the wrist menu; on the right a copy of the wrist menu stands unfolded on the page; on the left the tiles off the menu, in SYSTEM and APPS; no MOVE / HIDE buttons; the menu on your wrist does not change while you edit
+- [ ] Point the ray at a tile of the copy → it lights and its name shows in the copy's core
+- [ ] With the ray, pinch FOCUS on the copy and drag it round the outer ring → a click on pick-up; the tile follows the ray; an empty lit slot shows where it lands and the other tiles move aside; the core says OUTER; let go → it lands there (a soft ping); the bottom line says the change is not on your wrist yet
+- [ ] Drag a tile from the outer ring to the inner ring (the core says INNER), and one from the inner ring to the outer → each lands where the slot showed it
+- [ ] Drag a tile off the copy (past its edge, or onto the tiles on the left) → the core says TAKE OFF; let go → it is in SYSTEM (or APPS) on the left
+- [ ] Drag CONTROL off the copy → the tile turns to the warning tone and the core says STAYS; let go → it goes back to its place and a message says why; an inner ring of 3 (dragging one out) or 8 (dragging one in), or a full outer ring of 12, refuses the same way with NO ROOM
+- [ ] Drag a tile from SYSTEM or APPS onto the copy → it lands at the slot under the ray; a tap on a tile there instead adds it at the end of the outer ring
+- [ ] With the Timers example installed, drag TIMER off the copy → it is in APPS; turn the plugin off in MQH > PLUGINS → TIMERS shows dimmed in APPS, a tap says to turn it on there
+- [ ] Tap TIMER on the copy (pinch and let go without moving) → it is chosen: ICON ◂ ▸ steps through the generic icons on the copy; PLUGIN'S gives the timer icon back
+- [ ] Lose the hand while dragging (put it down) → the drag ends, the copy shows the layout as before
 - [ ] Move MENU SIZE, TEXT SIZE and GLASS; switch BATTERY, NETWORK, CLOCK and "Fold the rings after a tap" → the copy follows (the names once the TEXT SIZE slider rests); at the largest TEXT SIZE long names shrink to fit their tile
 - [ ] CANCEL → the copy is your wrist menu again; make a change and close the page, open it again → the change is gone
 - [ ] Make changes and press APPLY → your wrist menu is as on the copy (rings, size, names, glass, core); with "Main menu on the wrist" off the DOCK shows the same order without the hidden tiles
