@@ -1,9 +1,16 @@
 #!/bin/bash
-# mcx-project: the type of a project folder in MetaCodex: native (a Quest app), default (any coding) or research.
-#   mcx-project type <dir>                         native | default | research (stored in <dir>/.metacodex/project.json;
+# mcx-project: the type of a project folder in MetaCodex: native (a Quest app), default (any coding), research, or plugins
+# (a plugin of the MetaCodex app with a fixed kind: app, gesture or behaviour).
+#   mcx-project type <dir>                         native | default | research | plugins (stored in <dir>/.metacodex/project.json;
 #                                                  without it: native when the folder is an app, AndroidManifest.xml +
 #                                                  src/, else default; an old "general" reads as default)
-#   mcx-project set <dir> native|default|research  store it and lay / remove what the type brings ("general" = default)
+#   mcx-project set <dir> native|default|research  store it and lay / remove what the type brings ("general" = default);
+#                                                  a plugins project's type and kind are fixed (refused)
+#   mcx-project new plugins --kind app|gesture|behaviour <name>
+#                                                  a plugin project: the app makes /root/metacodex-projects/plugins/
+#                                                  <apps|gestures|behaviours>/<id> (its scaffold, the read-only marker, git,
+#                                                  its THREADS project) and runs it at once (needs the app: mcx-ui)
+#   mcx-project kind <dir>                         a plugins project's kind (its marker; checked against its folder)
 # New projects live in /root/metacodex-projects/<type>/<name> (the app makes them there, with git init).
 # Native: the quest-native-* skills linked into <dir>/.claude/skills (Claude Code reads project skills there; the other
 # agents read the AGENTS.md block that points at them) and the native block in AGENTS.md and CLAUDE.md (between
@@ -29,6 +36,7 @@ This folder is a research project, not an app. The work here is reading, testing
 - Commit the notes with git when a piece of work is done (the folder is a git repository).
 <!-- /metacodex:research -->'
 die() { echo "mcx-project: $*" >&2; exit 1; }
+PLUGINS_ROOT=/root/metacodex-projects/plugins
 
 type_of() {
   local f="$1/.metacodex/project.json" t
@@ -60,11 +68,44 @@ elif os.path.exists(path):
 PY
 }
 
+# kind_of <dir>: app | gesture | behaviour from the marker; dies when it is not a plugins project or the folder disagrees
+kind_of() {
+  local f="$1/.metacodex/project.json" k folder want
+  [ -f "$f" ] || die "$1 is not a plugin project (no .metacodex/project.json)"
+  [ "$(type_of "$1")" = plugins ] || die "$1 is a $(type_of "$1") project, not a plugin project"
+  k=$(sed -n 's/.*"kind": *"\([a-z]*\)".*/\1/p' "$f" | head -1)
+  case "$k" in app|gesture|behaviour) ;; *) die "$f has no kind app, gesture or behaviour" ;; esac
+  folder=$(basename "$(dirname "$1")")
+  case "$k" in app) want=apps ;; gesture) want=gestures ;; behaviour) want=behaviours ;; esac
+  [ "$(dirname "$(dirname "$1")")" = "$PLUGINS_ROOT" ] && [ "$folder" != "$want" ] &&
+    die "the marker says $k but the folder is plugins/$folder: the app does not load it (the kind is fixed: make a new project)"
+  echo "$k"
+}
+
+new_project() {
+  local type="${1:-}" kind="" name=""; shift || true
+  [ "$type" = plugins ] || die "new: only plugins (other projects: MetaCodex THREADS > + PROJECT; native apps: mcx-app new)"
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --kind) kind="${2:-}"; shift 2 || shift ;;
+      app|gesture|behaviour) [ -z "$kind" ] && [ -z "$name" ] && kind=$1 || name="${name:+$name }$1"; shift ;;
+      *) name="${name:+$name }$1"; shift ;;
+    esac
+  done
+  case "$kind" in app|gesture|behaviour) ;; *) die "new plugins --kind app|gesture|behaviour <name>" ;; esac
+  [ -n "$name" ] || die "new plugins --kind $kind <name>: say its name (e.g. Water tracker)"
+  command -v mcx-ui >/dev/null || die "no mcx-ui (the MetaCodex app makes plugin projects)"
+  # the app writes the scaffold and the marker, starts git and adds the THREADS project: one way to make one
+  mcx-ui plugin new "$name" "$kind"
+}
+
 set_type() {
   local dir t n
   [ -d "${1:-}" ] || die "no folder ${1:-}"
   dir=$(readlink -f "$1"); t=${2:-}
   [ "$t" = general ] && t=default
+  [ "$(type_of "$dir")" = plugins ] && die "$dir is a plugin project: its type and kind are fixed (.metacodex/project.json); make a new project instead"
+  [ "$t" = plugins ] && die "plugin projects are made by the app: mcx-project new plugins --kind app|gesture|behaviour <name>"
   [[ "$t" == native || "$t" == default || "$t" == research ]] || die "type: native, default or research"
   mkdir -p "$dir/.metacodex"
   printf '{\n  "type": "%s"\n}\n' "$t" > "$dir/.metacodex/project.json"
@@ -93,6 +134,8 @@ set_type() {
 
 case "${1:-}" in
   type) [ -d "${2:-}" ] || die "no folder ${2:-}"; type_of "$(readlink -f "$2")" ;;
+  kind) [ -d "${2:-}" ] || die "no folder ${2:-}"; kind_of "$(readlink -f "$2")" ;;
   set) set_type "${2:-}" "${3:-}" ;;
-  *) sed -n 2,13p "$0"; exit 2 ;;
+  new) shift; new_project "$@" ;;
+  *) sed -n '2,/^set -uo/p' "$0" | sed '$d'; exit 2 ;;
 esac

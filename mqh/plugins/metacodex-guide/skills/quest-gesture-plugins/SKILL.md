@@ -6,12 +6,14 @@ description: Create or change hand-gesture plugins for the MetaCodex headset app
 # Gesture plugins for the MetaCodex app
 
 The MetaCodex app (Unity, on a Meta Quest 3 / 3S) recognises hands every frame. Gesture plugins add **named
-gestures** and **what they do**. They are one kind of MetaCodex plugin (`"kind": "gesture"` in `plugin.json`;
-the others are `app`, a window and a menu tile, and `behaviour`): the folder, the review-first rule, the checks
-(`mcx-ui plugin check <id>`) and the removal are the same for every kind and are in the skill `quest-plugins`.
-A plugin can be of one kind and still use the others' calls (a gesture plugin may open a window). A plugin is a
-folder of plain files; the app loads it within a second of any change, with no rebuild and no restart. You write
-files; you never touch Unity or C#. The user sees it in CONTROL > MQH > PLUGINS (GESTURES) and in the GESTURES tab.
+gestures** and **what they do**. A gesture plugin is a plugin project of kind gesture,
+`/root/metacodex-projects/plugins/gestures/<id>/` (its kind fixed by the folder and the read-only marker
+`.metacodex/project.json`): what a plugin project is, the loop (plan and OK, write, `mcx-ui plugin check <id>`, try,
+commit, report), changes and removal are the same for every kind and are in the skill `quest-plugins`: read it first.
+A plugin of one kind may still use the others' calls (a gesture plugin may open a window), but only app plugins get a
+menu tile. The app loads the plugin within a second of any change, with no rebuild and no restart. You write files;
+you never touch Unity or C#. The user sees it in CONTROL > MQH > PLUGINS (GESTURES, with its threads) and in the
+GESTURES tab.
 
 Read this whole file before writing anything. Details: `reference/hand-model.md` (numbers, axes),
 `reference/lua-api.md` (every function), `reference/recipes.md` (complete working plugins),
@@ -28,7 +30,8 @@ Read this whole file before writing anything. Details: `reference/hand-model.md`
 | "A then B" (double clap, thumbs up twice) | `gesture.sequence` | `main.lua` |
 | The reaction (toast, panel, terminal command, URL, modal) | `gesture.on(name, fn)` or `app.action("...")` | `main.lua` |
 
-Check what exists first: `mcx-ui gesture list` (the 7 built-ins and every plugin loaded on this headset).
+Check what exists first: `mcx-ui gesture list` (the 7 built-ins and every plugin loaded on this headset). A binding
+is the user's setting, not part of your plugin: in a gesture plugin project, put the reaction in `main.lua`.
 
 **A plugin brings its own poses.** A fresh headset has only the built-ins (`pinch grab point open palm-up
 clap select`): the examples `core-poses` (thumbs-up, thumbs-down, victory, horns, call-me) and `swipes`
@@ -43,15 +46,17 @@ first, then `mcx-ui plugin example core-poses` (or `swipes`).
 ## 1. Where files go
 
 ```
-/mnt/quest/plugins/<id>/          <id>: lowercase letters, digits, - or _ (folder name = plugin id)
-  plugin.json                     required
+/root/metacodex-projects/plugins/gestures/<id>/   <id>: lowercase letters, digits, - or _ (folder name = plugin id)
+  .metacodex/project.json         the marker {"type": "plugins", "kind": "gesture"}: read-only, never change it
+  plugin.json                     required ("kind": "gesture")
   poses/<gesture-name>.json       optional, one named pose per file
   main.lua                        optional: detectors, handlers, sequences
-  README.md                       optional: what it does, how to use it
+  AGENTS.md, CLAUDE.md            made with the project: what an agent reads first
 ```
 
-`/mnt/quest` is the app's shared folder seen from Linux. If it does not exist you are not on the
-headset: write to the folder the user or the test harness gives you, same layout.
+The user makes the project (THREADS > + PROJECT > PLUGIN > GESTURE, or MQH > PLUGINS > + NEW PLUGIN); you work in it.
+Older gesture plugins may be folders in `/mnt/quest/plugins/<id>/` (no marker): they still load; make no new ones
+there. Off the headset (a test), write to the folder you are given, same layout.
 
 `plugin.json`:
 
@@ -65,8 +70,9 @@ headset: write to the folder the user or the test harness gives you, same layout
 }
 ```
 
-Only `id`/`name`/`version`/`description` are read today (`main` and `poses` override the defaults
-`main.lua` and `poses/`). Keep the description one line: CONTROL > MQH > PLUGINS shows it.
+`name`, `version` and `description` are shown in CONTROL > MQH > PLUGINS (keep the description one line); `kind`
+must be `gesture` (the project's kind counts; another value is a warning); `main` and `poses` override the defaults
+`main.lua` and `poses/`.
 
 ## 2. Pose files (static shapes)
 
@@ -141,7 +147,8 @@ Rules that keep it working:
   restart goes in `store.set(key, string)` / `store.get(key)`.
 - Never use a gesture that the system or the UI already owns as a trigger by itself:
   `pinch` (clicks), `grab`/fist (moves panels, spins the carousel), `point` (aims the ray), and
-  "palm up + pinch" (the Horizon OS menu). Combine them with something distinctive instead.
+  "palm up + pinch" (the system menu). Combine them with something distinctive instead: both hands at once,
+  held still for a moment (`hold` 0.5-0.8, `h.speed < 0.3`), as in `reference/recipes.md` recipe 4b.
 - Destructive actions (closing everything, `run:` commands that change files) go through a
   confirmation: `ui.modal(title, text, {"DO IT", "CANCEL"}, function(i) if i == 1 then ... end end)`.
 
@@ -162,21 +169,22 @@ Panels: `dock` `terminals` `files` `git` `web` (the in-app browser window) `brow
 
 ## 5. Procedure (do all of it)
 
-0. Review first: tell the user what the plugin will add or change (gestures, reactions, voice commands) and how
-   to turn it off, and wait for their OK. The same for changes to an existing plugin.
+0. Review first: tell the user what the plugin will add or change (gestures in body words, reactions, voice
+   commands) and how to turn it off, and wait for their OK. The same for changes to an existing plugin.
 1. Restate the gesture as a precise shape/motion: which hand(s), which fingers straight or curled,
    where the palm and thumb point, what motion, how long. Pick the mechanism from section 0.
-2. `mcx-ui gesture list` and `mcx-ui plugin list`: see what is loaded; pick a new plugin id.
-3. Write `plugin.json`, then the pose files and/or `main.lua` (complete files; no placeholders). Every
-   gesture your reactions name is a built-in or defined in this plugin (section 0).
-4. Within ~1 s the app loads it. Check: `mcx-ui plugin list` → your plugin, `error=-`;
-   `mcx-ui plugin log <id>` → `loaded (N handlers, N poses, N detectors)`;
-   `mcx-ui gesture list` → your gesture names.
-5. Prove the reaction: `mcx-ui gesture <name> right start` simulates the event; the toast/panel
-   should happen (`mcx-ui ui list` shows `open=True`). Fix and repeat until clean.
-6. Tell the user, in one short message: the gesture to make (in body words), what it triggers, how to
+2. `mcx-ui gesture list`: see what is loaded (a name you want may be taken). Read this project's `plugin.json` and
+   `main.lua` (the scaffold has one example detector: replace it, or keep it only if the user wants it).
+3. Write the pose files and/or `main.lua` (complete files; no placeholders); raise `version` in `plugin.json`. Every
+   gesture your reactions name is a built-in or defined in this plugin (section 0); your own names start with the id.
+4. Within ~1 s the app loads it. Check: `mcx-ui plugin check <id>` → `loaded`, `warnings: 0`;
+   `mcx-ui plugin log <id>` → `loaded (N handlers, N poses, N detectors)`; `mcx-ui gesture list` → your names.
+5. Prove the reaction: `mcx-ui gesture <name> right start` (a two-hand gesture: `both start`) simulates the event;
+   the toast/panel should happen (`mcx-ui ui list` shows `open=True`). Fix and repeat until clean.
+6. Commit: `git add -A && git commit -m "<what changed>"`.
+7. Tell the user, in one short message: the gesture to make (in body words), what it triggers, how to
    watch it live (MQH > GESTURES > LIVE shows finger bars and active gestures), how to turn it off
-   (CONTROL > MQH > PLUGINS, or `mcx-ui plugin disable <id>`), and the plugin folder.
+   (CONTROL > MQH > PLUGINS, or `mcx-ui plugin disable <id>`).
 
 The simulation proves the wiring, not the recognition: real recognition needs the user's hands. When a
 pose does not fire for the user, ask them to record it (GESTURES > RECORD makes `my-poses/poses/<name>.json`
@@ -186,7 +194,8 @@ while they hold it.
 
 ## 6. Checklist before you answer
 
-- [ ] Folder `/mnt/quest/plugins/<id>/` with a valid `plugin.json` (JSON parses; id = folder name)
+- [ ] The project folder `/root/metacodex-projects/plugins/gestures/<id>/`, its marker untouched; a valid `plugin.json`
+      (JSON parses; id = folder name; `"kind": "gesture"`; version raised)
 - [ ] Every gesture the plugin reacts to is a built-in or defined in the plugin itself (never assume the
       examples `core-poses` / `swipes` are installed)
 - [ ] Every gesture name is unique and lowercase-with-dashes; no clash with built-ins
@@ -195,7 +204,7 @@ while they hold it.
 - [ ] Detectors: cheap, `hand` set correctly, a cooldown on motion gestures (0.5-1 s)
 - [ ] Reactions only on `e.phase == "start"` (or `"tap"`) unless the end matters
 - [ ] No reliance on pinch / fist / point / palm-up-pinch alone
-- [ ] `mcx-ui plugin list` shows no error; the simulated event produced the reaction
+- [ ] `mcx-ui plugin check <id>`: `loaded`, `warnings: 0`; the simulated event produced the reaction; committed
 - [ ] The answer tells the user how to do it, how to see it live, and how to turn it off
 - [ ] The user saw the change and said OK before it was written (review first)
 - [ ] Voice commands the plugin adds are complete: `mcx-ui voice registry` shows them with `warnings: []`, and

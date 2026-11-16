@@ -24,8 +24,9 @@ description: Where you are when you run inside MetaCodex - a Meta Quest headset 
 |---|---|
 | `/root` | home |
 | `/root/metacodex-projects/{native,default,research}/<name>` | the user's projects, by type (MetaCodex's + PROJECT makes them: git init, `mcx-project` type); THREADS groups them the same way |
+| `/root/metacodex-projects/plugins/{apps,gestures,behaviours}/<id>/` | plugins of the app: projects of type plugins with a fixed kind (`app`: a window and a menu tile; `gesture`: named hand gestures; `behaviour`: reactions, no window), marked by the read-only `.metacodex/project.json` (never change it); the app runs them live. Made by the user (+ PROJECT > PLUGIN, or MQH > PLUGINS > + NEW PLUGIN) or `mcx-project new plugins --kind <kind> <name>`; THREADS lists them under PLUGINS. Skill `quest-plugins` (gestures: then `quest-gesture-plugins`) |
 | `/mnt/quest` | the app's shared folder (the user and adb can reach it) |
-| `/mnt/quest/plugins/<id>/` | plugins, one folder each, of three kinds (`plugin.json` `"kind"`): `app` (own windows, menu buttons, voice commands), `gesture` (named hand gestures), `behaviour` (Lua that reacts to the app). Start from skill `quest-plugins`; gesture details: `quest-gesture-plugins` |
+| `/mnt/quest/plugins/<id>/` | older plugin folders (no project, no marker: the V shortcut's `core-poses`, plugins of older versions); they still load. Make new plugins as projects (row above) |
 | `/mnt/quest/scripts/*.lua` | single-file Lua behaviours (skill `quest-scripting`) |
 | `/mnt/quest/control.token` | token for the app's control port (new at every app start) |
 | `/mnt/quest/qvac.token` | token for the local AI service (new at every start of the service) |
@@ -59,9 +60,11 @@ description: Where you are when you run inside MetaCodex - a Meta Quest headset 
   the captures (JSON, newest first).
 - Skills and plugins: the user manages them in CONTROL (on the wrist menu): MQH > SKILLS lists what every agent has
   (theirs, removable; the ones that came with MetaCodex or MQH, read-only); CONTROL > MQH > PLUGINS lists every plugin by
-  kind (APPS, GESTURES, BEHAVIOURS, MQH's own) with the examples to add (Timers, Calendar, gesture examples); the
-  GESTURES tab is the studio for gesture plugins (record poses, bindings); SCRIPTS lists the Lua scripts. New skills go to `~/.mqh/skills/<name>/` (skill `skill-creator`);
-  never edit the shipped ones.
+  kind (APPS, GESTURES, BEHAVIOURS, MQH's own) with the examples to add (Timers, Calendar, gesture examples: + ADD makes
+  each a plugin project); a picked plugin shows its threads (a tap opens one) and NEW THREAD ▸ starts one on it;
+  + NEW PLUGIN makes a plugin project; DELETE removes the project folder and its project. The GESTURES tab is the
+  studio for gesture plugins (record poses, bindings); SCRIPTS lists the Lua scripts. New skills go to
+  `~/.mqh/skills/<name>/` (skill `skill-creator`); never edit the shipped ones.
 - Native apps (a separate Quest app with its own Library icon) live in **Native app projects**: their folder has
   `.metacodex/project.json` with `"type": "native"`, the quest-native-* skills in `.claude/skills` and a native block
   in AGENTS.md / CLAUDE.md; follow those there. A native app is mixed reality and hands only unless the user
@@ -71,7 +74,7 @@ description: Where you are when you run inside MetaCodex - a Meta Quest headset 
   asks for a native app here, make the project: `mcx-app new /root/metacodex-projects/native/<name> --label "<Label>"` (it marks the
   folder native; skills at /opt/metacodex/quest-native/skills/quest-native-apps/SKILL.md), then tell the user to
   start the app's thread in that project (MetaCodex: + PROJECT, type Native app). `mcx-project type|set <dir>`
-  reads or changes a folder's type.
+  reads or changes a folder's type (a plugins project's type and kind are fixed; `mcx-project kind <dir>` reads it).
 - Views: show charts, diagrams (Mermaid), tables, checklists, choices or a physics scene in the headset
   with a ```mcx-view``` / ```mermaid``` block in your reply, or `mcx-ui view show spec.json` from a shell
   (skill `quest-views`). A tapped choice comes back as the user's next message.
@@ -99,7 +102,8 @@ description: Where you are when you run inside MetaCodex - a Meta Quest headset 
   words ("make a fist", "open GESTURES from the dock").
 - Things you change for the app (plugins, scripts, settings) apply live; never ask for an app rebuild
   for behaviour changes. A feature the app lacks (a timer, a calendar, a tool window with a menu button) is a
-  plugin (skill `quest-plugins`), not an app change. **Review first:** show the user what you will change and get their OK before writing
+  plugin project (skill `quest-plugins`), not an app change; in a plugin project, write only in its folder and
+  commit each working step. **Review first:** show the user what you will change and get their OK before writing
   plugins, scripts, gestures or voice commands.
 - Keep the command registry true: whatever you add declares all its options (skill `quest-scripting`, "MUST");
   whatever you turn off or remove takes its commands with it, so no agent or the voice model ever offers a dead

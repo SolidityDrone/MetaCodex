@@ -118,7 +118,11 @@ namespace MetaCodex.Hands
         public string Source = "";
     }
 
-    /// Never created by the harness (the fake services return null), so the host runs without an engine.
+    /// A small stand-in for the app's gesture engine, enough to test gesture plugins without hands: the harness sets the
+    /// hands (HandState fields) and calls Tick then RunCustomTick. Built-ins come from the hand's flags (grab, pinch,
+    /// point, open, palm-up), poses from finger curls within their tolerance (and palm / thumb directions), Lua detectors
+    /// from Feed (no hold, no cooldown). Every change becomes a start or end event in Events (the harness dispatches them).
+    /// Not the app's code: the real engine's filters and timings are not modelled.
     public sealed class GestureEngine
     {
         public static readonly string[] Names = { "pinch", "grab", "point", "open", "palm-up", "clap", "select" };
@@ -128,15 +132,124 @@ namespace MetaCodex.Hands
         public event Action<float, float> CustomTick;
         public Pose Head => new Pose(Vector3.zero, Quaternion.identity);
         public Vector3 ToHeadLocal(Vector3 world) => world;
-        public string Nearest(Vector3 v, Vector3 from) => "";
-        public void Feed(string name, string hand, bool raw, float time, Vector3 pos, float hold, float cooldown) { }
-        public void RegisterCustom(string name, string kind, string owner, string description, string hand) { }
-        public void AddPose(PoseSpec p) { }
-        public void RaiseExternal(string name, string hand, string phase, float time, Vector3 pos, string detail) { }
-        public IEnumerable<string> AllNames() => Names;
-        public bool IsActive(string name, string hand = null) => false;
-        public void RemoveOwnedBy(string owner) { }
-        internal void RunCustomTick(float time, float dt) => CustomTick?.Invoke(time, dt);
+
+        /// The direction's name by its largest axis (x right, y up, z forward).
+        public string Nearest(Vector3 v, Vector3 from)
+        {
+            float ax = Math.Abs(v.x), ay = Math.Abs(v.y), az = Math.Abs(v.z);
+            if (ax + ay + az < 1e-4f) return "";
+            if (ay >= ax && ay >= az) return v.y > 0 ? "up" : "down";
+            if (ax >= az) return v.x > 0 ? "right" : "left";
+            return v.z > 0 ? "away" : "head";
+        }
+
+        /// Gestures the plugins added: (name, "pose" or "lua", owner).
+        public readonly List<(string name, string kind, string owner)> Custom = new List<(string, string, string)>();
+        public readonly List<PoseSpec> Poses = new List<PoseSpec>();
+        /// Events since the harness last took them.
+        public readonly List<GestureEvent> Events = new List<GestureEvent>();
+        public readonly List<string> Emitted = new List<string>();
+        private readonly HashSet<string> _active = new HashSet<string>();   // "name/hand"
+        private readonly HashSet<string> _fed = new HashSet<string>();      // detectors true at the last feed
+
+        public void RegisterCustom(string name, string kind, string owner, string description, string hand)
+        {
+            Custom.RemoveAll(c => c.name == name && c.owner == owner);
+            Custom.Add((name, kind, owner));
+        }
+
+        public void AddPose(PoseSpec p)
+        {
+            Poses.RemoveAll(x => x.Name == p.Name);
+            Poses.Add(p);
+            Custom.RemoveAll(c => c.name == p.Name);
+            Custom.Add((p.Name, "pose", p.Owner));
+        }
+
+        public void RemoveOwnedBy(string owner)
+        {
+            Custom.RemoveAll(c => c.owner == owner);
+            Poses.RemoveAll(p => p.Owner == owner);
+        }
+
+        public IEnumerable<string> AllNames()
+        {
+            var all = new List<string>(Names);
+            foreach (var c in Custom) if (!all.Contains(c.name)) all.Add(c.name);
+            return all;
+        }
+
+        public bool IsActive(string name, string hand = null)
+        {
+            if (hand != null) return _active.Contains(name + "/" + hand);
+            foreach (var a in _active) if (a.StartsWith(name + "/", StringComparison.Ordinal)) return true;
+            return false;
+        }
+
+        public void RaiseExternal(string name, string hand, string phase, float time, Vector3 pos, string detail)
+        {
+            Emitted.Add(name + " " + hand + " " + phase);
+            Events.Add(new GestureEvent { Name = name, Hand = hand, Phase = phase, Time = time, Position = pos, Detail = detail });
+        }
+
+        /// A Lua detector's value this pass (ScriptHost's OnCustomTick): true after false = start, false after true = end.
+        public void Feed(string name, string hand, bool raw, float time, Vector3 pos, float hold, float cooldown)
+        {
+            string key = name + "/" + hand;
+            if (raw && _fed.Add(key)) { _active.Add(key); Events.Add(new GestureEvent { Name = name, Hand = hand, Phase = "start", Time = time, Position = pos, Detail = "detector" }); }
+            else if (!raw && _fed.Remove(key)) { _active.Remove(key); Events.Add(new GestureEvent { Name = name, Hand = hand, Phase = "end", Time = time, Position = pos, Detail = "detector" }); }
+        }
+
+        /// The built-ins and the poses from the hands now: all states first, then the start / end events.
+        public void Tick(float time)
+        {
+            var now = new HashSet<string>();
+            foreach (var h in new[] { Left, Right })
+            {
+                if (!h.Tracked) continue;
+                if (h.Grabbing) now.Add("grab/" + h.Side);
+                if (h.Pinching) now.Add("pinch/" + h.Side);
+                if (h.Pointing) now.Add("point/" + h.Side);
+                if (h.Open) now.Add("open/" + h.Side);
+                if (h.PalmUp) now.Add("palm-up/" + h.Side);
+                foreach (var p in Poses) if ((p.Hand == "any" || p.Hand == h.Side) && Matches(p, h)) now.Add(p.Name + "/" + h.Side);
+            }
+            var ended = new List<string>();
+            foreach (var a in _active) if (!_fed.Contains(a) && !now.Contains(a)) ended.Add(a);
+            var started = new List<string>();
+            foreach (var a in now) if (!_active.Contains(a)) started.Add(a);
+            foreach (var a in ended) _active.Remove(a);
+            foreach (var a in started) _active.Add(a);
+            foreach (var a in ended) Events.Add(Ev(a, "end", time));
+            foreach (var a in started) Events.Add(Ev(a, "start", time));
+        }
+
+        /// Ends every active gesture (the hands go away).
+        public void Clear(float time)
+        {
+            foreach (var a in _active) Events.Add(Ev(a, "end", time));
+            _active.Clear();
+            _fed.Clear();
+        }
+
+        private static GestureEvent Ev(string key, string phase, float time)
+        {
+            int i = key.LastIndexOf('/');
+            return new GestureEvent { Name = key.Substring(0, i), Hand = key.Substring(i + 1), Phase = phase, Time = time, Detail = "harness" };
+        }
+
+        private bool Matches(PoseSpec p, HandState h)
+        {
+            for (int i = 0; i < 5; i++)
+                if (p.Fingers[i].HasValue && Math.Abs(p.Fingers[i].Value - h.Fingers[i]) > p.Tolerance) return false;
+            if (!string.IsNullOrEmpty(p.PalmFacing) && Nearest(h.PalmNormal, h.Frame.Palm) != p.PalmFacing) return false;
+            if (!string.IsNullOrEmpty(p.ThumbPointing) && Nearest(h.ThumbDir, h.Frame.Palm) != p.ThumbPointing) return false;
+            if (p.PinchMin.HasValue && h.Pinch < p.PinchMin.Value) return false;
+            if (p.PinchMax.HasValue && h.Pinch > p.PinchMax.Value) return false;
+            return true;
+        }
+
+        public void RunCustomTick(float time, float dt) => CustomTick?.Invoke(time, dt);
     }
 }
 

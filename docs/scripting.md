@@ -9,11 +9,33 @@ only its own script or plugin. Nothing needs an APK rebuild.
 | Kind | Where | What it can do | Skill |
 |---|---|---|---|
 | Script | `/mnt/quest/scripts/<name>.lua` | react to events, run app actions, add voice commands | `quest-scripting` |
-| Gesture plugin | `/mnt/quest/plugins/<id>/` (`plugin.json`, pose files, `main.lua`) | new poses and gestures, bindings to actions ([ui.md](ui.md#gesture-plugins-no-rebuild)) | `quest-gesture-plugins` |
-| App plugin | `/mnt/quest/plugins/<id>/` (`plugin.json`, `main.lua`) | its own windows, menu tiles, voice commands, alarms and saved state | `quest-plugins` |
+| App plugin | project `/root/metacodex-projects/plugins/apps/<id>/` | its own windows, menu tiles, voice commands, alarms and saved state | `quest-plugins` |
+| Gesture plugin | project `/root/metacodex-projects/plugins/gestures/<id>/` (pose files, `main.lua`) | new poses and gestures and what they do ([ui.md](ui.md#gesture-plugins-no-rebuild)) | `quest-plugins`, `quest-gesture-plugins` |
+| Behaviour plugin | project `/root/metacodex-projects/plugins/behaviours/<id>/` | reactions to gestures, the voice or the time, no window | `quest-plugins`, `quest-scripting` |
 
 The app reloads a script or a plugin within a second of a change. MQH > SCRIPTS and CONTROL > MQH > PLUGINS list them; an
 agent that changes one shows the change and asks the user first (AGENTS.md).
+
+## Plugin projects
+
+A plugin is a project of type `plugins` with a fixed kind (`Runtime/Scripting/PluginProject.cs`):
+
+- The folder is `/root/metacodex-projects/plugins/<apps|gestures|behaviours>/<id>/`; its name is the plugin id. It holds
+  `plugin.json`, `main.lua`, optional `poses/*.json`, `AGENTS.md` and `CLAUDE.md` (what an agent reads first) and git.
+- The marker `.metacodex/project.json`, `{"type": "plugins", "kind": "app"}`, is written read-only. The app loads a
+  project only when the marker's kind is its folder's kind. `plugin.json`'s `"kind"` never changes it: a different
+  value is a `warn` line (`plugin check` counts it). A folder without the marker, with a marker of another type or
+  kind, or with an id another plugin has, is not loaded; the log says why once, and `plugin check <id>` shows it.
+- Made by THREADS > + PROJECT > PLUGIN or CONTROL > MQH > PLUGINS > + NEW PLUGIN… (APP, GESTURE, BEHAVIOUR, then a name),
+  by voice (`new_project`, type `plugins`, kind), or by `mcx-project new plugins --kind <kind> <name>` (through the
+  control port: `plugin new <name> <kind>`). The app writes the scaffold of the kind (APP: a window with a counter
+  and a menu tile; GESTURE: a both-palms-up detector and a toast; BEHAVIOUR: a triple clap and a toast), the marker
+  and the agent files, runs the plugin at once, then starts git (first commit) and adds the project to MQH: THREADS
+  lists it under PLUGINS, and a thread on it is an agent working on the plugin.
+- Older plugin folders in `/mnt/quest/plugins/<id>/` still load. On an id clash the project wins (the log says so).
+  The one example the app adds by itself, `core-poses` for the V shortcut, stays such a folder.
+- `ScriptHost` scans the projects folder with the others, off the main thread, once a second; it does not walk `.git`.
+  `mcx-project type <dir>` says `plugins`, `mcx-project kind <dir>` the kind; `mcx-project set` refuses a plugins project.
 
 ## App plugins
 
@@ -22,7 +44,9 @@ It loads again at every start, and its `main.lua` makes its windows and tiles ag
 
 Two examples ship with the app: **Timers** (a focus timer in the tomato style, with alarms) and **Calendar** (a month
 grid with entries and reminders). Install one from CONTROL > MQH > PLUGINS (EXAMPLES TO ADD, + ADD), by voice, or with
-`mcx-ui plugin example timers`. Their files are in `Runtime/Scripting/Resources/PluginExamples/<id>/`.
+`mcx-ui plugin example timers`: it becomes a plugin project (`plugins/apps/timers`) with the example's files, the
+project's AGENTS.md and git, so a thread on it can change it. Their files are in
+`Runtime/Scripting/Resources/PluginExamples/<id>/`.
 
 ### The API
 
@@ -36,6 +60,7 @@ grid with entries and reminders). Install one from CONTROL > MQH > PLUGINS (EXAM
 | `app.clock()`, `app.clock{ year, month, day, hour?, min?, sec? }`, `app.date([t])` | Wall-clock seconds since 1970; a local time as seconds (fields overflow like `os.time`); the local date of a time. |
 | `app.at(t, fn)`, `app.cancel(id)` | Runs `fn` once at the wall-clock time `t` (a time in the past runs at the next tick). Not saved: the plugin sets it again from `store` when it loads. |
 | `json.encode(value)`, `json.decode(text)` | JSON text; decode returns `nil, message` for bad text and never raises. |
+| `plugin.id`, `plugin.name`, `plugin.version`, `plugin.kind`, `plugin.dir` | The plugin's id, `plugin.json` name and version, its fixed kind (`""` for an older folder) and its Linux folder. |
 
 Window events reach `on(e)` with `e.type`, `e.id`, `e.value` and `e.window`: `button` (an item of `buttons`),
 `choice`, `input` (text sent), `toggle` (the new state), `cell` (a grid cell with an id), `open` and `close`.
@@ -65,13 +90,20 @@ the field; a warning (a long title or label, more than 8 components) goes to the
   commands and gestures. A window made again within 10 s of its removal (a reload) comes back at the same place,
   open if it was open.
 - An error in any callback stops the plugin (log `ERROR ...`, a callout); it loads again at the next start.
-- `mcx-ui plugin check <id>`: loaded, disabled or error; its windows (builds, open), tiles, voice commands, timers and
-  the last 10 warnings and errors.
+- Only app plugins' tiles go on the DOCK and the wrist menu.
+- `mcx-ui plugin check <id>`: loaded, disabled or error; its kind and folder; its windows (builds, open), tiles, voice
+  commands, timers and the last 10 warnings and errors; for a folder that is not loaded, why.
+- `mcx-ui plugin event <id> <type> <component id> [value]`: what a tap or a sent text does in its window (`input`,
+  `cell`, `toggle`, `button`, `choice`, `open`, `close`), so an agent can try every part of a window without hands.
+- Delete (MQH > PLUGINS > DELETE, `mcx-ui plugin delete <id>`): the folder (a project's with its git history), its
+  saved state and enabled flag, and a project's MQH project with its threads.
 
 ## Tests
 
-- `tests/plugins/run-plugin-tests.sh <plugin dir>... | --examples`: on the PC, no editor. The real `ScriptHost` and
-  the Lua interpreter with a fake app: load, the tile, every button, three hours of clock, voice lint, a restart and
-  the unload.
+- `tests/plugins/run-plugin-tests.sh <plugin dir>... | --examples | --scaffolds | --rules`: on the PC, no editor. The
+  real `ScriptHost` and the Lua interpreter with a fake app: load (a folder with the marker as a project of its kind),
+  the tile, every button, the gestures it reacts to and hand shapes through a stand-in engine, three hours of clock,
+  voice lint, a restart and the unload. `--rules`: the marker and kind rules, id clashes, reload, create, delete.
+  `--scaffold <kind> <id> <dest>` and `--example-project <id> <dest>` write a project as the app makes it.
 - `tests/plugins/device-test.sh [timers|calendar]`: the same plugin on the headset.
 - Editor self-test sections `scripts`, `agentscript`, `gestureplugins` and `agentplugin`.

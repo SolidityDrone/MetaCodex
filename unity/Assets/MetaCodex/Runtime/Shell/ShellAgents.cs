@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using MetaCodex.AI;
 using MetaCodex.App;
+using MetaCodex.Scripting;
 using MetaCodex.Terminal;
 using MetaCodex.UI;
 using Newtonsoft.Json.Linq;
@@ -479,7 +480,7 @@ namespace MetaCodex.Shell
                 if (list.Count == 0) items.Add(new UiListItem { Indent = 2, Icon = "·", IconColor = t.TextDim, Title = "no threads yet: + NEW THREAD…", TitleColor = t.TextDim, Tag = "p:" + pid });
             }
             int total = _threads.Count, run = _threads.Count(x => ThreadTimeline.IsWorking(ThreadStatus(x))), need = _threads.Count(x => x["hasPendingInteraction"]?.Value<bool>() == true);
-            if (_projects.Count == 0) _threadsStatus.Set("No project yet: + PROJECT… makes one in " + ProjectKinds.Root + "/ (native, default or research).", t.TextDim);
+            if (_projects.Count == 0) _threadsStatus.Set("No project yet: + PROJECT… makes one in " + ProjectKinds.Root + "/ (native, default, research or a plugin).", t.TextDim);
             else _threadsStatus.Set($"{_projects.Count} projects · {total} threads" + (run > 0 ? $" · <color=#{UiViz.Hex(t.Ok)}>{run} running</color>" : "") + (need > 0 ? $" · <color=#{UiViz.Hex(t.Warn)}>{need} need you</color>" : "") + " · tap a type or a project to fold it", t.TextDim);
             _threadList.SetItems(items, keepScroll: true);
             int sel = items.FindIndex(i => i.Tag as string == "t:" + _threadOpen);
@@ -520,24 +521,28 @@ namespace MetaCodex.Shell
             return type;
         }
 
-        /// + PROJECT…: first the type (one dialog), then the name (the keyboard); the project is made in
-        /// metacodex-projects/<type>/<folder from the name> with git. EXISTING FOLDER… adds a folder that is there.
+        /// + PROJECT…: first the type (one dialog; PLUGIN asks its kind in a second one), then the name (the keyboard);
+        /// the project is made in metacodex-projects/<type>/<folder from the name> (a plugin: plugins/<kind folder>/<id>)
+        /// with git. EXISTING FOLDER… adds a folder that is there.
         private void NewProjectPrompt() => NewProjectPrompt(null);
 
-        /// name: already known (voice): made as soon as the type is picked.
+        /// name: already known (voice): made as soon as the type (and a plugin's kind) is picked.
         private void NewProjectPrompt(string name)
         {
-            Modal("NEW PROJECT", (name != null ? "“" + name.Trim() + "”: what" : "What") + " will this project be? NATIVE APP: a Quest app (native skills and rules). DEFAULT: any other coding. RESEARCH: notes and findings, no app build.",
-                new[] { "NATIVE APP", "DEFAULT", "RESEARCH", "EXISTING…" }, choice =>
+            Modal("NEW PROJECT", (name != null ? "“" + name.Trim() + "”: what" : "What") + " will this project be? NATIVE APP: a Quest app (native skills and rules). DEFAULT: any other coding. RESEARCH: notes and findings, no app build. PLUGIN: a part of this app (a window and a menu tile, gestures or a behaviour) that runs at once.",
+                new[] { "NATIVE APP", "DEFAULT", "RESEARCH", "PLUGIN", "EXISTING…" }, choice =>
                 {
-                    if (choice >= 0 && choice < ProjectKinds.Types.Length) { if (name != null) CreateNewProject(ProjectKinds.Types[choice], name); else NewProjectNamed(ProjectKinds.Types[choice]); }
-                    else if (choice == 3) ExistingProjectPrompt();
+                    if (choice >= 0 && choice < 3) { if (name != null) CreateNewProject(ProjectKinds.Types[choice], name); else NewProjectNamed(ProjectKinds.Types[choice]); }
+                    else if (choice == 3) NewPluginKindPrompt(name);
+                    else if (choice == 4) ExistingProjectPrompt();
                 });
         }
 
-        /// The name of a new project of this type, on the keyboard (an empty field), then the project.
+        /// The name of a new project of this type, on the keyboard (an empty field), then the project. A plugin asks its
+        /// kind first.
         private void NewProjectNamed(string type)
         {
+            if (type == ProjectKinds.Plugins) { NewPluginKindPrompt(null); return; }
             UiKeyboard.Edit("", false, null, name =>
             {
                 if (string.IsNullOrWhiteSpace(name)) return; // cancelled
@@ -545,11 +550,33 @@ namespace MetaCodex.Shell
             }, "NEW " + ProjectKinds.Header(type) + " PROJECT · its name (e.g. Weather app)");
         }
 
+        /// NEW PROJECT > PLUGIN (and MQH > PLUGINS > + NEW PLUGIN…): the kind (APP, GESTURE, BEHAVIOUR), then the name.
+        /// preset: a kind already chosen (the PLUGINS tab's SHOW filter, voice): straight to the name. name: already
+        /// known (voice): made as soon as the kind is picked.
+        public void NewPluginKindPrompt(string name, string preset = null)
+        {
+            preset = PluginProject.NormalizeKind(preset);
+            if (preset != null) { if (!string.IsNullOrWhiteSpace(name)) CreateNewProject(ProjectKinds.Plugins, name, preset); else NewPluginNamed(preset); return; }
+            Modal("NEW PLUGIN", (name != null ? "“" + name.Trim() + "”: what" : "What") + " kind of plugin? APP: its own window and a tile on the main menu (a timer, a tracker). GESTURE: named hand gestures and what they do. BEHAVIOUR: Lua that reacts to your hands, your voice or the time, with no window. The kind stays fixed.",
+                new[] { "APP", "GESTURE", "BEHAVIOUR" }, choice =>
+                {
+                    if (choice < 0 || choice >= PluginProject.Kinds.Length) return;
+                    string kind = PluginProject.Kinds[choice];
+                    if (!string.IsNullOrWhiteSpace(name)) CreateNewProject(ProjectKinds.Plugins, name, kind); else NewPluginNamed(kind);
+                });
+        }
+
+        private void NewPluginNamed(string kind) =>
+            UiKeyboard.Edit("", false, null, name => { if (!string.IsNullOrWhiteSpace(name)) CreateNewProject(ProjectKinds.Plugins, name, kind); },
+                "NEW " + PluginProject.Label(kind).ToUpperInvariant() + " PLUGIN · its name (e.g. " + (kind == "app" ? "Water tracker" : kind == "gesture" ? "Fist shortcuts" : "Clap sounds") + ")");
+
         /// Makes the folder metacodex-projects/<type>/<name as a folder>, starts git there (a local identity only when
         /// there is no global one, so the first commit works offline), sets the type (mcx-project) and adds the project
-        /// to MQH. Refuses a folder that is there already. Returns what it does (voice) or an error.
-        public string CreateNewProject(string type, string name)
+        /// to MQH. Refuses a folder that is there already. A plugin (type plugins, with its kind): CreatePluginProject.
+        /// Returns what it does (voice) or an error.
+        public string CreateNewProject(string type, string name, string kind = null)
         {
+            if (type == ProjectKinds.Plugins) return CreatePluginProject(kind, name);
             name = (name ?? "").Trim();
             string path = ProjectKinds.PathFor(type, name);
             if (path == null) { Toast("Name the project with letters or digits", "warn"); return "error: say a name with letters or digits"; }
@@ -586,6 +613,68 @@ namespace MetaCodex.Shell
                 });
             });
             return $"Making the {ProjectKinds.Label(type).ToLowerInvariant()} project {name}";
+        }
+
+        /// A plugin project (owner 2026-11-16): /root/metacodex-projects/plugins/<apps|gestures|behaviours>/<id>, its kind
+        /// fixed by the folder and the read-only marker .metacodex/project.json. The app writes the files itself (the
+        /// scaffold of the kind, or `files`: an example's, with the project's AGENTS.md and CLAUDE.md) and the plugin runs
+        /// at once (ScriptHost.CreateProjectPlugin); then git starts there (the first commit holds the files) and the
+        /// project is added to MQH, so THREADS lists it under PLUGINS and a thread on it lets an agent change the plugin.
+        /// No kind: the kind dialog. Returns what it does (voice, the control port) or "error: ...".
+        public string CreatePluginProject(string kind, string name, IReadOnlyDictionary<string, string> files = null, string id = null)
+        {
+            name = (name ?? "").Trim();
+            string k = PluginProject.NormalizeKind(kind);
+            if (k == null) { NewPluginKindPrompt(name.Length > 0 ? name : null); return "App, gesture or behaviour?"; }
+            id = PluginProject.IdFor(id ?? name);
+            if (id.Length == 0) { Toast("Name the plugin with letters or digits", "warn"); return "error: say a name with letters or digits"; }
+            if (Scripts == null) return "error: plugins are not running";
+            if (!Application.isEditor && (app?.Host == null || !Directory.Exists(AndroidPathOf("/root") ?? "")))
+            {
+                Toast("The Linux is not set up yet: plugins can be made once it is", "warn");
+                return "error: the Linux is not set up yet";
+            }
+            string path = PluginProject.LinuxDirOf(k, id);
+            var all = new Dictionary<string, string>();
+            if (files != null) foreach (var kv in files) all[kv.Key] = kv.Value;
+            else foreach (var kv in PluginProject.Scaffold(k, id, name)) all[kv.Key] = kv.Value;
+            foreach (var kv in PluginProject.AgentFiles(k, id, name, fromExample: files != null)) if (!all.ContainsKey(kv.Key)) all[kv.Key] = kv.Value;
+            var e = Scripts.CreateProjectPlugin(k, id, all, out var err);
+            if (e == null) { Toast("Plugin not made: " + err, "warn"); return "error: " + err; }
+            Log($"plugin project {id} ({k}) made in {path}" + (e.Error != null ? ", error: " + e.Error : ""));
+            _projectTypes.Remove(path);
+            _collapsedTypes.Remove(ProjectKinds.Plugins);
+            RefreshPluginList();
+            SelectPluginForTest(id);
+            void Add() => EnsureHost(() => Mqh.CreateProject(name, _hostId, path, r =>
+            {
+                if (r == null) { Toast($"Plugin {id} made; its project is not in THREADS yet ({Mqh.LastError}): NEW THREAD ▸ in MQH > PLUGINS adds it", "warn"); return; }
+                _projectSel = (string)r["id"];
+                Settings.lastProject = _projectSel;
+                _collapsedProjects.Remove(_projectSel);
+                _pluginProjects = null; // the PLUGINS tab reads MQH's projects (and this plugin's threads) again
+                _pluginThreadsFor = null;
+                Toast($"Plugin {name} made ({PluginProject.Label(k).ToLowerInvariant()}): THREADS > PLUGINS has its project; a thread there lets an agent change it", "ok");
+                RefreshThreads();
+                ShowPluginDetail();
+            }));
+            if (Git == null || !Git.InUserland) { Add(); return $"Made the {k} plugin {name}"; } // the Editor: MQH only
+            string q = GitService.Quote(path);
+            string msg = files != null ? "The " + name + " plugin, as it ships with MetaCodex" : "A new " + k + " plugin: " + name + " (MetaCodex's scaffold)";
+            string cmd = $"cd {q} && chmod 444 .metacodex/project.json && git -c init.defaultBranch=main init -q . && " +
+                         "{ git config --get user.name >/dev/null || git config user.name MetaCodex; } && " +
+                         "{ git config --get user.email >/dev/null || git config user.email metacodex@localhost; } && " +
+                         $"git add -A && git commit -q -m {GitService.Quote(msg)}";
+            System.Threading.Tasks.Task.Run(async () =>
+            {
+                var res = await Git.Shell(cmd, 30000);
+                _main.Enqueue(() =>
+                {
+                    if (res.code != 0) Toast("Plugin made; git did not start there: " + Cut(res.output ?? "", 80), "warn");
+                    Add();
+                });
+            });
+            return $"Making the {k} plugin {name}";
         }
 
         /// EXISTING FOLDER…: a folder of the Linux userland as it is (no git init), then its type.
@@ -1731,15 +1820,18 @@ namespace MetaCodex.Shell
     }
 
     /// Where MetaCodex makes projects and what type each is (owner 2026-11-13): /root/metacodex-projects/<type>/<folder>,
-    /// type native (a Quest app), default (any coding) or research (notes and findings). Pure: the self-tests check it.
+    /// type native (a Quest app), default (any coding), research (notes and findings) or plugins (owner 2026-11-16: a
+    /// plugin of this app, in plugins/<apps|gestures|behaviours>/<id>, its kind fixed: PluginProject). Pure: the
+    /// self-tests check it.
     public static class ProjectKinds
     {
         public const string Root = "/root/metacodex-projects";
+        public const string Plugins = "plugins";
         /// The types in THREADS' order (and the NEW PROJECT dialog's).
-        public static readonly string[] Types = { "native", "default", "research" };
+        public static readonly string[] Types = { "native", "default", "research", Plugins };
 
-        public static string Header(string type) => type == "native" ? "NATIVE" : type == "default" ? "DEFAULT" : type == "research" ? "RESEARCH" : "OTHER";
-        public static string Label(string type) => type == "native" ? "Native app" : type == "default" ? "Default" : type == "research" ? "Research" : "Other";
+        public static string Header(string type) => type == "native" ? "NATIVE" : type == "default" ? "DEFAULT" : type == "research" ? "RESEARCH" : type == Plugins ? "PLUGINS" : "OTHER";
+        public static string Label(string type) => type == "native" ? "Native app" : type == "default" ? "Default" : type == "research" ? "Research" : type == Plugins ? "Plugin" : "Other";
 
         /// A project name as a folder: lower case, spaces -> '-', only a-z 0-9 . _ - (the rest dropped), no leading dot;
         /// "" when nothing is left.
@@ -1755,18 +1847,22 @@ namespace MetaCodex.Shell
             return s.Length > 64 ? s.Substring(0, 64).TrimEnd('-', '.') : s;
         }
 
-        /// root/<type>/<folder>; null for an unknown type or a name with no letters or digits.
-        public static string PathFor(string type, string name)
+        /// root/<type>/<folder>; a plugin: root/plugins/<kind folder>/<id> (kind app, gesture or behaviour); null for an
+        /// unknown type or kind, or a name with no letters or digits.
+        public static string PathFor(string type, string name, string kind = null)
         {
+            if (type == Plugins) return PluginProject.LinuxDirOf(PluginProject.NormalizeKind(kind), PluginProject.IdFor(name));
             string f = FolderName(name);
             return f.Length == 0 || Array.IndexOf(Types, type) < 0 ? null : Root + "/" + type + "/" + f;
         }
 
-        /// The type from where the folder is (root/<type>/<name>[/...]); null outside the root.
+        /// The type from where the folder is (root/<type>/<name>[/...]; plugins: root/plugins/<kind folder>/<id>); null
+        /// outside the root.
         public static string TypeFromPath(string linuxPath)
         {
             if (string.IsNullOrEmpty(linuxPath) || !linuxPath.StartsWith(Root + "/", StringComparison.Ordinal)) return null;
             var rest = linuxPath.Substring(Root.Length + 1).Split('/');
+            if (rest.Length > 0 && rest[0] == Plugins) return PluginProject.KindFromLinuxPath(linuxPath) != null ? Plugins : null;
             return rest.Length >= 2 && rest[1].Length > 0 && Array.IndexOf(Types, rest[0]) >= 0 ? rest[0] : null;
         }
 

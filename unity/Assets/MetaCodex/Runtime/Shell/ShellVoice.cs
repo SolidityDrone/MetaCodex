@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using MetaCodex.AI;
+using MetaCodex.Scripting;
 using MetaCodex.UI;
 using Newtonsoft.Json.Linq;
 using TMPro;
@@ -1278,8 +1279,9 @@ namespace MetaCodex.Shell
             Voice.Register(new VoiceCommand
             {
                 Name = "new_project",
-                Description = "Make a new project in metacodex-projects with git: type native (a Quest app), default (any other coding) or research (notes and findings); the name becomes its folder. What is not said is asked",
-                Parameters = VoiceCommands.Schema(("type", "string", ProjectKinds.Types, "the project type", false), ("name", "string", null, "the project name", false)),
+                Description = "Make a new project in metacodex-projects with git: type native (a Quest app), default (any other coding), research (notes and findings) or plugins (a plugin of this app; kind app: a window and a menu tile, gesture: hand gestures, behaviour: reactions with no window; the kind stays fixed); the name becomes its folder. What is not said is asked",
+                Parameters = VoiceCommands.Schema(("type", "string", ProjectKinds.Types, "the project type", false), ("name", "string", null, "the project name", false),
+                    ("kind", "string", PluginProject.Kinds, "a plugin's kind (type plugins only): app, gesture or behaviour", false)),
                 Synonyms = new Dictionary<string, Dictionary<string, string>>
                 {
                     ["type"] = new Dictionary<string, string>
@@ -1287,10 +1289,24 @@ namespace MetaCodex.Shell
                         ["native app"] = "native", ["app"] = "native", ["quest"] = "native", ["quest app"] = "native", ["headset app"] = "native", ["vr app"] = "native", ["vr"] = "native",
                         ["general"] = "default", ["coding"] = "default", ["code"] = "default", ["normal"] = "default", ["standard"] = "default", ["regular"] = "default", ["plain"] = "default",
                         ["study"] = "research", ["notes"] = "research", ["investigation"] = "research", ["reading"] = "research",
+                        ["plugin"] = "plugins", ["add-on"] = "plugins", ["addon"] = "plugins", ["extension"] = "plugins",
+                    },
+                    ["kind"] = new Dictionary<string, string>
+                    {
+                        ["window"] = "app", ["tool"] = "app", ["widget"] = "app", ["apps"] = "app",
+                        ["gestures"] = "gesture", ["hand gesture"] = "gesture", ["hand gestures"] = "gesture", ["pose"] = "gesture",
+                        ["behavior"] = "behaviour", ["behaviours"] = "behaviour", ["behaviors"] = "behaviour", ["reaction"] = "behaviour", ["automation"] = "behaviour",
                     },
                 },
                 Phrases = new[]
                 {
+                    "(create|make|add|start|set up) [me] [a|an] [new] {kind} plugin [project] (called|named) {name} {type:plugins}",
+                    "(create|make|add|start|set up) [me] [a|an] [new] plugin {kind} (called|named) {name} {type:plugins}",
+                    "(create|make|add|start|set up) [me] [a|an] [new] {kind} plugin [project] {type:plugins}",
+                    "(create|make|add|start|set up) [me] [a|an] [new] plugin (called|named) {name} {type:plugins}",
+                    "(create|make|add|start|set up) [me] [a|an] [new] plugin [project] {type:plugins}",
+                    "new {kind} plugin (called|named) {name} {type:plugins}",
+                    "new {kind} plugin {type:plugins}",
                     "(create|make|add|start|set up) [me] [a|an] [new] {type} project [called|named] {name}",
                     "(create|make|add|start|set up) [me] [a|an] [new] project (called|named) {name}",
                     "(create|make|add|start|set up) [me] [a|an] [new] {type} project",
@@ -1303,11 +1319,18 @@ namespace MetaCodex.Shell
                 {
                     "create a research project called solar panels", "make a new native app project named weather", "I need a new project",
                     "set up a default project named website", "start a project called notes app",
+                    "make me an app plugin called water tracker", "create a gesture plugin named fist shortcuts", "I want a new behaviour plugin",
+                    "add a plugin with its own window and a menu button", "start a new plugin for my hand gestures",
                 },
-                Examples = new List<(string, string)> { ("set up a research project about battery chemistry", "new_project research battery chemistry"), ("I want to begin a fresh quest app project", "new_project native") },
-                Vocabulary = new[] { "metacodex-projects" },
-                Check = a => a["name"] != null && ProjectKinds.FolderName((string)a["name"]).Length == 0 ? "say a name with letters or digits" : null,
-                Run = a => VoiceNewProject((string)a["type"], (string)a["name"]),
+                Examples = new List<(string, string)>
+                {
+                    ("set up a research project about battery chemistry", "new_project research battery chemistry"), ("I want to begin a fresh quest app project", "new_project native"),
+                    ("build me a small plugin for this headset called habit log", "new_project plugins habit log"),
+                },
+                Vocabulary = new[] { "metacodex-projects", "plugin" },
+                Check = a => a["name"] != null && (string)a["type"] == ProjectKinds.Plugins && PluginProject.IdFor((string)a["name"]).Length == 0 ? "say a name with letters or digits"
+                           : a["name"] != null && ProjectKinds.FolderName((string)a["name"]).Length == 0 ? "say a name with letters or digits" : null,
+                Run = a => VoiceNewProject((string)a["type"], (string)a["name"], (string)a["kind"]),
             });
             Voice.Register(new VoiceCommand
             {
@@ -1905,10 +1928,20 @@ namespace MetaCodex.Shell
         }
 
         /// new_project: both parts said -> made at once; the type only -> its name on the keyboard; else NEW PROJECT asks.
-        private string VoiceNewProject(string type, string name)
+        /// A plugin: its kind too (said, else the kind dialog); a kind said alone means a plugin.
+        private string VoiceNewProject(string type, string name, string kind = null)
         {
             type = Array.IndexOf(ProjectKinds.Types, type ?? "") >= 0 ? type : null;
-            if (type == null) { OpenPanel("threads"); NewProjectPrompt(string.IsNullOrWhiteSpace(name) ? null : name); return "Native app, default or research?"; }
+            kind = PluginProject.NormalizeKind(kind);
+            if (type == null && kind != null) type = ProjectKinds.Plugins;
+            if (type == ProjectKinds.Plugins)
+            {
+                OpenPanel("threads");
+                if (kind == null) { NewPluginKindPrompt(string.IsNullOrWhiteSpace(name) ? null : name); return "An app, a gesture or a behaviour plugin?"; }
+                if (string.IsNullOrWhiteSpace(name)) { NewPluginKindPrompt(null, kind); return "Name the " + kind + " plugin on the keyboard"; }
+                return CreatePluginProject(kind, name);
+            }
+            if (type == null) { OpenPanel("threads"); NewProjectPrompt(string.IsNullOrWhiteSpace(name) ? null : name); return "Native app, default, research or a plugin?"; }
             if (string.IsNullOrWhiteSpace(name)) { OpenPanel("threads"); NewProjectNamed(type); return "Name the " + ProjectKinds.Label(type).ToLowerInvariant() + " project on the keyboard"; }
             OpenPanel("threads");
             return CreateNewProject(type, name);

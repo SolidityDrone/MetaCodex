@@ -3,6 +3,7 @@
 ## On the headset (inside the Linux userland: an MQH thread or a terminal)
 
 ```bash
+mcx-ui plugin check finger-gun        # loaded, kind gesture (fixed), folder, warnings: 0
 mcx-ui plugin list                    # your plugin: enabled=True, error=-
 mcx-ui plugin log finger-gun          # "loaded (1 handlers, 1 poses, 0 detectors)" or the Lua error
 mcx-ui gesture list                   # your gesture names, kind pose/lua, active=False
@@ -23,7 +24,10 @@ MQH > GESTURES > LIVE tab is open (finger bars, palm/thumb direction, active ges
 The Editor's self-test (`tools/unity-batch.sh BatchCheck`) drives simulated hands:
 `hand pose right 0 1 1 1 1 up` (thumb index middle ring little curls, thumb direction) then
 `gesture tick 0.4` advances the engine; the same control commands work there. `tools/agent-plugin-test.sh`
-asks a fresh agent to write a plugin from this skill and replays it in the Editor.
+asks a fresh agent to write a plugin from this skill and replays it in the Editor. Without the Editor,
+`tests/plugins/run-plugin-tests.sh <project folder>` loads a plugin project with the app's real plugin host, checks
+that every gesture it reacts to is a built-in or its own, simulates each reaction, and drives hand shapes (open, palm
+up, fist, point, pinch, thumbs up / down, victory, fast moves) with both hands and with one.
 
 ## When it misfires
 

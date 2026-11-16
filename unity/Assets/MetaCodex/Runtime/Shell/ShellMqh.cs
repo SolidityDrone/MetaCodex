@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using MetaCodex.AI;
 using MetaCodex.Scripting;
 using MetaCodex.UI;
 using Newtonsoft.Json.Linq;
@@ -393,8 +394,31 @@ namespace MetaCodex.Shell
 
         // ------------------------------------------------------------------ PLUGINS
 
-        private JArray _mqhPluginCache = new JArray();
+        /// Where plugin projects are (ScriptHost scans them): on the headset the Linux's /root/metacodex-projects/plugins
+        /// in the app's rootfs; in the Editor (and its tests) a folder beside the scripts folder, so a test's projects stay
+        /// in its own temporary folder.
+        string IScriptServices.PluginProjectsDir(string scriptsDir)
+        {
+            if (!Application.isEditor && app?.Host != null) return AndroidPathOf(PluginProject.LinuxRoot);
+            string parent = Path.GetDirectoryName((scriptsDir ?? "").TrimEnd('/', '\\'));
+            return string.IsNullOrEmpty(parent) ? null : Path.Combine(parent, "projects");
+        }
 
+        private JArray _mqhPluginCache = new JArray();
+        /// MQH's projects as the PLUGINS tab last read them (which project is a plugin's: its folder); null: read again.
+        private JArray _pluginProjects;
+        private UiList _pluginThreads;
+        private UiLabel _pluginThreadsHead;
+        private UiButton _pluginThreadsArch, _pluginNewThread, _pluginDelete;
+        private bool _pluginThreadsArchived;
+        /// The project whose threads the list shows, and a counter that drops answers for an earlier pick.
+        private string _pluginThreadsFor;
+        private int _pluginThreadsGen;
+
+        /// MQH > PLUGINS (owner 2026-11-16): the list by kind on the left; on the right the picked plugin's detail, its
+        /// THREADS (the threads of its project, newest first; a tap opens one like THREADS does), and the buttons:
+        /// ENABLE / DISABLE, ⟳ RELOAD, DELETE; + NEW PLUGIN… (the NEW PROJECT flow at the kind question, or straight to
+        /// the name when SHOW is APPS, GESTURES or BEHAVIOURS) and NEW THREAD ▸ (a thread on the plugin's project).
         private void BuildPluginsTab(Rect area)
         {
             var t = UiTheme.Current;
@@ -407,43 +431,56 @@ namespace MetaCodex.Shell
             area = new Rect(area.x, area.y + filterH + t.Gap * 2, area.width, area.height - filterH - t.Gap * 2);
             _gPlugins = _mqhTabs.AddTo(page, new UiList(0.032f, (item, idx) => ShowPluginDetail()) { Rect = new Rect(area.x, area.y, leftW, area.height) });
             var pr = new UiStack(new Rect(area.x + leftW + t.Gap * 2, area.y, area.width - leftW - t.Gap * 2, area.height), t.Gap);
-            _gPluginDetail = _mqhTabs.AddTo(page, new UiLabel("", t.SmallSize) { Rect = pr.Next(area.height - t.ButtonHeight * 3 - t.Gap * 4), Wrap = true, UseMono = true, Align = TextAlignmentOptions.TopLeft, Color = t.TextDim });
-            // ENABLE or DISABLE: the one that applies to the picked plugin (ShowPluginDetail)
-            var pt = pr.Next(t.ButtonHeight);
-            float ptw = (pt.width - t.Gap) / 2f;
-            _pluginToggle = _mqhTabs.AddTo(page, new UiButton("ENABLE", TogglePickedPlugin) { Rect = new Rect(pt.x, pt.y, ptw, pt.height) });
-            _mqhTabs.AddTo(page, new UiButton("⟳ RELOAD", () => { Scripts.ReloadAll(); RefreshMqhPlugins(); }) { Rect = new Rect(pt.x + ptw + t.Gap, pt.y, ptw, pt.height) });
-            _pluginToggle.SetEnabled(false);
-            AddRow(_mqhTabs, page, pr.Next(t.ButtonHeight), new (string, Action)[]
+            float rest = area.height - t.ButtonHeight * 2 - t.Gap * 4;
+            float headH = 0.024f;
+            _gPluginDetail = _mqhTabs.AddTo(page, new UiLabel("", t.SmallSize) { Rect = pr.Next(rest * 0.46f), Wrap = true, UseMono = true, Align = TextAlignmentOptions.TopLeft, Color = t.TextDim });
+            // THREADS of the picked plugin's project, with a small ARCHIVED switch on the right of its title
+            var hr = pr.Next(headH);
+            float abw = 0.12f;
+            _pluginThreadsHead = _mqhTabs.AddTo(page, new UiLabel("THREADS", t.SmallSize) { Rect = new Rect(hr.x, hr.y, hr.width - abw - t.Gap, hr.height), Color = t.TextAccent });
+            _pluginThreadsArch = _mqhTabs.AddTo(page, new UiButton("▤ ARCHIVED", () => { _pluginThreadsArchived = !_pluginThreadsArchived; _pluginThreadsArch.SetSelected(_pluginThreadsArchived); _pluginThreadsFor = null; ShowPluginDetail(); }) { Rect = new Rect(hr.xMax - abw, hr.y, abw, hr.height), TextSize = t.SmallSize * 0.95f });
+            _pluginThreads = _mqhTabs.AddTo(page, new UiList(0.028f, (item, idx) => PluginThreadPicked(item)) { Rect = pr.Next(rest * 0.54f - headH - t.Gap) });
+            var row1 = AddRow(_mqhTabs, page, pr.Next(t.ButtonHeight), new (string, Action)[]
             {
-                ("+ NEW PLUGIN…", () => UiKeyboard.Edit("my-plugin", false, null, id => { if (string.IsNullOrWhiteSpace(id)) return; var e = NewPlugin(id); Toast($"Plugin {e.Name} created in /mnt/quest/plugins/{e.Name}", "ok"); RefreshPluginList(); })),
-                ("ASK AN AGENT…", () => UiKeyboard.Edit("", false, null, idea => { if (string.IsNullOrWhiteSpace(idea)) return; OpenNewThread(null); _ntSeed = NewPluginPrompt(idea); Toast("Pick the agent and START, then SEND the brief", "info"); })),
-            }, primary: 0);
-            AddRow(_mqhTabs, page, pr.Next(t.ButtonHeight), new (string, Action)[]
-            {
-                ("FOLDER", () =>
-                {
-                    var tag = SelectedPluginTag();
-                    if (tag is ScriptHost.Entry e) TerminalSend($"cd {GitService.Quote("/mnt/quest/plugins/" + e.Name)} && ls -la\r");
-                    else if (tag is JObject m && !string.IsNullOrEmpty((string)m["rootDir"])) TerminalSend($"cd {GitService.Quote((string)m["rootDir"])} && ls -la\r");
-                }),
+                ("ENABLE", TogglePickedPlugin),
+                ("⟳ RELOAD", () => { Scripts.ReloadAll(); RefreshMqhPlugins(); }),
                 ("DELETE", DeletePickedPlugin),
-            }, danger: 1);
+            }, danger: 2);
+            // ENABLE or DISABLE (or + ADD for an example): the one that applies to the picked row (ShowPluginDetail)
+            _pluginToggle = row1[0];
+            _pluginDelete = row1[2];
+            _pluginToggle.SetEnabled(false);
+            var row2 = AddRow(_mqhTabs, page, pr.Next(t.ButtonHeight), new (string, Action)[]
+            {
+                ("+ NEW PLUGIN…", NewPluginFromTab),
+                ("NEW THREAD ▸", NewThreadOnPickedPlugin),
+            }, primary: 0);
+            _pluginNewThread = row2[1];
         }
 
-        public static string NewPluginPrompt(string idea) =>
-            "Make a plugin for MetaCodex: " + idea.Trim() + "\n\n" +
-            "Start from the skill quest-plugins: a plugin is a folder in /mnt/quest/plugins, applies live and loads at every start; " +
-            "pick its kind: an app (its own window or a button in the menu: a timer, a calendar, a tool), gestures (named hand " +
-            "gestures and what they do: also read quest-gesture-plugins) or a behaviour (Lua that reacts to the app). " +
-            "If it extends MQH itself (a server part, a spatial panel), make an MQH plugin " +
-            "(`mqh plugin new` makes its folder). Read metacodex-context first. Show me the plan before you write files.";
+        /// + NEW PLUGIN…: the NEW PROJECT flow at the kind question; SHOW on APPS, GESTURES or BEHAVIOURS picks the kind.
+        private void NewPluginFromTab()
+        {
+            string only = _pluginKind > 0 ? PluginKinds[_pluginKind] : null;
+            NewPluginKindPrompt(null, only == KindApps ? "app" : only == KindGestures ? "gesture" : only == KindBehaviours ? "behaviour" : null);
+        }
 
         private object SelectedPluginTag() =>
             _gPlugins != null && _gPlugins.SelectedIndex >= 0 && _gPlugins.SelectedIndex < _gPlugins.Items.Count ? _gPlugins.Items[_gPlugins.SelectedIndex].Tag : null;
 
+        /// Picks a plugin's row (after NEW PLUGIN, tests); false when it is not listed.
+        public bool SelectPluginForTest(string id)
+        {
+            if (_gPlugins == null) return false;
+            for (int i = 0; i < _gPlugins.Items.Count; i++)
+                if (_gPlugins.Items[i].Tag is ScriptHost.Entry e && e.Name == id) { _gPlugins.SelectIndex(i, notify: false); ShowPluginDetail(); return true; }
+            return false;
+        }
+
         private void RefreshMqhPlugins()
         {
+            _pluginProjects = null; // MQH's projects again (a plugin's threads)
+            _pluginThreadsFor = null;
             RefreshPluginList();
             Mqh.Plugins(pl =>
             {
@@ -452,7 +489,7 @@ namespace MetaCodex.Shell
             });
         }
 
-        /// MQH's plugins and the app's gesture / behaviour plugins, in one list.
+        /// MQH's plugins and the app's plugins (projects of the three kinds, and older folders), in one list.
         public void RefreshPluginList()
         {
             if (_gPlugins == null) return;
@@ -471,7 +508,8 @@ namespace MetaCodex.Shell
                         Icon = kind == KindApps ? "◫" : kind == KindGestures ? "✋" : "▣",
                         IconColor = e.Error != null ? t.Danger : e.Enabled ? t.Ok : t.TextDim,
                         Title = e.Title.Length > 0 ? e.Title : e.Name,
-                        Sub = e.Name + (e.Version.Length > 0 ? " · v" + e.Version : ""),
+                        // the kind: the project's (its marker), fixed; an older folder says so
+                        Sub = (e.Project ? e.PluginKind : "older folder") + " · " + e.Name + (e.Version.Length > 0 ? " · v" + e.Version : ""),
                         Badge = e.Error != null ? "ERROR" : !e.Enabled ? "OFF" : e.Poses + e.Detectors > 0 ? $"{e.Poses + e.Detectors} G" : "ON",
                         BadgeColor = e.Error != null ? t.Danger : e.Enabled ? t.Ok : t.TextDim,
                         Tag = e,
@@ -494,8 +532,8 @@ namespace MetaCodex.Shell
                     Tag = x,
                 });
             }
-            // the examples that ship in the app and are not installed yet: a tap picks one, + ADD installs it (apps first:
-            // timers, calendar; then the gesture examples)
+            // the examples that ship in the app and are not installed yet: a tap picks one, + ADD makes it a plugin
+            // project (apps first: timers, calendar; then the gesture examples)
             var examples = GestureExampleIds.Where(id => (Scripts == null || Scripts.Find("plugin/" + id) == null) && (only == null || ExampleKindOf(id) == only))
                 .OrderBy(id => IsAppPluginExample(id) ? 0 : 1).ToList();
             if (examples.Count > 0) items.Add(new UiListItem { Icon = "", Title = $"EXAMPLES TO ADD  ({examples.Count})", TitleColor = t.TextAccent, Tag = null });
@@ -510,6 +548,8 @@ namespace MetaCodex.Shell
                     BadgeColor = t.Accent,
                     Tag = new GestureExampleRow { Id = id },
                 });
+            // nothing at all: the list says what to do
+            _gPlugins.SetEmptyText(items.Count == 0 ? "No plugins yet.\n+ NEW PLUGIN makes one." : "");
             _gPlugins.SetItems(items, keepScroll: true);
             ShowPluginDetail();
         }
@@ -522,14 +562,15 @@ namespace MetaCodex.Shell
         public const string KindApps = "APPS", KindGestures = "GESTURES", KindBehaviours = "BEHAVIOURS", KindMqh = "MQH";
         private static readonly string[] PluginKinds = { "ALL", KindApps, KindGestures, KindBehaviours, KindMqh };
 
-        /// An app plugin's kind: plugin.json "kind" ("app", "gesture", "behaviour"), else what it does now (a window or a
-        /// tile: APPS; poses or detectors: GESTURES; else BEHAVIOURS).
+        /// A plugin's kind: a plugin project's (its folder and marker: fixed); an older folder's plugin.json "kind" ("app",
+        /// "gesture", "behaviour"), else what it does now (a window or a tile: APPS; poses or detectors: GESTURES; else
+        /// BEHAVIOURS).
         public string PluginKindOf(ScriptHost.Entry e)
         {
-            string kind = ((string)e.Manifest?["kind"] ?? "").Trim().ToLowerInvariant();
-            if (kind == "app" || kind == "apps" || kind == "window") return KindApps;
-            if (kind == "gesture" || kind == "gestures") return KindGestures;
-            if (kind == "behaviour" || kind == "behavior" || kind == "behaviours") return KindBehaviours;
+            string kind = e.Project ? e.PluginKind : PluginProject.NormalizeKind((string)e.Manifest?["kind"]);
+            if (kind == "app") return KindApps;
+            if (kind == "gesture") return KindGestures;
+            if (kind == "behaviour") return KindBehaviours;
             if (Scripts != null && Scripts.OwnsUi(e)) return KindApps;
             return e.Poses + e.Detectors > 0 ? KindGestures : KindBehaviours;
         }
@@ -537,12 +578,16 @@ namespace MetaCodex.Shell
         private static string ExampleKindOf(string id)
         {
             if (IsAppPluginExample(id)) return KindApps;
-            try
-            {
-                string kind = ((string)JObject.Parse(ExamplePlugins[id]["plugin.json"])["kind"] ?? "").ToLowerInvariant();
-                return kind == "app" ? KindApps : kind == "behaviour" || kind == "behavior" ? KindBehaviours : KindGestures;
-            }
-            catch (Exception) { return KindGestures; }
+            string k = ExampleKind(id);
+            return k == "app" ? KindApps : k == "behaviour" ? KindBehaviours : KindGestures;
+        }
+
+        /// An example's kind (app, gesture, behaviour) from its plugin.json; gesture when it says none.
+        internal static string ExampleKind(string id)
+        {
+            if (IsAppPluginExample(id)) return "app";
+            try { return PluginProject.NormalizeKind((string)JObject.Parse(ExamplePlugins[id]["plugin.json"])["kind"]) ?? "gesture"; }
+            catch (Exception) { return "gesture"; }
         }
 
         /// PLUGINS with one kind shown (0 ALL, 1 APPS, 2 GESTURES, 3 BEHAVIOURS, 4 MQH): voice, tests.
@@ -559,14 +604,18 @@ namespace MetaCodex.Shell
             var t = UiTheme.Current;
             var tag = SelectedPluginTag();
             bool? on = tag is ScriptHost.Entry pe ? pe.Enabled : tag is JObject pm ? (pm["enabled"]?.Value<bool>() ?? (string)pm["status"] != "disabled") : (bool?)null;
+            _pluginNewThread?.SetEnabled(tag is ScriptHost.Entry pp && pp.Project);
+            _pluginDelete?.SetEnabled(tag is ScriptHost.Entry || tag is JObject);
             if (tag is GestureExampleRow ex)
             {
                 _pluginToggle?.SetText("+ ADD");
                 _pluginToggle?.SetEnabled(true);
-                _gPluginDetail.Set($"<b>{ex.Id}</b> · example\n{ExampleDescription(ExamplePlugins[ex.Id])}\n\n" +
-                                   (ExampleKindOf(ex.Id) == KindApps ? "An app: its own window and a tile on the main menu. " : "A gesture plugin: named gestures (the GESTURES tab is their studio). ") +
-                                   "+ ADD copies it to /mnt/quest/plugins/" + ex.Id + "/ and runs it at once; it loads again at every start. " +
-                                   "DELETE removes it again.", t.TextDim);
+                string k = ExampleKind(ex.Id);
+                _gPluginDetail.Set($"<b>{ex.Id}</b> · example ({k})\n{ExampleDescription(ExamplePlugins[ex.Id])}\n\n" +
+                                   (k == "app" ? "An app: its own window and a tile on the main menu. " : "A gesture plugin: named gestures (the GESTURES tab is their studio). ") +
+                                   "+ ADD makes it a plugin project in …/plugins/" + PluginProject.FolderOf(k) + "/" + ex.Id + "/ (with git) and runs it at once; " +
+                                   "a thread on its project lets an agent change it. DELETE removes it again.", t.TextDim);
+                ShowPluginThreads(null, "Not added yet: its threads show here once + ADD made its project.");
                 return;
             }
             _pluginToggle?.SetText(on == true ? "DISABLE" : "ENABLE");
@@ -577,23 +626,160 @@ namespace MetaCodex.Shell
                 _gPluginDetail.Set($"<b>{(string)m["name"] ?? (string)m["id"]}</b> {(string)m["version"]}  ({(string)m["id"]})\n{(string)m["description"]}\n\n" +
                                    $"MQH plugin · {(builtin ? "comes with MQH: it can be turned off, not removed" : (string)m["sourceDisplay"])}\n" +
                                    $"status {(string)m["status"]}{((string)m["statusDetail"] != null ? ": " + (string)m["statusDetail"] : "")}\n{(string)m["rootDir"]}", t.TextDim);
+                ShowPluginThreads(null, "A plugin of MQH itself: no threads here.");
                 return;
             }
             if (!(tag is ScriptHost.Entry e))
             {
-                _gPluginDetail.Set("A plugin is a folder in /mnt/quest/plugins/<id>/ (plugin.json, main.lua, poses/*.json); it applies live " +
-                                   "and loads at every start. Its kind (plugin.json \"kind\"):\n" +
-                                   "APPS: a window and a tile on the main menu (Timers, Calendar).\n" +
-                                   "GESTURES: named hand gestures, poses and detectors (GESTURES tab: the studio).\n" +
-                                   "BEHAVIOURS: Lua that reacts to the app and your hands.\n" +
-                                   "MQH: plugins of the agent harness (threads, providers).\n\n" +
-                                   "+ NEW PLUGIN makes an empty one; ASK AN AGENT writes one with you (skill quest-plugins).", t.TextDim);
+                _gPluginDetail.Set("A plugin is a project of type PLUGINS with a fixed kind:\n" +
+                                   "APP: a window and a tile on the main menu (Timers, Calendar).\n" +
+                                   "GESTURE: named hand gestures and what they do (GESTURES tab: the studio).\n" +
+                                   "BEHAVIOUR: Lua that reacts to your hands, voice or time.\n" +
+                                   "MQH: plugins of the agent harness.\n\n" +
+                                   "+ NEW PLUGIN makes one (also THREADS > + PROJECT > PLUGIN). Pick one: its threads show below; NEW THREAD ▸ starts an agent on it.", t.TextDim);
+                ShowPluginThreads(null, "");
                 return;
             }
             var gestures = Gestures.Custom.Where(x => x.Owner == e.Key).Select(x => x.Name).ToList();
-            _gPluginDetail.Set($"<b>{e.Title}</b> {e.Version}\n{e.Description}\n\n/mnt/quest/plugins/{e.Name}\n{(e.Enabled ? "enabled" : "disabled")} · {e.Handlers} handlers · {e.Poses} poses · {e.Detectors} detectors\n" +
+            string where = e.Project ? $"{PluginProject.Label(e.PluginKind).ToLowerInvariant()} plugin (kind fixed) · {ProjectKinds.ShortPath(e.LinuxDir)}"
+                                     : $"an older plugin folder: {e.LinuxDir} (no project)";
+            _gPluginDetail.Set($"<b>{e.Title}</b> {e.Version}\n{e.Description}\n\n{where}\n{(e.Enabled ? "enabled" : "disabled")} · {e.Handlers} handlers · {e.Poses} poses · {e.Detectors} detectors\n" +
                                (gestures.Count > 0 ? "gestures: " + string.Join(", ", gestures) + "\n" : "") +
-                               (e.Error != null ? $"<color=#FF5468>ERROR {e.Error}</color>\n" : "") + "\n" + string.Join("\n", e.Log.Skip(Math.Max(0, e.Log.Count - 5))), e.Error != null ? t.Danger : t.TextDim);
+                               (e.Error != null ? $"<color=#FF5468>ERROR {e.Error}</color>\n" : "") + string.Join("\n", e.Log.Skip(Math.Max(0, e.Log.Count - 3))), e.Error != null ? t.Danger : t.TextDim);
+            if (!e.Project) { ShowPluginThreads(null, "An older plugin folder: no project, so no threads. + NEW PLUGIN makes a project an agent can work in."); return; }
+            ShowPluginThreads(e, null);
+        }
+
+        // ---- the picked plugin's threads (its MQH project's): read when a plugin is picked, ARCHIVED flips, the tab
+        // refreshes or a thread is made from here; never per frame
+
+        /// The MQH project of a plugin project (its folder is the project's source), from the cache; null when none (yet).
+        private string PluginProjectId(ScriptHost.Entry e) =>
+            e == null || _pluginProjects == null ? null
+                : (string)_pluginProjects.FirstOrDefault(pr => (pr["sources"] as JArray)?.Any(src => (string)src["path"] == e.LinuxDir) == true)?["id"];
+
+        private void ShowPluginThreads(ScriptHost.Entry e, string emptyText)
+        {
+            if (_pluginThreads == null) return;
+            var t = UiTheme.Current;
+            _pluginThreadsArch?.SetEnabled(e != null);
+            if (e == null)
+            {
+                _pluginThreadsFor = null;
+                _pluginThreadsHead.Set("THREADS", t.TextDim);
+                _pluginThreads.SetEmptyText(emptyText ?? "");
+                _pluginThreads.SetItems(new List<UiListItem>());
+                return;
+            }
+            string key = e.LinuxDir + (_pluginThreadsArchived ? "|archived" : "");
+            if (key == _pluginThreadsFor) return; // shown already (the list refreshes on every scan: no new request)
+            _pluginThreadsFor = key;
+            int gen = ++_pluginThreadsGen;
+            _pluginThreadsHead.Set("THREADS · asking MQH …", t.TextDim);
+            _pluginThreads.SetEmptyText("");
+            _pluginThreads.SetItems(new List<UiListItem>());
+            void WithProject(Action<string> then)
+            {
+                if (_pluginProjects != null) { then(PluginProjectId(e)); return; }
+                Mqh.Projects(pr =>
+                {
+                    if (gen != _pluginThreadsGen) return;
+                    if (pr == null) { _pluginThreadsHead.Set("THREADS · ⚠ " + (Mqh.LastError ?? "MQH not reachable"), t.Danger); _pluginThreadsFor = null; return; }
+                    _pluginProjects = pr as JArray ?? new JArray();
+                    then(PluginProjectId(e));
+                });
+            }
+            WithProject(pid =>
+            {
+                if (gen != _pluginThreadsGen) return;
+                if (pid == null)
+                {
+                    _pluginThreadsHead.Set("THREADS (0)", t.TextDim);
+                    _pluginThreads.SetEmptyText("No project in THREADS yet: NEW THREAD ▸ adds it and starts an agent on this plugin.");
+                    return;
+                }
+                Action<JToken> show = th =>
+                {
+                    if (gen != _pluginThreadsGen) return;
+                    if (th == null) { _pluginThreadsHead.Set("THREADS · ⚠ " + (Mqh.LastError ?? "MQH not reachable"), t.Danger); _pluginThreadsFor = null; return; }
+                    var arr = th as JArray ?? new JArray();
+                    if (_pluginThreadsArchived) _archivedThreads = arr; // ARCHIVED rows open THREADS' RESTORE / DELETE dialog (ArchivedRowPicked)
+                    var mine = arr.Where(x => (string)x["projectId"] == pid).OrderByDescending(x => x["updatedAt"]?.Value<long>() ?? 0).ToList();
+                    var items = new List<UiListItem>();
+                    foreach (var x in mine)
+                    {
+                        string st = ThreadStatus(x);
+                        bool working = ThreadTimeline.IsWorking(st), pending = x["hasPendingInteraction"]?.Value<bool>() == true;
+                        string id = (string)x["id"];
+                        items.Add(new UiListItem
+                        {
+                            Icon = _pluginThreadsArchived ? "▤" : pending ? "?" : working ? "▶" : st == "error" ? "⚠" : "◆",
+                            IconColor = _pluginThreadsArchived ? t.TextDim : pending ? t.Warn : working ? t.Ok : st == "error" ? t.Danger : t.Accent,
+                            Title = (string)x["title"] ?? (string)x["titleFallback"] ?? id,
+                            Sub = $"{x["providerId"]} · {(_pluginThreadsArchived ? "archived" : st.Length > 0 ? st : "idle")} · {Ago(x["updatedAt"]?.Value<long>() ?? 0)}",
+                            Badge = _pluginThreadsArchived ? "RESTORE ▸" : pending ? "NEEDS YOU" : working ? "RUNNING" : st == "error" ? "ERROR" : "",
+                            BadgeColor = pending ? t.Warn : st == "error" ? t.Danger : _pluginThreadsArchived ? t.Accent : t.Ok,
+                            Tag = (_pluginThreadsArchived ? "a:" : "t:") + id,
+                        });
+                    }
+                    _pluginThreadsHead.Set((_pluginThreadsArchived ? "ARCHIVED THREADS" : "THREADS") + $" ({items.Count})" + (items.Count > 0 ? " · tap one to open it" : ""), t.TextAccent);
+                    _pluginThreads.SetEmptyText(_pluginThreadsArchived ? "No archived threads on this plugin." : "No threads yet: NEW THREAD ▸ starts an agent on this plugin.");
+                    _pluginThreads.SetItems(items);
+                };
+                if (_pluginThreadsArchived) Mqh.ThreadsArchived(show); else Mqh.Threads(pid, show);
+            });
+        }
+
+        /// A thread row: opens it as THREADS does (its own window and group); an archived one: RESTORE or DELETE.
+        private void PluginThreadPicked(UiListItem item)
+        {
+            if (!(item?.Tag is string tag)) return;
+            if (tag.StartsWith("t:")) OpenThread(tag.Substring(2));
+            else if (tag.StartsWith("a:"))
+            {
+                ArchivedRowPicked(tag.Substring(2));
+                After(3f, () => { _pluginThreadsFor = null; ShowPluginDetail(); }); // a RESTORE moves it back
+            }
+        }
+
+        /// NEW THREAD ▸: NEW THREAD with the plugin's project chosen (its project is added to MQH first when it is not there).
+        private void NewThreadOnPickedPlugin()
+        {
+            if (!(SelectedPluginTag() is ScriptHost.Entry e) || !e.Project) { Toast("Pick a plugin project", "warn"); return; }
+            WithPluginProject(e, pid => Mqh.Projects(pr =>
+            {
+                if (pr is JArray all) _projects = all; // THREADS' projects first, so the draft knows this one
+                _projectSel = pid;
+                Settings.lastProject = pid;
+                _collapsedProjects.Remove(pid);
+                OpenNewThread(null);
+                RefreshThreads();
+                _pluginThreadsFor = null; // its list again when it comes back
+                Toast($"NEW THREAD on {e.Title}: pick the agent and START, then say what to make or change", "info");
+            }));
+        }
+
+        /// The MQH project of a plugin project; added to MQH when it is not there (made while MQH was down, by an agent).
+        private void WithPluginProject(ScriptHost.Entry e, Action<string> then)
+        {
+            void Find()
+            {
+                string pid = PluginProjectId(e);
+                if (pid != null) { then(pid); return; }
+                EnsureHost(() => Mqh.CreateProject(e.Title.Length > 0 ? e.Title : e.Name, _hostId, e.LinuxDir, r =>
+                {
+                    if (r == null) { Toast("Its project could not be added to MQH: " + Mqh.LastError, "error"); return; }
+                    _pluginProjects = null;
+                    then((string)r["id"]);
+                }));
+            }
+            if (_pluginProjects != null) { Find(); return; }
+            Mqh.Projects(pr =>
+            {
+                if (pr == null) { Toast("MQH: " + (Mqh.LastError ?? "not reachable"), "error"); return; }
+                _pluginProjects = pr as JArray ?? new JArray();
+                Find();
+            });
         }
 
         private void TogglePickedPlugin()
@@ -602,8 +788,9 @@ namespace MetaCodex.Shell
             if (tag is GestureExampleRow ex)
             {
                 string err = InstallGestureExample(ex.Id);
-                Toast(err == null ? $"{ex.Id} added" + (IsAppPluginExample(ex.Id) ? ": its tile is on the main menu" : "") : "Not added: " + err, err == null ? "ok" : "error");
+                Toast(err == null ? $"{ex.Id} added as a plugin project" + (IsAppPluginExample(ex.Id) ? ": its tile is on the main menu" : "") : "Not added: " + err, err == null ? "ok" : "error");
                 RefreshPluginList();
+                if (err == null) SelectPluginForTest(ex.Id);
                 return;
             }
             if (tag is ScriptHost.Entry e) { Scripts.SetEnabled(e.Key, !e.Enabled); RefreshPluginList(); return; }
@@ -626,7 +813,104 @@ namespace MetaCodex.Shell
                 return;
             }
             if (!(tag is ScriptHost.Entry e)) { Toast("Pick a plugin", "warn"); return; }
-            Modal("DELETE PLUGIN", $"Delete the folder of plugin {e.Name}?", new[] { "DELETE", "CANCEL" }, i => { if (i == 0) { Scripts.Delete(e.Key); RefreshPluginList(); } });
+            string text = e.Project
+                ? $"Delete the plugin {e.Title}? Its project folder {ProjectKinds.ShortPath(e.LinuxDir)} goes (its files and git history), and its project in THREADS with its threads. This cannot be undone."
+                : $"Delete the plugin {e.Title}? Its folder {e.LinuxDir} goes.";
+            Modal("DELETE PLUGIN", text, new[] { "DELETE", "CANCEL" }, i => { if (i == 0) Toast(DeletePlugin(e.Name), "info"); });
+        }
+
+        /// Deletes a plugin: its folder (a project's with its .git), its saved state, and for a project its MQH project
+        /// (with its threads). Returns what was done (the PLUGINS tab, the control port).
+        public string DeletePlugin(string id)
+        {
+            var e = Scripts?.Find("plugin/" + id);
+            if (e == null) return "error: no plugin " + id;
+            bool project = e.Project;
+            string dir = e.LinuxDir, title = e.Title.Length > 0 ? e.Title : e.Name;
+            void Gone(string pid, bool mqhAnswered)
+            {
+                Scripts.Delete(e.Key);
+                RefreshPluginList();
+                if (project && !mqhAnswered) Toast($"{title}: folder deleted; MQH did not answer, so its project stays in THREADS", "warn");
+                if (pid == null) return;
+                Mqh.Call(System.Net.Http.HttpMethod.Delete, "/api/v1/projects/" + Uri.EscapeDataString(pid), null, r =>
+                {
+                    if (r == null) Toast($"{title}: folder deleted; its project stays in THREADS ({Mqh.LastError})", "warn");
+                    _pluginProjects = null;
+                    RefreshThreads();
+                });
+            }
+            if (!project) { Gone(null, true); return $"Deleted {title} ({dir})"; }
+            Mqh.Projects(pr =>
+            {
+                _pluginProjects = pr as JArray;
+                Gone(PluginProjectId(e), pr != null);
+            });
+            return $"Deleting {title}: {ProjectKinds.ShortPath(dir)} and its project";
+        }
+
+        // ---- control port `plugin ...` (mcx-ui plugin ..., mcx-project new plugins)
+
+        /// plugin list | new <name> app|gesture|behaviour | examples | example <id> | enable | disable | reload | log | delete <id> |
+        /// event <window> <type> <id> [value] | dir
+        public string PluginCommand(string arg)
+        {
+            var parts = (arg ?? "").Split(new[] { ' ' }, 2, StringSplitOptions.RemoveEmptyEntries);
+            string sub = parts.Length > 0 ? parts[0] : "list";
+            string id = parts.Length > 1 ? parts[1].Trim() : "";
+            switch (sub)
+            {
+                case "list":
+                    return string.Join("\n", Scripts.Entries.Where(e => e.Kind == "plugin").Select(e =>
+                        $"{e.Name} v{e.Version} enabled={e.Enabled} poses={e.Poses} detectors={e.Detectors} handlers={e.Handlers} error={e.Error ?? "-"} kind={(e.Project ? e.PluginKind : "-")} dir={e.LinuxDir}"));
+                case "new":
+                {
+                    // new <name words> <kind> | new --kind <kind> <name words>: a plugin project (the kind is fixed)
+                    var words = id.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries).ToList();
+                    string kind = null;
+                    int ki = words.IndexOf("--kind");
+                    if (ki >= 0 && ki + 1 < words.Count) { kind = words[ki + 1]; words.RemoveRange(ki, 2); }
+                    else if (words.Count > 1 && PluginProject.NormalizeKind(words[words.Count - 1]) != null) { kind = words[words.Count - 1]; words.RemoveAt(words.Count - 1); }
+                    else if (words.Count > 1 && PluginProject.NormalizeKind(words[0]) != null) { kind = words[0]; words.RemoveAt(0); }
+                    kind = PluginProject.NormalizeKind(kind);
+                    string name = string.Join(" ", words);
+                    if (kind == null || name.Length == 0) return "error: plugin new <name> app|gesture|behaviour (a plugin project in /root/metacodex-projects/plugins/<apps|gestures|behaviours>/<id>)";
+                    string r = CreatePluginProject(kind, name);
+                    if (r.StartsWith("error")) return r;
+                    var e = Scripts.Find("plugin/" + PluginProject.IdFor(name));
+                    return "ok, " + (e?.LinuxDir ?? PluginProject.LinuxDirOf(kind, PluginProject.IdFor(name))) + " (kind " + kind + ", fixed; git and its THREADS project follow in a few seconds)" +
+                           (e?.Error != null ? "\nerror: " + e.Error : "");
+                }
+                case "examples": return string.Join("\n", GestureExampleIds.Select(x => $"{x} installed={Scripts.Find("plugin/" + x) != null} kind={ExampleKind(x)} gestures={string.Join(",", GestureNamesIn(ExamplePlugins[x]))}"));
+                case "example":
+                {
+                    var err = InstallGestureExample(id);
+                    var e = Scripts.Find("plugin/" + id.Trim().ToLowerInvariant());
+                    return err == null ? "ok, " + (e?.LinuxDir ?? id) : "error: " + err;
+                }
+                case "enable": Scripts.SetEnabled("plugin/" + id, true); return "ok";
+                case "disable": Scripts.SetEnabled("plugin/" + id, false); return "ok";
+                case "reload": Scripts.ReloadAll(); return "ok";
+                case "log": { var e = Scripts.Find("plugin/" + id); return e == null ? "error: no plugin " + id : string.Join("\n", e.Log); }
+                case "delete": { var r = DeletePlugin(id); return r.StartsWith("error") ? r : "ok, " + r; }
+                case "event":
+                {
+                    // event <window> <type> <id> [value]: what a tap or a sent text does in a plugin window (agents test
+                    // inputs, toggles, cells and buttons with it); <window>: the full id or the plugin id (its main window)
+                    var a = id.Split(new[] { ' ' }, 4, StringSplitOptions.RemoveEmptyEntries);
+                    const string usage = "error: plugin event <window> button|input|toggle|cell|choice|open|close <component id> [value]";
+                    if (a.Length < 2) return usage;
+                    string win = a[0].StartsWith("plugin-") ? a[0] : "plugin-" + a[0] + "-main";
+                    string type = a[1], cid = a.Length > 2 ? a[2] : "", val = a.Length > 3 ? a[3] : "";
+                    if (Array.IndexOf(new[] { "button", "input", "toggle", "cell", "choice", "open", "close" }, type) < 0) return usage;
+                    var owner = Scripts.WindowOwner(win);
+                    if (owner == null) return "error: no plugin window " + win + " (plugin check <id> lists the windows)";
+                    Scripts.WindowEvent(win, type, cid, val);
+                    return owner.Error != null ? "error: the plugin stopped: " + owner.Error : "ok";
+                }
+                case "dir": return Scripts.PluginsDir;
+                default: return "error: plugin list | new <name> app|gesture|behaviour | examples | example <id> | enable <id> | disable <id> | reload | log <id> | delete <id> | event <window> <type> <id> [value] | dir";
+            }
         }
 
         // ------------------------------------------------------------------ STATUS (the tab's id: daemon)

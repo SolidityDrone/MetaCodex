@@ -20,17 +20,43 @@ namespace PluginHarness
         public static int Main(string[] args)
         {
             string runDir = null;
+            bool rules = false;
             var folders = new List<string>();
             for (int i = 0; i < args.Length; i++)
             {
                 if (args[i] == "--verbose") Verbose = true;
                 else if (args[i] == "--run" && i + 1 < args.Length) runDir = args[++i];
+                else if (args[i] == "--rules") rules = true;
+                else if (args[i] == "--scaffold" && i + 3 < args.Length)
+                {
+                    // --scaffold <kind> <id> <dest> [name]: a new plugin project's files, as the app makes them
+                    string kind = args[i + 1], id = args[i + 2], dest = args[i + 3];
+                    string name = i + 4 < args.Length ? args[i + 4] : id;
+                    // an example added as a project: its own files are in dest already; the project's agent files join them
+                    bool example = File.Exists(Path.Combine(dest, "plugin.json"));
+                    var files = example ? PluginProject.AgentFiles(kind, id, name, fromExample: true) : PluginProject.Scaffold(kind, id, name);
+                    foreach (var kv in files)
+                    {
+                        var path = Path.Combine(dest, kv.Key.Replace('/', Path.DirectorySeparatorChar));
+                        Directory.CreateDirectory(Path.GetDirectoryName(path));
+                        File.WriteAllText(path, kv.Value);
+                    }
+                    Directory.CreateDirectory(Path.Combine(dest, ".metacodex"));
+                    File.WriteAllText(Path.Combine(dest, ".metacodex", "project.json"), PluginProject.MarkerJson(kind));
+                    Console.WriteLine("scaffold " + kind + " " + id + " -> " + dest);
+                    return 0;
+                }
                 else folders.Add(args[i]);
             }
-            if (runDir == null || folders.Count == 0)
+            if (runDir == null || folders.Count == 0 && !rules)
             {
-                Console.WriteLine("usage: PluginTests.dll --run <run dir> [--verbose] <plugin folder name>...");
+                Console.WriteLine("usage: PluginTests.dll --run <run dir> [--verbose] [--rules] <plugin folder name>... | --scaffold <kind> <id> <dest> [name]");
                 return 2;
+            }
+            if (rules)
+            {
+                try { Rules.Run(runDir); }
+                catch (Exception ex) { Fails++; Console.WriteLine("FAIL [rules] the harness itself crashed: " + ex); }
             }
             foreach (var name in folders)
             {
@@ -50,7 +76,9 @@ namespace PluginHarness
         private const int RunSeconds = 3 * 3600;
         private const string InputText = "test 1 in 5 minutes";
 
-        private readonly string _raw, _id, _key, _scripts, _plugins, _prefix;
+        private readonly string _raw, _id, _key, _scripts, _plugins, _projects, _prefix;
+        /// The plugin's kind: a project's (its marker), else plugin.json's "kind", else app.
+        private string _kind = "app";
         private FakeServices _fake;
         private ScriptHost _host;
         private ScriptHost.Entry _entry;
@@ -74,6 +102,7 @@ namespace PluginHarness
             string root = Path.Combine(runDir, folderName);
             _scripts = Path.Combine(root, "scripts");
             _plugins = Path.Combine(root, "plugins");
+            _projects = Path.Combine(root, "projects"); // a plugin project: projects/<apps|gestures|behaviours>/<id>
             _badLogRx = new Regex("^\\[(plugin|script) " + Regex.Escape(_id) + "\\] (ERROR|warn)");
         }
 
@@ -155,12 +184,13 @@ namespace PluginHarness
             Console.WriteLine("== plugin " + _raw + (_raw == _id ? "" : " (id " + _id + ")"));
             Directory.CreateDirectory(_scripts);
             _fake = new FakeServices(StartClock());
-            _host = new ScriptHost(_fake, _scripts, _plugins);
+            _host = NewHost();
             if (Load())
             {
                 Made();
                 Taps();
                 Interact();
+                Gestures();
                 LongRun();
                 Voice();
                 Restart();
@@ -171,6 +201,8 @@ namespace PluginHarness
             Console.WriteLine((_fails == 0 ? "PASS" : "FAILED (" + _fails + ")") + " [" + _id + "] " + _summary);
         }
 
+        private ScriptHost NewHost() => new ScriptHost(_fake, _scripts, _plugins, Directory.Exists(_projects) ? _projects : null);
+
         // 1. Load
         private bool Load()
         {
@@ -179,9 +211,15 @@ namespace PluginHarness
             Step(0.1);
             Step(0.1);
             _entry = _host.Find(_key);
-            if (_entry == null) { Fail("load: the host did not find the plugin (no plugin.json in " + _plugins + "?)"); return false; }
+            if (_entry == null)
+            {
+                Fail("load: the host did not load the plugin" + (_host.ScanNotes.Count > 0 ? ": " + string.Join("; ", _host.ScanNotes) : " (no plugin.json?)"));
+                return false;
+            }
+            _kind = _entry.Project ? _entry.PluginKind : PluginProject.NormalizeKind((string)_entry.Manifest?["kind"]) ?? "app";
             if (_entry.Error != null) { _errorReported = true; Fail("load: the plugin stopped with an error: " + _entry.Error); return false; }
-            Ok("loaded without error (" + _entry.Title + (_entry.Version.Length > 0 ? " " + _entry.Version : "") + ")");
+            Ok("loaded without error (" + _entry.Title + (_entry.Version.Length > 0 ? " " + _entry.Version : "") + "), kind " + _kind +
+               (_entry.Project ? " (a plugin project: " + _entry.LinuxDir + ")" : " (an older plugin folder)"));
             return true;
         }
 
@@ -192,8 +230,18 @@ namespace PluginHarness
             var tiles = OwnTiles();
             _loadWindowIds = wins.Select(w => w.Id).ToList();
             _loadTileIds = tiles.Select(t => t.Id).ToList();
-            Check(wins.Count >= 1, "made " + wins.Count + " window(s): " + string.Join(", ", _loadWindowIds));
-            Check(tiles.Count >= 1, "made " + tiles.Count + " tile(s): " + string.Join(", ", tiles.Select(t => t.Label + (t.Window != null ? " -> " + t.Window : " (runs a function)"))));
+            string tileList = string.Join(", ", tiles.Select(t => t.Label + (t.Window != null ? " -> " + t.Window : " (runs a function)")));
+            if (_kind == "app")
+            {
+                Check(wins.Count >= 1, "made " + wins.Count + " window(s): " + string.Join(", ", _loadWindowIds));
+                Check(tiles.Count >= 1, "made " + tiles.Count + " tile(s): " + tileList);
+            }
+            else
+            {
+                Ok("a " + _kind + " plugin: " + wins.Count + " window(s), " + tiles.Count + " tile(s) (none needed)");
+                if (tiles.Count > 0 && _entry.Project)
+                    Fail("tile(s) " + tileList + ": only app plugins get tiles on the main menu, a " + _kind + " plugin's menu.add is never shown; remove it (or make an app plugin)");
+            }
             foreach (var t in tiles.Where(t => t.Window != null))
                 Check(wins.Any(w => w.Id == t.Window), "tile " + t.Label + " points to one of the plugin's windows (" + t.Window + ")");
             foreach (var w in wins) PrintSpec(w, "spec");
@@ -293,7 +341,7 @@ namespace PluginHarness
             }
             if (notices > 0) counts["notification tap"] = notices;
             if (NoError("interactions"))
-                Ok("used " + (counts.Count == 0 ? "nothing (the windows have no interactive component)" : string.Join(", ", counts.Select(kv => kv.Value + " " + kv.Key))) + "; no error");
+                Ok("used " + (counts.Count > 0 ? string.Join(", ", counts.Select(kv => kv.Value + " " + kv.Key)) : OwnWindows().Count == 0 ? "nothing (no window)" : "nothing (the windows have no interactive component)") + "; no error");
             if (Program.Verbose) foreach (var w in OwnWindows()) PrintSpec(w, "last spec");
         }
 
@@ -314,6 +362,157 @@ namespace PluginHarness
             counts[what] = (counts.TryGetValue(what, out var c) ? c : 0) + 1;
             NoError(what + " " + (id.Length > 0 ? id : value) + " in " + win.Id);
             return 1;
+        }
+
+        // 4b. Gestures: what it defines and reacts to; each reaction simulated; canonical hand shapes through the engine
+        private static readonly string[] BuiltIns = { "pinch", "grab", "point", "open", "palm-up", "clap", "select" };
+
+        private (int toasts, int actions, int panels, int notices, int said, int runs, int sounds) Snap() =>
+            (_fake.Toasts.Count, _fake.Actions.Count, _fake.PanelCalls.Count, _fake.Notices.Count, _fake.Said.Count, _fake.VoiceRuns.Count, _fake.Sounds.Count);
+
+        private List<string> Effects((int toasts, int actions, int panels, int notices, int said, int runs, int sounds) s)
+        {
+            var l = new List<string>();
+            l.AddRange(_fake.Toasts.Skip(s.toasts).Select(t => "toast \"" + Cut(t.text, 40) + "\""));
+            l.AddRange(_fake.Actions.Skip(s.actions).Select(a => "action " + Cut(a, 40)));
+            l.AddRange(_fake.PanelCalls.Skip(s.panels));
+            l.AddRange(_fake.Notices.Skip(s.notices).Select(n => "notify \"" + Cut(n.Text, 40) + "\""));
+            l.AddRange(_fake.Said.Skip(s.said).Select(x => "say \"" + Cut(x, 40) + "\""));
+            l.AddRange(_fake.VoiceRuns.Skip(s.runs).Select(x => "voice run \"" + Cut(x, 40) + "\""));
+            l.AddRange(_fake.Sounds.Skip(s.sounds).Select(x => "sound " + x));
+            return l;
+        }
+
+        private void DispatchAll(List<MetaCodex.Hands.GestureEvent> evs)
+        {
+            foreach (var ev in evs)
+            {
+                if (_entry.Error != null) return;
+                _host.Dispatch(ev);
+            }
+        }
+
+        private void Gestures()
+        {
+            if (_entry.Error != null) return;
+            var eng = _fake.Engine;
+            var own = eng.Custom.Where(c => c.owner == _key).ToList();
+            var ownNames = own.Select(c => c.name).Distinct().ToList();
+            var handled = _host.HandledGestures(_entry);
+            if (own.Count == 0 && handled.Count == 0)
+            {
+                if (_kind == "gesture") Fail("a gesture plugin defines or reacts to at least one gesture (poses/<name>.json, gesture.pose, gesture.define, gesture.on)");
+                return;
+            }
+            Ok("gestures: defines " + (own.Count == 0 ? "none" : string.Join(", ", own.Select(c => c.name + " (" + c.kind + ")"))) +
+               "; reacts to " + (handled.Count == 0 ? "none" : string.Join(", ", handled)));
+            foreach (var n in handled)
+                if (Array.IndexOf(BuiltIns, n) < 0 && !ownNames.Contains(n))
+                    Fail("reacts to '" + n + "', which neither this plugin nor the built-ins define (a fresh headset has no example poses: define it in this plugin, poses/" + n + ".json or gesture.define)");
+            foreach (var n in own.Select(c => c.name).Distinct())
+                if (Array.IndexOf(BuiltIns, n) >= 0) Fail("defines '" + n + "', a built-in gesture's name: pick another name");
+            // each reaction, simulated as the app would send it
+            float t = (float)_t;
+            foreach (var n in handled.Where(n => Array.IndexOf(BuiltIns, n) >= 0 || ownNames.Contains(n)))
+            {
+                var snap = Snap();
+                string hand = n == "clap" ? "both" : "right";
+                if (n == "clap" || n == "select") DispatchAll(new List<MetaCodex.Hands.GestureEvent> { new MetaCodex.Hands.GestureEvent { Name = n, Hand = "both", Phase = "tap", Time = t += 0.05f, Detail = "harness" } });
+                else
+                {
+                    DispatchAll(new List<MetaCodex.Hands.GestureEvent> { new MetaCodex.Hands.GestureEvent { Name = n, Hand = hand, Phase = "start", Time = t += 0.05f, Detail = "harness" } });
+                    DispatchAll(new List<MetaCodex.Hands.GestureEvent> { new MetaCodex.Hands.GestureEvent { Name = n, Hand = hand, Phase = "end", Time = t += 0.3f, Detail = "harness" } });
+                }
+                Step(0.1);
+                if (!NoError("gesture " + n)) return;
+                var fx = Effects(snap);
+                Ok("gesture " + n + " (" + (n == "clap" || n == "select" ? "both tap" : hand + " start, end") + ") -> " + (fx.Count == 0 ? "nothing visible" : string.Join(", ", fx.Take(4))));
+            }
+            foreach (var (steps, window) in _host.SequencesOf(_entry))
+            {
+                if (steps.Any(n => Array.IndexOf(BuiltIns, n) < 0 && !ownNames.Contains(n))) continue;
+                var snap = Snap();
+                float gap = Math.Min(0.25f, window / (steps.Length + 1));
+                foreach (var n in steps)
+                    DispatchAll(new List<MetaCodex.Hands.GestureEvent> { new MetaCodex.Hands.GestureEvent { Name = n, Hand = n == "clap" ? "both" : "right", Phase = n == "clap" || n == "select" ? "tap" : "start", Time = t += gap, Detail = "harness" } });
+                Step(0.1);
+                if (!NoError("sequence " + string.Join(" ", steps))) return;
+                var fx = Effects(snap);
+                Check(fx.Count > 0, "sequence " + string.Join(", ", steps) + " within " + window.ToString("0.0#", CultureInfo.InvariantCulture) + " s -> " + (fx.Count == 0 ? "nothing visible (its function did nothing the app can see)" : string.Join(", ", fx.Take(4))));
+            }
+            _t = t;
+            // the hands: each shape held 1 s (36 detector passes), both hands, then the right hand alone
+            if (own.Count == 0) return;
+            var shapes = HandShapes();
+            var startedAny = new HashSet<string>();
+            foreach (var both in new[] { true, false })
+                foreach (var (shape, set) in shapes)
+                {
+                    eng.Clear((float)_t);
+                    DispatchAll(eng.Events.ToList()); eng.Events.Clear();
+                    Reset(eng.Left); Reset(eng.Right);
+                    StepFor(0.2);
+                    var snap = Snap();
+                    var started = new List<string>();
+                    set(eng.Right); eng.Right.Tracked = true;
+                    if (both) { set(eng.Left); eng.Left.Tracked = true; }
+                    for (int i = 0; i < 36 && _entry.Error == null; i++)
+                    {
+                        _t += 1.0 / 36; _fake.Clock += 1.0 / 36;
+                        eng.Tick((float)_t);
+                        eng.RunCustomTick((float)_t, 1f / 36f);
+                        var evs = eng.Events.ToList(); eng.Events.Clear();
+                        foreach (var ev in evs) if (ev.Phase == "start" && ownNames.Contains(ev.Name)) started.Add(ev.Name + "(" + ev.Hand + ")");
+                        DispatchAll(evs);
+                        _host.Tick((float)_t);
+                        DrainProblems();
+                    }
+                    if (!NoError("hands " + shape)) { Reset(eng.Left); Reset(eng.Right); return; }
+                    var fx = Effects(snap);
+                    if (started.Count == 0) continue;
+                    foreach (var x in started) startedAny.Add(x);
+                    Ok("hands " + shape + (both ? " (both hands)" : " (right hand)") + ": " + string.Join(", ", started.Distinct()) + " started -> " + (fx.Count == 0 ? "nothing visible" : string.Join(", ", fx.Distinct().Take(4))));
+                }
+            eng.Clear((float)_t); DispatchAll(eng.Events.ToList()); eng.Events.Clear();
+            Reset(eng.Left); Reset(eng.Right);
+            if (startedAny.Count == 0) Ok("hands: none of its gestures started with the harness's shapes (" + string.Join(", ", shapes.Select(x => x.name)) + "); that proves nothing about real hands");
+            foreach (var d in _host.DetectorCosts().Where(d => d.owner == _id))
+                Ok("detector " + d.name + ": " + d.micros.ToString("0", CultureInfo.InvariantCulture) + " us a call on this PC");
+        }
+
+        private static void Reset(MetaCodex.Hands.HandState h)
+        {
+            h.Tracked = false; h.Pinching = h.Grabbing = h.Pointing = h.Open = h.PalmUp = false; h.Pinch = 0f;
+            for (int i = 0; i < 5; i++) h.Fingers[i] = 0f;
+            h.ThumbDir = h.PalmNormal = h.Forward = h.Velocity = UnityEngine.Vector3.zero;
+            h.Frame = new MetaCodex.Hands.HandFrame { Tracked = false, HighConfidence = false, Palm = UnityEngine.Vector3.zero };
+        }
+
+        /// Hand shapes as the engine reports them (curls 0 straight .. 1 curled; x right, y up, z forward).
+        private static List<(string name, Action<MetaCodex.Hands.HandState> set)> HandShapes()
+        {
+            var up = new UnityEngine.Vector3(0, 1, 0); var down = new UnityEngine.Vector3(0, -1, 0); var fwd = new UnityEngine.Vector3(0, 0, 1);
+            void Base(MetaCodex.Hands.HandState h, float t, float i, float m, float r, float l)
+            {
+                h.Fingers[0] = t; h.Fingers[1] = i; h.Fingers[2] = m; h.Fingers[3] = r; h.Fingers[4] = l;
+                h.Frame = new MetaCodex.Hands.HandFrame { Tracked = true, HighConfidence = true, Palm = new UnityEngine.Vector3(h.Side == "left" ? -0.15f : 0.15f, 1.2f, 0.35f) };
+                h.PalmNormal = down; h.ThumbDir = fwd; h.Forward = fwd;
+            }
+            return new List<(string, Action<MetaCodex.Hands.HandState>)>
+            {
+                ("open palm down", h => { Base(h, 0, 0, 0, 0, 0); h.Open = true; }),
+                ("open palm up", h => { Base(h, 0, 0, 0, 0, 0); h.Open = true; h.PalmUp = true; h.PalmNormal = up; }),
+                ("open palm away", h => { Base(h, 0, 0, 0, 0, 0); h.Open = true; h.PalmNormal = fwd; }),
+                ("fist", h => { Base(h, 1, 1, 1, 1, 1); h.Grabbing = true; }),
+                ("point", h => { Base(h, 1, 0, 1, 1, 1); h.Pointing = true; }),
+                ("pinch", h => { Base(h, 0.4f, 0.4f, 0, 0, 0); h.Pinch = 1f; h.Pinching = true; }),
+                ("thumbs up", h => { Base(h, 0, 1, 1, 1, 1); h.ThumbDir = up; }),
+                ("thumbs down", h => { Base(h, 0, 1, 1, 1, 1); h.ThumbDir = down; }),
+                ("victory", h => { Base(h, 1, 0, 0, 1, 1); }),
+                ("open hand moving left fast", h => { Base(h, 0, 0, 0, 0, 0); h.Open = true; h.PalmNormal = new UnityEngine.Vector3(-1, 0, 0); h.Velocity = new UnityEngine.Vector3(-1.6f, 0, 0); }),
+                ("open hand moving right fast", h => { Base(h, 0, 0, 0, 0, 0); h.Open = true; h.PalmNormal = new UnityEngine.Vector3(1, 0, 0); h.Velocity = new UnityEngine.Vector3(1.6f, 0, 0); }),
+                ("open hand pushed away fast", h => { Base(h, 0, 0, 0, 0, 0); h.Open = true; h.PalmNormal = fwd; h.Velocity = new UnityEngine.Vector3(0, 0, 1.4f); }),
+            };
         }
 
         // 5. Three hours of time
@@ -374,7 +573,7 @@ namespace PluginHarness
                     MaxRebuildsPerSecond.ToString("0.0", CultureInfo.InvariantCulture) + "), " + tx + " live text updates" +
                     (rate <= MaxRebuildsPerSecond ? "" : "; it redraws the whole window too often, use a text component with an id for the countdown"));
             }
-            if (parts.Count == 0) Fail("no window left after 3 h of app time");
+            if (parts.Count == 0 && _loadWindowIds.Count > 0) Fail("no window left after 3 h of app time");
             Ok("3 h of app time and wall clock in 1 s steps, no error; " + (_fake.Notices.Count - notices0) + " notification(s) in that time");
         }
 
@@ -449,7 +648,7 @@ namespace PluginHarness
             var storeBefore = ReadStore();
             CollectLog();
             _fake = new FakeServices(_fake.Clock);
-            _host = new ScriptHost(_fake, _scripts, _plugins);
+            _host = NewHost();
             _errorReported = false;
             _host.Scan();
             Step(0.0);
@@ -501,7 +700,7 @@ namespace PluginHarness
             if (before < 3) { Ok("restart while running: skipped (the window does not update by itself after the main action)"); return; }
             CollectLog();
             _fake = new FakeServices(_fake.Clock);
-            _host = new ScriptHost(_fake, _scripts, _plugins);
+            _host = NewHost();
             _errorReported = false;
             _host.Scan();
             Step(0.0);
