@@ -113,6 +113,8 @@ namespace MetaCodex.UI
         /// True when every piece is built (Build, or BuildStaged some frames later). Until then the menu is out of sight,
         /// Tick does nothing and no touch is seen.
         public bool Ready => _ready;
+        /// A step of the staged build threw: the menu never becomes Ready (the shell shows the DOCK instead).
+        public bool Failed => _failed;
         /// Raised once, on the main thread, when the menu becomes Ready: some frames after BuildStaged, or at the end of Build.
         public event Action Built;
         /// How many frames (steps) the build took: the staged build does one step a frame.

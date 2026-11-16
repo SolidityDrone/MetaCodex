@@ -11,9 +11,13 @@ namespace MetaCodex.Shell
     /// carry the same actions; switching closes one and brings the other (settings key `wristMenu`, voice "turn on the
     /// wrist menu", Lua settings.set("wristMenu", "true")).
     ///
-    /// The wrist menu only exists while it can be used (2026-11-15: its first frame cost 3 s on the Quest 3S, and the DOCK
-    /// is the default): on the headset it is made when WRIST is the main menu, at the start or when the user switches to it
-    /// later, and then in small steps over some frames (UiWristMenu.BuildStaged), the DOCK staying open until it is ready.
+    /// The wrist menu only exists while it can be used (2026-11-15: its first frame cost 3 s on the Quest 3S): on the
+    /// headset it is made when WRIST is the main menu, at the start or when the user switches to it later, and then in small
+    /// steps over some frames (UiWristMenu.BuildStaged). At the start in WRIST mode no DOCK is shown meanwhile (owner
+    /// 2026-11-16: "at start-up the menu is the panel, after a while it disappears and it uses the radial"): the wrist menu
+    /// is on the wrist, out of view, and simply works once it is ready (until then a look at the wrist shows nothing and a
+    /// touch does nothing). Only a switch from DOCK to WRIST later keeps the DOCK open until the wrist menu is ready. A
+    /// wrist menu whose staged build fails leaves the DOCK as the main menu for the session (TickWristFallback).
     /// In the Editor and in batch mode the self-tests read Wrist right after Build, so there it is made whole, at once.
     public sealed partial class MetaCodexShell
     {
@@ -79,14 +83,29 @@ namespace MetaCodex.Shell
             Wrist.RebuildItems();
         }
 
-        /// A staged wrist menu is ready: when WRIST is still the main menu, the DOCK goes and the wrist menu starts to look
-        /// for the wrist. (If the user went back to DOCK meanwhile, Dismiss put it away already: it stays so.)
+        /// A staged wrist menu is ready: when WRIST is still the main menu, the DOCK goes (open only after a switch from DOCK)
+        /// and the wrist menu starts to look for the wrist. (If the user went back to DOCK meanwhile, Dismiss put it away
+        /// already: it stays so.)
         private void OnWristBuilt()
         {
-            Log($"wrist menu: built in {Wrist.BuildFrames} frames ({(Time.realtimeSinceStartup - _wristMadeAt) * 1000f:F0} ms)");
+            bool dockWasOpen = _panels.TryGetValue("dock", out var dock) && dock != null && dock.IsOpen;
+            Log($"wrist menu: built in {Wrist.BuildFrames} frames ({(Time.realtimeSinceStartup - _wristMadeAt) * 1000f:F0} ms)"
+                + (Settings.wristMenu ? dockWasOpen ? ": the DOCK goes" : ": no DOCK was shown" : ""));
             if (!Settings.wristMenu) return;
             Wrist.Resume();
             SetDockOpen(false);
+        }
+
+        private bool _wristFallbackDone;
+
+        /// Every frame, a field test: in WRIST mode a wrist menu whose staged build failed (UiWristMenu logs the step) would
+        /// leave no main menu at all, since the DOCK is not shown at the start any more: the DOCK comes, once, for the session.
+        private void TickWristFallback()
+        {
+            if (_wristFallbackDone || Wrist == null || !Wrist.Failed || !Settings.wristMenu) return;
+            _wristFallbackDone = true;
+            Log("wrist menu: its build failed: the DOCK is the main menu for this session");
+            SetDockOpen(true);
         }
 
         /// One entry of the main menu. The dock and the wrist menu are built from the same table (MainMenuItems), so they
@@ -154,7 +173,8 @@ namespace MetaCodex.Shell
 
         /// Brings the chosen main menu and puts the other away; runs when the setting changed, whoever changed it (and once
         /// at the start, from BuildWrist: before that it does nothing). DOCK mode needs no wrist menu. WRIST mode makes it if
-        /// it does not exist yet (staged) and keeps the DOCK open until it is ready (OnWristBuilt). Every settings change
+        /// it does not exist yet (staged); a DOCK that is open (a switch from DOCK) stays until it is ready (OnWristBuilt), and
+        /// at the start none is opened (OnRecentered). Every settings change
         /// passes here (OnSettingsChanged): the wrist menu's own settings are applied first (ApplyWristLook, cheap when
         /// nothing changed).
         private void ApplyMainMenuMode()

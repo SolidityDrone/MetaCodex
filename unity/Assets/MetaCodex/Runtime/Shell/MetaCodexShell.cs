@@ -536,6 +536,7 @@ namespace MetaCodex.Shell
             HitchMark(9);
             TickOrb(Time.unscaledDeltaTime);
             TickSplash(Time.unscaledDeltaTime);
+            TickWristFallback(); // a failed wrist menu build: the DOCK, once (ShellWrist)
             TickFirstRun(Time.unscaledDeltaTime); // the first start's guide card, locks and tour (one test when none runs)
             if (_renderScaleForSetup != _setupActive) ApplyDisplaySettings(); // the setup is over: the full render scale, once
             HitchMark(10);
@@ -767,8 +768,12 @@ namespace MetaCodex.Shell
             foreach (var kv in _panels)
             {
                 if (kv.Key != "dock") continue;
-                // the WRIST main menu replaces the dock (once it is made: until then the dock stays, ShellWrist)
-                if (Settings.wristMenu && Wrist != null && Wrist.Ready) { if (kv.Value.IsOpen) kv.Value.Close(); continue; }
+                // WRIST mode: a recenter never opens the DOCK, also not the start's first one while the wrist menu is still
+                // being made (owner 2026-11-16: "at start-up the menu is the panel, after a while it disappears and it uses
+                // the radial"): the wrist menu is on the wrist, out of view, and works once it is ready. A DOCK still open
+                // from a switch to WRIST (it stays until the wrist menu is built, ShellWrist) comes in front, or goes once
+                // the wrist menu is ready.
+                if (Settings.wristMenu && (!kv.Value.IsOpen || Wrist != null && Wrist.Ready)) { if (kv.Value.IsOpen) kv.Value.Close(); continue; }
                 PlaceDefault("dock", kv.Value);
                 if (!kv.Value.IsOpen) kv.Value.Open();
             }
