@@ -1042,14 +1042,18 @@ bool App::Init(android_app* android, const Config& cfg)
     }
     Log("starting %s", cfg.name);
     ReadLaunch();
-    // runtime permissions first: the dialog shows while the app starts; depth and scene start once granted
+    // runtime permissions first: the dialog shows while the app starts; depth and scene start once granted.
+    // HAND_TRACKING is install-time on Horizon OS (granted at install when the manifest declares it; docs/
+    // native-build-and-install.md): the request is the fallback, and the log says which state this start had.
     std::vector<const char*> ask;
+    bool handsOk = !cfg.hands || Permissions::Granted(act, kPermHands);
     if (cfg.askPermissions)
     {
         if ((cfg.depth || cfg.scene) && !Permissions::Granted(act, kPermScene)) ask.push_back(kPermScene);
-        if (cfg.hands && !Permissions::Granted(act, kPermHands)) ask.push_back(kPermHands);
+        if (!handsOk) ask.push_back(kPermHands);
         if (!ask.empty()) Permissions::Request(act, ask);
     }
+    if (cfg.hands) Log("permission %s: %s", kPermHands, handsOk ? "granted" : "not granted at start (hands wait for it)");
 
     PFN_xrInitializeLoaderKHR initLoader = Proc<PFN_xrInitializeLoaderKHR>(XR_NULL_HANDLE, "xrInitializeLoaderKHR");
     if (!initLoader) { Log("no OpenXR loader"); return false; }
@@ -1112,6 +1116,10 @@ bool App::Init(android_app* android, const Config& cfg)
     // features
     if (cfg.passthrough && ext.Has("XR_FB_passthrough") && passthrough.Init(instance, session)) { passthrough.Start(); projectionFlags = XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT; }
     if (cfg.hands && ext.Has("XR_EXT_hand_tracking")) hands.Init(instance, session, ext.Has("XR_FB_hand_tracking_aim"));
+    if (cfg.hands && !ext.Has("XR_EXT_hand_tracking"))
+        Log("hands: XR_EXT_hand_tracking not enabled: its manifest entries or the hand tracking permission were missing at start");
+    if (cfg.hands && hands.Available() && !ext.Has("XR_FB_hand_tracking_aim"))
+        Log("menu: the menu gesture needs XR_FB_hand_tracking_aim, not enabled here: the app menu opens with the left controller's button only");
     if (cfg.controllers && controllers.Init(instance, session, ext))
     {
         XrSessionActionSetsAttachInfo ai{XR_TYPE_SESSION_ACTION_SETS_ATTACH_INFO};
@@ -1685,6 +1693,16 @@ bool App::Pump()
     // a permission granted while running (the dialog, or Settings): start what waited for it
     double now = Now();
     if (cfg_.depth && !depth.Running() && now - permCheck_ > 1.0) { permCheck_ = now; TryStartDepth(); }
+    // hands that waited for the permission: the trackers are made once it is granted (checked once a second, 10 tries)
+    if (cfg_.hands && session != XR_NULL_HANDLE && !hands.Available() && ext.Has("XR_EXT_hand_tracking") && handsTries_ < 10 &&
+        now - handsCheck_ > 1.0 &&
+        Permissions::Granted(android_->activity, kPermHands))
+    {
+        handsCheck_ = now;
+        handsTries_++;
+        hands.Destroy();
+        if (hands.Init(instance, session, ext.Has("XR_FB_hand_tracking_aim"))) Log("hands: started, the permission is granted now");
+    }
     return !exit_;
 }
 

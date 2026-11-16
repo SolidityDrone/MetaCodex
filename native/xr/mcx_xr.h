@@ -427,6 +427,8 @@ private:
     XrSessionState state_ = XR_SESSION_STATE_UNKNOWN;
     bool running_ = false, exit_ = false, resumed_ = false, frameBegun_ = false, depthAsked_ = false;
     double t0_ = -1.0, last_ = 0.0, permCheck_ = 0.0;
+    double handsCheck_ = 0.0;   // last try to start hands that waited for the permission
+    int handsTries_ = 0;
     struct Swap
     {
         XrSwapchain chain = XR_NULL_HANDLE;
