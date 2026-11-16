@@ -310,7 +310,7 @@ namespace MetaCodex.Shell
         /// a frame of 181 ms, outside the shell's Update, as the setup's locks lifted and the tiles' glyphs changed; the
         /// tiles' symbols live in the fallback fonts). Not in batch runs.
         private const string WarmLetters = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~";
-        private const string WarmSymbols = "·•…–—“”‘’→←↑↓✓✗✕⚠▸○●◉▤◫☰◎⚙▣◐⌖⌨⟲🔒";
+        private const string WarmSymbols = "·•…–—“”‘’→←↑↓✓✗✕⚠▸▾○●◉▤◫☰◎⚙▣◐⌖⌨⟲⎇◌🔒"; // ▾ ⎇ ◌: THREADS' fold triangle, worktree folder, setting-up mark
 
         /// Adds the characters to the font's atlas and the ones it lacks to its fallbacks (one atlas upload per font).
         private static void WarmGlyphs(TMP_FontAsset font, string chars)

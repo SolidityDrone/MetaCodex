@@ -29,6 +29,7 @@ namespace MetaCodex.EditorTools
             };
             shell.OpenPanel("threads");
             shell.SetThreadsForTest(projects, new JArray { T("ta_1", "pa1", "Login form"), T("ta_2", "pa2", "Physics demo") });
+            shell.FoldsForTest(null, open: true); // both projects open: their threads are picked below
             shell.PickThreadRowForTest("t:ta_1");
             shell.PickThreadRowForTest("t:ta_2");
             var wins = shell.ThreadWindowsForTest;

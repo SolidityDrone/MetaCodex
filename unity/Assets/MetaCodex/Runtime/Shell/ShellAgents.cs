@@ -295,12 +295,15 @@ namespace MetaCodex.Shell
         // ------------------------------------------------------------------ THREADS
 
         private readonly HashSet<string> _collapsedProjects = new HashSet<string>();
+        private readonly HashSet<string> _seenProjects = new HashSet<string>(); // the projects THREADS has shown (each folds on its first sight)
         private readonly HashSet<string> _collapsedTypes = new HashSet<string>(); // NATIVE, DEFAULT, RESEARCH, OTHER headers folded
 
         /// Threads grouped like bb's sidebar, under the project types (owner 2026-11-13): a type band (NATIVE, DEFAULT,
         /// RESEARCH, PLUGINS, then OTHER when there are any; tap: fold / unfold), its projects (tap: fold / unfold, the name
         /// with its caption under it), and each project's threads under it, newest first (a status dot, the age); a tap on a
-        /// thread opens it. The rows' levels are their indents (0.03 m a level); the list is a variable-height list (UiList).
+        /// thread opens it. Three levels (owner 2026-11-16): a gap row, then the type band (level 0); a project, bold, with a
+        /// fold triangle (level 1); its threads, under a connector, with a status dot (level 2, or 3 under a worktree's folder).
+        /// The levels are their indents (0.045 m a level); the list is a variable-height list (UiList).
         private void BuildThreads()
         {
             var t = UiTheme.Current;
@@ -313,7 +316,7 @@ namespace MetaCodex.Shell
             _threadsStatus = p.Add(new UiLabel("", t.SmallSize) { Rect = new Rect(sr.x, sr.y, sr.width - abw - t.Gap, sr.height), Color = t.TextDim });
             _threadsArchBtn = p.Add(new UiButton(_threadsArchived ? "◂ ACTIVE" : "▤ ARCHIVED", ToggleArchivedThreads) { Rect = new Rect(sr.xMax - abw, sr.y, abw, sr.height), TextSize = t.SmallSize * 1.02f });
             _threadsArchBtn.SetSelected(_threadsArchived);
-            _threadList = p.Add(new UiList(0.034f, (item, idx) => ThreadRowPicked(item)) { Rect = st.Next(c.height - 0.03f - t.ButtonHeight - t.Gap * 2), Variable = true, IndentStep = 0.03f });
+            _threadList = p.Add(new UiList(0.034f, (item, idx) => ThreadRowPicked(item)) { Rect = st.Next(c.height - 0.03f - t.ButtonHeight - t.Gap * 2), Variable = true, IndentStep = 0.045f });
             _projectList = _threadList; // one list now (projects are its group rows)
             AddButtons(p, st.Next(t.ButtonHeight), new (string, Action)[]
             {
@@ -386,6 +389,13 @@ namespace MetaCodex.Shell
             if (_threadList == null) return;
             if (_threadsArchived) { RenderArchivedThreads(); return; } // ARCHIVED is on: the archived list instead
             var t = UiTheme.Current;
+            // a project folds the first time THREADS sees it, unless it is the picked one: one project open, the rest folded
+            foreach (var pr in _projects)
+            {
+                string seen = (string)pr["id"];
+                if (seen != null && _seenProjects.Add(seen) && seen != _projectSel) _collapsedProjects.Add(seen);
+            }
+            Color threadText = Color.Lerp(t.Text, t.TextDim, 0.25f); // a thread's title: a step dimmer than a project's
             var byProject = _threads.GroupBy(x => (string)x["projectId"] ?? "").ToDictionary(g => g.Key, g => g.OrderByDescending(x => x["updatedAt"]?.Value<long>() ?? 0).ToList());
             var spaces = WorkspaceMap.Build(_threads, _environments);
             long Latest(JToken pr) => byProject.TryGetValue((string)pr["id"], out var l) && l.Count > 0 ? l[0]["updatedAt"]?.Value<long>() ?? 0 : 0;
@@ -401,6 +411,7 @@ namespace MetaCodex.Shell
                 var all = projects.SelectMany(ThreadsOf).ToList();
                 int tRun = all.Count(x => ThreadTimeline.IsWorking(ThreadStatus(x))), tAsk = all.Count(x => x["hasPendingInteraction"]?.Value<bool>() == true);
                 bool typeFolded = _collapsedTypes.Contains(type);
+                items.Add(new UiListItem { Kind = UiListKind.Gap }); // the space above each type: types read as sections
                 // the type band: its colour is the bar, the fold icon and the rule; one count (needs you, else running, else the projects)
                 items.Add(new UiListItem
                 {
@@ -430,14 +441,18 @@ namespace MetaCodex.Shell
                 string plugin = PluginProject.KindFromLinuxPath(path); // a plugin project: its kind is the caption
                 items.Add(new UiListItem
                 {
-                    Kind = UiListKind.Stacked,
+                    Kind = UiListKind.Stacked, // level 1: a divider above, a bold name, the fold triangle, its caption under it
                     Indent = 1,
                     Divider = true,
+                    Bold = true,
                     Icon = folded ? "▸" : "▾",
-                    IconColor = t.TextDim,
+                    IconColor = t.TextAccent,
                     Title = (string)pr["name"] ?? "project",
                     TitleColor = pid == _projectSel ? t.TextAccent : t.Text,
                     Sub = plugin != null ? PluginProject.Label(plugin).ToUpperInvariant() : Cut(ProjectKinds.ShortPath(path), 34),
+                    // folded: a dot for what is inside that needs you (amber) or runs (green), so the folded row still says it
+                    Dot = folded && (asks > 0 || running > 0) ? (Color?)(asks > 0 ? t.Warn : t.Ok) : null,
+                    DotLit = true,
                     Badge = list.Count.ToString(), // the threads; coloured by what they do (needs you, running)
                     BadgeColor = asks > 0 ? t.Warn : running > 0 ? t.Ok : t.TextDim,
                     Tag = "p:" + pid,
@@ -457,13 +472,14 @@ namespace MetaCodex.Shell
                     string id = (string)x["id"];
                     items.Add(new UiListItem
                     {
-                        Kind = UiListKind.Compact,
+                        Kind = UiListKind.Compact, // level 2 (3 under a folder): a connector, a status dot, a smaller title; no fold triangle
                         Indent = indent,
+                        Guide = true,
                         // the status dot: running and needs you lit; waiting (held) and error and idle dim
                         Dot = pending || held ? t.Warn : working ? t.Ok : st == "error" ? t.Danger : t.TextDim,
                         DotLit = pending || working || st == "error",
                         Title = (string)x["title"] ?? (string)x["titleFallback"] ?? id,
-                        TitleColor = id == _threadOpen || OpenWindowShowing(id) != null ? t.TextAccent : (Color?)null, // open in a window (any of them)
+                        TitleColor = id == _threadOpen || OpenWindowShowing(id) != null ? t.TextAccent : threadText, // open in a window (any of them)
                         Sub = showSpaces ? $"{x["providerId"]}" : $"{x["providerId"]} · {(x["environmentIsWorktree"]?.Value<bool>() == true ? "⎇ " + x["environmentBranchName"] : "checkout")}",
                         Badge = Ago(x["updatedAt"]?.Value<long>() ?? 0), // the age, dim, on the right
                         BadgeColor = t.TextDim,
@@ -474,10 +490,11 @@ namespace MetaCodex.Shell
                 else
                     foreach (var g in groups)
                     {
-                        items.Add(new UiListItem
+                        items.Add(new UiListItem // level 2: a folder the threads below work in (level 3)
                         {
                             Kind = UiListKind.Compact,
                             Indent = 2,
+                            Guide = true,
                             Icon = g.Starting ? "◌" : g.IsWorktree ? "⎇" : "▣",
                             IconColor = g.Clash ? t.Danger : t.TextDim,
                             Title = g.Starting ? "setting up" : g.IsWorktree ? (g.Branch.Length > 0 ? g.Branch : "worktree") : "checkout" + (g.Branch.Length > 0 ? " · " + g.Branch : ""),
@@ -489,7 +506,7 @@ namespace MetaCodex.Shell
                         });
                         foreach (var x in g.Threads) ThreadRow(x, 3);
                     }
-                if (list.Count == 0) items.Add(new UiListItem { Kind = UiListKind.Compact, Indent = 2, Icon = "·", IconColor = t.TextDim, Title = "no threads yet: + NEW THREAD…", TitleColor = t.TextDim, Tag = "p:" + pid });
+                if (list.Count == 0) items.Add(new UiListItem { Kind = UiListKind.Compact, Indent = 2, Guide = true, Icon = "·", IconColor = t.TextDim, Title = "no threads yet: + NEW THREAD…", TitleColor = t.TextDim, Tag = "p:" + pid });
             }
             int total = _threads.Count, run = _threads.Count(x => ThreadTimeline.IsWorking(ThreadStatus(x))), need = _threads.Count(x => x["hasPendingInteraction"]?.Value<bool>() == true);
             if (_projects.Count == 0) _threadsStatus.Set("No project yet: + PROJECT… makes one in " + ProjectKinds.Root + "/ (native, default, research or a plugin).", t.TextDim);
@@ -932,7 +949,7 @@ namespace MetaCodex.Shell
             UpdateThreadActions();
             RefreshAttachRow(); // each thread keeps its own attachments for its next message
             var row = _threads.FirstOrDefault(x => (string)x["id"] == id) as JObject;
-            if (row != null) { _threadInfo = row; _threadOpenProject = (string)row["projectId"]; }
+            if (row != null) { _threadInfo = row; _threadOpenProject = (string)row["projectId"]; _collapsedProjects.Remove(_threadOpenProject); } // its project is open in THREADS
             else _threadOpenProject = null;
             _tlMaxSeq = -1;
             _tlOpenSeq = -1;
@@ -1362,6 +1379,13 @@ namespace MetaCodex.Shell
         }
 
         public void SetThreadsForTest(JArray projects, JArray threads) { _projects = projects; _threads = threads; RenderThreadGroups(); }
+        /// The folds as at a start (self-tests): each project folds on its first sight but the picked one; open: none folds.
+        public void FoldsForTest(string picked, bool open = false)
+        {
+            _seenProjects.Clear(); _collapsedProjects.Clear(); _projectSel = picked;
+            if (open) foreach (var pr in _projects) _seenProjects.Add((string)pr["id"]);
+            RenderThreadGroups();
+        }
         public UiList ThreadListForTest => _threadList;
         public void PickThreadRowForTest(int index) => ThreadRowPicked(_threadList.Items[index]);
         public void PickThreadRowForTest(string tag) => ThreadRowPicked(_threadList.Items.First(i => i.Tag as string == tag));
