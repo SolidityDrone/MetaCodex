@@ -53,4 +53,8 @@
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
   <!-- held only while a native app build runs, so it completes with the headset off -->
   <uses-permission android:name="android.permission.WAKE_LOCK" />
+  <!-- the wrist menu's core: the Wi-Fi signal bars (WifiManager RSSI) and "offline" (Application.internetReachability);
+       normal permissions, granted at install, no prompt -->
+  <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 </manifest>

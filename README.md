@@ -322,6 +322,7 @@ Permissions MetaCodex uses:
 | Install apps | Install the apps an agent builds. | The "Install unknown apps" page, once. Then one tap on INSTALL for each new app. |
 | Install updates silently | Update an app that MetaCodex installed, without a new tap. | None. Android decides. |
 | Foreground service, wake lock | Keep the agents, the local AI and a build running while a built app is in front, or the headset is off. | None. |
+| Wi-Fi and network state | The Wi-Fi signal bars and the offline mark in the wrist menu's core. | None. |
 
 A built app declares its own permissions. `mcx-app verify` lists them. The headset asks for them when the app first uses them.
 

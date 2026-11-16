@@ -8,7 +8,8 @@ namespace MetaCodex.UI
 {
     /// The main menu on the wrist (Settings > DISPLAY > MAIN MENU: WRIST): a holographic instrument projected from the
     /// back of the left wrist when the user looks at it as at a watch (palm turned away, so it never meets the Horizon OS
-    /// palm-up gesture). Folded, it is a watch face: a hexagon of glass with the time, sixty ticks and a seconds hand.
+    /// palm-up gesture). Folded, it is a watch face: a hexagon of glass with the time, sixty ticks and a seconds hand, and
+    /// over the time the headset's battery and Wi-Fi signal (StatusRow, UiDeviceStatus).
     /// Touch it with the right index fingertip and it unfolds: a shock ring runs out, an inner ring of six tiles and an
     /// outer ring of twelve swing in from opposite sides (each draws its line icon with a scan line, then types its
     /// name), under a turning bezel, arcs and a radar sweep. Touching a tile runs it with a flash, a ring and sparks.
@@ -132,6 +133,11 @@ namespace MetaCodex.UI
         private static readonly (float start, float len)[] ArcsInner = { (60f, 22f), (250f, 30f), (318f, 12f) };
         private int _timeMinute = -1;
         private string _timeText = "";
+        // the status row in the core (UiDeviceStatus): read when the menu appears, then every few seconds while it shows
+        private TextMeshPro _status;
+        private int _statusVersion = -1, _statusStep;
+        private float _statusNextPoll, _statusTextW;
+        private bool _statusWasOn;
 
         // ------------------------------------------------------------------ set up
 
@@ -193,7 +199,7 @@ namespace MetaCodex.UI
                 case StepLabels:
                     if (_labels.Count == 0) _labelsVersion = _itemsVersion; // made from the lists as they are now
                     MakeLabels(sync ? int.MaxValue : LabelsPerStep, sync ? 0.0 : StepBudgetMs);
-                    if (_faceText != null && _hint != null && _labels.Count >= Inner.Count + Outer.Count) _step = StepBurst;
+                    if (_faceText != null && _hint != null && _status != null && _labels.Count >= Inner.Count + Outer.Count) _step = StepBurst;
                     break;
                 case StepBurst:
                     if (_sparkMat != null && _burst == null) _burst = Sparks("sparks", false);
@@ -261,6 +267,15 @@ namespace MetaCodex.UI
                 {
                     _hint = Label("hint", "MENU", 0.0032f, Theme?.Display);
                     HideUntilShown(_hint);
+                }
+                else if (_status == null)
+                {
+                    // the battery's percentage in the core's status row: from its left end (StatusRow places it)
+                    _status = Label("status", "", StatusLine, Theme?.Display);
+                    _status.characterSpacing = 1f;
+                    _status.alignment = TextAlignmentOptions.MidlineLeft;
+                    _status.rectTransform.pivot = new Vector2(0f, 0.5f);
+                    HideUntilShown(_status);
                 }
                 else if (_labels.Count < Inner.Count + Outer.Count)
                 {
@@ -542,6 +557,7 @@ namespace MetaCodex.UI
             foreach (var l in _labels) if (l.gameObject.activeSelf != on) l.gameObject.SetActive(on);
             if (_faceText != null && _faceText.gameObject.activeSelf != on) _faceText.gameObject.SetActive(on);
             if (_hint != null && _hint.gameObject.activeSelf != on) _hint.gameObject.SetActive(on);
+            if (_status != null && _status.gameObject.activeSelf != on) _status.gameObject.SetActive(on);
             if (_motes != null) { if (on && !_motes.isPlaying) _motes.Play(); else if (!on && _motes.isPlaying) _motes.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear); }
         }
 
@@ -683,6 +699,7 @@ namespace MetaCodex.UI
             if (_dismissing && _present <= 0.001f && _bloom <= 0.001f) { _dismissing = false; HideNow(); enabled = false; return; }
             bool on = _present > 0.001f || _bloom > 0.001f;
             SetVisible(on);
+            TickStatus(on);
             // depth only once it is mostly there: a fading menu must not hide the hand behind it
             bool depth = on && DepthWrite && _present > 0.5f;
             if (_depthMr != null && _depthMr.enabled != depth) _depthMr.enabled = depth;
@@ -927,6 +944,7 @@ namespace MetaCodex.UI
             FaceQuad(FaceR * faceScale, -0.0004f, accent, Mathf.Clamp01(P * 3f), Mathf.Clamp01(_coreHover + 0.6f * Bump(B, 0f, 0.3f)), sec, face);
             if (B > 0.5f && _expandTarget && _closeRect.z > 0f)
                 IconQuad(new Vector2(0f, -FaceR * 0.42f * faceScale), 0.0042f, -0.0008f, _closeRect, accent, Seg(B, 0.6f, 1f) * P * (0.55f + 0.45f * _coreHover), 1f, _coreHover, 0.6f);
+            StatusRow(t, Seg(P, 0.6f, 1f), uiHide); // over the glass of the face (drawn after it: not darkened by it)
 
             if (_wave < 1f)
             {
@@ -964,6 +982,107 @@ namespace MetaCodex.UI
         }
 
         private static void HideLabel(TextMeshPro l) { var c = l.color; if (c.a != 0f) { c.a = 0f; l.color = c; } }
+
+        // ------------------------------------------------------------------ the status row in the core
+
+        // Battery and network in the core (owner 2026-11-16: "so we can easily see what we would otherwise check outside the
+        // app"), over the time, inside the face: a battery that fills with the level (a bolt before it while plugged in),
+        // the percentage, and four bars of Wi-Fi signal (dim under a slash: offline). Low battery (LowBattery and under)
+        // in the warning tone, a plugged-in one's fill in the ok tone. Drawn as light (kind 1 lines) and one label; the
+        // menu does not grow and the core stays one touch target (the row lies inside CoreHit). Nothing at all when nothing
+        // is known (the Editor, batch runs).
+        // Menu-local metres before Scale: the row's centre (StatusY face radii over the centre, clear of the time and of the
+        // inner hexagon's top edge at 0.33), the percentage's line height, the battery, the bolt and the bars.
+        private const float StatusY = 0.44f, StatusLine = 0.0028f, StatusGap = 0.0008f;
+        private const float BatW = 0.0038f, BatH = 0.0020f, BatStroke = 0.00032f, BatNub = 0.00042f;
+        private const float BoltW = 0.0012f, BoltH = 0.0025f, BarW = 0.00052f, BarGap = 0.00034f, BarMinH = 0.0008f, BarMaxH = 0.0024f;
+        private const float BarsW = 4f * BarW + 3f * BarGap;
+
+        /// The status is read when the menu appears and then every UiDeviceStatus.PollSeconds while it shows: the battery
+        /// one frame, the network the next (each a short call into Android). Nothing between those.
+        private void TickStatus(bool on)
+        {
+            if (on && !_statusWasOn) _statusNextPoll = _time; // appearing: now
+            _statusWasOn = on;
+            if (_statusStep == 1) { _statusStep = 0; UiDeviceStatus.PollNetwork(); return; }
+            if (!on || _time < _statusNextPoll) return;
+            _statusNextPoll = _time + UiDeviceStatus.PollSeconds;
+            UiDeviceStatus.PollBattery();
+            _statusStep = 1;
+        }
+
+        /// The percentage's text and width, made again only when a value changed (UiDeviceStatus.Version).
+        private void RefreshStatusText()
+        {
+            _statusVersion = UiDeviceStatus.Version;
+            string s = UiDeviceStatus.Battery >= 0 ? UiDeviceStatus.Battery.ToString(System.Globalization.CultureInfo.InvariantCulture) + "%" : "";
+            if (_status.text != s) _status.text = s;
+            _statusTextW = s.Length > 0 ? _status.GetPreferredValues(s).x : 0f;
+        }
+
+        private void StatusRow(UiTheme t, float shown, float uiHide)
+        {
+            if (_status == null) return;
+            if (UiDeviceStatus.Version != _statusVersion) RefreshStatusText();
+            bool bat = UiDeviceStatus.Battery >= 0, net = UiDeviceStatus.NetworkKnown, plugged = bat && UiDeviceStatus.Charging;
+            if ((!bat && !net) || shown <= 0.002f) { HideLabel(_status); return; }
+            bool low = bat && UiDeviceStatus.Battery <= UiDeviceStatus.LowBattery;
+            Color tone = low ? t.Warn : t.Accent, ok = t.Ok;
+            const float z = -0.0009f;
+            float y = FaceR * StatusY;
+            // the row's width, then its pieces from the left
+            float w = 0f;
+            if (bat) w += (plugged ? BoltW + StatusGap * 0.6f : 0f) + BatW + BatStroke * 0.5f + BatNub + StatusGap + _statusTextW;
+            if (bat && net) w += StatusGap * 1.6f;
+            if (net) w += BarsW;
+            float x = -w * 0.5f;
+            if (bat)
+            {
+                if (plugged)
+                {
+                    // a bolt: three strokes, top right to bottom left
+                    float bx = x + BoltW * 0.5f, hw = BoltW * 0.5f, hh = BoltH * 0.5f;
+                    var c = Color.Lerp(ok, Color.white, 0.25f);
+                    LineSeg(new Vector2(bx + hw * 0.6f, y + hh), new Vector2(bx - hw * 0.5f, y + hh * 0.04f), 0.00026f, c, shown, 0.5f, z);
+                    LineSeg(new Vector2(bx - hw * 0.5f, y + hh * 0.04f), new Vector2(bx + hw * 0.5f, y - hh * 0.04f), 0.00026f, c, shown, 0.5f, z);
+                    LineSeg(new Vector2(bx + hw * 0.5f, y - hh * 0.04f), new Vector2(bx - hw * 0.6f, y - hh), 0.00026f, c, shown, 0.5f, z);
+                    x += BoltW + StatusGap * 0.6f;
+                }
+                // the battery: an outline, its nub on the right, the fill from the left as long as the level
+                float x0 = x, x1 = x + BatW, y0 = y - BatH * 0.5f, y1 = y + BatH * 0.5f, s = BatStroke;
+                LineSeg(new Vector2(x0 - s * 0.5f, y1), new Vector2(x1 + s * 0.5f, y1), s, tone, 0.9f * shown, 0.4f, z);
+                LineSeg(new Vector2(x0 - s * 0.5f, y0), new Vector2(x1 + s * 0.5f, y0), s, tone, 0.9f * shown, 0.4f, z);
+                LineSeg(new Vector2(x0, y0 + s * 0.5f), new Vector2(x0, y1 - s * 0.5f), s, tone, 0.9f * shown, 0.4f, z);
+                LineSeg(new Vector2(x1, y0 + s * 0.5f), new Vector2(x1, y1 - s * 0.5f), s, tone, 0.9f * shown, 0.4f, z);
+                LineSeg(new Vector2(x1 + s * 0.5f, y), new Vector2(x1 + s * 0.5f + BatNub, y), BatH * 0.42f, tone, 0.9f * shown, 0.2f, z);
+                float inset = s * 0.5f + 0.00028f, full = BatW - 2f * inset;
+                float level = Mathf.Clamp01(UiDeviceStatus.Battery / 100f);
+                if (level > 0f) LineSeg(new Vector2(x0 + inset, y), new Vector2(x0 + inset + full * Mathf.Max(level, 0.06f), y), BatH - 2f * inset, plugged ? ok : tone, 0.85f * shown, 0f, z);
+                x = x1 + s * 0.5f + BatNub + StatusGap;
+                // the percentage
+                _status.rectTransform.localPosition = new Vector3(x, y, z - 0.0001f);
+                var lc = Color.Lerp(low ? t.Warn : t.TextAccent, Color.white, 0.25f);
+                lc.a = shown * (1f - uiHide);
+                if (_status.color != lc) _status.color = lc;
+                x += _statusTextW;
+            }
+            else HideLabel(_status);
+            if (!net) return;
+            if (bat) x += StatusGap * 1.6f;
+            // the Wi-Fi bars: lit up to the signal (all four half lit when online with no signal read); offline, all dim
+            // under a slash in the warning tone
+            bool online = UiDeviceStatus.Online;
+            int bars = UiDeviceStatus.Bars;
+            float yb = y - BarMaxH * 0.5f;
+            for (int i = 0; i < 4; i++)
+            {
+                float bx = x + BarW * 0.5f + i * (BarW + BarGap), h = BarMinH + (BarMaxH - BarMinH) * i / 3f;
+                float k = !online ? 0.22f : bars < 0 ? 0.55f : i < bars ? 0.95f : 0.22f;
+                LineSeg(new Vector2(bx, yb), new Vector2(bx, yb + h), BarW, t.Accent, k * shown, online && (bars < 0 || i < bars) ? 0.35f : 0f, z);
+            }
+            if (!online)
+                LineSeg(new Vector2(x - 0.0002f, yb - 0.0001f), new Vector2(x + BarsW + 0.0002f, yb + BarMaxH + 0.0001f), 0.00028f, t.Warn, 0.95f * shown, 0.5f, z - 0.0001f);
+        }
 
         /// "HH:mm", made again only when the minute changes (the face asks every frame).
         private string TimeText(DateTime now)
@@ -1052,6 +1171,30 @@ namespace MetaCodex.UI
             Vert(new Vector3(p2.x, p2.y, z), lin, new Vector2(1f, 1f), info, ex);
             Vert(new Vector3(p3.x, p3.y, z), lin, new Vector2(0f, 1f), info, ex);
             Quad(b);
+        }
+
+        /// A straight line of light (kind 1) from a to b, w wide, square ends (the status row's glyphs; w as wide as a bar
+        /// draws a filled bar).
+        private void LineSeg(Vector2 a, Vector2 b, float w, Color col, float strength, float glow, float z)
+        {
+            if (strength <= 0.002f) return;
+            var d = b - a;
+            float len = d.magnitude;
+            if (len < 1e-6f) return;
+            var dir = d / len;
+            float qw = w + 2f * Mathf.Max(0.0006f, w * 2f) * Mathf.Clamp01(glow + 0.2f);
+            var side = new Vector2(-dir.y, dir.x) * (qw * 0.5f);
+            var lin = col.linear;
+            lin.a = strength;
+            var info = new Vector4(w, qw, 1f, 0f);
+            var ex = new Vector4(glow, 0f, 0.5f, 0f);
+            int i0 = _v.Count;
+            Vector2 p0 = a - side, p1 = a + side, p2 = b + side, p3 = b - side;
+            Vert(new Vector3(p0.x, p0.y, z), lin, new Vector2(0f, 0f), info, ex);
+            Vert(new Vector3(p1.x, p1.y, z), lin, new Vector2(1f, 0f), info, ex);
+            Vert(new Vector3(p2.x, p2.y, z), lin, new Vector2(1f, 1f), info, ex);
+            Vert(new Vector3(p3.x, p3.y, z), lin, new Vector2(0f, 1f), info, ex);
+            Quad(i0);
         }
 
         /// A soft glow (kind 2) over a ring sector, brightest at its leading edge (a1): the radar sweep.
@@ -1151,5 +1294,103 @@ namespace MetaCodex.UI
 
             private static float Alpha(float dt, float cutoff) { float tau = 1f / (2f * Mathf.PI * cutoff); return 1f / (1f + tau / dt); }
         }
+    }
+
+    /// The headset's battery and network, for the status row in the core of the wrist menu (UiWristMenu.StatusRow). Read only
+    /// when asked, on the main thread, one piece a call (the menu asks when it appears and then every PollSeconds while it
+    /// shows: the battery one frame, the network the next): the battery from SystemInfo.batteryLevel / batteryStatus, the
+    /// network from Application.internetReachability, the Wi-Fi signal from Android's WifiManager
+    /// (getConnectionInfo().getRssi(); manifest ACCESS_WIFI_STATE, a normal permission, no prompt), cut into 0..4 bars at
+    /// Android's default limits. Off Android (the Editor, batch runs) nothing is read: Battery stays -1 and NetworkKnown
+    /// false, and the core shows no status. It allocates only when it reads (every few seconds), never per frame.
+    public static class UiDeviceStatus
+    {
+        public const float PollSeconds = 5f;
+        /// A battery at or under this percentage shows in the warning tone.
+        public const int LowBattery = 20;
+        /// The battery in percent (0..100); -1: not known.
+        public static int Battery { get; private set; } = -1;
+        /// Plugged in: charging, or full on the charger.
+        public static bool Charging { get; private set; }
+        /// The network was read: Online (any network: Application.internetReachability) and Bars (the Wi-Fi signal 0..4;
+        /// -1: no signal read, not on Wi-Fi or no permission).
+        public static bool NetworkKnown { get; private set; }
+        public static bool Online { get; private set; }
+        public static int Bars { get; private set; } = -1;
+        /// Goes up whenever a value above changes: readers make their text again only then.
+        public static int Version { get; private set; }
+
+        private static bool _test, _wifiFailed, _logged;
+        private static AndroidJavaObject _wifi;
+
+        private static bool OnHeadset => !_test && Application.platform == RuntimePlatform.Android;
+
+        /// Android's default signal limits (dBm) for 0..4 bars: -88, -77, -66, -55; -127 (and below) is "no signal" (-1).
+        public static int BarsFor(int rssi) => rssi <= -127 ? -1 : rssi >= -55 ? 4 : rssi >= -66 ? 3 : rssi >= -77 ? 2 : rssi >= -88 ? 1 : 0;
+
+        public static void PollBattery()
+        {
+            if (!OnHeadset) return;
+            try
+            {
+                float level = SystemInfo.batteryLevel;
+                var st = SystemInfo.batteryStatus;
+                int pct = level < 0f ? -1 : Mathf.Clamp(Mathf.RoundToInt(level * 100f), 0, 100);
+                Set(pct, pct >= 0 && (st == BatteryStatus.Charging || st == BatteryStatus.Full), NetworkKnown, Online, Bars);
+            }
+            catch (Exception ex) { Debug.LogWarning("[MetaCodex] wrist status: battery: " + ex.Message); }
+        }
+
+        public static void PollNetwork()
+        {
+            if (!OnHeadset) return;
+            try
+            {
+                bool online = Application.internetReachability != NetworkReachability.NotReachable;
+                Set(Battery, Charging, true, online, online ? WifiBars() : -1);
+            }
+            catch (Exception ex) { Debug.LogWarning("[MetaCodex] wrist status: network: " + ex.Message); }
+            if (_logged) return;
+            _logged = true;
+            MetaCodex.App.SessionLog.Log($"wrist status: battery {Battery} %{(Charging ? " (plugged in)" : "")}, {(Online ? "online" : "offline")}, Wi-Fi {Bars} bars{(_wifiFailed ? " (no signal read)" : "")}");
+        }
+
+        /// The Wi-Fi signal in bars, -1 when there is none to read. A failure (no ACCESS_WIFI_STATE: a SecurityException)
+        /// is logged once and the bars are not read again.
+        private static int WifiBars()
+        {
+            if (_wifiFailed) return -1;
+            try
+            {
+                if (_wifi == null)
+                {
+                    using (var player = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+                    using (var activity = player.GetStatic<AndroidJavaObject>("currentActivity"))
+                    using (var context = activity.Call<AndroidJavaObject>("getApplicationContext"))
+                        _wifi = context.Call<AndroidJavaObject>("getSystemService", "wifi");
+                    if (_wifi == null) throw new Exception("no wifi service");
+                }
+                using (var info = _wifi.Call<AndroidJavaObject>("getConnectionInfo"))
+                    return info != null ? BarsFor(info.Call<int>("getRssi")) : -1;
+            }
+            catch (Exception ex)
+            {
+                _wifiFailed = true;
+                MetaCodex.App.SessionLog.Log("wrist status: no Wi-Fi signal: " + ex.Message);
+                return -1;
+            }
+        }
+
+        private static void Set(int battery, bool charging, bool netKnown, bool online, int bars)
+        {
+            if (battery == Battery && charging == Charging && netKnown == NetworkKnown && online == Online && bars == Bars) return;
+            Battery = battery; Charging = charging; NetworkKnown = netKnown; Online = online; Bars = bars;
+            Version++;
+        }
+
+        /// Self-tests (pictures of the core): these values instead of the headset's, until ClearForTest.
+        public static void SetForTest(int battery, bool charging, bool online, int bars) { _test = true; Set(battery, charging, true, online, bars); }
+
+        public static void ClearForTest() { if (!_test) return; _test = false; Set(-1, false, false, false, -1); }
     }
 }
