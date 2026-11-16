@@ -51,6 +51,7 @@ standard texts of the Debian image are also in `/usr/share/common-licenses/` the
 | | NDK (community build), OpenXR 1.1.65, 144 Debian packages (`mcx-setup quest`) | MIT, Apache-2.0, LLVM exception, GPL/LGPL/... | none for us (the user's device downloads them); keep the pointers |
 | | android.jar | Android SDK License Agreement | the user must accept it (gap G6) |
 | | agent CLIs the user installs | Claude Code: proprietary, Anthropic's terms; OpenCode MIT; Codex Apache-2.0 | never bundled |
+| | the code editor: code-server 4.145.2 (`mcx-ide install`, [section 4.4](#44-the-code-editor-mcx-ide-install-on-request)) | MIT (code-server; the VS Code "Code - OSS" build in it), Node.js MIT, the notices of its bundled parts; GitHub's Copilot CLI package inside it: GitHub's terms | never bundled: the user's device downloads the official release; we keep the pointer |
 | **C. Build / development only** | Unity Editor, build tools, MQH dev tree (1,012 npm packages), voice-bench packages and models, diagram fonts | many; none is shipped | listed for completeness |
 
 Counts, measured: 4 AI models; 132 Debian packages in the image (78 + 54) and 144 more on request; 133 + 72 + 97 npm packages
@@ -460,7 +461,27 @@ visible terminal and redistributes none of them. Catalogue measured in `ShellSys
 12.18.0 (MIT, npm), bun (MIT, bun.sh installer), uv (MIT OR Apache-2.0, astral.sh installer), Rust via rustup (MIT OR
 Apache-2.0, sh.rustup.rs), the agents Claude Code (proprietary, above), Codex CLI (`@openai/codex` 0.167.2, Apache-2.0)
 and OpenCode (above), and Debian packages through `apt` (python3-pip, build-essential, clang, cmake, ninja-build, go,
-adb, glslc, git, curl, wget, openssh-client, jq, ripgrep, fd-find, fzf, tmux, sqlite3, nano, vim, neovim).
+adb, glslc, git, curl, wget, openssh-client, jq, ripgrep, fd-find, fzf, tmux, sqlite3, nano, vim, neovim). The code
+editor (TOOLS > code editor) has its own section, 4.4.
+
+### 4.4 The code editor (`mcx-ide install`, on request)
+
+The CODE EDITOR of the app ([ide.md](ide.md)) is **code-server**, downloaded on the user's tap by `mcx-ide install`
+(`userland/overlay/usr/local/bin/mcx-ide`, which pins the version and the sha256) from the project's GitHub release into
+`/opt/ide` of the headset's Linux. Nothing of it is in the APK, the image or the repository. In the app it is called
+"code editor" / CODE; its name appears only in this file and in `docs/ide.md`.
+
+| What | Version | From | Licence | Notes |
+|---|---|---|---|---|
+| code-server (Coder) | 4.145.2 (2026-11-07) | github.com/coder/code-server, release `v4.145.2`, `code-server-4.145.2-linux-arm64.tar.gz`, 233,639,045 bytes, sha256 `e867a34416e2da4a83496b09580001893e7a4e5bb58a0624c4fcd22819e7d53d` (GitHub's digest of the asset; re-computed from the downloaded stream 2026-11-16) | [MIT](licenses/MIT.txt), "Copyright (c) 2019 Coder Technologies Inc." | its `LICENSE` and `ThirdPartyNotices.txt` (183,203 bytes: the notices of VS Code's bundled parts) are at the top of the unpacked release, `/opt/ide/code-server-4.145.2-linux-arm64/`, and stay there |
+| VS Code ("Code - OSS") 1.145.2 inside it (`lib/vscode`) | 1.145.2 | microsoft/vscode (MIT source), built by code-server | MIT, "Copyright (c) 2015 - present Microsoft Corporation"; its built-in extensions (MIT; TypeScript Apache-2.0) | its notices are in the `ThirdPartyNotices.txt` above; the product is named code-server (`product.json`), not Microsoft's branded build |
+| Node.js inside it (`lib/node`) | 24.22.1 (code-server's `.node-version`) | nodejs.org builds, via VS Code's server build | MIT, plus the notices of Node's bundled parts | the runtime of the server |
+| code-server's npm packages (`node_modules`: express, ws, argon2, cookie-parser, http-proxy, js-yaml, i18next, ...) | as in its `npm-shrinkwrap.json` | npm | MIT, ISC, BSD (each package's own file in `node_modules`) | |
+| VS Code's built-in Copilot extension (`lib/vscode/extensions/copilot`), with GitHub's `@github/copilot` (the Copilot CLI package) and `@github/copilot-sdk-linux-arm64` | as shipped in 4.145.2 (`@github/copilot-sdk` 1.0.34 on npm, MIT; `@github/copilot` "SEE LICENSE IN LICENSE.md") | inside the release | the extension: MIT (Microsoft); `@github/copilot`: **GitHub's own terms** (not open source); `@github/copilot-sdk`: MIT | about 220 MB of the unpacked 645 MB; the app's defaults turn the AI features off (`chat.disableAIFeatures`); it needs the user's own GitHub account and terms. We never redistribute it (the user's device downloads the release) |
+| Extensions the user installs in it | any | Open VSX (open-vsx.org), code-server's default gallery | each extension's own | the user's choice; Microsoft's marketplace is not used (its terms allow only Microsoft's products) |
+
+Duties: none for us beyond keeping this pointer (the user's device downloads the official release, whose licence and
+notices files stay in it). Brand rule: the app shows no logo and names it only by its function.
 
 ## 5. Group C: used only to build or develop (not shipped)
 
@@ -531,6 +552,7 @@ through the issue tracker of that repository (the contact must be confirmed by t
 | Android SDK License accepted by the user | android.jar | `mcx-setup` prints the licence name and URL | not done: it does not ask (G6) |
 | No third-party trademark use in the app | contest section 4 | no tool logos; | open: launcher icon (G5), MQH icons (G10) |
 | Never bundle Anthropic's proprietary CLI/SDK | Claude Code, `claude-agent-sdk` | verified absent from the APK | done |
+| Never redistribute the code editor's release (it carries GitHub's Copilot CLI package under GitHub's terms) | code-server 4.145.2 | `mcx-ide install` downloads it on the headset from the official release; not in the APK, the image or the repository | done |
 
 ## 8. Gaps
 
@@ -559,7 +581,8 @@ Status of the gaps of 2026-11-10 (G1-G9) and the new ones. "Owner" = a decision 
 The user's own accounts and the providers' terms apply: Anthropic (Claude Code login or API key), OpenAI (Codex),
 OpenCode's model providers, GitHub (only if the user stores a token in VAULT > GIT), Hugging Face and the QVAC registry
 (model downloads), Debian mirrors, nodejs.org, the npm registry, Google's SDK repository (android.jar), Maven Central,
-GitHub Releases (the NDK), skills.sh (MQH's skill registry). MetaCodex never reads or stores provider login tokens.
+GitHub Releases (the NDK, the code editor), Open VSX (extensions the user installs in the code editor), skills.sh
+(MQH's skill registry). MetaCodex never reads or stores provider login tokens.
 
 ## 10. How this was checked (rerun before every submission)
 
@@ -579,7 +602,9 @@ GitHub Releases (the NDK), skills.sh (MQH's skill registry). MetaCodex never rea
 - Downloads: `npm view <package> license version`, the Hugging Face API and model cards (licence, revision sha), the
   upstream LICENSE files, GitHub's licence API, Maven Central (sha256 re-computed for the OpenXR archive), Termux's
   build recipes (source hashes of PRoot, talloc, libandroid-shmem; the three source archives were downloaded and their
-  sha256 matched).
+  sha256 matched). The code editor: GitHub's release API (asset size and digest), the release archive streamed through
+  `sha256sum` and a tar listing without saving it (6,033 files, 675,891,723 bytes, its `LICENSE`, `ThirdPartyNotices.txt`,
+  `package.json`, `lib/vscode/product.json`), the npm registry for the `@github/copilot*` licences.
 
 
 ---
