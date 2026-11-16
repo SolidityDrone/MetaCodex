@@ -2,11 +2,13 @@
 //   * environment depth (XR_META_environment_depth) shaded as a night-vision image: green phosphor, brightness from
 //     distance, edges from depth discontinuities, grain and scanlines
 //   * passthrough (XR_FB_passthrough) underneath, turned green by a mono -> RGBA colour map; toggle it
-//   * hands (XR_EXT_hand_tracking + XR_FB_hand_tracking_aim) and controllers (Touch / Touch Plus) switch modes
+//   * hands (XR_EXT_hand_tracking + XR_FB_hand_tracking_aim) switch the modes; controllers (Touch / Touch Plus) add
+//     the trigger, the stick, A and the grip: every action works with the hands
 //   * the room (XR_FB_scene) is queried and counted; an anchor (XR_FB_spatial_entity + storage) marks a spot
 //   * a HUD panel with the state, drawn with mcx::Text, following the head lazily
-// Controls: right index pinch or right trigger: next mode | left index pinch or A: passthrough on/off |
-//           thumbstick up/down: gain | left grip (squeeze): drop an anchor at the left controller
+// Controls: a pinch with either hand (or the right trigger): next mode | both hands pinch together (or A): passthrough
+//           on/off | thumbstick up/down: gain | left grip (squeeze): drop an anchor at the left controller
+// The app menu (a hand's menu gesture, or the left controller's button) is MetaCodex's: this app does not use it.
 // Needs the spatial data permission (asked at the first start; or Settings > Apps > Night Vision > Permissions).
 #include <mcx_xr.h>
 #include <cmath>
@@ -95,6 +97,7 @@ struct Night
     XrPosef hud{{0, 0, 0, 1}, {0, -0.25f, -1.2f}};
     bool hudPlaced = false;
     bool sceneAsked = false, anchorsLoaded = false;
+    bool bothPinched = false;   // both hands pinching last frame (the passthrough gesture starts on its edge)
     int depthFrames = 0;
     double lastLog = 0;
 };
@@ -184,6 +187,12 @@ void PlaceHud(Night& n, const XrPosef& head, float dt)
     n.hudPlaced = true;
 }
 
+// a hand for the HUD: "palm" = the palm faces you (the system gesture): a pinch of that hand does not count
+const char* HandState(const mcx::Hand& h)
+{
+    return !h.tracked ? "-" : h.systemGesture ? "palm" : h.pinching ? "PINCH" : "ok";
+}
+
 void DrawHud(mcx::App& app, const Night& n, const mcx::Frame& f, const mcx::Eye& eye)
 {
     char text[640];
@@ -195,9 +204,9 @@ void DrawHud(mcx::App& app, const Night& n, const mcx::Frame& f, const mcx::Eye&
     const mcx::Hand& R = app.hands.hand[1];
     snprintf(text, sizeof text,
              "NIGHT VISION   %s   gain %.1f   passthrough %s\n%s\nhands L %s R %s   controllers L %s R %s\nroom %zu objects   anchors %zu   %.0f Hz\n"
-             "R pinch/trigger: mode   L pinch/A: passthrough   stick: gain",
+             "pinch: mode   both pinch or A: passthrough   stick: gain",
              kModes[n.mode], n.gain, n.passthroughOn ? "ON" : "OFF", depth,
-             L.tracked ? (L.pinching ? "PINCH" : "ok") : "-", R.tracked ? (R.pinching ? "PINCH" : "ok") : "-",
+             HandState(L), HandState(R),
              app.controllers.ctl[0].active ? "ok" : "-", app.controllers.ctl[1].active ? "ok" : "-",
              app.spatial.scene.size(), app.spatial.anchors.size(), app.refreshRate);
     mcx::Mat4 model = mcx::Mat4::FromPose(n.hud);
@@ -242,15 +251,21 @@ void android_main(android_app* android)
             const mcx::Hand& R = app.hands.hand[1];
             const mcx::Controller& cl = app.controllers.ctl[0];
             const mcx::Controller& cr = app.controllers.ctl[1];
+            // hands: a pinch of EITHER hand is the mode; a pinch that starts while the other hand is pinching belongs to
+            // the two-hand gesture. Both hands pinching together (its edge) is the passthrough. A palm towards you
+            // (systemGesture) never counts: pinchStarted is false then.
+            bool both = L.tracked && R.tracked && L.pinching && R.pinching && !L.systemGesture && !R.systemGesture;
+            bool modePinch = (L.pinchStarted && !R.pinching) || (R.pinchStarted && !L.pinching);
             bool look = false;
-            if (R.pinchStarted || cr.triggerPressed) { n.mode = (n.mode + 1) % 3; look = true; app.controllers.Haptic(1, 0.4f, 0.05f); mcx::Log("mode %s", kModes[n.mode]); }
-            if (L.pinchStarted || cr.primaryPressed || cl.primaryPressed)
+            if (modePinch || cr.triggerPressed) { n.mode = (n.mode + 1) % 3; look = true; app.controllers.Haptic(1, 0.4f, 0.05f); mcx::Log("mode %s", kModes[n.mode]); }
+            if ((both && !n.bothPinched) || cr.primaryPressed || cl.primaryPressed)
             {
                 n.passthroughOn = !n.passthroughOn;
                 if (n.passthroughOn) app.passthrough.Start(); else app.passthrough.Pause();
                 app.projectionFlags = n.passthroughOn ? XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT : 0;
                 mcx::Log("passthrough %s", n.passthroughOn ? "on" : "off");
             }
+            n.bothPinched = both;
             float stick = cr.stick.y != 0.f ? cr.stick.y : cl.stick.y;
             if (fabsf(stick) > 0.3f) { n.gain = fmaxf(0.3f, fminf(2.5f, n.gain + stick * f.dt)); look = true; }
             if (cl.squeeze > 0.8f && app.spatial.anchorsAvailable && app.spatial.anchors.size() < 8 && f.seconds - n.lastLog > 1.0)

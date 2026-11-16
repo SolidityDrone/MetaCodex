@@ -127,7 +127,7 @@ probe app with these manifest entries: Runner log) < **ran on headset** (observe
 `native/examples/nightvision`: environment depth -> per-eye full-screen pass that reprojects the depth map through the
 depth camera's view-projection, green phosphor brightness from distance, edges from depth discontinuities, grain,
 scanlines; three modes (PHOSPHOR, EDGES, RANGE); passthrough underneath, turned green by a mono -> RGBA colour map,
-toggled; right pinch / trigger = mode, left pinch / A = passthrough, stick = gain, left grip = drop an anchor; HUD panel
+toggled; a pinch of either hand (or the right trigger) = mode, both hands pinching together (or A) = passthrough, stick = gain, left grip = drop an anchor; HUD panel
 (text) following the head lazily; scene query and anchor count in the HUD; foveation 2, CPU/GPU sustained high.
 
 | Step on the Quest 3S | Result |

@@ -677,7 +677,7 @@ Night Vision (an example app):
 
 - [ ] `cp -r /opt/metacodex/quest-native/examples/nightvision /root/apps/nv`, `mcx-app build /root/apps/nv`, `mcx-app verify /root/apps/nv` → `RESULT: verify ok`; `mcx-app install` + `launch` → the system asks for spatial data once: Allow
 - [ ] The room in green; near things bright, far ones dark, outlines glowing; grain and scanlines → the HUD says `depth ... LIVE`, `room N objects`, `72 Hz`
-- [ ] Right pinch (or right trigger) cycles PHOSPHOR / EDGES / RANGE; left pinch (or A) turns the camera off (depth image alone) and on; stick up / down changes the gain → open the system menu: nothing reacts until you close it
+- [ ] A pinch of either hand (or right trigger) cycles PHOSPHOR / EDGES / RANGE; both hands pinching together (or A) turns the passthrough off and on; stick up / down changes the gain; the HUD's hands line shows PINCH when a pinch counts, and `palm` when your palm faces you (no pinch counts then) → open the system menu: nothing reacts until you close it
 - [ ] Night Vision has its own icon (green goggles) and label in the Library → it runs with MetaCodex force-stopped
 
 The way back from a built app:
