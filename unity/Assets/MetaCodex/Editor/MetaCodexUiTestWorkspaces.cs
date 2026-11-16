@@ -45,6 +45,7 @@ namespace MetaCodex.EditorTools
             // THREADS: the project's folders as rows, the threads under the one they work in
             shell.OpenPanel("threads");
             shell.SetThreadsForTest(projects, threads);
+            shell.FoldsForTest(null, open: true); // p1 open: its folders and threads are the rows checked here
             var rows = shell.ThreadListForTest.Items;
             var tags = rows.Select(i => i.Tag as string).ToList();
             int o = tags.IndexOf("p:p1"); // under OTHER: /root/app is outside metacodex-projects/

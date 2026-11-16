@@ -39,6 +39,7 @@ namespace MetaCodex.EditorTools
             var threads = new JArray { T("tw_a", "pw1", "Login form", 1000), T("tw_b", "pw1", "Signup page", 2000), T("tw_c", "pw2", "Physics demo", 3000), T("tw_d", "pw1", "Password reset", 4000) };
             shell.OpenPanel("threads");
             shell.SetThreadsForTest(projects, threads);
+            shell.FoldsForTest(null, open: true); // every project open: the threads are picked below
 
             // 1. one thread: one free window; a second thread of the same project: a new window, grouped with the first (2x1)
             shell.PickThreadRowForTest("t:tw_a");
