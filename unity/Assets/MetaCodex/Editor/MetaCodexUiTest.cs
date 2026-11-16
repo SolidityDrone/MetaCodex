@@ -2033,6 +2033,8 @@ end)
             foreach (var pp in shell.PanelsById.Values) pp.transform.position = Vector3.up * 50f; // nothing is "back where the user left it"
             for (int k = 0; k < 30; k++) shell.TickOrbForTest(0.05f); // the frame the orb floats in: where the body faces
             MetaCodexShell.ViewRect R(string id) { MetaCodexShell.ViewRectOf(shell.PanelsById[id], head.position, 0f, out var r); return r; }
+            // CONTROL's rail lies on its window's surface edge to edge (ShellControl.RailPose): the two touch, one window
+            bool OneWindow(string a, string b) => (a == MetaCodexShell.ControlId || b == MetaCodexShell.ControlId) && (a == shell.ControlRailPage || b == shell.ControlRailPage);
             float Dist(string id) => Vector3.Distance(shell.PanelsById[id].transform.position, head.position);
             void CloseAll() { foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id); }
             try
@@ -2050,7 +2052,7 @@ end)
                 shell.UpdateControlRailForTest();
                 var all = ids.Concat(new[] { MetaCodexShell.ControlId }).ToArray();
                 int over = 0;
-                for (int i = 0; i < all.Length; i++) for (int j = i + 1; j < all.Length; j++) if (R(all[i]).Overlaps(R(all[j]), 0f)) over++;
+                for (int i = 0; i < all.Length; i++) for (int j = i + 1; j < all.Length; j++) if (!OneWindow(all[i], all[j]) && R(all[i]).Overlaps(R(all[j]), 0f)) over++;
                 bool reach = ids.All(id => Mathf.Abs(R(id).YawMid) <= MetaCodexShell.ViewYaw + 4f); // every one in view (a pair's middle may sit a little past)
                 var second = R("settings");
                 var railR = R(MetaCodexShell.ControlId);
@@ -2140,7 +2142,7 @@ end)
                 shell.UpdateControlRailForTest();
                 var many2 = many.Concat(new[] { MetaCodexShell.ControlId }).ToArray();
                 int over2 = 0;
-                for (int i = 0; i < many2.Length; i++) for (int j = i + 1; j < many2.Length; j++) if (R(many2[i]).Overlaps(R(many2[j]), 0f)) over2++;
+                for (int i = 0; i < many2.Length; i++) for (int j = i + 1; j < many2.Length; j++) if (!OneWindow(many2[i], many2[j]) && R(many2[i]).Overlaps(R(many2[j]), 0f)) over2++;
                 // the fifth does not fit beside the others within an easy turn of the head: it goes above the row
                 var last = R("clipboard");
                 var lastP = shell.PanelsById["clipboard"];

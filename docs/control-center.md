@@ -1,6 +1,6 @@
 # CONTROL: one place for settings, and a calmer main menu
 
-CONTROL is one window for everything that sets the app up, with a rail of categories beside it. The main menu keeps
+CONTROL is one window for everything that sets the app up, with a rail of categories on its left. The main menu keeps
 only the work windows and the quick actions.
 
 ## The split: work windows stay windows, setup goes into CONTROL
@@ -11,15 +11,24 @@ only the work windows and the quick actions.
 | Setup (one at a time, in one place) | SETTINGS (display, look and sound, focus, hands, about), WRIST MENU, VOICE, AGENTS, MQH, VAULT, SYSTEM | CONTROL |
 
 Setup is not merged into one big window: each category keeps its own window (its tabs, its tests), and a sidebar
-rides on its left. That keeps the pages as rich as they are (MQH's five tabs, the gesture studio, the vault's git, the
+lies on its left, on its surface. That keeps the pages as rich as they are (MQH's five tabs, the gesture studio, the vault's git, the
 voice models), while the user sees one control center. The seven windows have one size (`ControlPageW` x
 `ControlPageH`, 0.76 x 0.66 m): a category taking another's place covers the same rectangle, so it
 never grows over a neighbour and the view does not jump.
 
 ## CONTROL (`Shell/ShellControl.cs`)
 
-- **The sidebar**: a narrow rail docked on the left of the category's window, top edges aligned and as tall as the window (bottom edges level too, 0.7.19), turned a little
-  towards the user. Eleven categories in three groups, each with a live status on the right:
+- **The sidebar**: a narrow rail on the category's window's own surface, on its left, edge to edge (owner 2026-11-16:
+  "embedded in the same panel as a sidebar ... otherwise the curve is not handled well"; it was 10 mm off and turned
+  12 degrees, and on a bent window the two drew two arcs). Flat, it is in the window's plane; bent, it lies on the
+  window's cylinder (the same axis and world radius, the window's curve snapped onto it), so the two draw one arc; it
+  moves and scales with the window and leans with it in curve mode, never on its own. Top and bottom edges level (as
+  tall as the window). It stays a panel of its own (`RailPose`, `FollowRail`), placed on the window's surface like a
+  thread group's windows on the group's curve: merging it into the seven windows would change seven page builders and
+  every width the placement and the FLOAT ring use. It follows its window in the layout tick, in the window's
+  `BendChanged` (the same tick the curve eases) and once more before the frame is drawn (`Application.onBeforeRender`,
+  after the router's drags and the window's lean): never a frame behind. Eleven categories in three groups, each with
+  a live status on the right:
   - THIS HEADSET: ◧ DISPLAY (fixed / float), ◔ WRIST MENU (the rings' counts, "6 + 5"; "dock" when the DOCK is the
     main menu), ◈ LOOK & SOUND (sound / muted), ◐ FOCUS (on / off; the same glyph as FOCUS on the menu), ✋ HANDS
     (pinch / poke / both)
@@ -28,14 +37,15 @@ never grows over a neighbour and the view does not jump.
   - LINUX & APP: ⬢ SYSTEM (first-use setup), ✦ ABOUT (the version)
   - Row names, title and group captions are in the display font (Rajdhani capitals), the console look.
 - **One category at a time**: another category (from the rail, voice, a button, `ui.open`) takes the place of the
-  shown one: same left edge, same top edge, same size, the rail does not move. DISPLAY, LOOK & SOUND, FOCUS, HANDS and
+  shown one: same left edge, same top edge, same size, the same curve and lean, the rail does not move. DISPLAY, LOOK & SOUND, FOCUS, HANDS and
   ABOUT are pages of the SETTINGS window (its own tab bar is gone: the rail is the navigation; a line says what the
   page is for). Each has its category's id: `display`, `look`, `focus`, `hands`, `about` (SETTINGS' tabs 1, 3, 2, 0,
   4); `control` opens CONTROL on the last category shown (a page reached any way counts), and toggling or closing
   `control` takes the window and the rail together.
 - **Moving it**: drag the window by its header, or the rail by its bar: the other follows. ✕ on the window closes
-  both. FLOAT: the pair takes one slot of the ring.
-- **Where it opens**: in front of the user, with room for the rail on its left (the placement reserves it). It comes
+  both (the header ✕ is large and is hit beyond what it draws: docs/ui.md). FLOAT: the pair takes one slot of the ring,
+  the rail on the ring's curve with its window.
+- **Where it opens**: in front of the user, with room for the rail on its left (the placement reserves its width). It comes
   back where it was while that place is free and in view.
 - Every old id still opens its page (`agents`, `mqh`, `vault`, `git`, `skills`, `gestures`, `daemon` (MQH > STATUS),
   `focus`, `storage`, ...), with the rail; voice also knows "control panel", "control center".
@@ -92,10 +102,15 @@ where it was while that place is free and in view.
 
 ## Tests
 
-- Editor self-test section `control` (`Editor/MetaCodexUiTestControl.cs`): menu counts and entries, the rail beside
-  its page, category swaps in place, old ids, the close link, FLOAT room, the reserved place, statuses, contextual
-  openers; then `ControlPolish`: page ids, `control` toggled and closed, one size, HANDS' row and the studio link, MQH's
-  title and STATUS, DISPLAY's dimmed controls, ABOUT's buttons, LINKS / FILES / SYSTEM rows, AGENTS' buttons, LOG's
+- Editor self-test section `control` (`Editor/MetaCodexUiTestControl.cs`): menu counts and entries, the rail on its
+  page's surface (edge to edge, one plane), category swaps in place, old ids, the close link, FLOAT room and the seam
+  on the ring, the reserved place, statuses, contextual openers; `ControlRailOnCurve`: bent, one axis, one world
+  radius, the seam's corners on each other, a ray at a row hits it, leaning high above the eyes the rail leans with
+  its window and none of its own, a swapped category keeps the curve and the lean (picture `ui-control-bent.png`);
+  `HeaderCloseSize`: every window's header ✕ (drawn size, glyph, hit rect, nothing on it, the title before it; the
+  terminal frame's too), and on a bent, leaning window rays at it, past it (also 2 mm past the frame's corner) and
+  left of it hit it and a pinch past the frame's corner closes the window; then `ControlPolish`: page ids, `control`
+  toggled and closed, one size, HANDS' row and the studio link, MQH's title and STATUS, DISPLAY's dimmed controls, ABOUT's buttons, LINKS / FILES / SYSTEM rows, AGENTS' buttons, LOG's
   CLEAR ALL, the dock's lit tiles, ShowTerminalKeyboard; then `WristMenuPage`: the layout rules, the page with its
   twin, drags on and off the twin and from the palette, CANCEL / APPLY / RESET LAYOUT, and the voice settings. Sections `wrist`, `web`, `mqh` and `placement` (the
   five-panel scene and the opened-from-a-button scene) check CONTROL too.

@@ -771,11 +771,10 @@ namespace MetaCodex.Shell
             var t = UiTheme.Current;
             var p = Panel<UiPanel>(w.Id, w.Number == 1 ? "Thread" : "Thread " + w.Number, ThreadW, ThreadH);
             w.Panel = p;
-            // a large ✕ at the top-right (owner 2026-11-14: easy to hit, also when the window is shrunk in a group): it
-            // closes this window only; the thread stays in MQH and in THREADS
+            // a large ✕ at the top-right (owner 2026-11-14: easy to hit, also when the window is shrunk in a group; 2026-11-16:
+            // pressed beyond what it draws, UiPanel.AddHeaderClose): it closes this window only; the thread stays in MQH and in THREADS
             p.HideCloseButton();
-            w.CloseButton = p.Add(new UiButton("✕", () => { if (!w.Dead && w.Panel != null) w.Panel.Close(); }, UiButtonStyle.Danger)
-                { Rect = new Rect(ThreadW - 0.088f, 0.004f, 0.082f, t.HeaderHeight - 0.008f), TextSize = t.BodySize * 1.35f });
+            w.CloseButton = p.AddHeaderClose(() => { if (!w.Dead && w.Panel != null) w.Panel.Close(); }, UiPanel.CloseWideW);
             var c0 = p.Content;
             var c = new Rect(c0.x, c0.y, c0.width - ThreadHandleW, c0.height); // the conversation; its right edge holds the handle
             // the expand handle on the right edge: the sidebar (changes, files, git, status, views) opens beside it
