@@ -190,7 +190,8 @@ namespace MetaCodex.Shell
         private void AddPluginMenuItems(List<MainMenuItem> list, bool outer, WristMenuSettings ws)
         {
             var tiles = _pluginTiles;
-            _pluginTilesApplied = tiles;
+            // what the menus are built with: only the real table counts (the WRIST MENU page reads the catalog for its draft)
+            if (ReferenceEquals(ws, Settings?.wrist)) _pluginTilesApplied = tiles;
             for (int i = 0; i < tiles.Count; i++)
             {
                 var tile = tiles[i];
