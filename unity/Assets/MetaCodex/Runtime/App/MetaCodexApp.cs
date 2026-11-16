@@ -205,12 +205,78 @@ namespace MetaCodex.App
             }
         }
 
+        // ---- the head pose at the start (owner 2026-11-16: "the splash screen and stuff spawned on the ground: I was sitting
+        // at the desk and it spawned at my feet"). The rig (OVRCameraRig, Floor Level) sits at the world origin; until the
+        // runtime gives the head its first pose the eye anchor stays at the rig's origin, which is the floor. A place taken
+        // from that pose lies on the floor, about where the user sits. The start waits for a valid pose instead
+        // (HeadPoseValid, twice in a row), at most StartPoseWaitSeconds of wall time, and then uses the default eye height.
+
+        /// How long the start waits for a valid head pose (wall time) before it places at the default eye height.
+        public const float StartPoseWaitSeconds = 5f;
+        /// While the start waits, a pose with the eyes lower than this over the floor origin is not trusted yet (the first
+        /// poses of the runtime's start may still be in a space whose origin is at the eyes); after the wait any tracked
+        /// height goes (a user lying down).
+        public const float MinEyeHeight = 0.4f;
+        /// The eye height over the floor origin used when the head never got a pose (a seated user).
+        public const float DefaultEyeHeight = 1.2f;
+
+        /// The camera rig gave the head a pose at least once: until then the eye anchor sits at the rig's origin (the floor of
+        /// the Floor Level tracking space). Self-tests place their head away from its parent's origin.
+        public static bool HeadHasPose(Transform h) => h != null && h.localPosition != Vector3.zero;
+
+        /// The head pose can place things: it has a pose, and on the headset the runtime says the headset is present and its
+        /// position tracked, and the eyes are at least MinEyeHeight over the floor origin (unless `anyHeight`). In the Editor
+        /// and batch runs (no headset): any head with a pose.
+        public static bool HeadPoseValid(Transform h, bool anyHeight = false)
+        {
+            if (!HeadHasPose(h)) return false;
+#if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                if (!OVRManager.isHmdPresent || !OVRPlugin.GetNodePositionTracked(OVRPlugin.Node.Head)) return false;
+            }
+            catch (Exception) { } // no answer from the plugin: the rig's pose stands
+            if (!anyHeight && h.localPosition.y < MinEyeHeight) return false;
+#endif
+            return true;
+        }
+
+        /// Where the eyes are for a placement: the head, or, when it never got a pose, DefaultEyeHeight over the rig's origin.
+        public static Vector3 EyeOrDefault(Transform h)
+        {
+            if (h == null) return new Vector3(0f, DefaultEyeHeight, 0f);
+            return HeadHasPose(h) ? h.position : h.position + Vector3.up * DefaultEyeHeight;
+        }
+
+        /// The tracking origin the runtime uses now, for the start's log lines ("Floor", "Device"...; "?" when unknown).
+        public static string TrackingOriginText()
+        {
+            try
+            {
+                var list = new List<UnityEngine.XR.XRInputSubsystem>();
+                SubsystemManager.GetSubsystems(list);
+                foreach (var s in list) if (s != null && s.running) return s.GetTrackingOriginMode().ToString();
+            }
+            catch (Exception) { }
+            return "?";
+        }
+
+        /// The main terminal was placed (the start's first Recenter ran).
+        public bool Placed => _placed;
+
         private IEnumerator PlaceWhenTracked()
         {
-            float until = Time.realtimeSinceStartup + 5f;
-            while (Time.realtimeSinceStartup < until && (head == null || head.position == Vector3.zero)) yield return null;
-            yield return null;
+            float t0 = Time.realtimeSinceStartup;
+            int valid = 0;
+            while (true)
+            {
+                valid = HeadPoseValid(head) ? valid + 1 : 0;
+                if (valid >= 2 || Time.realtimeSinceStartup - t0 >= StartPoseWaitSeconds) break;
+                yield return null;
+            }
+            bool tracked = HeadPoseValid(head, true);
             Recenter();
+            SessionLog.Log($"start: terminal placed at eye y={EyeOrDefault(head).y:F2} (head {(tracked ? "tracked" : HeadHasPose(head) ? "NOT tracked, its last pose" : "NOT tracked, default height")} after {(Time.realtimeSinceStartup - t0) * 1000f:F0} ms)");
         }
 
         /// Raised by Recenter; the shell repositions its panels (or the carousel) around the new pose.
@@ -220,10 +286,11 @@ namespace MetaCodex.App
         public Vector3? RecenterFrom;
         public Transform RecenterMain;
 
-        /// Puts the main terminal in front of where the user looks now: level, slightly below the eyes.
+        /// Puts the main terminal in front of where the user looks now: level, slightly below the eyes (the default eye
+        /// height when the head never got a pose).
         public void Recenter()
         {
-            Vector3 eye = head != null ? head.position : new Vector3(0f, 1.2f, 0f);
+            Vector3 eye = EyeOrDefault(head);
             Vector3 fwd = head != null ? head.forward : Vector3.forward;
             fwd.y = 0f;
             if (fwd.sqrMagnitude < 1e-4f) fwd = Vector3.forward;

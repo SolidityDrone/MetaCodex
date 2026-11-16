@@ -502,7 +502,7 @@ namespace MetaCodex.Shell
         private void Update()
         {
             HitchCheck();
-            if (_staging) { TickSplash(Time.unscaledDeltaTime); return; } // the staged start: only the splash moves until the shell is up
+            if (_staging) { TickStart(Time.unscaledDeltaTime); return; } // the staged start: only the splash (and its place watch) moves until the shell is up
             while (_main.TryDequeue(out var a))
             {
                 double c0 = _hitchSw.Elapsed.TotalMilliseconds;
@@ -535,8 +535,7 @@ namespace MetaCodex.Shell
             UpdateLayout();
             HitchMark(9);
             TickOrb(Time.unscaledDeltaTime);
-            TickSplash(Time.unscaledDeltaTime);
-            TickWristFallback(); // a failed wrist menu build: the DOCK, once (ShellWrist)
+            TickStart(Time.unscaledDeltaTime); // the splash, the start's place watch, the wrist menu's fallback (ShellSplash)
             TickFirstRun(Time.unscaledDeltaTime); // the first start's guide card, locks and tour (one test when none runs)
             if (_renderScaleForSetup != _setupActive) ApplyDisplaySettings(); // the setup is over: the full render scale, once
             HitchMark(10);

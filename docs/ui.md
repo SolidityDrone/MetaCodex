@@ -425,8 +425,23 @@ and ghost buttons keep their glass look. The grain and the glass's lattice come 
 
 A splash in passthrough, so the user is never blind at start. `ShellSplash`: the transparent logo (`Resources/Brand/splash.png`, 1280 x 722) 0.60 m wide, a metre ahead of where the user
 faces, at eye level, upright and facing them, fixed in the room (it does not follow the head), on top of everything
-(`Resources/Shaders/Splash`, queue Overlay, no depth test). It shows in the first frame, comes in behind a
+(`Resources/Shaders/Splash`, queue Overlay, no depth test). It is made in the first frame and shows as soon as the
+head has a valid pose, comes in behind a
 scan line running down (0.7 s), holds at least 1.4 s and until the shell is built behind it (at most 8 s more; see
 [perf.md](perf.md#first-start)), then breaks up into light (0.9 s: a noise dissolve
 with an accent edge, growing 5 %), and is destroyed with its texture. Not in batch runs.
+
+Where the start places things (2026-11-16: the splash lay on the floor at a seated user's feet). The rig sits at the
+world origin and, until the runtime gives the head its first pose, the eye anchor is at the rig's origin: the floor of
+the Floor Level space. The splash used to wait for a tracked head at most 1 s counted in frame times; the start's first
+frames are long, so it was placed from that floor pose. Now nothing is placed from an invalid pose
+(`MetaCodexApp.HeadPoseValid`: a pose, the headset present, its position tracked, the eyes at least 0.4 m over the
+floor origin, two frames in a row; at most 5 s of wall time, then the default eye height of 1.2 m). The splash and the
+main terminal (`MetaCodexApp.PlaceWhenTracked`) both wait for it. During the start (until 5 s after the splash is gone and
+the shell is up) the start's places are taken again once, at the eyes, when the head moves more than 0.3 m from the first
+place, the tracking origin changes (a recenter, a reference space change) or the first place was the default and the
+head is tracked now: the splash, the windows (the app's recenter: the terminal, the DOCK in DOCK mode, the Whisp) and
+the guide card (unless the user moved it). Log lines: `start: placed at eye y=… (head tracked after N ms) · splash ·
+origin …`, `start: terminal placed at eye y=… (head tracked after N ms)` and, when it happens, `start: re-placed at eye
+y=… (why; N ms after the first place): what`.
 
