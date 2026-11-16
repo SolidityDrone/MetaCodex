@@ -22,10 +22,12 @@ import android.os.Looper;
 import android.os.SystemClock;
 import android.util.Log;
 import android.view.InputDevice;
+import android.view.KeyCharacterMap;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.Surface;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
@@ -67,19 +69,33 @@ import java.util.concurrent.locks.ReentrantLock;
  * nothing). If the VirtualDisplay or the Presentation cannot be made, or no frame comes from it, the old path takes
  * over: the WebView off screen in the activity, drawn through a hardware canvas into the ImageReader when it changes.
  *
- * Touch, hover, wheel, keys and text come from the Unity side, posted to the UI thread and dispatched to the page's
- * views (page pixels, top-left origin). A page's full-screen view (video) fills the same surface. Page dialogs, notices
+ * Touch, hover, wheel, keys (with Ctrl / Shift / Alt / Meta), typed text (as key events) and pasted text come from the
+ * Unity side, posted to the UI thread and dispatched to the page's views (page pixels, top-left origin). On pages of
+ * this device (localhost, 127.x, [::1]: the userland's servers, code editors) and pages with <meta name="mcx-wheel">,
+ * a drag scrolls with wheel events and a tap is a touch on release; <meta name="mcx-wheel" content="off"> keeps the
+ * touch drag. resize() changes the page's size (a larger window). A page's full-screen view (video) fills the surface. Page dialogs, notices
  * (downloads, refused permissions, file pickers, links of other apps) and errors are reported through state(); camera,
  * microphone and location requests are refused. WebView debugging is on: chrome://inspect on the PC (adb) sees the page.
  */
 public final class MetaCodexWebView {
     private static final String TAG = "MetaCodexWeb";
+    /** The focused element, inside same-origin frames too (code editors keep theirs in a frame at times). */
+    private static final String FOCUSED = "function mcxFocused(){var e=document.activeElement||document.body;try{while(e&&e.contentDocument&&e.contentDocument.activeElement)e=e.contentDocument.activeElement;}catch(x){}return e;}";
+    /** A paste the page can take as its own (code editors listen for it); if it does not, the text is typed in. */
+    private static final String PASTE = FOCUSED + "(function(t){var e=mcxFocused(),go=true;try{var d=new DataTransfer();d.setData('text/plain',t);"
+            + "go=e.dispatchEvent(new ClipboardEvent('paste',{clipboardData:d,bubbles:true,cancelable:true}));}catch(x){}"
+            + "if(go)(e.ownerDocument||document).execCommand('insertText',false,t);})";
+    /** The page's own wish about drags: "off", any other value (on), or "" (no tag). */
+    private static final String WHEEL_META = "(function(){var m=document.querySelector('meta[name=\"mcx-wheel\"]');return m?(m.getAttribute('content')||'on'):'';})()";
     /** Pauses the page's own audio and video (the top document; a closed window or a paused app must be silent). */
     private static final String PAUSE_MEDIA = "(function(){var m=document.querySelectorAll('video,audio');for(var i=0;i<m.length;i++){try{m[i].pause();}catch(e){}}})();";
 
     private final Activity activity;
-    private final int width, height;
-    private final ByteBuffer pixels;              // RGBA, width * height * 4, read by Unity between poll and endRead
+    private volatile int width, height;            // changed only by resize, under the lock
+    private volatile ByteBuffer pixels;            // RGBA, width * height * 4, read by Unity between poll and endRead
+    private ByteBuffer oldPixels;                  // kept until Unity has taken the new one (its view points here)
+    private volatile int sizeSeq;
+    private int sizeSeen;                          // Unity's thread
     private final ReentrantLock lock = new ReentrantLock();
     private final Handler ui = new Handler(Looper.getMainLooper());
     private final HandlerThread thread;
@@ -96,7 +112,13 @@ public final class MetaCodexWebView {
     private VirtualDisplay display;
     private Presentation presentation;
     private boolean canvasMode, appliedPause, drawPending;
+    private int displayGen;                        // which display a pending frame check is about
     private long downTime;
+    private float scrollFactorV = 64f, scrollFactorH = 64f;
+    private volatile boolean wheelMode;            // a drag scrolls with the wheel (pages of this device, mcx-wheel)
+    private boolean wheelPressed, wheelScrolling;  // the drag in progress (UI thread)
+    private float wheelX0, wheelY0, wheelLastX, wheelLastY;
+    private long wheelDown;
     private JsResult js;
     private int jsSeq;
     private String mainUrl = "";                   // the page being loaded in the main frame (its SSL errors are the page's)
@@ -145,6 +167,9 @@ public final class MetaCodexWebView {
     private void create() {
         try {
             WebView.setWebContentsDebuggingEnabled(true);
+            ViewConfiguration vc = ViewConfiguration.get(activity);
+            scrollFactorV = Math.max(1f, vc.getScaledVerticalScrollFactor());
+            scrollFactorH = Math.max(1f, vc.getScaledHorizontalScrollFactor());
             reader = newReader();
             web = makeWeb();
             host = new FrameLayout(activity);
@@ -210,6 +235,7 @@ public final class MetaCodexWebView {
         try {
             DisplayManager dm = (DisplayManager) activity.getSystemService(Context.DISPLAY_SERVICE);
             int dpi = activity.getResources().getDisplayMetrics().densityDpi; // the page lays out as it did in the activity
+            imagesSeen = 0;
             vd = dm.createVirtualDisplay("metacodex-web", width, height, dpi, reader.getSurface(), DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY);
             if (vd == null) { Log.w(TAG, "web: createVirtualDisplay returned nothing"); return false; }
             p = new Presentation(activity, vd.getDisplay()) {
@@ -232,7 +258,8 @@ public final class MetaCodexWebView {
             mode = "display";
             web.requestFocus();                        // the page has the focus inside its own window (fields, keys)
             Log.i(TAG, "web: capture=virtual-display " + width + "x" + height + " dpi " + dpi);
-            ui.postDelayed(this::checkDisplayFrames, 3000);
+            final int gen = ++displayGen;
+            ui.postDelayed(() -> checkDisplayFrames(gen), 3000);
             return true;
         } catch (Throwable t) {
             Log.w(TAG, "web: virtual display failed: " + t);
@@ -244,9 +271,9 @@ public final class MetaCodexWebView {
     }
 
     /** No image from the virtual display 3 s after it showed (it always draws once): the canvas path instead. */
-    private void checkDisplayFrames() {
-        if (closed || canvasMode || display == null) return;
-        if (paused || activityPaused) { ui.postDelayed(this::checkDisplayFrames, 1000); return; }
+    private void checkDisplayFrames(final int gen) {
+        if (closed || canvasMode || display == null || gen != displayGen) return;
+        if (paused || activityPaused) { ui.postDelayed(() -> checkDisplayFrames(gen), 1000); return; }
         if (imagesSeen > 0) return;
         Log.w(TAG, "web: no frame from the virtual display in 3 s");
         try { if (presentation != null) presentation.dismiss(); } catch (Throwable ignored) { }
@@ -328,9 +355,17 @@ public final class MetaCodexWebView {
             return false;
         }
         @Override public void onPageStarted(WebView v, String u, android.graphics.Bitmap icon) {
-            url = clean(u); mainUrl = u; loading = true; error = ""; errorUrl = ""; cancelJs(); nav(); bump(); scheduleDraw();
+            url = clean(u); mainUrl = u; loading = true; error = ""; errorUrl = ""; wheelMode = isLoopback(u); cancelJs(); nav(); bump(); scheduleDraw();
         }
-        @Override public void onPageFinished(WebView v, String u) { url = clean(u); loading = false; nav(); bump(); scheduleDraw(); }
+        @Override public void onPageFinished(WebView v, String u) {
+            url = clean(u); loading = false; nav(); bump(); scheduleDraw();
+            final boolean local = isLoopback(u);
+            v.evaluateJavascript(WHEEL_META, r -> {
+                String m = r == null ? "" : r.replace("\"", "").trim();
+                boolean on = m.equals("off") ? false : m.isEmpty() || m.equals("null") ? local : true;
+                if (on != wheelMode) { wheelMode = on; bump(); }
+            });
+        }
         @Override public void doUpdateVisitedHistory(WebView v, String u, boolean reload) { url = clean(u); nav(); bump(); } // pages that change their address themselves
         @Override public void onReceivedError(WebView v, WebResourceRequest r, WebResourceError e) {
             if (!r.isForMainFrame()) return;
@@ -513,8 +548,8 @@ public final class MetaCodexWebView {
 
     // a new image: copied now, or (within 16 ms of the last copy) once that time comes, the newest then
     private void onImage(ImageReader r) {
+        if (closed || r != reader) return;         // a replaced reader's last images count for nothing
         imagesSeen++;
-        if (closed || r != reader) return;
         long due = lastCopy + minCopyMs;
         if (SystemClock.uptimeMillis() < due) {
             if (!drainPosted) { drainPosted = true; copier.postAtTime(drain, due); }
@@ -538,22 +573,24 @@ public final class MetaCodexWebView {
             lastCopy = SystemClock.uptimeMillis();
             Image.Plane plane = img.getPlanes()[0];
             ByteBuffer src = plane.getBuffer();
-            int stride = plane.getRowStride(), row = width * 4;
-            if (img.getWidth() != width || img.getHeight() != height || plane.getPixelStride() != 4 || src.capacity() < stride * (height - 1) + row) return;
-            lock.lock();
+            int stride = plane.getRowStride();
+            lock.lock();                               // the size and the buffer change only under it (resize)
             try {
-                pixels.clear();
+                int w = width, h = height, row = w * 4;
+                ByteBuffer dst = pixels;
+                if (img.getWidth() != w || img.getHeight() != h || plane.getPixelStride() != 4 || src.capacity() < stride * (h - 1) + row || dst.capacity() < row * h) return;
+                dst.clear();
                 ByteBuffer line = src.duplicate();
                 if (stride == row) {
                     line.clear();
-                    line.limit(row * height);
-                    pixels.put(line);
+                    line.limit(row * h);
+                    dst.put(line);
                 } else {
-                    for (int y = 0; y < height; y++) {
+                    for (int y = 0; y < h; y++) {
                         line.clear();
                         line.position(y * stride);
                         line.limit(y * stride + row);
-                        pixels.put(line);
+                        dst.put(line);
                     }
                 }
                 frame++;
@@ -577,10 +614,12 @@ public final class MetaCodexWebView {
     public int height() { return height; }
 
     /** Each Unity frame, never waits, allocates nothing. Bit 1: a new frame is in pixels() and the buffer is locked
-     *  (read it, then call endRead); bit 2: the state changed since the last state(). While the copy thread writes,
-     *  bit 1 stays off (Unity takes the frame next time). */
+     *  (read it, then call endRead); bit 2: the state changed since the last state(); bit 4: the page's size changed
+     *  (take width(), height() and pixels() again, then call sizeTaken; no frame until then). While the copy thread
+     *  writes, bit 1 stays off (Unity takes the frame next time). */
     public int poll() {
         int r = stateVersion.get() != stateSeen ? 2 : 0;
+        if (sizeSeq != sizeSeen) return r | 4;
         if (frame != taken && lock.tryLock()) {
             if (frame != taken) { taken = frame; return r | 1; }
             lock.unlock();
@@ -590,14 +629,59 @@ public final class MetaCodexWebView {
 
     public void endRead() { if (lock.isHeldByCurrentThread()) lock.unlock(); }
 
+    /** Unity has the new size and buffer: the old buffer can go. */
+    public void sizeTaken() {
+        lock.lock();
+        try { sizeSeen = sizeSeq; oldPixels = null; } finally { lock.unlock(); }
+    }
+
+    /** The page's size in pixels (a larger window: more of the page at the same sharpness). The page stays; its
+     *  window moves to a new display of that size. */
+    public void resize(final int w, final int h) {
+        ui.post(() -> {
+            if (closed || host == null || w <= 0 || h <= 0 || (w == width && h == height)) return;
+            ByteBuffer buf = ByteBuffer.allocateDirect(w * h * 4).order(ByteOrder.nativeOrder());
+            boolean wasDisplay = !canvasMode;
+            if (wasDisplay) {
+                try { if (presentation != null) presentation.dismiss(); } catch (Throwable ignored) { }
+                try { if (display != null) display.release(); } catch (Throwable ignored) { }
+                presentation = null;
+                display = null;
+            }
+            if (host.getParent() instanceof ViewGroup) ((ViewGroup) host.getParent()).removeView(host);
+            lock.lock();
+            try {
+                if (oldPixels == null) oldPixels = pixels;   // Unity's view may still point at it until sizeTaken
+                pixels = buf;
+                width = w;
+                height = h;
+                sizeSeq++;
+            } finally {
+                lock.unlock();
+            }
+            ImageReader old = reader;
+            reader = newReader();
+            if (old != null) copier.post(old::close);
+            Log.i(TAG, "web: page size " + w + "x" + h);
+            if (!wasDisplay) {
+                host.setTranslationX(-4f * w);
+                ((ViewGroup) activity.getWindow().getDecorView()).addView(host, new FrameLayout.LayoutParams(w, h));
+                scheduleDraw();
+            } else if (!showOnDisplay()) {
+                showOffScreen("the virtual display could not be made at " + w + "x" + h);
+            }
+            bump();
+        });
+    }
+
     /** Tab separated: url, title, progress, can go back, can go forward, loading, the error, a refused sign-in link
      *  (once), a notice (once), full screen, the capture path (display or canvas), the page dialog's kind (alert,
-     *  confirm or empty), its id, its message. */
+     *  confirm or empty), its id, its message, wheel mode (1: a drag scrolls with the wheel). */
     public String state() {
         stateSeen = stateVersion.get();
         return url + "\t" + title + "\t" + progress + "\t" + (canBack ? 1 : 0) + "\t" + (canForward ? 1 : 0) + "\t" + (loading ? 1 : 0)
                 + "\t" + error + "\t" + external.getAndSet("") + "\t" + clean(notice.getAndSet("")) + "\t" + (fullscreen ? 1 : 0) + "\t" + mode
-                + "\t" + jsKind + "\t" + jsId + "\t" + jsMessage;
+                + "\t" + jsKind + "\t" + jsId + "\t" + jsMessage + "\t" + (wheelMode ? 1 : 0);
     }
 
     /** The pages that must not load in this WebView (sign-in pages: their session would stay in the app's cookies):
@@ -616,6 +700,14 @@ public final class MetaCodexWebView {
         for (String h : externalHosts) if (host.equals(h) || host.endsWith("." + h)) return true;
         for (String p : externalPaths) if (path.contains(p)) return true;
         return false;
+    }
+
+    private static boolean isLoopback(String u) {
+        if (u == null) return false;
+        String host = Uri.parse(u).getHost();
+        if (host == null) return false;
+        host = host.toLowerCase();
+        return host.equals("localhost") || host.startsWith("127.") || host.equals("[::1]") || host.equals("::1") || host.equals("0.0.0.0");
     }
 
     /** Copies per second at most (the texture's upload rate; 60 by default). */
@@ -692,7 +784,7 @@ public final class MetaCodexWebView {
     private View target() { return custom != null ? custom : web; }
 
     /** A touch in page pixels: 0 down, 1 up, 2 move (MotionEvent's actions). Timed when Unity sends it, so the page
-     *  measures a drag's speed right (a fling goes on by itself). */
+     *  measures a drag's speed right (a fling goes on by itself). In wheel mode a drag scrolls with wheel events. */
     public void touch(final int action, final float x, final float y) {
         final long t = SystemClock.uptimeMillis();
         if (action == MotionEvent.ACTION_DOWN) downTime = t;
@@ -700,12 +792,61 @@ public final class MetaCodexWebView {
         ui.post(() -> {
             if (host == null || web == null) return;
             if (action == MotionEvent.ACTION_DOWN && !canvasMode && custom == null && !web.hasFocus()) web.requestFocus();
-            MotionEvent ev = MotionEvent.obtain(down, t, action, x, y, 0);
-            ev.setSource(InputDevice.SOURCE_TOUCHSCREEN);
-            host.dispatchTouchEvent(ev);               // the view under the point gets it (the full-screen view on top)
-            ev.recycle();
-            scheduleDraw();
+            if (action == MotionEvent.ACTION_DOWN) wheelPressed = wheelScrolling = false;
+            if (wheelMode && custom == null && (action == MotionEvent.ACTION_DOWN || wheelPressed)) { wheelTouch(action, x, y, down, t); return; }
+            dispatchTouch(action, x, y, down, t);
         });
+    }
+
+    private void dispatchTouch(int action, float x, float y, long down, long t) {
+        MotionEvent ev = MotionEvent.obtain(down, t, action, x, y, 0);
+        ev.setSource(InputDevice.SOURCE_TOUCHSCREEN);
+        host.dispatchTouchEvent(ev);                   // the view under the point gets it (the full-screen view on top)
+        ev.recycle();
+        scheduleDraw();
+    }
+
+    /** Wheel mode (code editors, pages of this device): nothing goes to the page on the press; a drag past 10 px
+     *  scrolls with wheel events at the press point (the content follows the hand, pixel for pixel); a release without
+     *  a drag is a tap there (down and up). Text selection by drag is left to the keyboard (Shift + arrows). */
+    private void wheelTouch(int action, float x, float y, long down, long t) {
+        if (action == MotionEvent.ACTION_DOWN) {
+            wheelPressed = true;
+            wheelX0 = wheelLastX = x;
+            wheelY0 = wheelLastY = y;
+            wheelDown = down;
+            return;
+        }
+        if (action == MotionEvent.ACTION_MOVE) {
+            if (!wheelScrolling && Math.hypot(x - wheelX0, y - wheelY0) < 10f) return;
+            wheelScrolling = true;
+            float dx = x - wheelLastX, dy = y - wheelLastY;
+            wheelLastX = x;
+            wheelLastY = y;
+            sendWheel(wheelX0, wheelY0, -dx / scrollFactorH, dy / scrollFactorV, t);
+            return;
+        }
+        boolean tap = !wheelScrolling;
+        wheelPressed = wheelScrolling = false;
+        if (!tap || action != MotionEvent.ACTION_UP) return;
+        dispatchTouch(MotionEvent.ACTION_DOWN, wheelX0, wheelY0, wheelDown, wheelDown);
+        dispatchTouch(MotionEvent.ACTION_UP, wheelX0, wheelY0, wheelDown, Math.max(t, wheelDown));
+    }
+
+    // a mouse wheel at (x, y): h > 0 scrolls right, v > 0 scrolls up (Android's axes, in wheel steps)
+    private void sendWheel(float x, float y, float h, float v, long t) {
+        MotionEvent.PointerProperties[] props = { new MotionEvent.PointerProperties() };
+        props[0].id = 0;
+        props[0].toolType = MotionEvent.TOOL_TYPE_MOUSE;
+        MotionEvent.PointerCoords[] coords = { new MotionEvent.PointerCoords() };
+        coords[0].x = x;
+        coords[0].y = y;
+        coords[0].setAxisValue(MotionEvent.AXIS_VSCROLL, v);
+        coords[0].setAxisValue(MotionEvent.AXIS_HSCROLL, h);
+        MotionEvent ev = MotionEvent.obtain(t, t, MotionEvent.ACTION_SCROLL, 1, props, coords, 0, 0, 1f, 1f, 0, 0, InputDevice.SOURCE_MOUSE, 0);
+        host.dispatchGenericMotionEvent(ev);
+        ev.recycle();
+        scheduleDraw();
     }
 
     /** The pointer over the page without pressing (hover styles, menus that open on hover). */
@@ -720,39 +861,53 @@ public final class MetaCodexWebView {
         });
     }
 
-    /** The wheel: positive dy scrolls the page down. */
+    /** The wheel: positive dy scrolls the page down (wheel steps). */
     public void wheel(final float x, final float y, final float dy) {
         final long t = SystemClock.uptimeMillis();
+        ui.post(() -> { if (host != null) sendWheel(x, y, 0f, -dy, t); });
+    }
+
+    /** Text into the focused field of the page, in one piece (the headset keyboard's text). */
+    public void text(final String s) {
+        ui.post(() -> { if (web != null && s != null) web.evaluateJavascript(FOCUSED + "(function(t){var e=mcxFocused();(e.ownerDocument||document).execCommand('insertText',false,t);})(" + JSONObject.quote(s) + ");", null); });
+    }
+
+    /** Text typed on a hardware keyboard: as key events, like a keyboard on the page's own device (code editors
+     *  read keys); a character no keyboard has (accented letters, emoji) goes in as text. */
+    public void typeText(final String s) {
+        final long t = SystemClock.uptimeMillis();
         ui.post(() -> {
-            if (host == null) return;
-            MotionEvent.PointerProperties[] props = { new MotionEvent.PointerProperties() };
-            props[0].id = 0;
-            props[0].toolType = MotionEvent.TOOL_TYPE_MOUSE;
-            MotionEvent.PointerCoords[] coords = { new MotionEvent.PointerCoords() };
-            coords[0].x = x;
-            coords[0].y = y;
-            coords[0].setAxisValue(MotionEvent.AXIS_VSCROLL, -dy);
-            MotionEvent ev = MotionEvent.obtain(t, t, MotionEvent.ACTION_SCROLL, 1, props, coords, 0, 0, 1f, 1f, 0, 0, InputDevice.SOURCE_MOUSE, 0);
-            host.dispatchGenericMotionEvent(ev);
-            ev.recycle();
+            if (web == null || s == null || s.isEmpty()) return;
+            KeyEvent[] evs = KeyCharacterMap.load(KeyCharacterMap.VIRTUAL_KEYBOARD).getEvents(s.toCharArray());
+            if (evs == null) { text(s); return; }
+            View v = target();
+            for (KeyEvent e : evs) v.dispatchKeyEvent(KeyEvent.changeTimeRepeat(e, t, 0));
             scheduleDraw();
         });
     }
 
-    /** Text into the focused field of the page. */
-    public void text(final String s) {
-        ui.post(() -> { if (web != null) web.evaluateJavascript("document.execCommand('insertText', false, " + JSONObject.quote(s) + ");", null); });
+    /** Text pasted into the page: a paste event the page can take (code editors), else typed into the focused field. */
+    public void paste(final String s) {
+        ui.post(() -> { if (web != null && s != null && !s.isEmpty()) web.evaluateJavascript(PASTE + "(" + JSONObject.quote(s) + ");", null); });
     }
 
     /** A key (KeyEvent codes: 66 enter, 67 backspace, 61 tab, 111 escape, 19-22 arrows); escape leaves full screen. */
-    public void key(final int code) {
+    public void key(final int code) { keyMeta(code, 0); }
+
+    /** A key with modifiers: bits 1 Ctrl, 2 Shift, 4 Alt, 8 Meta (Ctrl+S, Shift+Tab, Ctrl+Shift+P, Alt+arrows...). */
+    public void keyMeta(final int code, final int mods) {
         final long t = SystemClock.uptimeMillis();
         ui.post(() -> {
             if (web == null) return;
-            if (code == KeyEvent.KEYCODE_ESCAPE && custom != null) { exitFullscreenNow(); return; }
+            if (code == KeyEvent.KEYCODE_ESCAPE && mods == 0 && custom != null) { exitFullscreenNow(); return; }
+            int meta = 0;
+            if ((mods & 1) != 0) meta |= KeyEvent.META_CTRL_ON | KeyEvent.META_CTRL_LEFT_ON;
+            if ((mods & 2) != 0) meta |= KeyEvent.META_SHIFT_ON | KeyEvent.META_SHIFT_LEFT_ON;
+            if ((mods & 4) != 0) meta |= KeyEvent.META_ALT_ON | KeyEvent.META_ALT_LEFT_ON;
+            if ((mods & 8) != 0) meta |= KeyEvent.META_META_ON | KeyEvent.META_META_LEFT_ON;
             View v = target();
-            v.dispatchKeyEvent(new KeyEvent(t, t, KeyEvent.ACTION_DOWN, code, 0));
-            v.dispatchKeyEvent(new KeyEvent(t, t, KeyEvent.ACTION_UP, code, 0));
+            v.dispatchKeyEvent(new KeyEvent(t, t, KeyEvent.ACTION_DOWN, code, 0, meta, KeyCharacterMap.VIRTUAL_KEYBOARD, 0, 0, InputDevice.SOURCE_KEYBOARD));
+            v.dispatchKeyEvent(new KeyEvent(t, t, KeyEvent.ACTION_UP, code, 0, meta, KeyCharacterMap.VIRTUAL_KEYBOARD, 0, 0, InputDevice.SOURCE_KEYBOARD));
             scheduleDraw();
         });
     }
