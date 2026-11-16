@@ -243,6 +243,11 @@ namespace MetaCodex.EditorTools
             // (-1 GPU level, +1 CPU level) gave the CPU nothing and held the GPU at level 1, 350 MHz, 91-99 % busy
             // (VrApi CPU4/GPU=3/1 up to 0.7.19). Equal: GPU level 2, 456 MHz (+30 %); the CPU stays at level 3.
             config.processorFavor = OVRProjectConfig.ProcessorFavor.FavorEqually;
+            // the network security config: the SDK's default refuses all plain http, which also blocks this headset's
+            // own servers in WEB (the code editor, a dev server in the Linux); ours allows http only to 127.0.0.1 and
+            // localhost (Assets/MetaCodex/Android/network_sec_config.xml)
+            config.enableNSCConfig = true;
+            config.securityXmlPath = "Assets/MetaCodex/Android/network_sec_config.xml";
             OVRProjectConfig.CommitProjectConfig(config);
         }
 
