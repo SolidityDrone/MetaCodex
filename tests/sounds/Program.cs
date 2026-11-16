@@ -1,8 +1,9 @@
-// UI sound tests without Unity: renders every sound of Runtime/UI/UiSoundSynth.cs (the file itself, compiled here) and
-// the sounds of polish/base (OldSounds.cs) to 16-bit 44.1 kHz WAV files (<out>/new, <out>/old), prints a table of
-// both, and checks the new ones: no NaN, peak <= -1 dBFS, no DC, faded ends, durations (about the old ones or shorter,
-// wake <= 0.21 s), little energy above 6 kHz, one loudness (hover well below), the same samples on every render, and
-// the time to make them all. Build + run: tests/sounds/run-sounds-tests.sh
+// UI sound tests without Unity: renders every sound of every style of Runtime/UI/UiSoundSynth.cs (the file itself,
+// compiled here) to 16-bit 44.1 kHz WAV files (<out>/hud, holo, core, classic), prints a table per style, and checks:
+// classic is the sounds of polish/base f2dcaca sample for sample (OldSounds.cs); hud, holo and core: no NaN, peak
+// <= -1 dBFS, no DC, faded ends, durations (about classic's or shorter, wake <= 0.21 s), little energy above 6 kHz,
+// one loudness in a style (hover well below) and about the same loudness in every style, the same samples on every
+// render, and the time to make each style. Build + run: tests/sounds/run-sounds-tests.sh
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -28,76 +29,84 @@ internal static class Program
         _verbose = Array.IndexOf(args, "--verbose") >= 0;
         int oi = Array.IndexOf(args, "--out");
         string outDir = oi >= 0 && oi + 1 < args.Length ? args[oi + 1] : null;
-
-        // time: the first render of each (cold: includes the JIT, like the first run on a device) and the best of 5
-        var sw = Stopwatch.StartNew();
-        var fresh = new Dictionary<string, float[]>();
-        foreach (var n in UiSoundSynth.Names) fresh[n] = UiSoundSynth.Render(n);
-        double coldMs = sw.Elapsed.TotalMilliseconds;
-        double warmMs = double.MaxValue;
-        var perSound = UiSoundSynth.Names.ToDictionary(n => n, n => double.MaxValue);
-        for (int r = 0; r < 5; r++)
-        {
-            var all = Stopwatch.StartNew();
-            foreach (var n in UiSoundSynth.Names)
-            {
-                var one = Stopwatch.StartNew();
-                var again = UiSoundSynth.Render(n);
-                perSound[n] = Math.Min(perSound[n], one.Elapsed.TotalMilliseconds);
-                if (r == 0) Check(again.SequenceEqual(fresh[n]), $"{n}: the same samples on every render");
-            }
-            warmMs = Math.Min(warmMs, all.Elapsed.TotalMilliseconds);
-        }
-        sw.Restart();
+        var names = UiSoundSynth.Names;
         var old = OldSounds.All();
-        double oldMs = sw.Elapsed.TotalMilliseconds;
 
-        Check(UiSoundSynth.Render("nope") == null, "an unknown name gives null");
-        Check(new HashSet<string>(UiSoundSynth.Names).SetEquals(old.Keys), "the same names as before: " + string.Join(" ", old.Keys));
+        Check(UiSoundSynth.Render("hud", "nope") == null, "an unknown name gives null");
+        Check(new HashSet<string>(names).SetEquals(old.Keys), "the same names as before: " + string.Join(" ", old.Keys));
+        Check(UiSoundSynth.StyleOf("nope") == "hud" && UiSoundSynth.StyleOf(null) == "hud" && UiSoundSynth.StyleOf(" HOLO ") == "holo", "an unknown style is hud; names are trimmed and folded");
 
-        Console.WriteLine($"{"sound",-8} | {"dur s",11} | {"peak dBFS",11} | {"loud dB",11} | {"centroid Hz",11} | {"> 6 kHz dB",11} | {"DC",8} | ms");
-        Console.WriteLine($"{"",-8} | {"old   new",11} | {"old   new",11} | {"old   new",11} | {"old   new",11} | {"old   new",11} | {"new",8} |");
-        var stats = new Dictionary<string, Stats>();
-        foreach (var n in UiSoundSynth.Names)
+        var medians = new Dictionary<string, double>();
+        var times = new List<string>();
+        foreach (var style in UiSoundSynth.Styles)
         {
-            var s = Measure(fresh[n]); var o = Measure(old[n]);
-            stats[n] = s;
-            Console.WriteLine($"{n,-8} | {o.Dur,5:F3} {s.Dur,5:F3} | {o.PeakDb,5:F1} {s.PeakDb,5:F1} | {o.Loud,5:F1} {s.Loud,5:F1} | {o.Centroid,5:F0} {s.Centroid,5:F0} | {o.HfDb,5:F0} {s.HfDb,5:F0} | {s.Dc,8:E1} | {perSound[n]:F2}");
-
-            var x = fresh[n];
-            Check(!s.NaN, $"{n}: no NaN or infinity");
-            Check(s.PeakDb <= -1.0 + 1e-6, $"{n}: peak {s.PeakDb:F2} dBFS <= -1");
-            Check(Math.Abs(s.Dc) < 1e-5, $"{n}: DC {s.Dc:E1} under 1e-5");
-            Check(Math.Abs(x[0]) < 1e-4 && Math.Abs(x[x.Length - 1]) < 1e-4, $"{n}: starts and ends at 0");
-            Check(MaxAbs(x, 0, Rate / 2000) <= 0.25 * s.Peak, $"{n}: faded in (first 0.5 ms under a quarter of the peak)");
-            Check(MaxAbs(x, x.Length - Rate / 1000, x.Length) <= 0.12 * s.Peak, $"{n}: faded out (last 1 ms under 12 % of the peak)");
-            double oldDur = old[n].Length / (double)Rate;
-            Check(s.Dur <= oldDur * 1.1 + 0.005, $"{n}: {s.Dur:F3} s, about the old {oldDur:F3} s or shorter");
-            Check(s.HfDb < -25, $"{n}: energy above 6 kHz {s.HfDb:F1} dB < -25 dB of the whole");
-            Check(s.HfTailDb < -30, $"{n}: energy above 6 kHz after the first 30 ms {s.HfTailDb:F1} dB < -30 dB of the whole");
-        }
-        Check(stats["wake"].Dur <= 0.21, $"wake is short: {stats["wake"].Dur:F3} s <= 0.21 s (the user speaks right after it)");
-        var loud = UiSoundSynth.Names.Where(n => n != "hover").Select(n => stats[n].Loud).OrderBy(v => v).ToList();
-        double median = loud[loud.Count / 2];
-        foreach (var n in UiSoundSynth.Names.Where(n => n != "hover"))
-            Check(Math.Abs(stats[n].Loud - median) <= 3.0, $"{n}: loudness {stats[n].Loud:F1} dB within 3 dB of the median {median:F1}");
-        Check(stats["hover"].Loud <= median - 10, $"hover: {stats["hover"].Loud:F1} dB, at least 10 dB under the others (almost subliminal)");
-
-        long samples = fresh.Values.Sum(a => (long)a.Length), oldSamples = old.Values.Sum(a => (long)a.Length);
-        var oldLoud = UiSoundSynth.Names.Where(n => n != "hover").Select(n => Measure(old[n]).Loud).OrderBy(v => v).ToList();
-        Console.WriteLine($"loudness median (no hover): old {oldLoud[oldLoud.Count / 2]:F1} dB, new {median:F1} dB");
-        Console.WriteLine($"samples: new {samples} ({samples * 4 / 1024} KB as float, {samples / (double)Rate:F2} s), old {oldSamples} ({oldSamples * 4 / 1024} KB)");
-        Console.WriteLine($"time to make all {UiSoundSynth.Names.Length}: new {coldMs:F1} ms cold (first run, with the JIT), {warmMs:F1} ms warm; old {oldMs:F1} ms cold");
-
-        if (outDir != null)
-        {
-            foreach (var n in UiSoundSynth.Names)
+            // time: the first render of each sound (cold: includes the JIT of what this style uses) and the best of 5
+            var sw = Stopwatch.StartNew();
+            var fresh = new Dictionary<string, float[]>();
+            foreach (var n in names) fresh[n] = UiSoundSynth.Render(style, n);
+            double coldMs = sw.Elapsed.TotalMilliseconds, warmMs = double.MaxValue;
+            var perSound = names.ToDictionary(n => n, n => double.MaxValue);
+            for (int r = 0; r < 5; r++)
             {
-                WriteWav(Path.Combine(outDir, "new", n + ".wav"), fresh[n]);
-                WriteWav(Path.Combine(outDir, "old", n + ".wav"), old[n]);
+                var all = Stopwatch.StartNew();
+                foreach (var n in names)
+                {
+                    var one = Stopwatch.StartNew();
+                    var again = UiSoundSynth.Render(style, n);
+                    perSound[n] = Math.Min(perSound[n], one.Elapsed.TotalMilliseconds);
+                    if (r == 0) Check(again.SequenceEqual(fresh[n]), $"{style} {n}: the same samples on every render");
+                }
+                warmMs = Math.Min(warmMs, all.Elapsed.TotalMilliseconds);
             }
-            Console.WriteLine($"wav: {Path.Combine(outDir, "new")} and {Path.Combine(outDir, "old")} ({UiSoundSynth.Names.Length} each)");
+            long samples = fresh.Values.Sum(a => (long)a.Length);
+            times.Add($"{style,-8} {warmMs,5:F1} ms warm, {coldMs,5:F1} ms cold, {samples} samples ({samples * 4 / 1024} KB as float)");
+
+            Console.WriteLine();
+            Console.WriteLine($"{style.ToUpperInvariant(),-8} | {"dur s",5} | {"peak",5} | {"loud",5} | {"centr",5} | {">6kHz",5} | {"DC",8} | ms");
+            var stats = new Dictionary<string, Stats>();
+            foreach (var n in names)
+            {
+                var s = Measure(fresh[n]);
+                stats[n] = s;
+                Console.WriteLine($"{n,-8} | {s.Dur,5:F3} | {s.PeakDb,5:F1} | {s.Loud,5:F1} | {s.Centroid,5:F0} | {s.HfDb,5:F0} | {s.Dc,8:E1} | {perSound[n]:F2}");
+                var x = fresh[n];
+                Check(!s.NaN, $"{style} {n}: no NaN or infinity");
+                if (style == "classic")
+                {
+                    Check(x.SequenceEqual(old[n]), $"classic {n}: the sound of polish/base, sample for sample");
+                    continue;
+                }
+                Check(s.PeakDb <= -1.0 + 1e-6, $"{style} {n}: peak {s.PeakDb:F2} dBFS <= -1");
+                Check(Math.Abs(s.Dc) < 1e-5, $"{style} {n}: DC {s.Dc:E1} under 1e-5");
+                Check(Math.Abs(x[0]) < 1e-4 && Math.Abs(x[x.Length - 1]) < 1e-4, $"{style} {n}: starts and ends at 0");
+                Check(MaxAbs(x, 0, Rate / 2000) <= 0.25 * s.Peak, $"{style} {n}: faded in (first 0.5 ms under a quarter of the peak)");
+                Check(MaxAbs(x, x.Length - Rate / 1000, x.Length) <= 0.12 * s.Peak, $"{style} {n}: faded out (last 1 ms under 12 % of the peak)");
+                double oldDur = old[n].Length / (double)Rate;
+                Check(s.Dur <= oldDur * 1.1 + 0.005, $"{style} {n}: {s.Dur:F3} s, about classic's {oldDur:F3} s or shorter");
+                Check(s.HfDb < -25, $"{style} {n}: energy above 6 kHz {s.HfDb:F1} dB < -25 dB of the whole");
+                Check(s.HfTailDb < -30, $"{style} {n}: energy above 6 kHz after the first 30 ms {s.HfTailDb:F1} dB < -30 dB of the whole");
+            }
+            var loud = names.Where(n => n != "hover").Select(n => stats[n].Loud).OrderBy(v => v).ToList();
+            double median = loud[loud.Count / 2];
+            medians[style] = median;
+            Console.WriteLine($"loudness median (no hover) {median:F1} dB; made in {warmMs:F1} ms warm, {coldMs:F1} ms cold; {samples} samples");
+            if (style != "classic")
+            {
+                Check(stats["wake"].Dur <= 0.21, $"{style} wake is short: {stats["wake"].Dur:F3} s <= 0.21 s (the user speaks right after it)");
+                foreach (var n in names.Where(n => n != "hover"))
+                    Check(Math.Abs(stats[n].Loud - median) <= 3.0, $"{style} {n}: loudness {stats[n].Loud:F1} dB within 3 dB of the median {median:F1}");
+                Check(stats["hover"].Loud <= median - 10, $"{style} hover: {stats["hover"].Loud:F1} dB, at least 10 dB under the others (almost subliminal)");
+            }
+            if (outDir != null)
+                foreach (var n in names) WriteWav(Path.Combine(outDir, style, n + ".wav"), fresh[n]);
         }
+        var made = medians.Where(kv => kv.Key != "classic").Select(kv => kv.Value).ToList();
+        Check(made.Max() - made.Min() <= 2.0, $"hud, holo and core are about as loud (medians {string.Join(", ", made.Select(v => v.ToString("F1")))} dB, within 2 dB)");
+
+        Console.WriteLine();
+        Console.WriteLine("time to make all " + names.Length + " (tiered compilation off: optimised code, as IL2CPP's):");
+        foreach (var t in times) Console.WriteLine("  " + t);
+        if (outDir != null) Console.WriteLine($"wav: {outDir}\\{{{string.Join(",", UiSoundSynth.Styles)}}} ({names.Length} each)");
         Console.WriteLine(_fails == 0 ? $"sounds: ALL OK ({_passes} checks)" : $"sounds: {_fails} FAILED, {_passes} passed");
         return _fails == 0 ? 0 : 1;
     }
