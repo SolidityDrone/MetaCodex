@@ -315,7 +315,7 @@ namespace MetaCodex.Shell
             _wd = _wsBase = null; // what was not applied is dropped
             _wsSel = null;
             if (_wsTwin == null) return;
-            if (!Application.isPlaying) { DropTwin(); return; }
+            if (!Application.isPlaying || Application.isBatchMode) { DropTwin(); return; } // self-tests: no frames to fold in
             _wsTwin.Dismiss(); // folds with its animation, then the page's window goes and the twin with it
             After(0.6f, () => { if (_wsPage == null || !_wsPage.IsOpen) DropTwin(); });
         }

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using MetaCodex.Shell;
 using MetaCodex.UI;
@@ -9,7 +10,7 @@ namespace MetaCodex.EditorTools
     /// in CONTROL), CONTROL's rail beside its window (top edges level, its own gap), one category at a time taking the
     /// shown window's place, old ids, SETTINGS' pages without their tab bar, the statuses, following a moved window,
     /// closing together, the FLOAT ring's room, voice, and work windows opening beside the window they belong to; then
-    /// the menus-and-layout polish (ControlPolish).
+    /// the menus-and-layout polish (ControlPolish) and CONTROL > WRIST MENU (WristMenuPage).
     public static partial class MetaCodexUiTest
     {
         private static Vector3 TopLeftOf(UiPanel p) => p.transform.TransformPoint(new Vector3(-p.Width * 0.5f, p.Height * 0.5f, 0f));
@@ -35,10 +36,10 @@ namespace MetaCodex.EditorTools
             Check(dock.SequenceEqual(wristOrder) && !outer.Contains("TABLE") && shell.MainMenuItems().Count == inner.Count + outer.Count,
                 $"dock and wrist from one table: dock {string.Join(" ", dock)} = wrist {string.Join(" ", wristOrder)}");
             var cats = shell.ControlCategories;
-            Check(cats.Count == 10 && cats.Select(c => c.Group).Distinct().Count() == 3 && new[] { "agents", "mqh", "vault", "voice", "system", "display", "focus", "hands", "look", "about" }.All(k => cats.Any(c => c.Key == k)),
-                "CONTROL has ten categories in three groups: " + string.Join(", ", cats.Select(c => c.Group + "/" + c.Label)));
+            Check(cats.Count == 11 && cats.Select(c => c.Group).Distinct().Count() == 3 && new[] { "agents", "mqh", "vault", "voice", "system", "display", "wrist", "focus", "hands", "look", "about" }.All(k => cats.Any(c => c.Key == k)),
+                "CONTROL has eleven categories in three groups: " + string.Join(", ", cats.Select(c => c.Group + "/" + c.Label)));
             string groups = string.Join(" / ", cats.GroupBy(c => c.Group).Select(g => g.Key + ": " + string.Join(", ", g.Select(c => c.Key))));
-            Check(groups == "THIS HEADSET: display, look, focus, hands / AI: voice, agents, mqh, vault / LINUX & APP: system, about"
+            Check(groups == "THIS HEADSET: display, wrist, look, focus, hands / AI: voice, agents, mqh, vault / LINUX & APP: system, about"
                 && cats.First(c => c.Key == "focus").Glyph == "◐" && cats.First(c => c.Key == "look").Glyph == "◈",
                 $"the rail's groups and glyphs (FOCUS ◐ as on the menu, LOOK & SOUND ◈): {groups}");
 
@@ -153,6 +154,7 @@ namespace MetaCodex.EditorTools
             shell.Settings.bendPanels = bend0;
             shell.OnSettingsChanged();
             ControlPolish(shell);
+            WristMenuPage(shell);
         }
 
         /// The menus-and-layout polish (branch feat/polish): page ids, one size, entry points in their place, buttons that
@@ -189,10 +191,10 @@ namespace MetaCodex.EditorTools
             shell.ClosePanel("control");
             Check(toggledAway && toggledBack && !st.IsOpen && !shell.ControlRail.IsOpen, $"toggle_panel / close_panel “control”: the window and the rail go and come together (away {toggledAway}, back {toggledBack})");
 
-            // one size for the six CONTROL windows: a category taking another's place covers the same rectangle
+            // one size for the seven CONTROL windows: a category taking another's place covers the same rectangle
             var sizes = MetaCodexShell.ControlPages.Where(shell.PanelsById.ContainsKey).Select(id => (id, w: shell.PanelsById[id].Width, h: shell.PanelsById[id].Height)).ToList();
-            bool oneSize = sizes.Count == 6 && sizes.All(x => Mathf.Abs(x.w - MetaCodexShell.ControlPageW) < 1e-4f && Mathf.Abs(x.h - MetaCodexShell.ControlPageH) < 1e-4f);
-            Check(oneSize, "CONTROL's six windows have one size: " + string.Join(", ", sizes.Select(x => $"{x.id} {x.w:F2}x{x.h:F2}")) + (oneSize ? "" : " (VOICE: ShellVoice's BuildVoice must use ControlPageW, ControlPageH)"));
+            bool oneSize = sizes.Count == 7 && sizes.All(x => Mathf.Abs(x.w - MetaCodexShell.ControlPageW) < 1e-4f && Mathf.Abs(x.h - MetaCodexShell.ControlPageH) < 1e-4f);
+            Check(oneSize, "CONTROL's seven windows have one size: " + string.Join(", ", sizes.Select(x => $"{x.id} {x.w:F2}x{x.h:F2}")) + (oneSize ? "" : " (VOICE: ShellVoice's BuildVoice must use ControlPageW, ControlPageH)"));
 
             // HANDS: SELECT AREA, GESTURE STUDIO (MQH's studio, in HANDS' place), HORIZON HANDS
             shell.OpenControl("hands");
@@ -273,6 +275,86 @@ namespace MetaCodex.EditorTools
             Check(litOn && !dockFiles.Selected, $"the dock's FILES is selected while FILES is open ({litOn}) and not after ({!dockFiles.Selected})");
 
             // "show the keyboard" never hides it: tested on the terminal input in the section syskeyboard
+            foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
+            shell.TickLayoutForTest(0.02f, 1);
+        }
+
+        /// CONTROL > WRIST MENU (owner 2026-11-16): the layout rules (WristLayout, pure), then the page: it opens with the rail
+        /// and a twin of the menu; edits change the twin only; CONTROL cannot be hidden; CANCEL drops; APPLY changes the wrist
+        /// menu and the DOCK; RESET LAYOUT + APPLY gives the default back; closing the page takes the twin away.
+        private static void WristMenuPage(MetaCodexShell shell)
+        {
+            // the rules
+            var ids = new List<string> { "talk", "terms", "files", "threads", "web", "control", "clip", "focus", "select", "keys", "center" };
+            var outerDef = ids.Select((x, i) => i >= 6).ToList();
+            List<string> inner = new List<string>(), outer = new List<string>(), off = new List<string>();
+            WristLayout.Resolve(ids, outerDef, "control", null, null, null, inner, outer, off);
+            bool def = inner.SequenceEqual(ids.Take(6)) && outer.SequenceEqual(ids.Skip(6)) && off.Count == 0;
+            var withPlugin = ids.Concat(new[] { "plugin:p/t" }).ToList();
+            WristLayout.Resolve(withPlugin, outerDef.Concat(new[] { true }).ToList(), "control",
+                new[] { "web", "talk", "gone" }, new[] { "files", "clip" }, new[] { "control", "keys" }, inner, outer, off);
+            bool saved = inner.SequenceEqual(new[] { "web", "talk", "control" }) && outer.SequenceEqual(new[] { "files", "clip", "terms", "threads", "focus", "select", "center", "plugin:p/t" })
+                && off.SequenceEqual(new[] { "keys" });
+            WristLayout.Resolve(ids, outerDef, "control", ids, null, null, inner, outer, off);
+            bool innerMax = inner.Count == UiWristMenu.MaxInner && outer.SequenceEqual(new[] { "select", "keys", "center" });
+            WristLayout.Resolve(ids, outerDef, "control", new[] { "talk" }, ids.Skip(1).ToList(), null, inner, outer, off);
+            bool innerMin = inner.Count == UiWristMenu.MinInner;
+            var many = ids.Concat(Enumerable.Range(0, 6).Select(k => "plugin:p/" + k)).ToList();
+            WristLayout.Resolve(many, many.Select((x, i) => i >= 6).ToList(), "control", ids.Take(3).ToList(), many.Skip(3).ToList(), null, inner, outer, off);
+            bool outerMax = outer.Count == UiWristMenu.MaxOuter && off.SequenceEqual(new[] { "plugin:p/4", "plugin:p/5" }) && outer.Contains("control");
+            Check(def && saved && innerMax && innerMin && outerMax,
+                $"wrist layout rules: default ({def}); saved order, unknown ids skipped, new ones at the end of the outer ring, CONTROL never off ({saved}); inner ring {UiWristMenu.MinInner}-{UiWristMenu.MaxInner} ({innerMin}, {innerMax}); outer ring {UiWristMenu.MaxOuter}, the rest off ({outerMax})");
+
+            // the page
+            foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
+            shell.Settings.wrist = new WristMenuSettings();
+            shell.OnSettingsChanged();
+            shell.OpenControl("wrist");
+            shell.UpdateControlRailForTest();
+            var page = shell.PanelsById[MetaCodexShell.WristSettingsId];
+            var twin = shell.WristTwinForTest;
+            UiButton Btn(string text) => page.Elements.OfType<UiButton>().First(b => b.Text == text);
+            bool HasFocus(IEnumerable<UiWristMenu.Item> items) => items.Any(x => x.Label == "FOCUS");
+            var menu = shell.MainMenuItems();
+            bool opened = page.IsOpen && shell.ControlRailPage == MetaCodexShell.WristSettingsId && shell.ControlCategoryNow() == "wrist" && twin != null && twin.Preview && twin.Ready
+                && twin.Inner.Count == menu.Count(x => !x.Outer) && twin.Outer.Count == menu.Count(x => x.Outer) && twin.GetComponent<MeshRenderer>().sharedMaterial.renderQueue == 2995;
+            Check(opened, $"WRIST MENU opens beside the rail with a twin of the menu ({twin?.Inner.Count} + {twin?.Outer.Count}, drawn after the page's glass)");
+            if (twin == null) return;
+            twin.PoseTimelineForTest(1f, 1f);
+            RenderPanel(page, "ui-wrist-settings.png");
+            shell.WristPageSelectForTest("focus");
+            Btn("HIDE").Click();
+            bool twinOnly = !HasFocus(twin.Outer) && shell.MainMenuItems().Any(x => x.Label == "FOCUS") && shell.Settings.wrist.IsDefaultLayout;
+            shell.WristPageSelectForTest("control");
+            Btn("HIDE").Click();
+            bool controlStays = twin.Inner.Any(x => x.Label == "CONTROL");
+            Btn("CANCEL").Click();
+            bool cancelled = HasFocus(twin.Outer);
+            shell.WristPageSelectForTest("focus");
+            Btn("HIDE").Click();
+            Btn("APPLY").Click();
+            var dock = shell.PanelsById["dock"].Elements.OfType<UiButton>().Select(b => (b.Text ?? "").Split('\n').Last()).ToList();
+            bool applied = !shell.MainMenuItems().Any(x => x.Label == "FOCUS") && !dock.Contains("FOCUS") && shell.Settings.wrist.hidden.Contains("focus");
+            Btn("RESET LAYOUT").Click();
+            bool resetOnTwin = HasFocus(twin.Outer) && !shell.MainMenuItems().Any(x => x.Label == "FOCUS");
+            Btn("APPLY").Click();
+            bool reset = shell.Settings.wrist.IsDefaultLayout && shell.MainMenuItems().Any(x => x.Label == "FOCUS");
+            shell.ClosePanel(MetaCodexShell.WristSettingsId);
+            bool gone = shell.WristTwinForTest == null;
+            Check(twinOnly && controlStays && cancelled && applied && resetOnTwin && reset && gone,
+                $"WRIST MENU: HIDE changes the twin only ({twinOnly}); CONTROL stays ({controlStays}); CANCEL drops ({cancelled}); APPLY changes the menu and the DOCK ({applied}); "
+                + $"RESET LAYOUT on the twin ({resetOnTwin}), applied ({reset}); the twin goes with the page ({gone})");
+
+            // voice: the page's names, the glass (its own value), "bigger" = the menu's size (not the DOCK / WRIST switch)
+            var vOpen = shell.Voice.FastMatch("open the radial menu settings");
+            shell.SetSettingByVoice("wrist_opacity", "50 percent");
+            float glass = shell.Wrist != null ? shell.Wrist.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_Opacity") : -1f;
+            bool mode0 = shell.Settings.wristMenu;
+            string bigger = shell.SetSettingByVoice("wrist_menu", "bigger");
+            Check((string)vOpen?.Args["panel"] == MetaCodexShell.WristSettingsId && Mathf.Abs(glass - 0.5f) < 1e-3f && shell.Settings.wrist.size > 1.01f && shell.Settings.wristMenu == mode0,
+                $"voice: “open the radial menu settings” -> {(string)vOpen?.Args["panel"]}; wrist_opacity 50 % -> the wrist glass {glass:F2}; “make the wrist menu bigger” -> {bigger}");
+            shell.Settings.wrist = new WristMenuSettings();
+            shell.OnSettingsChanged();
             foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
             shell.TickLayoutForTest(0.02f, 1);
         }
