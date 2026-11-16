@@ -7,6 +7,8 @@
 #   mcx-ui plugin list | plugin log <id> | plugin new <name> app|gesture|behaviour | plugin examples | plugin example <id> | plugin enable|disable|delete <id> | plugin reload | plugin check <id>
 #                (new: a plugin project in /root/metacodex-projects/plugins/<apps|gestures|behaviours>/<id>, kind fixed;
 #                 check: loaded or error, kind, folder, windows, tiles, timers, the last warnings; run it after a plugin edit)
+#   mcx-ui plugin event <id> input add buy milk | plugin event <id> cell item-3 | plugin event <id> toggle sound true
+#                (a tap or a sent text in a plugin's window, as the user would; <id>: the plugin (its main window) or a full window id)
 #   mcx-ui action open:git     (any action: open/close/toggle:<panel>, toast:, run:, url:, layout:, spin:, voice:, ...)
 #   mcx-ui voice run "close all windows" | voice say "hello" | voice list | voice status | voice match "open git"
 #   mcx-ui voice listen | voice wav /mnt/quest/cmd.wav | voice install | voice threads 2 | voice lang en
@@ -22,7 +24,7 @@
 set -euo pipefail
 TOKEN_FILE=${MCX_TOKEN_FILE:-/mnt/quest/control.token}
 PORT=${MCX_CONTROL_PORT:-47800}
-[[ $# -gt 0 ]] || { sed -n 2,21p "$0"; exit 2; }
+[[ $# -gt 0 ]] || { sed -n 2,23p "$0"; exit 2; }
 # views: the app reads the spec file itself (any size), so pass an absolute path; '-' takes stdin
 if [[ "$1" == view && ( "${2:-}" == show || "${2:-}" == mermaid ) && -n "${3:-}" ]]; then
   f=$3

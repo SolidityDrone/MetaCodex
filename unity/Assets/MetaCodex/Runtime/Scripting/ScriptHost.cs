@@ -1027,6 +1027,9 @@ namespace MetaCodex.Scripting
 
         /// An event of a plugin window (a button, choice, input, toggle, cell, or the window opened or closed by the
         /// user): runs the `on` function of ui.panel with e = {type, id, value, window}. value is a boolean for toggle.
+        /// The plugin that owns this window (full id, "plugin-<id>-<local>"), or null when no plugin has it.
+        public Entry WindowOwner(string windowId) => FindWindow(windowId)?.Owner;
+
         public void WindowEvent(string windowId, string type, string id, string value)
         {
             var w = FindWindow(windowId);

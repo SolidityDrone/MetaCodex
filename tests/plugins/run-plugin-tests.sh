@@ -7,6 +7,7 @@
 #   --rules       the plugin project rules (folder + marker, kinds, ids, reload, create, delete): PluginHarness/Rules.cs
 #   --scaffolds   a new project of each kind, as the app makes it, through the scenario below
 #   --scaffold    writes a new plugin project's files (the app's scaffold and its marker) into <dest> and stops
+#   --example-project <example id> <dest>   the shipped example as the app adds it (+ ADD): its files, AGENTS.md, marker
 #   REF_PROJECT=/mnt/c/Users/pnncl/MetaCodex/unity   a Unity project with a Library (for Newtonsoft.Json.dll)
 #   MCX_CHECK_DIR=...        output folder (default /mnt/c/Users/pnncl/mcxcheck-plugins)
 #   MCX_SKIP_RAM_CHECK=1     skip the Windows RAM guard (it refuses to start under 900 MB available)
@@ -61,13 +62,16 @@ EXDIR="$ROOT/unity/Assets/MetaCodex/Runtime/Scripting/Resources/PluginExamples"
 RT="$ROOT/unity/Assets/MetaCodex/Runtime"
 W() { wslpath -w "$1"; }
 
-VERBOSE=(); FOLDERS=(); EXAMPLES=0; RULES=(); SCAFFOLDS=0; SCAFFOLD=()
+VERBOSE=(); FOLDERS=(); EXAMPLES=0; RULES=(); SCAFFOLDS=0; SCAFFOLD=(); EXAMPLE_PROJECT=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --verbose) VERBOSE=(--verbose) ;;
     --examples) EXAMPLES=1 ;;
     --rules) RULES=(--rules) ;;
     --scaffolds) SCAFFOLDS=1 ;;
+    --example-project) [[ $# -ge 3 ]] || { echo "usage: $0 --example-project <example id> <dest>"; exit 2; }
+                [[ -d "$EXDIR/$2" ]] || { echo "no example $2 in $EXDIR"; exit 2; }
+                EXAMPLE_PROJECT=("$2" "$3"); shift 2 ;;
     --scaffold) [[ $# -ge 4 ]] || { echo "usage: $0 --scaffold <app|gesture|behaviour> <id> <dest> [name]"; exit 2; }
                 SCAFFOLD=("$2" "$3" "$4" "${5:-$3}"); shift $(( $# >= 5 ? 4 : 3 )) ;;
     -h|--help) sed -n '2,/^set -euo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 0 ;;
@@ -79,7 +83,7 @@ if [[ "$EXAMPLES" == 1 ]]; then
   [[ -d "$EXDIR" ]] || { echo "no examples folder: $EXDIR"; exit 1; }
   for d in "$EXDIR"/*/; do [[ -f "${d}plugin.json" ]] && FOLDERS+=("${d%/}"); done
 fi
-[[ ${#FOLDERS[@]} -gt 0 || ${#RULES[@]} -gt 0 || "$SCAFFOLDS" == 1 || ${#SCAFFOLD[@]} -gt 0 ]] || { echo "usage: $0 [--verbose] [--rules] [--scaffolds] [--examples] [<plugin-folder>...] | --scaffold <kind> <id> <dest> [name]"; exit 2; }
+[[ ${#FOLDERS[@]} -gt 0 || ${#RULES[@]} -gt 0 || "$SCAFFOLDS" == 1 || ${#SCAFFOLD[@]} -gt 0 || ${#EXAMPLE_PROJECT[@]} -gt 0 ]] || { echo "usage: $0 [--verbose] [--rules] [--scaffolds] [--examples] [<plugin-folder>...] | --scaffold <kind> <id> <dest> [name]"; exit 2; }
 
 if [[ -z "${MCX_SKIP_RAM_CHECK:-}" ]]; then
   avail=$(timeout 20 powershell.exe -NoProfile -Command "[int]((Get-Counter '\Memory\Available MBytes').CounterSamples[0].CookedValue)" 2>/dev/null | tr -dc '0-9')
@@ -124,6 +128,16 @@ if [[ ${#SCAFFOLD[@]} -gt 0 ]]; then
   RUN --scaffold "${SCAFFOLD[0]}" "${SCAFFOLD[1]}" "$(W "$tmp")" "${SCAFFOLD[3]}" || exit 1
   mkdir -p "${SCAFFOLD[2]}"; cp -r "$tmp"/. "${SCAFFOLD[2]}"/; chmod 444 "${SCAFFOLD[2]}/.metacodex/project.json"
   echo "scaffold: ${SCAFFOLD[2]}"; exit 0
+fi
+
+# --example-project: the example's files (main.lua.txt as main.lua), then the project's agent files and marker
+if [[ ${#EXAMPLE_PROJECT[@]} -gt 0 ]]; then
+  ex="${EXAMPLE_PROJECT[0]}"; tmp="$OUT/scaffold/$ex"; rm -rf "$tmp"; mkdir -p "$tmp"
+  cp "$EXDIR/$ex/plugin.json" "$tmp/plugin.json"; cp "$EXDIR/$ex/main.lua.txt" "$tmp/main.lua"
+  kind=$(sed -n 's/.*"kind": *"\([a-z]*\)".*/\1/p' "$tmp/plugin.json" | head -1); name=$(sed -n 's/.*"name": *"\([^"]*\)".*/\1/p' "$tmp/plugin.json" | head -1)
+  RUN --scaffold "${kind:-app}" "$ex" "$(W "$tmp")" "${name:-$ex}" || exit 1
+  mkdir -p "${EXAMPLE_PROJECT[1]}"; cp -r "$tmp"/. "${EXAMPLE_PROJECT[1]}"/; chmod 444 "${EXAMPLE_PROJECT[1]}/.metacodex/project.json"
+  echo "example project: ${EXAMPLE_PROJECT[1]}"; exit 0
 fi
 
 # a fresh run folder: every plugin in its own plugins or projects dir (the folder name is the id) and its own state dir

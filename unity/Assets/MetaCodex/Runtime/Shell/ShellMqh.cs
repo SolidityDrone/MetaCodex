@@ -851,7 +851,8 @@ namespace MetaCodex.Shell
 
         // ---- control port `plugin ...` (mcx-ui plugin ..., mcx-project new plugins)
 
-        /// plugin list | new <name> app|gesture|behaviour | examples | example <id> | enable | disable | reload | log | delete <id> | dir
+        /// plugin list | new <name> app|gesture|behaviour | examples | example <id> | enable | disable | reload | log | delete <id> |
+        /// event <window> <type> <id> [value] | dir
         public string PluginCommand(string arg)
         {
             var parts = (arg ?? "").Split(new[] { ' ' }, 2, StringSplitOptions.RemoveEmptyEntries);
@@ -892,8 +893,23 @@ namespace MetaCodex.Shell
                 case "reload": Scripts.ReloadAll(); return "ok";
                 case "log": { var e = Scripts.Find("plugin/" + id); return e == null ? "error: no plugin " + id : string.Join("\n", e.Log); }
                 case "delete": { var r = DeletePlugin(id); return r.StartsWith("error") ? r : "ok, " + r; }
+                case "event":
+                {
+                    // event <window> <type> <id> [value]: what a tap or a sent text does in a plugin window (agents test
+                    // inputs, toggles, cells and buttons with it); <window>: the full id or the plugin id (its main window)
+                    var a = id.Split(new[] { ' ' }, 4, StringSplitOptions.RemoveEmptyEntries);
+                    const string usage = "error: plugin event <window> button|input|toggle|cell|choice|open|close <component id> [value]";
+                    if (a.Length < 2) return usage;
+                    string win = a[0].StartsWith("plugin-") ? a[0] : "plugin-" + a[0] + "-main";
+                    string type = a[1], cid = a.Length > 2 ? a[2] : "", val = a.Length > 3 ? a[3] : "";
+                    if (Array.IndexOf(new[] { "button", "input", "toggle", "cell", "choice", "open", "close" }, type) < 0) return usage;
+                    var owner = Scripts.WindowOwner(win);
+                    if (owner == null) return "error: no plugin window " + win + " (plugin check <id> lists the windows)";
+                    Scripts.WindowEvent(win, type, cid, val);
+                    return owner.Error != null ? "error: the plugin stopped: " + owner.Error : "ok";
+                }
                 case "dir": return Scripts.PluginsDir;
-                default: return "error: plugin list | new <name> app|gesture|behaviour | examples | example <id> | enable <id> | disable <id> | reload | log <id> | delete <id> | dir";
+                default: return "error: plugin list | new <name> app|gesture|behaviour | examples | example <id> | enable <id> | disable <id> | reload | log <id> | delete <id> | event <window> <type> <id> [value] | dir";
             }
         }
 

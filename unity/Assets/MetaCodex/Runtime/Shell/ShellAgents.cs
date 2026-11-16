@@ -638,7 +638,7 @@ namespace MetaCodex.Shell
             var all = new Dictionary<string, string>();
             if (files != null) foreach (var kv in files) all[kv.Key] = kv.Value;
             else foreach (var kv in PluginProject.Scaffold(k, id, name)) all[kv.Key] = kv.Value;
-            foreach (var kv in PluginProject.AgentFiles(k, id, name)) if (!all.ContainsKey(kv.Key)) all[kv.Key] = kv.Value;
+            foreach (var kv in PluginProject.AgentFiles(k, id, name, fromExample: files != null)) if (!all.ContainsKey(kv.Key)) all[kv.Key] = kv.Value;
             var e = Scripts.CreateProjectPlugin(k, id, all, out var err);
             if (e == null) { Toast("Plugin not made: " + err, "warn"); return "error: " + err; }
             Log($"plugin project {id} ({k}) made in {path}" + (e.Error != null ? ", error: " + e.Error : ""));

@@ -101,13 +101,14 @@ namespace MetaCodex.Scripting
             return files;
         }
 
-        /// AGENTS.md and CLAUDE.md of a plugin project (new ones and the examples added as projects).
-        public static Dictionary<string, string> AgentFiles(string kind, string id, string name)
+        /// AGENTS.md and CLAUDE.md of a plugin project. fromExample: the project began as a shipped example (Timers,
+        /// Calendar): it is the user's copy, to change when asked.
+        public static Dictionary<string, string> AgentFiles(string kind, string id, string name, bool fromExample = false)
         {
             name = CleanName(name, id);
             return new Dictionary<string, string>
             {
-                ["AGENTS.md"] = AgentsMd(kind, id, name),
+                ["AGENTS.md"] = AgentsMd(kind, id, name, fromExample),
                 // Claude Code reads CLAUDE.md (the import pulls AGENTS.md in); Codex and opencode read AGENTS.md
                 ["CLAUDE.md"] = "This folder is a MetaCodex plugin project. Follow AGENTS.md (imported below).\n\n@AGENTS.md\n",
             };
@@ -203,7 +204,7 @@ gesture.sequence({ ""clap"", ""clap"", ""clap"" }, 1.5, function(e)
 end)
 ";
 
-        private static string AgentsMd(string kind, string id, string name)
+        private static string AgentsMd(string kind, string id, string name, bool fromExample)
         {
             string folder = FolderOf(kind);
             string dir = LinuxRoot + "/" + folder + "/" + id;
@@ -212,6 +213,10 @@ end)
             sb.Append("This folder is a MetaCodex plugin project. The MetaCodex app runs the plugin from here, loads it again within a\n")
               .Append("second of every save and at every start: `").Append(dir).Append("/`.\n")
               .Append("Plugin id: `").Append(id).Append("` (the folder's name). Kind: **").Append(kind).Append("**, fixed.\n\n");
+            if (fromExample)
+                sb.Append("This project began as the ").Append(name).Append(" example that ships with MetaCodex. It is the user's own copy now:\n")
+                  .Append("change it when they ask (follow \"Change an existing plugin\" in the skill `quest-plugins`: keep its ids and\n")
+                  .Append("its saved state readable).\n\n");
             sb.Append(kind == "app" ? "An app plugin has its own window (drawn by the app from a component list) and a tile on the main menu; it may\nadd voice commands, alarms and saved state.\n\n"
                 : kind == "gesture" ? "A gesture plugin adds named hand gestures (pose files, Lua detectors, sequences) and what they do.\n\n"
                 : "A behaviour plugin is Lua that reacts to the hands, the voice or time, with no window of its own.\n\n");
@@ -229,21 +234,37 @@ end)
             if (kind == "app") sb.Append("; its part APP:\n   windows, menu tiles, state, timers).\n");
             else if (kind == "gesture") sb.Append("), then\n   `quest-gesture-plugins` (poses, detectors, sequences, bindings, how to test without hands).\n");
             else sb.Append("; its part\n   BEHAVIOUR), then `quest-scripting` (the whole Lua API, voice commands).\n");
-            sb.Append("2. `plugin.json` and `main.lua` here: what the plugin does now.\n")
-              .Append("The skills are in `~/.claude/skills/<name>/SKILL.md` when your agent does not list them.\n")
-              .Append("Two complete app plugins are models: `/root/metacodex-projects/plugins/apps/timers` and `.../apps/calendar` when\n")
-              .Append("the user has added them (`mcx-ui plugin examples` says so); read their `main.lua`, never change them from here.\n\n");
+            sb.Append("2. `plugin.json`, all of `main.lua` and `git log --oneline` here: what the plugin does now.\n")
+              .Append("The skills are in `~/.claude/skills/<name>/SKILL.md` when your agent does not list them.\n");
+            if (kind == "app" && !fromExample)
+                sb.Append("Two complete app plugins are models: `/root/metacodex-projects/plugins/apps/timers` and `.../apps/calendar` when\n")
+                  .Append("the user has added them (`mcx-ui plugin examples` says so): read their `main.lua`; never change them from here.\n");
+            sb.Append("\n");
+            if (kind == "app")
+                sb.Append("## What the app plugin needs (the app checks it)\n\n")
+                  .Append("- `main.lua` builds its window in ONE `render()` that calls `ui.panel{ id = \"main\", ... }` again after every change,\n")
+                  .Append("  and adds its tile once: `menu.add{ id = \"main\", label = \"").Append(TileLabel(name)).Append("\", glyph = \"◆\", icon = \"plugin\", panel = \"main\" }`\n")
+                  .Append("  (label: capitals, 8 characters at most; icon: one of the skill's list; keep the tile's id once it is made).\n")
+                  .Append("- 8 components at most; button labels short capitals (14 characters or fewer), one `accent` button at most;\n")
+                  .Append("  every component id unique in the window; the app does not cut lists: render() shows the first rows (about 8)\n")
+                  .Append("  and a dim \"+3 more\" line. Any rebuild empties `input` fields.\n")
+                  .Append("- What must survive a restart is saved with `store.set(\"state\", json.encode(S))` after every change and read back\n")
+                  .Append("  when `main.lua` loads (missing fields keep their defaults); times are `app.clock()` seconds; timers are set\n")
+                  .Append("  again at load. Anything that changes every second is a LIVE text (a `text` with an `id`).\n")
+                  .Append("- Every voice command is complete (description, typed params, phrases, 4+ English samples).\n\n");
 
             sb.Append("## The loop (every change)\n\n")
               .Append("1. **Plan, then wait for the user's OK.** Say what the user will see and do (the window, the menu tile, the\n")
               .Append("   gestures, the voice commands), what is saved, and how to undo it. Write nothing before the OK.\n")
-              .Append("2. Write complete files here (no placeholders). Raise `version` in `plugin.json` (0.1.0 -> 0.2.0).\n")
+              .Append("2. Write complete files here (no placeholders). Raise the minor number of `version` in `plugin.json`\n")
+              .Append("   (0.1.0 -> 0.2.0, 1.0.0 -> 1.1.0).\n")
               .Append("3. Check: `mcx-ui plugin check ").Append(id).Append("` must say `loaded` and `warnings: 0`. Fix every `ERROR` and `warn` line,\n")
               .Append("   save, check again. `mcx-ui plugin log ").Append(id).Append("` shows the whole log.\n")
               .Append("4. Try it:\n");
             if (kind == "app")
                 sb.Append("   - `mcx-ui view open plugin-").Append(id).Append("-main` opens the window; `mcx-ui ui click view-plugin-").Append(id).Append("-main <LABEL>` presses a\n")
-                  .Append("     button by its label; then `mcx-ui plugin check ").Append(id).Append("` again (it must still say `loaded`).\n");
+                  .Append("     button by its label; `mcx-ui plugin event ").Append(id).Append(" input|cell|toggle|button <component id> [value]` sends\n")
+                  .Append("     what a sent text or a tap sends; then `mcx-ui plugin check ").Append(id).Append("` again (it must still say `loaded`).\n");
             else if (kind == "gesture")
                 sb.Append("   - `mcx-ui gesture list` shows your gesture names; `mcx-ui gesture <name> right start` (or `both start`) simulates\n")
                   .Append("     one: the reaction must happen (`mcx-ui ui list` shows which panels are open); then `mcx-ui plugin check ").Append(id).Append("`.\n");
@@ -252,8 +273,9 @@ end)
                   .Append("     happen; then `mcx-ui plugin check ").Append(id).Append("`.\n");
             sb.Append("   - A voice command you added: `mcx-ui voice decide \"<one of its samples>\"` picks it, `mcx-ui voice run \"<sample>\"` runs it.\n")
               .Append("5. Commit: `git add -A && git commit -m \"<what changed>\"`, one commit per working step.\n")
-              .Append("6. Report in a few short lines: what the user does now (the tile, the gesture in body words, what to say), what\n")
-              .Append("   changed, how to undo it.\n\n");
+              .Append("6. Report in a few short lines: what the user does now (")
+              .Append(kind == "app" ? "the tile in the menu, the buttons, what to say" : kind == "gesture" ? "the gesture in body words, what it does" : "what to do, what happens")
+              .Append("), what changed, how to undo it.\n\n");
 
             sb.Append("## Undo\n\n")
               .Append("- One step back: `git log --oneline`, then `git revert <commit>`; the app reloads at once.\n")
@@ -263,7 +285,8 @@ end)
 
             sb.Append("## Rules\n\n")
               .Append("- Text the user sees is English, with no brand names. No secrets in files.\n")
-              .Append("- Lua runs in a sandbox (no `io`, `os`, `require`, `load`, network). One call over 200,000 instructions stops the plugin.\n")
+              .Append("- Lua runs in a sandbox (no `io`, `require`, `load`, network; for time use `app.clock()` and `app.date()`). One call\n")
+              .Append("  over 200,000 instructions stops the plugin.\n")
               .Append("- The app keeps 72 frames a second: nothing heavy in a callback; a countdown changes only a LIVE text (a `text` with an `id`).\n");
             if (kind == "gesture")
                 sb.Append("- React only to gestures this plugin defines or to the built-ins (`pinch grab point open palm-up clap select`): the examples'\n")

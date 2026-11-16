@@ -32,7 +32,10 @@ namespace PluginHarness
                     // --scaffold <kind> <id> <dest> [name]: a new plugin project's files, as the app makes them
                     string kind = args[i + 1], id = args[i + 2], dest = args[i + 3];
                     string name = i + 4 < args.Length ? args[i + 4] : id;
-                    foreach (var kv in PluginProject.Scaffold(kind, id, name))
+                    // an example added as a project: its own files are in dest already; the project's agent files join them
+                    bool example = File.Exists(Path.Combine(dest, "plugin.json"));
+                    var files = example ? PluginProject.AgentFiles(kind, id, name, fromExample: true) : PluginProject.Scaffold(kind, id, name);
+                    foreach (var kv in files)
                     {
                         var path = Path.Combine(dest, kv.Key.Replace('/', Path.DirectorySeparatorChar));
                         Directory.CreateDirectory(Path.GetDirectoryName(path));
