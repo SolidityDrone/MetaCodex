@@ -47,9 +47,9 @@ namespace MetaCodex.Shell
         private void AddTerminalButtons(UiPanel frame, TerminalInstance inst, float w)
         {
             var t = UiTheme.Current;
-            float y = 0.006f, h = t.HeaderHeight - 0.010f, x = w - 0.044f;
-            frame.Add(new UiButton("✕", () => CloseOrHideTerminal(inst), UiButtonStyle.Danger) { Rect = new Rect(x, y, 0.036f, h) });
-            x -= 0.042f;
+            // the shared header ✕ (red, larger, hit beyond what it draws: UiPanel.AddHeaderClose); the rest go left of its hit rect
+            var close = frame.AddHeaderClose(() => CloseOrHideTerminal(inst));
+            float y = 0.006f, h = t.HeaderHeight - 0.010f, x = close.Rect.x - 0.042f;
             frame.Add(new UiButton("–", () => HideTerminal(inst), UiButtonStyle.Ghost) { Rect = new Rect(x, y, 0.036f, h) });
             x -= 0.042f;
             frame.Add(new UiButton("+", TerminalNew, UiButtonStyle.Ghost) { Rect = new Rect(x, y, 0.036f, h) });

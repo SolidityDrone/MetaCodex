@@ -78,8 +78,8 @@ It is large and easy to hit on a curved window (owner 2026-11-16): `UiPanel.AddH
 (`UiCloseButton`): 13 mm more on its left, out to the frame's right edge and top plus the 4 mm round the frame where a
 ray still lands on the window, down to the header's bottom (75 x 44 mm). Hits are found on the drawn surface (the arc
 length on a bent window), so near a curved window's edge the ✕ is hit where it is drawn; a pinch higher above the bar
-still moves the window. The title ends before it; the group's UNGROUP sits left of it. The terminal frames still build
-their own 36 mm ✕ (`MetaCodexShell.WrapTerminal`) until they use `AddHeaderClose`.
+still moves the window. The title ends before it; the group's UNGROUP sits left of it. Terminal frames use the same ✕
+(`ShellTerminals.AddTerminalButtons`); their other buttons sit left of its hit area.
 
 How it is drawn: nothing is moved or scaled. The scan line is one plane in world space per window
 (`_PanelScan[slot]`, with `_PanelFx[slot]` = cast on, flash, all hidden, own brackets hidden; all zero at rest),
