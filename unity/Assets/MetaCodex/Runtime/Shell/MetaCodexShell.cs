@@ -805,7 +805,7 @@ namespace MetaCodex.Shell
             if (!v.gameObject.activeSelf) v.gameObject.SetActive(true); // hidden during the start (BuildSteps): the frame shows or hides it now
             inst.Frame = frame.transform;
             float bx = w - 0.044f;
-            frame.Add(new UiButton("✕", () => CloseOrHideTerminal(inst), UiButtonStyle.Ghost) { Rect = new Rect(bx, 0.006f, 0.036f, t.HeaderHeight - 0.010f) });
+            frame.Add(new UiButton("✕", () => CloseOrHideTerminal(inst), UiButtonStyle.Danger) { Rect = new Rect(bx, 0.006f, 0.036f, t.HeaderHeight - 0.010f) });
             frame.Add(new UiButton("–", () => HideTerminal(inst), UiButtonStyle.Ghost) { Rect = new Rect(bx - 0.042f, 0.006f, 0.036f, t.HeaderHeight - 0.010f) });
             frame.Add(new UiButton("+", () => app?.NewTerminal(), UiButtonStyle.Ghost) { Rect = new Rect(bx - 0.084f, 0.006f, 0.036f, t.HeaderHeight - 0.010f) });
             frame.Add(new UiButton("⌨", () => app.Input?.ToggleSystemKeyboard(), UiButtonStyle.Ghost) { Rect = new Rect(bx - 0.126f, 0.006f, 0.036f, t.HeaderHeight - 0.010f) });
