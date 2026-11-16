@@ -7,10 +7,11 @@ using UnityEngine;
 namespace MetaCodex.EditorTools
 {
     /// Self-test section `control` (owner 2026-11-11, docs/control-center.md): the calmer main menu (13 entries, setup
-    /// in CONTROL), CONTROL's rail beside its window (top edges level, its own gap), one category at a time taking the
-    /// shown window's place, old ids, SETTINGS' pages without their tab bar, the statuses, following a moved window,
-    /// closing together, the FLOAT ring's room, voice, and work windows opening beside the window they belong to; then
-    /// the menus-and-layout polish (ControlPolish) and CONTROL > WRIST MENU (WristMenuPage).
+    /// in CONTROL), CONTROL's rail on its window's surface (edge to edge, tops and bottoms level, one plane), one category
+    /// at a time taking the shown window's place, old ids, SETTINGS' pages without their tab bar, the statuses, following
+    /// a moved window, closing together, the FLOAT ring's room, voice, and work windows opening beside the window they
+    /// belong to; the rail on a bent and leaning window (ControlRailOnCurve: one axis, one radius, one lean); the header ✕
+    /// (HeaderCloseSize); then the menus-and-layout polish (ControlPolish) and CONTROL > WRIST MENU (WristMenuPage).
     public static partial class MetaCodexUiTest
     {
         private static Vector3 TopLeftOf(UiPanel p) => p.transform.TransformPoint(new Vector3(-p.Width * 0.5f, p.Height * 0.5f, 0f));
@@ -43,7 +44,8 @@ namespace MetaCodex.EditorTools
                 && cats.First(c => c.Key == "focus").Glyph == "◐" && cats.First(c => c.Key == "look").Glyph == "◈",
                 $"the rail's groups and glyphs (FOCUS ◐ as on the menu, LOOK & SOUND ◈): {groups}");
 
-            // CONTROL from the menu: its last category (DISPLAY here), the rail on the window's left, top edges level, its gap
+            // CONTROL from the menu: its last category (DISPLAY here), the rail on the window's surface on its left: edge to
+            // edge (no gap, owner 2026-11-16), top edges level, in the window's plane (flat here)
             shell.OpenControl("display");
             shell.ToggleControl();
             shell.TickLayoutForTest(0.02f, 1);
@@ -52,13 +54,15 @@ namespace MetaCodex.EditorTools
             var st = shell.PanelsById["settings"];
             var rail = shell.ControlRail;
             var tabs = st.Elements.OfType<UiTabs>().First();
-            var railCorner = st.transform.InverseTransformPoint(rail.transform.TransformPoint(new Vector3(rail.Width * 0.5f, rail.Height * 0.5f, 0f))); // its top-right corner, seen from the window
-            bool docked = railCorner.x < -st.Width * 0.5f && railCorner.x > -st.Width * 0.5f - MetaCodexShell.RailGap - 0.004f && Mathf.Abs(railCorner.y - st.Height * 0.5f) < 0.002f;
+            var railCorner = st.transform.InverseTransformPoint(rail.SurfacePoint(new Vector2(rail.Width, 0f))); // its top-right corner, seen from the window
+            bool docked = Mathf.Abs(railCorner.x + st.Width * 0.5f) < 0.001f && Mathf.Abs(railCorner.y - st.Height * 0.5f) < 0.001f && Mathf.Abs(railCorner.z) < 0.001f
+                && Vector3.Angle(rail.transform.forward, st.transform.forward) < 0.1f && MetaCodexShell.RailGap == 0f;
             Check(st.IsOpen && rail.IsOpen && shell.ControlCategoryNow() == "display" && tabs.Selected == 1 && docked,
-                $"CONTROL opens on DISPLAY with the rail on its left, top edges level ({railCorner.x + st.Width * 0.5f:F3} m, {railCorner.y - st.Height * 0.5f:F3} m from the window's corner)");
-            // as tall as the page: the bottom corners level too
-            var railBottom = st.transform.InverseTransformPoint(rail.transform.TransformPoint(new Vector3(rail.Width * 0.5f, -rail.Height * 0.5f, 0f)));
-            Check(Mathf.Abs(railBottom.y + st.Height * 0.5f) < 0.003f, $"the rail is as tall as its window: bottom edges level ({railBottom.y + st.Height * 0.5f:F3} m)");
+                $"CONTROL opens on DISPLAY with the rail on its left, edge to edge in its plane ({(railCorner.x + st.Width * 0.5f) * 1000f:F1} mm, {(railCorner.y - st.Height * 0.5f) * 1000f:F1} mm, {railCorner.z * 1000f:F1} mm from the window's corner; turned {Vector3.Angle(rail.transform.forward, st.transform.forward):F1} deg)");
+            // as tall as the page: the bottom corners meet too
+            var railBottom = st.transform.InverseTransformPoint(rail.SurfacePoint(new Vector2(rail.Width, rail.Height)));
+            Check(Mathf.Abs(railBottom.y + st.Height * 0.5f) < 0.002f && Mathf.Abs(railBottom.x + st.Width * 0.5f) < 0.001f,
+                $"the rail is as tall as its window: bottom corners meet ({(railBottom.x + st.Width * 0.5f) * 1000f:F1} mm, {(railBottom.y + st.Height * 0.5f) * 1000f:F1} mm)");
             bool tabBarGone = !st.Elements.OfType<UiButton>().Any(b => b.Visible && b.Style == UiButtonStyle.Tab && tabs.Names.Contains(b.Text));
             var blurb = st.Elements.OfType<UiLabel>().FirstOrDefault(l => l.Visible && (l.Text ?? "").Contains("Where windows go"));
             Check(tabBarGone && blurb != null && st.Title.Contains("DISPLAY"), $"SETTINGS' tab bar is gone (the rail is the navigation); a line says what DISPLAY is for; its title: {st.Title}");
@@ -92,7 +96,7 @@ namespace MetaCodex.EditorTools
             // dragged, the window takes the rail along; closed, the rail goes too
             st.transform.position += st.transform.right * 0.25f + Vector3.up * 0.05f;
             shell.TickLayoutForTest(0.02f, 1);
-            var moved = st.transform.InverseTransformPoint(rail.transform.TransformPoint(new Vector3(rail.Width * 0.5f, rail.Height * 0.5f, 0f)));
+            var moved = st.transform.InverseTransformPoint(rail.SurfacePoint(new Vector2(rail.Width, 0f)));
             Check(Vector3.Distance(moved, railCorner) < 0.002f, $"the window moved: the rail follows it ({Vector3.Distance(moved, railCorner) * 1000f:F1} mm off its place)");
             shell.ClosePanel("settings");
             shell.TickLayoutForTest(0.02f, 1);
@@ -130,7 +134,9 @@ namespace MetaCodex.EditorTools
             float ra = Ang(rail.transform.position), rh = Half(rail);
             int clash = ringed.Where(p => p.Id != "agents").Count(p => Mathf.Abs(Mathf.DeltaAngle(Ang(p.transform.position), ra)) < Half(p) + rh);
             float agA = Ang(ag.transform.position);
-            Check(rail.IsOpen && clash == 0 && Mathf.DeltaAngle(agA, ra) < 0f, $"FLOAT: the rail rides on AGENTS' left ({Mathf.DeltaAngle(agA, ra):F1} deg) and no neighbour overlaps it ({clash})");
+            float seamF = Vector3.Distance(rail.SurfacePoint(new Vector2(rail.Width, 0f)), ag.SurfacePoint(Vector2.zero));
+            Check(rail.IsOpen && clash == 0 && Mathf.DeltaAngle(agA, ra) < 0f && seamF < 0.001f,
+                $"FLOAT: the rail rides on AGENTS' left ({Mathf.DeltaAngle(agA, ra):F1} deg), edge to edge ({seamF * 1000f:F1} mm), and no neighbour overlaps it ({clash})");
             shell.SetLayout("fixed");
             foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
             shell.TickLayoutForTest(0.02f, 1);
@@ -151,10 +157,162 @@ namespace MetaCodex.EditorTools
                 shell.ClosePanel("terminals");
                 frame.Close();
             }
+            ControlRailOnCurve(shell, head);
+            HeaderCloseSize(shell, head, frame);
             shell.Settings.bendPanels = bend0;
             shell.OnSettingsChanged();
             ControlPolish(shell);
             WristMenuPage(shell);
+        }
+
+        /// A point of a bent panel's axis (world): the cylinder it is drawn on (UiPanel.Intersect) has its axis BendNow in
+        /// front of its centre, along its own up.
+        private static Vector3 BendAxisPoint(UiPanel p) => p.transform.TransformPoint(new Vector3(0f, 0f, -p.BendNow));
+
+        /// CONTROL as one window on a curve (owner 2026-11-16: "the sidebar ... would be better embedded in the same panel
+        /// ...; otherwise the curve is not handled well"): with bending on, the rail lies on its window's cylinder (one axis,
+        /// one world radius), edge to edge, tops and bottoms level, and a ray at one of its rows hits that row; seen high
+        /// above the eyes the window leans (curve mode) and the rail leans with it, never on its own; another category keeps
+        /// the rail on the new window's curve. FIXED layout; the Editor snaps the curve and the lean.
+        private static void ControlRailOnCurve(MetaCodexShell shell, Transform head)
+        {
+            foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
+            shell.SetLayout("fixed");
+            shell.Settings.bendPanels = true;
+            shell.OnSettingsChanged();
+            var eye = head.position;
+            shell.OpenControl("display");
+            var st = shell.PanelsById["settings"];
+            var rail = shell.ControlRail;
+            void Put(UiPanel p, Vector3 offset)
+            {
+                p.transform.SetPositionAndRotation(eye + offset, Quaternion.LookRotation(new Vector3(offset.x, 0f, offset.z), Vector3.up));
+                shell.TickLayoutForTest(0.02f, 1); // its curve and lean from where it is (UpdateFixedBend), then the rail on it
+                shell.UpdateControlRailForTest();
+            }
+            // what makes them one: the same axis line and world radius, the seam's two corners on each other, the rail's
+            // middle on the window's cylinder; the same up (the lean)
+            string OneCurve(UiPanel page, out bool ok)
+            {
+                var up = page.transform.up;
+                float rWorld = page.BendNow * page.RestLossyScale.x;
+                float axisOff = Vector3.ProjectOnPlane(BendAxisPoint(rail) - BendAxisPoint(page), up).magnitude;
+                float radiusOff = Mathf.Abs(rail.BendNow * rail.RestLossyScale.x - rWorld);
+                float seamTop = Vector3.Distance(rail.SurfacePoint(new Vector2(rail.Width, 0f)), page.SurfacePoint(Vector2.zero));
+                float seamBottom = Vector3.Distance(rail.SurfacePoint(new Vector2(rail.Width, rail.Height)), page.SurfacePoint(new Vector2(0f, page.Height)));
+                float onCyl = Mathf.Abs(Vector3.ProjectOnPlane(rail.SurfacePoint(new Vector2(rail.Width * 0.5f, rail.Height * 0.5f)) - BendAxisPoint(page), up).magnitude - rWorld);
+                float upOff = Vector3.Angle(rail.transform.up, up);
+                ok = page.BendNow > 0.3f && axisOff < 0.001f && radiusOff < 0.001f && seamTop < 0.001f && seamBottom < 0.001f && onCyl < 0.001f && upOff < 0.1f;
+                return $"radius {rWorld:F2} m (rail {radiusOff * 1000f:F1} mm off), axes {axisOff * 1000f:F1} mm apart, seam {seamTop * 1000f:F1} / {seamBottom * 1000f:F1} mm, "
+                    + $"rail's middle {onCyl * 1000f:F1} mm off the window's cylinder, ups {upOff:F2} deg apart";
+            }
+
+            // at eye level: bent, upright
+            Put(st, new Vector3(0.25f, -0.05f, 0.9f));
+            string level = OneCurve(st, out bool levelOk);
+            var row = shell.RailButtonForTest("agents");
+            var rowAt = rail.SurfacePoint(row.Rect.center);
+            bool rowHit = rail.Raycast(new Ray(eye, (rowAt - eye).normalized), out var rowPt, out _) && rail.HitTest(rowPt) == row;
+            Check(st.IsOpen && rail.IsOpen && levelOk && rowHit && st.TiltNow == 0f,
+                $"bent: CONTROL's rail lies on its window's curve, one arc ({level}); a ray at its AGENTS row hits it ({rowHit})");
+            st.ForceRefresh(); rail.ForceRefresh();
+            var mid = (st.transform.position + rail.transform.position) * 0.5f;
+            Render(shell, "ui-control-bent.png", eye + (mid - eye) * 0.15f, Quaternion.LookRotation(mid - eye), 80f, 1600, 1000);
+
+            // high above the eyes: the window leans its top to them and the rail leans with it (none of its own)
+            Put(st, new Vector3(0.25f, 0.45f, 0.9f));
+            string lean = OneCurve(st, out bool leanOk);
+            Check(st.TiltNow > 10f && rail.TiltNow == 0f && rail.TiltTarget == 0f && leanOk,
+                $"bent and leaning {st.TiltNow:F0} deg: the rail leans with its window, none of its own ({rail.TiltNow:F0} deg); {lean}");
+
+            // another category takes the place: with its curve and its lean (not levelled and eased back), the rail on it
+            float lean0 = st.TiltNow;
+            shell.OpenControl("agents");
+            shell.UpdateControlRailForTest();
+            var ag = shell.PanelsById["agents"];
+            string swapped = OneCurve(ag, out bool swapOk);
+            Check(ag.IsOpen && !st.IsOpen && shell.ControlRailPage == "agents" && swapOk && Mathf.Abs(ag.TiltNow - lean0) < 0.01f && Mathf.Abs(ag.TiltTarget - lean0) < 0.01f,
+                $"bent: AGENTS in SETTINGS' place with its lean ({ag.TiltNow:F1} deg, was {lean0:F1}), the rail on its curve ({swapped})");
+            foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
+            shell.TickLayoutForTest(0.02f, 1);
+            shell.Settings.bendPanels = false;
+            shell.OnSettingsChanged();
+        }
+
+        /// The header ✕ (owner 2026-11-16: "with curved panels I often struggle to close the panels: the close icon should be
+        /// bigger"): in every window with one (the generic one, THREAD's wide one; groups build theirs the same way: the
+        /// thread-windows section) it is drawn about 1.4 times the old 36 mm one with a glyph 1.4 times as large, it is
+        /// pressed on about 1.5 times its width and the header's full height out to the frame's edge, nothing else in the
+        /// header lies on that rect and the title ends before it; on a bent window leaning high above the eyes, rays at its
+        /// outer end, just past it (right of it and above it, and past the frame's corner) and just left of it land on it,
+        /// and a press and release past the frame's corner closes the window. The terminal frames' ✕ (MetaCodexShell.WrapTerminal) is checked too: it needs AddHeaderClose.
+        private static void HeaderCloseSize(MetaCodexShell shell, Transform head, UiPanel frame)
+        {
+            var t = UiTheme.Current;
+            foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
+            var bad = new List<string>();
+            int seen = 0;
+            void Inspect(UiPanel p)
+            {
+                if (p == null || !p.HasHeader) return;
+                foreach (var b in p.Elements.OfType<UiButton>().Where(b => b.Visible && b.Text == "✕" && b.Style == UiButtonStyle.Danger))
+                {
+                    seen++;
+                    if (!(b is UiCloseButton c)) { bad.Add($"{p.Id}: its ✕ is a plain button ({b.Rect.width * 1000f:F0} mm; use UiPanel.AddHeaderClose)"); continue; }
+                    Rect d = c.Drawn, h = c.Rect;
+                    bool size = d.width >= 0.036f * 1.35f && c.TextSize >= t.BodySize * 1.35f && d.height >= t.HeaderHeight - 0.0065f && d.yMin >= 0f && d.yMax <= t.HeaderHeight;
+                    bool hit = h.xMin <= d.xMin && h.yMin <= Mathf.Min(0f, d.yMin) && h.xMax >= Mathf.Max(p.Width, d.xMax) && h.yMax >= Mathf.Max(t.HeaderHeight, d.yMax) - 1e-5f
+                        && h.width >= Mathf.Min(1.45f * d.width, d.width + 0.024f);
+                    var over = p.Elements.Where(e => e != b && e.Visible && e.Interactive && e.Rect.Overlaps(h)).Select(e => e.GetType().Name + (e is UiButton ob ? " " + ob.Text : "")).ToList();
+                    bool title = p.TitleRectForTest.xMax <= h.xMin;
+                    if (!size || !hit || over.Count > 0 || !title)
+                        bad.Add($"{p.Id}: drawn {d.width * 1000f:F0} x {d.height * 1000f:F0} mm, glyph {c.TextSize * 1000f:F1} mm ({size}); hit {h.width * 1000f:F0} x {h.height * 1000f:F0} mm "
+                            + $"from x {h.xMin * 1000f:F0} to {h.xMax * 1000f:F0} of {p.Width * 1000f:F0} ({hit}); on it: {(over.Count == 0 ? "nothing" : string.Join(", ", over))}; title ends at {p.TitleRectForTest.xMax * 1000f:F0} ({title})");
+                }
+            }
+            foreach (var p in shell.PanelsById.Values) Inspect(p);
+            Inspect(frame); // a terminal frame
+            var gen = shell.PanelsById["files"].CloseButton as UiCloseButton;
+            Check(seen >= 10 && bad.Count == 0 && gen != null,
+                $"header ✕ in {seen} windows: drawn {gen?.Drawn.width * 1000f:F0} x {gen?.Drawn.height * 1000f:F0} mm (was 36 x 30), glyph {gen?.TextSize * 1000f:F1} mm (was {t.BodySize * 1000f:F0}), "
+                + $"pressed on {gen?.Rect.width * 1000f:F0} x {gen?.Rect.height * 1000f:F0} mm" + (bad.Count == 0 ? "" : "; wrong: " + string.Join(" | ", bad)));
+            if (gen == null) return;
+
+            // bent and leaning (curve mode, high above the eyes): the ✕ is hit where it is drawn, and round it
+            bool bend0 = shell.Settings.bendPanels;
+            shell.Settings.bendPanels = true;
+            shell.OnSettingsChanged();
+            shell.SetLayout("fixed");
+            var eye = head.position;
+            shell.OpenPanel("files");
+            var fp = shell.PanelsById["files"];
+            var off = new Vector3(0.3f, 0.4f, 0.8f);
+            fp.transform.SetPositionAndRotation(eye + off, Quaternion.LookRotation(new Vector3(off.x, 0f, off.z), Vector3.up));
+            shell.TickLayoutForTest(0.02f, 1); // its curve and lean (UpdateFixedBend; the Editor snaps both)
+            var dr = gen.Drawn;
+            bool Hits(Vector2 at) => fp.Raycast(new Ray(eye, (fp.SurfacePoint(at) - eye).normalized), out var pt, out _) && fp.HitTest(pt) == gen;
+            bool outerEnd = Hits(new Vector2(dr.xMax - 0.002f, dr.center.y));
+            bool pastIt = Hits(new Vector2(dr.xMax + 0.006f, dr.yMin - 0.004f)); // right of it and above it: still its hit rect
+            var beyond = new Vector2(fp.Width + 0.002f, -0.002f); // 2 mm past the frame's top-right corner, where a ray that misses the edge lands
+            bool pastFrame = Hits(beyond);
+            bool leftOf = Hits(new Vector2(dr.xMin - 0.010f, dr.center.y));
+            bool title = !Hits(new Vector2(fp.TitleRectForTest.center.x, dr.center.y)); // the title bar stays the title bar
+            // a press and release past the frame's corner, as the router gets them, closes the window
+            var at = fp.SurfacePoint(beyond);
+            var ptr = new UiPointer { Id = 63, Kind = PointerKind.Test, Hand = "test", Active = true, Ray = new Ray(eye, (at - eye).normalized) };
+            shell.Router.Inject(ptr);
+            ptr.Down = true;
+            shell.Router.Inject(ptr);
+            ptr.Down = false;
+            shell.Router.Inject(ptr);
+            ptr.Active = false;
+            shell.Router.Inject(ptr);
+            bool closed = !fp.IsOpen;
+            Check(fp.BendNow > 0.3f && fp.TiltNow > 5f && outerEnd && pastIt && pastFrame && leftOf && title && closed,
+                $"bent ({fp.BendNow:F2} m) and leaning ({fp.TiltNow:F0} deg): rays at the ✕'s outer end ({outerEnd}), 6 mm right of and 4 mm above it ({pastIt}), 2 mm past the frame's corner ({pastFrame}), 10 mm left of it ({leftOf}) hit it, the title does not ({title}); a pinch past the frame's corner closes the window ({closed})");
+            foreach (var id in shell.PanelIds.ToList()) shell.ClosePanel(id);
+            shell.Settings.bendPanels = bend0;
+            shell.OnSettingsChanged();
         }
 
         /// The menus-and-layout polish (branch feat/polish): page ids, one size, entry points in their place, buttons that
