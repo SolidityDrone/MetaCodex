@@ -250,7 +250,7 @@ install_app() {
     echo "RESULT: $r"
     ask "The app is ready: tap INSTALL in MetaCodex when you want it (Android asks once more), then LAUNCH."
     echo "check later: mcx-app status ${d:-$apk}   (a first install waits for the user's tap; nothing else to do now)"
-    [ -n "${d:-}" ] && echo "hint: hands need HAND_TRACKING, which Horizon OS grants at install; after the first launch, mcx-app verify $d shows the hands of that start"
+    [ -n "${d:-}" ] && echo "hint: hands need HAND_TRACKING, which the headset grants at install; after the first launch, mcx-app verify $d shows the hands of that start"
     return 0
   fi
   [[ "$r" == installing* ]] || { echo "RESULT: $r"; hint "$r"; return 1; }
@@ -263,7 +263,7 @@ install_app() {
     case "$st" in
       waiting*) (( asked )) || { ask "Android asks to install the app in the headset: tap Install (Update for a new version)."; asked=1; } ;;
       success*) echo "RESULT: installed. $st"
-        [ -n "${d:-}" ] && echo "hint: hands need HAND_TRACKING, which Horizon OS grants at install; after the first launch, mcx-app verify $d shows the hands of that start"
+        [ -n "${d:-}" ] && echo "hint: hands need HAND_TRACKING, which the headset grants at install; after the first launch, mcx-app verify $d shows the hands of that start"
         return 0 ;;
       failure*) echo "RESULT: $st"; hint "$st"; return 1 ;;
     esac
