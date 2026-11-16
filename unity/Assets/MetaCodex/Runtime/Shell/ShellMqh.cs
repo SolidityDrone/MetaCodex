@@ -45,6 +45,7 @@ namespace MetaCodex.Shell
         private void RefreshMqhTab(int tab)
         {
             if (!_panels.TryGetValue("mqh", out var p) || !p.IsOpen) return;
+            RefreshRail(); // MQH or PLUGINS lit on CONTROL's rail
             switch (tab)
             {
                 case MqhSkillsTab: if (_skillsRegistry) ShowSkillRows(); else RefreshSkills(); break;
@@ -400,6 +401,11 @@ namespace MetaCodex.Shell
             var t = UiTheme.Current;
             const int page = MqhPluginsTab;
             float leftW = 0.36f;
+            // the kinds of plugin: APPS (a window, a menu tile), GESTURES (poses, detectors: the GESTURES tab is their
+            // studio), BEHAVIOURS (Lua that reacts to the app), MQH (the harness's own)
+            float filterH = 0.032f;
+            _pluginFilter = _mqhTabs.AddTo(page, new UiSegmented("SHOW", PluginKinds, 0, i => { _pluginKind = i; RefreshPluginList(); }) { Rect = new Rect(area.x, area.y, area.width, filterH), LabelWidth = 0.07f });
+            area = new Rect(area.x, area.y + filterH + t.Gap * 2, area.width, area.height - filterH - t.Gap * 2);
             _gPlugins = _mqhTabs.AddTo(page, new UiList(0.032f, (item, idx) => ShowPluginDetail()) { Rect = new Rect(area.x, area.y, leftW, area.height) });
             var pr = new UiStack(new Rect(area.x + leftW + t.Gap * 2, area.y, area.width - leftW - t.Gap * 2, area.height), t.Gap);
             _gPluginDetail = _mqhTabs.AddTo(page, new UiLabel("", t.SmallSize) { Rect = pr.Next(area.height - t.ButtonHeight * 3 - t.Gap * 4), Wrap = true, UseMono = true, Align = TextAlignmentOptions.TopLeft, Color = t.TextDim });
@@ -411,7 +417,7 @@ namespace MetaCodex.Shell
             _pluginToggle.SetEnabled(false);
             AddRow(_mqhTabs, page, pr.Next(t.ButtonHeight), new (string, Action)[]
             {
-                ("+ NEW PLUGIN…", () => UiKeyboard.Edit("my-gestures", false, null, id => { if (string.IsNullOrWhiteSpace(id)) return; var e = NewPlugin(id); Toast($"Plugin {e.Name} created in /mnt/quest/plugins/{e.Name}", "ok"); RefreshPluginList(); })),
+                ("+ NEW PLUGIN…", () => UiKeyboard.Edit("my-plugin", false, null, id => { if (string.IsNullOrWhiteSpace(id)) return; var e = NewPlugin(id); Toast($"Plugin {e.Name} created in /mnt/quest/plugins/{e.Name}", "ok"); RefreshPluginList(); })),
                 ("ASK AN AGENT…", () => UiKeyboard.Edit("", false, null, idea => { if (string.IsNullOrWhiteSpace(idea)) return; OpenNewThread(null); _ntSeed = NewPluginPrompt(idea); Toast("Pick the agent and START, then SEND the brief", "info"); })),
             }, primary: 0);
             AddRow(_mqhTabs, page, pr.Next(t.ButtonHeight), new (string, Action)[]
@@ -453,8 +459,27 @@ namespace MetaCodex.Shell
             if (_gPlugins == null) return;
             var t = UiTheme.Current;
             var items = new List<UiListItem>();
-            var mqh = _mqhPluginCache.OfType<JObject>().ToList();
-            items.Add(new UiListItem { Icon = "", Title = $"MQH PLUGINS  ({mqh.Count})", TitleColor = t.TextAccent, Tag = null });
+            string only = _pluginKind > 0 ? PluginKinds[_pluginKind] : null; // ALL: every kind, one section each
+            var local = Scripts != null ? Scripts.Entries.Where(e => e.Kind == "plugin").ToList() : new List<ScriptHost.Entry>();
+            foreach (var kind in new[] { KindApps, KindGestures, KindBehaviours })
+            {
+                if (only != null && only != kind) continue;
+                var mine = local.Where(e => PluginKindOf(e) == kind).ToList();
+                items.Add(new UiListItem { Icon = "", Title = $"{kind}  ({mine.Count})", TitleColor = t.TextAccent, Tag = null });
+                foreach (var e in mine)
+                    items.Add(new UiListItem
+                    {
+                        Icon = kind == KindApps ? "◫" : kind == KindGestures ? "✋" : "▣",
+                        IconColor = e.Error != null ? t.Danger : e.Enabled ? t.Ok : t.TextDim,
+                        Title = e.Title.Length > 0 ? e.Title : e.Name,
+                        Sub = e.Name + (e.Version.Length > 0 ? " · v" + e.Version : ""),
+                        Badge = e.Error != null ? "ERROR" : !e.Enabled ? "OFF" : e.Poses + e.Detectors > 0 ? $"{e.Poses + e.Detectors} G" : "ON",
+                        BadgeColor = e.Error != null ? t.Danger : e.Enabled ? t.Ok : t.TextDim,
+                        Tag = e,
+                    });
+            }
+            var mqh = only == null || only == KindMqh ? _mqhPluginCache.OfType<JObject>().ToList() : new List<JObject>();
+            if (only == null || only == KindMqh) items.Add(new UiListItem { Icon = "", Title = $"MQH  ({mqh.Count})", TitleColor = t.TextAccent, Tag = null });
             foreach (var x in mqh.OrderBy(x => (string)x["provenance"] == "builtin").ThenBy(x => (string)x["id"]))
             {
                 bool on = x["enabled"]?.Value<bool>() ?? (string)x["status"] != "disabled";
@@ -470,24 +495,64 @@ namespace MetaCodex.Shell
                     Tag = x,
                 });
             }
-            var local = Scripts != null ? Scripts.Entries.Where(e => e.Kind == "plugin").ToList() : new List<ScriptHost.Entry>();
-            items.Add(new UiListItem { Icon = "", Title = $"GESTURE AND BEHAVIOUR PLUGINS  ({local.Count})", TitleColor = t.TextAccent, Tag = null });
-            foreach (var e in local)
+            // the examples that ship in the app and are not installed yet: a tap picks one, + ADD installs it (apps first:
+            // timers, calendar; then the gesture examples)
+            var examples = GestureExampleIds.Where(id => (Scripts == null || Scripts.Find("plugin/" + id) == null) && (only == null || ExampleKindOf(id) == only))
+                .OrderBy(id => IsAppPluginExample(id) ? 0 : 1).ToList();
+            if (examples.Count > 0) items.Add(new UiListItem { Icon = "", Title = $"EXAMPLES TO ADD  ({examples.Count})", TitleColor = t.TextAccent, Tag = null });
+            foreach (var id in examples)
                 items.Add(new UiListItem
                 {
-                    Icon = "▣",
-                    IconColor = e.Error != null ? t.Danger : e.Enabled ? t.Ok : t.TextDim,
-                    Title = e.Title.Length > 0 ? e.Title : e.Name,
-                    Sub = e.Name + (e.Version.Length > 0 ? " · v" + e.Version : ""),
-                    Badge = e.Error != null ? "ERROR" : !e.Enabled ? "OFF" : $"{e.Poses + e.Detectors} G",
-                    BadgeColor = e.Error != null ? t.Danger : e.Enabled ? t.Ok : t.TextDim,
-                    Tag = e,
+                    Icon = "+",
+                    IconColor = t.Accent,
+                    Title = id,
+                    Sub = ExampleKindOf(id).ToLowerInvariant() + " · " + Trim(ExampleDescription(ExamplePlugins[id]), 40),
+                    Badge = "+ ADD",
+                    BadgeColor = t.Accent,
+                    Tag = new GestureExampleRow { Id = id },
                 });
             _gPlugins.SetItems(items, keepScroll: true);
             ShowPluginDetail();
         }
 
         private UiButton _pluginToggle;
+        private UiSegmented _pluginFilter;
+        private int _pluginKind;
+
+        /// The kinds of plugin, as PLUGINS' SHOW filter lists them (0 = ALL).
+        public const string KindApps = "APPS", KindGestures = "GESTURES", KindBehaviours = "BEHAVIOURS", KindMqh = "MQH";
+        private static readonly string[] PluginKinds = { "ALL", KindApps, KindGestures, KindBehaviours, KindMqh };
+
+        /// An app plugin's kind: plugin.json "kind" ("app", "gesture", "behaviour"), else what it does now (a window or a
+        /// tile: APPS; poses or detectors: GESTURES; else BEHAVIOURS).
+        public string PluginKindOf(ScriptHost.Entry e)
+        {
+            string kind = ((string)e.Manifest?["kind"] ?? "").Trim().ToLowerInvariant();
+            if (kind == "app" || kind == "apps" || kind == "window") return KindApps;
+            if (kind == "gesture" || kind == "gestures") return KindGestures;
+            if (kind == "behaviour" || kind == "behavior" || kind == "behaviours") return KindBehaviours;
+            if (Scripts != null && Scripts.OwnsUi(e)) return KindApps;
+            return e.Poses + e.Detectors > 0 ? KindGestures : KindBehaviours;
+        }
+
+        private static string ExampleKindOf(string id)
+        {
+            if (IsAppPluginExample(id)) return KindApps;
+            try
+            {
+                string kind = ((string)JObject.Parse(ExamplePlugins[id]["plugin.json"])["kind"] ?? "").ToLowerInvariant();
+                return kind == "app" ? KindApps : kind == "behaviour" || kind == "behavior" ? KindBehaviours : KindGestures;
+            }
+            catch (Exception) { return KindGestures; }
+        }
+
+        /// PLUGINS with one kind shown (0 ALL, 1 APPS, 2 GESTURES, 3 BEHAVIOURS, 4 MQH): CONTROL > PLUGINS, voice, tests.
+        public void ShowPluginKind(int i)
+        {
+            _pluginKind = Mathf.Clamp(i, 0, PluginKinds.Length - 1);
+            _pluginFilter?.Set(_pluginKind);
+            RefreshPluginList();
+        }
 
         private void ShowPluginDetail()
         {
@@ -495,6 +560,16 @@ namespace MetaCodex.Shell
             var t = UiTheme.Current;
             var tag = SelectedPluginTag();
             bool? on = tag is ScriptHost.Entry pe ? pe.Enabled : tag is JObject pm ? (pm["enabled"]?.Value<bool>() ?? (string)pm["status"] != "disabled") : (bool?)null;
+            if (tag is GestureExampleRow ex)
+            {
+                _pluginToggle?.SetText("+ ADD");
+                _pluginToggle?.SetEnabled(true);
+                _gPluginDetail.Set($"<b>{ex.Id}</b> · example\n{ExampleDescription(ExamplePlugins[ex.Id])}\n\n" +
+                                   (ExampleKindOf(ex.Id) == KindApps ? "An app: its own window and a tile on the main menu. " : "A gesture plugin: named gestures (the GESTURES tab is their studio). ") +
+                                   "+ ADD copies it to /mnt/quest/plugins/" + ex.Id + "/ and runs it at once; it loads again at every start. " +
+                                   "DELETE removes it again.", t.TextDim);
+                return;
+            }
             _pluginToggle?.SetText(on == true ? "DISABLE" : "ENABLE");
             _pluginToggle?.SetEnabled(on != null);
             if (tag is JObject m)
@@ -507,9 +582,13 @@ namespace MetaCodex.Shell
             }
             if (!(tag is ScriptHost.Entry e))
             {
-                _gPluginDetail.Set("MQH PLUGINS extend the harness (threads, providers, panels of their own). GESTURE AND BEHAVIOUR PLUGINS live in " +
-                                   "/mnt/quest/plugins/<id>/ (plugin.json, main.lua, poses/*.json) and apply live.\n\n+ NEW PLUGIN makes an empty gesture plugin; " +
-                                   "ASK AN AGENT writes one with you.", t.TextDim);
+                _gPluginDetail.Set("A plugin is a folder in /mnt/quest/plugins/<id>/ (plugin.json, main.lua, poses/*.json); it applies live " +
+                                   "and loads at every start. Its kind (plugin.json \"kind\"):\n" +
+                                   "APPS: a window and a tile on the main menu (Timers, Calendar).\n" +
+                                   "GESTURES: named hand gestures, poses and detectors (GESTURES tab: the studio).\n" +
+                                   "BEHAVIOURS: Lua that reacts to the app and your hands.\n" +
+                                   "MQH: plugins of the agent harness (threads, providers).\n\n" +
+                                   "+ NEW PLUGIN makes an empty one; ASK AN AGENT writes one with you (skill quest-plugins).", t.TextDim);
                 return;
             }
             var gestures = Gestures.Custom.Where(x => x.Owner == e.Key).Select(x => x.Name).ToList();
@@ -521,6 +600,13 @@ namespace MetaCodex.Shell
         private void TogglePickedPlugin()
         {
             var tag = SelectedPluginTag();
+            if (tag is GestureExampleRow ex)
+            {
+                string err = InstallGestureExample(ex.Id);
+                Toast(err == null ? $"{ex.Id} added" + (IsAppPluginExample(ex.Id) ? ": its tile is on the main menu" : "") : "Not added: " + err, err == null ? "ok" : "error");
+                RefreshPluginList();
+                return;
+            }
             if (tag is ScriptHost.Entry e) { Scripts.SetEnabled(e.Key, !e.Enabled); RefreshPluginList(); return; }
             if (!(tag is JObject m)) { Toast("Pick a plugin", "warn"); return; }
             string id = (string)m["id"];

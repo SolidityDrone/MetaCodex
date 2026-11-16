@@ -12,7 +12,7 @@ only its own script or plugin. Nothing needs an APK rebuild.
 | Gesture plugin | `/mnt/quest/plugins/<id>/` (`plugin.json`, pose files, `main.lua`) | new poses and gestures, bindings to actions ([ui.md](ui.md#gesture-plugins-no-rebuild)) | `quest-gesture-plugins` |
 | App plugin | `/mnt/quest/plugins/<id>/` (`plugin.json`, `main.lua`) | its own windows, menu tiles, voice commands, alarms and saved state | `quest-plugins` |
 
-The app reloads a script or a plugin within a second of a change. MQH > SCRIPTS and MQH > PLUGINS list them; an
+The app reloads a script or a plugin within a second of a change. MQH > SCRIPTS and CONTROL > PLUGINS list them; an
 agent that changes one shows the change and asks the user first (AGENTS.md).
 
 ## App plugins
@@ -21,7 +21,7 @@ An app plugin makes windows drawn with the app's own UI kit, and tiles on the DO
 It loads again at every start, and its `main.lua` makes its windows and tiles again from its saved `store`.
 
 Two examples ship with the app: **Timers** (a focus timer in the tomato style, with alarms) and **Calendar** (a month
-grid with entries and reminders). Install one from CONTROL > MQH > GESTURES > EXAMPLES, by voice, or with
+grid with entries and reminders). Install one from CONTROL > PLUGINS (EXAMPLES TO ADD, + ADD), by voice, or with
 `mcx-ui plugin example timers`. Their files are in `Runtime/Scripting/Resources/PluginExamples/<id>/`.
 
 ### The API

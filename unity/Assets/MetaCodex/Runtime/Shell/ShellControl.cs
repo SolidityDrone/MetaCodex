@@ -19,7 +19,7 @@ namespace MetaCodex.Shell
         public sealed class ControlCategory
         {
             public string Key, Label, Glyph, Group, Panel, Blurb;
-            public int Tab = -1;                 // the SETTINGS tab, for its pages
+            public int Tab = -1;                 // the tab of its window (SETTINGS' pages; MQH's PLUGINS tab), -1: any
             public Func<string> Status;          // a few words on the right of the rail
         }
 
@@ -69,6 +69,9 @@ namespace MetaCodex.Shell
                     Status = () => { int n = _providerStates.Count(x => (string)x["status"] == "ready" || (string)x["status"] == "authenticated"); return n > 0 ? n + " ready" : "sign in"; } },
                 new ControlCategory { Key = "mqh", Label = "MQH", Glyph = "⬡", Group = "AI", Panel = "mqh",
                     Status = () => MqhHost != null ? MqhHost.State.ToString().ToLowerInvariant() : Mqh != null && Mqh.Online ? "online" : "offline" },
+                // plugins have their own row (owner 2026-11-16): apps (a window, a menu tile), gestures, behaviours, MQH's
+                new ControlCategory { Key = "plugins", Label = "PLUGINS", Glyph = "◫", Group = "AI", Panel = "mqh", Tab = MqhPluginsTab,
+                    Status = () => { int n = Scripts != null ? Scripts.Entries.Count(e => e.Kind == "plugin" && e.Enabled) : 0; return n > 0 ? n + " on" : "add"; } },
                 new ControlCategory { Key = "vault", Label = "VAULT", Glyph = "⚿", Group = "AI", Panel = "vault",
                     Status = () => Vault != null ? AI.ThreadPulse.Plural(Vault.Entries.Count, "key") : "locked" },
                 new ControlCategory { Key = "system", Label = "SYSTEM", Glyph = "⬢", Group = "LINUX & APP", Panel = "system",
@@ -158,8 +161,29 @@ namespace MetaCodex.Shell
         {
             string pid = ControlRailPage;
             if (pid == null) return null;
-            if (pid == "settings") return _categories.FirstOrDefault(c => c.Panel == "settings" && c.Tab == (_settingsTabs?.Selected ?? -1))?.Key;
-            return _categories.FirstOrDefault(c => c.Panel == pid)?.Key;
+            return CategoryOf(pid)?.Key;
+        }
+
+        /// The category a CONTROL window stands for now: SETTINGS by its page; MQH's window is PLUGINS on its PLUGINS
+        /// tab, else MQH.
+        private ControlCategory CategoryOf(string pid)
+        {
+            if (pid == "settings") return _categories.FirstOrDefault(c => c.Panel == "settings" && c.Tab == (_settingsTabs?.Selected ?? -1));
+            if (pid == "mqh")
+            {
+                int sel = _mqhTabs?.Selected ?? -1;
+                return _categories.FirstOrDefault(c => c.Panel == "mqh" && c.Tab >= 0 && c.Tab == sel) ?? _categories.FirstOrDefault(c => c.Panel == "mqh" && c.Tab < 0);
+            }
+            return _categories.FirstOrDefault(c => c.Panel == pid);
+        }
+
+        /// Shows the category's tab in its window (SETTINGS' page, MQH's PLUGINS; MQH itself leaves PLUGINS for SKILLS).
+        private void SelectCategoryTab(ControlCategory cat)
+        {
+            if (cat.Panel == "settings") { if (cat.Tab >= 0) _settingsTabs?.Select(cat.Tab); return; }
+            if (cat.Panel != "mqh" || _mqhTabs == null) return;
+            if (cat.Tab >= 0) _mqhTabs.Select(cat.Tab);
+            else if (_mqhTabs.Selected == MqhPluginsTab) _mqhTabs.Select(MqhSkillsTab);
         }
 
         private void RefreshRail()
@@ -191,17 +215,17 @@ namespace MetaCodex.Shell
             int need = PanelNeedsStep(cat.Panel);
             if (need > 0 && SetupBlocks(need, cat.Label)) return false;
             _controlLast = cat.Key;
-            if (cat.Tab >= 0) _settingsShown = true; // a chosen SETTINGS page wins over the first-time DISPLAY
-            // a page of the window already shown (DISPLAY -> LOOK): only its page changes, no new cast
+            if (cat.Panel == "settings" && cat.Tab >= 0) _settingsShown = true; // a chosen SETTINGS page wins over the first-time DISPLAY
+            // a page of the window already shown (DISPLAY -> LOOK, MQH -> PLUGINS): only its page changes, no new cast
             if (ControlRailPage == cat.Panel && _panels.TryGetValue(cat.Panel, out var shownP) && shownP.IsOpen)
             {
-                if (cat.Tab >= 0) _settingsTabs?.Select(cat.Tab);
+                SelectCategoryTab(cat);
                 UiSounds.Fire("click");
                 RefreshRail();
                 return true;
             }
             bool ok = OpenPanel(cat.Panel);
-            if (ok && cat.Tab >= 0) _settingsTabs?.Select(cat.Tab);
+            if (ok) SelectCategoryTab(cat);
             RefreshRail();
             return ok;
         }
@@ -250,7 +274,7 @@ namespace MetaCodex.Shell
         {
             if (_rail == null) return;
             _railPage = pageId;
-            var cat = pageId == "settings" ? null : _categories.FirstOrDefault(c => c.Panel == pageId);
+            var cat = pageId == "settings" ? null : CategoryOf(pageId);
             if (cat != null) _controlLast = cat.Key;
             // the first time SETTINGS shows, it shows DISPLAY (its first tab, HANDS, is not where people look first)
             if (pageId == "settings" && !_settingsShown) { _settingsShown = true; if (cat == null && _settingsTabs != null && _settingsTabs.Selected == SetHands) _settingsTabs.Select(SetDisplay); }

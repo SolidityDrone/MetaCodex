@@ -729,6 +729,14 @@ namespace MetaCodex.Scripting
             return null;
         }
 
+        /// Whether this plugin has made a window or a menu tile now (the APPS category of plugins).
+        public bool OwnsUi(Entry e)
+        {
+            for (int i = 0; i < _windows.Count; i++) if (_windows[i].Owner == e) return true;
+            for (int i = 0; i < _tileEntries.Count; i++) if (_tileEntries[i].Owner == e) return true;
+            return false;
+        }
+
         private PlugWin FindWindow(string fullId)
         {
             for (int i = 0; i < _windows.Count; i++) if (_windows[i].FullId == fullId) return _windows[i];

@@ -742,7 +742,7 @@ end)
             Check(core != null && core.Error == null && core.Poses == 5, $"example core-poses loaded ({core?.Poses} poses{(core?.Error != null ? ", " + core.Error : "")})");
             Check(swipes != null && swipes.Error == null && swipes.Detectors == 3, $"example swipes loaded ({swipes?.Detectors} Lua detectors{(swipes?.Error != null ? ", " + swipes.Error : "")})");
             GestureExamplesCleanup(tmp);
-            // SCRIPTS lists scripts only (the examples just added are plugins: MQH > PLUGINS), or one empty line
+            // SCRIPTS lists scripts only (the examples just added are plugins: CONTROL > PLUGINS), or one empty line
             var scriptRows = shell.ScriptRowsForTest;
             int nScripts = host.Entries.Count(e => e.Kind == "script");
             Check(scriptRows != null && (nScripts == 0 ? scriptRows.Count == 1 && scriptRows[0].Title == MetaCodexShell.ScriptsEmptyText && scriptRows[0].Tag == null
@@ -875,7 +875,7 @@ end)
             }
             tabs.Select(0);
             shell.SetGestureExamplesOpen(false);
-            shell.OpenPanel("plugins"); // the gesture plugins are in MQH > PLUGINS now
+            shell.OpenPanel("plugins"); // the gesture plugins are in CONTROL > PLUGINS now
             gp.ForceRefresh();
             RenderPanel(gp, "ui-gestures-plugins.png");
             hands.Hide(Handedness.Left);

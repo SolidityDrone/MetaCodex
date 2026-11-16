@@ -258,6 +258,9 @@ end)
         /// Example ids in the order the list shows them.
         public static IEnumerable<string> GestureExampleIds => ExamplePlugins.Keys;
 
+        /// An example that is an app plugin with its own window and menu tile (PluginExamples), not a gesture plugin.
+        public static bool IsAppPluginExample(string id) => Array.IndexOf(MetaCodex.Scripting.PluginExamples.Ids, id) >= 0;
+
         /// The gesture names a plugin's files define: poses/<name>.json and gesture.define("<name>", …).
         public static List<string> GestureNamesIn(IReadOnlyDictionary<string, string> files)
         {
@@ -464,7 +467,7 @@ gesture.on(""both-palms-up"", function(e)
 end)
 ";
 
-        /// Scaffolds a plugin folder from the template (MQH > PLUGINS > + NEW PLUGIN…, control port `plugin new`).
+        /// Scaffolds a plugin folder from the template (CONTROL > PLUGINS > + NEW PLUGIN…, control port `plugin new`).
         public ScriptHost.Entry NewPlugin(string id)
         {
             id = ScriptHost.Sanitize(id);
@@ -517,7 +520,7 @@ end)
 
         // ------------------------------------------------------------------ the panel
 
-        /// GESTURES (a tab of MQH): the studio, with its own tabs. Its plugin list is MQH > PLUGINS now.
+        /// GESTURES (a tab of MQH): the studio, with its own tabs. Its plugin list is CONTROL > PLUGINS now.
         private void BuildGesturesTab(UiTabs outer, int outerPage, Rect c)
         {
             var t = UiTheme.Current;
@@ -598,9 +601,9 @@ end)
             _gTabs.AddTo(3, new UiSlider("HOLD", 0f, 1f, _gHold, v => _gHold = v) { Rect = rec.Next(0.032f), LabelWidth = 0.12f, Format = "0.00 s" });
             AddRow(_gTabs, 3, rec.Next(t.ButtonHeight), new (string, Action)[] { ("● RECORD IN 3 s", StartRecording) }, primary: 0);
             _gRecordStatus = _gTabs.AddTo(3, new UiLabel("", t.SmallSize) { Rect = rec.Rest(), Wrap = true, Align = TextAlignmentOptions.TopLeft });
-            // plugins have one home (MQH > PLUGINS: + NEW PLUGIN…, FOLDER); here only where to find it
+            // plugins have one home (CONTROL > PLUGINS: + NEW PLUGIN…, FOLDER); here only where to find it
             var tpl = new UiStack(new Rect(area.x + area.width * 0.57f, area.y, area.width * 0.43f, area.height), t.Gap);
-            _gTabs.AddTo(3, new UiLabel("Plugins: MQH > PLUGINS (+ NEW, or ask an agent)", t.SmallSize) { Rect = tpl.Next(0.04f), Wrap = true, Color = t.TextDim, Align = TextAlignmentOptions.TopLeft });
+            _gTabs.AddTo(3, new UiLabel("Plugins: CONTROL > PLUGINS (+ NEW, or ask an agent)", t.SmallSize) { Rect = tpl.Next(0.04f), Wrap = true, Color = t.TextDim, Align = TextAlignmentOptions.TopLeft });
 
             _gTabs.OnChanged = _ => RefreshGesturesPanel();
             RefreshGesturesPanel();
@@ -620,7 +623,7 @@ end)
         /// A group header row in ALL (YOURS, SYSTEM, EXAMPLES); EXAMPLES folds and unfolds on a tap.
         private sealed class GestureGroupRow { public string Name; }
         /// An example plugin's row in ALL > EXAMPLES.
-        private sealed class GestureExampleRow { public string Id; }
+        internal sealed class GestureExampleRow { public string Id; }
 
         /// Short roles of the built-ins in ALL > SYSTEM.
         private static string BuiltInRole(string n)
@@ -674,7 +677,8 @@ end)
             foreach (var n in GestureEngine.Names)
                 items.Add(new UiListItem { Icon = "◆", IconColor = t.Accent, Title = n, Sub = BuiltInRole(n), Badge = BindingBadge(n), BadgeColor = t.Ok, Tag = n });
 
-            var ids = GestureExampleIds.ToList();
+            // gesture examples only: the app-plugin examples (a window and a menu tile: timers, calendar) are under CONTROL > PLUGINS
+            var ids = GestureExampleIds.Where(id => !IsAppPluginExample(id)).ToList();
             var exHeader = Header("EXAMPLES", $"EXAMPLES  ({ids.Count})");
             exHeader.Icon = _gExamplesOpen ? "▾" : "▸"; // folds like THREADS' projects
             items.Add(exHeader);
@@ -807,7 +811,7 @@ end)
                 "\n\n<color=#7FA9BF>LUA</color>\n  gesture.on(\"" + name + "\", function(e) … end)", t.Text);
         }
 
-        private static string ExampleDescription(IReadOnlyDictionary<string, string> files)
+        internal static string ExampleDescription(IReadOnlyDictionary<string, string> files)
         {
             try { return (string)Newtonsoft.Json.Linq.JObject.Parse(files["plugin.json"])["description"] ?? ""; } catch (Exception) { return ""; }
         }
@@ -820,7 +824,7 @@ end)
             var gnames = GestureNamesIn(files);
             bool installed = Scripts.Find("plugin/" + id) != null;
             _gDetail.Set($"<size=130%><b>{id}</b></size>  <color=#7FA9BF>EXAMPLE</color>\n{desc}\n\n<color=#7FA9BF>GESTURES</color>\n  " + (gnames.Count > 0 ? string.Join("\n  ", gnames) : "none: a plugin window, opened from its menu tile") + "\n\n" +
-                (installed ? "<color=#4DFFA6>● added</color> in /mnt/quest/plugins/" + id + ": bind its gestures in BIND; remove it in MQH > PLUGINS."
+                (installed ? "<color=#4DFFA6>● added</color> in /mnt/quest/plugins/" + id + ": bind its gestures in BIND; remove it in CONTROL > PLUGINS."
                            : "Not installed: nothing runs. + ADD puts it in /mnt/quest/plugins/" + id + "."), t.Text);
         }
 
