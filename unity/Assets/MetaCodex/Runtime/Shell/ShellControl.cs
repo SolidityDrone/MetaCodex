@@ -10,7 +10,8 @@ namespace MetaCodex.Shell
 {
     /// CONTROL (owner 2026-11-11, docs/control-center.md): one place for everything that sets the workbench up. Each
     /// category keeps its own window (SETTINGS' pages, WRIST MENU, VOICE, AGENTS, MQH, VAULT, SYSTEM: their tabs and tests);
-    /// a sidebar rides on the left of the one shown, with the eleven categories in three groups and a live status each.
+    /// a sidebar (the rail) lies on the shown one's own surface, on its left, edge to edge (RailPose: one curve, one lean),
+    /// with the eleven categories in three groups and a live status each.
     /// One category at a time: another one takes the shown window's place (same left and top edges, and since all seven
     /// windows have one size, ControlPageW x ControlPageH, the same rectangle), the rail stays.
     /// Work windows (terminals, files, threads, web, clipboard) stay windows of their own.
@@ -24,7 +25,13 @@ namespace MetaCodex.Shell
         }
 
         public const string ControlId = "control";
-        public const float RailW = 0.17f, RailGap = 0.010f, RailYaw = 12f;
+        public const float RailW = 0.17f;
+        /// No gap and no turn of its own (owner 2026-11-16: "the sidebar would be better embedded in the same panel as a
+        /// sidebar, not as a different panel; this is also because otherwise the curve is not handled well"): the rail
+        /// lies on its window's surface, edge to edge (was 10 mm apart and turned 12 degrees round the window's left
+        /// edge, so on a bent window the two drew two arcs). Both kept at 0 for the FLOAT ring's and the placement's
+        /// sums (ShellLayout.FloatRadius, ShellPlacement.PlaceSmart and RailReserveYaw).
+        public const float RailGap = 0f, RailYaw = 0f;
         public static readonly string[] ControlPages = { "settings", "voice", "agents", "mqh", "vault", "system", WristSettingsId };
         public static bool IsControlPage(string id) => id != null && Array.IndexOf(ControlPages, id) >= 0;
         /// The one size of CONTROL's seven windows: a category taking another's place never grows over a neighbour.
@@ -35,6 +42,8 @@ namespace MetaCodex.Shell
         private string _controlLast = "display";
         private bool _railDragged, _settingsShown;
         private float _nextRailStatus;
+        private Action<UiPanel> _railOnBend;                         // the shown window's curve changed (UiPanel.BendChanged)
+        private UnityEngine.Events.UnityAction _railBeforeRender;   // after every Update, before the frame is drawn
         private UiLabel _settingsBlurb;
         private List<ControlCategory> _categories = new List<ControlCategory>();
         private readonly List<(ControlCategory cat, UiButton button, UiLabel name, UiLabel status)> _railRows = new List<(ControlCategory, UiButton, UiLabel, UiLabel)>();
@@ -98,6 +107,10 @@ namespace MetaCodex.Shell
             var rail = UiPanel.Create<UiPanel>(ControlId, "", RailW, h, _root, header: false);
             rail.Closable = false;
             rail.AddGrabHandle(handle); // pinch its bar to move the control center (its window comes along)
+            // it follows its window's curve in the same tick the window eases it, and its pose once more after every
+            // Update (the router's drags, the window's lean): never a frame off the window (FollowRail)
+            _railOnBend ??= OnRailPageBend;
+            if (_railBeforeRender == null) { _railBeforeRender = RailBeforeRender; Application.onBeforeRender += _railBeforeRender; }
             _panels[ControlId] = rail;
             Router.Register(rail);
             float y = handle + pad * 0.6f;
@@ -258,32 +271,89 @@ namespace MetaCodex.Shell
             // the first time SETTINGS shows, it shows DISPLAY (its first tab, HANDS, is not where people look first)
             if (pageId == "settings" && !_settingsShown) { _settingsShown = true; if (cat == null && _settingsTabs != null && _settingsTabs.Selected == SetHands) _settingsTabs.Select(SetDisplay); }
             if (pageId == "settings") { var page0 = _categories.FirstOrDefault(c => c.Panel == "settings" && c.Tab == (_settingsTabs?.Selected ?? -1)); if (page0 != null) _controlLast = page0.Key; }
-            if (_panels.TryGetValue(pageId, out var page)) { var (pos, rot) = RailPose(page); _rail.transform.SetPositionAndRotation(pos, rot); }
+            if (_panels.TryGetValue(pageId, out var page))
+            {
+                // its curve, followed in the same tick the window eases it (once per window: the handler checks which one)
+                page.BendChanged -= _railOnBend;
+                page.BendChanged += _railOnBend;
+                FollowRail(page);
+            }
             if (!_rail.IsOpen) _rail.Open();
             RefreshRail();
         }
 
-        /// Left of the page, top edges level, turned a little towards the user round its right edge; on a bent page it
-        /// leaves from the page's own (curved) left edge.
+        // ------------------------------------------------------------------ the rail on its window's surface
+
+        /// The rail's place on its window: on the window's own surface, left of it, edge to edge (no gap), tops level.
+        /// Bent: on the window's cylinder, the same axis and world radius (FollowRail gives it the window's curve), at the
+        /// arc length of its centre and turned to face the axis, as a thread group's windows lie on the group's curve
+        /// (ShellThreadGroups.CellPose); the two draw one arc. Flat: in the window's plane. Built from the window's
+        /// transform, so it moves and scales with the window and carries its lean (curve mode, UiPanel.SetTilt); the rail
+        /// never leans on its own (it is not a layout panel: nothing calls its SetTilt).
         private (Vector3 pos, Quaternion rot) RailPose(UiPanel page)
         {
-            float s = page.RestLossyScale.x; // the rest scale: steady while a window casts or closes
+            float k = RailScaleIn(page);
+            float x = -(page.Width + RailW * k) * 0.5f;        // its centre: arc length left of the window's centre (window units)
+            float y = (page.Height - _rail.Height * k) * 0.5f; // tops level (as tall as the window: the bottoms too)
             float bend = page.BendNow;
-            float th = bend > 0.05f ? page.Width * 0.5f * s / bend : 0f; // radians the left half turns through
-            var edge = page.SurfacePoint(new Vector2(0f, 0f));         // its top-left corner, on the surface
-            var rot = page.transform.rotation * Quaternion.Euler(0f, -(th * Mathf.Rad2Deg + RailYaw), 0f);
-            float rs = _rail.RestLossyScale.x;
-            var pos = edge + rot * new Vector3(-(RailGap * s + RailW * 0.5f * rs), -_rail.Height * 0.5f * rs, 0f);
-            return (pos, rot);
+            if (bend <= 0f) return (page.transform.TransformPoint(new Vector3(x, y, 0f)), page.transform.rotation);
+            float a = x / bend; // the same arc as UiPanel.SurfacePoint
+            var local = new Vector3(bend * Mathf.Sin(a), y, -bend + bend * Mathf.Cos(a));
+            return (page.transform.TransformPoint(local), page.transform.rotation * Quaternion.Euler(0f, a * Mathf.Rad2Deg, 0f));
+        }
+
+        /// The rail's units in its window's (both are at the UI scale: 1). The rest scale: steady while a window casts.
+        private float RailScaleIn(UiPanel page) => _rail.RestLossyScale.x / Mathf.Max(1e-5f, page.RestLossyScale.x);
+
+        /// The rail on its window: the window's drawn curve in the rail's units (one world radius, one axis; snapped, so
+        /// it follows the window's easing instead of easing on its own), then its place; carried by its bar, the window
+        /// is put where the rail is on it instead. No allocation; several calls a frame are the same result.
+        private void FollowRail(UiPanel page)
+        {
+            float r = page.BendNow > 0f ? page.BendNow / RailScaleIn(page) : 0f;
+            if (r < 0.05f) r = 0f; // UiPanel.SetBend's floor: never asked again every frame
+            if (_rail.BendRadius != r || _rail.BendNow != r) { _rail.SetBend(r); _rail.SnapBend(); }
+            if (Router != null && Router.IsDragging(_rail))
+            {
+                var want = (_rail.transform.position, _rail.transform.rotation);
+                var (_, fr) = RailPose(page);
+                page.transform.rotation = want.rotation * Quaternion.Inverse(fr) * page.transform.rotation;
+                var (fp, _) = RailPose(page);
+                page.transform.position += want.position - fp;
+                _railDragged = true;
+                return;
+            }
+            var (pos, rot) = RailPose(page);
+            _rail.transform.SetPositionAndRotation(pos, rot);
+        }
+
+        /// The window beside the rail, when both show.
+        private UiPanel RailPageShown() =>
+            _rail != null && _rail.IsOpen && _railPage != null && _panels.TryGetValue(_railPage, out var p) && p != null && p.IsOpen ? p : null;
+
+        /// A CONTROL window's drawn curve changed (eased, snapped, flattened for a capture): the rail takes it in the same
+        /// tick, when that window is the one it is on.
+        private void OnRailPageBend(UiPanel page)
+        {
+            if (page != null && RailPageShown() == page) FollowRail(page);
+        }
+
+        /// Once a frame after every Update (the router moves a dragged window, a window eases its lean, the layout moves
+        /// it; their order is not fixed) and before the frame is drawn: the rail is never a frame behind its window.
+        private void RailBeforeRender()
+        {
+            if (this == null) { Application.onBeforeRender -= _railBeforeRender; return; } // the shell is gone
+            var page = RailPageShown();
+            if (page != null) FollowRail(page);
         }
 
         /// Whether `p` is the window the rail rides beside (FLOAT reserves the rail's room on its left).
         private bool RailBeside(UiPanel p) => p != null && _rail != null && _rail.IsOpen && _railPage == p.Id;
-        private float RailGapDeg(float r) => RailGap * (_rail != null ? _rail.RestLossyScale.x : 1f) / Mathf.Max(r, 0.1f) * Mathf.Rad2Deg;
-        private float RailShift(float r) => _rail != null ? HalfArc(_rail, r) + RailGapDeg(r) * 0.5f : 0f;
+        /// The rail's half on the ring: edge to edge with its window (RailGap 0), so half its own arc.
+        private float RailShift(float r) => _rail != null ? HalfArc(_rail, r) : 0f;
         private bool RailCarries(UiPanel p) => RailBeside(p) && Router != null && Router.IsDragging(_rail);
 
-        /// Every frame: the rail follows its window; carried by its bar, the window follows the rail. It closes with it.
+        /// Every layout tick: the rail follows its window; carried by its bar, the window follows the rail. It closes with it.
         private void UpdateControlRail()
         {
             if (_rail == null) return;
@@ -297,23 +367,12 @@ namespace MetaCodex.Shell
                 return;
             }
             if (!_rail.IsOpen) return;
-            if (Router != null && Router.IsDragging(_rail))
-            {
-                var want = (_rail.transform.position, _rail.transform.rotation);
-                var (_, fr) = RailPose(page);
-                page.transform.rotation = want.rotation * Quaternion.Inverse(fr) * page.transform.rotation;
-                var (fp, _) = RailPose(page);
-                page.transform.position += want.position - fp;
-                _railDragged = true;
-                return;
-            }
-            if (_railDragged)
+            if (_railDragged && (Router == null || !Router.IsDragging(_rail)))
             {
                 _railDragged = false;
                 if (Floating && _carousel != null) Slot(page.transform); // the pair stays where it was dropped
             }
-            var (pos, rot) = RailPose(page);
-            _rail.transform.SetPositionAndRotation(pos, rot);
+            FollowRail(page);
         }
 
         // ------------------------------------------------------------------ smart places for work windows

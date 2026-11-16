@@ -320,7 +320,8 @@ namespace MetaCodex.Shell
             if (!Floating)
             {
                 // fixed: follow the distance every frame (panels are dragged, the user walks): only a uniform changes
-                if (Settings.bendPanels) { UpdateFixedBend(); UpdateSidebarLink(); }
+                // after the windows' curve and lean: THREAD's sidebar, and CONTROL's rail on its window's surface
+                if (Settings.bendPanels) { UpdateFixedBend(); UpdateSidebarLink(); UpdateControlRail(); }
                 return;
             }
             if (_carousel == null) EnterFloat();
