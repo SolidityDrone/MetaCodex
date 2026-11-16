@@ -78,7 +78,13 @@ Plugin windows use the same view components as the agents' views (`text`, `stats
 In an agent's view, `buttons`, `toggle` and `cell` answer the thread, as `choices` do.
 
 A `text` with an `id` is LIVE: when only such texts change, the app sets the labels and does not rebuild the window.
-Any other change rebuilds the window at most once a second.
+A new spec with the same components (kinds, ids, sizes, columns, title, count) also sets the texts of its `text`
+components in place, whether they have an `id` or not, as long as each new text fits its row. Any other change
+rebuilds the window at most once a second.
+
+A window that is updated keeps its place and its bend, and the update waits until a press ends: when a tap, a pinch or
+a drag is on the window, its new spec is kept and applied the frame after the release, so the tap reaches the
+element it hit. (The app logs `plugin window <id>: rebuild deferred until the press ends` and `updated in place`.)
 
 The spec is checked before anything is built (`Runtime/Scripting/ViewSpecCheck.cs`): an error (an unknown component,
 a missing id, more than 16 components or 49 cells, a duplicate id) raises a Lua error that names the component and

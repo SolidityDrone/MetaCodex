@@ -36,6 +36,11 @@ namespace MetaCodex.Shell
             public readonly Dictionary<string, UiLabel> Live = new Dictionary<string, UiLabel>();
             /// Plugin windows: the open state last reported to the host (Opened / Closed events of the panel).
             public bool Shown;
+            /// Plugin windows: the built spec without its texts (ShapeOf), and its text labels with the component index
+            /// each one shows (TryUpdateInPlace). Both made at each build.
+            public string Shape;
+            public readonly List<TextSlot> Texts = new List<TextSlot>();
+            public sealed class TextSlot { public int Index; public UiLabel Label; public float Width, Height; public bool Big; }
         }
 
         private readonly List<AgentView> _viewList = new List<AgentView>();
@@ -193,9 +198,11 @@ namespace MetaCodex.Shell
             var t = UiTheme.Current;
             string pid = v.PanelId;
             bool had = _panels.TryGetValue(pid, out var old);
-            Vector3 pos = default; Quaternion rot = default; bool wasOpen = false;
-            if (had) { pos = old.transform.position; rot = old.transform.rotation; wasOpen = old.IsOpen; DestroyViewPanel(pid); }
+            Vector3 pos = default; Quaternion rot = default; bool wasOpen = false; float bend = 0f;
+            if (had) { pos = old.transform.position; rot = old.transform.rotation; wasOpen = old.IsOpen; bend = old.BendNow; DestroyViewPanel(pid); }
             v.Live.Clear();
+            v.Texts.Clear();
+            v.Shape = null;
             bool plugin = v.Source == "plugin";
             var comps = ViewComponents(v.Spec);
             int columns = Mathf.Clamp(I(v.Spec["columns"], 1), 1, 3);
@@ -218,6 +225,9 @@ namespace MetaCodex.Shell
             float contentH = rowsH.Sum() + t.Gap * Mathf.Max(0, rowsH.Count - 1);
             float h = size != null && size.Length > 1 ? Mathf.Clamp(size[1], 0.18f, 0.9f) : Mathf.Clamp(contentH + t.HeaderHeight + 2 * t.Padding, 0.2f, 0.86f);
             var p = Panel<UiPanel>(pid, plugin ? v.Title : "View · " + v.Title, w, h);
+            // a rebuilt window keeps the curve it is drawn with: a new panel starts flat, and its flat frames were the flash
+            // on every tap (owner 2026-11-16). The layout eases it to its own curve after this; SnapBend keeps it until then.
+            if (had) { p.SetBend(bend); p.SnapBend(); }
             if (plugin) HookPluginWindow(v, p); // before any open below: its Opened event reaches the plugin
             p.BaseScale = Vector3.one * UiScaleNow;
             var c0 = p.Content;
@@ -232,8 +242,14 @@ namespace MetaCodex.Shell
                 {
                     int i = rw[col];
                     var rect = wide ? new Rect(c0.x, y, innerW, rh) : new Rect(c0.x + col * (colW + t.Gap), y, colW, rh);
+                    int textsBefore = v.Texts.Count;
                     try { AddViewComponent(p, v, comps[i], rect); }
-                    catch (Exception ex) { p.Add(new UiLabel("⚠ " + (string)comps[i]["type"] + ": " + ex.Message, t.SmallSize) { Rect = rect, Color = t.Danger, Wrap = true }); }
+                    catch (Exception ex)
+                    {
+                        if (v.Texts.Count > textsBefore) v.Texts.RemoveRange(textsBefore, v.Texts.Count - textsBefore);
+                        p.Add(new UiLabel("⚠ " + (string)comps[i]["type"] + ": " + ex.Message, t.SmallSize) { Rect = rect, Color = t.Danger, Wrap = true });
+                    }
+                    for (int ti = textsBefore; ti < v.Texts.Count; ti++) v.Texts[ti].Index = i;
                 }
                 y += rh + t.Gap;
             }
@@ -245,8 +261,29 @@ namespace MetaCodex.Shell
                 if (wasOpen || open) { p.gameObject.SetActive(true); p.ForceRefresh(); OnOpenedFloating(p); }
             }
             else if (open) OpenPanel(pid);
+            if (plugin) v.Shape = ShapeOf(v.Spec); // the next spec with the same shape updates the texts in place
             if (plugin) PluginShownSync(v, p); // a rebuild that opened a panel the user had closed
         }
+
+        /// A spec without the texts of its text components (text, markdown, note; a missing type is text, as in
+        /// AddViewComponent): what a built window's layout depends on besides its texts. Two specs with the same shape
+        /// differ only in their texts, so the built labels can take the new texts (ShellPluginUi.TryUpdateInPlace).
+        public static string ShapeOf(JObject spec)
+        {
+            var c = (JObject)spec.DeepClone();
+            if (c["components"] is JArray comps)
+                foreach (var tok in comps)
+                {
+                    if (!(tok is JObject co)) continue;
+                    string type = co["type"] is JValue tv && tv.Value != null ? tv.ToString().ToLowerInvariant() : "text";
+                    if (!MetaCodex.Scripting.ViewSpecCheck.IsTextType(type)) continue;
+                    co.Remove("text"); co.Remove("markdown"); co.Remove("value");
+                }
+            return c.ToString(Newtonsoft.Json.Formatting.None);
+        }
+
+        /// The text a text component shows (AddViewComponent's default branch: text, else markdown, else value).
+        private static string ViewText(JObject c) => (string)c["text"] ?? (string)c["markdown"] ?? (c["value"]?.ToString() ?? "");
 
         private static bool Is(JObject c, params string[] types) => types.Contains(((string)c["type"] ?? "").ToLowerInvariant());
 
@@ -477,12 +514,13 @@ namespace MetaCodex.Shell
                 }
                 default:
                 {
-                    string text = (string)c["text"] ?? (string)c["markdown"] ?? (c["value"]?.ToString() ?? "");
+                    string text = ViewText(c);
                     // style "big": one centred line in the display face (a countdown, a clock, a score)
                     bool big = (string)c["style"] == "big";
                     var lab = p.Add(new UiLabel(MdLite(text), big ? t.SmallSize * 2.8f : t.SmallSize * 1.1f) { Rect = r, Wrap = !big, UseDisplay = big, Align = big ? TextAlignmentOptions.Center : TextAlignmentOptions.TopLeft, Color = UiViz.Tone((string)c["tone"], t.Text) });
                     string liveId = (string)c["id"];
                     if (!string.IsNullOrEmpty(liveId)) v.Live[liveId] = lab; // LIVE text: a plugin window sets it without a rebuild
+                    if (MetaCodex.Scripting.ViewSpecCheck.IsTextType(type)) v.Texts.Add(new AgentView.TextSlot { Label = lab, Width = r.width, Height = r.height, Big = big }); // in place (ShapeOf)
                     break;
                 }
             }
