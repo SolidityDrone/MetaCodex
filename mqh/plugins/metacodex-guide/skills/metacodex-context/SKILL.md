@@ -25,7 +25,7 @@ description: Where you are when you run inside MetaCodex - a Meta Quest headset 
 | `/root` | home |
 | `/root/metacodex-projects/{native,default,research}/<name>` | the user's projects, by type (MetaCodex's + PROJECT makes them: git init, `mcx-project` type); THREADS groups them the same way |
 | `/mnt/quest` | the app's shared folder (the user and adb can reach it) |
-| `/mnt/quest/plugins/<id>/` | app plugins: own windows, menu buttons, voice commands (skill `quest-plugins`); gesture / behaviour plugins (skill `quest-gesture-plugins`) |
+| `/mnt/quest/plugins/<id>/` | plugins, one folder each, of three kinds (`plugin.json` `"kind"`): `app` (own windows, menu buttons, voice commands), `gesture` (named hand gestures), `behaviour` (Lua that reacts to the app). Start from skill `quest-plugins`; gesture details: `quest-gesture-plugins` |
 | `/mnt/quest/scripts/*.lua` | single-file Lua behaviours (skill `quest-scripting`) |
 | `/mnt/quest/control.token` | token for the app's control port (new at every app start) |
 | `/mnt/quest/qvac.token` | token for the local AI service (new at every start of the service) |
@@ -57,9 +57,10 @@ description: Where you are when you run inside MetaCodex - a Meta Quest headset 
   panel): the window alone and always opaque, never the room or the hands. When the user attaches captures or files to
   a message (the + in a thread), you get them as images / files with their Linux paths. `mcx-ui capture list` lists
   the captures (JSON, newest first).
-- Skills and plugins: the user manages them in the MQH panel (dock or wrist: MQH): SKILLS lists what every agent has
-  (theirs, removable; the ones that came with MetaCodex or MQH, read-only), PLUGINS has MQH's plugins and the gesture /
-  behaviour plugins, then SCRIPTS, GESTURES, DAEMON. New skills go to `~/.mqh/skills/<name>/` (skill `skill-creator`);
+- Skills and plugins: the user manages them in CONTROL (on the wrist menu): MQH > SKILLS lists what every agent has
+  (theirs, removable; the ones that came with MetaCodex or MQH, read-only); CONTROL > PLUGINS lists every plugin by
+  kind (APPS, GESTURES, BEHAVIOURS, MQH's own) with the examples to add (Timers, Calendar, gesture examples); the
+  GESTURES tab is the studio for gesture plugins (record poses, bindings); SCRIPTS lists the Lua scripts. New skills go to `~/.mqh/skills/<name>/` (skill `skill-creator`);
   never edit the shipped ones.
 - Native apps (a separate Quest app with its own Library icon) live in **Native app projects**: their folder has
   `.metacodex/project.json` with `"type": "native"`, the quest-native-* skills in `.claude/skills` and a native block

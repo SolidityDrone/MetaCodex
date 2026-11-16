@@ -1,6 +1,6 @@
 ---
 name: quest-plugins
-description: Add a new feature to the MetaCodex headset app with no rebuild - a plugin with its own window (drawn like every other window), its own button on the DOCK and the wrist menu, voice commands, alarms and state that survives a restart. Use when the user asks for a panel or tool the app does not have ("make me a tomato timer with a button in my menu", "a calendar window where I can add reminders", "a habit tracker", "a launcher for my scripts"), or to change or remove such a plugin.
+description: Add a new feature to the MetaCodex headset app with no rebuild - a plugin. Start here for every kind of plugin - an app (its own window drawn like every other window, its own button on the DOCK and the wrist menu, voice commands, alarms, state that survives a restart), gestures (named hand gestures and what they do; details in quest-gesture-plugins) or a behaviour (Lua that reacts to the app). Use when the user asks for a panel or tool the app does not have ("make me a tomato timer with a button in my menu", "a calendar window where I can add reminders", "a habit tracker", "a launcher for my scripts"), a new gesture, or to change or remove a plugin.
 ---
 
 # Quest plugins: new windows and menu buttons, live
@@ -10,8 +10,22 @@ The app loads it within a second of a change and again at every start: no rebuil
 Lua runs in a sandbox (no `io`, `require`, `load`, network) and talks to the app only through the API below.
 The app draws the window from your component list with its own UI kit, so it always looks like the app.
 
-Other skills: `quest-scripting` (the whole Lua API, gestures, voice command rules), `quest-views` (the same
-components shown by an agent), `quest-gesture-plugins` (hand poses).
+## Kinds of plugin
+
+Every plugin has the same folder, manifest, checks and removal (this skill). `plugin.json` `"kind"` says which kind
+it is; the user finds it under that kind in CONTROL > PLUGINS (SHOW: APPS, GESTURES, BEHAVIOURS).
+
+| Kind | What it adds | Read |
+|---|---|---|
+| `app` | a window, a tile on the main menu, voice commands, alarms, saved state | this skill (below) |
+| `gesture` | named hand gestures (pose files, Lua detectors, sequences) and what they do | `quest-gesture-plugins` |
+| `behaviour` | Lua that reacts to the app, the hands or the voice, with no window | `quest-scripting` (the API) |
+
+One kind per plugin, by what it is mainly for; any plugin can use every call (a gesture plugin may open a window).
+A single-file script in `/mnt/quest/scripts/` is lighter than a behaviour plugin when one small reaction is enough.
+
+Other skills: `quest-scripting` (the whole Lua API, voice command rules), `quest-views` (the same components shown
+by an agent), `quest-gesture-plugins` (gesture plugins).
 Two complete models ship with the app: `mcx-ui plugin example timers` and `mcx-ui plugin example calendar`
 install them into `/mnt/quest/plugins/`; read their `main.lua` before you write a bigger plugin.
 

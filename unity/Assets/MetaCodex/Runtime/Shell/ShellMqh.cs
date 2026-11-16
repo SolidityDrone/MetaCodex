@@ -434,10 +434,10 @@ namespace MetaCodex.Shell
 
         public static string NewPluginPrompt(string idea) =>
             "Make a plugin for MetaCodex: " + idea.Trim() + "\n\n" +
-            "If it needs its own window or a button in the menu (a timer, a calendar, a tool), make an app plugin (skill quest-plugins: " +
-            "a folder in /mnt/quest/plugins, applies live, loads at every start). " +
-            "If it reacts to hands, gestures or the app's panels, make a gesture / behaviour plugin (skill quest-gesture-plugins: a folder " +
-            "in /mnt/quest/plugins, applies live). If it extends MQH itself (a server part, a spatial panel), make an MQH plugin " +
+            "Start from the skill quest-plugins: a plugin is a folder in /mnt/quest/plugins, applies live and loads at every start; " +
+            "pick its kind: an app (its own window or a button in the menu: a timer, a calendar, a tool), gestures (named hand " +
+            "gestures and what they do: also read quest-gesture-plugins) or a behaviour (Lua that reacts to the app). " +
+            "If it extends MQH itself (a server part, a spatial panel), make an MQH plugin " +
             "(`mqh plugin new` makes its folder). Read metacodex-context first. Show me the plan before you write files.";
 
         private object SelectedPluginTag() =>

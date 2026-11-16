@@ -5,9 +5,13 @@ description: Create or change hand-gesture plugins for the MetaCodex headset app
 
 # Gesture plugins for the MetaCodex app
 
-The MetaCodex app (Unity, on a Meta Quest 3 / 3S) recognises hands every frame. Plugins add **named
-gestures** and **what they do**. A plugin is a folder of plain files; the app loads it within a second
-of any change, with no rebuild and no restart. You write files; you never touch Unity or C#.
+The MetaCodex app (Unity, on a Meta Quest 3 / 3S) recognises hands every frame. Gesture plugins add **named
+gestures** and **what they do**. They are one kind of MetaCodex plugin (`"kind": "gesture"` in `plugin.json`;
+the others are `app`, a window and a menu tile, and `behaviour`): the folder, the review-first rule, the checks
+(`mcx-ui plugin check <id>`) and the removal are the same for every kind and are in the skill `quest-plugins`.
+A plugin can be of one kind and still use the others' calls (a gesture plugin may open a window). A plugin is a
+folder of plain files; the app loads it within a second of any change, with no rebuild and no restart. You write
+files; you never touch Unity or C#. The user sees it in CONTROL > PLUGINS (GESTURES) and in the GESTURES tab.
 
 Read this whole file before writing anything. Details: `reference/hand-model.md` (numbers, axes),
 `reference/lua-api.md` (every function), `reference/recipes.md` (complete working plugins),

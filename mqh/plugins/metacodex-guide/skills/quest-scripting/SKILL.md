@@ -48,8 +48,9 @@ Handler argument `e`: `name`, `hand` (`left` | `right` | `both`), `phase` (`star
 
 A new window or a button in the menu (a timer, a calendar, a tool) belongs in a **plugin** too: skill
 `quest-plugins`.
-New gestures (hand poses, swipes, two-hand shapes) belong in a **plugin** folder
-(`/mnt/quest/plugins/<id>/`, skill `quest-gesture-plugins`); a script can react to them by name, but only to
+New gestures (hand poses, swipes, two-hand shapes) belong in a **gesture plugin**: one kind of plugin
+(`/mnt/quest/plugins/<id>/`, `"kind": "gesture"`; skill `quest-plugins` for every plugin, `quest-gesture-plugins`
+for the gesture details); a script can react to them by name, but only to
 names `mcx-ui gesture list` shows: a script never assumes a plugin's gesture is installed.
 
 ## App API
@@ -79,16 +80,17 @@ names `mcx-ui gesture list` shows: a script never assumes a plugin's gesture is 
 | `voice.remove(name)` / `voice.registry()` | remove one of this script's commands / the whole registry as JSON text (every enabled command, its schema, samples, warnings) |
 | `log(...)` / `print(...)` | lines in the script log (`mcx-ui script log <name>`) |
 
-Settings keys: `gestures.clickMode` (0 pinch, 1 poke, 2 both), `gestures.grabMode` (0 pinch the header,
-1 closed hand, 2 both), `gestures.pointMode` (0 ray always, 1 only in the pointing pose),
+Settings keys: `gestures.clickMode` (0 pinch, the default; the app shows no switch for it: change it only when the
+user asks for fingertip pokes: 1 poke, 2 both), `gestures.pointMode` (0 ray always, 1 only in the pointing pose),
 `gestures.pinchOn` (0.6-0.98), `gestures.clapEnabled`, `gestures.clapDistance` (m), `gestures.rayVisible`,
 `gestures.customEnabled` (plugin gestures on/off), `layout` (`fixed` | `float`), `carouselRadius`,
 `panelDistance`, `uiScale`, `accent` (`cyan` `amber` `green` `violet` `red` `ice` `magenta` `gold` `white`),
 `panelOpacity` (0.3-1), `motion` (0-2), `grid`, `scanlines`, `sounds`, `soundVolume`, `bendPanels`.
 No-code links from a gesture to an action live in Settings too (Gestures panel > BIND, or
 `mcx-ui gesture bind <gesture> <action>`).
-Example: "move panels by closing my hand instead of pinching" = `settings.set("gestures.grabMode", "1")`
-(a one-line script, or the Settings panel).
+Windows move only by a pinch on their title bar (or just above it); there is no setting for that.
+Example: "show the hand ray only when I point" = `settings.set("gestures.pointMode", "1")`
+(a one-line script, or CONTROL > HANDS).
 
 ## Voice commands
 
