@@ -147,6 +147,7 @@ namespace MetaCodex.EditorTools
                 if (Want("agentplugin")) AgentPlugin(shell, hands, tmp);
                 if (Want("vault")) Vault(shell);
                 if (Want("links")) Links(shell, term);
+                if (Want("termframes")) TerminalFramesSection(shell, head, view, tmp); // MetaCodexUiTestTerminals.cs
                 if (Want("lookandlayouts")) LookAndLayouts(shell, head);
                 if (Want("daemon")) Daemon(shell);
                 if (Want("agentsandthreads")) AgentsAndThreads(shell);
