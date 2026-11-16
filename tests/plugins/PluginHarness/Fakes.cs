@@ -160,8 +160,12 @@ namespace PluginHarness
         public void SetSelectionMode(bool on) => Actions.Add("selection " + on);
         public string GetSetting(string key) => Settings.TryGetValue(key, out var v) ? v : null;
         public bool SetSetting(string key, string value) { Settings[key] = value; return true; }
-        public HandState Hand(string hand) => null;
-        public GestureEngine Gestures => null;
+        public HandState Hand(string hand) => hand == "left" ? Engine.Left : Engine.Right;
+        /// The stand-in gesture engine (Stubs.cs): the scenario sets the hands and ticks it.
+        public readonly GestureEngine Engine = new GestureEngine();
+        public GestureEngine Gestures => Engine;
+        /// The scenario passes the projects folder to the host itself.
+        public string PluginProjectsDir(string scriptsDir) => null;
         public string RunAction(string action) { Actions.Add(action); return null; }
         public VoiceCommands Voice { get; } = new VoiceCommands();
         public void VoiceSay(string text) => Said.Add(text);

@@ -58,6 +58,9 @@ namespace MetaCodex.Scripting
         void PlaySound(string name);
         /// A callout by the Whisp. onTap may be null.
         void Notify(string text, string tone, string sound, string speak, Action onTap);
+        /// The app's own path of /root/metacodex-projects/plugins (plugin projects, PluginProject) for the host whose
+        /// scripts are in scriptsDir; null: no plugin projects.
+        string PluginProjectsDir(string scriptsDir);
     }
 
     /// A tile a plugin put in the menu (DOCK and wrist). Window = the full window id it toggles, or null (a `run` tile).
@@ -69,8 +72,11 @@ namespace MetaCodex.Scripting
     /// Behaviours in Lua (MoonSharp: pure C#, IL2CPP-safe), changed during a session without a rebuild.
     /// Two forms, both hot-reloaded within a second of a change:
     ///  - scripts: single `*.lua` files in one folder (/mnt/quest/scripts in the userland);
-    ///  - plugins: folders in /mnt/quest/plugins/<id>/ with plugin.json, an optional main.lua and optional
-    ///    poses/*.json (named hand poses). A plugin is enabled, disabled and reloaded as one unit.
+    ///  - plugins: folders with plugin.json, an optional main.lua and optional poses/*.json (named hand poses), either
+    ///    plugin projects (/root/metacodex-projects/plugins/{apps,gestures,behaviours}/<id>/ with the marker
+    ///    .metacodex/project.json: their kind is fixed, PluginProject) or older folders in /mnt/quest/plugins/<id>/.
+    ///    The id is the folder's name, unique across both: on a clash the project wins. A plugin is enabled, disabled
+    ///    and reloaded as one unit.
     /// Each runs in its own sandbox (no io/os/load); every call has an instruction budget (a runaway loop
     /// stops that script, the app keeps its frame rate); enabled flags and `store` survive restarts.
     /// Gesture detectors (gesture.define) run as persistent coroutines a few dozen times per second.
@@ -82,6 +88,13 @@ namespace MetaCodex.Scripting
             /// "script" (one .lua file) or "plugin" (a folder with plugin.json).
             public string Kind = "script";
             public string PluginDir, Title = "", Version = "";
+            /// A plugin project's kind (app, gesture, behaviour: its folder and marker, fixed); "" for an older plugin folder
+            /// in /mnt/quest/plugins (the shell then reads plugin.json's "kind" or guesses).
+            public string PluginKind = "";
+            /// True for a plugin project (/root/metacodex-projects/plugins/...).
+            public bool Project;
+            /// The plugin's folder as the Linux sees it (what `plugin.dir` and the panels show).
+            public string LinuxDir = "";
             public JObject Manifest;
             public Script Script;
             public string Error;
@@ -122,6 +135,10 @@ namespace MetaCodex.Scripting
         public const int MaxDetectors = 32;
         public readonly string Dir;
         public readonly string PluginsDir;
+        /// The app's path of /root/metacodex-projects/plugins (plugin projects); null: none.
+        public readonly string ProjectsDir;
+        /// Why folders were not loaded at the last scan (no marker, a kind that does not fit its folder, an id clash).
+        public IReadOnlyList<string> ScanNotes => _notes;
         public IReadOnlyList<Entry> Entries => _entries;
         public event Action Changed;
         /// Runs at the end of every Tick (the app's per-frame work for plugin tiles).
@@ -151,11 +168,14 @@ namespace MetaCodex.Scripting
         private int _timerIds;
         private GestureEngine _hookedEngine;
 
-        public ScriptHost(IScriptServices services, string dir, string pluginsDir = null)
+        /// projectsDir: where plugin projects are; null = the services' (PluginProjectsDir) for a host with the default
+        /// plugins folder, none for a host given its own plugins folder (tests).
+        public ScriptHost(IScriptServices services, string dir, string pluginsDir = null, string projectsDir = null)
         {
             _svc = services;
             Dir = dir;
             PluginsDir = pluginsDir ?? System.IO.Path.Combine(System.IO.Path.GetDirectoryName(dir.TrimEnd('/', '\\')) ?? dir, "plugins");
+            ProjectsDir = projectsDir ?? (pluginsDir == null ? services?.PluginProjectsDir(dir) : null);
             Directory.CreateDirectory(dir);
             try { Directory.CreateDirectory(PluginsDir); } catch (Exception) { }
             _statePath = System.IO.Path.Combine(dir, ".state.json");
@@ -194,12 +214,12 @@ namespace MetaCodex.Scripting
                     // the folder walk (every plugin file's time: 2-3 ms each second on the headset in 0.7.19) on a pool
                     // thread; this thread only loads what changed
                     _scanOut = true;
-                    string dir = Dir, plugins = PluginsDir;
+                    string dir = Dir, plugins = PluginsDir, projects = ProjectsDir;
                     int gen = _scanGen;
                     System.Threading.Tasks.Task.Run(() =>
                     {
                         var r = new ScanResult { Gen = gen };
-                        try { r.Found = Gather(dir, plugins); } catch (Exception) { r.Found = null; }
+                        try { r.Found = Gather(dir, plugins, projects); } catch (Exception) { r.Found = null; }
                         System.Threading.Volatile.Write(ref _scanReady, r);
                     });
                 }
@@ -228,7 +248,14 @@ namespace MetaCodex.Scripting
             AfterTick?.Invoke();
         }
 
-        private sealed class ScanResult { public int Gen; public List<(string kind, string name, string path, DateTime mtime)> Found; }
+        /// What a scan found: a script or a plugin (Kind "script" / "plugin"), or a note (Note set: why a folder is not loaded).
+        private sealed class Found
+        {
+            public string Kind, Name, Path, PluginKind = "", Note;
+            public bool Project;
+            public DateTime Mtime;
+        }
+        private sealed class ScanResult { public int Gen; public List<Found> Found; }
         private ScanResult _scanReady; // written by the pool thread, taken by Tick
         private bool _scanOut;
         private int _scanGen;          // a scan done at once makes the one still out stale
@@ -237,36 +264,83 @@ namespace MetaCodex.Scripting
         public void Scan()
         {
             _scanGen++;
-            Apply(Gather(Dir, PluginsDir));
+            Apply(Gather(Dir, PluginsDir, ProjectsDir));
         }
 
-        /// What is in the folders: scripts, then plugins (with the newest time of any of their files), in name order.
-        private static List<(string kind, string name, string path, DateTime mtime)> Gather(string dir, string pluginsDir)
+        /// What is in the folders: scripts, then plugin projects (apps, gestures, behaviours), then the older plugin
+        /// folders, each in name order, with the newest time of any of a plugin's files; and a note for each folder that is
+        /// not loaded (no marker, a marker that does not fit its folder, an id another plugin has). Runs on a pool thread.
+        private static List<Found> Gather(string dir, string pluginsDir, string projectsDir)
         {
-            var found = new List<(string, string, string, DateTime)>();
+            var found = new List<Found>();
             var files = Directory.Exists(dir) ? Directory.GetFiles(dir, "*.lua") : new string[0];
             Array.Sort(files, StringComparer.Ordinal);
-            foreach (var f in files) found.Add(("script", System.IO.Path.GetFileNameWithoutExtension(f), f, File.GetLastWriteTimeUtc(f)));
+            foreach (var f in files) found.Add(new Found { Kind = "script", Name = System.IO.Path.GetFileNameWithoutExtension(f), Path = f, Mtime = File.GetLastWriteTimeUtc(f) });
+            var ids = new Dictionary<string, string>(); // plugin id -> where it was found first
+            if (!string.IsNullOrEmpty(projectsDir) && Directory.Exists(projectsDir))
+            {
+                for (int k = 0; k < PluginProject.Kinds.Length; k++)
+                {
+                    string kind = PluginProject.Kinds[k], folder = PluginProject.Folders[k];
+                    string kdir = System.IO.Path.Combine(projectsDir, folder);
+                    if (!Directory.Exists(kdir)) continue;
+                    var pdirs = Directory.GetDirectories(kdir);
+                    Array.Sort(pdirs, StringComparer.Ordinal);
+                    foreach (var d in pdirs)
+                    {
+                        string fname = System.IO.Path.GetFileName(d), at = "plugins/" + folder + "/" + fname;
+                        if (fname.StartsWith(".", StringComparison.Ordinal)) continue;
+                        if (!File.Exists(System.IO.Path.Combine(d, "plugin.json"))) { found.Add(new Found { Note = at + ": not loaded: no plugin.json" }); continue; }
+                        string marker = System.IO.Path.Combine(d, ".metacodex", "project.json"), problem = null, mkind = null;
+                        if (!File.Exists(marker)) problem = "no marker .metacodex/project.json (a plugin project is made by + NEW PLUGIN or mcx-project new plugins, not by a folder alone)";
+                        else
+                        {
+                            try { mkind = PluginProject.KindFromMarker(File.ReadAllText(marker), out problem); }
+                            catch (Exception ex) { problem = "its marker is unreadable: " + ex.Message; }
+                            if (mkind != null && mkind != kind) problem = "its marker says kind " + mkind + " but its folder is plugins/" + folder + " (the kind is fixed: make a new project of that kind)";
+                        }
+                        if (problem != null) { found.Add(new Found { Note = at + ": not loaded: " + problem }); continue; }
+                        string id = Sanitize(fname);
+                        if (ids.TryGetValue(id, out var first)) { found.Add(new Found { Note = at + ": not loaded: the id " + id + " is taken by " + first }); continue; }
+                        ids[id] = at;
+                        found.Add(new Found { Kind = "plugin", Name = id, Path = d, Mtime = PluginMtime(d), PluginKind = kind, Project = true });
+                    }
+                }
+            }
             var dirs = Directory.Exists(pluginsDir) ? Directory.GetDirectories(pluginsDir) : new string[0];
             Array.Sort(dirs, StringComparer.Ordinal);
             foreach (var d in dirs)
             {
                 if (!File.Exists(System.IO.Path.Combine(d, "plugin.json"))) continue;
-                found.Add(("plugin", Sanitize(System.IO.Path.GetFileName(d)), d, PluginMtime(d)));
+                string id = Sanitize(System.IO.Path.GetFileName(d));
+                if (ids.TryGetValue(id, out var first))
+                {
+                    found.Add(new Found { Note = "/mnt/quest/plugins/" + System.IO.Path.GetFileName(d) + ": not loaded: the plugin project " + first + " has the same id (the project wins)" });
+                    continue;
+                }
+                ids[id] = "/mnt/quest/plugins/" + id;
+                found.Add(new Found { Kind = "plugin", Name = id, Path = d, Mtime = PluginMtime(d) });
             }
             return found;
         }
 
-        private void Apply(List<(string kind, string name, string path, DateTime mtime)> found)
+        private readonly List<string> _notes = new List<string>();
+
+        private void Apply(List<Found> found)
         {
             var seen = new HashSet<string>();
             bool changed = false;
-            foreach (var (kind, name, path, mtime) in found)
+            var notes = new List<string>();
+            foreach (var f in found)
             {
-                seen.Add(kind == "plugin" ? "plugin/" + name : name);
-                var e = _entries.FirstOrDefault(x => x.Kind == kind && x.Name == name);
-                if (e != null && e.Mtime == mtime) continue;
-                Load(e ?? NewEntry(kind, name, path), mtime);
+                if (f.Note != null) { notes.Add(f.Note); continue; }
+                seen.Add(f.Kind == "plugin" ? "plugin/" + f.Name : f.Name);
+                var e = _entries.FirstOrDefault(x => x.Kind == f.Kind && x.Name == f.Name);
+                // the same id from another folder (an older folder replaced by its project): load it from there
+                if (e != null && e.Mtime == f.Mtime && e.Path == f.Path) continue;
+                if (e == null) e = NewEntry(f.Kind, f.Name, f.Path);
+                SetPlace(e, f.Path, f.Project, f.PluginKind);
+                Load(e, f.Mtime);
                 changed = true;
             }
             foreach (var e in _entries.Where(x => !seen.Contains(x.Key)).ToList())
@@ -275,30 +349,52 @@ namespace MetaCodex.Scripting
                 _entries.Remove(e);
                 changed = true;
             }
+            // a note is said once, when it appears (the scan runs every second)
+            foreach (var n in notes) if (!_notes.Contains(n)) _svc.Log("[plugins] " + n);
+            if (notes.Count != _notes.Count || notes.Any(n => !_notes.Contains(n))) { _notes.Clear(); _notes.AddRange(notes); changed = true; }
             if (changed) Changed?.Invoke();
         }
 
         private Entry NewEntry(string kind, string name, string path)
         {
             var e = new Entry { Kind = kind, Name = name, Path = path, PluginDir = kind == "plugin" ? path : null };
+            if (kind == "plugin") e.LinuxDir = "/mnt/quest/plugins/" + name;
             _entries.Add(e);
             return e;
         }
 
-        /// A plugin changes when any of its files changes.
+        private static void SetPlace(Entry e, string path, bool project, string pluginKind)
+        {
+            e.Path = path;
+            if (e.Kind != "plugin") return;
+            e.PluginDir = path;
+            e.Project = project;
+            e.PluginKind = project ? pluginKind ?? "" : "";
+            e.LinuxDir = project ? PluginProject.LinuxDirOf(pluginKind, System.IO.Path.GetFileName(path)) : "/mnt/quest/plugins/" + e.Name;
+        }
+
+        /// A plugin changes when any of its files changes (a project's .git folder is not looked at: it only grows).
         private static DateTime PluginMtime(string dir)
         {
             var t = Directory.GetLastWriteTimeUtc(dir);
-            try
-            {
-                foreach (var f in Directory.GetFiles(dir, "*", SearchOption.AllDirectories))
-                {
-                    var m = File.GetLastWriteTimeUtc(f);
-                    if (m > t) t = m;
-                }
-            }
+            try { NewestIn(dir, ref t); }
             catch (Exception) { }
             return t;
+        }
+
+        private static void NewestIn(string dir, ref DateTime t)
+        {
+            foreach (var f in Directory.GetFiles(dir))
+            {
+                var m = File.GetLastWriteTimeUtc(f);
+                if (m > t) t = m;
+            }
+            foreach (var d in Directory.GetDirectories(dir))
+            {
+                string n = System.IO.Path.GetFileName(d);
+                if (n == ".git" || n == "node_modules") continue;
+                NewestIn(d, ref t);
+            }
         }
 
         private void Load(Entry e, DateTime mtime)
@@ -321,6 +417,10 @@ namespace MetaCodex.Scripting
                     e.Description = (string)e.Manifest["description"] ?? "";
                 }
                 catch (Exception ex) { e.Error = "plugin.json: " + ex.Message; Say(e, "ERROR " + e.Error); return; }
+                // a project's kind is its folder and marker's, never what plugin.json says later
+                string said = e.Manifest["kind"]?.Type == JTokenType.String ? (string)e.Manifest["kind"] : null;
+                if (e.Project && said != null && PluginProject.NormalizeKind(said) != e.PluginKind)
+                    Say(e, "warn plugin.json: \"kind\": \"" + said + "\" is not this project's kind; the kind is " + e.PluginKind + " (fixed by .metacodex/project.json and the folder plugins/" + PluginProject.FolderOf(e.PluginKind) + "): set \"kind\": \"" + e.PluginKind + "\"");
                 if (!e.Enabled) { Say(e, "disabled"); return; }
                 LoadPoses(e);
                 var main = System.IO.Path.Combine(e.PluginDir, (string)e.Manifest["main"] ?? "main.lua");
@@ -373,7 +473,7 @@ namespace MetaCodex.Scripting
                     eng.AddPose(p);
                     e.Poses++;
                 }
-                catch (Exception ex) { Say(e, $"pose {System.IO.Path.GetFileName(f)} skipped: {ex.Message}"); }
+                catch (Exception ex) { Say(e, $"warn pose {System.IO.Path.GetFileName(f)} skipped: {ex.Message}"); }
             }
         }
 
@@ -444,22 +544,79 @@ namespace MetaCodex.Scripting
         }
 
         /// Creates (or overwrites files of) a plugin folder and loads it at once. `files` maps relative paths to text.
+        /// A plugin project of that id gets the files in its own folder; otherwise the folder is /mnt/quest/plugins/<id>.
         public Entry SavePlugin(string id, IDictionary<string, string> files)
         {
             id = Sanitize(id);
-            var dir = System.IO.Path.Combine(PluginsDir, id);
-            Directory.CreateDirectory(dir);
-            foreach (var kv in files)
-            {
-                var path = System.IO.Path.Combine(dir, kv.Key.Replace('/', System.IO.Path.DirectorySeparatorChar));
-                if (!System.IO.Path.GetFullPath(path).StartsWith(System.IO.Path.GetFullPath(dir))) continue; // stays inside
-                Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path));
-                File.WriteAllText(path, kv.Value);
-            }
-            var e = _entries.FirstOrDefault(x => x.Kind == "plugin" && x.Name == id) ?? NewEntry("plugin", id, dir);
+            var have = _entries.FirstOrDefault(x => x.Kind == "plugin" && x.Name == id);
+            var dir = have != null && have.Project ? have.PluginDir : System.IO.Path.Combine(PluginsDir, id);
+            WriteFiles(dir, files);
+            var e = have ?? NewEntry("plugin", id, dir);
             Load(e, PluginMtime(dir));
             Changed?.Invoke();
             return e;
+        }
+
+        private static void WriteFiles(string dir, IEnumerable<KeyValuePair<string, string>> files)
+        {
+            Directory.CreateDirectory(dir);
+            string root = System.IO.Path.GetFullPath(dir).TrimEnd('/', '\\') + System.IO.Path.DirectorySeparatorChar;
+            foreach (var kv in files)
+            {
+                var path = System.IO.Path.Combine(dir, kv.Key.Replace('/', System.IO.Path.DirectorySeparatorChar));
+                if (!System.IO.Path.GetFullPath(path).StartsWith(root, StringComparison.Ordinal)) continue; // stays inside
+                Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path));
+                File.WriteAllText(path, kv.Value);
+            }
+        }
+
+        /// The app's folder of a plugin project of this kind and id (null without ProjectsDir or for an unknown kind).
+        public string ProjectDirFor(string kind, string id)
+        {
+            string f = PluginProject.FolderOf(kind);
+            return f == null || string.IsNullOrEmpty(ProjectsDir) || string.IsNullOrEmpty(id) ? null : System.IO.Path.Combine(ProjectsDir, f, id);
+        }
+
+        /// Makes a plugin project's folder (ProjectsDir/<kind folder>/<id>): the files, then the marker
+        /// .metacodex/project.json, read-only; loads it at once. Refuses an id that is taken (by a project or an older
+        /// folder) and a folder that is there already. The shell then starts git there and adds the MQH project.
+        public Entry CreateProjectPlugin(string kind, string id, IDictionary<string, string> files, out string error)
+        {
+            error = null;
+            kind = PluginProject.NormalizeKind(kind);
+            if (kind == null) { error = "the kind is app, gesture or behaviour"; return null; }
+            if (string.IsNullOrEmpty(id) || id != PluginProject.IdFor(id)) { error = "the id '" + id + "' must be lower case letters, digits, - or _"; return null; }
+            string dir = ProjectDirFor(kind, id);
+            if (dir == null) { error = "no plugin projects here (the Linux is not set up)"; return null; }
+            var have = Find("plugin/" + id);
+            if (have != null) { error = "a plugin with the id " + id + " is there already (" + have.LinuxDir + ")"; return null; }
+            foreach (var f in PluginProject.Folders)
+                if (Directory.Exists(System.IO.Path.Combine(ProjectsDir, f, id))) { error = "the folder plugins/" + f + "/" + id + " is there already"; return null; }
+            if (File.Exists(System.IO.Path.Combine(PluginsDir, id, "plugin.json"))) { error = "/mnt/quest/plugins/" + id + " has that id already"; return null; }
+            try
+            {
+                WriteFiles(dir, files);
+                string marker = System.IO.Path.Combine(dir, ".metacodex", "project.json");
+                Directory.CreateDirectory(System.IO.Path.GetDirectoryName(marker));
+                File.WriteAllText(marker, PluginProject.MarkerJson(kind));
+                try { File.SetAttributes(marker, FileAttributes.ReadOnly); } catch (Exception) { } // chmod a-w on Linux and Android
+            }
+            catch (Exception ex) { error = "the folder was not made: " + ex.Message; return null; }
+            var e = NewEntry("plugin", id, dir);
+            SetPlace(e, dir, true, kind);
+            Load(e, PluginMtime(dir));
+            _scanGen++; // a scan still out does not know this folder yet
+            Changed?.Invoke();
+            return e;
+        }
+
+        /// Deletes a folder with everything in it, read-only files too (the marker; git's objects on Windows).
+        public static void DeleteTree(string dir)
+        {
+            if (!Directory.Exists(dir)) return;
+            foreach (var f in Directory.GetFiles(dir, "*", SearchOption.AllDirectories))
+                try { File.SetAttributes(f, FileAttributes.Normal); } catch (Exception) { }
+            Directory.Delete(dir, true);
         }
 
         public bool Delete(string nameOrKey)
@@ -470,10 +627,11 @@ namespace MetaCodex.Scripting
             _entries.Remove(e);
             try
             {
-                if (e.Kind == "plugin") Directory.Delete(e.PluginDir, true);
+                if (e.Kind == "plugin") DeleteTree(e.PluginDir);
                 else File.Delete(e.Path);
             }
-            catch (Exception) { }
+            catch (Exception ex) { _svc.Log("[plugins] " + e.Name + ": not all of " + e.PluginDir + " was deleted: " + ex.Message); }
+            _scanGen++;
             // deleted means gone: its saved on/off flag and its store go too, so installing the same id again starts clean
             // (on the headset a deleted Timers came back disabled with its old store)
             ForgetState(e.Key);
@@ -885,9 +1043,17 @@ namespace MetaCodex.Scripting
         public string Check(string pluginId)
         {
             var e = Find("plugin/" + pluginId) ?? Find(pluginId);
-            if (e == null) return "plugin " + pluginId + ": not found (mcx-ui plugin list)";
+            if (e == null)
+            {
+                // a folder that is there but not loaded says why (no marker, a kind that does not fit, an id clash)
+                var why = _notes.Where(n => n.Contains("/" + pluginId + ":")).ToList();
+                return "plugin " + pluginId + ": " + (why.Count > 0 ? string.Join("\n", why) : "not found (mcx-ui plugin list)");
+            }
             var sb = new StringBuilder();
             sb.Append("plugin ").Append(e.Name).Append(": ").Append(e.Error != null ? "error" : !e.Enabled ? "disabled" : "loaded");
+            if (e.Kind == "plugin")
+                sb.Append("\nkind: ").Append(e.Project ? e.PluginKind + " (fixed: a plugin project)" : ((string)e.Manifest?["kind"] ?? "not set") + " (an older folder, not a project)")
+                  .Append("\nfolder: ").Append(e.LinuxDir);
             if (e.Error != null) sb.Append("\nerror: ").Append(e.Error);
             var wins = new List<string>();
             foreach (var w in _windows)
@@ -905,10 +1071,26 @@ namespace MetaCodex.Scripting
             sb.Append("\ntimers: ").Append(timers);
             var bad = new List<string>();
             foreach (var line in e.Log) if (line.StartsWith("warn", StringComparison.Ordinal) || line.StartsWith("ERROR", StringComparison.Ordinal) || line.StartsWith("voice.command ", StringComparison.Ordinal)) bad.Add(line); // voice.command lines are the registry's lint warnings
+            foreach (var n in _notes) if (n.Contains("/" + e.Name + ":")) bad.Add("warn " + n); // an older folder this project hides
             sb.Append("\nwarnings: ").Append(bad.Count);
             for (int i = Math.Max(0, bad.Count - 10); i < bad.Count; i++) sb.Append('\n').Append(bad[i]);
             return sb.ToString();
         }
+
+        /// The gesture names a plugin or script reacts to (gesture.on, gesture.sequence steps; "*" left out).
+        public List<string> HandledGestures(Entry e)
+        {
+            var names = new List<string>();
+            foreach (var h in _handlers) if (h.Owner == e && h.Event != "*" && !names.Contains(h.Event)) names.Add(h.Event);
+            foreach (var s in _sequences) if (s.Owner == e) foreach (var st in s.Steps) if (!names.Contains(st)) names.Add(st);
+            return names;
+        }
+
+        /// The gesture names a plugin or script defines with gesture.define (Lua detectors).
+        public List<string> DetectorNames(Entry e) => _detectors.Where(d => d.Owner == e).Select(d => d.Name).Distinct().ToList();
+
+        /// The gesture sequences of a plugin or script (their steps, in order, and the time window).
+        public List<(string[] steps, float window)> SequencesOf(Entry e) => _sequences.Where(s => s.Owner == e).Select(s => (s.Steps, s.Window)).ToList();
 
         private static double LocalToEpoch(int year, int month, int day, int hour, int min, double sec)
         {
@@ -1419,7 +1601,8 @@ namespace MetaCodex.Scripting
                 plugin.Set("id", DynValue.NewString(e.Name));
                 plugin.Set("name", DynValue.NewString(e.Title ?? e.Name));
                 plugin.Set("version", DynValue.NewString(e.Version ?? ""));
-                plugin.Set("dir", DynValue.NewString("/mnt/quest/plugins/" + e.Name));
+                plugin.Set("dir", DynValue.NewString(e.LinuxDir));
+                plugin.Set("kind", DynValue.NewString(e.PluginKind));
                 g.Set("plugin", DynValue.NewTable(plugin));
             }
 

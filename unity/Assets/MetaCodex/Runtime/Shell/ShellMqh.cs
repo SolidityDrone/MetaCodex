@@ -393,6 +393,16 @@ namespace MetaCodex.Shell
 
         // ------------------------------------------------------------------ PLUGINS
 
+        /// Where plugin projects are (ScriptHost scans them): on the headset the Linux's /root/metacodex-projects/plugins
+        /// in the app's rootfs; in the Editor (and its tests) a folder beside the scripts folder, so a test's projects stay
+        /// in its own temporary folder.
+        string IScriptServices.PluginProjectsDir(string scriptsDir)
+        {
+            if (!Application.isEditor && app?.Host != null) return AndroidPathOf(PluginProject.LinuxRoot);
+            string parent = Path.GetDirectoryName((scriptsDir ?? "").TrimEnd('/', '\\'));
+            return string.IsNullOrEmpty(parent) ? null : Path.Combine(parent, "projects");
+        }
+
         private JArray _mqhPluginCache = new JArray();
 
         private void BuildPluginsTab(Rect area)
