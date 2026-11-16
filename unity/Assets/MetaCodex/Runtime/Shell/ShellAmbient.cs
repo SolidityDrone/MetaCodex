@@ -240,6 +240,9 @@ namespace MetaCodex.Shell
             // faces you, and the windows vanished until the hands were lowered (owner, 0.7.3: the gesture must not hide
             // anything). Only when a system menu has opened and taken the app's input focus.
 #if !UNITY_EDITOR
+            // the system keyboard takes the input focus too, but it is drawn over the app: the windows stay (owner
+            // 2026-11-16: "everything else disappears until I send"; SystemKeyboard.HoldsInputFocus)
+            if (SystemKeyboard.HoldsInputFocus) return false;
             if (OVRManager.instance != null && !OVRManager.hasInputFocus) return true;
 #endif
             return false;

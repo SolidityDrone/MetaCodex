@@ -947,6 +947,14 @@ namespace MetaCodex.UI
         /// after it closes, only the text box counts.
         public static bool Busy => IsOpen || Time.unscaledTime - _closedAt < 1f;
 
+        /// Horizon OS takes the app's input focus while its keyboard shows and draws the keyboard over the app, which stays
+        /// in sight (Meta, "Enable Keyboard Overlay": opening it raises OVRManager.InputFocusLost, closing it
+        /// InputFocusAcquired). The shell hides its windows when the input focus goes, for the system menu
+        /// (ShellAmbient.UiShouldStepAside); it must not for this, or every window vanished until the text was sent (owner
+        /// 2026-11-16: "everything else disappears until I send"). True while it is open and 1 s after it closes (the focus
+        /// comes back some frames later).
+        public static bool HoldsInputFocus => Busy;
+
         /// Opens it for `owner` with `text` in its box (an open one closes first). False: there is no system keyboard here.
         public static bool Open(object owner, string text, bool secure, bool multiline, string placeholder)
         {
@@ -954,7 +962,11 @@ namespace MetaCodex.UI
             if (!Supported) return false;
             _owner = owner;
             if (FakeForTest) { _fakeOpen = true; FakeText = text ?? ""; FakeStatus = TouchScreenKeyboard.Status.Visible; }
-            else _kb = TouchScreenKeyboard.Open(text ?? "", TouchScreenKeyboardType.Default, false, multiline, secure, false, placeholder ?? "");
+            else
+            {
+                _kb = TouchScreenKeyboard.Open(text ?? "", TouchScreenKeyboardType.Default, false, multiline, secure, false, placeholder ?? "");
+                MetaCodex.App.SessionLog.Log("system keyboard: open (the windows stay in sight while it has the input focus)");
+            }
             Opened?.Invoke();
             return true;
         }
@@ -982,7 +994,11 @@ namespace MetaCodex.UI
             if (!IsOpenFor(owner)) return TouchScreenKeyboard.Status.LostFocus;
             text = (_fakeOpen ? FakeText : _kb.text) ?? "";
             var status = _fakeOpen ? FakeStatus : _kb.status;
-            if (status != TouchScreenKeyboard.Status.Visible) Closed();
+            if (status != TouchScreenKeyboard.Status.Visible)
+            {
+                if (!_fakeOpen) MetaCodex.App.SessionLog.Log("system keyboard: " + status);
+                Closed();
+            }
             return status;
         }
     }
