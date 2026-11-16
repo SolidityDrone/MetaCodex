@@ -5,6 +5,7 @@
 const fs = require('bare-fs')
 const path = require('bare-path')
 const { CATALOGUE } = require('./models')
+const { parseAssistant, thinkStripper, callGuard, safeJson } = require('./toolcalls')
 
 const KINDS = ['asr', 'llm', 'tts', 'embed', 'coder']
 const INTERFACE = ['asr', 'llm', 'tts', 'embed'] // the app's own voice / UI AI
@@ -291,6 +292,8 @@ class Engines {
   /**
    * OpenAI-style chat with optional tools -> { content, tool_calls, ms, firstMs, stats, cancelled }.
    *   opts.onToken(text): streamed answer text (no <think> block, no <tool_call> text), called per decoded token.
+   *   The local coder's text is held from the first point where a call could start (callGuard: a `{`, a code fence)
+   *   and what is left of it once parsed goes out as one last chunk: a bare JSON call is never streamed as text.
    *   opts.abort: { aborted, onabort } from the HTTP layer (the client went away): a job still queued is skipped,
    *   a running one is cancelled (QVAC response.cancel(); the loop ends with what was made so far).
    */
@@ -312,7 +315,8 @@ class Engines {
       const r = await llm.run(prompt, runOpts)
       if (abort) abort.onabort = () => { r.cancel().catch(() => {}) }
       if (abort && abort.aborted) abort.onabort()
-      const strip = opts.onToken ? thinkStripper(opts.onToken) : null
+      const guard = kind === 'coder' && opts.onToken ? callGuard(opts.onToken) : null
+      const strip = opts.onToken ? thinkStripper(guard ? guard.feed : opts.onToken) : null
       try {
         for await (const tok of r.iterate()) {
           if (!first) first = Date.now() - t0
@@ -320,9 +324,9 @@ class Engines {
           if (strip && !(abort && abort.aborted)) strip(tok)
         }
       } finally { if (abort) abort.onabort = null }
-      const names = (tools || []).map((t) => (t && t.function && t.function.name) || (t && t.name)).filter(Boolean)
-      const res = parseAssistant(out, names)
+      const res = parseAssistant(out, tools || [], { coder: kind === 'coder' })
       if (kind === 'coder') stopRepeat(messages, res)
+      if (guard && !(abort && abort.aborted)) { const rest = guard.rest(res.content); if (rest) opts.onToken(rest) }
       return Object.assign(res, { ms: Date.now() - t0, firstMs: first, stats: r.stats || null, cancelled: !!(abort && abort.aborted) })
     })
   }
@@ -669,43 +673,6 @@ async function embedPass (m, texts) {
   return vectors
 }
 
-/** Forwards streamed text without a leading <think>...</think> block (Qwen3 may write an empty one even with
- * /no_think). Text is held only while it could still be the start of "<think>" or "<tool_call>"; a <tool_call> block
- * is not streamed (the final chunk carries the parsed call). */
-function thinkStripper (emit) {
-  let buf = ''
-  let state = 'start' // start | think | text | tool
-  const feed = (tok) => {
-    if (state === 'tool') return
-    if (state === 'text') {
-      const i = tok.indexOf('<tool_call>')
-      if (i < 0) return emit(tok)
-      if (i > 0) emit(tok.slice(0, i))
-      state = 'tool'
-      return
-    }
-    buf += tok
-    if (state === 'think') {
-      const j = buf.indexOf('</think>')
-      if (j < 0) return
-      const rest = buf.slice(j + 8)
-      buf = ''
-      state = 'start'
-      if (rest) feed(rest)
-      return
-    }
-    const t = buf.trimStart() // state start
-    if (!t) return
-    if (t.startsWith('<think>')) { state = 'think'; buf = t.slice(7); if (buf) { const b = buf; buf = ''; feed(b) } return }
-    if (t.startsWith('<tool_call>')) { state = 'tool'; return }
-    if ('<think>'.startsWith(t) || '<tool_call>'.startsWith(t)) return // could still become a tag
-    state = 'text'
-    buf = ''
-    feed(t)
-  }
-  return feed
-}
-
 /** Whisper marks non-speech as [BLANK_AUDIO], (music) and the like; drop those. */
 function cleanTranscript (t) {
   return String(t || '').replace(/\[[^\]]*\]|\([^)]*\)|\*[^*]*\*/g, ' ').replace(/\s+/g, ' ').trim()
@@ -736,42 +703,6 @@ function toQvacMessage (m) {
   return out
 }
 
-/** Qwen-style output: optional <think>, then text and/or <tool_call>{json}</tool_call> blocks. */
-function parseAssistant (raw, toolNames) {
-  let text = String(raw || '').replace(/<think>[\s\S]*?<\/think>/g, '')
-  const calls = []
-  text = text.replace(/<tool_call>\s*([\s\S]*?)\s*(<\/tool_call>|$)/g, (_, body) => {
-    try {
-      const j = JSON.parse(body)
-      calls.push({ name: j.name, arguments: typeof j.arguments === 'string' ? safeJson(j.arguments) : (j.arguments || {}) })
-    } catch {
-      calls.push({ name: null, arguments: {}, error: 'unparsed tool call: ' + body.slice(0, 200) })
-    }
-    return ''
-  })
-  text = text.trim()
-  // small models write calls as bare JSON instead of <tool_call> blocks, one or several (Qwen2.5-Coder 0.5B:
-  // {"name": "bash", "arguments": {...}} then a made-up second one): every top-level JSON object with a name and
-  // arguments is a call when that name is one of the request's tools (any name when the tools are not known)
-  if (!calls.length && text.includes('"name"')) {
-    const found = []
-    for (const body of jsonObjects(text)) {
-      const j = safeJson(body)
-      if (!j || typeof j.name !== 'string' || !('arguments' in j || 'parameters' in j)) continue
-      if (toolNames && toolNames.length && !toolNames.includes(j.name)) continue
-      const a = 'arguments' in j ? j.arguments : j.parameters
-      found.push({ body, call: { name: j.name, arguments: typeof a === 'string' ? safeJson(a) : (a || {}) } })
-    }
-    if (found.length) {
-      for (const f of found) { calls.push(f.call); text = text.replace(f.body, '') }
-      // and the call-shaped objects naming no tool of the request (made up next to a real one)
-      for (const body of jsonObjects(text)) { const j = safeJson(body); if (j && typeof j.name === 'string' && ('arguments' in j || 'parameters' in j)) text = text.replace(body, '') }
-      text = text.replace(/^[\s,;]+|[\s,;]+$/g, '')
-    }
-  }
-  return { content: text, tool_calls: calls.filter((c) => c.name), raw }
-}
-
 /**
  * A small coder repeats the call that just worked (Qwen2.5-Coder 0.5B wrote hello.txt 29 times, 2026-11-13): when the
  * new tool calls are exactly the previous assistant turn's (names and arguments) and that turn's results were no
@@ -792,24 +723,6 @@ function stopRepeat (messages, res) {
   res.tool_calls = []
   res.repeatStopped = true
 }
-
-/** The top-level {...} spans of a text (strings and escapes respected). */
-function jsonObjects (text) {
-  const out = []
-  let depth = 0
-  let start = -1
-  let inStr = false
-  let esc = false
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i]
-    if (inStr) { if (esc) esc = false; else if (ch === '\\') esc = true; else if (ch === '"') inStr = false; continue }
-    if (ch === '"') { if (depth > 0) inStr = true; continue }
-    if (ch === '{') { if (depth === 0) start = i; depth++ } else if (ch === '}' && depth > 0) { depth--; if (depth === 0 && start >= 0) { out.push(text.slice(start, i + 1)); start = -1 } }
-  }
-  return out
-}
-
-function safeJson (s) { try { return JSON.parse(s) } catch { return {} } }
 
 /** 64-bit FNV-1a of a string, hex (file names for prompt caches). */
 function fnv1a (str) {

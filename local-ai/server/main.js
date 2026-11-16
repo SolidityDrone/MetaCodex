@@ -131,8 +131,8 @@ async function handle (req, res, body) {
       return wake(req, res, body, u)
     case 'POST /v1/audio/speech':
       return speech(res, parseJson(body))
-    case 'POST /v1/chat/completions':
-      return completions(req, res, parseJson(body))
+    case 'POST /v1/chat/completions': // the app's LLM, and OpenCode on the local coding model (model "local-coder")
+      return compat.chatCompletions(req, res, parseJson(body), { engines, send, log, cfg, ids: { llm: CATALOGUE.llm.id, coder: CATALOGUE.coder.id } })
     case 'POST /v1/responses': // Codex (wire_api = "responses") on the local coding model
       return compat.responses(req, res, parseJson(body), { engines, send, sse, log, cfg })
     case 'POST /v1/messages': // Claude Code (ANTHROPIC_BASE_URL) on the local coding model
@@ -290,65 +290,6 @@ async function speech (res, j) {
 /** ", yielded to speech Nx, done after T ms" for a warm-up or prefill that waited for spoken answers. */
 function yieldNote (r) {
   return r.yields ? `, yielded to speech ${r.yields}x, done after ${r.totalMs} ms` : ''
-}
-
-async function completions (req, res, j) {
-  if (!Array.isArray(j.messages) || !j.messages.length) throw httpError(400, 'messages is required')
-  // the local coder gets the slim profile (compat.slim): a short system prompt, the core tools (OpenCode threads)
-  if (compat.wantsCoder(j.model) && cfg.coderSlim !== false) Object.assign(j, compat.slim({ messages: j.messages.map((m) => Object.assign({}, m, { content: Array.isArray(m.content) ? m.content.map((p) => typeof p === 'string' ? p : p.text || '').join('') : m.content })), tools: j.tools || [] }))
-  if (j.stream) return completionsStream(req, res, j)
-  const r = await engines.chat(j.messages, Array.isArray(j.tools) ? j.tools : [], { max_tokens: j.max_tokens, temperature: j.temperature, grammar: j.grammar, engine: compat.wantsCoder(j.model) ? 'coder' : 'llm' })
-  const calls = r.tool_calls.map((c, i) => ({ id: 'call_' + Date.now().toString(36) + i, type: 'function', function: { name: c.name, arguments: JSON.stringify(c.arguments || {}) } }))
-  const st = r.stats || {}
-  log(`llm ${r.ms} ms (first ${r.firstMs} ms, prompt ${st.promptTokens || '?'} tok): ${calls.length ? calls.map((c) => c.function.name + c.function.arguments).join(' ') : JSON.stringify(r.content).slice(0, 120)}`)
-  send(res, 200, {
-    id: 'chatcmpl-' + Date.now().toString(36),
-    object: 'chat.completion',
-    created: Math.floor(Date.now() / 1000),
-    model: (compat.wantsCoder(j.model) ? CATALOGUE.coder : CATALOGUE.llm).id,
-    choices: [{ index: 0, message: Object.assign({ role: 'assistant', content: r.content || null }, calls.length ? { tool_calls: calls } : {}), finish_reason: calls.length ? 'tool_calls' : 'stop' }],
-    usage: { prompt_tokens: st.promptTokens || 0, completion_tokens: st.generatedTokens || 0, total_tokens: (st.promptTokens || 0) + (st.generatedTokens || 0) },
-    timings: { ms: r.ms, firstMs: r.firstMs, tps: st.TPS || null }
-  })
-}
-
-/** stream: true -> text/event-stream, OpenAI chunk format: a role chunk, one delta.content per decoded token (no
- * <think> block, no <tool_call> text), a final chunk with finish_reason (and parsed tool_calls), then [DONE]. The
- * client closing the connection cancels the generation (a queued one is skipped). */
-async function completionsStream (req, res, j) {
-  const id = 'chatcmpl-' + Date.now().toString(36)
-  const created = Math.floor(Date.now() / 1000)
-  const abort = { aborted: false, onabort: null }
-  const gone = () => { if (abort.aborted) return; abort.aborted = true; if (abort.onabort) abort.onabort() }
-  // the socket, not the request: bare-http1 closes the request object once its body has been read
-  try { if (req.socket) req.socket.on('close', gone) } catch {}
-  res.statusCode = 200
-  res.setHeader('Content-Type', 'text/event-stream')
-  res.setHeader('Cache-Control', 'no-cache')
-  const chunk = (delta, finish, extra) => {
-    if (abort.aborted) return
-    const o = { id, object: 'chat.completion.chunk', created, model: (compat.wantsCoder(j.model) ? CATALOGUE.coder : CATALOGUE.llm).id, choices: [{ index: 0, delta, finish_reason: finish || null }] }
-    try { res.write('data: ' + JSON.stringify(Object.assign(o, extra || {})) + '\n\n') } catch { gone() }
-  }
-  chunk({ role: 'assistant' })
-  let r
-  try {
-    r = await engines.chat(j.messages, Array.isArray(j.tools) ? j.tools : [], {
-      max_tokens: j.max_tokens, temperature: j.temperature, grammar: j.grammar, abort, engine: compat.wantsCoder(j.model) ? 'coder' : 'llm',
-      onToken: (t) => chunk({ content: t })
-    })
-  } catch (e) {
-    chunk({}, 'error', { error: String(e.message || e) })
-    try { res.end('data: [DONE]\n\n') } catch {}
-    throw Object.assign(e, { streamed: true })
-  }
-  const calls = r.tool_calls.map((c, i) => ({ index: i, id: 'call_' + Date.now().toString(36) + i, type: 'function', function: { name: c.name, arguments: JSON.stringify(c.arguments || {}) } }))
-  const st = r.stats || {}
-  log(`llm stream ${r.ms} ms (first ${r.firstMs} ms, prompt ${st.promptTokens || '?'} tok)${r.cancelled ? ' cancelled' : ''}: ${JSON.stringify(r.content).slice(0, 120)}`)
-  chunk(calls.length ? { tool_calls: calls } : {}, calls.length ? 'tool_calls' : 'stop', {
-    usage: { prompt_tokens: st.promptTokens || 0, completion_tokens: st.generatedTokens || 0 }, timings: { ms: r.ms, firstMs: r.firstMs, tps: st.TPS || null }
-  })
-  try { res.end('data: [DONE]\n\n') } catch {}
 }
 
 /** A server-sent-events response: event(name, obj) writes `event:` + `data:` lines, end() closes it; `abort` is set
