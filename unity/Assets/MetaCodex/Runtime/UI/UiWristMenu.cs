@@ -10,9 +10,12 @@ namespace MetaCodex.UI
     /// back of the left wrist when the user looks at it as at a watch (palm turned away, so it never meets the Horizon OS
     /// palm-up gesture). Folded, it is a watch face: a hexagon of glass with the time, sixty ticks and a seconds hand, and
     /// over the time the headset's battery and Wi-Fi signal (StatusRow, UiDeviceStatus).
-    /// Touch it with the right index fingertip and it unfolds: a shock ring runs out, an inner ring of six tiles and an
-    /// outer ring of twelve swing in from opposite sides (each draws its line icon with a scan line, then types its
-    /// name), under a turning bezel, arcs and a radar sweep. Touching a tile runs it with a flash, a ring and sparks.
+    /// Touch it with the right index fingertip and it unfolds: a shock ring runs out, an inner ring (MinInner..MaxInner
+    /// tiles) and an outer ring (up to MaxOuter) swing in from opposite sides (each draws its line icon with a scan line,
+    /// then types its name), under a turning bezel, arcs and a radar sweep. A ring's tiles share it evenly, however many
+    /// it holds (no empty places); its names are fitted to their tiles (FitTileLabel). Touching a tile runs it with a
+    /// flash, a ring and sparks. The user arranges the rings and sets its size, text size, glass and core in CONTROL >
+    /// WRIST MENU (ShellWristSettings), which shows a copy of it (Preview).
     /// Nothing pops: the face and the rings each follow one timeline, played back from where they are when the user
     /// changes their mind (owner 2026-11-09: "never appear / disappear instantly, always transition back or forth").
     /// Stable on the wrist (owner 2026-11-09: "when i try to click stuff on the left side, the radial either gets far
@@ -35,14 +38,44 @@ namespace MetaCodex.UI
         public sealed class Item { public string Glyph, Label, Icon; public Action Act; public Func<bool> Lit, Locked; public Color LitTint; }
 
         public readonly List<Item> Inner = new List<Item>(), Outer = new List<Item>();
+        /// How many tiles a ring holds (ShellWristSettings keeps a layout inside these): the inner ring MinInner..MaxInner,
+        /// the outer one 0..MaxOuter. A ring of few tiles keeps them no wider than InnerMaxDeg / OuterMaxDeg (spread evenly,
+        /// with room between them), so a tile never becomes a whole ring.
+        public const int MinInner = 3, MaxInner = 8, MaxOuter = 12;
+        private const float InnerMaxDeg = 90f, OuterMaxDeg = 72f;
         /// A locked tile's colour: dim steel (its name stays, fainter).
         private static readonly Color LockedTint = new Color(0.30f, 0.38f, 0.46f, 1f);
         /// The hands: left carries the menu, the right index fingertip presses.
         public Func<Handedness, (bool ok, HandFrame frame)> Hand;
         public Transform Head;
         public UiTheme Theme;
-        /// Overall size (1 = 15 cm across the outer ring).
-        public float Scale = 0.85f;
+        /// Overall size (1 = 15 cm across the outer ring). MENU SIZE multiplies the default (DefaultScale).
+        public float Scale = DefaultScale;
+        public const float DefaultScale = 0.85f;
+        /// TEXT SIZE: scales the tiles' names and the face's text (each name is still fitted to its tile). The labels are
+        /// made again when it changes (never per frame).
+        public float TextScale
+        {
+            get => _textScale;
+            set
+            {
+                float v = Mathf.Clamp(value, 0.5f, 2f);
+                if (Mathf.Approximately(v, _textScale)) return;
+                _textScale = v;
+                if (_ready) RebuildItems(); else _itemsVersion++;
+            }
+        }
+        /// What the core shows: the battery, the network, the time (CONTROL > WRIST MENU).
+        public bool ShowBattery = true, ShowNetwork = true, ShowClock = true;
+        /// A tap on a tile folds the rings after it runs (else they stay open until the core is touched or 7 s pass).
+        public bool CloseAfterTap;
+        /// A copy for the WRIST MENU page (ShellWristSettings): no hands, no touches, no depth; it stays unfolded where its
+        /// owner puts it (parented to the page) and lights the tile PreviewSelected (-1: none) as if a finger were over it,
+        /// its name in the core. Set before Build.
+        public bool Preview;
+        public int PreviewSelected = -1;
+        /// The light's render queue (-1: the shader's, Transparent-20). The copy on the page draws after the page's glass.
+        public int ArtQueue = -1;
         /// Where it floats: this far off the back of the wrist, and this far from the wrist towards the eyes (metres).
         public float OffBack = 0.040f, TowardEyes = 0.065f;
         /// Writes the menu's depth so the hand cut-outs keep the carrying hand behind it (tests turn it off to compare).
@@ -80,21 +113,38 @@ namespace MetaCodex.UI
             }
         }
 
-        // geometry, metres before Scale: the face, the two rings of tiles, the bezel and the arcs
-        private const float FaceR = 0.0205f, CoreHit = 0.0175f;
+        // geometry, metres before Scale: the face, the two rings of tiles, the bezel and the arcs. The face grew from 0.0205
+        // (owner 2026-11-16: the status row was too small and on the core's rim): the menu's outer size is the same, the
+        // face's ring stays inside the inner tiles' guide arc (InR0 - 0.0017)
+        private const float FaceR = 0.0222f, CoreHit = 0.0190f;
         private const float InR0 = 0.0236f, InR1 = 0.0470f, OutR0 = 0.0500f, OutR1 = 0.0690f, MidRingR = 0.0485f;
         private const float BezelR0 = 0.0722f, BezelR1 = 0.0740f, ArcR = 0.0790f, ArcR2 = 0.0822f;
         private const float InGapDeg = 3.6f, OutGapDeg = 2.8f, Corner = 0.0016f;
-        private const float InStart = 90f, OutStart = 75f; // the first tile's centre (degrees, counter-clockwise from +x)
+        private const float InStart = 90f; // the inner ring's first tile is centred at 12; the outer ring's first one starts at 12
         private const float JumpDist = 0.08f;
+        // line heights, metres before Scale and TextScale (owner 2026-11-16: "a bit larger text, like +20 %"; they were
+        // 0.0034, 0.0030, 0.0056, 0.0036, 0.0030, 0.0032): the inner and outer tiles' names, the time, a name in the face
+        // (a long one smaller), the hint under the folded face. The names sit this far under their tile's centre.
+        private const float InnerLine = 0.0041f, OuterLine = 0.0036f, TimeLine = 0.0067f, NameLine = 0.0043f, LongNameLine = 0.0036f, HintLine = 0.0038f;
+        private const float InLabelDrop = 0.0062f, OutLabelDrop = 0.0054f;
+        /// The time (and the name of the tile under the finger) sits a little under the face's centre, the status row over it.
+        private const float FaceTextY = -0.0018f;
+
+        private static float Spacing(int n) => n > 0 ? 360f / n : 360f;
+        private static float WedgeDeg(int n, bool inner) => Mathf.Min(Spacing(n), inner ? InnerMaxDeg : OuterMaxDeg);
+        /// The first tile's centre (degrees, counter-clockwise from +x): the inner ring's at 12, the outer ring's half a
+        /// place to the right of 12 (its tiles sit between the inner ones).
+        private float StartDeg(bool inner) => inner ? InStart : 90f - Spacing(Outer.Count) * 0.5f;
+        private static Vector2 Dir(float deg) => new Vector2(Mathf.Cos(deg * Mathf.Deg2Rad), Mathf.Sin(deg * Mathf.Deg2Rad));
 
         private Mesh _mesh;
         private Material _mat, _sparkMat;
         private MeshRenderer _mr, _depthMr;
-        private float _glassOpacity = 1f;
+        private float _glassOpacity = 1f, _textScale = 1f;
         private ParticleSystem _burst, _motes;
         private TextMeshPro _faceText, _hint;
         private readonly List<TextMeshPro> _labels = new List<TextMeshPro>();
+        private readonly List<float> _labelDx = new List<float>(); // each name's shift on its line (FitTileLabel)
         private Vector4[] _iconRect = new Vector4[0];
         private float[] _hoverAmt = new float[0], _flash = new float[0];
         private bool _expandTarget, _wantShow, _posed, _armed, _dismissing, _emitterOk, _tipOk;
@@ -220,6 +270,7 @@ namespace MetaCodex.UI
             var sh = Resources.Load<Shader>("Shaders/WristArt") ?? Shader.Find("MetaCodex/WristArt");
             var ssh = Resources.Load<Shader>("Shaders/WristSpark") ?? Shader.Find("MetaCodex/WristSpark");
             _mat = new Material(sh) { name = "wrist menu" };
+            if (ArtQueue > 0) _mat.renderQueue = ArtQueue;
             _mat.SetFloat("_Opacity", _glassOpacity);
             _sparkMat = ssh != null ? new Material(ssh) { name = "wrist sparks" } : null;
         }
@@ -259,13 +310,13 @@ namespace MetaCodex.UI
                 if (made > 0 && budgetMs > 0.0 && (System.Diagnostics.Stopwatch.GetTimestamp() - t0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency > budgetMs) break;
                 if (_faceText == null)
                 {
-                    _faceText = Label("face", "", 0.0056f, Theme?.Mono ?? Theme?.Display);
+                    _faceText = Label("face", "", TimeLine * _textScale, Theme?.Mono ?? Theme?.Display);
                     _faceText.characterSpacing = 1f;
                     HideUntilShown(_faceText);
                 }
                 else if (_hint == null)
                 {
-                    _hint = Label("hint", "MENU", 0.0032f, Theme?.Display);
+                    _hint = Label("hint", "MENU", HintLine, Theme?.Display);
                     HideUntilShown(_hint);
                 }
                 else if (_status == null)
@@ -281,7 +332,8 @@ namespace MetaCodex.UI
                 {
                     int i = _labels.Count;
                     var it = ItemAt(i);
-                    var l = Label("tile " + it.Label, it.Label, i < Inner.Count ? 0.0034f : 0.0030f, Theme?.Display);
+                    var l = Label("tile " + it.Label, it.Label ?? "", (i < Inner.Count ? InnerLine : OuterLine) * _textScale, Theme?.Display);
+                    _labelDx.Add(FitTileLabel(l, i));
                     HideUntilShown(l);
                     _labels.Add(l);
                 }
@@ -295,10 +347,81 @@ namespace MetaCodex.UI
             if (l != null && (_mr == null || !_mr.enabled)) l.gameObject.SetActive(false);
         }
 
+        /// Keeps a tile's name inside its tile (owner 2026-11-16: bigger names, and none may run over a tile's edge): on its
+        /// line the name has the room between the tile's edges (TileLine); it stays centred under the icon when it fits so,
+        /// else it moves towards the wider side just enough; a name wider than the whole room is drawn smaller (down to
+        /// 72 %), then with tighter letters, and as a last resort cut. Returns how far it moved (menu-local metres, + right).
+        /// Runs when the label is made (the lists or TEXT SIZE changed), never per frame.
+        private float FitTileLabel(TextMeshPro l, int part)
+        {
+            string text = l.text ?? "";
+            if (text.Length == 0) return 0f;
+            TileLine(part, l.fontSize, out float left, out float right);
+            float room = left + right;
+            if (room <= 0f) return 0f;
+            float w = l.GetPreferredValues(text).x;
+            if (w > room)
+            {
+                l.fontSize *= Mathf.Max(0.72f, room / w);
+                w = l.GetPreferredValues(text).x;
+                if (w > room) { l.characterSpacing = 1f; w = l.GetPreferredValues(text).x; }
+                while (w > room && text.Length > 2)
+                {
+                    text = text.Substring(0, text.Length - 1);
+                    w = l.GetPreferredValues(text).x;
+                }
+                if (text != l.text) l.text = text;
+            }
+            float lo = w * 0.5f - left, hi = right - w * 0.5f; // where its centre may go
+            return lo > 0f ? lo : hi < 0f ? hi : 0f;
+        }
+
+        /// The room on a tile name's line (menu-local metres before Scale): how far from the point under the tile's centre
+        /// the tile goes to the left and to the right (its inner and outer radius, its two sides), on the line through
+        /// the name's middle and on the lines through its top and bottom, less a margin for the tile's round corners.
+        private void TileLine(int part, float fontSize, out float left, out float right)
+        {
+            left = right = 0f;
+            bool inner = part < Inner.Count;
+            int j = inner ? part : part - Inner.Count, n = inner ? Inner.Count : Outer.Count;
+            if (n == 0) return;
+            float half = WedgeDeg(n, inner) * 0.5f - (inner ? InGapDeg : OutGapDeg) * 0.5f;
+            float centre = StartDeg(inner) - j * Spacing(n);
+            float r0 = inner ? InR0 : OutR0, r1 = inner ? InR1 : OutR1;
+            var mid = Dir(centre) * ((r0 + r1) * 0.5f);
+            var at = new Vector2(mid.x, mid.y - (inner ? InLabelDrop : OutLabelDrop));
+            float capHalf = fontSize * 0.1f * 0.36f; // half a capital's height (an em is ~0.1 m per point)
+            left = right = float.MaxValue;
+            for (int row = -1; row <= 1; row++)
+            {
+                float y = at.y + row * capHalf;
+                left = Mathf.Min(left, Reach(at.x, y, -1f, r0, r1, centre, half));
+                right = Mathf.Min(right, Reach(at.x, y, 1f, r0, r1, centre, half));
+            }
+            const float corner = 0.0012f;
+            left = Mathf.Max(0f, left - corner);
+            right = Mathf.Max(0f, right - corner);
+        }
+
+        private static float Reach(float x0, float y, float dir, float r0, float r1, float centre, float half)
+        {
+            const float step = 0.0004f;
+            float x = 0f;
+            for (int k = 0; k < 100; k++)
+            {
+                var q = new Vector2(x0 + dir * (x + step), y);
+                float r = q.magnitude, a = Mathf.Atan2(q.y, q.x) * Mathf.Rad2Deg;
+                if (r < r0 || r > r1 || Mathf.Abs(Mathf.DeltaAngle(centre, a)) > half) break;
+                x += step;
+            }
+            return x;
+        }
+
         private void DestroyTileLabels()
         {
             foreach (var l in _labels) if (l != null) KillObject(l.gameObject);
             _labels.Clear();
+            _labelDx.Clear();
         }
 
         private static void KillObject(GameObject go)
@@ -582,6 +705,7 @@ namespace MetaCodex.UI
         {
             if (!_ready || _mesh == null) return;
             if (_labels.Count != Inner.Count + Outer.Count) RebuildItems(); // the lists changed and nobody said so
+            if (Preview) { TickPreview(dt); return; }
             _time += dt;
             (bool okL, HandFrame L) = Hand != null ? Hand(Handedness.Left) : (false, default);
             (bool okR, HandFrame R) = Hand != null ? Hand(Handedness.Right) : (false, default);
@@ -706,25 +830,70 @@ namespace MetaCodex.UI
             if (on) Rebuild();
         }
 
+        /// The copy on the WRIST MENU page: unfolded where its owner put it, the chosen tile lit, no hands, no depth. It
+        /// folds and turns itself off after Dismiss, like the real one.
+        private void TickPreview(float dt)
+        {
+            _time += dt;
+            _tipOk = false;
+            _emitterOk = false;
+            Engaged = false;
+            _posed = true;
+            bool show = !_dismissing;
+            _wantShow = show;
+            _expandTarget = show;
+            float bloomTarget = show ? 1f : 0f;
+            _bloom = Mathf.MoveTowards(_bloom, bloomTarget, dt / (bloomTarget > _bloom ? BloomTime : FoldTime));
+            bool keepFace = show || _bloom > 0.35f;
+            _present = Mathf.MoveTowards(_present, keepFace ? 1f : 0f, dt / (keepFace ? AppearTime : VanishTime));
+            transform.localScale = Vector3.one * Scale;
+            int n = Inner.Count + Outer.Count;
+            Hover = PreviewSelected >= 0 && PreviewSelected < n ? PreviewSelected : -1;
+            for (int i = 0; i < _hoverAmt.Length; i++)
+            {
+                _hoverAmt[i] = Mathf.MoveTowards(_hoverAmt[i], Hover == i ? 1f : 0f, dt * 10f);
+                _flash[i] = Mathf.Max(0f, _flash[i] - dt / 0.35f);
+            }
+            _coreHover = Mathf.MoveTowards(_coreHover, 0f, dt * 10f);
+            if (_wave < 1f) _wave = Mathf.Min(1f, _wave + dt / 0.42f);
+            _faceTyped = Mathf.Min(1f, _faceTyped + dt / 0.14f);
+            if (_dismissing && _present <= 0.001f && _bloom <= 0.001f) { _dismissing = false; HideNow(); enabled = false; return; }
+            bool on = _present > 0.001f || _bloom > 0.001f;
+            SetVisible(on);
+            TickStatus(on);
+            if (_depthMr != null && _depthMr.enabled) _depthMr.enabled = false;
+            if (on) Rebuild();
+        }
+
+        /// The copy on the WRIST MENU page: a tile flashes and sends a ring out (what just changed).
+        public void Ping(int part)
+        {
+            if (part < 0 || part >= _flash.Length) return;
+            _flash[part] = 1f;
+            _wave = 0f;
+            var w = transform.InverseTransformPoint(WorldOf(part));
+            _waveCenter = new Vector2(w.x, w.y);
+        }
+
         /// What a point of the menu's surface is over (menu-local, metres before Scale).
         public int HitTest(Vector2 q)
         {
             float r = q.magnitude, a = Mathf.Atan2(q.y, q.x) * Mathf.Rad2Deg;
             if (r < CoreHit) return -2;
             if (_bloom < 0.6f) return -1;
-            if (r >= InR0 - 0.001f && r <= InR1 + 0.0015f) { int i = TileAt(a, Inner.Count, InStart, InGapDeg); if (i >= 0) return i; }
-            if (r >= OutR0 - 0.0015f && r <= OutR1 + 0.002f) { int i = TileAt(a, Outer.Count, OutStart, OutGapDeg); if (i >= 0) return Inner.Count + i; }
+            if (r >= InR0 - 0.001f && r <= InR1 + 0.0015f) { int i = TileAt(a, Inner.Count, StartDeg(true), InGapDeg, InnerMaxDeg); if (i >= 0) return i; }
+            if (r >= OutR0 - 0.0015f && r <= OutR1 + 0.002f) { int i = TileAt(a, Outer.Count, StartDeg(false), OutGapDeg, OuterMaxDeg); if (i >= 0) return Inner.Count + i; }
             return -1;
         }
 
-        private static int TileAt(float a, int n, float start, float gap)
+        private static int TileAt(float a, int n, float start, float gap, float maxDeg)
         {
             if (n == 0) return -1;
             float step = 360f / n;
             int i = Mathf.RoundToInt(-Mathf.DeltaAngle(start, a) / step);
             i = ((i % n) + n) % n;
             float centre = start - i * step;
-            return Mathf.Abs(Mathf.DeltaAngle(centre, a)) <= step * 0.5f - gap * 0.5f ? i : -1;
+            return Mathf.Abs(Mathf.DeltaAngle(centre, a)) <= Mathf.Min(step, maxDeg) * 0.5f - gap * 0.5f ? i : -1;
         }
 
         private void Press(int part, Vector3 tipWorld, Vector2 local)
@@ -748,6 +917,7 @@ namespace MetaCodex.UI
             Pressed?.Invoke(part);
             try { item.Act?.Invoke(); }
             catch (Exception ex) { Debug.LogWarning("[MetaCodex] wrist menu " + item.Label + ": " + ex.Message); }
+            if (CloseAfterTap) _expandTarget = false; // CLOSE AFTER A TAP: the rings fold, the face stays while it is looked at
         }
 
         private void Burst(Vector3 at, int count)
@@ -763,13 +933,24 @@ namespace MetaCodex.UI
             if (part == -2) return transform.position;
             bool inner = part < Inner.Count;
             int i = inner ? part : part - Inner.Count, n = inner ? Inner.Count : Outer.Count;
-            float a = ((inner ? InStart : OutStart) - i * 360f / n) * Mathf.Deg2Rad;
+            float a = (StartDeg(inner) - i * Spacing(n)) * Mathf.Deg2Rad;
             float r = inner ? (InR0 + InR1) * 0.5f : (OutR0 + OutR1) * 0.5f;
             return transform.TransformPoint(new Vector3(Mathf.Cos(a) * r, Mathf.Sin(a) * r, 0f));
         }
 
         /// Off (DOCK mode, or the shell disabled it): its depth must not stay in the picture.
         private void OnDisable() { if (_depthMr != null) _depthMr.enabled = false; }
+
+        /// Destroyed (the copy on the WRIST MENU page goes when the page closes): its own mesh and materials go with it (the
+        /// icon atlas is shared and stays).
+        private void OnDestroy()
+        {
+            void Kill(UnityEngine.Object o) { if (o == null) return; if (Application.isPlaying) Destroy(o); else DestroyImmediate(o); }
+            Kill(_mesh);
+            Kill(_mat);
+            Kill(_sparkMat);
+            if (_depthMr != null) Kill(_depthMr.sharedMaterial);
+        }
 
         /// Out of sight at once (tests; the shell uses Dismiss).
         public void HideNow()
@@ -810,8 +991,9 @@ namespace MetaCodex.UI
         private static float EaseOutBack(float t) { const float c1 = 1.70158f, c3 = c1 + 1f; t = Mathf.Clamp01(t); return 1f + c3 * Mathf.Pow(t - 1f, 3f) + c1 * Mathf.Pow(t - 1f, 2f); }
         private static float Bump(float x, float a, float b) => Mathf.Sin(Mathf.PI * Seg(x, a, b));
 
-        private float InnerStart(int j) => 0.14f + 0.055f * j;
-        private float OuterStart(int j) => 0.28f + 0.032f * j;
+        // when each tile starts to swing in (of the unfold's timeline): a full ring's last tile is still typed in by its end
+        private float InnerStart(int j) => 0.14f + Mathf.Min(0.055f, 0.40f / Mathf.Max(1, Inner.Count - 1)) * j;
+        private float OuterStart(int j) => 0.28f + Mathf.Min(0.032f, 0.30f / Mathf.Max(1, Outer.Count - 1)) * j;
 
         private void Rebuild()
         {
@@ -855,8 +1037,10 @@ namespace MetaCodex.UI
                 Arc(Vector2.zero, MidRingR, 0.00030f, 0f, 360f, 72, accent, 0.22f * Seg(B, 0.3f, 0.7f), 0.3f);
             }
 
-            // the rings of tiles: the inner six swing in clockwise, the outer twelve the other way, each a fan opening
+            // the rings of tiles: the inner ones swing in clockwise, the outer ones the other way, each a fan opening; a ring's
+            // tiles share it evenly (Spacing), none wider than its ring's limit (WedgeDeg)
             int n = Inner.Count + Outer.Count;
+            float startIn = StartDeg(true), startOut = StartDeg(false);
             for (int i = 0; i < n; i++)
             {
                 bool inner = i < Inner.Count;
@@ -866,9 +1050,9 @@ namespace MetaCodex.UI
                 var label = _labels[i];
                 if (e <= 0.001f) { HideLabel(label); continue; }
                 float eo = EaseOut(e), eb = EaseOutBack(e);
-                float step = 360f / cnt, gap = inner ? InGapDeg : OutGapDeg;
-                float half = (step * 0.5f - gap * 0.5f) * Mathf.Clamp01(eo * 1.05f);
-                float centre = (inner ? InStart : OutStart) - j * step + (inner ? 38f : -38f) * (1f - eo);
+                float spacing = Spacing(cnt), gap = inner ? InGapDeg : OutGapDeg;
+                float half = (WedgeDeg(cnt, inner) * 0.5f - gap * 0.5f) * Mathf.Clamp01(eo * 1.05f);
+                float centre = (inner ? startIn : startOut) - j * spacing + (inner ? 38f : -38f) * (1f - eo);
                 float h = _hoverAmt[i], f = _flash[i];
                 var item = ItemAt(i);
                 bool locked = item.Locked != null && item.Locked();
@@ -889,8 +1073,8 @@ namespace MetaCodex.UI
                 IconQuad(mid + new Vector2(0f, inner ? 0.0026f : 0.0022f), icon, z - 0.0005f, _iconRect[i], ink, alpha, Seg(B, s0 + 0.12f, s0 + 0.34f), state, 1f);
                 if (lit) TickLine(r1 - 0.0019f, r1 - 0.0007f, centre, 0.0011f, item.LitTint, alpha, 0.9f, z - 0.0004f);
                 float typed = Seg(B, s0 + 0.18f, s0 + 0.40f);
-                label.rectTransform.localPosition = new Vector3(mid.x, mid.y - (inner ? 0.0058f : 0.0050f), z - 0.0006f);
-                int chars = Mathf.CeilToInt(item.Label.Length * typed);
+                label.rectTransform.localPosition = new Vector3(mid.x + _labelDx[i], mid.y - (inner ? InLabelDrop : OutLabelDrop), z - 0.0006f);
+                int chars = Mathf.CeilToInt(label.text.Length * typed); // the name as fitted (FitTileLabel may have cut it)
                 if (label.maxVisibleCharacters != chars) label.maxVisibleCharacters = chars;
                 var lc = lit ? Color.Lerp(item.LitTint, Color.white, 0.5f) : Color.Lerp(t.TextDim, Color.white, 0.25f + h * 0.75f);
                 lc.a = alpha * Seg(B, s0 + 0.2f, s0 + 0.42f) * (0.85f + 0.15f * h) * (1f - uiHide) * (locked ? 0.55f : 1f);
@@ -961,21 +1145,22 @@ namespace MetaCodex.UI
             _mesh.SetTriangles(_tri, 0);
             _mesh.RecalculateBounds();
 
-            // the face's text: the time, or the name of what the fingertip is over while unfolded; the hint while folded
-            string want = B > 0.5f && Hover >= 0 ? ItemAt(Hover).Label : B > 0.5f && Hover == -2 ? "CLOSE" : TimeText(now);
+            // the face's text: the time (unless the core hides it), or the name of what the fingertip is over while unfolded;
+            // the hint while folded
+            string want = B > 0.5f && Hover >= 0 ? ItemAt(Hover).Label ?? "" : B > 0.5f && Hover == -2 ? "CLOSE" : ShowClock ? TimeText(now) : "";
             if (want != _faceShown) { _faceShown = want; _faceText.text = want; _faceTyped = 0f; }
             int faceChars = Mathf.CeilToInt(want.Length * Mathf.Min(_faceTyped, Seg(P, 0.6f, 1f) * 1.0001f));
             if (_faceText.maxVisibleCharacters != faceChars) _faceText.maxVisibleCharacters = faceChars;
             bool name = want.Length > 0 && !char.IsDigit(want[0]);
-            float fs = (Theme ?? UiTheme.Current).FontSizeFor(name ? (want.Length > 6 ? 0.0030f : 0.0036f) : 0.0056f) * 1.12f;
+            float fs = (Theme ?? UiTheme.Current).FontSizeFor((name ? (want.Length > 6 ? LongNameLine : NameLine) : TimeLine) * _textScale) * 1.12f;
             if (!Mathf.Approximately(_faceText.fontSize, fs)) _faceText.fontSize = fs;
             float cs = name ? 5f : 1f;
             if (!Mathf.Approximately(_faceText.characterSpacing, cs)) _faceText.characterSpacing = cs;
-            _faceText.rectTransform.localPosition = new Vector3(0f, B > 0.5f && _expandTarget ? FaceR * 0.08f : 0f, -0.0010f);
+            _faceText.rectTransform.localPosition = new Vector3(0f, FaceTextY, -0.0010f);
             var fc = name ? Color.Lerp(t.TextAccent, Color.white, 0.4f) : Color.Lerp(t.TextAccent, Color.white, 0.15f + 0.5f * _coreHover);
             fc.a = Seg(P, 0.6f, 1f) * (1f - uiHide);
             _faceText.color = fc;
-            _hint.rectTransform.localPosition = new Vector3(0f, -(FaceR + 0.0052f), -0.0009f);
+            _hint.rectTransform.localPosition = new Vector3(0f, -(FaceR + 0.0056f), -0.0009f);
             var hc = t.TextDim;
             hc.a = Seg(P, 0.75f, 1f) * (1f - B) * 0.8f * (1f - uiHide);
             _hint.color = hc;
@@ -990,18 +1175,22 @@ namespace MetaCodex.UI
         // the percentage, and four bars of Wi-Fi signal (dim under a slash: offline). Low battery (LowBattery and under)
         // in the warning tone, a plugged-in one's fill in the ok tone. Drawn as light (kind 1 lines) and one label; the
         // menu does not grow and the core stays one touch target (the row lies inside CoreHit). Nothing at all when nothing
-        // is known (the Editor, batch runs).
-        // Menu-local metres before Scale: the row's centre (StatusY face radii over the centre, clear of the time and of the
-        // inner hexagon's top edge at 0.33), the percentage's line height, the battery, the bolt and the bars.
-        private const float StatusY = 0.44f, StatusLine = 0.0028f, StatusGap = 0.0008f;
-        private const float BatW = 0.0038f, BatH = 0.0020f, BatStroke = 0.00032f, BatNub = 0.00042f;
-        private const float BoltW = 0.0012f, BoltH = 0.0025f, BarW = 0.00052f, BarGap = 0.00034f, BarMinH = 0.0008f, BarMaxH = 0.0024f;
-        private const float BarsW = 4f * BarW + 3f * BarGap;
+        // is known (the Editor, batch runs), and only the parts the user keeps (ShowBattery, ShowNetwork).
+        // Menu-local metres before Scale. The owner's test of the first row (2026-11-16: "way too small and on the edge of
+        // the inner circle"): everything is 1.35 times bigger (the percentage 1.43), and the row sits in the middle band of
+        // the face's glass, where its sides are straight (|y| < 0.35 face radii, 0.0078 m): its centre 5.2 mm over the
+        // face's centre, the time under it. "85%" with the bars is 20.3 mm wide, the glass there 26.9 mm (3.3 mm free on
+        // each side); the widest row ("100%" with the bolt) 24.2 mm (measured with the fonts in a prototype picture).
+        private const float StatusY = 0.0052f, StatusLine = 0.0040f, StatusGap = 0.0011f;
+        private const float BatW = 0.0051f, BatH = 0.0027f, BatStroke = 0.00042f, BatNub = 0.00056f;
+        private const float BoltW = 0.0016f, BoltH = 0.0034f, BarW = 0.0007f, BarGap = 0.00046f, BarMinH = 0.0011f, BarMaxH = 0.0032f;
+        private const float BarsW = 4f * BarW + 3f * BarGap, StatusStroke = 0.00035f;
 
         /// The status is read when the menu appears and then every UiDeviceStatus.PollSeconds while it shows: the battery
         /// one frame, the network the next (each a short call into Android). Nothing between those.
         private void TickStatus(bool on)
         {
+            on &= ShowBattery || ShowNetwork; // nothing shown: nothing read
             if (on && !_statusWasOn) _statusNextPoll = _time; // appearing: now
             _statusWasOn = on;
             if (_statusStep == 1) { _statusStep = 0; UiDeviceStatus.PollNetwork(); return; }
@@ -1024,12 +1213,12 @@ namespace MetaCodex.UI
         {
             if (_status == null) return;
             if (UiDeviceStatus.Version != _statusVersion) RefreshStatusText();
-            bool bat = UiDeviceStatus.Battery >= 0, net = UiDeviceStatus.NetworkKnown, plugged = bat && UiDeviceStatus.Charging;
+            bool bat = ShowBattery && UiDeviceStatus.Battery >= 0, net = ShowNetwork && UiDeviceStatus.NetworkKnown, plugged = bat && UiDeviceStatus.Charging;
             if ((!bat && !net) || shown <= 0.002f) { HideLabel(_status); return; }
             bool low = bat && UiDeviceStatus.Battery <= UiDeviceStatus.LowBattery;
             Color tone = low ? t.Warn : t.Accent, ok = t.Ok;
             const float z = -0.0009f;
-            float y = FaceR * StatusY;
+            float y = StatusY;
             // the row's width, then its pieces from the left
             float w = 0f;
             if (bat) w += (plugged ? BoltW + StatusGap * 0.6f : 0f) + BatW + BatStroke * 0.5f + BatNub + StatusGap + _statusTextW;
@@ -1043,9 +1232,9 @@ namespace MetaCodex.UI
                     // a bolt: three strokes, top right to bottom left
                     float bx = x + BoltW * 0.5f, hw = BoltW * 0.5f, hh = BoltH * 0.5f;
                     var c = Color.Lerp(ok, Color.white, 0.25f);
-                    LineSeg(new Vector2(bx + hw * 0.6f, y + hh), new Vector2(bx - hw * 0.5f, y + hh * 0.04f), 0.00026f, c, shown, 0.5f, z);
-                    LineSeg(new Vector2(bx - hw * 0.5f, y + hh * 0.04f), new Vector2(bx + hw * 0.5f, y - hh * 0.04f), 0.00026f, c, shown, 0.5f, z);
-                    LineSeg(new Vector2(bx + hw * 0.5f, y - hh * 0.04f), new Vector2(bx - hw * 0.6f, y - hh), 0.00026f, c, shown, 0.5f, z);
+                    LineSeg(new Vector2(bx + hw * 0.6f, y + hh), new Vector2(bx - hw * 0.5f, y + hh * 0.04f), StatusStroke, c, shown, 0.5f, z);
+                    LineSeg(new Vector2(bx - hw * 0.5f, y + hh * 0.04f), new Vector2(bx + hw * 0.5f, y - hh * 0.04f), StatusStroke, c, shown, 0.5f, z);
+                    LineSeg(new Vector2(bx + hw * 0.5f, y - hh * 0.04f), new Vector2(bx - hw * 0.6f, y - hh), StatusStroke, c, shown, 0.5f, z);
                     x += BoltW + StatusGap * 0.6f;
                 }
                 // the battery: an outline, its nub on the right, the fill from the left as long as the level
@@ -1055,7 +1244,7 @@ namespace MetaCodex.UI
                 LineSeg(new Vector2(x0, y0 + s * 0.5f), new Vector2(x0, y1 - s * 0.5f), s, tone, 0.9f * shown, 0.4f, z);
                 LineSeg(new Vector2(x1, y0 + s * 0.5f), new Vector2(x1, y1 - s * 0.5f), s, tone, 0.9f * shown, 0.4f, z);
                 LineSeg(new Vector2(x1 + s * 0.5f, y), new Vector2(x1 + s * 0.5f + BatNub, y), BatH * 0.42f, tone, 0.9f * shown, 0.2f, z);
-                float inset = s * 0.5f + 0.00028f, full = BatW - 2f * inset;
+                float inset = s * 0.5f + 0.00036f, full = BatW - 2f * inset;
                 float level = Mathf.Clamp01(UiDeviceStatus.Battery / 100f);
                 if (level > 0f) LineSeg(new Vector2(x0 + inset, y), new Vector2(x0 + inset + full * Mathf.Max(level, 0.06f), y), BatH - 2f * inset, plugged ? ok : tone, 0.85f * shown, 0f, z);
                 x = x1 + s * 0.5f + BatNub + StatusGap;
@@ -1081,7 +1270,7 @@ namespace MetaCodex.UI
                 LineSeg(new Vector2(bx, yb), new Vector2(bx, yb + h), BarW, t.Accent, k * shown, online && (bars < 0 || i < bars) ? 0.35f : 0f, z);
             }
             if (!online)
-                LineSeg(new Vector2(x - 0.0002f, yb - 0.0001f), new Vector2(x + BarsW + 0.0002f, yb + BarMaxH + 0.0001f), 0.00028f, t.Warn, 0.95f * shown, 0.5f, z - 0.0001f);
+                LineSeg(new Vector2(x - 0.0003f, yb - 0.0001f), new Vector2(x + BarsW + 0.0003f, yb + BarMaxH + 0.0001f), StatusStroke, t.Warn, 0.95f * shown, 0.5f, z - 0.0001f);
         }
 
         /// "HH:mm", made again only when the minute changes (the face asks every frame).
