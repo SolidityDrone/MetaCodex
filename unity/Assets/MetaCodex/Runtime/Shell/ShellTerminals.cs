@@ -7,8 +7,9 @@ using UnityEngine;
 
 namespace MetaCodex.Shell
 {
-    /// The terminals' frames (owner 2026-11-16: "avoid them stacking on top of one another ... make the terminal smaller:
-    /// it's way too big and it doesn't scale like the UI ... we must be able to select, and copy"):
+    /// The terminals' frames (owner 2026-11-16: "avoid them stacking on top of one another ... I get the link for the auth
+    /// but I can't copy it ... make the terminal smaller: it's way too big and it doesn't scale like the UI ... we must be
+    /// able to select, and copy"):
     /// - size: the grid (96 x 30 cells) is drawn at TerminalGridScale in its frame, so the frame is THREAD's width at UI SCALE
     ///   1.0 and its letters are the windows' body text size; the frame takes the UI SCALE like every window (BaseScale).
     ///   The key bar and the status line hang on the view and follow it; the pty keeps its columns and rows.
@@ -20,6 +21,8 @@ namespace MetaCodex.Shell
     ///   letting go keeps it, COPY in the title bar copies it: to the system clipboard (the system keyboard, WEB and every
     ///   PASTE read it) and to CLIPBOARD. A tap focuses the terminal and drops the selection. Rows scrolled back into the
     ///   history (⇞ on the key bar) can be selected too; a drag does not scroll.
+    /// - links: ⇗ opens the newest link the terminal printed, COPY LINK copies it; both light up while there is one
+    ///   (ScanTerminalLinks; TerminalText.Urls joins long sign-in links wrapped over several rows).
     /// - a program's own copy (OSC 52: vim, tmux, a CLI's "copy") lands on both clipboards the same way.
     public sealed partial class MetaCodexShell
     {
@@ -27,19 +30,20 @@ namespace MetaCodex.Shell
         /// big"); at 0.62 it is 0.73 m (THREAD's width) and a row is 13 mm, the glyphs the size of the windows' body text.
         public const float TerminalGridScale = 0.62f;
 
-        private const float TermPasteW = 0.085f, TermCopyW = 0.064f;
+        private const float TermPasteW = 0.085f, TermCopyW = 0.064f, TermCopyLinkW = 0.104f;
 
         /// Frames that were open once: shown again, they may go back where they were.
         private readonly HashSet<UiPanel> _termPlaced = new HashSet<UiPanel>();
         private readonly Dictionary<TerminalInstance, UiButton> _termCopy = new Dictionary<TerminalInstance, UiButton>();
+        private readonly Dictionary<TerminalInstance, UiButton> _termCopyLink = new Dictionary<TerminalInstance, UiButton>();
         private bool _termSelectTipShown;
 
         /// Self-tests: copies go to CLIPBOARD and LastCopiedForTest only, not to the PC's own clipboard.
         public bool SystemClipboardForTest = true;
         public string LastCopiedForTest { get; private set; }
 
-        /// The title bar, right to left: ✕ – + ⌨ ⎘ PASTE, COPY (the selection), then ⇗ (the newest link).
-        /// COPY looks off until there is a selection; a press then says what to do.
+        /// The title bar, right to left: ✕ – + ⌨ ⎘ PASTE, COPY (the selection), then ⇗ and COPY LINK (the newest link).
+        /// COPY, ⇗ and COPY LINK look off until there is something to copy or open; a press then says what to do.
         private void AddTerminalButtons(UiPanel frame, TerminalInstance inst, float w)
         {
             var t = UiTheme.Current;
@@ -56,7 +60,10 @@ namespace MetaCodex.Shell
             x -= 0.006f + TermCopyW;
             _termCopy[inst] = frame.Add(new UiButton("COPY", () => CopyTerminalSelection(inst), UiButtonStyle.Ghost) { Rect = new Rect(x, y, TermCopyW, h), Dimmed = true });
             x -= 0.018f + 0.036f;
-            _linkButtons[inst] = frame.Add(new UiButton("⇗", () => OpenTerminalLink(inst), UiButtonStyle.Ghost) { Rect = new Rect(x, y, 0.036f, h) });
+            _linkButtons[inst] = frame.Add(new UiButton("⇗", () => OpenTerminalLink(inst), UiButtonStyle.Ghost) { Rect = new Rect(x, y, 0.036f, h), Dimmed = true });
+            x -= 0.006f + TermCopyLinkW;
+            _termCopyLink[inst] = frame.Add(new UiButton("COPY LINK", () => CopyTerminalLink(inst), UiButtonStyle.Ghost) { Rect = new Rect(x, y, TermCopyLinkW, h), Dimmed = true });
+            if (_links.ContainsKey(inst)) LightTerminalLink(inst, true);
         }
 
         /// The UI SCALE on every terminal frame, open or hidden (OnSettingsChanged).
@@ -107,6 +114,23 @@ namespace MetaCodex.Shell
             Toast($"Copied {text.Length} characters", "ok");
         }
 
+        /// COPY LINK: the newest link the terminal printed to both clipboards.
+        public void CopyTerminalLink(TerminalInstance inst)
+        {
+            string url = TerminalLinkOf(inst);
+            if (url == null) { Toast("No link on this terminal yet", "warn"); return; }
+            CopyText(url, inst.Name, "term-" + inst.Number);
+            Toast("Link copied", "ok");
+        }
+
+        /// The newest link a terminal printed: the one ScanTerminalLinks keeps, else one on it now (before the scan ran).
+        private string TerminalLinkOf(TerminalInstance inst)
+        {
+            if (inst == null) return null;
+            if (_links.TryGetValue(inst, out var url)) return url;
+            return inst.Terminal != null ? TerminalLinks.Last(inst.Terminal) : null;
+        }
+
         /// Text to the clipboards: the system one (the system keyboard, WEB and every PASTE in the app read it) and
         /// CLIPBOARD's text list.
         public void CopyText(string text, string from, string fromId)
@@ -126,8 +150,18 @@ namespace MetaCodex.Shell
             Toast($"Copied {text.Length} characters from {inst.Name}", "ok");
         }
 
+        /// ⇗ and COPY LINK light up while the terminal has a link.
+        private void LightTerminalLink(TerminalInstance inst, bool on)
+        {
+            if (_linkButtons.TryGetValue(inst, out var b) && b != null) { b.SetDimmed(!on); b.SetSelected(on); }
+            if (_termCopyLink.TryGetValue(inst, out var c) && c != null) { c.SetDimmed(!on); c.SetSelected(on); }
+        }
+
         /// Self-tests: a terminal frame's buttons and its text surface.
         public UiButton TerminalCopyButtonForTest(TerminalInstance inst) => _termCopy.TryGetValue(inst, out var b) ? b : null;
+        public UiButton TerminalCopyLinkButtonForTest(TerminalInstance inst) => _termCopyLink.TryGetValue(inst, out var b) ? b : null;
+        public UiButton TerminalOpenLinkButtonForTest(TerminalInstance inst) => _linkButtons.TryGetValue(inst, out var b) ? b : null;
+        public void ScanTerminalLinksForTest() { _nextLinkScan = 0f; ScanTerminalLinks(); }
 
         /// Self-tests: a terminal framed for a test goes away again (its frame destroyed, as a closed terminal's).
         public void DropTerminalForTest(TerminalInstance inst)

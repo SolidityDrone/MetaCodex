@@ -873,7 +873,7 @@ namespace MetaCodex.Shell
         private void OnTerminalClosed(TerminalInstance inst)
         {
             if (_frames.TryGetValue(inst, out var f)) { Router.Unregister(f); _frames.Remove(inst); _termPlaced.Remove(f); }
-            _linkButtons.Remove(inst); _links.Remove(inst); _linkVersion.Remove(inst); _termCopy.Remove(inst);
+            _linkButtons.Remove(inst); _links.Remove(inst); _linkVersion.Remove(inst); _termCopy.Remove(inst); _termCopyLink.Remove(inst);
             RefreshTerminalsPanel();
         }
 
