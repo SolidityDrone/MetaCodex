@@ -572,8 +572,8 @@ namespace MetaCodex.UI
 
         // ------------------------------------------------------------------ lean (curve mode)
 
-        // A bent window in curve mode may lean: its top towards the user, so a tall one faces the eyes (ShellLayout
-        // .LayoutTilt sets the target on every layout tick). The lean is a pitch about the panel's own horizontal axis,
+        // A bent window in curve mode may lean: its top towards the user, so one seen high above the eyes faces them
+        // (ShellLayout.LayoutTilt sets the target from its elevation on every layout tick). The lean is a pitch about the panel's own horizontal axis,
         // written to the transform: the shaders bend in object space and the ray maths go through the transform, so both
         // follow it with no change of their own. The yaw is kept: the level pose is rebuilt from the azimuth of the
         // forward direction, which a pitch does not change. A window that never leans is never written (its placement
@@ -644,7 +644,9 @@ namespace MetaCodex.UI
             fwd.y = 0f;
             if (fwd.sqrMagnitude < 1e-8f) return;
             var level = Quaternion.LookRotation(fwd, Vector3.up);
-            // the top goes towards -z (the user's side), so the front faces the eyes more
+            // the top goes towards -z (the user's side), so the front faces the eyes more: a turn of -t about +x takes the
+            // local up (0,1,0) to (0, cos t, -sin t) and the forward (0,0,1) to (0, sin t, cos t), i.e. +z (away from the
+            // user, MetaCodexApp.Recenter) along the line from the eyes up to the centre when t is the centre's elevation
             var q = _tiltCurrent > 0f ? Quaternion.AngleAxis(-_tiltCurrent, level * Vector3.right) * level : level;
             transform.rotation = q;
             _leaning = _tiltCurrent > 0f;

@@ -74,7 +74,8 @@ namespace MetaCodex.Shell
             _slots.Clear();
             ArrangeRing();
             EnsureRingBar();
-            if (!_ringBar.IsOpen) _ringBar.Open();
+            // a bar already open (a recenter while floating) keeps its yaw and follows from there: no jump
+            if (!_ringBar.IsOpen) { _barYaw = _baseYaw; _barYawVel = 0f; _barFollowing = false; _ringBar.Open(); }
         }
 
         private const float RingGap = 4f;     // degrees between neighbours
@@ -169,12 +170,23 @@ namespace MetaCodex.Shell
         }
 
         // ---- FLOAT's TURN bar (owner 2026-11-13: "keep the stuff fixed in the rig, follow us, and add a scroll bar below to
-        // rotate the rig; the float should not rotate by itself"): a bar under the ring, fixed to the rig (it turns with the
-        // body, not with the ring); its slider turns the ring. No gesture turns the ring any more.
+        // rotate the rig; the float should not rotate by itself"): a bar under the ring; its slider turns the ring. No
+        // gesture turns the ring any more. It does not spin with the ring; it follows the head's yaw lazily (owner
+        // 2026-11-16: "if it is fixed we have to turn all around to select and turn. Not locked to the camera, but a smooth
+        // follow"): it stays put while the user looks within BarDeadZoneDeg of it, beyond that it eases round the ring to
+        // where they face (critically damped, no overshoot), and it holds still while a hand aims at it or holds it.
         private UiPanel _ringBar;
         private UiSlider _ringTurn;
+        private float _barYaw, _barYawVel; // the bar's world yaw (degrees) and its follow speed (degrees/s)
+        private bool _barFollowing;
         /// The body may move this far (metres) before the ring follows it.
         public const float RigDeadZone = 0.30f;
+        /// The TURN bar stays put while the user's yaw is within this many degrees of it; beyond, it follows.
+        public const float BarDeadZoneDeg = 25f;
+        /// The follow's smooth time (s; Mathf.SmoothDampAngle: critically damped, it arrives in about this long).
+        public const float BarFollowTime = 1.5f;
+        /// The follow ends this close to where the user faces (degrees); then the dead zone holds the bar again.
+        private const float BarSettleDeg = 1f;
 
         private void EnsureRingBar()
         {
@@ -186,16 +198,35 @@ namespace MetaCodex.Shell
             _ringTurn = _ringBar.Add(new UiSlider("TURN", -360f, 360f, 0f, v => { _spin = v; _spinVel = 0f; }) { Rect = _ringBar.Content, Format = "0", LabelWidth = 0.09f });
         }
 
-        /// The bar sits below the windows' row, at the front of the rig (its angle is the rig's, not the ring's); its
-        /// slider shows the turn (shown wrapped to -360..360: a full turn is the same ring).
-        private void UpdateRingBar(Vector3 c, float r)
+        /// The bar sits below the windows' row on the ring's radius, facing the user, at its own yaw (not the ring's: the
+        /// ring's spin does not move it), which follows the head lazily; its slider shows the turn (shown wrapped to
+        /// -360..360: a full turn is the same ring). Per frame: a few float ops, no allocation.
+        private void UpdateRingBar(Vector3 c, float r, float dt)
         {
             if (_ringBar == null) return;
-            float a = _baseYaw * Mathf.Deg2Rad;
+            // a hand holds its slider (or presses on it), or aims at it: the bar holds still, and the follow restarts from rest
+            bool held = Router != null && (Router.IsPressing(_ringBar) || Router.HandRayPanel(0) == _ringBar || Router.HandRayPanel(1) == _ringBar);
+            var head = Head;
+            if (held) _barYawVel = 0f;
+            else if (head != null && dt > 0f)
+            {
+                var f = head.forward;
+                if (f.x * f.x + f.z * f.z > 0.04f) // looking almost straight up or down the yaw is noise: the bar waits
+                {
+                    float face = Mathf.Atan2(f.x, f.z) * Mathf.Rad2Deg;
+                    if (!_barFollowing && Mathf.Abs(Mathf.DeltaAngle(_barYaw, face)) > BarDeadZoneDeg) _barFollowing = true;
+                    if (_barFollowing)
+                    {
+                        _barYaw = Mathf.Repeat(Mathf.SmoothDampAngle(_barYaw, face, ref _barYawVel, BarFollowTime, Mathf.Infinity, dt), 360f);
+                        if (Mathf.Abs(Mathf.DeltaAngle(_barYaw, face)) < BarSettleDeg) { _barFollowing = false; _barYawVel = 0f; }
+                    }
+                }
+            }
+            float a = _barYaw * Mathf.Deg2Rad;
             var dir = new Vector3(Mathf.Sin(a), 0f, Mathf.Cos(a));
             _ringBar.transform.SetPositionAndRotation(new Vector3(c.x, _carouselY - 0.36f, c.z) + dir * r, Quaternion.LookRotation(dir, Vector3.up));
             float shown = Mathf.Repeat(_spin + 360f, 720f) - 360f;
-            if (_ringTurn != null && !Router.IsDragging(_ringBar) && Mathf.Abs(shown - _ringTurn.Value) > 0.5f) _ringTurn.Set(shown);
+            if (_ringTurn != null && !held && Mathf.Abs(shown - _ringTurn.Value) > 0.5f) _ringTurn.Set(shown);
         }
 
         /// Windows that never bend: terminals (their text grid cannot bend yet) and WEB (the page is one flat picture,
@@ -203,28 +234,30 @@ namespace MetaCodex.Shell
         /// windows lie on its curve (ShellThreadGroups.FitGroupMembers).
         public static bool StaysFlat(UiPanel p) => p.Id.StartsWith("term-") || p.Id == "web";
 
-        // ---- curve mode's lean (owner 2026-11-16: "a very high window ... tilts ... so it is easy to read, because it faces
-        // slightly toward my y position"): a tall bent window leans its top towards the eyes.
+        // ---- curve mode's lean (owner 2026-11-16: "if a panel is above a certain height, curve mode should not only curve it
+        // but also tilt it, so a panel high up faces slightly toward my eyes"): a bent window high in the view leans its top
+        // towards the eyes. Keyed on where the window is (its elevation), not on its size: a normal window placed high leans.
 
-        /// The world height (m) from which a bent window leans, the height at which it leans in full, and the most it
-        /// leans (degrees). Between the first two the lean ramps up.
-        public const float TiltFromHeight = 0.6f, TiltFullHeight = 1.0f, TiltMaxDeg = 25f;
+        /// The elevation (degrees: how far above the eyes the window's centre is seen) from which a bent window leans, the
+        /// elevation at which it leans in full, and the most it leans (degrees). Between the first two the lean ramps up.
+        public const float TiltFromDeg = 8f, TiltFullDeg = 20f, TiltMaxDeg = 30f;
 
-        /// The lean (degrees) of a window in curve mode: 0 when it is shorter than TiltFromHeight or its centre is not above
-        /// the eyes; else the ramp k (0 at TiltFromHeight, 1 at TiltFullHeight) times the angle its centre rises above the
-        /// eyes as they see it, at most TiltMaxDeg. The yaw is not touched; the panel leans its top towards the user.
+        /// The lean (degrees) of a window in curve mode, any size: elev = atan2(centre.y - eye.y, horizontal distance);
+        /// 0 below TiltFromDeg; else the ramp k (0 at TiltFromDeg, 1 at TiltFullDeg) times elev, at most TiltMaxDeg. The
+        /// yaw is not touched; the panel leans its top towards the user (UiPanel.ApplyTilt), so its face turns down to the eyes.
         public static float LayoutTilt(UiPanel p, Vector3 eye)
         {
-            float k = Mathf.Clamp01((p.Height * p.RestLossyScale.y - TiltFromHeight) / (TiltFullHeight - TiltFromHeight));
-            var d = p.transform.position - eye;
-            if (k <= 0f || d.y <= 0f) return 0f;
-            return Mathf.Min(TiltMaxDeg, k * Mathf.Atan2(d.y, new Vector2(d.x, d.z).magnitude) * Mathf.Rad2Deg);
+            var d = p.transform.position - eye; // the panel's pivot is its centre (UiPanel.PanelToLocal)
+            if (d.y <= 0f) return 0f;
+            float elev = Mathf.Atan2(d.y, Mathf.Sqrt(d.x * d.x + d.z * d.z)) * Mathf.Rad2Deg;
+            float k = Mathf.Clamp01((elev - TiltFromDeg) / (TiltFullDeg - TiltFromDeg));
+            return k <= 0f ? 0f : Mathf.Min(TiltMaxDeg, k * elev);
         }
 
         /// Fixed layout with "Bend panels": each panel curves towards you around its own distance (bent on the GPU,
         /// eased by the panel, so it follows you smoothly). Terminals and WEB stay flat (StaysFlat). A thread group gets
         /// the same curve in its own units (LayoutBend); its windows are not layout panels, they follow it. A bent
-        /// window also leans its top to the eyes (LayoutTilt); with bending off nothing leans.
+        /// window seen high above the eyes also leans its top to them (LayoutTilt); with bending off nothing leans.
         public void UpdateFixedBend()
         {
             if (Floating || Settings == null) return;
@@ -324,7 +357,7 @@ namespace MetaCodex.Shell
                 p.SetBend(Settings.bendPanels && !StaysFlat(p) ? LayoutBend(p, r) : 0f);
                 p.SetTilt(0f); // the ring stands upright: its poses are set above, every frame (no lean from FIXED)
             }
-            UpdateRingBar(_carousel.position, r); // the bar under the ring: fixed to the rig
+            UpdateRingBar(_carousel.position, r, dt); // the bar under the ring: follows the head's yaw lazily
             UpdateControlRail(); // after the ring moved its window
             UpdateSidebarLink(); // after the ring moved the thread
 
