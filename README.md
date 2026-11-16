@@ -235,7 +235,7 @@ Examples: "Is this build stuck?" and "What did this thread achieve?".
 
 Most commands run without the language model.
 
-1. You push to talk, or you say "Hey Whisp" (off by default: CONTROL > VOICE). The microphone records 16 kHz mono and stops 0.7 s after you stop speaking. A clip lasts 12 s at most.
+1. You push to talk, or you say "Hey Whisp" (on by default; CONTROL > VOICE turns it off). The microphone records 16 kHz mono and stops 0.7 s after you stop speaking. A clip lasts 12 s at most.
 2. Local speech-to-text makes the text. The prompt holds the words of every command, so names are heard right. A misheard word becomes the nearest command word.
 3. The fast path matches phrase templates of the enabled commands. It uses no model.
 4. The decision model embeds each clause and compares it with example sentences of each command (cosine similarity). It also scores an explicit "none" option for chit-chat.
@@ -363,7 +363,7 @@ A built app declares its own permissions. `mcx-app verify` lists them. The heads
 - Layouts: FIXED panels stay in the world. FLOAT panels sit on an invisible cylinder that follows your body. The cylinder moves only past a dead zone of 0.30 m, so a small step does not move it. A TURN bar turns the cylinder. No gesture turns it. Named layouts save the open panels.
 - Recenter keeps the layout. Every window turns with you, so each keeps its place relative to the others.
 - The main menu is the wrist menu, or the DOCK if you choose it in CONTROL > DISPLAY. The wrist menu opens when you look at your left wrist and touch it with your right index finger. Both show the same 11 tiles, plus the tiles of app plugins.
-- Hand tracking drives everything: ray and pinch, fingertip poke, fist to move a panel. By default only the pinch selects, drags and scrolls. No gesture opens or closes a window by default. A pose fires only after you hold it for 2 s in a row. One pose is bound by default: the V (index and middle finger up) turns Ambient Focus on or off. Taps, such as a clap or a swipe, fire at once. A binding never fires while that hand is on a window. Built-in gestures are pinch, grab, point, open, palm-up and clap.
+- Hand tracking drives everything: you point the hand ray and pinch. The pinch selects, drags and scrolls. To move a window, you pinch its title bar or the band just above it. The wrist menu and the Whisp also take a touch of the fingertip. No gesture opens or closes a window by default. A pose fires only after you hold it for 2 s in a row. One pose is bound by default: the V (index and middle finger up) turns Ambient Focus on or off. Taps, such as a clap or a swipe, fire at once. A binding never fires while that hand is on a window. Built-in gestures are pinch, grab, point, open, palm-up and clap.
 - Ambient Focus keeps a dome of your room visible. The blur covers the whole room at once, using the colours of the room that the camera has seen. A sharpened depth map keeps real people and objects in front of the panels.
 - Depth and camera stay on for 60 s after nothing needs them. Voice does not stop the camera. Its frames are not used while speech is turned into text.
 - THREADS groups threads by project type: NATIVE, DEFAULT and RESEARCH. A new thread is named from its first message. + PROJECT asks for a type, then a name.

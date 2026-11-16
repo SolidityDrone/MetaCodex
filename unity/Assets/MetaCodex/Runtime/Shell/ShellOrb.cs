@@ -235,7 +235,10 @@ namespace MetaCodex.Shell
             var d = head.position - _orbAnchor;
             float walked = new Vector2(d.x, d.z).magnitude;
             bool moved = walked > 0.25f || Mathf.Abs(d.y) > 0.18f;
-            bool showing = Orb.State != UiOrb.Mood.Idle || Toasts.Count > 0 || OrbMenuOpen;
+            // the guided tour holds it still too: its card sits beside the Whisp and moves off it when covered, so a
+            // Whisp that looks for a better place drags the card about (owner 2026-11-16)
+            bool tour = TourRunning;
+            bool showing = Orb.State != UiOrb.Mood.Idle || Toasts.Count > 0 || OrbMenuOpen || tour;
             float turn = Mathf.Abs(Mathf.DeltaAngle(_orbYaw, headYaw));
             bool turned = turn > 34f;
             if (showing && !_orbWasShowing && turned && _orbGrabHand < 0) FrameOrb(false); // something new to show: into view, once
@@ -255,7 +258,7 @@ namespace MetaCodex.Shell
             }
             // it still keeps its menu and callouts off the window watched when they appeared (that one is kept while it
             // holds: a look at the callouts does not make another window "watched" and send the orb elsewhere)
-            TickOrbAvoid();
+            if (!tour) TickOrbAvoid();
             if (_orbGrabHand >= 0) return; // in the user's fingers
             // ease round the user (never straight through their head) to its place in the frame; gliding aside from the
             // window being watched, a little slower (it never jumps)
@@ -481,7 +484,7 @@ namespace MetaCodex.Shell
             if (to.sqrMagnitude < 1e-6f) to = Vector3.forward;
             var side = Vector3.Cross(Vector3.up, to.normalized); // the user's right, seen from the eye
             float dist = Head != null ? Vector3.Distance(Head.position, Orb.Position) : OrbDistance;
-            return new UiToasts.Anchor { Orb = Orb.Position, Side = side, Radius = OrbOuterRadius / 1.75f, Scale = Mathf.Clamp(dist / 0.75f, 0.45f, 1.2f) * Mathf.Clamp(Settings.uiScale, 0.6f, 1.8f) / 1.2f * 1.12f }; // their text about a degree
+            return new UiToasts.Anchor { Orb = Orb.Position, Side = side, Radius = OrbOuterRadius / 1.75f, Scale = Mathf.Clamp(dist / 0.75f, 0.45f, 1.2f) * Mathf.Max(UiScaleNow, 1.2f) / 1.2f * 1.12f }; // their text about a degree; smaller windows keep readable callouts
         }
 
         private void OnNoteShown(UiToasts.Note n)
@@ -690,7 +693,7 @@ namespace MetaCodex.Shell
         {
             float dist = Head != null ? Vector3.Distance(Head.position, Orb.Position) : OrbDistance;
             // ~0.95 at half a metre: the labels' em is then about a degree (TMP's em is 0.72 of the line size)
-            return Mathf.Clamp(dist / 0.75f, 0.45f, 1.2f) * Mathf.Clamp(Settings.uiScale, 0.6f, 1.8f) / 1.2f * 1.30f;
+            return Mathf.Clamp(dist / 0.75f, 0.45f, 1.2f) * Mathf.Max(UiScaleNow, 1.2f) / 1.2f * 1.30f; // smaller windows keep readable labels
         }
 
         private float OrbMenuScaleNow => _orbActs.Count > 0 ? _orbActs[0].BaseScale.x : OrbMenuScale();

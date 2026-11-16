@@ -44,10 +44,11 @@ namespace MetaCodex.Hands
     [Serializable]
     public sealed class GestureSettings
     {
-        /// How a UI element is clicked: 0 pinch (with the hand ray), 1 poke (fingertip), 2 both.
-        public int clickMode = 2;
-        /// How a panel is moved: 0 pinch its header, 1 close the hand (fist) while pointing at it, 2 both.
-        public int grabMode = 2;
+        /// How a UI element is clicked: 0 pinch (with the hand ray), 1 poke (fingertip), 2 both. Pinch: no setting in
+        /// the app any more (MetaCodexShell.MigrateSettings sets 0); kept so scripts and older files still load.
+        public int clickMode = 0;
+        /// Windows move by a pinch on their title bar only; kept so older settings files still load (ignored).
+        public int grabMode = 0;
         /// When the hand ray shows: 0 always, 1 only in the pointing pose.
         public int pointMode = 0;
         public float pinchOn = 0.85f, pinchOff = 0.6f;

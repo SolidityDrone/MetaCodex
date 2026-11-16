@@ -179,6 +179,13 @@ namespace MetaCodex.Shell
                 Settings = ShellSettings.Load(_settingsPath);
                 InitFirstRun(); // the very first start: the one-time setup, its locks and the guide card (ShellFirstRun)
                 MigrateSettings();
+                // the terminal starts hidden (TERMS shows it): its bare view, placed in front of the user while the shell
+                // is still being built, must not show either (WrapTerminal turns it on inside its hidden frame)
+                if (_hideFirstTerminal && app != null)
+                {
+                    app.StartHidden = true; // the app has not made its terminal yet
+                    foreach (var term in app.Terminals) if (term.View != null && term.Frame == null) term.View.gameObject.SetActive(false);
+                }
             }));
             s.Add(("font body", () =>
             {
@@ -280,7 +287,7 @@ namespace MetaCodex.Shell
             s.Add(("control", BuildControl)); // CONTROL's rail beside the setup windows (ShellControl)
             s.Add(("panel scales", () =>
             {
-                foreach (var p in _panels.Values) p.BaseScale = Vector3.one * Mathf.Clamp(Settings.uiScale, 0.6f, 1.8f);
+                foreach (var p in _panels.Values) p.BaseScale = Vector3.one * UiScaleNow;
                 ApplyGroupScales(); // a group's windows are scaled by their group, not again by the UI scale
             }));
             s.Add(("wrist", BuildWrist)); // DOCK mode on the headset: no wrist menu is made (ShellWrist)
@@ -356,6 +363,22 @@ namespace MetaCodex.Shell
                 Settings.Save(_settingsPath);
                 _localSettingsWin = true;
             }
+            if (Settings.settingsVersion < 5)
+            {
+                // the defaults after the owner's test of 2026-11-16: windows move and click by a pinch only (no closed
+                // hand, no poke choice), flat windows, opaque glass, smaller windows (UI SCALE 1.0 instead of 1.2; a
+                // size the user chose stays), "Hey Whisp" on, the terminal hidden at start
+                Settings.gestures.clickMode = 0;
+                Settings.gestures.grabMode = 0;
+                Settings.bendPanels = false;
+                Settings.panelOpacity = 1f;
+                if (Mathf.Approximately(Settings.uiScale, 1.2f)) Settings.uiScale = 1f;
+                Settings.voice.wakeWord = true;
+                Settings.terminalAtStart = false;
+                Settings.settingsVersion = 5;
+                Settings.Save(_settingsPath);
+                _localSettingsWin = true;
+            }
         }
 
         private TMP_FontAsset FindMonoFont()
@@ -376,6 +399,10 @@ namespace MetaCodex.Shell
 
         /// PANEL OPACITY as the shaders get it: the panels' `_Opacity` and the wrist menu's glass (ShellWrist).
         private float PanelOpacity => Mathf.Clamp(Settings.panelOpacity, 0.3f, 1f);
+
+        /// The UI SCALE slider's range (CONTROL > DISPLAY, voice "ui scale"); every window's size goes through UiScaleNow.
+        public const float MinUiScale = 0.5f, MaxUiScale = 1.8f;
+        public float UiScaleNow => Settings != null ? Mathf.Clamp(Settings.uiScale, MinUiScale, MaxUiScale) : 1f;
 
         private void ApplyMaterialSettings()
         {
@@ -775,6 +802,7 @@ namespace MetaCodex.Shell
             viewTr.SetParent(frame.transform, true);
             viewTr.localPosition = localTopLeft;
             viewTr.localRotation = Quaternion.identity;
+            if (!v.gameObject.activeSelf) v.gameObject.SetActive(true); // hidden during the start (BuildSteps): the frame shows or hides it now
             inst.Frame = frame.transform;
             float bx = w - 0.044f;
             frame.Add(new UiButton("✕", () => CloseOrHideTerminal(inst), UiButtonStyle.Ghost) { Rect = new Rect(bx, 0.006f, 0.036f, t.HeaderHeight - 0.010f) });
@@ -960,7 +988,7 @@ namespace MetaCodex.Shell
             Mqh.BaseUrl = Settings.mqhUrl;
             Mqh.Token = MqhTokenNow();
             ApplyMaterialSettings();
-            foreach (var p in _panels.Values) p.BaseScale = Vector3.one * Mathf.Clamp(Settings.uiScale, 0.6f, 1.8f);
+            foreach (var p in _panels.Values) p.BaseScale = Vector3.one * UiScaleNow;
             ApplyGroupScales(); // a group's windows are scaled by their group, not again by the UI scale
             ApplyMainMenuMode();
             ApplyOrbSetting();

@@ -108,7 +108,7 @@ namespace MetaCodex.Shell
             _tourEnding = false;
             _fadePhase = 0;
             _moveActive = false;
-            g.Panel.BaseScale = Vector3.one * Mathf.Clamp(Settings.uiScale, 0.6f, 1.8f);
+            g.Panel.BaseScale = Vector3.one * UiScaleNow;
             if (g.HasStrip)
             {
                 _stripAlive = true;
@@ -217,7 +217,7 @@ namespace MetaCodex.Shell
             float stripH = strip ? GuideStripH : 0f;
             float h = t.HeaderHeight + 2f * t.Padding + stripH + tourH;
             var p = UiPanel.Create<UiPanel>(GuideId, "TOUR", GuideW, h, _root);
-            p.BaseScale = Vector3.one * Mathf.Clamp(Settings.uiScale, 0.6f, 1.8f);
+            p.BaseScale = Vector3.one * UiScaleNow;
             var g = new GuideCard { Panel = p, HasStrip = strip, StripH = stripH };
             var c = p.Content;
             g.Content = c;
@@ -372,15 +372,13 @@ namespace MetaCodex.Shell
                 {
                     string menu = wrist
                         ? "Your main menu lives on your left wrist. Look at the back of your wrist like a watch, then touch it with your right index finger."
-                        : "This row of tiles is your main menu, the DOCK. Tap CLIP: touch it with a fingertip, or point at it and pinch.";
+                        : "This row of tiles is your main menu, the DOCK. Tap CLIP: point at it and pinch.";
                     return LockBits() != 0 ? menu + " Tiles with 🔒 unlock by themselves in a few seconds." : menu;
                 }
                 case 2:
                     return "That light is me. Touch me with a fingertip, or point at me and pinch, to open my menu.";
                 case 3:
-                    return Settings.gestures.grabMode == 1
-                        ? "Windows stay where you put them. Close your hand on this card, move it, and open your hand."
-                        : "Windows stay where you put them. Pinch the bar on top of this card, move it, and let go.";
+                    return "Windows stay where you put them. Pinch the bar on top of this card, move it, and let go.";
                 case 4:
                     return "Settings, voice, agents and the system all live in CONTROL. Open ⚙ CONTROL on " + (wrist ? "your wrist menu." : "the DOCK.");
                 default:

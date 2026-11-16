@@ -48,9 +48,9 @@ namespace MetaCodex.Shell
         /// 2026-11-13 (owner): FAST is 3 steps, the voice effect hides the small loss; the headset runs the voice
         /// at about 3x slower than it plays, so every step counts.
         public string speech = "fast";
-        /// "Hey Whisp" starts TALK hands-free (WakeListener; CONTROL > VOICE, `set_wake_word`). Off by default: on, the
+        /// "Hey Whisp" starts TALK hands-free (WakeListener; CONTROL > VOICE, `set_wake_word`). On by default: the
         /// microphone stays open and a cheap gate sends short pieces of speech to the AI service's wake check.
-        public bool wakeWord = false;
+        public bool wakeWord = true;
     }
 
     /// One voice request, start to end (VOICE panel history, control port replies).
@@ -1570,7 +1570,7 @@ namespace MetaCodex.Shell
             new VoiceSetting { Id = "focus_softness", Key = "focusSoftness", Kind = "number", Min = 0.05f, Max = 2f, Unit = "m", Label = "Focus softness", Names = new[] { "softness", "focus softness", "fade", "edge softness" } },
             new VoiceSetting { Id = "opacity", Key = "panelOpacity", Kind = "number", Min = 0.5f, Max = 1f, Unit = "%", Label = "Panel opacity", Names = new[] { "opacity", "panel opacity", "window opacity" } },
             new VoiceSetting { Id = "panel_distance", Key = "panelDistance", Kind = "number", Min = 0.5f, Max = 1.4f, Unit = "m", Label = "Panel distance", Names = new[] { "distance", "panel distance", "window distance" } },
-            new VoiceSetting { Id = "ui_scale", Key = "uiScale", Kind = "number", Min = 0.8f, Max = 1.8f, Unit = "x", Label = "UI scale", Names = new[] { "ui scale", "scale", "panel size", "window size", "windows", "panels", "text size", "size" } },
+            new VoiceSetting { Id = "ui_scale", Key = "uiScale", Kind = "number", Min = MinUiScale, Max = MaxUiScale, Unit = "x", Label = "UI scale", Names = new[] { "ui scale", "scale", "panel size", "window size", "windows", "panels", "text size", "size" } },
             new VoiceSetting { Id = "carousel_radius", Key = "carouselRadius", Kind = "number", Min = 0.6f, Max = 1.6f, Unit = "m", Label = "Float radius", Names = new[] { "carousel radius", "ring radius", "carousel size", "carousel" } },
             new VoiceSetting { Id = "bend", Key = "bendPanels", Kind = "bool", Label = "Bend panels", Names = new[] { "bend", "bending", "bend panels", "curved panels", "curve" } },
             new VoiceSetting { Id = "sounds", Key = "sounds", Kind = "bool", Label = "Sounds", Names = new[] { "sounds", "sound", "ui sounds", "clicks" } },
@@ -1845,11 +1845,11 @@ namespace MetaCodex.Shell
                 }
                 else if (_panels.TryGetValue("dock", out var dock) && dock.IsOpen)
                 {
-                    _vHud.BaseScale = Vector3.one * Mathf.Clamp(Settings.uiScale, 0.6f, 1.8f);
+                    _vHud.BaseScale = Vector3.one * UiScaleNow;
                     var dt = dock.transform;
                     _vHud.transform.SetPositionAndRotation(dt.position + dt.up * (dock.Height * 0.5f + _vHud.Height * 0.5f + 0.015f) * dock.RestLossyScale.y, dt.rotation);
                 }
-                else if (Head != null) { _vHud.BaseScale = Vector3.one * Mathf.Clamp(Settings.uiScale, 0.6f, 1.8f); _vHud.PlaceInFront(Head, 0.62f, 0.18f); }
+                else if (Head != null) { _vHud.BaseScale = Vector3.one * UiScaleNow; _vHud.PlaceInFront(Head, 0.62f, 0.18f); }
                 _vHud.Open();
             }
         }
@@ -1861,7 +1861,7 @@ namespace MetaCodex.Shell
             _vHud = UiPanel.Create<UiPanel>("voice-hud", "", 0.40f, 0.098f, _root, header: false);
             _vHud.Closable = false;
             _vHud.Draggable = false; // it has its place: beside the orb, or over the dock
-            _vHud.BaseScale = Vector3.one * Mathf.Clamp(Settings.uiScale, 0.6f, 1.8f);
+            _vHud.BaseScale = Vector3.one * UiScaleNow;
             Router.Register(_vHud);
             var c = _vHud.Content;
             float bw = 0.062f;

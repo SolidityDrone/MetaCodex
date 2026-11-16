@@ -374,12 +374,14 @@ namespace MetaCodex.EditorTools
             Click(r, settings, fov.Rect.center); // back off
 
             Click(r, rail, shell.RailButtonForTest("hands").Rect.center);
-            var click = settings.Elements.OfType<UiSegmented>().First(sg => sg.Text == "CLICK");
-            var w = click.Rect;
-            float segW = (w.xMax - (w.x + click.LabelWidth)) / 3f;
-            Click(r, settings, new Vector2(w.x + click.LabelWidth + segW * 1.5f, w.center.y));
-            Check(shell.Settings.gestures.clickMode == 1, "segmented control sets click mode = POKE");
-            Click(r, settings, new Vector2(w.x + click.LabelWidth + segW * 2.5f, w.center.y));
+            // clicks and moves are a pinch only: no CLICK or MOVE PANELS choice; POINT RAY is the segmented control left
+            Check(!settings.Elements.OfType<UiSegmented>().Any(sg => sg.Text == "CLICK" || sg.Text == "MOVE PANELS"), "HANDS has no CLICK or MOVE PANELS choice (pinch only)");
+            var ray = settings.Elements.OfType<UiSegmented>().First(sg => sg.Text == "POINT RAY");
+            var w = ray.Rect;
+            float segW = (w.xMax - (w.x + ray.LabelWidth)) / 2f;
+            Click(r, settings, new Vector2(w.x + ray.LabelWidth + segW * 1.5f, w.center.y));
+            Check(shell.Settings.gestures.pointMode == 1, "segmented control sets point ray = POINTING POSE");
+            Click(r, settings, new Vector2(w.x + ray.LabelWidth + segW * 0.5f, w.center.y));
             var pinch = settings.Elements.OfType<UiSlider>().First(sl => sl.Text == "PINCH AT");
             var track = new Rect(pinch.Rect.x + pinch.LabelWidth, pinch.Rect.y, pinch.Rect.width - pinch.LabelWidth - 0.06f, pinch.Rect.height);
             Click(r, settings, new Vector2(track.x + track.width * 0.9f, pinch.Rect.center.y), new Vector2(track.x + track.width * 0.25f, pinch.Rect.center.y));

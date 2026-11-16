@@ -219,7 +219,7 @@ namespace MetaCodex.Shell
             float h = size != null && size.Length > 1 ? Mathf.Clamp(size[1], 0.18f, 0.9f) : Mathf.Clamp(contentH + t.HeaderHeight + 2 * t.Padding, 0.2f, 0.86f);
             var p = Panel<UiPanel>(pid, plugin ? v.Title : "View · " + v.Title, w, h);
             if (plugin) HookPluginWindow(v, p); // before any open below: its Opened event reaches the plugin
-            p.BaseScale = Vector3.one * Mathf.Clamp(Settings.uiScale, 0.6f, 1.8f);
+            p.BaseScale = Vector3.one * UiScaleNow;
             var c0 = p.Content;
             float k = contentH > c0.height ? (c0.height - t.Gap * Mathf.Max(0, rowsH.Count - 1)) / Mathf.Max(0.01f, rowsH.Sum()) : 1f;
             float y = c0.y;

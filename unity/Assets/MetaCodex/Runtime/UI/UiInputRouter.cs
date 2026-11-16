@@ -173,6 +173,7 @@ namespace MetaCodex.UI
                 var st = Gestures.Get((Handedness)h);
                 if (!st.Tracked) continue;
                 if (HandBlocked != null && HandBlocked(h) && _hand[h].Captured == null && _hand[h].DragPanel == null && _hand[2 + h].Captured == null) continue;
+                // clicks are a pinch with the hand ray (CONTROL has no CLICK choice; poke stays for scripts and older files)
                 bool pinchClicks = Settings.clickMode != 1;
                 bool pokeClicks = Settings.clickMode != 0;
                 var ray = _hand[h];
@@ -233,12 +234,19 @@ namespace MetaCodex.UI
                 p.HitPoint = panel.SurfacePoint(point);
                 return true;
             }
-            float best = float.MaxValue;
+            float best = float.MaxValue, bestGrace = float.MaxValue;
+            UiPanel grace = null; Vector2 gracePoint = default;
             foreach (var pan in Panels)
             {
                 if (pan == null || !pan.IsOpen) continue;
-                if (pan.Raycast(p.Ray, out var pt, out float d) && d < best) { best = d; panel = pan; point = pt; }
+                if (pan.Raycast(p.Ray, out var pt, out float d, out bool inGrace))
+                {
+                    if (!inGrace) { if (d < best) { best = d; panel = pan; point = pt; } }
+                    else if (d < bestGrace) { bestGrace = d; grace = pan; gracePoint = pt; }
+                }
             }
+            // a near miss just above a title bar takes that bar, unless the ray is on a window itself
+            if (panel == null && grace != null) { panel = grace; point = gracePoint; best = bestGrace; }
             if (panel != null) p.HitPoint = p.Ray.origin + p.Ray.direction * best;
             return panel != null;
         }
@@ -328,13 +336,8 @@ namespace MetaCodex.UI
             bool pressEdge = p.Down && !p.WasDown;
             bool grabEdge = p.GrabHeld && !p.WasGrab;
             if ((pressEdge || grabEdge) && panel != null) Touched?.Invoke(panel);
-            if (grabEdge && panel != null && panel.Draggable && Settings.grabMode != 0 && p.Kind != PointerKind.Poke)
-            {
-                p.DragPanel = panel;
-                p.DragByGrab = true;
-                p.DragOffset = panel.transform.position - p.GrabPoint;
-            }
-            else if (pressEdge && panel != null)
+            // windows move only by a pinch on their title bar (or the grace band just above it, UiPanel.HeaderGrace)
+            if (pressEdge && panel != null)
             {
                 // the selection tool draws on content panels; the dock always clicks (SELECT turns it off again)
                 if (SelectionMode && p.Kind != PointerKind.Poke && panel.Id != "dock")
@@ -353,7 +356,7 @@ namespace MetaCodex.UI
                     ActivePanel = panel;
                     try { element.OnPress(new UiPointerEvent { Point = point, PressPoint = point, Pointer = p }); } finally { ActivePanel = null; }
                 }
-                else if (panel.InHeader(point) && panel.Draggable && Settings.grabMode != 1 && p.Kind != PointerKind.Poke)
+                else if (panel.InHeader(point) && panel.Draggable && p.Kind != PointerKind.Poke)
                 {
                     p.DragPanel = panel;
                     p.DragByGrab = false;

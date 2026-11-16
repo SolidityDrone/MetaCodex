@@ -212,8 +212,10 @@ namespace MetaCodex.Shell
         /// "fixed": panels stay where you put them (world-locked). "float": a carousel that follows you horizontally.
         public string layout = "fixed";
         public float carouselRadius = 0.95f;
-        public bool bendPanels = true;
-        public float uiScale = 1.2f;
+        /// Windows bend round the user (a cylinder); flat by default.
+        public bool bendPanels = false;
+        /// Window size (CONTROL > DISPLAY > UI SCALE, MetaCodexShell.MinUiScale .. MaxUiScale).
+        public float uiScale = 1f;
         /// MAIN MENU: false = the DOCK panel in front of you, true = the WRIST menu (look at the back of your left wrist).
         public bool wristMenu = true; // the radial menu on the left wrist is the main menu by default (owner 2026-11-15); the DOCK in CONTROL > DISPLAY
         /// Render resolution x (supersampling). Fixed at MetaCodexShell.RenderScale (1.6, owner 2026-11-09: no SHARPNESS
@@ -233,7 +235,7 @@ namespace MetaCodex.Shell
         /// Gesture -> action links (Gestures panel > BIND).
         public List<GestureBinding> bindings = new List<GestureBinding>();
         // look and feel
-        public float panelOpacity = 0.92f;
+        public float panelOpacity = 1f;
         /// The image clipboard keeps this many captures (the newest); one more deletes the oldest from the Linux.
         public int clipboardMax = 20;
         public float motion = 0f;

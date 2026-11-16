@@ -628,7 +628,7 @@ end)
             switch (n)
             {
                 case "pinch": return "click";
-                case "grab": return "move · spin";
+                case "grab": return "spin";
                 case "point": return "ray";
                 case "open": return "open hand";
                 case "palm-up": return "palm up";
@@ -829,7 +829,7 @@ end)
             switch (n)
             {
                 case "pinch": return "<b>built-in</b>: thumb and index tips together (OVR pinch strength, hysteresis). Clicks with the hand ray.";
-                case "grab": return "<b>built-in</b>: all four fingers curled (fist). Moves panels (closed-hand mode) and spins the carousel.";
+                case "grab": return "<b>built-in</b>: all four fingers curled (fist). Spins the carousel (FLOAT layout).";
                 case "point": return "<b>built-in</b>: index straight, the other fingers curled.";
                 case "open": return "<b>built-in</b>: all four fingers straight.";
                 case "palm-up": return "<b>built-in</b>: open hand with the palm facing up.";

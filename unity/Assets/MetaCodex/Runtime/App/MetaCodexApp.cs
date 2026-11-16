@@ -58,6 +58,9 @@ namespace MetaCodex.App
         public float Fps => _fps;
         /// Raised for every new terminal (the shell wraps it into a frame panel) and on focus changes.
         public event Action<TerminalInstance> TerminalCreated;
+        /// The shell keeps the first terminal hidden at start (Settings.terminalAtStart off): its bare view (with the key
+        /// bar and status line under it) stays off until the shell wraps it in its frame.
+        public bool StartHidden;
         public event Action<TerminalInstance> TerminalClosed;
         public event Action<TerminalInstance> FocusChanged;
         /// Extra control-port commands (the shell adds ui/script/gesture commands).
@@ -93,6 +96,7 @@ namespace MetaCodex.App
             if (statusText != null) statusText.font = view.Font;
             TerminalCreated?.Invoke(main);
             AttachKeyBar(main);
+            if (StartHidden && main.Frame == null) view.gameObject.SetActive(false); // the shell shows it in its frame, or keeps it hidden
 
             if (controlPort)
             {

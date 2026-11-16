@@ -1355,7 +1355,12 @@ namespace MetaCodex.Shell
             float colW = 0.22f;
             var a = new UiStack(new Rect(c.x, c.y, colW, c.height), t.Gap);
             p.Add(new UiLabel("PROVIDER", t.SmallSize) { Rect = a.Next(0.018f), UseDisplay = true, Color = t.TextDim });
-            _ntProviders = p.Add(new UiList(0.032f, (item, idx) => { _ntProvider = item.Tag as string; LoadModels(); }) { Rect = a.Rest(), EmptyText = "No agent yet.\nGet one in CONTROL › AGENTS (GET), or turn on the local coder there." });
+            // no agent yet: the list says so and GET AN AGENT opens CONTROL > AGENTS, where GET adds one
+            var provRect = a.Rest();
+            provRect.height -= t.ButtonHeight + t.Gap;
+            _ntProviders = p.Add(new UiList(0.032f, (item, idx) => { _ntProvider = item.Tag as string; LoadModels(); }) { Rect = provRect, EmptyText = "No agent yet.\nGET AN AGENT below: CONTROL › AGENTS adds one, or turns on the local coder." });
+            _ntGetAgent = p.Add(new UiButton("GET AN AGENT ▸", OpenGetAgent, UiButtonStyle.Primary) { Rect = new Rect(provRect.x, provRect.yMax + t.Gap, provRect.width, t.ButtonHeight) });
+            _ntGetAgent.SetVisible(false);
             var b = new UiStack(new Rect(c.x + colW + t.Gap * 2, c.y, colW, c.height), t.Gap);
             p.Add(new UiLabel("MODEL", t.SmallSize) { Rect = b.Next(0.018f), UseDisplay = true, Color = t.TextDim });
             _ntModelList = p.Add(new UiList(0.032f, (item, idx) => { _ntModel = item.Tag as string; ShowNewThreadSummary(); }) { Rect = b.Rest(), EmptyText = "Pick a provider: its models show here." });
@@ -1368,6 +1373,15 @@ namespace MetaCodex.Shell
             p.Add(new UiLabel("CHECKOUT works in the project folder itself; WORKTREE gives the thread its own git worktree and branch. EDITS asks before commands; FULL never asks. START opens the thread: your first message there (typed or ◉ said) starts it and names it; a thread closed before that is not kept.", t.SmallSize) { Rect = r.Next(0.112f), Wrap = true, Color = t.TextDim, Align = TextAlignmentOptions.TopLeft });
             var go = r.Next(t.ButtonHeight);
             p.Add(new UiButton("START ▶", StartThread, UiButtonStyle.Primary) { Rect = go });
+        }
+
+        private UiButton _ntGetAgent;
+
+        /// No agent to start a thread with: CONTROL > AGENTS, where GET installs one (its key or sign-in is the user's).
+        private void OpenGetAgent()
+        {
+            Toast("No agent yet: GET adds one here", "info");
+            OpenControl("agents");
         }
 
         public void OpenNewThread(string providerId)
@@ -1399,6 +1413,7 @@ namespace MetaCodex.Shell
                         BadgeColor = StatusColor((string)x["status"]),
                         Tag = (string)x["providerId"],
                     }));
+                    _ntGetAgent?.SetVisible(list.Count == 0);
                     if (_ntProvider == null || !list.Any(x => (string)x["providerId"] == _ntProvider)) _ntProvider = (string)list.FirstOrDefault()?["providerId"];
                     int i = list.FindIndex(x => (string)x["providerId"] == _ntProvider);
                     if (i >= 0) _ntProviders.SelectIndex(i, notify: false);
@@ -1508,7 +1523,12 @@ namespace MetaCodex.Shell
         private void StartThread()
         {
             if (_projectSel == null) { Toast("Pick or add a project in THREADS first", "warn"); OpenPanel("threads"); return; }
-            if (_ntProvider == null) { Toast("Pick a provider", "warn"); return; }
+            if (_ntProvider == null)
+            {
+                if (_ntProviders != null && _ntProviders.Items.Count == 0) { OpenGetAgent(); return; }
+                Toast("Pick a provider", "warn");
+                return;
+            }
             var proj = _projects.FirstOrDefault(x => (string)x["id"] == _projectSel);
             var d = new ThreadDraft
             {

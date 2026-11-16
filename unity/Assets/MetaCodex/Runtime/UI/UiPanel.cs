@@ -136,7 +136,11 @@ namespace MetaCodex.UI
         public Rect Content => new Rect(Theme.Padding, (HasHeader ? Theme.HeaderHeight : 0f) + Theme.Padding,
             Width - 2 * Theme.Padding, Height - (HasHeader ? Theme.HeaderHeight : 0f) - 2 * Theme.Padding);
 
-        public bool InHeader(Vector2 p) => (HasHeader ? p.y >= 0f && p.y <= Theme.HeaderHeight : HandleHeight > 0f && p.y >= 0f && p.y <= HandleHeight) && p.x >= 0f && p.x <= Width;
+        public bool InHeader(Vector2 p)
+        {
+            float g = GraceLocal; // the band just above the bar counts as the bar
+            return (HasHeader ? p.y >= -g && p.y <= Theme.HeaderHeight : HandleHeight > 0f && p.y >= -g && p.y <= HandleHeight) && p.x >= -g * 0.5f && p.x <= Width + g * 0.5f;
+        }
 
         /// Panels without a title bar (the dock) can still be moved: pinch the strip at the top (a small bar shows it).
         public float HandleHeight { get; private set; }
@@ -162,14 +166,28 @@ namespace MetaCodex.UI
 
         /// Ray against the panel's drawn surface (its plane, or its cylinder when bent); the panel point when the
         /// ray hits inside the frame. Pointers land where the panel is drawn, not on its flat projection.
-        public bool Raycast(Ray ray, out Vector2 panelPoint, out float distance)
+        public bool Raycast(Ray ray, out Vector2 panelPoint, out float distance) => Raycast(ray, out panelPoint, out distance, out bool grace) && !grace;
+
+        /// The same, and a hit in the grace band above the title bar counts too (grace = true): a pinch that misses a
+        /// window's top edge by a few centimetres still takes its bar (UiInputRouter prefers a real hit on any window).
+        public bool Raycast(Ray ray, out Vector2 panelPoint, out float distance, out bool grace)
         {
             panelPoint = default;
             distance = 0f;
+            grace = false;
             if (!IsOpen || !Intersect(ray, out var local, out distance)) return false;
             panelPoint = SurfaceToPanel(local);
-            return panelPoint.x >= -0.004f && panelPoint.y >= -0.004f && panelPoint.x <= Width + 0.004f && panelPoint.y <= Height + 0.004f;
+            if (panelPoint.x >= -0.004f && panelPoint.y >= -0.004f && panelPoint.x <= Width + 0.004f && panelPoint.y <= Height + 0.004f) return true;
+            float g = GraceLocal;
+            grace = g > 0f && panelPoint.y < 0f && panelPoint.y >= -g && panelPoint.x >= -g * 0.5f && panelPoint.x <= Width + g * 0.5f;
+            return grace;
         }
+
+        /// How far (m, in the world) above its top edge a pinch still takes a window's title bar.
+        public const float HeaderGrace = 0.035f;
+
+        /// The grace band in panel units (the panel may be scaled); 0 when the panel cannot be moved by its top.
+        private float GraceLocal => Draggable && (HasHeader || HandleHeight > 0f) ? HeaderGrace / Mathf.Max(0.2f, transform.lossyScale.y) : 0f;
 
         /// The same without the bounds check (dragging continues outside the panel).
         public bool ProjectRay(Ray ray, out Vector2 panelPoint)

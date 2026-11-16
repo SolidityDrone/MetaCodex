@@ -122,7 +122,7 @@ Opacity and bending:
 - [ ] Put one window in front of another at 100 % → no text, icon or button of the window behind shows through
 - [ ] Around a window's edge and where it overlaps another window → no see-through line (fissure)
 - [ ] PANEL OPACITY below 75 % → windows behind show through faintly (as intended)
-- [ ] CONTROL > DISPLAY > Bend panels around you, in FIXED layout: walk closer and farther, drag a window → it curves smoothly (no steps or jumps); terminals stay flat
+- [ ] Windows are flat by default; CONTROL > DISPLAY > Bend panels around you on, in FIXED layout: walk closer and farther, drag a window → it curves smoothly (no steps or jumps); terminals stay flat
 - [ ] Point at a bent window's edges → the reticle sits on the curved surface, buttons near the edges react where the beam meets them; pokes with the fingertip work on bent windows
 - [ ] A text that changes fast (a working thread) on a bent window → it stays on the curve, never flashes flat
 
@@ -139,9 +139,10 @@ Back from a native app (open the DOCK, THREAD and one more window in FIXED layou
 Hands:
 
 - [ ] Hover over a slider without pinching → it does not move; pinch and drag → it moves
-- [ ] Point a ray at a button and pinch, or poke it with the index fingertip → the button clicks
+- [ ] Point a ray at a button and pinch → the button clicks; a fingertip poke on a window does nothing
 - [ ] Pinch a window header and move → the window follows; release → it stays (fixed layout)
-- [ ] Close the hand (fist) while pointing at a window → the window moves with the hand
+- [ ] Pinch 2-3 cm above a window's title bar (a near miss) → the window moves as if you pinched the bar; a pinch on another window just above it still clicks that window
+- [ ] Close the hand (fist) while pointing at a window → nothing moves
 - [ ] SELECT on → pinch-drag a rectangle (also over a window) → a dashed rectangle, "Selected … cm", and the tool turns itself off; SELECT on, then SELECT again (DOCK or CONTROL) → off
 - [ ] Palm towards you + pinch (the system quick actions, left-hand settings) → the windows stay where they are (the gesture hides nothing) and the quick-actions menu shows over them; when a system menu has opened and taken the app's focus, the windows step aside and come back when it closes
 - [ ] Make a V (index and middle up) for about 1 s and drop it → nothing happens
@@ -263,8 +264,7 @@ Pages:
 - [ ] FOVEATED on → the edges of the view get softer (VrApi `Fov=`); off (the default): sharp everywhere
 - [ ] SOUNDS → click, open, close and toast blips play; off: silent; VOLUME changes how loud they are
 - [ ] A settings file that still has "glow" loads → the app starts with its other settings (PANEL OPACITY keeps its value)
-- [ ] HANDS: click mode PINCH / POKE / BOTH → changes how buttons react
-- [ ] HANDS: set MOVE PANELS to PINCH HEADER, CLOSED HAND or BOTH → windows move only the way you chose
+- [ ] HANDS → no CLICK or MOVE PANELS choice (pinch only); POINT RAY, the hand rays, PINCH AT and the clap are there
 - [ ] HANDS: POINT RAY ALWAYS / POINTING POSE → the ray shows only when you point
 - [ ] HANDS: change the PINCH AT slider, clap on / off, clap distance, and "Custom gestures from plugins" on / off → each changes how the hands react
 - [ ] HANDS: look at the button row → it reads SELECT AREA ⌖ | GESTURE STUDIO ▸ | the system's hand settings ⚙; the line at the top ends "GESTURE STUDIO: your own gestures."; GESTURE STUDIO opens MQH on GESTURES in HANDS' place; the third button opens the headset's own hand settings page

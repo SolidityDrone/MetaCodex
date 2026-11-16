@@ -63,7 +63,6 @@ namespace MetaCodex.Shell
             return null;
         }
 
-        private float UiScaleNow => Settings != null ? Mathf.Clamp(Settings.uiScale, 0.6f, 1.8f) : 1f;
 
         public static (int cols, int rows) GroupGrid(int n) => n <= 2 ? (2, 1) : n <= 4 ? (2, 2) : (3, 2);
         public static float DefaultGroupScale(int n) => n <= 2 ? 0.72f : n <= 4 ? 0.6f : 0.5f;

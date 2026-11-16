@@ -41,7 +41,7 @@ namespace MetaCodex.Shell
             BuildSystem();
             BuildMessagesPanel(); // the orb's messages (ShellOrb)
             BuildControl(); // CONTROL's rail beside the setup windows (ShellControl)
-            foreach (var p in _panels.Values) p.BaseScale = Vector3.one * Mathf.Clamp(Settings.uiScale, 0.6f, 1.8f);
+            foreach (var p in _panels.Values) p.BaseScale = Vector3.one * UiScaleNow;
             ApplyGroupScales(); // a group's windows are scaled by their group, not again by the UI scale
         }
 
@@ -549,8 +549,6 @@ end)
 
             // GESTURES
             var g = new UiStack(area, t.Gap);
-            tabs.AddTo(0, new UiSegmented("CLICK", new[] { "PINCH", "POKE", "BOTH" }, s.gestures.clickMode, i => { s.gestures.clickMode = i; OnSettingsChanged(); }) { Rect = g.Next(rowH) });
-            tabs.AddTo(0, new UiSegmented("MOVE PANELS", new[] { "PINCH HEADER", "CLOSED HAND", "BOTH" }, s.gestures.grabMode, i => { s.gestures.grabMode = i; OnSettingsChanged(); }) { Rect = g.Next(rowH) });
             tabs.AddTo(0, new UiSegmented("POINT RAY", new[] { "ALWAYS", "POINTING POSE" }, s.gestures.pointMode, i => { s.gestures.pointMode = i; OnSettingsChanged(); }) { Rect = g.Next(rowH) });
             tabs.AddTo(0, new UiToggle("Show hand rays", s.gestures.rayVisible, v => { s.gestures.rayVisible = v; OnSettingsChanged(); }) { Rect = g.Next(rowH) });
             tabs.AddTo(0, new UiSlider("PINCH AT", 0.6f, 0.98f, s.gestures.pinchOn, v => { s.gestures.pinchOn = v; s.gestures.pinchOff = Mathf.Min(v - 0.15f, 0.8f); OnSettingsChanged(); }) { Rect = g.Next(rowH) });
@@ -574,7 +572,7 @@ end)
             // with a word saying when it applies (bending works in both)
             _fixedDistance = tabs.AddTo(TabDisplay, new UiSlider("DISTANCE", 0.5f, 1.4f, s.panelDistance, v => { s.panelDistance = v; OnSettingsChanged(); }) { Rect = d.Next(rowH), Format = "0.00 m", Note = "FIXED only" });
             _floatRadius = tabs.AddTo(TabDisplay, new UiSlider("FLOAT RADIUS", 0.6f, 1.6f, s.carouselRadius, v => { s.carouselRadius = v; OnSettingsChanged(); }) { Rect = d.Next(rowH), Format = "0.00 m", Note = "FLOAT only" });
-            tabs.AddTo(TabDisplay, new UiSlider("UI SCALE", 0.8f, 1.8f, s.uiScale, v => { s.uiScale = v; OnSettingsChanged(); }) { Rect = d.Next(rowH), Format = "0.00" });
+            tabs.AddTo(TabDisplay, new UiSlider("UI SCALE", MinUiScale, MaxUiScale, s.uiScale, v => { s.uiScale = v; OnSettingsChanged(); }) { Rect = d.Next(rowH), Format = "0.00" });
             tabs.AddTo(TabDisplay, new UiToggle("Bend panels around you", s.bendPanels, v => { s.bendPanels = v; OnSettingsChanged(); UpdateFixedBend(); }) { Rect = d.Next(rowH) });
             tabs.AddTo(TabDisplay, new UiToggle("Main menu on the wrist (look at your left wrist, touch the core)", s.wristMenu, v => SetWristMenu(v)) { Rect = d.Next(rowH) });
             var lr = d.NextSplit(t.ButtonHeight, 0.5f, out var lr2);
