@@ -203,28 +203,30 @@ namespace MetaCodex.Shell
         /// windows lie on its curve (ShellThreadGroups.FitGroupMembers).
         public static bool StaysFlat(UiPanel p) => p.Id.StartsWith("term-") || p.Id == "web";
 
-        // ---- curve mode's lean (owner 2026-11-16: "a very high window ... tilts ... so it is easy to read, because it faces
-        // slightly toward my y position"): a tall bent window leans its top towards the eyes.
+        // ---- curve mode's lean (owner 2026-11-16: "if a panel is above a certain height, curve mode should not only curve it
+        // but also tilt it, so a panel high up faces slightly toward my eyes"): a bent window high in the view leans its top
+        // towards the eyes. Keyed on where the window is (its elevation), not on its size: a normal window placed high leans.
 
-        /// The world height (m) from which a bent window leans, the height at which it leans in full, and the most it
-        /// leans (degrees). Between the first two the lean ramps up.
-        public const float TiltFromHeight = 0.6f, TiltFullHeight = 1.0f, TiltMaxDeg = 25f;
+        /// The elevation (degrees: how far above the eyes the window's centre is seen) from which a bent window leans, the
+        /// elevation at which it leans in full, and the most it leans (degrees). Between the first two the lean ramps up.
+        public const float TiltFromDeg = 8f, TiltFullDeg = 20f, TiltMaxDeg = 30f;
 
-        /// The lean (degrees) of a window in curve mode: 0 when it is shorter than TiltFromHeight or its centre is not above
-        /// the eyes; else the ramp k (0 at TiltFromHeight, 1 at TiltFullHeight) times the angle its centre rises above the
-        /// eyes as they see it, at most TiltMaxDeg. The yaw is not touched; the panel leans its top towards the user.
+        /// The lean (degrees) of a window in curve mode, any size: elev = atan2(centre.y - eye.y, horizontal distance);
+        /// 0 below TiltFromDeg; else the ramp k (0 at TiltFromDeg, 1 at TiltFullDeg) times elev, at most TiltMaxDeg. The
+        /// yaw is not touched; the panel leans its top towards the user (UiPanel.ApplyTilt), so its face turns down to the eyes.
         public static float LayoutTilt(UiPanel p, Vector3 eye)
         {
-            float k = Mathf.Clamp01((p.Height * p.RestLossyScale.y - TiltFromHeight) / (TiltFullHeight - TiltFromHeight));
-            var d = p.transform.position - eye;
-            if (k <= 0f || d.y <= 0f) return 0f;
-            return Mathf.Min(TiltMaxDeg, k * Mathf.Atan2(d.y, new Vector2(d.x, d.z).magnitude) * Mathf.Rad2Deg);
+            var d = p.transform.position - eye; // the panel's pivot is its centre (UiPanel.PanelToLocal)
+            if (d.y <= 0f) return 0f;
+            float elev = Mathf.Atan2(d.y, Mathf.Sqrt(d.x * d.x + d.z * d.z)) * Mathf.Rad2Deg;
+            float k = Mathf.Clamp01((elev - TiltFromDeg) / (TiltFullDeg - TiltFromDeg));
+            return k <= 0f ? 0f : Mathf.Min(TiltMaxDeg, k * elev);
         }
 
         /// Fixed layout with "Bend panels": each panel curves towards you around its own distance (bent on the GPU,
         /// eased by the panel, so it follows you smoothly). Terminals and WEB stay flat (StaysFlat). A thread group gets
         /// the same curve in its own units (LayoutBend); its windows are not layout panels, they follow it. A bent
-        /// window also leans its top to the eyes (LayoutTilt); with bending off nothing leans.
+        /// window seen high above the eyes also leans its top to them (LayoutTilt); with bending off nothing leans.
         public void UpdateFixedBend()
         {
             if (Floating || Settings == null) return;
