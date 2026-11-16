@@ -643,19 +643,26 @@ namespace MetaCodex.UI
         public Color? Dot;
         /// The dot's core is lit (running, needs you); unlit: a dim core (idle, waiting).
         public bool DotLit;
+        /// Variable lists only, a Stacked row: its title in bold (the body face with TMP's bold).
+        public bool Bold;
+        /// Variable lists only, a Compact row: a connector to the row above it: a vertical guide under the parent's icon
+        /// (one level up) and a short tick to this row's dot or icon. Its indent must be 2 or more.
+        public bool Guide;
     }
 
     /// The kinds of row of a Variable list. Row: the list's RowHeight, one line (the title, the sub and the badge side by
-    /// side), as every row was before. Band: a type header, 1.45 rows: a band in BarColor with a rule across its top, the
-    /// title in the display face, the sub and the badge on the right. Stacked: 1.3 rows, the sub under the title in small
-    /// dim text (a project and its caption). Compact: 0.8 rows and smaller text (a thread, a folder, a hint).
-    public enum UiListKind { Row = 0, Band = 1, Stacked = 2, Compact = 3 }
+    /// side), as every row was before. Band: a type header, 1.45 rows: a band in BarColor with a thick bar on its left and a
+    /// rule across its top, the title in the display face, the sub and the badge on the right. Stacked: 1.3 rows, the sub
+    /// under the title in small dim text (a project and its caption), its Dot before the badge. Compact: 0.8 rows and smaller
+    /// text (a thread, a folder, a hint). Gap: 0.6 rows, blank: nothing is drawn and a tap does nothing (THREADS' space above
+    /// each type).
+    public enum UiListKind { Row = 0, Band = 1, Stacked = 2, Compact = 3, Gap = 4 }
 
     /// A scrolling list with a fixed row height: a pool of rows reused while scrolling (drag up/down, or the
     /// arrows). Tap selects a row.
     /// Variable: the rows take the heights of their UiListKind. The pool shows the rows from the first one scrolled to on,
     /// and scrolling still moves by whole rows; a row that does not fit whole at the bottom is not drawn (as before).
-    /// Band, Stacked, Compact, Divider and Dot are drawn only in a Variable list; IndentStep applies to every list.
+    /// Gap, Band, Stacked, Compact, Divider, Dot, Bold and Guide are drawn only in a Variable list; IndentStep applies to every list.
     public sealed class UiList : UiElement
     {
         public float RowHeight;
@@ -665,9 +672,9 @@ namespace MetaCodex.UI
         /// What the list says while it has no items: centred in its area, with what to do next (empty: nothing). The same
         /// pattern in every window (SetEmptyText changes it).
         public string EmptyText = "";
-        /// Rows of their own heights (UiListKind), and the Band, Stacked, Compact, Divider and Dot options of UiListItem.
+        /// Rows of their own heights (UiListKind), and the Gap, Band, Stacked, Compact, Divider, Dot, Bold and Guide options of UiListItem.
         public bool Variable;
-        /// The indent of one level (UiListItem.Indent) in metres: 0.016 for every list as it was; THREADS uses 0.03.
+        /// The indent of one level (UiListItem.Indent) in metres: 0.016 for every list as it was; THREADS uses 0.045.
         public float IndentStep = 0.016f;
         public override bool Interactive => true;
         public IReadOnlyList<UiListItem> Items => _items;
@@ -685,13 +692,13 @@ namespace MetaCodex.UI
         private float _contentH;
         private int _maxFirst;
 
-        private const float BandScale = 1.45f, StackedScale = 1.3f, CompactScale = 0.8f; // Variable: the kinds' heights in rows
+        private const float BandScale = 1.45f, StackedScale = 1.3f, CompactScale = 0.8f, GapScale = 0.6f; // Variable: the kinds' heights in rows
 
-        /// One pooled row: its plate and texts, and in a Variable list its band, bar, rule, divider and dot (-1 otherwise)
-        /// and its head (the display title of a Band row). shown: where a Variable row is drawn now (empty: hidden).
+        /// One pooled row: its plate and texts, and in a Variable list its band, bar, rule, divider, dot, guide and tick
+        /// (-1 otherwise) and its head (the display title of a Band row). shown: where a Variable row is drawn now (empty: hidden).
         private sealed class PoolRow
         {
-            public int shape, band = -1, bandBar = -1, bandRule = -1, divider = -1, dot = -1;
+            public int shape, band = -1, bandBar = -1, bandRule = -1, divider = -1, dot = -1, guide = -1, tick = -1;
             public UiText icon, title, head, sub, badge;
             public Rect shown;
         }
@@ -704,7 +711,7 @@ namespace MetaCodex.UI
         protected override void Build()
         {
             if (RowHeight <= 0f) RowHeight = Theme.RowHeight;
-            int pool = Variable ? Mathf.CeilToInt(Rect.height / (RowHeight * CompactScale)) + 2 : VisibleRows;
+            int pool = Variable ? Mathf.CeilToInt(Rect.height / (RowHeight * Mathf.Min(CompactScale, GapScale))) + 2 : VisibleRows; // the smallest kind shows the most rows
             for (int i = 0; i < pool; i++)
             {
                 var r = RowRect(i);
@@ -735,6 +742,8 @@ namespace MetaCodex.UI
             row.bandRule = Panel.Shapes.Add(Panel.Shape(UiShapeKind.Flat, r, Theme.Accent, 0f, 0f, 0.0015f));
             row.divider = Panel.Shapes.Add(Panel.Shape(UiShapeKind.Flat, r, Theme.TextDim, 0f, 0f, 0.0015f));
             row.dot = Panel.Shapes.Add(Panel.Shape(UiShapeKind.Dot, r, Theme.Ok, 0f, 0f, 0.003f, 1f));
+            row.guide = Panel.Shapes.Add(Panel.Shape(UiShapeKind.Flat, r, Theme.TextDim, 0f, 0f, 0.0015f));
+            row.tick = Panel.Shapes.Add(Panel.Shape(UiShapeKind.Flat, r, Theme.TextDim, 0f, 0f, 0.0015f));
             row.head = UiText.Create(Panel, r, "", Theme.Display, Theme.TitleSize, Theme.Text);
             HideExtras(row);
         }
@@ -751,7 +760,7 @@ namespace MetaCodex.UI
         private Rect RowRect(int i) => new Rect(Rect.x, Rect.y + i * RowHeight, Rect.width - 0.010f, RowHeight - 0.003f);
 
         private float HeightOf(UiListItem it) => RowHeight * (it.Kind == UiListKind.Band ? BandScale : it.Kind == UiListKind.Stacked ? StackedScale
-            : it.Kind == UiListKind.Compact ? CompactScale : 1f);
+            : it.Kind == UiListKind.Compact ? CompactScale : it.Kind == UiListKind.Gap ? GapScale : 1f);
 
         /// Variable: the top of every item, the content's height, and the first item from which the rows fill the list.
         private void LayoutVariable()
@@ -831,6 +840,7 @@ namespace MetaCodex.UI
                 bool sel = idx == SelectedIndex, hover = i == _hoverRow;
                 switch (it.Kind)
                 {
+                    case UiListKind.Gap: HideRow(row); row.shown = default; break; // blank: nothing drawn, nothing to pick
                     case UiListKind.Band: PlaceBand(row, it, r, hover); break;
                     case UiListKind.Stacked: PlaceStacked(row, it, r, sel, hover); break;
                     case UiListKind.Compact: PlaceCompact(row, it, r, sel, hover); break;
@@ -882,12 +892,11 @@ namespace MetaCodex.UI
             var t = Theme;
             Color bar = it.BarColor ?? t.Accent;
             float indent = it.Indent * IndentStep;
+            HideExtras(row); // a band has no divider, dot or connector (its band, bar and rule are set below)
             Panel.Shapes.SetVisible(row.shape, false);
-            SetShape(row.band, r, new Color(bar.r, bar.g, bar.b, hover ? 0.2f : 0.12f));
-            SetShape(row.bandBar, new Rect(r.x, r.y, 0.0035f, r.height), bar);
+            SetShape(row.band, r, new Color(bar.r, bar.g, bar.b, hover ? 0.3f : 0.2f));
+            SetShape(row.bandBar, new Rect(r.x, r.y, 0.008f, r.height), bar); // a thick bar: the type is the top level at a glance
             SetShape(row.bandRule, new Rect(r.x, r.y, r.width, 0.0012f), new Color(bar.r, bar.g, bar.b, 0.8f));
-            ShowShape(row.divider, false);
-            ShowShape(row.dot, false);
             RightWidths(it, r, indent, out float badgeW, out float subW);
             row.icon.SetVisible(true);
             row.icon.SetRect(new Rect(r.x + 0.006f + indent, r.y, 0.024f, r.height));
@@ -909,12 +918,14 @@ namespace MetaCodex.UI
             row.badge.Color = it.BadgeColor ?? t.Ok;
         }
 
-        /// A Stacked row (a project): the title on top, the sub (its caption) under it, the badge on the right.
+        /// A Stacked row (a project): the title on top (bold when it asks), the sub (its caption) under it, the badge on the
+        /// right, and a dot before the badge when it has one (a folded project with a thread that runs or needs you).
         private void PlaceStacked(PoolRow row, UiListItem it, Rect r, bool sel, bool hover)
         {
             float indent = it.Indent * IndentStep;
             RightWidths(it, r, indent, out float badgeW, out _);
-            float x = r.x + 0.032f + indent, w = r.width - 0.036f - indent - badgeW;
+            bool dot = it.Dot.HasValue;
+            float x = r.x + 0.032f + indent, w = r.width - 0.036f - indent - badgeW - (dot ? 0.016f : 0f);
             HideExtras(row);
             SetPlate(row, r);
             PlaceTexts(row, it, sel, hover, true);
@@ -924,6 +935,12 @@ namespace MetaCodex.UI
             row.title.SetRect(new Rect(x, r.y, w, r.height * 0.56f));
             row.sub.SetRect(new Rect(x, r.y + r.height * 0.54f, w, r.height * 0.46f));
             row.badge.SetRect(new Rect(r.xMax - badgeW - 0.004f, r.y, badgeW, r.height));
+            if (dot)
+            {
+                float d = 0.0105f;
+                SetShape(row.dot, new Rect(r.xMax - badgeW - 0.014f - d * 0.5f, r.center.y - d * 0.5f, d, d), it.Dot.Value);
+                Panel.Shapes.SetState(row.dot, it.DotLit ? 1f : 0.3f);
+            }
             PlaceDivider(row, it, r);
         }
 
@@ -943,6 +960,16 @@ namespace MetaCodex.UI
                 float d = 0.0105f;
                 SetShape(row.dot, new Rect(r.x + 0.014f + indent - d * 0.5f, r.center.y - d * 0.5f, d, d), it.Dot.Value);
                 Panel.Shapes.SetState(row.dot, it.DotLit ? 1f : 0.3f);
+            }
+            if (it.Guide)
+            {
+                // the connector: a vertical guide under the parent's icon (one level up, the rows of one parent join up), and a
+                // tick from it to this row's dot (or icon), at the row's middle
+                float gx = r.x + (it.Indent - 1) * IndentStep + 0.018f;
+                var line = new Color(Theme.TextDim.r, Theme.TextDim.g, Theme.TextDim.b, 0.5f);
+                SetShape(row.guide, new Rect(gx - 0.0006f, r.y, 0.0012f, r.height), line);
+                float tx = r.x + (dot ? 0.00875f : 0.006f) + indent;
+                SetShape(row.tick, new Rect(gx, r.center.y - 0.0006f, Mathf.Max(0f, tx - gx), 0.0012f), line);
             }
             PlaceTexts(row, it, sel, hover, !dot);
             SetSize(row.title, Theme.SmallSize * 1.25f); SetSize(row.sub, Theme.SmallSize);
@@ -967,7 +994,7 @@ namespace MetaCodex.UI
             row.icon.Text = it.Icon;
             row.icon.Color = it.IconColor ?? Theme.TextAccent;
             row.title.SetVisible(true);
-            row.title.Text = "<noparse>" + it.Title + "</noparse>";
+            row.title.Text = it.Bold ? "<b><noparse>" + it.Title + "</noparse></b>" : "<noparse>" + it.Title + "</noparse>";
             row.title.Color = it.TitleColor ?? Theme.Text;
             row.sub.SetVisible(true);
             row.sub.Text = "<noparse>" + it.Sub + "</noparse>";
@@ -999,7 +1026,7 @@ namespace MetaCodex.UI
         private void HideExtras(PoolRow row)
         {
             ShowShape(row.band, false); ShowShape(row.bandBar, false); ShowShape(row.bandRule, false);
-            ShowShape(row.divider, false); ShowShape(row.dot, false);
+            ShowShape(row.divider, false); ShowShape(row.dot, false); ShowShape(row.guide, false); ShowShape(row.tick, false);
             row.head?.SetVisible(false);
         }
 
