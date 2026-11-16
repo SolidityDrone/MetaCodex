@@ -297,9 +297,10 @@ namespace MetaCodex.Shell
         private readonly HashSet<string> _collapsedProjects = new HashSet<string>();
         private readonly HashSet<string> _collapsedTypes = new HashSet<string>(); // NATIVE, DEFAULT, RESEARCH, OTHER headers folded
 
-        /// Threads grouped like bb's sidebar, under the project types (owner 2026-11-13): a dim type header (NATIVE,
-        /// DEFAULT, RESEARCH, then OTHER when there are any; tap: fold / unfold), its projects (tap: fold / unfold), and
-        /// each project's threads under it, newest first; a tap on a thread opens it.
+        /// Threads grouped like bb's sidebar, under the project types (owner 2026-11-13): a type band (NATIVE, DEFAULT,
+        /// RESEARCH, PLUGINS, then OTHER when there are any; tap: fold / unfold), its projects (tap: fold / unfold, the name
+        /// with its caption under it), and each project's threads under it, newest first (a status dot, the age); a tap on a
+        /// thread opens it. The rows' levels are their indents (0.03 m a level); the list is a variable-height list (UiList).
         private void BuildThreads()
         {
             var t = UiTheme.Current;
@@ -312,7 +313,7 @@ namespace MetaCodex.Shell
             _threadsStatus = p.Add(new UiLabel("", t.SmallSize) { Rect = new Rect(sr.x, sr.y, sr.width - abw - t.Gap, sr.height), Color = t.TextDim });
             _threadsArchBtn = p.Add(new UiButton(_threadsArchived ? "◂ ACTIVE" : "▤ ARCHIVED", ToggleArchivedThreads) { Rect = new Rect(sr.xMax - abw, sr.y, abw, sr.height), TextSize = t.SmallSize * 1.02f });
             _threadsArchBtn.SetSelected(_threadsArchived);
-            _threadList = p.Add(new UiList(0.034f, (item, idx) => ThreadRowPicked(item)) { Rect = st.Next(c.height - 0.03f - t.ButtonHeight - t.Gap * 2) });
+            _threadList = p.Add(new UiList(0.034f, (item, idx) => ThreadRowPicked(item)) { Rect = st.Next(c.height - 0.03f - t.ButtonHeight - t.Gap * 2), Variable = true, IndentStep = 0.03f });
             _projectList = _threadList; // one list now (projects are its group rows)
             AddButtons(p, st.Next(t.ButtonHeight), new (string, Action)[]
             {
@@ -399,12 +400,15 @@ namespace MetaCodex.Shell
                 var all = projects.SelectMany(ThreadsOf).ToList();
                 int tRun = all.Count(x => ThreadTimeline.IsWorking(ThreadStatus(x))), tAsk = all.Count(x => x["hasPendingInteraction"]?.Value<bool>() == true);
                 bool typeFolded = _collapsedTypes.Contains(type);
+                // the type band: its colour is the bar, the fold icon and the rule; one count (needs you, else running, else the projects)
                 items.Add(new UiListItem
                 {
+                    Kind = UiListKind.Band,
+                    BarColor = TypeColor(t, type),
                     Icon = typeFolded ? "▸" : "▾",
-                    IconColor = t.TextDim,
+                    IconColor = TypeColor(t, type),
                     Title = ProjectKinds.Header(type),
-                    TitleColor = t.TextDim,
+                    TitleColor = t.Text,
                     Sub = type == "other" ? "outside metacodex-projects/" : "",
                     Badge = tAsk > 0 ? tAsk + " NEED YOU" : tRun > 0 ? tRun + " RUNNING" : projects.Count == 1 ? "1 project" : projects.Count + " projects",
                     BadgeColor = tAsk > 0 ? t.Warn : tRun > 0 ? t.Ok : t.TextDim,
@@ -412,7 +416,7 @@ namespace MetaCodex.Shell
                 });
                 if (typeFolded) continue;
                 if (projects.Count == 0)
-                    items.Add(new UiListItem { Indent = 1, Icon = "+", IconColor = t.TextDim, Title = "no " + ProjectKinds.Label(type).ToLowerInvariant() + " project yet: tap to make one", TitleColor = t.TextDim, Tag = "n:" + type });
+                    items.Add(new UiListItem { Kind = UiListKind.Compact, Indent = 1, Icon = "+", IconColor = t.TextDim, Title = "no " + ProjectKinds.Label(type).ToLowerInvariant() + " project yet: tap to make one", TitleColor = t.TextDim, Tag = "n:" + type });
                 foreach (var pr in projects) ProjectRows(pr, ThreadsOf(pr));
             }
             void ProjectRows(JToken pr, List<JToken> list)
@@ -421,15 +425,19 @@ namespace MetaCodex.Shell
                 int running = list.Count(x => ThreadTimeline.IsWorking(ThreadStatus(x)));
                 int asks = list.Count(x => x["hasPendingInteraction"]?.Value<bool>() == true);
                 bool folded = _collapsedProjects.Contains(pid);
+                string path = (string)pr["sources"]?.FirstOrDefault()?["path"] ?? "";
+                string plugin = PluginProject.KindFromLinuxPath(path); // a plugin project: its kind is the caption
                 items.Add(new UiListItem
                 {
+                    Kind = UiListKind.Stacked,
                     Indent = 1,
+                    Divider = true,
                     Icon = folded ? "▸" : "▾",
                     IconColor = t.TextDim,
-                    Title = ((string)pr["name"] ?? "project").ToUpperInvariant(),
-                    TitleColor = pid == _projectSel ? t.TextAccent : t.TextDim,
-                    Sub = Cut(ProjectKinds.ShortPath((string)pr["sources"]?.FirstOrDefault()?["path"] ?? ""), 34),
-                    Badge = asks > 0 ? asks + " NEED YOU" : running > 0 ? running + " RUNNING" : list.Count.ToString(),
+                    Title = (string)pr["name"] ?? "project",
+                    TitleColor = pid == _projectSel ? t.TextAccent : t.Text,
+                    Sub = plugin != null ? PluginProject.Label(plugin).ToUpperInvariant() : Cut(ProjectKinds.ShortPath(path), 34),
+                    Badge = list.Count.ToString(), // the threads; coloured by what they do (needs you, running)
                     BadgeColor = asks > 0 ? t.Warn : running > 0 ? t.Ok : t.TextDim,
                     Tag = "p:" + pid,
                 });
@@ -448,14 +456,16 @@ namespace MetaCodex.Shell
                     string id = (string)x["id"];
                     items.Add(new UiListItem
                     {
+                        Kind = UiListKind.Compact,
                         Indent = indent,
-                        Icon = pending ? "?" : working ? "▶" : held ? "⏸" : st == "error" ? "⚠" : "◆",
-                        IconColor = pending || held ? t.Warn : working ? t.Ok : st == "error" ? t.Danger : t.Accent,
+                        // the status dot: running and needs you lit; waiting (held) and error and idle dim
+                        Dot = pending || held ? t.Warn : working ? t.Ok : st == "error" ? t.Danger : t.TextDim,
+                        DotLit = pending || working || st == "error",
                         Title = (string)x["title"] ?? (string)x["titleFallback"] ?? id,
                         TitleColor = id == _threadOpen || OpenWindowShowing(id) != null ? t.TextAccent : (Color?)null, // open in a window (any of them)
-                        Sub = showSpaces ? $"{x["providerId"]} · {Ago(x["updatedAt"]?.Value<long>() ?? 0)}" : $"{x["providerId"]} · {(x["environmentIsWorktree"]?.Value<bool>() == true ? "⎇ " + x["environmentBranchName"] : "checkout")} · {Ago(x["updatedAt"]?.Value<long>() ?? 0)}",
-                        Badge = pending ? "NEEDS YOU" : working ? "RUNNING" : held ? "WAITING" : st == "error" ? "ERROR" : "",
-                        BadgeColor = pending || held ? t.Warn : st == "error" ? t.Danger : t.Ok,
+                        Sub = showSpaces ? $"{x["providerId"]}" : $"{x["providerId"]} · {(x["environmentIsWorktree"]?.Value<bool>() == true ? "⎇ " + x["environmentBranchName"] : "checkout")}",
+                        Badge = Ago(x["updatedAt"]?.Value<long>() ?? 0), // the age, dim, on the right
+                        BadgeColor = t.TextDim,
                         Tag = "t:" + id,
                     });
                 }
@@ -465,6 +475,7 @@ namespace MetaCodex.Shell
                     {
                         items.Add(new UiListItem
                         {
+                            Kind = UiListKind.Compact,
                             Indent = 2,
                             Icon = g.Starting ? "◌" : g.IsWorktree ? "⎇" : "▣",
                             IconColor = g.Clash ? t.Danger : t.TextDim,
@@ -477,7 +488,7 @@ namespace MetaCodex.Shell
                         });
                         foreach (var x in g.Threads) ThreadRow(x, 3);
                     }
-                if (list.Count == 0) items.Add(new UiListItem { Indent = 2, Icon = "·", IconColor = t.TextDim, Title = "no threads yet: + NEW THREAD…", TitleColor = t.TextDim, Tag = "p:" + pid });
+                if (list.Count == 0) items.Add(new UiListItem { Kind = UiListKind.Compact, Indent = 2, Icon = "·", IconColor = t.TextDim, Title = "no threads yet: + NEW THREAD…", TitleColor = t.TextDim, Tag = "p:" + pid });
             }
             int total = _threads.Count, run = _threads.Count(x => ThreadTimeline.IsWorking(ThreadStatus(x))), need = _threads.Count(x => x["hasPendingInteraction"]?.Value<bool>() == true);
             if (_projects.Count == 0) _threadsStatus.Set("No project yet: + PROJECT… makes one in " + ProjectKinds.Root + "/ (native, default, research or a plugin).", t.TextDim);
@@ -493,6 +504,11 @@ namespace MetaCodex.Shell
             var d = DateTimeOffset.UtcNow - DateTimeOffset.FromUnixTimeMilliseconds(ms);
             return d.TotalMinutes < 1 ? "now" : d.TotalHours < 1 ? $"{(int)d.TotalMinutes} min" : d.TotalDays < 1 ? $"{(int)d.TotalHours} h" : $"{(int)d.TotalDays} d";
         }
+
+        /// A type's colour in THREADS (its band's bar, rule and fold icon): NATIVE the accent, DEFAULT violet, RESEARCH green,
+        /// PLUGINS amber, OTHER steel.
+        private static Color TypeColor(UiTheme t, string type) =>
+            type == "native" ? t.Accent : type == "default" ? t.Violet : type == "research" ? t.Ok : type == ProjectKinds.Plugins ? t.Warn : t.Frame;
 
         // a project's type (mcx-project): where it is (metacodex-projects/<type>/...), else .metacodex/project.json, else an
         // app folder (AndroidManifest.xml + src/) is native; null (OTHER) when nothing says. Read at most every 30 s per
