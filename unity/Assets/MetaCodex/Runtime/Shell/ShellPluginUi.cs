@@ -37,12 +37,62 @@ namespace MetaCodex.Shell
         // ------------------------------------------------------------------ windows
 
         /// Makes or replaces a plugin window. Not open and not built yet: only the spec is kept (built on the first open).
+        /// A window that a press is on keeps its place: its newest spec waits until the press ends (TickPendingWindows),
+        /// so the tap reaches the element it hit (owner 2026-11-16: taps were lost when a rebuild ran mid-press).
         void IScriptServices.PluginWindow(string windowId, string specJson, bool open)
         {
             if (string.IsNullOrEmpty(windowId)) return;
             JObject spec;
             try { spec = JObject.Parse(specJson ?? "{}"); }
             catch (Exception ex) { Log("plugin window " + windowId + ": bad spec: " + ex.Message); return; }
+            var v = FindView(windowId);
+            if (v != null && PluginWindowPressed(v))
+            {
+                int at = PendingIndex(v);
+                if (at >= 0) open |= _pendingWin[at].open;
+                var entry = (view: v, spec, open);
+                if (at >= 0) _pendingWin[at] = entry; else _pendingWin.Add(entry);
+                EnsurePluginTick();
+                Log("plugin window " + windowId + ": rebuild deferred until the press ends");
+                return;
+            }
+            int done = v != null ? PendingIndex(v) : -1;
+            if (done >= 0) _pendingWin.RemoveAt(done); // this spec is newer than a deferred one
+            ApplyPluginWindow(windowId, spec, open);
+        }
+
+        /// Windows whose update waits for a press to end: the newest spec and the open request (one per window).
+        private readonly List<(AgentView view, JObject spec, bool open)> _pendingWin = new List<(AgentView view, JObject spec, bool open)>();
+
+        private int PendingIndex(AgentView v)
+        {
+            for (int i = 0; i < _pendingWin.Count; i++) if (_pendingWin[i].view == v) return i;
+            return -1;
+        }
+
+        /// A press is in progress on the window's built panel (a button held, a drag or a selection on it).
+        private bool PluginWindowPressed(AgentView v) =>
+            Router != null && _panels.TryGetValue(v.PanelId, out var p) && p != null && Router.IsPressing(p);
+
+        /// The deferred windows whose press has ended: applied in the frame after the release at the latest.
+        private void TickPendingWindows()
+        {
+            for (int i = _pendingWin.Count - 1; i >= 0; i--)
+            {
+                if (i >= _pendingWin.Count) continue; // a rebuild below may have changed the list
+                var (v, spec, open) = _pendingWin[i];
+                if (!_viewList.Contains(v) || v.Source != "plugin") { _pendingWin.RemoveAt(i); continue; }
+                if (PluginWindowPressed(v)) continue;
+                _pendingWin.RemoveAt(i);
+                Log("plugin window " + v.Id + ": deferred rebuild applied");
+                try { ApplyPluginWindow(v.Id, spec, open); }
+                catch (Exception ex) { v.Error = ex.Message; Log("plugin window " + v.Id + " failed: " + ex); }
+            }
+        }
+
+        /// Builds or updates a plugin window from a parsed spec (the press, if any, has ended).
+        private void ApplyPluginWindow(string windowId, JObject spec, bool open)
+        {
             var v = FindView(windowId);
             if (v == null) { v = new AgentView { Id = windowId }; _viewList.Add(v); }
             v.Spec = spec;
@@ -82,7 +132,10 @@ namespace MetaCodex.Shell
                 string shown = MdLite(kv.Value ?? "");
                 if (lab.Text != shown) lab.Set(shown);
             }
-            if (v.Spec != null && v.Spec["components"] is JArray comps)
+            // the spec the next build uses: the deferred one when an update waits for a press to end, else the built one
+            int at = PendingIndex(v);
+            var spec = at >= 0 ? _pendingWin[at].spec : v.Spec;
+            if (spec != null && spec["components"] is JArray comps)
                 foreach (var tok in comps)
                     if (tok is JObject c && (string)c["id"] is string cid && texts.TryGetValue(cid, out var txt)) c["text"] = txt;
             return true;
@@ -118,6 +171,8 @@ namespace MetaCodex.Shell
         {
             var v = FindView(windowId);
             if (v == null || v.Source != "plugin") return;
+            int at = PendingIndex(v);
+            if (at >= 0) _pendingWin.RemoveAt(at);
             v.OnEvent = null;
             v.Shown = false;
             if (_panels.TryGetValue(v.PanelId, out var p) && p != null)
@@ -168,6 +223,12 @@ namespace MetaCodex.Shell
             _pluginTilesDirtyAt = Time.unscaledTime;
             _pluginTilesPending = true;
             // per frame through the script host's tick (the shell calls it every frame; nothing to do = two bool checks)
+            EnsurePluginTick();
+        }
+
+        /// The per-frame tick of the plugin UI (tiles, deferred windows) is hooked to the script host once.
+        private void EnsurePluginTick()
+        {
             if (!_pluginTickHooked && Scripts != null) { _pluginTickHooked = true; Scripts.AfterTick += TickPluginUi; }
         }
 
@@ -246,6 +307,7 @@ namespace MetaCodex.Shell
 
         private void TickPluginUi()
         {
+            if (_pendingWin.Count > 0) TickPendingWindows(); // a window whose press has ended: the frame after the release
             if (_pluginTilesPending)
             {
                 if (Time.unscaledTime - _pluginTilesDirtyAt < 0.3f) return;

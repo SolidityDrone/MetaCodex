@@ -108,6 +108,19 @@ namespace MetaCodex.UI
             return _mouse.DragPanel == p;
         }
 
+        /// A press is in progress on this panel: a pointer holds one of its elements, is moving it, or selects on it. A
+        /// rebuild of the panel now would lose that press (ShellPluginUi waits for the press to end). Read-only.
+        public bool IsPressing(UiPanel p)
+        {
+            if (p == null) return false;
+            for (int i = 0; i < _hand.Length; i++) if (PressingOn(_hand[i], p)) return true;
+            return PressingOn(_mouse, p) || PressingOn(_lastInjected, p);
+        }
+
+        private static bool PressingOn(UiPointer ptr, UiPanel p) =>
+            ptr != null && ((ptr.Captured != null && ptr.CapturedPanel == p) || ptr.DragPanel == p
+                || (ptr.Selecting && ptr.SelectPanel == p) || (ptr.Down && ptr.HasHit && ptr.HitPanel == p));
+
         /// The panel under a hand's ray this frame (0 left, 1 right), or null.
         public UiPanel HandRayPanel(int hand) => hand >= 0 && hand < 2 && _hand[hand] != null && _hand[hand].Active && _hand[hand].HasHit ? _hand[hand].HitPanel : null;
 
