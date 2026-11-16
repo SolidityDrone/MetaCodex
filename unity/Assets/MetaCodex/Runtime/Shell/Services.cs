@@ -244,6 +244,8 @@ namespace MetaCodex.Shell
         public bool grid = false;
         public bool sounds = true;
         public float soundVolume = 0.35f;
+        /// The UI sounds' style (UiSoundSynth.Styles): hud (default), holo, core, classic. LOOK & SOUND > SOUND.
+        public string soundStyle = "hud";
         // agents: defaults for new threads
         public string defaultProvider = "";
         public string defaultModel = "";
