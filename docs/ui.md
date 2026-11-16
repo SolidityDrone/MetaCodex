@@ -18,7 +18,10 @@ bottom from the right cut with a pulse in it. **Your hands light it**: a fingert
 the cursor of a hand's ray, is a point of light on the lattice and the frame (`_McxPointer0` / `_McxPointer1`, set by
 the router every frame); the pool tightens as the finger comes closer, so it also shows how far the glass still is. Lattice
 lines fade out with distance before they get thinner than a pixel (no shimmer). Titles and buttons use Rajdhani SemiBold in capitals with letter spacing (the console voice), body text
-Inter, code DejaVu Sans Mono. All OFL / free licences. Short UI sounds are synthesised in code.
+Inter, code DejaVu Sans Mono. All OFL / free licences. Short UI sounds are synthesised in code, no audio files
+(`UiSoundSynth`; `UiSounds` makes them on a worker thread at start and plays them): one family in G major pentatonic
+(struck glass, soft bells, filtered air, a low body, beads of light, one small room), one loudness for all (hover
+well under), little above 6 kHz, 0.02-0.68 s each. `tests/sounds/` renders them to WAV and checks them.
 
 Everything is drawn by one shader, `MetaCodex/SciFiUI`: each panel, button, header, bar, line, dot and
 selection frame is a quad whose shape is computed per pixel from vertex data (size, chamfer, fill style,
@@ -72,9 +75,10 @@ slot when a cast starts (`TagForeign`). The line leaves from the caster's side (
 top or bottom, whichever edge is nearest to it) and comes back to it; without a caster it crosses from the left. A
 small overlay mesh in the window's own space draws the light itself with `MetaCodex/WristArt` (the flying
 brackets, the scan line, its two rays, the spark), bent like the window; on a bent window a horizontal line is an
-arc. Captures render a window at rest. Sounds follow: two ticks as
-the brackets lock on, a rising sweep with a shimmer, a low thump and a clear note; a falling sweep, a quick
-rise as the spark flies home.
+arc. Captures render a window at rest. Sounds follow the cast: two glass ticks as
+the brackets lock on, a rising stream of air and light with beads in it as the scan line crosses, a low body and a
+clear G5 + D6 as it settles; a surge, a falling stream as the line runs back, a tick as the brackets let go, a quick
+rise as the spark flies home and a soft body as it is taken in.
 
 ## The Whisp
 
@@ -134,7 +138,7 @@ cast from their left edge and messages float in the upper view.
 
 | Folder | What |
 |---|---|
-| `UI/` | `UiTheme` (colours, sizes, fonts), `UiShapeMesh` (batched shapes, rotated strokes), `UiPanel` (frame, header, the cast, drag, GPU bend and cast slots, curved ray hits), `UiPanelFx` (the cast's timelines, its scan plane and its light), `UiOrb` (the orb's body: moods, motion, the uniforms of its shader), widgets (`UiButton`, `UiToggle`, `UiSegmented`, `UiSlider`, `UiTextField` (one line, or `Wrap` for a box that grows), `UiDragGrip` (a bar to drag: THREAD's message box), `UiList`, `UiTabs`, `UiProgress`, `UiDivider`), `UiViz` (canvases drawn from pooled shapes: `UiChart`, `UiFlow`, `UiSequence`, `UiTable`, `UiCodeView`, `UiRing`, `UiChangeMap`, `UiToolList` (SYSTEM > TOOLS: groups and rows, no icons), `UiStorageBar`; the series palette), `UiMermaid` (flowchart / sequence / pie subset), `UiKeyboard` (the headset's system keyboard), `UiInputRouter` (pointers, beams, reticles, selection), `UiToasts`, `UiModal`, `UiSounds` |
+| `UI/` | `UiTheme` (colours, sizes, fonts), `UiShapeMesh` (batched shapes, rotated strokes), `UiPanel` (frame, header, the cast, drag, GPU bend and cast slots, curved ray hits), `UiPanelFx` (the cast's timelines, its scan plane and its light), `UiOrb` (the orb's body: moods, motion, the uniforms of its shader), widgets (`UiButton`, `UiToggle`, `UiSegmented`, `UiSlider`, `UiTextField` (one line, or `Wrap` for a box that grows), `UiDragGrip` (a bar to drag: THREAD's message box), `UiList`, `UiTabs`, `UiProgress`, `UiDivider`), `UiViz` (canvases drawn from pooled shapes: `UiChart`, `UiFlow`, `UiSequence`, `UiTable`, `UiCodeView`, `UiRing`, `UiChangeMap`, `UiToolList` (SYSTEM > TOOLS: groups and rows, no icons), `UiStorageBar`; the series palette), `UiMermaid` (flowchart / sequence / pie subset), `UiKeyboard` (the headset's system keyboard), `UiInputRouter` (pointers, beams, reticles, selection), `UiToasts`, `UiModal`, `UiSounds` (plays the sounds), `UiSoundSynth` (makes them) |
 | `Hands/` | `GestureEngine` (built-ins, pose templates, custom gestures with hold/cooldown, head-relative directions), `PoseSpec`, `OvrHandSource` (OVRHand/OVRSkeleton), `SimulatedHands` (any pose, for tests) |
 | `Scripting/` | `ScriptHost`: Lua (MoonSharp) scripts and plugin folders, hot reload, sandbox, instruction budget, detectors as persistent coroutines, persisted state; `PoseJson` |
 | `Security/` | `SecretVault` (Android Keystore sealer, Editor dev sealer, policies, access log) |
