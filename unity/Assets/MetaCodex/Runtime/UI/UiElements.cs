@@ -633,10 +633,29 @@ namespace MetaCodex.UI
         public Color? IconColor;
         public int Indent;
         public object Tag;
+        /// Variable lists only: the row's height and style (UiListKind; Row, as every row was before).
+        public UiListKind Kind;
+        /// Variable lists only: a thin rule across the top of the row (a separator).
+        public bool Divider;
+        /// Variable lists only, a Band row: its colour (the band's fill and left bar, its top rule, its fold icon); null: the accent.
+        public Color? BarColor;
+        /// Variable lists only: a status dot in the icon's place, in this colour (null: the icon text, as before).
+        public Color? Dot;
+        /// The dot's core is lit (running, needs you); unlit: a dim core (idle, waiting).
+        public bool DotLit;
     }
+
+    /// The kinds of row of a Variable list. Row: the list's RowHeight, one line (the title, the sub and the badge side by
+    /// side), as every row was before. Band: a type header, 1.45 rows: a band in BarColor with a rule across its top, the
+    /// title in the display face, the sub and the badge on the right. Stacked: 1.3 rows, the sub under the title in small
+    /// dim text (a project and its caption). Compact: 0.8 rows and smaller text (a thread, a folder, a hint).
+    public enum UiListKind { Row = 0, Band = 1, Stacked = 2, Compact = 3 }
 
     /// A scrolling list with a fixed row height: a pool of rows reused while scrolling (drag up/down, or the
     /// arrows). Tap selects a row.
+    /// Variable: the rows take the heights of their UiListKind. The pool shows the rows from the first one scrolled to on,
+    /// and scrolling still moves by whole rows; a row that does not fit whole at the bottom is not drawn (as before).
+    /// Band, Stacked, Compact, Divider and Dot are drawn only in a Variable list; IndentStep applies to every list.
     public sealed class UiList : UiElement
     {
         public float RowHeight;
@@ -646,43 +665,78 @@ namespace MetaCodex.UI
         /// What the list says while it has no items: centred in its area, with what to do next (empty: nothing). The same
         /// pattern in every window (SetEmptyText changes it).
         public string EmptyText = "";
+        /// Rows of their own heights (UiListKind), and the Band, Stacked, Compact, Divider and Dot options of UiListItem.
+        public bool Variable;
+        /// The indent of one level (UiListItem.Indent) in metres: 0.016 for every list as it was; THREADS uses 0.03.
+        public float IndentStep = 0.016f;
         public override bool Interactive => true;
         public IReadOnlyList<UiListItem> Items => _items;
         private readonly List<UiListItem> _items = new List<UiListItem>();
-        private readonly List<(int shape, UiText icon, UiText title, UiText sub, UiText badge)> _rows = new List<(int, UiText, UiText, UiText, UiText)>();
+        private readonly List<PoolRow> _rows = new List<PoolRow>();
         private int _bar;
         private UiText _empty;
         private float _scroll;      // rows scrolled
         private float _dragStartScroll;
         private bool _dragged;
         private int _hoverRow = -1;
+        // Variable: the top of each item (metres; the last entry is the content's height) and the first item from which
+        // the rows still fill the list (the most it scrolls)
+        private readonly List<float> _tops = new List<float>();
+        private float _contentH;
+        private int _maxFirst;
+
+        private const float BandScale = 1.45f, StackedScale = 1.3f, CompactScale = 0.8f; // Variable: the kinds' heights in rows
+
+        /// One pooled row: its plate and texts, and in a Variable list its band, bar, rule, divider and dot (-1 otherwise)
+        /// and its head (the display title of a Band row). shown: where a Variable row is drawn now (empty: hidden).
+        private sealed class PoolRow
+        {
+            public int shape, band = -1, bandBar = -1, bandRule = -1, divider = -1, dot = -1;
+            public UiText icon, title, head, sub, badge;
+            public Rect shown;
+        }
 
         public UiList(float rowHeight = 0f, Action<UiListItem, int> onSelect = null) { RowHeight = rowHeight; OnSelect = onSelect; }
 
         private int VisibleRows => Mathf.Max(1, Mathf.FloorToInt(Rect.height / RowHeight));
-        private float MaxScroll => Mathf.Max(0, _items.Count - VisibleRows);
+        private float MaxScroll => Variable ? _maxFirst : Mathf.Max(0, _items.Count - VisibleRows);
 
         protected override void Build()
         {
             if (RowHeight <= 0f) RowHeight = Theme.RowHeight;
-            for (int i = 0; i < VisibleRows; i++)
+            int pool = Variable ? Mathf.CeilToInt(Rect.height / (RowHeight * CompactScale)) + 2 : VisibleRows;
+            for (int i = 0; i < pool; i++)
             {
                 var r = RowRect(i);
+                var row = new PoolRow();
                 // fill style 3: a list row (quiet glass, a notch, the accent floods in when chosen)
-                int shape = Panel.Shapes.Add(Panel.Shape(UiShapeKind.Button, r, Theme.AccentSoft, 0.004f, 3f, 0.005f));
-                var icon = UiText.Create(Panel, new Rect(r.x + 0.006f, r.y, 0.024f, r.height), "", Theme.Body, Theme.BodySize, Theme.TextAccent, TextAlignmentOptions.Center);
-                var title = UiText.Create(Panel, new Rect(r.x + 0.032f, r.y, r.width * 0.62f, r.height), "", Monospace ? Theme.Mono : Theme.Body,
+                row.shape = Panel.Shapes.Add(Panel.Shape(UiShapeKind.Button, r, Theme.AccentSoft, 0.004f, 3f, 0.005f));
+                row.icon = UiText.Create(Panel, new Rect(r.x + 0.006f, r.y, 0.024f, r.height), "", Theme.Body, Theme.BodySize, Theme.TextAccent, TextAlignmentOptions.Center);
+                row.title = UiText.Create(Panel, new Rect(r.x + 0.032f, r.y, r.width * 0.62f, r.height), "", Monospace ? Theme.Mono : Theme.Body,
                     Monospace ? Theme.SmallSize * 1.1f : Theme.BodySize, Theme.Text);
-                var sub = UiText.Create(Panel, new Rect(r.x + r.width * 0.55f, r.y, r.width * 0.30f, r.height), "", Theme.Body, Theme.SmallSize * 1.08f, Color.Lerp(Theme.TextDim, Theme.Text, 0.25f), TextAlignmentOptions.MidlineRight);
-                var badge = UiText.Create(Panel, new Rect(r.xMax - 0.075f, r.y, 0.070f, r.height), "", Theme.Display, Theme.SmallSize * 0.92f, Theme.Ok, TextAlignmentOptions.MidlineRight);
-                _rows.Add((shape, icon, title, sub, badge));
+                row.sub = UiText.Create(Panel, new Rect(r.x + r.width * 0.55f, r.y, r.width * 0.30f, r.height), "", Theme.Body, Theme.SmallSize * 1.08f, Color.Lerp(Theme.TextDim, Theme.Text, 0.25f), TextAlignmentOptions.MidlineRight);
+                row.badge = UiText.Create(Panel, new Rect(r.xMax - 0.075f, r.y, 0.070f, r.height), "", Theme.Display, Theme.SmallSize * 0.92f, Theme.Ok, TextAlignmentOptions.MidlineRight);
+                if (Variable) AddVariableShapes(row, r);
+                _rows.Add(row);
             }
             _bar = Panel.Shapes.Add(Panel.Shape(UiShapeKind.Line, new Rect(Rect.xMax - 0.003f, Rect.y, 0.003f, Rect.height), Theme.Accent, 0, 0, 0.002f));
             // the empty state: in the upper middle of the list's area (where its first rows would be), wrapped
             float ey = Mathf.Min(Rect.height * 0.25f, 0.06f), eh = Mathf.Max(0.02f, Mathf.Min(Rect.height - ey, 0.09f));
             _empty = UiText.Create(Panel, new Rect(Rect.x + Rect.width * 0.08f, Rect.y + ey, Rect.width * 0.84f, eh), "",
                 Theme.Body, Theme.BodySize * 0.95f, Color.Lerp(Theme.TextDim, Theme.Text, 0.15f), TextAlignmentOptions.Top, true);
+            if (Variable) { LayoutVariable(); _scroll = Mathf.Clamp(_scroll, 0f, MaxScroll); }
             Render();
+        }
+
+        private void AddVariableShapes(PoolRow row, Rect r)
+        {
+            row.band = Panel.Shapes.Add(Panel.Shape(UiShapeKind.Flat, r, Theme.Accent, 0.002f, 0f, 0.0015f));
+            row.bandBar = Panel.Shapes.Add(Panel.Shape(UiShapeKind.Flat, r, Theme.Accent, 0f, 0f, 0.0015f));
+            row.bandRule = Panel.Shapes.Add(Panel.Shape(UiShapeKind.Flat, r, Theme.Accent, 0f, 0f, 0.0015f));
+            row.divider = Panel.Shapes.Add(Panel.Shape(UiShapeKind.Flat, r, Theme.TextDim, 0f, 0f, 0.0015f));
+            row.dot = Panel.Shapes.Add(Panel.Shape(UiShapeKind.Dot, r, Theme.Ok, 0f, 0f, 0.003f, 1f));
+            row.head = UiText.Create(Panel, r, "", Theme.Display, Theme.TitleSize, Theme.Text);
+            HideExtras(row);
         }
 
         /// Sets what the list says while it has no items (only when it changes).
@@ -696,10 +750,28 @@ namespace MetaCodex.UI
 
         private Rect RowRect(int i) => new Rect(Rect.x, Rect.y + i * RowHeight, Rect.width - 0.010f, RowHeight - 0.003f);
 
+        private float HeightOf(UiListItem it) => RowHeight * (it.Kind == UiListKind.Band ? BandScale : it.Kind == UiListKind.Stacked ? StackedScale
+            : it.Kind == UiListKind.Compact ? CompactScale : 1f);
+
+        /// Variable: the top of every item, the content's height, and the first item from which the rows fill the list.
+        private void LayoutVariable()
+        {
+            _tops.Clear();
+            float y = 0f;
+            for (int i = 0; i < _items.Count; i++) { _tops.Add(y); y += HeightOf(_items[i]); }
+            _tops.Add(y);
+            _contentH = y;
+            int f = _items.Count;
+            float s = 0f;
+            while (f > 0 && s + HeightOf(_items[f - 1]) <= Rect.height) { f--; s += HeightOf(_items[f]); }
+            _maxFirst = Mathf.Max(0, Mathf.Min(f, _items.Count - 1));
+        }
+
         public void SetItems(IEnumerable<UiListItem> items, bool keepScroll = false)
         {
             _items.Clear();
             _items.AddRange(items);
+            if (Variable) LayoutVariable();
             if (!keepScroll) _scroll = 0f;
             _scroll = Mathf.Clamp(_scroll, 0f, MaxScroll);
             if (SelectedIndex >= _items.Count) SelectedIndex = -1;
@@ -711,39 +783,10 @@ namespace MetaCodex.UI
         private void Render()
         {
             if (Panel == null) return;
-            int first = Mathf.FloorToInt(_scroll);
-            for (int i = 0; i < _rows.Count; i++)
-            {
-                var row = _rows[i];
-                int idx = first + i;
-                bool has = idx < _items.Count && Visible;
-                Panel.Shapes.SetVisible(row.shape, has);
-                row.icon.SetVisible(has); row.title.SetVisible(has); row.sub.SetVisible(has); row.badge.SetVisible(has);
-                if (!has) continue;
-                var it = _items[idx];
-                float indent = it.Indent * 0.016f;
-                var r = RowRect(i);
-                row.icon.SetRect(new Rect(r.x + 0.006f + indent, r.y, 0.024f, r.height));
-                // the tag and the badge take about the room their text needs (a generous guess from its length), never
-                // more than before: a short tag ("key", "2 keys") leaves the title room instead of a third of the row
-                float badgeW = string.IsNullOrEmpty(it.Badge) ? 0f : Mathf.Min(Mathf.Min(0.075f, r.width * 0.3f), it.Badge.Length * Theme.SmallSize * 0.92f * 0.72f * 0.78f + 0.010f);
-                float subW = string.IsNullOrEmpty(it.Sub) ? 0f : Mathf.Min(Mathf.Min(r.width * 0.32f, it.Sub.Length * Theme.SmallSize * 1.08f * 0.72f * 0.62f + 0.012f), r.width - badgeW - 0.05f - indent);
-                row.title.SetRect(new Rect(r.x + 0.032f + indent, r.y, r.width - 0.036f - indent - subW - badgeW, r.height));
-                row.sub.SetRect(new Rect(r.xMax - badgeW - subW - 0.004f, r.y, subW, r.height));
-                row.badge.SetRect(new Rect(r.xMax - badgeW - 0.004f, r.y, badgeW, r.height));
-                row.icon.Text = it.Icon;
-                row.icon.Color = it.IconColor ?? Theme.TextAccent;
-                row.title.Text = "<noparse>" + it.Title + "</noparse>";
-                row.title.Color = it.TitleColor ?? Theme.Text;
-                row.sub.Text = "<noparse>" + it.Sub + "</noparse>";
-                row.badge.Text = it.Badge;
-                row.badge.Color = it.BadgeColor ?? Theme.Ok;
-                bool sel = idx == SelectedIndex;
-                Panel.Shapes.SetTint(row.shape, sel ? Theme.Accent : Theme.AccentSoft);
-                Panel.Shapes.SetState(row.shape, sel ? 0.75f : (i == _hoverRow ? 0.3f : 0f));
-            }
+            if (Variable) RenderVariable(); else RenderRows();
             // scroll indicator
-            float frac = _items.Count <= VisibleRows ? 1f : (float)VisibleRows / _items.Count;
+            float frac = Variable ? (_contentH <= Rect.height ? 1f : Rect.height / _contentH)
+                : (_items.Count <= VisibleRows ? 1f : (float)VisibleRows / _items.Count);
             float pos = MaxScroll <= 0 ? 0f : _scroll / MaxScroll;
             float h = Rect.height * frac;
             var bar = new Rect(Rect.xMax - 0.004f, Rect.y + (Rect.height - h) * pos, 0.004f, h);
@@ -757,11 +800,235 @@ namespace MetaCodex.UI
             }
         }
 
+        private void RenderRows()
+        {
+            int first = Mathf.FloorToInt(_scroll);
+            for (int i = 0; i < _rows.Count; i++)
+            {
+                var row = _rows[i];
+                int idx = first + i;
+                bool has = idx < _items.Count && Visible;
+                Panel.Shapes.SetVisible(row.shape, has);
+                row.icon.SetVisible(has); row.title.SetVisible(has); row.sub.SetVisible(has); row.badge.SetVisible(has);
+                if (!has) continue;
+                PlaceRow(row, _items[idx], RowRect(i), idx == SelectedIndex, i == _hoverRow);
+            }
+        }
+
+        private void RenderVariable()
+        {
+            int first = Mathf.FloorToInt(_scroll);
+            float top = first < _items.Count ? _tops[first] : 0f;
+            for (int i = 0; i < _rows.Count; i++)
+            {
+                var row = _rows[i];
+                int idx = first + i;
+                Rect r = idx < _items.Count && Visible ? new Rect(Rect.x, Rect.y + _tops[idx] - top, Rect.width - 0.010f, HeightOf(_items[idx]) - 0.003f) : default;
+                bool has = idx < _items.Count && Visible && r.yMax <= Rect.yMax + 0.0005f;
+                row.shown = has ? r : default;
+                if (!has) { HideRow(row); continue; }
+                var it = _items[idx];
+                bool sel = idx == SelectedIndex, hover = i == _hoverRow;
+                switch (it.Kind)
+                {
+                    case UiListKind.Band: PlaceBand(row, it, r, hover); break;
+                    case UiListKind.Stacked: PlaceStacked(row, it, r, sel, hover); break;
+                    case UiListKind.Compact: PlaceCompact(row, it, r, sel, hover); break;
+                    default:
+                        HideExtras(row);
+                        SetPlate(row, r);
+                        row.icon.SetVisible(true); row.title.SetVisible(true); row.sub.SetVisible(true); row.badge.SetVisible(true);
+                        SetSize(row.title, Theme.BodySize); SetSize(row.sub, Theme.SmallSize * 1.08f);
+                        SetAlign(row.sub, TextAlignmentOptions.MidlineRight);
+                        PlaceRow(row, it, r, sel, hover);
+                        PlaceDivider(row, it, r);
+                        break;
+                }
+            }
+        }
+
+        /// A row's texts and plate in the one-line layout: the title, the sub and the badge side by side.
+        private void PlaceRow(PoolRow row, UiListItem it, Rect r, bool sel, bool hover)
+        {
+            float indent = it.Indent * IndentStep;
+            RightWidths(it, r, indent, out float badgeW, out float subW);
+            row.icon.SetRect(new Rect(r.x + 0.006f + indent, r.y, 0.024f, r.height));
+            // the tag and the badge take about the room their text needs (a generous guess from its length), never
+            // more than before: a short tag ("key", "2 keys") leaves the title room instead of a third of the row
+            row.title.SetRect(new Rect(r.x + 0.032f + indent, r.y, r.width - 0.036f - indent - subW - badgeW, r.height));
+            row.sub.SetRect(new Rect(r.xMax - badgeW - subW - 0.004f, r.y, subW, r.height));
+            row.badge.SetRect(new Rect(r.xMax - badgeW - 0.004f, r.y, badgeW, r.height));
+            row.icon.Text = it.Icon;
+            row.icon.Color = it.IconColor ?? Theme.TextAccent;
+            row.title.Text = "<noparse>" + it.Title + "</noparse>";
+            row.title.Color = it.TitleColor ?? Theme.Text;
+            row.sub.Text = "<noparse>" + it.Sub + "</noparse>";
+            row.badge.Text = it.Badge;
+            row.badge.Color = it.BadgeColor ?? Theme.Ok;
+            Panel.Shapes.SetTint(row.shape, sel ? Theme.Accent : Theme.AccentSoft);
+            Panel.Shapes.SetState(row.shape, sel ? 0.75f : (hover ? 0.3f : 0f));
+        }
+
+        /// The badge's and the sub's widths: about what their text needs, never more than the row gives them.
+        private void RightWidths(UiListItem it, Rect r, float indent, out float badgeW, out float subW)
+        {
+            badgeW = string.IsNullOrEmpty(it.Badge) ? 0f : Mathf.Min(Mathf.Min(0.075f, r.width * 0.3f), it.Badge.Length * Theme.SmallSize * 0.92f * 0.72f * 0.78f + 0.010f);
+            subW = string.IsNullOrEmpty(it.Sub) ? 0f : Mathf.Min(Mathf.Min(r.width * 0.32f, it.Sub.Length * Theme.SmallSize * 1.08f * 0.72f * 0.62f + 0.012f), r.width - badgeW - 0.05f - indent);
+        }
+
+        /// A Band row (a type header): a band in its colour with a rule across the top, the display title, the sub and badge.
+        private void PlaceBand(PoolRow row, UiListItem it, Rect r, bool hover)
+        {
+            var t = Theme;
+            Color bar = it.BarColor ?? t.Accent;
+            float indent = it.Indent * IndentStep;
+            Panel.Shapes.SetVisible(row.shape, false);
+            SetShape(row.band, r, new Color(bar.r, bar.g, bar.b, hover ? 0.2f : 0.12f));
+            SetShape(row.bandBar, new Rect(r.x, r.y, 0.0035f, r.height), bar);
+            SetShape(row.bandRule, new Rect(r.x, r.y, r.width, 0.0012f), new Color(bar.r, bar.g, bar.b, 0.8f));
+            ShowShape(row.divider, false);
+            ShowShape(row.dot, false);
+            RightWidths(it, r, indent, out float badgeW, out float subW);
+            row.icon.SetVisible(true);
+            row.icon.SetRect(new Rect(r.x + 0.006f + indent, r.y, 0.024f, r.height));
+            row.icon.Text = it.Icon;
+            row.icon.Color = it.IconColor ?? bar;
+            row.title.SetVisible(false);
+            row.head.SetVisible(true);
+            row.head.SetRect(new Rect(r.x + 0.030f + indent, r.y, r.width - 0.034f - indent - subW - badgeW, r.height));
+            row.head.Text = "<noparse>" + it.Title + "</noparse>";
+            row.head.Color = it.TitleColor ?? t.Text;
+            row.sub.SetVisible(true);
+            SetSize(row.sub, t.SmallSize * 1.08f);
+            SetAlign(row.sub, TextAlignmentOptions.MidlineRight);
+            row.sub.SetRect(new Rect(r.xMax - badgeW - subW - 0.004f, r.y, subW, r.height));
+            row.sub.Text = "<noparse>" + it.Sub + "</noparse>";
+            row.badge.SetVisible(true);
+            row.badge.SetRect(new Rect(r.xMax - badgeW - 0.004f, r.y, badgeW, r.height));
+            row.badge.Text = it.Badge;
+            row.badge.Color = it.BadgeColor ?? t.Ok;
+        }
+
+        /// A Stacked row (a project): the title on top, the sub (its caption) under it, the badge on the right.
+        private void PlaceStacked(PoolRow row, UiListItem it, Rect r, bool sel, bool hover)
+        {
+            float indent = it.Indent * IndentStep;
+            RightWidths(it, r, indent, out float badgeW, out _);
+            float x = r.x + 0.032f + indent, w = r.width - 0.036f - indent - badgeW;
+            HideExtras(row);
+            SetPlate(row, r);
+            PlaceTexts(row, it, sel, hover, true);
+            SetSize(row.title, Theme.BodySize); SetSize(row.sub, Theme.SmallSize);
+            SetAlign(row.sub, TextAlignmentOptions.MidlineLeft);
+            row.icon.SetRect(new Rect(r.x + 0.006f + indent, r.y, 0.024f, r.height));
+            row.title.SetRect(new Rect(x, r.y, w, r.height * 0.56f));
+            row.sub.SetRect(new Rect(x, r.y + r.height * 0.54f, w, r.height * 0.46f));
+            row.badge.SetRect(new Rect(r.xMax - badgeW - 0.004f, r.y, badgeW, r.height));
+            PlaceDivider(row, it, r);
+        }
+
+        /// A Compact row (a thread, a folder, a hint): smaller text; a status dot in the icon's place when it has one; the
+        /// sub beside the title on the right, the badge (the thread's age) after it.
+        private void PlaceCompact(PoolRow row, UiListItem it, Rect r, bool sel, bool hover)
+        {
+            float indent = it.Indent * IndentStep;
+            RightWidths(it, r, indent, out float badgeW, out float subW);
+            HideExtras(row);
+            SetPlate(row, r);
+            bool dot = it.Dot.HasValue;
+            float x = r.x + (dot ? 0.028f : 0.032f) + indent;
+            row.icon.SetRect(new Rect(r.x + 0.006f + indent, r.y, 0.024f, r.height));
+            if (dot)
+            {
+                float d = 0.0105f;
+                SetShape(row.dot, new Rect(r.x + 0.014f + indent - d * 0.5f, r.center.y - d * 0.5f, d, d), it.Dot.Value);
+                Panel.Shapes.SetState(row.dot, it.DotLit ? 1f : 0.3f);
+            }
+            PlaceTexts(row, it, sel, hover, !dot);
+            SetSize(row.title, Theme.SmallSize * 1.25f); SetSize(row.sub, Theme.SmallSize);
+            SetAlign(row.sub, TextAlignmentOptions.MidlineRight);
+            row.title.SetRect(new Rect(x, r.y, r.width - (x - r.x) - subW - badgeW - 0.008f, r.height));
+            row.sub.SetRect(new Rect(r.xMax - badgeW - subW - 0.004f, r.y, subW, r.height));
+            row.badge.SetRect(new Rect(r.xMax - badgeW - 0.004f, r.y, badgeW, r.height));
+            PlaceDivider(row, it, r);
+        }
+
+        /// A thin rule across the top of a row when it asks for one (UiListItem.Divider).
+        private void PlaceDivider(PoolRow row, UiListItem it, Rect r)
+        {
+            if (it.Divider) SetShape(row.divider, new Rect(r.x + 0.004f, r.y, r.width - 0.008f, 0.0012f), new Color(Theme.TextDim.r, Theme.TextDim.g, Theme.TextDim.b, 0.45f));
+        }
+
+        /// The texts every Variable row has: the icon text (if shown), the title, the sub and the badge, with their text and
+        /// colours (the rects are set by the caller).
+        private void PlaceTexts(PoolRow row, UiListItem it, bool sel, bool hover, bool iconShown)
+        {
+            row.icon.SetVisible(iconShown);
+            row.icon.Text = it.Icon;
+            row.icon.Color = it.IconColor ?? Theme.TextAccent;
+            row.title.SetVisible(true);
+            row.title.Text = "<noparse>" + it.Title + "</noparse>";
+            row.title.Color = it.TitleColor ?? Theme.Text;
+            row.sub.SetVisible(true);
+            row.sub.Text = "<noparse>" + it.Sub + "</noparse>";
+            row.badge.SetVisible(true);
+            row.badge.Text = it.Badge;
+            row.badge.Color = it.BadgeColor ?? Theme.TextDim;
+            row.head.SetVisible(false);
+            Panel.Shapes.SetTint(row.shape, sel ? Theme.Accent : Theme.AccentSoft);
+            Panel.Shapes.SetState(row.shape, sel ? 0.75f : (hover ? 0.3f : 0f));
+        }
+
+        /// A Variable row's plate (its button shape) at its rect, shown.
+        private void SetPlate(PoolRow row, Rect r)
+        {
+            Panel.Shapes.SetRect(row.shape, Panel.PanelToLocal(r.center), r.size);
+            Panel.Shapes.SetVisible(row.shape, true);
+        }
+
+        private void SetShape(int id, Rect r, Color tint)
+        {
+            if (id < 0) return;
+            Panel.Shapes.SetRect(id, Panel.PanelToLocal(r.center), r.size);
+            Panel.Shapes.SetTint(id, tint);
+            Panel.Shapes.SetVisible(id, true);
+        }
+
+        private void ShowShape(int id, bool v) { if (id >= 0) Panel.Shapes.SetVisible(id, v); }
+
+        private void HideExtras(PoolRow row)
+        {
+            ShowShape(row.band, false); ShowShape(row.bandBar, false); ShowShape(row.bandRule, false);
+            ShowShape(row.divider, false); ShowShape(row.dot, false);
+            row.head?.SetVisible(false);
+        }
+
+        private void HideRow(PoolRow row)
+        {
+            Panel.Shapes.SetVisible(row.shape, false);
+            row.icon.SetVisible(false); row.title.SetVisible(false); row.sub.SetVisible(false); row.badge.SetVisible(false);
+            HideExtras(row);
+        }
+
+        /// The font size of a text for a line height (only when it changes: a Variable row's texts change kind).
+        private void SetSize(UiText text, float lineHeight)
+        {
+            float v = Theme.FontSizeFor(lineHeight);
+            if (text.Tmp.fontSize != v) text.Tmp.fontSize = v;
+        }
+
+        private static void SetAlign(UiText text, TextAlignmentOptions a) { if (text.Tmp.alignment != a) text.Tmp.alignment = a; }
+
         private int RowAt(Vector2 p)
         {
             if (!Rect.Contains(p)) return -1;
-            int i = Mathf.FloorToInt((p.y - Rect.y) / RowHeight);
-            return i >= 0 && i < _rows.Count ? i : -1;
+            if (Variable)
+            {
+                for (int i = 0; i < _rows.Count; i++) if (_rows[i].shown.Contains(p)) return i;
+                return -1;
+            }
+            int row = Mathf.FloorToInt((p.y - Rect.y) / RowHeight);
+            return row >= 0 && row < _rows.Count ? row : -1;
         }
 
         public override void OnPress(UiPointerEvent e) { _dragStartScroll = _scroll; _dragged = false; }
@@ -820,8 +1087,10 @@ namespace MetaCodex.UI
             foreach (var row in _rows)
             {
                 Panel.Shapes.SetVisible(row.shape, false);
+                HideExtras(row);
                 DestroyGo(row.icon.Tmp.gameObject); DestroyGo(row.title.Tmp.gameObject);
                 DestroyGo(row.sub.Tmp.gameObject); DestroyGo(row.badge.Tmp.gameObject);
+                if (row.head != null) DestroyGo(row.head.Tmp.gameObject);
             }
             if (_empty != null) { DestroyGo(_empty.Tmp.gameObject); _empty = null; }
             Panel.Shapes.SetVisible(_bar, false);
