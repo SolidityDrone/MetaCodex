@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Text;
 using TMPro;
@@ -10,7 +11,9 @@ namespace MetaCodex.Terminal
     /// Draws a VtTerminal on a world-space panel, local origin at the top-left corner, +x right, -y down.
     /// One TextMeshPro per row (only rows that changed are re-parsed: a spinner costs one row, not the
     /// screen) and one opaque mesh for the panel, cell backgrounds and the cursor. Glyphs are SDF, so text
-    /// stays sharp at reading distance; size is set in metres per cell.
+    /// stays sharp at reading distance; size is set in metres per cell. A selection (pinch-dragged over the text, the
+    /// shell's UiTerminalSurface) is drawn under the text; it is kept by line number (TerminalText), so it stays on its
+    /// text while that scrolls, also into the history.
     public sealed class TerminalView : MonoBehaviour
     {
         [SerializeField] private Font monoFont;
@@ -50,6 +53,16 @@ namespace MetaCodex.Terminal
         private bool _lastCursorVisible;
         private long _lastVersion = -1;
         private float _syncSince = -1f;
+        private bool _lastAlt;
+
+        // the selection: where the drag began (anchor) and where it is (head), as line numbers (TerminalText) and columns
+        private bool _sel, _selDirty;
+        private long _selAnchorLine, _selHeadLine;
+        private int _selAnchorCol, _selHeadCol;
+        /// The selection's colour under the text (the editor's usual selection blue: the text stays readable on it).
+        public const int SelectionRgb = 0x264F78;
+        /// Raised when a selection appears or goes (the frame's COPY lights up).
+        public event Action SelectionChanged;
 
         /// A new terminal panel made at runtime takes the fonts, material and cell metrics of an existing one.
         public void CopyConfigFrom(TerminalView other)
@@ -124,6 +137,8 @@ namespace MetaCodex.Terminal
             bgr.receiveShadows = false;
             _lastVersion = -1;
             ScrollOffset = 0;
+            _lastAlt = terminal.AltScreen;
+            ClearSelection();
         }
 
         public void ScrollBy(int lines)
@@ -141,6 +156,7 @@ namespace MetaCodex.Terminal
             var t = Terminal;
             if (t == null) return;
             if (t.AltScreen && ScrollOffset != 0) ScrollBy(-ScrollOffset);
+            if (t.AltScreen != _lastAlt) { _lastAlt = t.AltScreen; ClearSelection(); } // another screen: the selected text is gone
             // a program mid-frame (DECSET 2026) is shown when it ends the frame, or after 0.25 s at most
             if (t.SyncOutput)
             {
@@ -152,7 +168,7 @@ namespace MetaCodex.Terminal
             bool cursorVisible = t.CursorVisible && ScrollOffset == 0;
             int cr = t.CursorRow, cc = t.CursorCol;
             bool cursorMoved = cr != _lastCursorRow || cc != _lastCursorCol || cursorVisible != _lastCursorVisible;
-            if (t.Version == _lastVersion && !cursorMoved && !AnyNeeds()) return;
+            if (t.Version == _lastVersion && !cursorMoved && !_selDirty && !AnyNeeds()) return;
 
             float t0 = Time.realtimeSinceStartup;
             if (cursorMoved)
@@ -171,7 +187,8 @@ namespace MetaCodex.Terminal
                 bgChanged = true;
             }
             t.ClearDirty();
-            if (bgChanged || cursorMoved) RebuildMesh(cursorVisible ? cr : -1, cc);
+            if (bgChanged || cursorMoved || _selDirty) RebuildMesh(cursorVisible ? cr : -1, cc);
+            _selDirty = false;
             _lastCursorRow = cr;
             _lastCursorCol = cc;
             _lastCursorVisible = cursorVisible;
@@ -285,6 +302,7 @@ namespace MetaCodex.Terminal
                 foreach (var run in _rowBg[r])
                     Quad(padding + run.col * CellWidth, y, run.len * CellWidth, cellHeight, -0.0002f, run.rgb);
             }
+            if (_sel) SelectionQuads();
             if (cursorRow >= 0)
             {
                 float x = padding + cursorCol * CellWidth, y = padding + cursorRow * cellHeight;
@@ -341,6 +359,91 @@ namespace MetaCodex.Terminal
                 chain.Add(fa);
             }
             _font.fallbackFontAssetTable = chain;
+        }
+
+        // ------------------------------------------------------------------ selection
+
+        public bool HasSelection => _sel;
+
+        /// The line number (TerminalText) shown in view row `row` now (the history scrolled in counts).
+        public long LineAtRow(int row) => (Terminal?.LinesScrolled ?? 0) + row - ScrollOffset;
+
+        /// A point on the view (metres from its top-left corner, x right, y down) -> the cell under it, clamped onto the
+        /// grid: a drag that leaves the text selects to its edge.
+        public Vector2Int CellAtClamped(Vector2 p)
+        {
+            if (Terminal == null) return Vector2Int.zero;
+            int col = Mathf.Clamp(Mathf.FloorToInt((p.x - padding) / CellWidth), 0, Terminal.Cols - 1);
+            int row = Mathf.Clamp(Mathf.FloorToInt((p.y - padding) / cellHeight), 0, Terminal.Rows - 1);
+            return new Vector2Int(col, row);
+        }
+
+        /// Starts a selection at a view cell (x col, y row); ExtendSelection moves its other end.
+        public void BeginSelection(Vector2Int cell)
+        {
+            if (Terminal == null) return;
+            _selAnchorLine = _selHeadLine = LineAtRow(cell.y);
+            _selAnchorCol = _selHeadCol = cell.x;
+            bool was = _sel;
+            _sel = true;
+            _selDirty = true;
+            if (!was) SelectionChanged?.Invoke();
+        }
+
+        public void ExtendSelection(Vector2Int cell)
+        {
+            if (!_sel || Terminal == null) return;
+            long line = LineAtRow(cell.y);
+            if (line == _selHeadLine && cell.x == _selHeadCol) return;
+            _selHeadLine = line;
+            _selHeadCol = cell.x;
+            _selDirty = true;
+        }
+
+        public void ClearSelection()
+        {
+            if (!_sel) return;
+            _sel = false;
+            _selDirty = true;
+            SelectionChanged?.Invoke();
+        }
+
+        /// The selected text as it reads (TerminalText.Selection); "" without a selection.
+        public string SelectedText() =>
+            _sel && Terminal != null ? TerminalText.Selection(Terminal, _selAnchorLine, _selAnchorCol, _selHeadLine, _selHeadCol) : "";
+
+        /// The selection in view cells now, first and last (row, col), for tests; false without one.
+        public bool SelectionCells(out Vector2Int from, out Vector2Int to)
+        {
+            from = to = default;
+            if (!_sel || Terminal == null) return false;
+            Order(out long l0, out int c0, out long l1, out int c1);
+            long top = LineAtRow(0);
+            from = new Vector2Int(c0, (int)(l0 - top));
+            to = new Vector2Int(c1, (int)(l1 - top));
+            return true;
+        }
+
+        private void Order(out long l0, out int c0, out long l1, out int c1)
+        {
+            l0 = _selAnchorLine; c0 = _selAnchorCol; l1 = _selHeadLine; c1 = _selHeadCol;
+            if (l1 < l0 || l1 == l0 && c1 < c0) { l0 = _selHeadLine; c0 = _selHeadCol; l1 = _selAnchorLine; c1 = _selAnchorCol; }
+        }
+
+        /// One quad per selected row in view, under the text and over the cells' own backgrounds.
+        private void SelectionQuads()
+        {
+            Order(out long l0, out int c0, out long l1, out int c1);
+            long top = LineAtRow(0);
+            int cols = Terminal.Cols;
+            for (int r = 0; r < Terminal.Rows; r++)
+            {
+                long l = top + r;
+                if (l < l0 || l > l1) continue;
+                int a = l == l0 ? c0 : 0, b = l == l1 ? c1 : cols - 1;
+                if (b < a) continue;
+                Quad(padding + a * CellWidth, padding + r * cellHeight, (b - a + 1) * CellWidth, cellHeight, -0.0003f, SelectionRgb);
+            }
         }
 
         /// Local panel point (metres from the top-left, y down) -> cell, or (-1,-1) outside.

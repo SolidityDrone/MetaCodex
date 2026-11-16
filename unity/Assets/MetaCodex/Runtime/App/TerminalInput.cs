@@ -21,6 +21,8 @@ namespace MetaCodex.App
 
         /// A panel that takes the navigation keys while it has the focus (THREAD's sidebar): true = used, not typed.
         public static Func<TermKey, bool> Intercept;
+        /// Ctrl+Shift+C on a keyboard: copy the terminal's selection (the shell sets it; without it the chord types ^C).
+        public Action CopySelection;
 
         private Keyboard _kb;
         private char _pendingHigh;
@@ -130,6 +132,7 @@ namespace MetaCodex.App
             }
             if (!Ctrl) return;
             if (Shift && _kb.vKey.wasPressedThisFrame) { Paste(GUIUtility.systemCopyBuffer); return; }
+            if (Shift && _kb.cKey.wasPressedThisFrame && CopySelection != null) { CopySelection(); return; }
             for (Key k = Key.A; k <= Key.Z; k++)
                 if (_kb[k].wasPressedThisFrame) Emit(KeyEncoder.Ctrl((char)('a' + (k - Key.A)), Alt));
             if (_kb.spaceKey.wasPressedThisFrame) Emit(KeyEncoder.Ctrl(' ', Alt));

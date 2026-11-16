@@ -12,16 +12,20 @@ namespace MetaCodex.Shell
 {
     /// The image clipboard: PNG captures in one folder of the Linux (/root/.metacodex/captures), newest first, at most
     /// Max (Settings clipboardMax, 20): one more deletes the oldest file. index.json says where each came from.
+    /// Copied text (a terminal's selection or link, ShellTerminals) is kept beside them as clip-*.txt files, newest first,
+    /// at most Max too: Texts, apart from the pictures (Items), so what takes pictures never meets text.
     public sealed class CaptureClipboard
     {
-        [Serializable] public sealed class Item { public string file, panel, panelId, time; public int w, h; public long bytes; }
-        [Serializable] private sealed class IndexFile { public List<Item> items = new List<Item>(); }
+        [Serializable] public sealed class Item { public string file, panel, panelId, time, kind; public int w, h, chars; public long bytes; }
+        [Serializable] private sealed class IndexFile { public List<Item> items = new List<Item>(); public List<Item> texts = new List<Item>(); }
 
         private readonly Func<string> _dir;
         private readonly Func<int> _max;
-        private List<Item> _items;
+        private List<Item> _items, _texts;
         public readonly string LinuxDir;
         public event Action Changed;
+        /// The text list changed (Changed is the pictures').
+        public event Action TextsChanged;
 
         /// `dir`: where the files are for the app (asked at first use: the Linux may not be up when this is made).
         public CaptureClipboard(Func<string> dir, string linuxDir, Func<int> max) { _dir = dir; LinuxDir = linuxDir.TrimEnd('/'); _max = max; }
@@ -29,6 +33,8 @@ namespace MetaCodex.Shell
         public string Dir => _dir();
         public int Max => Mathf.Clamp(_max?.Invoke() ?? 20, 1, 500);
         public IReadOnlyList<Item> Items { get { Load(); return _items; } }
+        public IReadOnlyList<Item> Texts { get { Load(); return _texts; } }
+        public static bool IsText(Item i) => i != null && i.kind == "text";
         public string LinuxPath(Item i) => LinuxDir + "/" + i.file;
         public string HostPath(Item i) => Path.Combine(Dir, i.file);
         public Item Find(string file) { Load(); return _items.FirstOrDefault(x => x.file == file); }
@@ -49,7 +55,46 @@ namespace MetaCodex.Shell
             return item;
         }
 
-        /// Keeps the newest Max and deletes the rest from the disk; returns how many went.
+        /// Copied text, newest first; the same text twice in a row is kept once.
+        public Item AddText(string text, string panel, string panelId)
+        {
+            Load();
+            if (string.IsNullOrEmpty(text)) return null;
+            if (_texts.Count > 0 && _texts[0].chars == text.Length && ReadText(_texts[0]) == text) return _texts[0];
+            Directory.CreateDirectory(Dir);
+            var now = DateTime.Now;
+            string name = "clip-" + now.ToString("yyyyMMdd-HHmmss-fff") + ".txt";
+            for (int k = 2; File.Exists(Path.Combine(Dir, name)); k++) name = "clip-" + now.ToString("yyyyMMdd-HHmmss-fff") + "-" + k + ".txt";
+            File.WriteAllText(Path.Combine(Dir, name), text);
+            var item = new Item { file = name, kind = "text", panel = panel ?? "", panelId = panelId ?? "", time = now.ToString("o"), chars = text.Length, bytes = System.Text.Encoding.UTF8.GetByteCount(text) };
+            _texts.Insert(0, item);
+            TrimTexts();
+            Save();
+            TextsChanged?.Invoke();
+            return item;
+        }
+
+        /// A text item's text (null when its file is gone).
+        public string ReadText(Item i)
+        {
+            try { return i != null && File.Exists(HostPath(i)) ? File.ReadAllText(HostPath(i)) : null; }
+            catch (Exception) { return null; }
+        }
+
+        private int TrimTexts()
+        {
+            int n = 0;
+            while (_texts.Count > Max)
+            {
+                var old = _texts[_texts.Count - 1];
+                _texts.RemoveAt(_texts.Count - 1);
+                try { File.Delete(HostPath(old)); } catch (Exception) { }
+                n++;
+            }
+            return n;
+        }
+
+        /// Keeps the newest Max (pictures and texts each) and deletes the rest from the disk; returns how many went.
         public int Trim(bool save = true)
         {
             Load();
@@ -61,14 +106,24 @@ namespace MetaCodex.Shell
                 try { File.Delete(HostPath(old)); } catch (Exception) { }
                 n++;
             }
-            if (save && n > 0) { Save(); Changed?.Invoke(); }
-            return n;
+            int nt = TrimTexts();
+            if (save && n + nt > 0) { Save(); if (n > 0) Changed?.Invoke(); if (nt > 0) TextsChanged?.Invoke(); }
+            return n + nt;
         }
 
         public bool Delete(string file)
         {
             var it = Find(file);
-            if (it == null) return false;
+            if (it == null)
+            {
+                var tx = _texts.FirstOrDefault(x => x.file == file);
+                if (tx == null) return false;
+                _texts.Remove(tx);
+                try { File.Delete(HostPath(tx)); } catch (Exception) { }
+                Save();
+                TextsChanged?.Invoke();
+                return true;
+            }
             _items.Remove(it);
             try { File.Delete(HostPath(it)); } catch (Exception) { }
             Save();
@@ -79,16 +134,18 @@ namespace MetaCodex.Shell
         public int Clear()
         {
             Load();
-            int n = _items.Count;
-            foreach (var it in _items) { try { File.Delete(HostPath(it)); } catch (Exception) { } }
+            int n = _items.Count + _texts.Count;
+            foreach (var it in _items.Concat(_texts)) { try { File.Delete(HostPath(it)); } catch (Exception) { } }
             _items.Clear();
+            _texts.Clear();
             Save();
             Changed?.Invoke();
+            TextsChanged?.Invoke();
             return n;
         }
 
         /// From the disk again: the index, checked against the files (PNGs it does not know are added).
-        public void Reload() { _items = null; Load(); }
+        public void Reload() { _items = null; _texts = null; Load(); }
 
         private static DateTime When(Item x)
         {
@@ -97,14 +154,23 @@ namespace MetaCodex.Shell
 
         private void Load()
         {
-            if (_items != null) return;
+            if (_items != null && _texts != null) return;
             _items = new List<Item>();
+            _texts = new List<Item>();
             try
             {
                 string dir = Dir, idx = Path.Combine(dir, "index.json");
-                if (File.Exists(idx)) _items = JsonUtility.FromJson<IndexFile>(File.ReadAllText(idx))?.items ?? new List<Item>();
+                if (File.Exists(idx))
+                {
+                    var index = JsonUtility.FromJson<IndexFile>(File.ReadAllText(idx));
+                    _items = index?.items ?? new List<Item>();
+                    _texts = index?.texts ?? new List<Item>();
+                }
                 _items = _items.Where(x => x != null && !string.IsNullOrEmpty(x.file) && File.Exists(Path.Combine(dir, x.file))).ToList();
+                _texts = _texts.Where(x => x != null && !string.IsNullOrEmpty(x.file) && File.Exists(Path.Combine(dir, x.file))).ToList();
+                foreach (var x in _texts) x.kind = "text";
                 if (Directory.Exists(dir))
+                {
                     foreach (var f in Directory.GetFiles(dir, "*.png"))
                     {
                         string n = Path.GetFileName(f);
@@ -112,7 +178,16 @@ namespace MetaCodex.Shell
                         var fi = new FileInfo(f);
                         _items.Add(new Item { file = n, panel = "", panelId = "", time = fi.LastWriteTime.ToString("o"), bytes = fi.Length });
                     }
+                    foreach (var f in Directory.GetFiles(dir, "clip-*.txt"))
+                    {
+                        string n = Path.GetFileName(f);
+                        if (_texts.Any(x => x.file == n)) continue;
+                        var fi = new FileInfo(f);
+                        _texts.Add(new Item { file = n, kind = "text", panel = "", panelId = "", time = fi.LastWriteTime.ToString("o"), bytes = fi.Length, chars = (int)fi.Length });
+                    }
+                }
                 _items = _items.OrderByDescending(When).ToList();
+                _texts = _texts.OrderByDescending(When).ToList();
             }
             catch (Exception) { }
         }
@@ -123,7 +198,7 @@ namespace MetaCodex.Shell
             {
                 Directory.CreateDirectory(Dir);
                 string idx = Path.Combine(Dir, "index.json"), tmp = idx + ".tmp";
-                File.WriteAllText(tmp, JsonUtility.ToJson(new IndexFile { items = _items }, true));
+                File.WriteAllText(tmp, JsonUtility.ToJson(new IndexFile { items = _items, texts = _texts ?? new List<Item>() }, true));
                 if (File.Exists(idx)) File.Delete(idx);
                 File.Move(tmp, idx);
             }
@@ -150,6 +225,7 @@ namespace MetaCodex.Shell
                 _clipDirOverride ?? (Application.isEditor ? Path.GetFullPath(Path.Combine("Temp", "mcx-captures")) : Files.HostPath(CapturesLinuxDir)),
                 CapturesLinuxDir, () => Settings.clipboardMax);
             Clipboard.Changed += () => { RefreshClipboardPanel(); if (_amOpen && _amMode == "capture") ShowAttachModalList(); };
+            Clipboard.TextsChanged += RefreshClipboardPanel; // text copied from a terminal (ShellTerminals)
         }
 
         /// Tests: the clipboard in a folder of their own.
@@ -301,7 +377,7 @@ namespace MetaCodex.Shell
         // ------------------------------------------------------------------ CLIPBOARD panel
 
         private UiList _clipList;
-        private UiLabel _clipStatus, _clipInfo;
+        private UiLabel _clipStatus, _clipInfo, _clipText;
         private Rect _clipPreviewArea;
         private GameObject _clipPreview;
         private Texture2D _clipTex;
@@ -323,10 +399,12 @@ namespace MetaCodex.Shell
             float leftW = 0.28f;
             var left = new UiStack(new Rect(c.x, c.y, leftW, c.height), t.Gap);
             _clipStatus = p.Add(new UiLabel("", t.SmallSize) { Rect = left.Next(0.022f), Color = t.TextDim });
-            _clipList = p.Add(new UiList(0.034f, (item, idx) => ShowClipPreview()) { Rect = left.Rest(), EmptyText = "No captures yet.\nSELECT (wrist or dock), then pinch and drag over any window." });
+            _clipList = p.Add(new UiList(0.034f, (item, idx) => ShowClipPreview()) { Rect = left.Rest(), EmptyText = "No captures yet.\nSELECT (wrist or dock), then pinch and drag over any window.\nCOPY on a terminal keeps text here." });
             var rs = new UiStack(new Rect(c.x + leftW + t.Gap * 2, c.y, c.width - leftW - t.Gap * 2, c.height), t.Gap);
             const float keepH = 0.032f;
             _clipPreviewArea = rs.Next(c.height - 0.022f - keepH - t.ButtonHeight - t.Gap * 4);
+            // a text item shows its text where a picture shows
+            _clipText = p.Add(new UiLabel("", t.SmallSize) { Rect = _clipPreviewArea, Wrap = true, UseMono = true, Align = TextAlignmentOptions.TopLeft, Color = t.Text });
             _clipInfo = p.Add(new UiLabel("", t.SmallSize) { Rect = rs.Next(0.022f), Color = t.TextDim });
             // how many captures it keeps (was DISPLAY's CLIPBOARD SIZE): one more deletes the oldest
             p.Add(new UiSlider("KEEP", 5f, 100f, Settings.clipboardMax, v => { Settings.clipboardMax = Mathf.RoundToInt(v); OnSettingsChanged(); Clipboard?.Trim(); if (Clipboard != null) _clipStatus.Set($"{Clipboard.Items.Count} of {Clipboard.Max} · newest first", t.TextDim); }) { Rect = rs.Next(keepH), Format = "0", LabelWidth = 0.07f });
@@ -337,13 +415,24 @@ namespace MetaCodex.Shell
                     var it = SelectedClip();
                     if (it == null) { Toast("Pick a capture", "warn"); return; }
                     if (ThreadKey == null) { Toast("Open a thread first (THREADS): it goes with your next message there", "warn"); return; }
-                    AddAttachment(CaptureAttachment(it)); // the focused thread window's next message
+                    bool text = CaptureClipboard.IsText(it);
+                    AddAttachment(text ? TextClipAttachment(it) : CaptureAttachment(it)); // the focused thread window's next message
                     ShowThreadWindow();
-                    Toast("Capture attached to the next message", "ok");
+                    Toast(text ? "Text attached to the next message" : "Capture attached to the next message", "ok");
+                }),
+                ("COPY", () =>
+                {
+                    var it = SelectedClip();
+                    if (it == null) { Toast("Pick a text", "warn"); return; }
+                    if (!CaptureClipboard.IsText(it)) { Toast("A picture: ⎘ TO THE THREAD attaches it to a message", "info"); return; }
+                    string text = Clipboard.ReadText(it);
+                    if (string.IsNullOrEmpty(text)) { Toast("That text is gone", "warn"); return; }
+                    if (SystemClipboardForTest) GUIUtility.systemCopyBuffer = text; // PASTE, the system keyboard and WEB take it from here
+                    Toast($"Copied {text.Length} characters", "ok");
                 }),
                 ("DELETE", () => { var it = SelectedClip(); if (it != null) Clipboard.Delete(it.file); }),
-                ("CLEAR ALL", () => Modal("CLEAR THE CLIPBOARD", $"Delete all {Clipboard.Items.Count} captures?", new[] { "DELETE ALL", "CANCEL" }, i => { if (i == 0) Clipboard.Clear(); })),
-            }, primary: 0, danger: 2);
+                ("CLEAR ALL", () => Modal("CLEAR THE CLIPBOARD", $"Delete all {Clipboard.Items.Count + Clipboard.Texts.Count} captures and texts?", new[] { "DELETE ALL", "CANCEL" }, i => { if (i == 0) Clipboard.Clear(); })),
+            }, primary: 0, danger: 3);
             p.Closed += _ => ClearClipPreview();
         }
 
@@ -355,17 +444,30 @@ namespace MetaCodex.Shell
             if (_clipList == null || Clipboard == null) return;
             var t = UiTheme.Current;
             var items = Clipboard.Items;
-            _clipStatus.Set($"{items.Count} of {Clipboard.Max} · newest first", t.TextDim);
-            _clipList.SetItems(items.Select(i => new UiListItem
-            {
-                Icon = "▣",
-                IconColor = t.Accent,
-                Title = ClipTime(i),
-                Sub = $"{i.w}×{i.h} · {(string.IsNullOrEmpty(i.panel) ? "capture" : i.panel)}",
-                Badge = FileService.Size(i.bytes),
-                BadgeColor = t.TextDim,
-                Tag = i,
-            }), keepScroll: true);
+            var texts = Clipboard.Texts;
+            _clipStatus.Set(texts.Count == 0 ? $"{items.Count} of {Clipboard.Max} · newest first" : $"{items.Count} pictures · {texts.Count} texts · newest first", t.TextDim);
+            // pictures and texts in one list, newest first
+            _clipList.SetItems(items.Concat(texts).OrderByDescending(i => i.time, StringComparer.Ordinal).Select(i => CaptureClipboard.IsText(i)
+                ? new UiListItem
+                {
+                    Icon = "☰",
+                    IconColor = t.TextAccent,
+                    Title = ClipTime(i),
+                    Sub = $"{i.chars} characters · {(string.IsNullOrEmpty(i.panel) ? "text" : i.panel)}",
+                    Badge = FileService.Size(i.bytes),
+                    BadgeColor = t.TextDim,
+                    Tag = i,
+                }
+                : new UiListItem
+                {
+                    Icon = "▣",
+                    IconColor = t.Accent,
+                    Title = ClipTime(i),
+                    Sub = $"{i.w}×{i.h} · {(string.IsNullOrEmpty(i.panel) ? "capture" : i.panel)}",
+                    Badge = FileService.Size(i.bytes),
+                    BadgeColor = t.TextDim,
+                    Tag = i,
+                }), keepScroll: true);
             if (items.Count > 0 && _clipList.SelectedIndex < 0) _clipList.SelectIndex(0, notify: false);
             ShowClipPreview();
         }
@@ -381,10 +483,20 @@ namespace MetaCodex.Shell
             if (it == null)
             {
                 ClearClipPreview();
+                _clipText?.Set("");
                 _clipInfo.Set("", t.TextDim); // with no captures the list itself says what to do
                 return;
             }
             _clipInfo.Set($"{Clipboard.LinuxPath(it)}", t.TextDim);
+            if (CaptureClipboard.IsText(it))
+            {
+                ClearClipPreview();
+                string text = Clipboard.ReadText(it) ?? "";
+                if (text.Length > 700) text = text.Substring(0, 700) + "…";
+                _clipText?.Set("<noparse>" + text.Replace("</noparse>", "‹/noparse>") + "</noparse>");
+                return;
+            }
+            _clipText?.Set("");
             if (!_panels.TryGetValue("clipboard", out var p)) return;
             _clipTex = ShowImage(p, ref _clipPreview, _clipTex, Clipboard.HostPath(it), _clipPreviewArea);
         }
@@ -452,6 +564,10 @@ namespace MetaCodex.Shell
 
         private Attachment CaptureAttachment(CaptureClipboard.Item it) =>
             new Attachment { Kind = "image", LinuxPath = Clipboard.LinuxPath(it), Name = "capture " + ClipTime(it), Mime = "image/png", Size = it.bytes };
+
+        /// A copied text goes as a text file (its clip-*.txt beside the captures).
+        private Attachment TextClipAttachment(CaptureClipboard.Item it) =>
+            new Attachment { Kind = "file", LinuxPath = Clipboard.LinuxPath(it), Name = "text " + ClipTime(it), Mime = "text/plain", Size = it.bytes };
 
         private static readonly string[] ImageExt = { ".png", ".jpg", ".jpeg", ".webp", ".gif" };
 

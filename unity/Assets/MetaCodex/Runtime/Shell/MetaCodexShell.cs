@@ -68,6 +68,8 @@ namespace MetaCodex.Shell
             {
                 app.TerminalCreated += WrapTerminal;
                 app.TerminalClosed += OnTerminalClosed;
+                app.ProgramCopied += OnProgramCopied; // OSC 52: a program in a terminal copied text (ShellTerminals)
+                if (app.Input != null) app.Input.CopySelection = () => CopyTerminalSelection(app.Active); // Ctrl+Shift+C
                 app.FocusChanged += OnFocusChanged;
                 app.ExtraCommand = ControlCommand;
                 app.AsyncCommand = (line, reply) => VoiceAsyncCommand(line, reply) || SecretCommand(line, reply) || ViewAsyncCommand(line, reply);
@@ -811,19 +813,13 @@ namespace MetaCodex.Shell
             viewTr.SetParent(frame.transform, false);
             viewTr.localPosition = frame.PanelToLocal(new Vector2(bezel, t.HeaderHeight + bezel), -0.004f);
             viewTr.localRotation = Quaternion.identity;
-            viewTr.localScale = new Vector3(k, k, 1f); // depth kept: the cells and the text keep their layers
+            viewTr.localScale = new Vector3(k, k, 1f); // depth kept: the cells, the selection and the text keep their layers
             if (!v.gameObject.activeSelf) v.gameObject.SetActive(true); // hidden during the start (BuildSteps): the frame shows or hides it now
             inst.Frame = frame.transform;
-            float bx = w - 0.044f;
-            frame.Add(new UiButton("✕", () => CloseOrHideTerminal(inst), UiButtonStyle.Danger) { Rect = new Rect(bx, 0.006f, 0.036f, t.HeaderHeight - 0.010f) });
-            frame.Add(new UiButton("–", () => HideTerminal(inst), UiButtonStyle.Ghost) { Rect = new Rect(bx - 0.042f, 0.006f, 0.036f, t.HeaderHeight - 0.010f) });
-            frame.Add(new UiButton("+", () => app?.NewTerminal(), UiButtonStyle.Ghost) { Rect = new Rect(bx - 0.084f, 0.006f, 0.036f, t.HeaderHeight - 0.010f) });
-            frame.Add(new UiButton("⌨", () => app.Input?.ToggleSystemKeyboard(), UiButtonStyle.Ghost) { Rect = new Rect(bx - 0.126f, 0.006f, 0.036f, t.HeaderHeight - 0.010f) });
-            frame.Add(new UiButton("⎘", () => { app?.Focus(inst); app?.Input?.Paste(GUIUtility.systemCopyBuffer); }, UiButtonStyle.Ghost) { Rect = new Rect(bx - 0.168f, 0.006f, 0.036f, t.HeaderHeight - 0.010f) });
-            var link = frame.Add(new UiButton("⇗", () => OpenTerminalLink(inst), UiButtonStyle.Ghost) { Rect = new Rect(bx - 0.210f, 0.006f, 0.036f, t.HeaderHeight - 0.010f) });
-            _linkButtons[inst] = link;
-            // a tap on the terminal area (the grid as the frame draws it) focuses it
-            frame.Add(new UiHitArea(() => app?.Focus(inst)) { Rect = new Rect(bezel, t.HeaderHeight + bezel, vw, vh) });
+            AddTerminalButtons(frame, inst, w);
+            // the text: a tap focuses this terminal, a pinch dragged over it selects (COPY copies it)
+            frame.Add(new UiTerminalSurface(v, k, () => app?.Focus(inst), () => OnTerminalSelected(inst)) { Rect = new Rect(bezel, t.HeaderHeight + bezel, vw, vh) });
+            v.SelectionChanged += () => RefreshTerminalCopy(inst);
             _frames[inst] = frame;
             Router.Register(frame);
             if (!keepPlace) OpenTerminalFrame(frame); // a new terminal: a free place, never on another window
@@ -877,7 +873,7 @@ namespace MetaCodex.Shell
         private void OnTerminalClosed(TerminalInstance inst)
         {
             if (_frames.TryGetValue(inst, out var f)) { Router.Unregister(f); _frames.Remove(inst); _termPlaced.Remove(f); }
-            _linkButtons.Remove(inst); _links.Remove(inst); _linkVersion.Remove(inst);
+            _linkButtons.Remove(inst); _links.Remove(inst); _linkVersion.Remove(inst); _termCopy.Remove(inst);
             RefreshTerminalsPanel();
         }
 
