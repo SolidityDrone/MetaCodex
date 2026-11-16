@@ -226,7 +226,7 @@ namespace MetaCodex.Shell
             }));
             s.Add(("sounds", () =>
             {
-                Sounds = new GameObject("UiSounds").AddComponent<UiSounds>(); // its clips are made in code here
+                Sounds = new GameObject("UiSounds").AddComponent<UiSounds>(); // its clips are made in code, on a worker thread (UiSoundSynth)
                 Sounds.transform.SetParent(_root, false);
                 if (Sounds != null) { Sounds.Enabled = Settings.sounds; Sounds.Volume = Mathf.Clamp01(Settings.soundVolume); }
             }));
