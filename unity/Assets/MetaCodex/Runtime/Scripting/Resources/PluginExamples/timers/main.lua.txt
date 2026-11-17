@@ -1,16 +1,18 @@
 -- Timers: a focus timer (tomato style) and alarms.
 --
 -- A MODEL PLUGIN. Copy its shape for any small app that has a window:
---   * window   one ui.panel{} made again by a single render() whenever the state changes
+--   * window   one ui.panel{} made again by a single render() on a real change only (a button, a phase
+--              that ends, an alarm, the window opening): never once a second
 --   * tile     menu.add{} puts a TIMER tile on the dock and the wrist menu
---   * LIVE     the clock and the phase are `text` components with an id: while only their text changes,
---              the app sets the labels and does not rebuild the window (so keep the rest of the spec
---              identical and in the same order between two seconds)
+--   * LIVE     the clock is a `text` component with an id: each second ui.set("main", "clock", ...) changes
+--              that one label (no spec, no rebuild); while the window is closed (ui.shown is false) the
+--              tick returns at once and draws nothing (quest-plugins: Performance rules)
 --   * store    the whole state is one JSON text; saved on every change; times are WALL CLOCK
 --              (app.clock), never app.time (session time restarts at zero when the app restarts)
 --   * restart  on load: a running phase goes on from its stored end time; a phase or an alarm that
 --              ended while the app was closed is reported once; alarms are armed again with app.at
---   * timers   ONE app.every(1, ...) runs only while a phase runs; it is cancelled when idle
+--   * timers   ONE app.every(1, ...) runs only while a phase runs; it is cancelled when idle; its only work
+--              while the window is closed is the end of the phase (on time, shown or not)
 --   * voice    complete voice.command entries (description, typed params, phrases, 4+ samples)
 
 -- Settings (seconds): change these to change the rhythm.
@@ -23,7 +25,7 @@ local MAX_ALARMS = 6
 local st            -- the saved state (see fresh())
 local ticker        -- id of the one-second timer, nil when idle
 local alarmTimers = {}  -- alarm id -> app.at timer id
-local shownPhase, shownClock = "", ""  -- what the LIVE texts show now
+local shownClock = ""   -- what the LIVE clock shows now
 local render        -- forward declaration
 
 ------------------------------------------------------------------ state
@@ -140,8 +142,14 @@ onSecond = function()
     render()
     return
   end
-  -- redraw only when a shown text changed
-  if phaseText() .. fmt(remaining()) ~= shownPhase .. shownClock then render() end
+  -- nothing shows: nothing to draw (the window's "open" event renders it fresh)
+  if not ui.shown("main") then return end
+  -- one LIVE text, only when it changed: no spec, no rebuild
+  local clock = fmt(remaining())
+  if clock ~= shownClock then
+    ui.set("main", "clock", clock)
+    shownClock = clock
+  end
 end
 
 local function startRun()
@@ -308,7 +316,7 @@ render = function()
   local clock = fmt(remaining())
   local phase = phaseText()
   local comps = {
-    -- LIVE texts: only their text changes between two seconds
+    -- the clock is a LIVE text (an id): the tick sets it with ui.set; the phase changes only through render()
     { type = "text", id = "phase", text = phase, tone = (st.phase == "work") and "accent" or "ok" },
     { type = "text", id = "clock", style = "big", text = clock },
     { type = "buttons", id = "controls", items = {
@@ -335,7 +343,7 @@ render = function()
   end
   comps[#comps + 1] = { type = "input", prompt = "New alarm", placeholder = "20 stretch  or  15:30 call mum" }
   ui.panel{ id = "main", title = "Timers", components = comps, on = onEvent }
-  shownPhase, shownClock = phase, clock
+  shownClock = clock
   syncTicker(onSecond)
 end
 
