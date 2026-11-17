@@ -469,6 +469,19 @@ WEB, several windows (2026-11-17: a video and the code editor fought over one wi
 - [ ] The WEB tile (wrist or dock): with a page window and the editor open → WEB hides the page window, not the editor's; again → the first window shows; voice "close the browser" closes the window touched last
 - [ ] Every web window stays flat with "Bend panels" on; a closed window costs nothing (72 fps with one window open on a still page, the others closed)
 
+WEB windows in groups (2026-11-17: the thread groups' gestures for web windows; one thread window and the code editor installed; FIXED layout first, then FLOAT):
+
+- [ ] The editor beside a thread: open a thread, then CODE; pinch the editor window's title bar, move it onto the thread window, let go → the thread lights up while it is under, then a group "Group 1 · 2 windows" (2x1) where the thread was; the editor slides into its cell, its top in line with the thread's; the session log shows `window group: web-2 (code editor) let go on thread (<project>)`
+- [ ] In the group: the editor's page takes touches where you pinch (a file opens, the cursor goes where you tap), a drag scrolls, the pointer hovers; tap a field then type on a Bluetooth keyboard → the keys go to the editor; tap the thread's composer and type → they go to the thread; ⌨ ⎘ ⏎ ⌫ on the editor's toolbar work
+- [ ] Two web windows: play a video in WEB, open a page in WEB 2 (❐), drop WEB 2 onto WEB → a group of two pages (2x1); the video keeps playing with sound; both pages update; 72 fps (as two free windows)
+- [ ] In a page of a grouped window: a dropdown opens its chooser over that window, at the window's size in the group (RESIZE the group: the chooser follows); an alert opens its dialog over it; a video's full screen fills that window's page area (EXIT FULL SCREEN where the address was) and the group stays as it was
+- [ ] Drag out: pinch a grouped web window's title bar and let it go outside the group → it comes out where you let it go and grows back to its full size (the code editor to its larger size); with one window left the group goes
+- [ ] Release a free web window on a window of a group of threads → it joins at that place; release a thread window on a web window of a group → it joins; release a grouped window on another window of its group → the two change places
+- [ ] With "Bend panels" on: a group with a thread and a page bends; the thread lies on the curve, the page stays flat (no seam, its edges in front of the group's frame); tap the corners and the middle of the page and of its toolbar → each tap lands where you pinched (a link at the edge opens)
+- [ ] The ✕ of a grouped web window → only it closes (an extra window frees its page: `web-2: closed, its page and its memory freed`); the ✕ of the editor's window in a group → the editor's server keeps running (CODE opens it again quickly); the group's ✕ → every window in it closes
+- [ ] ❐ NEW WINDOW on a grouped web window → the new window opens free beside the group, not in it; a terminal link (or a bookmark) while a grouped page is the one touched last → it loads in that window, which stays in its group
+- [ ] ⇲ UNGROUP on a mixed group → every window free at its full size (the editor at its larger size), side by side; CENTER and FLOAT move a mixed group as one window
+
 CLIPBOARD (captures):
 
 - [ ] SELECT, then pinch-drag over a window (also at a low PANEL OPACITY) → CLIPBOARD has the capture, opaque, with nothing of the room or the hands and no orange border; the orange frame goes as soon as the capture is taken; no hitch at the moment of the capture (72 fps)

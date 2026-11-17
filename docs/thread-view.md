@@ -103,7 +103,8 @@ The composer is a message box that grows.
 
 ## Thread windows and groups
 
-Each thread opens in a full window, and windows can be grouped.
+Each thread opens in a full window, and windows can be grouped. A group can hold thread windows and web windows
+(browser pages and the code editor) together.
 
 ### Several windows (`Shell/ShellThreadWindows.cs`)
 
@@ -126,29 +127,46 @@ Each thread opens in a full window, and windows can be grouped.
 
 ### Groups (`Shell/ShellThreadGroups.cs`)
 
-- A group is a window that holds thread windows in a grid: 2 windows in 2x1, 3 or 4 in 2x2, 5 or 6 in 3x2.
-- The windows in a group are smaller, but they keep their full chat and composer. They work as free windows do.
+- A group is a window that holds windows in a grid: 2 windows in 2x1, 3 or 4 in 2x2, 5 or 6 in 3x2. The windows can
+  be thread windows and web windows (a page, the code editor), in any mix: for example a thread beside the code
+  editor of its project, or the editor beside a video (owner 2026-11-17).
+- A cell is as wide as the widest window of the group and as tall as the tallest (a thread window is 0.73 x 0.66, a
+  web window 0.80 x 0.61). Each window is centred across its cell, with its top at the top of the cell.
+- The windows in a group are smaller, but they keep all they have: a thread its full chat and composer, a page its
+  toolbar, touch, scroll, hover, keyboard, dropdown chooser, dialogs and full screen. They work as free windows do.
+  A page's full screen fills its page area inside its cell (as in a free window); the group does not change.
+- A web window that is large when free (the code editor, a large page: 1.25 times) has the same scale as the other
+  windows in the group. It gets its larger size again when it comes out.
 - Make a group: pinch the title bar of a window, move it onto another window and release it. The target window
-  lights up while the carried window is over it. Any project: a drop groups windows of different projects too.
-- Automatic groups (the only rule by project): when a thread opens and a window of the same project is open, the new
-  window joins that group. Two free windows of one project make a new group.
+  lights up while the carried window is over it. Any project and any kind: a drop groups windows of different
+  projects too, and thread windows with web windows.
+- Automatic groups (the only rule by project, thread windows only): when a thread opens and a window of the same
+  project is open, the new window joins that group. Two free windows of one project make a new group. A web window
+  never joins a group by itself.
 - In a group:
   - Release a window on another window of the same group: the two windows change places.
   - Release a window on a window of another group: it moves to that group, at that place.
   - Release a window outside its group: it comes out at its full size. That thread does not join a group again by
     itself while its window stays open.
-  - The ✕ of a window closes that window only. A group with one window left goes, and that window is free.
+  - The ✕ of a window closes that window only. A group with one window left goes, and that window is free. A web
+    window `web-2` or `web-3` that closes frees its page, as a free one does. The code editor's window closes, and the
+    editor's server continues to run.
+  - ❐ NEW WINDOW on a web window in a group: the new window opens free, beside the group. A page that the app opens
+    in a web window that is in a group (a link, a bookmark, voice) loads there, and the window stays in its group.
 - The title bar of the group moves the group. ⇲ UNGROUP sets all its windows free, side by side. The ✕ of the group
   closes all its windows.
 - RESIZE (bottom right of the group): pinch and pull. The group and its windows get larger or smaller. The top-left
   corner stays where it is. The scale is between 0.4 and 1.2.
 - The sidebar of a window in a group opens at the right edge of the group, not inside the grid.
 - Placement, RECENTER and the FLOAT ring move a group as one window.
-- With "Bend panels around you" on, a group bends like any window. Its windows have no curve of their own: they lie
-  on the curve of the group, and a ray or a fingertip hits the element that is drawn under it.
+- With "Bend panels around you" on, a group bends like any window. Its thread windows have no curve of their own:
+  they lie on the curve of the group, and a ray or a fingertip hits the element that is drawn under it. A web window
+  never bends: it stays flat, on the plane that touches the curve at the centre of its cell, a little nearer to you,
+  so that its side edges are in front of the group. Its page and the pointer agree everywhere on it.
 - Moves are smooth: a window that joins, leaves or changes place moves to its new place in about 0.25 s.
 - Voice: "put the open threads side by side" (`thread_windows group`), "break up the group" (`ungroup`), "close the
-  whole group of threads" (`close_group`).
+  whole group of threads" (`close_group`). These act on thread windows and on the group of the focused thread window
+  (which can hold web windows). No voice command groups web windows yet: the command needs the registry bench.
 - Groups are not kept when the app restarts.
 
 ### How the code works
@@ -161,11 +179,21 @@ Each thread opens in a full window, and windows can be grouped.
   are bound to their window (`Bind`). A window that closed drops the late answers.
 - There is one sidebar. It belongs to the window that opened it last (`_sbOwner`), and it sits beside that window or
   its group (`SbAnchor`).
+- A window that a group can hold is a `GroupMember` (`Shell/ShellThreadGroups.cs`): its id, panel, group, drag and
+  glide, its size when free (`FreeScale`), `Flat` (never bends: web windows) and `Gone`. `ThreadWindow` and
+  `WebWindow` (`Shell/ShellWeb.cs`) are members. A group is a `WindowGroup` (id `tgroup-N`).
 - A group's windows are children of the group's panel. They are not in the layout lists (`IsGroupedPanel`).
+  `TickMember` runs every frame for each thread window and each web window: the drag and the drop, the eased size
+  and the glide (two loops over the lists, no allocation). A web window's size eases only in a group or just out of
+  one; the web code keeps its own scale (a large page, the code editor) otherwise.
 - Bent group: `CellPose` puts each window on the arc of the group at the angle of its cell, 1 cm in front (`CellDepth`),
   turned to the axis of the group. `FitMemberBend` gives it the radius of the group in its own units, so the two
   surfaces have the same axis. `FitGroupMembers` runs every frame and on `UiPanel.BendChanged` (the same frame the
-  bend of the group eases). A window that leaves the group gets its own bend again.
+  bend of the group eases). A window that leaves the group gets its own bend again. A flat window (web) gets the
+  centre and the turn of its cell from `CellPose` and no bend; it is moved towards the axis of the group until its
+  side edges are `CellDepth` in front of the curve.
+- Session log: `window group: <window> (<project> | web page | code editor) let go on <window or group> (...)` for
+  each drop.
 - Self-test section `threadwindows` (`Editor/MetaCodexUiTestThreadWindows.cs`).
 
 ## Held turns and archive
