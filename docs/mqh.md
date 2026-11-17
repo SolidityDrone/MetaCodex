@@ -50,7 +50,8 @@ call it (`MqhClient` calls only `/api/v1/plugins` and enable / disable, never a 
 
 | Plugin | | Why |
 |---|---|---|
-| provider-claude-code, provider-codex, provider-acp | KEEP | the three agents (OpenCode runs through ACP) |
+| provider-codex, provider-acp | KEEP | the three agents: Codex through its plugin; OpenCode and Claude Code through ACP (below) |
+| provider-claude-code | KEEP (source), not in the APK | MQH's own Claude plugin bundles Anthropic's proprietary Agent SDK: `tools/mqh-bundle.sh` removes it (LICENSES G8); it serves a developer's MQH on a PC only |
 | environment-project-checkout, environment-git-worktree | KEEP | NEW THREAD's checkout and worktree modes |
 | environment-personal-workspace | KEEP | the server's built-in personal project (`kind: personal`) makes its threads through it |
 | git | KEEP | the server's environment routes and `mqh thread show` read status and diffs through it |
@@ -73,6 +74,39 @@ call it (`MqhClient` calls only `/api/v1/plugins` and enable / disable, never a 
 `quest-scripting`, `quest-views`, `skill-creator` and `worktree-per-thread` (Codex too, which does not read
 `~/.claude/skills`); the overlay also lays all but `skill-creator` in `/root/.claude/skills` for agents started in a terminal (Claude Code skips the duplicate copy). `bb-cli`,
 `bb-plugin-authoring` and `submit-a-plugin` are gone. Re-syncs reproduce the cut: the lists in `tools/mqh-gut.sh`.
+
+## Claude Code through ACP
+
+Claude Code threads run on `provider-acp`, the way OpenCode does, with no change to MQH's code:
+
+- **The adapter**: `@agentclientprotocol/claude-agent-acp` (Apache-2.0, bin `claude-agent-acp`), an ACP agent built on
+  Anthropic's Agent SDK. The user installs it on the headset from the official npm registry, in a terminal they watch:
+  AGENTS > GET CLAUDE CODE installs it with the CLI, ENABLE THREADS installs it alone (`ShellAgentGet.cs`, version
+  pinned there). npm brings the SDK and its linux-arm64 Claude Code binary with it; MetaCodex ships none of it
+  ([LICENSES.md](LICENSES.md#third-party-coding-agents-not-included)). Node >= 22 (the image has Node 24).
+- **The login**: the adapter runs on the Claude Code login the user made with `claude auth login` (the CLI's own files,
+  `~/.claude`), or `ANTHROPIC_API_KEY` from MQH's machine environment (AGENTS > API KEY). MetaCodex never reads them.
+  Not signed in: MQH's health says READY anyway (it only checks the bin), and the first turn fails with the adapter's
+  sign-in message; SIGN IN in AGENTS runs `claude auth login`.
+- **The registration**: provider-acp's own `customAgents` setting (the mechanism `mqh acp add` writes to). When the
+  app's probe finds `claude-agent-acp`, `EnsureClaudeThreads` reads `GET /api/v1/plugins/provider-acp/settings` and,
+  only when the entry is missing or different, writes it with `PUT` (`{"values": {"customAgents": "<JSON array>"}}`),
+  keeping the user's other entries:
+
+  ```json
+  { "id": "claude-code", "displayName": "Claude Code", "command": "claude-agent-acp", "args": [], "env": {},
+    "nativeSkillRoots": { "user":    [{ "path": ".claude/skills", "skipIfManifest": ".claude-plugin/plugin.json" }],
+                          "project": [{ "path": ".claude/skills", "ancestors": true, "skipIfManifest": ".claude-plugin/plugin.json" }] } }
+  ```
+
+  The plugin registers it at once as provider `acp-claude-code` (custom agents are `acp-<id>`, always listed, no
+  fork). The command is the global bin from the PATH; the registry's way (`mqh acp add claude-acp`) would run
+  `npx -y @agentclientprotocol/claude-agent-acp@<version>` and fetch the package again at every start. Its health:
+  `not_installed` without the bin, else `ready` with the adapter's `--version`. The native skill roots tell MQH that
+  Claude Code reads `~/.claude/skills` itself (the overlay's copies), so MQH does not hand it a second copy.
+- **What threads get**: the generic ACP dialect: text, thinking, tool calls, plans, approvals (EDITS asks through MQH's
+  interactions; FULL answers the adapter's permission requests itself), stop (`session/cancel`), the adapter's model
+  list. Not there: the local coder (OpenCode only, [local-coder.md](local-coder.md)), fork, MQH-side usage limits.
 
 ## Wiring
 

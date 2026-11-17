@@ -508,11 +508,23 @@ Agents:
 - [ ] The terminal prints a link → toast "Link in …", `⇗` and COPY LINK light up → `⇗` opens it in the headset's own browser; COPY LINK → toast "Link copied", the whole link (also when it wraps over several rows) pastes into WEB's address or the system keyboard
 - [ ] Sign in in the browser; the redirect back to localhost completes the login (or paste the code with ⎘) → AGENTS ⟳ shows READY + account
 - [ ] Sign in the same way with `opencode auth login` and `codex login --device-auth` (device code flow) → AGENTS shows READY for each
-- [ ] Press GET on a missing agent (for example `opencode`) → a terminal installs it in about a minute, the tile turns into "✓" with its version and it shows in the providers (the others the same way); UPDATE (installed agents only) updates it through MQH (or run `mcx-setup` in a terminal); MORE · COMING SOON cannot be pressed
+- [ ] Press GET on a missing agent (for example `opencode`) → a terminal installs it in about a minute, the tile turns into "✓" with its version and it shows in the providers (the others the same way); UPDATE (installed agents only) updates it through MQH, or for OpenCode and Claude Code (MQH cannot update them) runs GET's install again in a terminal; MORE · COMING SOON cannot be pressed
 - [ ] Press DISABLE (or ENABLE: the button says the one that applies) → the provider is switched in MQH
 - [ ] Pick an installed agent → the second row reads DISABLE (or ENABLE) | NEW THREAD → | UPDATE; pick one that is not installed: no UPDATE; no OPEN LINK button; the hint says ⇗ on the sign-in terminal opens the link
 - [ ] ⚿ API KEY: pick your provider, copy your key (in WEB or the headset's browser), ⎘ PASTE, SAVE → "✓ … set for the agents"
 - [ ] NEW THREAD with `opencode` → it answers (with your key, no terminal login)
+
+Claude Code threads (through its ACP adapter, `docs/mqh.md`):
+
+- [ ] Claude Code installed and signed in before this build, no adapter: AGENTS → Claude Code shows TERMINAL and "runs in a terminal; ENABLE THREADS installs its thread adapter"; the second row reads DISABLE (dim) | ENABLE THREADS | UPDATE; its GET tile offers ENABLE THREADS, UPDATE, API KEY
+- [ ] ENABLE THREADS → a terminal runs `npm i -g @agentclientprotocol/claude-agent-acp@0.107.3` (a few minutes, about 400 MB) and prints `0.107.3` and "✓ CLAUDE CODE threads enabled" → toasts "CLAUDE CODE threads enabled" and "Claude Code threads are ready in MQH"; `files/session_log.txt` has `[agents] Claude Code threads: acp-claude-code registered in MQH`; AGENTS ⟳ → Claude Code READY with the CLI's version, sign in `claude auth login`, NEW THREAD → in the second row
+- [ ] On a headset without Claude Code: GET CLAUDE CODE → one terminal installs the CLI and the adapter (`… @anthropic-ai/claude-code@latest @agentclientprotocol/claude-agent-acp@0.107.3`) and prints both versions; SIGN IN ▶ (`claude auth login`) → AGENTS READY
+- [ ] NEW THREAD → Claude Code is in PROVIDER and its models load; START, send "list the files here and say what this project is" → the answer streams in THREAD, the tool calls show as rows
+- [ ] PERMISSIONS EDITS, "create hello.txt with the word hi" → an approval shows in THREAD; ALLOW → the file is there; again with DENY → the agent says it was refused
+- [ ] A long task, then STOP → the turn ends within a few seconds; a new message continues the thread
+- [ ] `claude auth logout` in a terminal, then a new Claude Code thread → its turn fails with a sign-in message (no hang); SIGN IN, send again → it answers
+- [ ] `npm rm -g @agentclientprotocol/claude-agent-acp`, AGENTS ⟳ → TERMINAL with ENABLE THREADS again; NEW THREAD no longer lists Claude Code
+- [ ] While a Claude Code thread works → the app stays at 72 fps (Perf menu Snapshot)
 
 Agent views:
 

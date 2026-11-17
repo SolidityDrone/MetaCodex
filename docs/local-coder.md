@@ -17,13 +17,13 @@ coder: a 0.5B model handles small tasks (one small file, one command) and simple
   | Harness | API | Endpoint | How it is pointed there |
   |---|---|---|---|
   | OpenCode | OpenAI chat completions | `/v1/chat/completions`, model `local-coder` | `OPENCODE_CONFIG=/mnt/quest/local-coder.opencode.json` (provider "MetaCodex (this headset)") |
-  | Claude Code | Anthropic Messages | `/v1/messages`, `/v1/messages/count_tokens` | MQH gives only a `local-coder` thread `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN` and `ANTHROPIC_MODEL` |
+  | Claude Code | Anthropic Messages | `/v1/messages`, `/v1/messages/count_tokens` | only with MQH's own Claude plugin (a PC's MQH; not in the APK): it gives only a `local-coder` thread `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN` and `ANTHROPIC_MODEL`. The headset's Claude Code threads run through the ACP adapter (`docs/mqh.md`), which does not list the local coder |
   | Codex | OpenAI Responses | `/v1/responses` exists in the service | Codex is not offered the local coder: small models loop on its tools |
 
 - **The key**: `<data>/coder.key`, made once by the app, shared as `/mnt/quest/local-coder.key` and given to MQH as
   `MCX_LOCAL_CODER_KEY`. It opens only the coder's routes; the per-start token still guards the rest. MQH also gets
-  `MCX_LOCAL_CODER_URL`. With both set, the model lists of Claude Code and OpenCode show "Local coder (this headset,
-  slow)" (MQH's ACP bridge puts `metacodex/local-coder` first under that name). NEW THREAD shows the local model as
+  `MCX_LOCAL_CODER_URL`. With both set, OpenCode's model list shows "Local coder (this headset, slow)" (MQH's ACP
+  bridge puts `metacodex/local-coder` first under that name; MQH's own Claude plugin, on a PC, lists it too). NEW THREAD shows the local model as
   the first row of every agent's list (⌂, LOCAL); it never becomes the default.
 - **Model lists**: they come from MQH's provider bridges in the host daemon's long-lived maintenance runtime. A
   change of the machine environment (the app sets the three variables after the install) restarts that runtime
