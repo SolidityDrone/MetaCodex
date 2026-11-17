@@ -14,7 +14,8 @@ The app (Unity, on the headset) runs Lua in two forms, with the same API (this s
 
 Write or edit a file and the app loads it within a second: no rebuild, no restart. Files persist across restarts.
 Each runs sandboxed (no `io`, `require`, `load`; `os` has only `time`, `clock`, `date`) and talks to the app only
-through the API below. The Lua is 5.2 (MoonSharp): no `utf8` library and no `//`; `#` and `string.len` count bytes;
+through the API below. The network is for plugins only (`net`, https to the hosts their `plugin.json` declares): a
+single script has none. The Lua is 5.2 (MoonSharp): no `utf8` library and no `//`; `#` and `string.len` count bytes;
 every number is a double (`json.decode` too): `math.floor(n)` or `string.format("%d", n)` for whole numbers.
 
 ## Procedure
@@ -77,6 +78,8 @@ New gestures (hand poses, swipes, two-hand shapes) are a **gesture plugin** (a p
 | `settings.get(key)` / `settings.set(key, value)` | app settings (strings in and out), saved and synced to MQH |
 | `store.get(key)` / `store.set(key, value)` | this script's own persistent strings (tables: `json.encode` / `json.decode`) |
 | `json.encode(value)` / `json.decode(text)` | Lua table to JSON text and back (`decode` returns `nil, message` on bad text) |
+| `net.get(url, [{headers=, timeout=}], fn)` | plugins only: an https GET to a host `plugin.json` `"network"` lists; returns the request id at once (`nil, why` when refused) and calls `fn(res)` later, `res = {ok, status, body, json, error}` (`json`: the decoded reply when it is JSON); 4 in flight, 60 a minute, 1 MB, timeout 15 s (30 at most); skill `quest-plugins`, "APP: data from the network" |
+| `net.post(url, body, [opts], fn)` / `net.cancel(id)` | the same with a body (text, or a table sent as JSON) / drop a request: its `fn` never runs |
 | `app.after(sec, fn)` / `app.every(sec, fn)` / `app.cancel(id)` / `app.time()` | timers (session time: `app.time()` starts at 0 with the app) |
 | `app.clock()` / `app.clock{year, month, day, hour, min, sec}` / `app.date([t])` / `app.at(t, fn)` | wall clock (seconds since 1970) / a local time in seconds / `{year, month, day, hour, min, sec, wday, yday}` / run once at a clock time |
 | `app.action("verb:arg")` | one action string: `open:` `close:` `toggle:<panel>`, `toast:`, `run:<cmd>`, `type:<text>`, `url:<url>`, `layout:fixed\|float`, `spin:<deg>`, `select`, `keyboard`, `terminal:new`, `recenter`, `gesture:<name>`, `voice:listen\|stop\|toggle\|say:<text>\|run:<text>` |
@@ -85,7 +88,7 @@ New gestures (hand poses, swipes, two-hand shapes) are a **gesture plugin** (a p
 | `voice.say(text)` / `voice.run(text)` / `voice.listen()` / `voice.list()` | speak with the local voice / run text as if spoken / start listening / enabled command names |
 | `voice.remove(name)` / `voice.registry()` | remove one of this script's commands / the whole registry as JSON text (every enabled command, its schema, samples, warnings) |
 | `log(...)` / `print(...)` | lines in the log (`mcx-ui script log <name>`; a plugin's: `mcx-ui plugin log <id>`) |
-| `plugin.id` `plugin.name` `plugin.version` `plugin.kind` `plugin.dir` | plugins only: its id, `plugin.json` name and version, its fixed kind (`""` for an older folder) and its Linux folder |
+| `plugin.id` `plugin.name` `plugin.version` `plugin.kind` `plugin.dir` `plugin.network` | plugins only: its id, `plugin.json` name and version, its fixed kind (`""` for an older folder), its Linux folder and the hosts its `"network"` declares |
 
 Settings keys: `gestures.clickMode` (0 pinch, the default; the app shows no switch for it: change it only when the
 user asks for fingertip pokes: 1 poke, 2 both), `gestures.pointMode` (0 ray always, 1 only in the pointing pose),
@@ -185,5 +188,7 @@ verb ("and the softness to half a metre") repeats the previous command with its 
 - Remove a script: delete its file (or MQH > SCRIPTS > DELETE). Plugins: skill `quest-plugins`, "Turn off or remove".
 - One behaviour per file; keep callbacks short. A callback that runs more than 200,000 Lua instructions is
   stopped and the script disabled (shown as ERROR in the Scripts panel): no busy loops, use `app.every`.
-- Never put secrets in scripts. Scripts can type into the terminal, so they run with the user's rights.
+- Never put secrets in scripts or plugins (API keys, tokens): the user types a key into a plugin's `input`, the plugin
+  keeps it in `store`, and `store` is not a vault (a plain file agents can read). Scripts can type into the
+  terminal, so they run with the user's rights.
 - Prefer gestures that cannot fire by accident: sequences (double clap) or a hold, not a single pinch.

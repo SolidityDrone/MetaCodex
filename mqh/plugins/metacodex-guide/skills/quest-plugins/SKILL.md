@@ -1,6 +1,6 @@
 ---
 name: quest-plugins
-description: Make or change a plugin of the MetaCodex headset app, with no rebuild. A plugin is a project of type plugins with a fixed kind - an app (its own window drawn like every other window, a tile on the main menu, voice commands, alarms, state that survives a restart), a gesture plugin (named hand gestures and what they do; details in quest-gesture-plugins) or a behaviour (Lua that reacts to the hands, the voice or the time, with no window). Start here for every plugin. Use when you work in a folder under /root/metacodex-projects/plugins, when the user asks for a panel or tool the app does not have ("make me a tomato timer with a button in my menu", "a habit tracker", "a calendar window"), a new gesture or reaction, or to change or remove a plugin.
+description: Make or change a plugin of the MetaCodex headset app, with no rebuild. A plugin is a project of type plugins with a fixed kind - an app (its own window drawn like every other window, a tile on the main menu, voice commands, alarms, state that survives a restart, data fetched over https from the hosts it declares), a gesture plugin (named hand gestures and what they do; details in quest-gesture-plugins) or a behaviour (Lua that reacts to the hands, the voice or the time, with no window). Start here for every plugin. Use when you work in a folder under /root/metacodex-projects/plugins, when the user asks for a panel or tool the app does not have ("make me a tomato timer with a button in my menu", "a habit tracker", "a calendar window", "a panel with the weather / an exchange rate / data from a public API"), a new gesture or reaction, or to change or remove a plugin.
 ---
 
 # Quest plugins: new windows, menu tiles, gestures and reactions, live
@@ -38,8 +38,10 @@ A plugin is a **project of type plugins with a fixed kind**, one folder:
   V shortcut's `core-poses` is one). Never make new plugins there. When a project and an older folder have the same
   id, the project wins and the log says why.
 
-Lua runs in a sandbox (no `io`, `require`, `load`, network; `os` has only `time`, `clock`, `date`) and talks to the app
-only through its API. The app draws windows from your component list with its own UI kit, so they look like the app.
+Lua runs in a sandbox (no `io`, `require`, `load`; `os` has only `time`, `clock`, `date`) and talks to the app only
+through its API. The network is there for plugins through `net.get` / `net.post`, over https, to the hosts the plugin
+lists in `plugin.json` `"network"` (part APP, "Data from the network"). The app draws windows from your component list
+with its own UI kit, so they look like the app.
 
 | Kind | What it adds | Read |
 |---|---|---|
@@ -53,9 +55,10 @@ a gesture or behaviour plugin's `menu.add` is never shown. A single small reacti
 
 Other skills: `quest-scripting` (the whole Lua API, voice command rules), `quest-gesture-plugins` (gestures),
 `quest-views` (the components as agent views), `metacodex-context` (the headset).
-Models: the Timers and Calendar examples are complete app plugins. `mcx-ui plugin examples` says which are installed;
-installed ones are projects in `/root/metacodex-projects/plugins/apps/timers` and `.../apps/calendar`: read their
-`main.lua` before a bigger plugin (read only: they are the user's projects).
+Models: the Timers, Calendar and Weather examples are complete app plugins (Weather: data from the network).
+`mcx-ui plugin examples` says which are installed; installed ones are projects in
+`/root/metacodex-projects/plugins/apps/timers`, `.../apps/calendar` and `.../apps/weather`: read their `main.lua` before a
+bigger plugin (read only: they are the user's projects).
 
 ## The loop (every new plugin and every change)
 
@@ -83,7 +86,8 @@ installed ones are projects in `/root/metacodex-projects/plugins/apps/timers` an
 
 ## Files
 
-`plugin.json` (`name` is the window title and the list's name; `description` one line):
+`plugin.json` (`name` is the window title and the list's name; `description` one line; `network` only when the plugin
+fetches data: the hosts it calls, see "Data from the network"):
 ```json
 { "id": "water", "name": "Water", "version": "1.1.0", "kind": "app",
   "description": "Counts glasses of water today, reminds you every hour" }
@@ -91,7 +95,8 @@ installed ones are projects in `/root/metacodex-projects/plugins/apps/timers` an
 `main.lua` runs once when the plugin loads (at every app start, after every save, after ENABLE). It makes the windows,
 the tiles, the gestures and the voice commands, reads the saved state and sets the timers again. Everything it made
 goes away when the plugin is disabled, deleted or stopped by an error, and comes back when it loads again.
-`plugin.id`, `plugin.name`, `plugin.version`, `plugin.kind` and `plugin.dir` (its Linux folder) are set for it.
+`plugin.id`, `plugin.name`, `plugin.version`, `plugin.kind`, `plugin.dir` (its Linux folder) and `plugin.network` (the
+declared hosts) are set for it.
 
 ---
 
@@ -154,8 +159,8 @@ Rules:
   600 characters is a warning.
 - Any rebuild (after a button, a toggle, a new item) empties the `input` fields: a half-typed text is lost, so keep
   the input for whole entries sent with SEND.
-- Symbols: the ones in the glyph list below (`◆ ◉ ▤ ◫ ☰ ◎ ▣ ◐ ⌖ ◷ ◔ ✓ ★`) show everywhere; others may show as boxes.
-  Keep cell and button text to a few words.
+- Symbols: the ones in the glyph list below (`◆ ◉ ▤ ◫ ☰ ◎ ▣ ◐ ⌖ ◷ ◔ ✓ ★`) show everywhere, and so do `·`, `…`, `°`,
+  `▸` and `◀ ▶` in text and labels; others may show as boxes. Keep cell and button text to a few words.
 - A cell without `id` is not tappable (week day headers, blanks: `{ text = "", tone = "dim" }`). Give tappable things
   stable ids (`"d-2026-11-20"`, `"alarm-3"`), never list positions that shift.
 - Do not draw your own frame, header or close button: the app does. One symbol in a label is fine; no emoji walls.
@@ -313,6 +318,170 @@ voice.command{
 ```
 (`progress` changes with each glass, so a glass rebuilds the window: fine, it happens on a tap, not every second.)
 
+## APP: data from the network (`net`)
+
+Use it when the window shows data a web service has: the weather, an exchange rate, a timetable, a status page, a
+feed. Not for: files over 1 MB, streams or sockets, pages to look at (`browser.open(url)` shows a page), or anything
+that needs the user to sign in in a browser.
+
+**1. Pick the service before you plan.** It must be https, answer in JSON (or short text), be free, need no key if
+at all possible, and allow this use: read its terms page (who may use it, the request limits, whether it asks for a
+credit). Say in the plan which host you call, why it fits (free, no key, the terms), how often the plugin calls it,
+and the credit line if the licence asks for one. Try the URL first when you can (`curl -s '<url>' | head -c 600` in a
+terminal) and write the reply's field names down: you parse exactly those.
+
+**2. Declare every host** the plugin calls in `plugin.json`:
+```json
+{ "id": "weather", "name": "Weather", "version": "1.0.0", "kind": "app",
+  "description": "Weather now and the next 3 days for a city you pick (online)",
+  "network": ["api.open-meteo.com", "geocoding-api.open-meteo.com"] }
+```
+- Host names only: no `https://`, no path, no port (any port of a declared host is allowed). `"*.example.com"` covers
+  its subdomains at any depth but not `example.com` itself (list both when you need both). `"*"` is refused.
+- https only. Plain http only to `127.0.0.1` and `localhost` (this headset's own servers), and those must be declared too.
+- A request to a host that is not declared fails: its callback gets `res.error` =
+  `net: host not declared in plugin.json "network": <host>`, and `mcx-ui plugin check <id>` shows that warn line.
+  A bad entry in `"network"` is a warn line too. The user sees the hosts in MQH > PLUGINS ("uses the network: ...").
+
+**3. The calls** (plugins only; a single script has no network):
+
+| Call | Does |
+|---|---|
+| `net.get(url, [opts], fn)` | starts a GET and returns its id at once (or `nil, why` when it is refused); `fn(res)` runs later |
+| `net.post(url, body, [opts], fn)` | the same with a body: a text (sent as `text/plain`) or a table (sent as JSON, `application/json`) |
+| `net.cancel(id)` | drops a request: its `fn` never runs (true when it was still out) |
+| `opts` | `headers = { Accept = "application/json" }` (yours, sent as you set them; a `Content-Type` here is the body's), `timeout = 15` (seconds, 1 to 30; default 15) |
+| `res.ok` | true when a reply came with status 200-299 |
+| `res.status` | the HTTP status; 0 when no reply came |
+| `res.body` | the reply as text ("" when none) |
+| `res.json` | the reply decoded (a table) when it is JSON, else nil; JSON `null` is nil, every number a double |
+| `res.error` | nil when ok; else why: `status 404`, `timeout`, `too large`, a network error, or `net: ...` (refused) |
+
+- It never waits: `net.get` returns at once, and `fn` runs in a later frame, never inside the `net.get` call. So set
+  your "loading" state first, render, and let `fn` render the result.
+- Every request gets exactly one call of `fn`, a refused one too (with `res.error`), unless you cancelled it or the
+  plugin unloaded: a disable, a delete, an error or a reload after a save drops every request still out, and their
+  `fn` never runs. So handle every failure in `fn` (the model below does: its failure branch sets the retry timer);
+  the `nil, why` that `net.get` returns for a refusal is only for a log line or a toast.
+- `fn` runs under the same budget as any callback: an error or a long loop in it stops the plugin.
+- Limits a plugin: 4 requests in flight, 60 started a minute, a reply of 1 MB at most (a longer one is cut:
+  `res.error = "too large"`), the same 1 MB for a body you send. Over a limit the request is refused (`res.error` says
+  which): keep one request in flight per thing you fetch.
+- The app keeps no cookies and adds no credentials or keys of its own; a redirect is followed only to a declared host
+  over https, and your `Authorization` header is not sent to another host. It sends `User-Agent: MetaCodex-plugin/1.0
+  (<plugin id>)` unless you set one (some services ask for a User-Agent that says who calls).
+- Build URLs with every value encoded: `local function enc(s) return (tostring(s):gsub("[^%w%-%._~]", function(c)
+  return string.format("%%%02X", string.byte(c)) end)) end`; numbers with `string.format("%.4f", lat)`.
+
+**4. Errors: keep what you had.** A failure (offline, `timeout`, `status 500`, a reply without the fields) must not
+empty the window: keep the last good data, say why in a status line (`"Updated 2 h ago · no update: timeout"`), and
+try again later with a timer (5 minutes), never at once in a loop. Check every field you read from `res.json`
+(`type(v) == "number"`): a service can change its reply.
+
+**5. Cache in `store`.** Save the parsed result (not the whole reply) with the `app.clock()` time it came. When
+`main.lua` loads, show the cached result at once with its age ("Updated 12 min ago") and fetch only when it is older
+than the refresh period. The user sees data at once after a restart, and the service gets fewer calls.
+
+**6. Refresh with a wall-clock timer.** One `app.at(at + EVERY, fetch)` (`at` = when the result came), set again after
+every reply and at load; a failure sets it to now + 5 minutes. A REFRESH button calls `fetch()` now (do nothing while
+one is out; for data that changes slowly it may also wait a minute after the last try). Show the age as a LIVE text (a `text` with an `id`) updated by `app.every(60, render)`: once a minute only
+that text changes, no rebuild. Call as seldom as the data changes: the weather every 30 minutes, a rate every hour.
+More than one call a minute on average is too often (the PC test fails it).
+
+**7. Credits.** When the data's licence asks for a credit (CC BY: "a credit and a link next to the data"), put a dim
+`text` line in the window (`"Weather data by Open-Meteo.com (CC BY 4.0)"`) and a `SOURCE` button that calls
+`browser.open("https://...")`. No logos. The credit line is the one place the user sees the service's name: the
+`plugin.json` description, the title and the other texts stay generic ("online", "a public API"); a code comment may
+name it. A service whose terms ask for no credit gets no credit line.
+
+**8. Keys.** Never put an API key, a token or a password in a plugin's files: they are in git, and agents read them.
+Prefer a service that needs no key. When one needs a key, the user types it: an `input` (`prompt = "Your key"`), the
+plugin keeps it in `store` and sends it in a header (`headers = { Authorization = "Bearer " .. key }`), and the plan
+says so. Tell the user that `store` is not a vault: it is a plain file of the app's that any agent with access to the
+app's files can read; a key that must stay secret belongs in VAULT, which plugins cannot read.
+
+**9. Try it.** `mcx-ui plugin check <id>` shows `network: <hosts> (n in flight, m in the last minute)` and every
+warn line; `mcx-ui plugin log <id>` shows the first reply (`net: GET https://host/path -> 200 (2.1 KB)`, never the
+query) and each failure; `mcx-ui plugin event <id> button refresh` presses REFRESH. Try the failure path too: a city
+that does not exist, the network off.
+
+### The model: Weather, condensed
+
+The shipped Weather example (`.../apps/weather`: 8 preset cities, a typed city through the place search, 3 days,
+units, voice) has this shape; here it is cut to one city:
+
+```lua
+-- the weather now in Paris; updated every 30 minutes
+-- service: Open-Meteo (free, no key, data CC BY 4.0); plugin.json: "network": ["api.open-meteo.com"]
+local EVERY, RETRY = 30 * 60, 5 * 60
+local URL = "https://api.open-meteo.com/v1/forecast?latitude=48.8534&longitude=2.3488" ..
+            "&current=temperature_2m,weather_code,wind_speed_10m&timezone=auto"
+local SKY = { [0] = "Clear sky", [1] = "Mainly clear", [2] = "Partly cloudy", [3] = "Overcast", [45] = "Fog",
+              [61] = "Slight rain", [63] = "Rain", [65] = "Heavy rain", [71] = "Slight snow", [80] = "Rain showers",
+              [95] = "Thunderstorm" }
+local S = { wx = nil, at = 0 }     -- the last good result and when it came (saved)
+local reqId, problem, timer = nil, nil, nil
+local render
+
+local function save() store.set("state", json.encode(S)) end
+local function load()
+  local t = json.decode(store.get("state") or "")
+  if type(t) == "table" and type(t.wx) == "table" and type(t.wx.temp) == "number" and type(t.at) == "number" then
+    S.wx, S.at = { temp = t.wx.temp, code = t.wx.code, wind = t.wx.wind }, t.at
+  end
+end
+local function ago()
+  local s = math.max(0, app.clock() - S.at)
+  if s < 90 then return "just now" elseif s < 3600 then return math.floor(s / 60 + 0.5) .. " min ago" end
+  return math.floor(s / 3600 + 0.5) .. " h ago"
+end
+
+local fetch
+local function arm()                                      -- the next update: 30 min after the result, 5 min after a failure
+  if timer then app.cancel(timer) end
+  timer = app.at(problem and app.clock() + RETRY or S.at + EVERY, function() timer = nil; fetch() end)
+end
+fetch = function()
+  if reqId then return false end                         -- one at a time
+  reqId = net.get(URL, { timeout = 15 }, function(res)
+    reqId = nil
+    local c = res.ok and type(res.json) == "table" and res.json.current or nil
+    if type(c) == "table" and type(c.temperature_2m) == "number" then
+      S.wx = { temp = c.temperature_2m, code = c.weather_code, wind = c.wind_speed_10m }
+      S.at, problem = app.clock(), nil
+      save()
+    else
+      problem = res.error or "the reply had no weather in it"    -- keep the old data
+    end
+    arm(); render()
+  end)
+  render()
+  return true
+end
+
+render = function()
+  local w = S.wx
+  local status = not w and (reqId and "Getting the weather…" or "No weather yet") or
+                 ("Updated " .. ago() .. (reqId and " · updating…" or "") .. (problem and (" · no update: " .. problem) or ""))
+  ui.panel{ id = "main", title = "Weather", components = {
+    { type = "text", id = "now", style = "big", text = w and string.format("%d°C", math.floor(w.temp + 0.5)) or "--" },
+    { type = "text", id = "sky", text = w and ((SKY[w.code] or "-") .. " · wind " .. math.floor((w.wind or 0) + 0.5) .. " km/h · Paris") or "Paris" },
+    { type = "buttons", items = { { id = "refresh", label = "REFRESH", tone = "accent" }, { id = "source", label = "SOURCE" } } },
+    { type = "text", id = "status", text = status },
+    { type = "text", tone = "dim", text = "Weather data by Open-Meteo.com (CC BY 4.0)" },
+  }, on = function(e)
+    if e.type == "button" and e.id == "refresh" then if not fetch() then ui.toast("Already updating") end
+    elseif e.type == "button" and e.id == "source" then browser.open("https://open-meteo.com/")
+    elseif e.type == "open" then render() end
+  end }
+end
+
+menu.add{ id = "weather", label = "WEATHER", glyph = "◐", icon = "bolt", panel = "main" }
+load(); render()
+if not S.wx or app.clock() - S.at >= EVERY then fetch() else arm() end   -- cached and fresh: show it, wait
+app.every(60, render)                                                     -- the age line, a LIVE text
+```
+
 ## APP: patterns
 
 - **Countdown**: save `ends`; one `app.every(1, tick)` only while something runs (cancel it when idle); `tick`
@@ -401,5 +570,8 @@ end)
 - [ ] Alarms and timers are set again on load; what ended while the app was closed is told once.
 - [ ] Voice: every command complete, 4+ samples, no `voice.command` warning in `check`.
 - [ ] Only built-in gestures or the plugin's own; no tile on a gesture or behaviour plugin.
+- [ ] Network: every host in `plugin.json` `"network"`, https, one request in flight per thing fetched, the result
+      cached in `store` with its time, a wall-clock refresh no more than needed, failures keep the old data and say
+      why, every `res.json` field checked, the credit and SOURCE when the licence asks; no key in any file.
 - [ ] No loop that can run long; no secrets; English only; no brand names.
 - [ ] Committed (`git add -A && git commit`); told the user what to do, what changed and how to undo it.

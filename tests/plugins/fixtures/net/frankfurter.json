@@ -1,0 +1,14 @@
+{
+  "about": "A canned exchange-rate reply (recorded 2026-11-17 from api.frankfurter.dev, the endpoint the fresh-agent trial plugin 'exchange' chose: free, no key). Format: tests/plugins/PluginHarness/Fakes.cs (NetFixture).",
+  "replies": [
+    {
+      "url": "https://api.frankfurter.dev/v2/rate/EUR/USD",
+      "json": {
+        "date": "2026-11-17",
+        "base": "EUR",
+        "quote": "USD",
+        "rate": 1.1038
+      }
+    }
+  ]
+}
