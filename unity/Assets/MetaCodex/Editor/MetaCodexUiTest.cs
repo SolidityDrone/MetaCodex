@@ -2497,6 +2497,9 @@ end)
             Check(asked && once && a7 == (7, false) && okOnly && a8 == (8, false) && a9 == (9, true) && UiModal.OpenCount == open0,
                 $"a page's confirm opens one dialog over WEB ({asked}, once: {once}); CANCEL -> {a7}; an alert has only OK ({okOnly}), its ✕ -> {a8}; OK -> {a9}");
 
+            // a page's <select> and its date, time and colour fields: the app's chooser (WebChooser)
+            WebChooser(shell, wp, page, r);
+
             // ⎘ pastes the clipboard (terminals and CLIP fill it) into the page
             string clip0 = GUIUtility.systemCopyBuffer;
             GUIUtility.systemCopyBuffer = "pasted into the page";
@@ -2544,6 +2547,175 @@ end)
             wp.ForceRefresh();
             RenderPanel(wp, "ui-web-panel.png");
             shell.ClosePanel("web");
+        }
+
+        /// A page's <select>, date, time and colour fields (2026-11-17: the engine's own lists are dialogs the headset never
+        /// shows): the app's chooser over WEB, under the element (above it near the bottom); one tap chooses, a multiple
+        /// select ticks then DONE, more than 15 entries get SEARCH; CANCEL, its ✕, a press on the page beside it and the
+        /// page changing write nothing; typed values are checked. (The page's side, SELECT_JS, is a headset check.)
+        private static void WebChooser(MetaCodexShell shell, UiPanel wp, UiElement page, Rect r)
+        {
+            string B(bool b) => b ? "true" : "false";
+            string Op(string t, bool s = false, bool d = false, int g = -1) => "{\"t\":\"" + t + "\",\"d\":" + B(d) + ",\"s\":" + B(s) + ",\"h\":false,\"g\":" + g + "}";
+            string Sel(int id, string opts, bool multiple = false, string groups = "") =>
+                "{\"id\":" + id + ",\"kind\":\"select\",\"label\":\"City\",\"box\":[0.25,0.1,0.2,0.05],\"multiple\":" + B(multiple) + ",\"groups\":[" + groups + "],\"options\":[" + opts + "]}";
+            string Field(int id, string kind, string value, string min = "", bool required = false, string box = "0.1,0.2,0.15,0.04", string label = "") =>
+                "{\"id\":" + id + ",\"kind\":\"" + kind + "\",\"label\":\"" + label + "\",\"box\":[" + box + "],\"value\":\"" + value + "\",\"min\":\"" + min
+                + "\",\"max\":\"\",\"step\":\"\",\"required\":" + B(required) + "}";
+            List<string> Titles() => shell.WebChoiceListForTest?.Items.Select(i => i.Title).ToList() ?? new List<string>();
+            int Row(Func<UiListItem, bool> f) { var l = shell.WebChoiceListForTest; if (l != null) for (int i = 0; i < l.Items.Count; i++) if (f(l.Items[i])) return i; return -1; }
+            UiButton ChoiceBtn(string text) => shell.WebChoicePanelForTest?.Elements.OfType<UiButton>().FirstOrDefault(b => b.Text == text);
+            // a point of the chooser (its panel coordinates) in the window's panel coordinates
+            Vector2 InWeb(UiPanel p, Vector2 at) => wp.LocalToPanel(wp.transform.InverseTransformPoint(p.transform.TransformPoint(p.PanelToLocal(at))));
+            bool Cancelled((int id, string answer) a, int id) => a.id == id && a.answer == null;
+
+            // a select: optgroups as dim titles, their options indented, the selected one lit, no SEARCH for 5; under the
+            // element (its left, just under its bottom), parallel to the window and in front of it
+            shell.WebChoiceForTest(Sel(21, string.Join(",", Op("Choose…", s: true), Op("Rome", g: 0), Op("Milan", d: true, g: 0), Op("Paris", g: 1), Op("Other")), groups: "\"Italy\",\"France\""));
+            var ch = shell.WebChoicePanelForTest;
+            var list = shell.WebChoiceListForTest;
+            string rows = string.Join("|", Titles());
+            bool shape = ch != null && ch.IsOpen && list != null && rows == "Choose…|Italy|Rome|Milan|France|Paris|Other" && list.SelectedIndex == 0 && list.Items[2].Indent == 1
+                && list.Items[0].Indent == 0 && list.Items[1].Tag == null && shell.WebChoiceSearchFieldForTest == null && ch.Title == "City" && ChoiceBtn("CANCEL") != null && ChoiceBtn("DONE") == null;
+            var corner = ch != null ? InWeb(ch, Vector2.zero) : default;
+            var local = ch != null ? wp.transform.InverseTransformPoint(ch.transform.position) : default;
+            float wantX = r.x + 0.25f * r.width, wantY = r.y + 0.15f * r.height + 0.004f;
+            bool placed = ch != null && Mathf.Abs(corner.x - wantX) < 0.002f && Mathf.Abs(corner.y - wantY) < 0.002f && local.z < -0.01f
+                && Quaternion.Angle(ch.transform.rotation, wp.transform.rotation) < 0.5f && Mathf.Abs(ch.transform.lossyScale.x - wp.transform.lossyScale.x) < 1e-3f;
+            var last0 = shell.WebLastChoiceForTest;
+            list?.SelectIndex(3); // Milan: disabled
+            list?.SelectIndex(1); // Italy: a group's title
+            bool inert = shell.WebLastChoiceForTest == last0 && shell.WebChoicePanelForTest == ch && list != null && list.SelectedIndex == 0;
+            list?.SelectIndex(5); // Paris
+            var paris = shell.WebLastChoiceForTest;
+            Check(shape && placed && inert && paris == (21, "3") && shell.WebChoicePanelForTest == null,
+                $"a select: the app's chooser over WEB ({rows}), its corner at ({corner.x:F3}, {corner.y:F3}) for the element's ({wantX:F3}, {wantY:F3}), {-local.z * 100f:F1} cm in front; "
+                + $"a disabled option and a group's title do nothing ({inert}); Paris -> {paris}, closed");
+
+            // a multiple select: a tap ticks or unticks (a disabled option keeps its state), DONE sends the ticked ones
+            shell.WebChoiceForTest(Sel(22, string.Join(",", Op("a"), Op("b", s: true), Op("c", s: true, d: true), Op("d")), multiple: true));
+            string Ticks() => string.Join("", (shell.WebChoiceListForTest?.Items ?? new List<UiListItem>()).Select(i => i.Icon == "☑" ? "1" : "0"));
+            string t0 = Ticks();
+            list = shell.WebChoiceListForTest;
+            list?.SelectIndex(0);
+            list?.SelectIndex(1);
+            list?.SelectIndex(2);
+            string t1 = Ticks();
+            bool stillOpen = shell.WebChoicePanelForTest != null && shell.WebLastChoiceForTest == paris && list != null && list.SelectedIndex == -1;
+            ChoiceBtn("DONE")?.Click();
+            var multi = shell.WebLastChoiceForTest;
+            Check(t0 == "0110" && t1 == "1010" && stillOpen && multi == (22, "0,2") && shell.WebChoicePanelForTest == null,
+                $"a multiple select: ticks {t0} -> {t1} (a on, b off, disabled c kept), open until DONE ({stillOpen}) -> {multi}");
+
+            // 40 options: SEARCH, the selected one lit; a search narrows the list (nothing found says so); a tap chooses
+            shell.WebChoiceForTest(Sel(23, string.Join(",", Enumerable.Range(1, 40).Select(i => Op("Option " + i, s: i == 30)))));
+            list = shell.WebChoiceListForTest;
+            bool hasSearch = shell.WebChoiceSearchFieldForTest != null && list != null && list.Items.Count == 40 && list.SelectedIndex == 29;
+            shell.WebChoiceSearchForTest("3");
+            string found = string.Join(",", Titles().Select(x => x.Replace("Option ", "")));
+            shell.WebChoiceSearchForTest("zz");
+            int none = Titles().Count;
+            shell.WebChoiceSearchForTest("40");
+            shell.WebChoiceListForTest?.SelectIndex(0);
+            var forty = shell.WebLastChoiceForTest;
+            Check(hasSearch && found == "3,13,23,30,31,32,33,34,35,36,37,38,39" && none == 0 && forty == (23, "39"),
+                $"40 options: SEARCH, Option 30 lit ({hasSearch}); “3” -> {found}; “zz” -> {none} rows; “40”, a tap -> {forty}");
+
+            // nothing written: CANCEL, its ✕, a press on the page beside it (that touch goes nowhere, the next one does),
+            // the page changing (the WebView has no request any more: nothing is sent back)
+            shell.WebChoiceForTest(Sel(24, Op("x") + "," + Op("y")));
+            ChoiceBtn("CANCEL")?.Click();
+            var c24 = shell.WebLastChoiceForTest;
+            shell.WebChoiceForTest(Sel(25, Op("x") + "," + Op("y")));
+            shell.WebChoicePanelForTest?.Close();
+            var c25 = shell.WebLastChoiceForTest;
+            bool closed25 = shell.WebChoicePanelForTest == null;
+            shell.WebChoiceForTest(Sel(26, Op("x") + "," + Op("y")));
+            var touch0 = shell.WebLastTouchForTest;
+            page?.OnPress(new UiPointerEvent { Point = r.center, PressPoint = r.center });
+            page?.OnDrag(new UiPointerEvent { Point = r.center + new Vector2(0.01f, 0f), PressPoint = r.center });
+            page?.OnRelease(new UiPointerEvent { Point = r.center, PressPoint = r.center }, true);
+            var c26 = shell.WebLastChoiceForTest;
+            bool swallowed = shell.WebLastTouchForTest == touch0 && shell.WebChoicePanelForTest == null;
+            page?.OnPress(new UiPointerEvent { Point = r.center, PressPoint = r.center });
+            bool nextTouch = shell.WebLastTouchForTest.action == 0;
+            page?.OnRelease(new UiPointerEvent { Point = r.center, PressPoint = r.center }, true);
+            shell.WebTakeKeysForTest(false); // that touch took the hardware keyboard: back to the terminal
+            shell.WebChoiceForTest(Sel(27, Op("x") + "," + Op("y")));
+            shell.WebChoiceForTest("");
+            bool gone = shell.WebChoicePanelForTest == null && Cancelled(shell.WebLastChoiceForTest, 26);
+            Check(Cancelled(c24, 24) && Cancelled(c25, 25) && closed25 && Cancelled(c26, 26) && swallowed && nextTouch && gone,
+                $"CANCEL -> {c24}, its ✕ -> {c25}, a press on the page beside it -> {c26}, that touch goes nowhere ({swallowed}), the next one does ({nextTouch}); the page changing closes it, nothing sent ({gone})");
+
+            // a date field near the bottom of the page: the days round its value from the page's min on, its value lit,
+            // SEARCH, TYPE (no CLEAR: required), above the element
+            shell.WebChoiceForTest(Field(28, "date", "2026-11-17", min: "2026-11-10", required: true, box: "0.1,0.8,0.15,0.04"));
+            ch = shell.WebChoicePanelForTest;
+            var dates = Titles();
+            int lit = shell.WebChoiceListForTest?.SelectedIndex ?? -1;
+            var bottomLeft = ch != null ? InWeb(ch, new Vector2(0f, ch.Height)) : default;
+            float elemTop = r.y + 0.8f * r.height;
+            bool dateList = ch != null && ch.Title == "DATE" && dates.Count == 53 && dates[0] == "2026-11-10" && dates[dates.Count - 1] == "2027-01-01" && lit >= 0 && dates[lit] == "2026-11-17"
+                && shell.WebChoiceSearchFieldForTest != null && ChoiceBtn("TYPE") != null && ChoiceBtn("CLEAR") == null && Mathf.Abs(bottomLeft.y - (elemTop - 0.004f)) < 0.002f;
+            shell.WebChoiceListForTest?.SelectIndex(dates.IndexOf("2026-11-20"));
+            var d28 = shell.WebLastChoiceForTest;
+            Check(dateList && d28 == (28, "2026-11-20"),
+                $"a date field: {dates.Count} days ({(dates.Count > 0 ? dates[0] + " .. " + dates[dates.Count - 1] : "none")}), 2026-11-17 lit, SEARCH, TYPE, no CLEAR, above the element "
+                + $"({bottomLeft.y:F3} vs {elemTop - 0.004f:F3}); 2026-11-20 -> {d28}");
+
+            // datetime-local: the day, then the time (every 15 minutes, its own lit)
+            shell.WebChoiceForTest(Field(29, "datetime-local", "2026-11-17T09:30", label: "Meeting"));
+            string dayTitle = shell.WebChoicePanelForTest?.Title;
+            shell.WebChoiceListForTest?.SelectIndex(Row(i => i.Tag as string == "2026-11-18"));
+            var timePanel = shell.WebChoicePanelForTest;
+            var times = Titles();
+            int litT = shell.WebChoiceListForTest?.SelectedIndex ?? -1;
+            bool twoSteps = dayTitle == "Meeting · DATE" && timePanel != null && timePanel.Title == "Meeting · TIME" && times.Count == 96 && litT >= 0 && times[litT] == "09:30" && shell.WebLastChoiceForTest == d28;
+            shell.WebChoiceListForTest?.SelectIndex(times.IndexOf("10:00"));
+            var d29 = shell.WebLastChoiceForTest;
+            Check(twoSteps && d29 == (29, "2026-11-18T10:00"), $"a date and time field: the day ({dayTitle}), then the time ({timePanel?.Title}, {times.Count} rows, 09:30 lit) -> {d29}");
+
+            // a colour field: its colour, then a palette of 20
+            shell.WebChoiceForTest(Field(30, "color", "#123456"));
+            var colours = Titles();
+            bool palette = colours.Count == 21 && colours[0] == "this colour" && shell.WebChoiceListForTest?.SelectedIndex == 0 && shell.WebChoicePanelForTest?.Title == "COLOUR";
+            shell.WebChoiceListForTest?.SelectIndex(colours.IndexOf("blue"));
+            var d30 = shell.WebLastChoiceForTest;
+            Check(palette && d30 == (30, "#0000ff"), $"a colour field: its colour and a palette ({colours.Count} rows); blue -> {d30}");
+
+            // TYPE: a wrong value is refused with a toast (the chooser stays), a right one in another spelling is written in
+            // the field's own form; CLEAR empties a field that may be empty
+            var keep = UiKeyboard.EditorProvider;
+            shell.WebChoiceForTest(Field(31, "date", "2026-11-17", min: "2026-11-01"));
+            UiKeyboard.EditorProvider = _ => "2026-13-01";
+            ChoiceBtn("TYPE")?.Click();
+            bool refused = shell.WebChoicePanelForTest != null && shell.WebLastChoiceForTest == d30 && (shell.Toasts.Last ?? "").StartsWith("Not a valid date");
+            string refusedToast = shell.Toasts.Last;
+            UiKeyboard.EditorProvider = _ => "2026-11-7";
+            ChoiceBtn("TYPE")?.Click();
+            var d31 = shell.WebLastChoiceForTest;
+            shell.WebChoiceForTest(Field(32, "time", "09:30"));
+            bool clear = ChoiceBtn("CLEAR") != null;
+            ChoiceBtn("CLEAR")?.Click();
+            var d32 = shell.WebLastChoiceForTest;
+            UiKeyboard.EditorProvider = keep;
+            Check(refused && d31 == (31, "2026-11-07") && clear && d32 == (32, ""), $"TYPE: 2026-13-01 refused ({refused}: {refusedToast}); 2026-11-7 -> {d31}; CLEAR -> {d32}");
+
+            // typed values (WebChoiceValid) and what the WebView sends that is not read
+            bool V(string kind, string s, string min, bool req, out string v) => MetaCodexShell.WebChoiceValid(kind, s, min, "", req, out v, out _);
+            bool val = !V("date", "2026-02-30", "", false, out _) && V("time", "9:05", "", false, out var tv) && tv == "09:05"
+                && V("week", "2026-W53", "", false, out var wv) && wv == "2026-W53" && !V("week", "2027-W53", "", false, out _)
+                && V("color", "#ABC", "", false, out var cv) && cv == "#aabbcc" && V("datetime-local", "2026-11-17 9:30", "", false, out var dv) && dv == "2026-11-17T09:30"
+                && V("month", "2026-1", "", false, out var mv) && mv == "2026-01" && !V("date", "2026-10-30", "2026-11-01", false, out _)
+                && !V("date", "", "", true, out _) && V("date", "", "", false, out var empty) && empty == ""
+                && MetaCodexShell.WebChoiceInRange("time", "23:00", "22:00", "06:00") && !MetaCodexShell.WebChoiceInRange("time", "12:00", "22:00", "06:00");
+            var odd = MetaCodexShell.ParseWebChoice("{\"id\":3,\"kind\":\"select\",\"label\":\"<b>x</b>\",\"box\":[0,0,0,0],\"options\":[{\"t\":\"a</noparse><size=99>\",\"g\":-1}]}");
+            bool unread = MetaCodexShell.ParseWebChoice("{\"id\":1,\"kind\":\"select\",\"box\":[0,0,0,0],\"options\":[]}") == null
+                && MetaCodexShell.ParseWebChoice("{\"id\":2,\"kind\":\"file\",\"box\":[0,0,0,0]}") == null && MetaCodexShell.ParseWebChoice("not json") == null
+                && odd != null && odd.Label == "bx/b" && odd.Options[0].Text == "a</ noparse><size=99>";
+            Check(val && unread && shell.WebChoicePanelForTest == null,
+                "typed values: 2026-02-30 refused, 9:05 -> 09:05, 2026-W53 yes, 2027-W53 no, #ABC -> #aabbcc, 2026-11-17 9:30 -> 2026-11-17T09:30, 2026-1 -> 2026-01, "
+                + "under min refused, empty only when not required, a time range over midnight; no options, an unknown kind, broken JSON: not read; page text never markup");
         }
 
         /// What a frame costs on the CPU, per part, in a busy scene (owner 2026-11-10: "ultra optimized, more prompt"):

@@ -32,6 +32,7 @@ import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
 import android.webkit.GeolocationPermissions;
+import android.webkit.JavascriptInterface;
 import android.webkit.JsPromptResult;
 import android.webkit.JsResult;
 import android.webkit.PermissionRequest;
@@ -47,10 +48,13 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 
+import org.json.JSONArray;
+import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.security.SecureRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
@@ -76,6 +80,15 @@ import java.util.concurrent.locks.ReentrantLock;
  * touch drag. resize() changes the page's size (a larger window). A page's full-screen view (video) fills the surface. Page dialogs, notices
  * (downloads, refused permissions, file pickers, links of other apps) and errors are reported through state(); camera,
  * microphone and location requests are refused. WebView debugging is on: chrome://inspect on the PC (adb) sees the page.
+ *
+ * Dropdowns and pickers (2026-11-17, owner: a page's <select> could not be used): Chromium opens them as dialogs on the
+ * activity's window, which the headset never shows in the panel. SELECT_JS, run in every page (when it first shows and
+ * when it has loaded), takes the press, click or key that would open one on a <select> (also in open shadow roots and
+ * same-origin frames) or on a date, time, datetime-local, month, week or color field, stops the native one and sends
+ * the element's options (or value, min, max) and where it is on the page through one bridge method, with a random
+ * token made at each page load. Unity reads it (poll bit 8, selectPayload) and shows its own chooser over the page; the
+ * choice comes back through selectAnswer and is written into the element with the page's own setters, then input and
+ * change events (bubbling) so the page's code sees it. Cancel writes nothing.
  */
 public final class MetaCodexWebView {
     private static final String TAG = "MetaCodexWeb";
@@ -89,6 +102,77 @@ public final class MetaCodexWebView {
     private static final String WHEEL_META = "(function(){var m=document.querySelector('meta[name=\"mcx-wheel\"]');return m?(m.getAttribute('content')||'on'):'';})()";
     /** Pauses the page's own audio and video (the top document; a closed window or a paused app must be silent). */
     private static final String PAUSE_MEDIA = "(function(){var m=document.querySelectorAll('video,audio');for(var i=0;i<m.length;i++){try{m[i].pause();}catch(e){}}})();";
+    /** The page's side of the app's chooser (see the class comment), called with this page load's token. Capture
+     *  listeners on the window (before the page's own): a trusted mousedown (a touch's tap is one: Blink's menu list
+     *  opens its popup in mousedown's default action) and the keys that open one (Enter, Space, F4, Alt+arrows) on a
+     *  <select>; click (keyboard activation is one too; an untrusted one during a user gesture, as the engine allows)
+     *  on date / time / colour fields, whose picker opens on the DOMActivate after it; showPicker() on either. Left to
+     *  the page: selects drawn in the page as a list box (multiple or size > 1 on engines that lay their options out),
+     *  selects with no options, disabled or read-only fields and `appearance: base-select` (its picker is in the page). __mcxSelAnswer(token, id, answer) writes the choice: option indexes (a multiple select: the enabled
+     *  options not listed are unselected) or a field's value, through the prototypes' setters (frameworks that track
+     *  the value see the change), then input and change. An old answer (another element opened since, the options
+     *  changed, the element gone) writes nothing. Run again in the same document it only takes the new token. */
+    private static final String SELECT_JS = "(function(T){var W=window;"
+            + "if(W.__mcxSel){try{W.__mcxSel(T);}catch(z){}return;}"
+            + "var B=W.mcxSelectBridge;if(!B||!B.open)return;"
+            + "var J=JSON.stringify,cur=null,seq=0,lastN=null,lastAt=0,K='|date|time|datetime-local|month|week|color|';"
+            + "var sIdx=Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'selectedIndex').set;"
+            + "var sVal=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;"
+            + "function txt(s,m){return String(s==null?'':s).replace(/\\s+/g,' ').trim().slice(0,m);}"
+            + "function el(e){var p=e.composedPath?e.composedPath():null,n=p&&p.length?p[0]:e.target;"
+            + "if(!n||n.nodeType!==1)return null;var g=n.tagName;"
+            + "if(g==='OPTION'||g==='OPTGROUP'){n=n.closest('select');if(!n)return null;g='SELECT';}"
+            + "if(g==='SELECT')return n;if(g==='INPUT'&&K.indexOf('|'+n.type+'|')>=0)return n;return null;}"
+            + "function usable(n){try{if(n.matches(':disabled')||(n.tagName==='INPUT'&&n.readOnly))return false;"
+            + "if(n.ownerDocument.defaultView.getComputedStyle(n).appearance==='base-select')return false;}catch(z){}return true;}"
+            + "function inPage(n){if(!n.multiple&&!(n.size>1))return false;var o=n.options;"
+            + "for(var i=0;i<o.length&&i<8;i++){if(o[i].getBoundingClientRect().height>0)return true;}return false;}"
+            + "function want(n){return !!n&&usable(n)&&!(n.tagName==='SELECT'&&inPage(n));}"
+            + "function active(){var u=navigator.userActivation;return !!(u&&u.isActive);}"
+            + "function lab(n){var s=n.getAttribute('aria-label')||'';"
+            + "if(!s&&n.labels&&n.labels.length)s=n.labels[0].innerText||n.labels[0].textContent||'';"
+            + "if(!s){var b=(n.getAttribute('aria-labelledby')||'').split(' ')[0],d=b?n.ownerDocument.getElementById(b):null;if(d)s=d.textContent||'';}"
+            + "if(!s)s=n.getAttribute('title')||n.name||'';return txt(s,80);}"
+            + "function box(n){var r=n.getBoundingClientRect(),x=r.left,y=r.top,w=n.ownerDocument.defaultView;"
+            + "try{while(w&&w!==W&&w.frameElement){var f=w.frameElement,q=f.getBoundingClientRect();x+=q.left+f.clientLeft;y+=q.top+f.clientTop;w=w.parent;}}catch(z){}"
+            + "var v=W.visualViewport,ox=v?v.offsetLeft:0,oy=v?v.offsetTop:0,vw=(v?v.width:W.innerWidth)||1,vh=(v?v.height:W.innerHeight)||1;"
+            + "return[(x-ox)/vw,(y-oy)/vh,r.width/vw,r.height/vh];}"
+            + "function open(n,e){var s=n.tagName==='SELECT';if(s&&!n.options.length)return;if(e)e.preventDefault();"
+            + "var d={id:++seq,kind:s?'select':n.type,label:lab(n),box:box(n)};"
+            + "if(s){var o=n.options,a=[],g=[],lg=null;"
+            + "for(var i=0;i<o.length&&i<5000;i++){var t=o[i],p=t.parentNode,k=-1;"
+            + "if(p&&p.tagName==='OPTGROUP'){if(p!==lg&&g.length<1000){lg=p;g.push(txt(p.label,200));}if(p===lg)k=g.length-1;}"
+            + "a.push({t:txt(t.label||t.text,200),d:t.matches(':disabled'),s:!!t.selected,h:!!t.hidden,g:k});}"
+            + "d.multiple=!!n.multiple;d.options=a;d.groups=g;}"
+            + "else{d.value=String(n.value||'');d.min=String(n.min||'');d.max=String(n.max||'');d.step=String(n.step||'');d.required=!!n.required;}"
+            + "try{n.focus({preventScroll:true});}catch(z){}"
+            + "cur={n:n,id:d.id,len:s?n.options.length:0};lastN=n;lastAt=Date.now();try{B.open(T,J(d));}catch(z){}}"
+            + "function down(e){if(!e.isTrusted||e.button!==0||e.defaultPrevented)return;var n=el(e);if(n&&n.tagName==='SELECT'&&want(n))open(n,e);}"
+            + "function click(e){if(e.defaultPrevented)return;var n=el(e);if(!n||!want(n))return;var s=n.tagName==='SELECT';"
+            + "if(!e.isTrusted&&(s||!active()))return;if(s&&n===lastN&&Date.now()-lastAt<1000)return;open(n,e);}"
+            + "function key(e){if(!e.isTrusted||e.defaultPrevented||e.ctrlKey||e.metaKey)return;var n=el(e);if(!want(n))return;"
+            + "var k=e.key;if(k==='F4'||(e.altKey&&(k==='ArrowDown'||k==='ArrowUp'))||(n.tagName==='SELECT'&&!e.altKey&&(k==='Enter'||k===' ')))open(n,e);}"
+            + "function fire(n){n.dispatchEvent(new Event('input',{bubbles:true,composed:true}));n.dispatchEvent(new Event('change',{bubbles:true}));}"
+            + "function answer(t,id,v){if(t!==T||!cur||cur.id!==id)return false;var n=cur.n,len=cur.len;cur=null;if(!n.isConnected)return false;"
+            + "if(n.tagName==='SELECT'){var o=n.options;if(o.length!==len)return false;"
+            + "if(n.multiple){var w={},c=false;for(var i=0;i<v.length;i++)w[v[i]]=1;"
+            + "for(var j=0;j<o.length;j++){if(o[j].matches(':disabled'))continue;var b=!!w[j];if(o[j].selected!==b){o[j].selected=b;c=true;}}if(c)fire(n);}"
+            + "else{var x=v[0];if(typeof x!=='number'||x<0||x>=o.length||o[x].matches(':disabled'))return false;if(n.selectedIndex!==x){sIdx.call(n,x);fire(n);}}}"
+            + "else{var was=n.value;sVal.call(n,String(v));if(n.value!==was)fire(n);}"
+            + "try{n.focus({preventScroll:true});}catch(z){}return true;}"
+            + "function hook(w){try{if(w.__mcxSelH)return;Object.defineProperty(w,'__mcxSelH',{value:1});"
+            + "w.addEventListener('mousedown',down,true);w.addEventListener('click',click,true);w.addEventListener('keydown',key,true);"
+            + "w.document.addEventListener('load',function(e){var f=e.target;if(f&&f.tagName==='IFRAME')try{hook(f.contentWindow);}catch(z){}},true);"
+            + "['HTMLInputElement','HTMLSelectElement'].forEach(function(k){var C=w[k],p=C&&C.prototype,f=p&&p.showPicker;if(typeof f!=='function'||f.__mcx)return;"
+            + "var g=function(){var n=this;if(n&&n.nodeType===1&&active()&&(n.tagName==='SELECT'||K.indexOf('|'+n.type+'|')>=0)&&want(n)){open(n,null);return;}return f.apply(this,arguments);};"
+            + "try{Object.defineProperty(g,'__mcx',{value:1});Object.defineProperty(p,'showPicker',{value:g,writable:true,configurable:true});}catch(z){}});"
+            + "for(var i=0;i<w.frames.length;i++)try{hook(w.frames[i]);}catch(z){}}catch(z){}}"
+            + "Object.defineProperty(W,'__mcxSel',{value:function(t){T=t;}});"
+            + "Object.defineProperty(W,'__mcxSelAnswer',{value:answer});hook(W);})";
+    /** The chooser's limits: the payload's size (characters), options, optgroups, a text's length. */
+    private static final int SELECT_MAX_JSON = 400000, SELECT_MAX_OPTIONS = 5000, SELECT_MAX_GROUPS = 1000, SELECT_MAX_TEXT = 200;
+    private static final String SELECT_KINDS = "|select|date|time|datetime-local|month|week|color|";
+    private static final SecureRandom RNG = new SecureRandom();
 
     private final Activity activity;
     private volatile int width, height;            // changed only by resize, under the lock
@@ -140,6 +224,31 @@ public final class MetaCodexWebView {
     private volatile String[] externalHosts = new String[0], externalPaths = new String[0];
     private volatile int progress, jsId;
     private volatile boolean canBack, canForward, loading, fullscreen;
+
+    // the chooser (a page's <select> or picker): the request waiting for Unity's answer, written on the page's bridge
+    // thread, read and taken on Unity's; the token of this page load (made on the UI thread)
+    private final AtomicReference<Sel> sel = new AtomicReference<>(null);
+    private final AtomicInteger selVersion = new AtomicInteger(0), selSeq = new AtomicInteger(0);
+    private int selSeen;                           // Unity's thread
+    private volatile String pageToken = "";
+    private volatile long selLastOpen;
+
+    /** One request of the page: Unity's id for it, the page's own id and token, what it is, its options' count and the
+     *  checked JSON Unity reads. */
+    private static final class Sel {
+        final int id, jsId, count;
+        final String token, kind, json;
+        final boolean multiple;
+        Sel(int id, int jsId, String token, String kind, boolean multiple, int count, String json) {
+            this.id = id; this.jsId = jsId; this.token = token; this.kind = kind; this.multiple = multiple; this.count = count; this.json = json;
+        }
+    }
+
+    /** The one method pages can call (every frame of every page sees it, so it trusts nothing): a chooser request with
+     *  this page load's token, of the expected size and shape. It does nothing else. */
+    private final class SelectBridge {
+        @JavascriptInterface public void open(String token, String json) { onSelectOpen(token, json); }
+    }
 
     private final Runnable draw = this::drawFrame;
     private final Runnable drain = this::drainLatest;
@@ -222,6 +331,7 @@ public final class MetaCodexWebView {
         w.setBackgroundColor(Color.WHITE);
         w.setWebViewClient(new Client());
         w.setWebChromeClient(new Chrome());
+        w.addJavascriptInterface(new SelectBridge(), "mcxSelectBridge"); // dropdowns and pickers: the app's chooser
         w.setDownloadListener((u, agent, disposition, mime, length) -> {
             say("Downloads are not saved here (" + URLUtil.guessFileName(u, disposition, mime) + "): \u21d7 opens the page in the system browser");
         });
@@ -356,9 +466,13 @@ public final class MetaCodexWebView {
         }
         @Override public void onPageStarted(WebView v, String u, android.graphics.Bitmap icon) {
             url = clean(u); mainUrl = u; loading = true; error = ""; errorUrl = ""; wheelMode = isLoopback(u); cancelJs(); nav(); bump(); scheduleDraw();
+            pageToken = newToken();                      // a new page: the old page's chooser and token are void
+            clearSelect();
         }
+        @Override public void onPageCommitVisible(WebView v, String u) { injectSelect(v); } // as soon as the page shows
         @Override public void onPageFinished(WebView v, String u) {
             url = clean(u); loading = false; nav(); bump(); scheduleDraw();
+            injectSelect(v);                             // again once loaded (a no-op where it already runs)
             final boolean local = isLoopback(u);
             v.evaluateJavascript(WHEEL_META, r -> {
                 String m = r == null ? "" : r.replace("\"", "").trim();
@@ -393,6 +507,8 @@ public final class MetaCodexWebView {
 
     private void rebuild(WebView dead, String last) {
         if (closed || dead != web) return;
+        pageToken = "";
+        clearSelect();
         removeCustom();
         host.removeView(dead);
         try { dead.destroy(); } catch (Throwable ignored) { }
@@ -516,6 +632,140 @@ public final class MetaCodexWebView {
         }
     }
 
+    // ---- the chooser: a page's <select> or date / time / colour field (see SELECT_JS)
+
+    private static String newToken() {
+        byte[] b = new byte[16];
+        RNG.nextBytes(b);
+        StringBuilder s = new StringBuilder(32);
+        for (byte x : b) s.append(Character.forDigit((x >> 4) & 15, 16)).append(Character.forDigit(x & 15, 16));
+        return s.toString();
+    }
+
+    // on the UI thread: the page's side of the chooser, with this page load's token
+    private void injectSelect(WebView v) {
+        String t = pageToken;
+        if (closed || v == null || v != web || t.isEmpty()) return;
+        v.evaluateJavascript(SELECT_JS + "(" + JSONObject.quote(t) + ");", null);
+    }
+
+    /** No request waits any more (a new page, the window closed, the page's engine stopped): Unity closes its chooser. */
+    private void clearSelect() {
+        if (sel.getAndSet(null) != null) selVersion.incrementAndGet();
+    }
+
+    // the page's bridge thread: a request is checked, rebuilt from the fields Unity reads, and kept until answered
+    private void onSelectOpen(String token, String json) {
+        String want = pageToken;
+        if (closed || paused || want.isEmpty() || token == null || !want.equals(token) || json == null || json.length() > SELECT_MAX_JSON) return;
+        long now = SystemClock.uptimeMillis();
+        if (now - selLastOpen < 200) return;          // one chooser at a time, never a burst
+        Sel s;
+        try { s = parseSelect(json, want); } catch (JSONException | RuntimeException e) { s = null; }
+        if (s == null) { Log.w(TAG, "web: a page's chooser request was refused (not the expected shape)"); return; }
+        selLastOpen = now;
+        sel.set(s);
+        selVersion.incrementAndGet();
+        Log.i(TAG, "web: chooser " + s.kind + (s.multiple ? " (multiple)" : "") + (s.kind.equals("select") ? ", " + s.count + " options" : ""));
+    }
+
+    private static Object field(JSONObject o, String key) { return o.opt(key); }
+
+    private static String text(JSONObject o, String key, int max) {
+        Object v = field(o, key);
+        if (v == null) return "";
+        if (!(v instanceof String)) throw new IllegalArgumentException(key);
+        String s = ((String) v).replace('\t', ' ').replace('\n', ' ').replace('\r', ' ');
+        return s.length() > max ? s.substring(0, max) : s;
+    }
+
+    private static boolean flag(JSONObject o, String key) {
+        Object v = field(o, key);
+        if (v == null) return false;
+        if (!(v instanceof Boolean)) throw new IllegalArgumentException(key);
+        return (Boolean) v;
+    }
+
+    private static double number(Object v, String what) {
+        if (!(v instanceof Number)) throw new IllegalArgumentException(what);
+        double d = ((Number) v).doubleValue();
+        if (Double.isNaN(d) || Double.isInfinite(d)) throw new IllegalArgumentException(what);
+        return d;
+    }
+
+    /** A field's value, min, max or step: short, and only the characters those formats use. */
+    private static String fieldValue(JSONObject o, String key) {
+        String s = text(o, key, 64);
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (!(c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c == '-' || c == ':' || c == '.' || c == '#' || c == '+' || c == ' '))
+                throw new IllegalArgumentException(key);
+        }
+        return s;
+    }
+
+    /** The request's shape: {id, kind, label, box: [x, y, w, h] (fractions of the page shown), then for a select
+     *  multiple, options: [{t, d, s, h, g}], groups: [label]; for a field value, min, max, step, required}. Anything
+     *  else is not read; a wrong type, a count or a size over the limits refuses it. */
+    private Sel parseSelect(String json, String token) throws JSONException {
+        JSONObject o = new JSONObject(json);
+        double jsIdD = number(field(o, "id"), "id");
+        if (jsIdD < 1 || jsIdD > 1e9 || jsIdD != Math.floor(jsIdD)) return null;
+        String kind = text(o, "kind", 20);
+        if (kind.isEmpty() || kind.indexOf('|') >= 0 || !SELECT_KINDS.contains("|" + kind + "|")) return null;
+        JSONArray box = o.getJSONArray("box");
+        if (box.length() != 4) return null;
+        JSONArray outBox = new JSONArray();
+        for (int i = 0; i < 4; i++) outBox.put(Math.max(-2.0, Math.min(3.0, number(box.get(i), "box"))));
+        int id = selSeq.incrementAndGet();
+        JSONObject out = new JSONObject();
+        out.put("id", id);
+        out.put("kind", kind);
+        out.put("label", text(o, "label", 80));
+        out.put("box", outBox);
+        boolean multiple = false;
+        int count = 0;
+        if (kind.equals("select")) {
+            multiple = flag(o, "multiple");
+            JSONArray groups = o.has("groups") ? o.getJSONArray("groups") : new JSONArray();
+            JSONArray options = o.getJSONArray("options");
+            if (groups.length() > SELECT_MAX_GROUPS || options.length() < 1 || options.length() > SELECT_MAX_OPTIONS) return null;
+            JSONArray outGroups = new JSONArray();
+            for (int i = 0; i < groups.length(); i++) {
+                Object g = groups.get(i);
+                if (!(g instanceof String)) return null;
+                String gs = clean((String) g);
+                outGroups.put(gs.length() > SELECT_MAX_TEXT ? gs.substring(0, SELECT_MAX_TEXT) : gs);
+            }
+            JSONArray outOptions = new JSONArray();
+            for (int i = 0; i < options.length(); i++) {
+                Object x = options.get(i);
+                if (!(x instanceof JSONObject)) return null;
+                JSONObject op = (JSONObject) x;
+                double g = op.has("g") ? number(op.get("g"), "g") : -1;
+                if (g < -1 || g >= groups.length() || g != Math.floor(g)) return null;
+                JSONObject oo = new JSONObject();
+                oo.put("t", text(op, "t", SELECT_MAX_TEXT));
+                oo.put("d", flag(op, "d"));
+                oo.put("s", flag(op, "s"));
+                oo.put("h", flag(op, "h"));
+                oo.put("g", (int) g);
+                outOptions.put(oo);
+            }
+            count = options.length();
+            out.put("multiple", multiple);
+            out.put("groups", outGroups);
+            out.put("options", outOptions);
+        } else {
+            out.put("value", fieldValue(o, "value"));
+            out.put("min", fieldValue(o, "min"));
+            out.put("max", fieldValue(o, "max"));
+            out.put("step", fieldValue(o, "step"));
+            out.put("required", flag(o, "required"));
+        }
+        return new Sel(id, (int) jsIdD, token, kind, multiple, count, out.toString());
+    }
+
     // ---- the canvas path (fallback)
 
     private void scheduleDraw() {
@@ -615,10 +865,12 @@ public final class MetaCodexWebView {
 
     /** Each Unity frame, never waits, allocates nothing. Bit 1: a new frame is in pixels() and the buffer is locked
      *  (read it, then call endRead); bit 2: the state changed since the last state(); bit 4: the page's size changed
-     *  (take width(), height() and pixels() again, then call sizeTaken; no frame until then). While the copy thread
-     *  writes, bit 1 stays off (Unity takes the frame next time). */
+     *  (take width(), height() and pixels() again, then call sizeTaken; no frame until then); bit 8: the page's
+     *  chooser request changed (selectPayload: a new one, or none any more). While the copy thread writes, bit 1 stays
+     *  off (Unity takes the frame next time). */
     public int poll() {
         int r = stateVersion.get() != stateSeen ? 2 : 0;
+        if (selVersion.get() != selSeen) r |= 8;
         if (sizeSeq != sizeSeen) return r | 4;
         if (frame != taken && lock.tryLock()) {
             if (frame != taken) { taken = frame; return r | 1; }
@@ -780,6 +1032,60 @@ public final class MetaCodexWebView {
         });
     }
 
+    /** The page's chooser request (after poll bit 8): checked JSON {id, kind (select, date, time, datetime-local,
+     *  month, week, color), label, box [x, y, w, h] (the element, fractions of the page shown, top-left origin), then
+     *  for a select multiple, options [{t text, d disabled, s selected, h hidden, g group index or -1}], groups
+     *  [label]; for a field value, min, max, step, required}; "" when none waits (a new page voided it). */
+    public String selectPayload() {
+        selSeen = selVersion.get();
+        Sel s = sel.get();
+        return s == null ? "" : s.json;
+    }
+
+    /** The choice for request `id`: a select's option indexes, comma separated (exactly one for a single select; any
+     *  number, none too, for a multiple one), or a field's value ("" clears it). Written into the page on the UI
+     *  thread; false (nothing written) for an old id or an answer that does not fit the request. */
+    public boolean selectAnswer(final int id, final String answer) {
+        final Sel s = sel.get();
+        if (s == null || s.id != id || answer == null || answer.length() > 6 * SELECT_MAX_OPTIONS) return false;
+        final String arg;
+        if (s.kind.equals("select")) {
+            StringBuilder js = new StringBuilder(answer.length() + 2).append('[');
+            int n = 0;
+            if (!answer.isEmpty()) {
+                boolean[] seen = new boolean[s.count];
+                for (String part : answer.split(",", -1)) {
+                    int i;
+                    try { i = Integer.parseInt(part.trim()); } catch (NumberFormatException e) { return false; }
+                    if (i < 0 || i >= s.count || seen[i]) return false;
+                    seen[i] = true;
+                    if (n++ > 0) js.append(',');
+                    js.append(i);
+                }
+            }
+            if (!s.multiple && n != 1) return false;
+            arg = js.append(']').toString();
+        } else {
+            if (answer.length() > 64) return false;
+            JSONObject check = new JSONObject();
+            try { check.put("v", answer); fieldValue(check, "v"); } catch (JSONException | RuntimeException e) { return false; }
+            arg = JSONObject.quote(answer);
+        }
+        if (!sel.compareAndSet(s, null)) return false;
+        ui.post(() -> {
+            if (closed || web == null || !s.token.equals(pageToken)) return;
+            web.evaluateJavascript("window.__mcxSelAnswer&&window.__mcxSelAnswer(" + JSONObject.quote(s.token) + "," + s.jsId + "," + arg + ");", null);
+            scheduleDraw();
+        });
+        return true;
+    }
+
+    /** The chooser for request `id` closed without a choice: the page keeps what it had. */
+    public void selectCancel(int id) {
+        Sel s = sel.get();
+        if (s != null && s.id == id) sel.compareAndSet(s, null);
+    }
+
     // the page's view under a point: the full-screen view when there is one
     private View target() { return custom != null ? custom : web; }
 
@@ -915,11 +1221,14 @@ public final class MetaCodexWebView {
     /** The window closed: the page's media pause, then the page stops (timers, drawing, copying); open again: it goes on. */
     public void setPaused(final boolean p) {
         paused = p;
+        if (p) clearSelect();                          // a closed window keeps no chooser waiting
         ui.post(this::applyPause);
     }
 
     public void close() {
         closed = true;
+        pageToken = "";
+        clearSelect();
         ui.post(() -> {
             try {
                 cancelJs();

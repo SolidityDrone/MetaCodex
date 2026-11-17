@@ -1,7 +1,11 @@
 using System;
+using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using MetaCodex.UI;
+using Newtonsoft.Json.Linq;
 using TMPro;
 using UnityEngine;
 using IsKey = UnityEngine.InputSystem.Key;
@@ -26,6 +30,8 @@ namespace MetaCodex.Shell
     /// as the app's dialogs; downloads, file pickers, other apps' links and camera, microphone or location requests
     /// are refused with a toast. Every page the app opens (GO, bookmarks, local servers, terminal links, voice, Lua
     /// browser.open) opens here; ⇗ sends the page to Horizon OS's browser (sign-in pages that refuse embedded browsers).
+    /// A page's dropdown (<select>) and its date, time and colour pickers open as the app's chooser over the page (the
+    /// engine's own ones are dialogs the headset never shows): see "a page's dropdowns and pickers" below.
     /// Remote debugging is on: chrome://inspect on the PC (adb) shows the page's console. In the Editor there is no
     /// WebView: the window works, the page area says so.
     public sealed partial class MetaCodexShell
@@ -77,6 +83,7 @@ namespace MetaCodex.Shell
 
         private void BuildWeb()
         {
+            WebChoiceEnd(true); // built again (accent colour): an open chooser goes, the page keeps its value
             var t = UiTheme.Current;
             var p = Panel<UiPanel>("web", "WEB", 0.80f, 0.61f);
             _web = p;
@@ -138,7 +145,7 @@ namespace MetaCodex.Shell
                 WebCallBool("setPaused", false);
                 if (string.IsNullOrEmpty(_webCurrent)) { WebStartPage(); ProbeLocalServers(); }
             };
-            p.Closed += _ => { WebCallBool("setPaused", true); WebTakeKeys(false); }; // the page's media pause; no drawing, no copying while closed
+            p.Closed += _ => { WebCallBool("setPaused", true); WebTakeKeys(false); WebChoiceEnd(true); }; // the page's media pause; no drawing, no copying while closed
             WebApplyScale();
         }
 
@@ -317,6 +324,10 @@ namespace MetaCodex.Shell
 
         private void WebTouch(int action, Vector2 page)
         {
+            // a press on the page while a chooser is open closes it (the page keeps its value), as a tap beside a
+            // dropdown does; that touch goes nowhere, up to its release
+            if (action == 0) { _webSwallow = _wcPanel != null; if (_webSwallow) { WebChoiceEnd(true); return; } }
+            else if (_webSwallow) { if (action == 1) _webSwallow = false; return; }
             _webLastTouch = (action, page);
             if (action == 0) WebTakeKeys(true); // a hardware keyboard types into the page now
 #if UNITY_ANDROID && !UNITY_EDITOR
@@ -418,6 +429,7 @@ namespace MetaCodex.Shell
             WebDialogTick();
             WebKeysTick();
             WebApplyScale();
+            if (_wcPanel != null) WebChoiceFollow();
 #if UNITY_ANDROID && !UNITY_EDITOR
             if (_wv == null || _webTex == null || _wvPoll == IntPtr.Zero) return;
             IntPtr obj = _wv.GetRawObject();
@@ -432,6 +444,7 @@ namespace MetaCodex.Shell
                 finally { AndroidJNI.CallVoidMethod(obj, _wvEndRead, WvNoArgs); WebJniOk(); }
                 if (upload) _webTex.Apply(false, false);
             }
+            if ((bits & 8) != 0) WebChoiceTake(); // a page's dropdown or picker opened (or the page it was on is gone)
             if (((bits & 2) == 0 && !_webReadState) || Time.unscaledTime < _webNextState) return;
             _webNextState = Time.unscaledTime + 0.25f;
             _webReadState = false;
@@ -577,7 +590,7 @@ namespace MetaCodex.Shell
             (IsKey.Minus, 69), (IsKey.Equals, 70), (IsKey.LeftBracket, 71), (IsKey.RightBracket, 72), (IsKey.Backslash, 73),
             (IsKey.Semicolon, 74), (IsKey.Quote, 75), (IsKey.Slash, 76), (IsKey.Comma, 55), (IsKey.Period, 56), (IsKey.Backquote, 68),
         };
-        private const int WebKeyV = 50, WebKeyInsert = 124;
+        private const int WebKeyV = 50, WebKeyInsert = 124, WebKeyEscape = 111;
         private bool _webKeys, _webTermWasOn, _webFocusHooked;
         private IsKeyboard _webKb;
         private readonly StringBuilder _webTyped = new StringBuilder(32);
@@ -667,6 +680,7 @@ namespace MetaCodex.Shell
         /// A key with modifiers (bits 1 Ctrl, 2 Shift, 4 Alt, 8 Meta) into the page; raw JNI, nothing allocated.
         private void WebKeyMods(int code, int mods)
         {
+            if (code == WebKeyEscape && mods == 0 && _wcPanel != null) { WebChoiceEnd(true); return; } // Esc closes the chooser
             _webLastKey = (code, mods);
 #if UNITY_ANDROID && !UNITY_EDITOR
             if (_wv == null || _wvKeyMeta == IntPtr.Zero) return;
@@ -676,6 +690,628 @@ namespace MetaCodex.Shell
             WebJniOk();
 #endif
         }
+
+        // ---- a page's dropdowns and pickers: the app's own chooser over the page (2026-11-17)
+        //
+        // The engine opens a <select>'s list and the date, time and colour pickers as dialogs on the app's activity,
+        // which the headset never shows in the panel: the page could not use them. MetaCodexWebView's script stops
+        // those and sends the element (its options, or its value, min and max, and where it is on the page); here a
+        // chooser opens over the page, just under the element (above it when there is no room): a scrolling list, a
+        // SEARCH field over 15 entries, optgroups as dim titles with their options indented, disabled options dim and
+        // not chosen. One tap chooses (a multiple select ticks, DONE sends them); CANCEL, its ✕, Esc, a press on the
+        // page beside it, the page changing or the window closing leave the page as it was. Date, time, datetime-local
+        // (the date, then the time), month and week fields list the values round the current one (or today) inside the
+        // page's min and max, a colour field a palette; TYPE takes any value on the keyboard (checked), CLEAR empties a
+        // field that may be empty. The answer goes back through selectAnswer and the page sees input and change.
+
+        /// A page's <select> (or date / time / colour field) the user opened: MetaCodexWebView.selectPayload, read.
+        public sealed class WebChoice
+        {
+            public int Id;
+            public string Kind = "select", Label = "", Value = "", Min = "", Max = "", Step = "";
+            public bool Multiple, Required;
+            /// The element on the page: fractions of the page shown (top-left origin).
+            public Rect Box;
+            public readonly List<WebChoiceOption> Options = new List<WebChoiceOption>();
+            public readonly List<string> Groups = new List<string>();
+        }
+
+        public struct WebChoiceOption { public string Text; public bool Disabled, Selected, Hidden; public int Group; }
+
+        /// More entries than this: a SEARCH field. Rows shown at once (the rest scroll).
+        public const int WebChoiceSearchOver = 15, WebChoiceRows = 9;
+        private const float WebChoiceRowH = 0.034f, WebChoiceGap = 0.03f; // a row; how far in front of the window it floats
+        private UiPanel _wcPanel;
+        private UiList _wcList;
+        private UiTextField _wcSearch;
+        private WebChoice _wc;
+        private readonly HashSet<int> _wcPicked = new HashSet<int>(); // a multiple select: the options ticked
+        private readonly List<(string value, string title, string sub)> _wcValues = new List<(string, string, string)>(); // a field's values
+        private string _wcFilter = "", _wcDate = "";
+        private int _wcStep, _wcCurrentRow = -1; // datetime-local: 0 the date, 1 the time; the row of the value it has
+        private Vector3 _wcWebPos;
+        private Quaternion _wcWebRot;
+        private float _wcWebScale;
+        private bool _webSwallow;
+        private (int id, string answer) _webLastChoice;
+
+        private static readonly (string name, string hex)[] WebColours =
+        {
+            ("black", "#000000"), ("white", "#ffffff"), ("grey", "#808080"), ("silver", "#c0c0c0"), ("red", "#ff0000"),
+            ("maroon", "#800000"), ("orange", "#ffa500"), ("yellow", "#ffff00"), ("olive", "#808000"), ("lime", "#00ff00"),
+            ("green", "#008000"), ("teal", "#008080"), ("cyan", "#00ffff"), ("sky blue", "#87ceeb"), ("blue", "#0000ff"),
+            ("navy", "#000080"), ("purple", "#800080"), ("magenta", "#ff00ff"), ("pink", "#ffc0cb"), ("brown", "#a52a2a"),
+        };
+
+        /// A text from the page for the app's labels: one line, cut, and never TMP markup (a list row's <noparse> cannot
+        /// be closed from the page; a title has no <noparse>, so it has no angle brackets at all).
+        private static string WebPageText(string s, int max, bool title = false)
+        {
+            if (string.IsNullOrEmpty(s)) return "";
+            s = s.Replace('\t', ' ').Replace('\n', ' ').Replace('\r', ' ').Trim();
+            s = title ? s.Replace("<", "").Replace(">", "") : Regex.Replace(s, "</(noparse)", "</ $1", RegexOptions.IgnoreCase);
+            return s.Length > max ? s.Substring(0, max) + "…" : s;
+        }
+
+        /// What the WebView sent (its checked JSON), or null when it cannot be read.
+        public static WebChoice ParseWebChoice(string json)
+        {
+            if (string.IsNullOrEmpty(json)) return null;
+            try
+            {
+                var o = JObject.Parse(json);
+                var c = new WebChoice
+                {
+                    Id = (int?)o["id"] ?? 0,
+                    Kind = (string)o["kind"] ?? "",
+                    Label = WebPageText((string)o["label"], 40, true),
+                    Value = (string)o["value"] ?? "",
+                    Min = (string)o["min"] ?? "",
+                    Max = (string)o["max"] ?? "",
+                    Step = (string)o["step"] ?? "",
+                    Multiple = (bool?)o["multiple"] ?? false,
+                    Required = (bool?)o["required"] ?? false,
+                };
+                if (o["box"] is JArray b && b.Count == 4) c.Box = new Rect((float)b[0], (float)b[1], (float)b[2], (float)b[3]);
+                if (o["groups"] is JArray g) foreach (var x in g) c.Groups.Add(WebPageText((string)x, 120));
+                if (o["options"] is JArray opts)
+                    foreach (var x in opts)
+                        if (x is JObject op)
+                            c.Options.Add(new WebChoiceOption
+                            {
+                                Text = WebPageText((string)op["t"], 160),
+                                Disabled = (bool?)op["d"] ?? false,
+                                Selected = (bool?)op["s"] ?? false,
+                                Hidden = (bool?)op["h"] ?? false,
+                                Group = (int?)op["g"] ?? -1,
+                            });
+                bool known = c.Kind == "select" ? c.Options.Count > 0 : WebChoiceNoun(c.Kind) != null;
+                return c.Id > 0 && known ? c : null;
+            }
+            catch (Exception) { return null; }
+        }
+
+        /// A field's kind in words (null: not one the chooser knows), the example a typed value follows, the title.
+        public static string WebChoiceNoun(string kind) => kind switch
+        {
+            "select" => "option", "date" => "date", "time" => "time", "datetime-local" => "date and time",
+            "month" => "month", "week" => "week", "color" => "colour", _ => null,
+        };
+
+        private static string WebChoiceExample(string kind) => kind switch
+        {
+            "date" => "2026-11-17", "time" => "09:30", "datetime-local" => "2026-11-17 09:30", "month" => "2026-11",
+            "week" => "2026-W47", "color" => "#3366ff", _ => "",
+        };
+
+        private static string WebChoiceTitle(string kind) => kind == "select" ? "CHOOSE" : (WebChoiceNoun(kind) ?? "CHOOSE").ToUpperInvariant();
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+        /// Poll bit 8: the page's request (or "", none waits any more).
+        private void WebChoiceTake()
+        {
+            string json;
+            try { json = _wv.Call<string>("selectPayload"); } catch (Exception ex) { Log("web selectPayload: " + ex.Message); return; }
+            WebChoiceOpen(json);
+        }
+#endif
+
+        /// A request from the page opens the chooser; "" (the page it was on is gone) closes it.
+        private void WebChoiceOpen(string json)
+        {
+            if (string.IsNullOrEmpty(json)) { if (_wc != null) WebChoiceEnd(false); return; }
+            var c = ParseWebChoice(json);
+            if (c == null) { Log("web: a chooser request from the page could not be read"); return; }
+            if (_wc != null && _wc.Id == c.Id) return;
+            WebChoiceEnd(false); // an older one: the WebView keeps only the newest
+            if (_web == null || !_web.IsOpen || _webPage == null || Router == null) { WebChoiceCancel(c.Id); return; }
+            _wc = c;
+            _wcStep = 0;
+            _wcDate = "";
+            _wcPicked.Clear();
+            if (c.Multiple) for (int i = 0; i < c.Options.Count; i++) if (c.Options[i].Selected) _wcPicked.Add(i);
+            Log($"web: chooser {c.Kind}{(c.Multiple ? " (multiple)" : "")}{(c.Kind == "select" ? ", " + c.Options.Count + " options" : "")}");
+            WebChoiceBuild();
+        }
+
+        /// What the chooser shows now: the kind, or for datetime-local the date (step 0) then the time.
+        private string WebChoiceKindNow() => _wc == null ? "" : _wc.Kind != "datetime-local" ? _wc.Kind : _wcStep == 0 ? "date" : "time";
+
+        /// The field's value for what the chooser shows now (datetime-local: its date or its time part).
+        private string WebChoiceCurrent()
+        {
+            string v = _wc?.Value ?? "";
+            if (_wc == null || _wc.Kind != "datetime-local") return v;
+            int t = v.IndexOf('T');
+            return t < 0 ? "" : _wcStep == 0 ? v.Substring(0, t) : v.Substring(t + 1);
+        }
+
+        /// The page's min and max for what the chooser shows now (datetime-local: the date's, then the time's on the
+        /// first and the last day allowed).
+        private void WebChoiceRange(out string min, out string max)
+        {
+            min = _wc.Min;
+            max = _wc.Max;
+            if (_wc.Kind != "datetime-local") return;
+            string Part(string s, bool date) { int t = s.IndexOf('T'); return t < 0 ? (date ? s : "") : date ? s.Substring(0, t) : s.Substring(t + 1); }
+            if (_wcStep == 0) { min = Part(_wc.Min, true); max = Part(_wc.Max, true); return; }
+            min = Part(_wc.Min, true) == _wcDate ? Part(_wc.Min, false) : "";
+            max = Part(_wc.Max, true) == _wcDate ? Part(_wc.Max, false) : "";
+        }
+
+        /// The chooser's panel, over the WEB window at the element (once per opening: it may allocate).
+        private void WebChoiceBuild()
+        {
+            var t = UiTheme.Current;
+            var c = _wc;
+            if (c == null || _web == null || _webPage == null || Router == null) return;
+            string kind = WebChoiceKindNow();
+            if (kind != "select") WebChoiceValues(kind);
+            int n = kind == "select" ? c.Options.Count(o => !o.Hidden) + c.Groups.Count : _wcValues.Count;
+            bool search = n > WebChoiceSearchOver;
+            int rows = Mathf.Clamp(n, 1, WebChoiceRows);
+            float bh = t.ButtonHeight, w = Mathf.Clamp(c.Box.width * _webPage.Rect.width + 0.02f, 0.30f, 0.42f);
+            float h = t.HeaderHeight + t.Padding + (search ? bh + t.Gap : 0f) + rows * WebChoiceRowH + t.Gap + bh + t.Padding;
+            string title = c.Label.Length > 0 ? c.Label : WebChoiceTitle(c.Kind);
+            if (c.Kind == "datetime-local") title = (c.Label.Length > 0 ? c.Label + " · " : "") + (_wcStep == 0 ? "DATE" : "TIME");
+            var p = UiPanel.Create<UiPanel>("modal", title, w, h, _root); // a dialog, not a window (placement, layouts)
+            var cr = p.Content;
+            float y = cr.y;
+            _wcSearch = null;
+            if (search)
+            {
+                _wcSearch = p.Add(new UiTextField("", "", WebChoiceFilter, "search " + n + (kind == "select" ? " options" : " values")) { Rect = new Rect(cr.x, y, cr.width, bh) });
+                _wcSearch.OnChanged = WebChoiceFilter; // as it is typed
+                y += bh + t.Gap;
+            }
+            _wcList = p.Add(new UiList(WebChoiceRowH, (item, idx) => WebChoicePick(item)) { Rect = new Rect(cr.x, y, cr.width, rows * WebChoiceRowH) });
+            y += rows * WebChoiceRowH + t.Gap;
+            // DONE (a multiple select), TYPE (a field: any value, typed), CLEAR (a field that may be empty), CANCEL
+            var buttons = new List<(string text, Action act, UiButtonStyle style)>();
+            if (kind == "select" && c.Multiple) buttons.Add(("DONE", WebChoiceDone, UiButtonStyle.Primary));
+            if (kind != "select") buttons.Add(("TYPE", WebChoiceType, UiButtonStyle.Normal));
+            if (kind != "select" && !c.Required && c.Value.Length > 0) buttons.Add(("CLEAR", () => WebChoiceFinish(""), UiButtonStyle.Normal));
+            buttons.Add(("CANCEL", () => WebChoiceEnd(true), UiButtonStyle.Normal));
+            float bw = (cr.width - t.Gap * (buttons.Count - 1)) / buttons.Count;
+            for (int i = 0; i < buttons.Count; i++)
+                p.Add(new UiButton(buttons[i].text, buttons[i].act, buttons[i].style) { Rect = new Rect(cr.x + i * (bw + t.Gap), y, bw, bh) });
+            p.Closed += _ =>
+            {
+                Router?.Unregister(p);
+                if (ReferenceEquals(_wcPanel, p)) WebChoiceEnd(true); // its ✕: the page keeps what it had
+            };
+            _wcPanel = p;
+            _wcFilter = "";
+            WebChoiceRefresh(false);
+            WebChoicePlace();
+            p.SetHighlight(1f);
+            Router.Register(p);
+            p.Open();
+        }
+
+        /// The chooser under the element (its top at the element's bottom, its left at the element's left), above it when
+        /// there is no room under it, inside the window; parallel to the window, a little in front of it, at its scale.
+        private void WebChoicePlace()
+        {
+            var p = _wcPanel;
+            var c = _wc;
+            if (p == null || c == null || _web == null || _webPage == null) return;
+            var area = _webPage.Rect;
+            float ex = area.x + Mathf.Clamp01(c.Box.x) * area.width;
+            float top = area.y + Mathf.Clamp01(c.Box.y) * area.height, bottom = area.y + Mathf.Clamp01(c.Box.yMax) * area.height;
+            float left = Mathf.Clamp(ex, 0f, Mathf.Max(0f, _web.Width - p.Width));
+            float y = bottom + 0.004f + p.Height <= _web.Height ? bottom + 0.004f
+                : top - 0.004f - p.Height >= 0f ? top - 0.004f - p.Height
+                : Mathf.Clamp(bottom, 0f, Mathf.Max(0f, _web.Height - p.Height));
+            var wt = _web.transform;
+            var centre = wt.TransformPoint(_web.PanelToLocal(new Vector2(left + p.Width * 0.5f, y + p.Height * 0.5f)));
+            p.transform.SetPositionAndRotation(centre - wt.forward * WebChoiceGap, wt.rotation); // towards the user
+            float rootScale = _root != null ? Mathf.Max(1e-4f, _root.lossyScale.x) : 1f;
+            p.BaseScale = Vector3.one * (_web.RestLossyScale.x / rootScale);
+            _wcWebPos = wt.position;
+            _wcWebRot = wt.rotation;
+            _wcWebScale = _web.BaseScale.x;
+        }
+
+        /// Each frame while it is open: the window moved or was scaled, the chooser goes with it (compares only).
+        private void WebChoiceFollow()
+        {
+            if (_web == null) return;
+            var wt = _web.transform;
+            if (wt.position != _wcWebPos || wt.rotation != _wcWebRot || _web.BaseScale.x != _wcWebScale) WebChoicePlace();
+        }
+
+        private void WebChoiceFilter(string s)
+        {
+            string f = (s ?? "").Trim();
+            if (f == _wcFilter) return;
+            _wcFilter = f;
+            WebChoiceRefresh(false);
+        }
+
+        private bool WebChoiceMatch(string a, string b) =>
+            (a != null && a.IndexOf(_wcFilter, StringComparison.OrdinalIgnoreCase) >= 0) || (b != null && b.IndexOf(_wcFilter, StringComparison.OrdinalIgnoreCase) >= 0);
+
+        /// The list again (opened, searched, the date picked for a datetime-local), its current entry lit and in view.
+        private void WebChoiceRefresh(bool keepScroll)
+        {
+            if (_wcList == null || _wc == null) return;
+            var items = new List<UiListItem>();
+            int current = WebChoiceKindNow() == "select" ? WebChoiceSelectItems(items) : WebChoiceValueItems(items);
+            _wcCurrentRow = current;
+            _wcList.SelectedIndex = current;
+            _wcList.SetItems(items, keepScroll);
+            if (!keepScroll && current > 2) _wcList.ScrollBy(current - 2);
+            _wcList.SetEmptyText(_wcFilter.Length > 0 ? "Nothing matches “" + _wcFilter + "”" : "Nothing to choose here");
+        }
+
+        /// A select's rows: optgroups as dim titles (tapping one does nothing), their options indented; hidden options
+        /// are not listed, disabled ones dim. Returns the row of the selected option (-1: none, or a multiple select).
+        private int WebChoiceSelectItems(List<UiListItem> items)
+        {
+            var t = UiTheme.Current;
+            var c = _wc;
+            int lastGroup = -1, current = -1;
+            for (int i = 0; i < c.Options.Count; i++)
+            {
+                var o = c.Options[i];
+                if (o.Hidden) continue;
+                string group = o.Group >= 0 && o.Group < c.Groups.Count ? c.Groups[o.Group] : null;
+                if (_wcFilter.Length > 0 && !WebChoiceMatch(o.Text, group)) continue;
+                if (o.Group != lastGroup)
+                {
+                    lastGroup = o.Group;
+                    if (group != null) items.Add(new UiListItem { Icon = "▾", IconColor = t.TextDim, Title = group.Length > 0 ? group : "—", TitleColor = t.TextDim });
+                }
+                bool on = c.Multiple ? _wcPicked.Contains(i) : o.Selected;
+                if (on && !c.Multiple && current < 0) current = items.Count;
+                items.Add(new UiListItem
+                {
+                    Icon = c.Multiple ? (on ? "☑" : "·") : on ? "◆" : "◇",
+                    IconColor = on ? t.Ok : o.Disabled ? t.TextDim : (Color?)null,
+                    Title = o.Text.Length > 0 ? o.Text : "—",
+                    TitleColor = o.Disabled ? t.TextDim : (Color?)null,
+                    Sub = o.Disabled ? "not available" : "",
+                    Indent = group != null ? 1 : 0,
+                    Tag = i,
+                });
+            }
+            return current;
+        }
+
+        /// A field's rows (WebChoiceValues), the value it has lit. Returns that row (-1: not listed).
+        private int WebChoiceValueItems(List<UiListItem> items)
+        {
+            var t = UiTheme.Current;
+            string cur = WebChoiceCurrent();
+            bool colour = WebChoiceKindNow() == "color";
+            int current = -1;
+            foreach (var (v, title, sub) in _wcValues)
+            {
+                if (_wcFilter.Length > 0 && !WebChoiceMatch(title, sub)) continue;
+                bool on = string.Equals(v, cur, StringComparison.OrdinalIgnoreCase);
+                if (on && current < 0) current = items.Count;
+                Color? swatch = null;
+                if (colour && ColorUtility.TryParseHtmlString(v, out var col)) swatch = col;
+                items.Add(new UiListItem { Icon = colour ? "■" : on ? "◆" : "◇", IconColor = swatch ?? (on ? t.Ok : (Color?)null), Title = title, Sub = sub, Badge = on ? "✓" : "", BadgeColor = t.Ok, Tag = v });
+            }
+            return current;
+        }
+
+        /// The values a field offers, inside the page's min and max: days from two weeks before the current one (or
+        /// today) to six weeks after; months a year before to two years after; weeks two months before to half a year
+        /// after; the day's times at the page's step (15 minutes unless it asks for 15 minutes or more), with the
+        /// current one; a palette of 20 colours, with the current one.
+        private void WebChoiceValues(string kind)
+        {
+            _wcValues.Clear();
+            var inv = CultureInfo.InvariantCulture;
+            string cur = WebChoiceCurrent();
+            WebChoiceRange(out string min, out string max);
+            var today = DateTime.Today;
+            DateTime Base(string fmt)
+            {
+                var d = DateTime.TryParseExact(cur, fmt, inv, DateTimeStyles.None, out var x) ? x : today;
+                return d.Year < 1000 || d.Year > 9000 ? today : d;
+            }
+            void Add(string v, string title, string sub) { if (WebChoiceInRange(kind, v, min, max)) _wcValues.Add((v, title, sub)); }
+            switch (kind)
+            {
+                case "date":
+                {
+                    var b = Base("yyyy-MM-dd");
+                    for (int i = -14; i <= 45; i++)
+                    {
+                        var d = b.AddDays(i);
+                        string v = d.ToString("yyyy-MM-dd", inv);
+                        Add(v, v, d.ToString("ddd d MMM", inv) + (d == today ? " · today" : ""));
+                    }
+                    break;
+                }
+                case "month":
+                {
+                    var b = Base("yyyy-MM");
+                    for (int i = -12; i <= 24; i++)
+                    {
+                        var d = new DateTime(b.Year, b.Month, 1).AddMonths(i);
+                        string v = d.ToString("yyyy-MM", inv);
+                        Add(v, v, d.ToString("MMMM yyyy", inv) + (d.Year == today.Year && d.Month == today.Month ? " · this month" : ""));
+                    }
+                    break;
+                }
+                case "week":
+                {
+                    var m = Regex.Match(cur, @"^(\d{4})-W(\d{2})$");
+                    var b = m.Success ? IsoWeekMonday(int.Parse(m.Groups[1].Value, inv), int.Parse(m.Groups[2].Value, inv)) : today;
+                    if (b.Year < 1000 || b.Year > 9000) b = today;
+                    var (ty, tw) = IsoWeekOf(today);
+                    for (int i = -8; i <= 26; i++)
+                    {
+                        var (y, w) = IsoWeekOf(b.AddDays(7 * i));
+                        var mon = IsoWeekMonday(y, w);
+                        string v = y.ToString("D4", inv) + "-W" + w.ToString("D2", inv);
+                        Add(v, v, "from " + mon.ToString("ddd d MMM yyyy", inv) + (y == ty && w == tw ? " · this week" : ""));
+                    }
+                    break;
+                }
+                case "time":
+                {
+                    int stepMin = 15;
+                    if (double.TryParse(_wc.Step, NumberStyles.Float, inv, out double st) && st >= 900 && st <= 43200 && Math.Abs(st / 60.0 - Math.Round(st / 60.0)) < 1e-9)
+                        stepMin = (int)Math.Round(st / 60.0);
+                    var times = new List<string>();
+                    for (int mm = 0; mm < 1440; mm += stepMin) times.Add((mm / 60).ToString("D2", inv) + ":" + (mm % 60).ToString("D2", inv));
+                    if (Regex.IsMatch(cur, @"^\d\d:\d\d(:\d\d(\.\d+)?)?$") && !times.Contains(cur)) { times.Add(cur); times.Sort(string.CompareOrdinal); }
+                    foreach (var v in times)
+                    {
+                        string sub = DateTime.TryParseExact(v.Length > 5 ? v.Substring(0, 5) : v, "HH:mm", inv, DateTimeStyles.None, out var tm) ? tm.ToString("h:mm tt", inv).ToLowerInvariant() : "";
+                        Add(v, v, sub);
+                    }
+                    break;
+                }
+                case "color":
+                {
+                    string c = cur.ToLowerInvariant();
+                    if (Regex.IsMatch(c, "^#[0-9a-f]{6}$") && Array.FindIndex(WebColours, x => x.hex == c) < 0) _wcValues.Add((c, "this colour", c));
+                    foreach (var (name, hex) in WebColours) _wcValues.Add((hex, name, hex));
+                    break;
+                }
+            }
+        }
+
+        /// Inside the page's min and max (same-format values compare as text); a time range over midnight (min after
+        /// max) allows either side.
+        public static bool WebChoiceInRange(string kind, string v, string min, string max)
+        {
+            bool lo = string.IsNullOrEmpty(min) || string.CompareOrdinal(v, min) >= 0;
+            bool hi = string.IsNullOrEmpty(max) || string.CompareOrdinal(v, max) <= 0;
+            if (kind == "time" && !string.IsNullOrEmpty(min) && !string.IsNullOrEmpty(max) && string.CompareOrdinal(min, max) > 0) return lo || hi;
+            return lo && hi;
+        }
+
+        /// ISO 8601 weeks: the week (and its year) a day is in, the Monday a week starts on.
+        private static (int year, int week) IsoWeekOf(DateTime d)
+        {
+            int dow = ((int)d.DayOfWeek + 6) % 7; // Monday 0
+            var thursday = d.AddDays(3 - dow);
+            return (thursday.Year, (thursday.DayOfYear - 1) / 7 + 1);
+        }
+
+        private static DateTime IsoWeekMonday(int year, int week)
+        {
+            var jan4 = new DateTime(year, 1, 4);
+            return jan4.AddDays(-(((int)jan4.DayOfWeek + 6) % 7) + (week - 1) * 7);
+        }
+
+        /// A typed value for a field (TYPE): its kind's format (a few spellings are taken: 2026-11-7, 9:05, 2026/11/07,
+        /// #36f), then the page's min and max. `value` is what goes into the field (its canonical form); `why` says what
+        /// is wrong. Empty clears a field that may be empty.
+        public static bool WebChoiceValid(string kind, string typed, string min, string max, bool required, out string value, out string why)
+        {
+            var inv = CultureInfo.InvariantCulture;
+            string s = (typed ?? "").Trim();
+            value = "";
+            why = "";
+            if (s.Length == 0)
+            {
+                if (!required) return true;
+                why = "The page needs a " + (WebChoiceNoun(kind) ?? "value") + " here";
+                return false;
+            }
+            bool ok = false;
+            switch (kind)
+            {
+                case "date":
+                    ok = DateTime.TryParseExact(s, new[] { "yyyy-MM-dd", "yyyy-M-d", "yyyy/MM/dd", "yyyy/M/d" }, inv, DateTimeStyles.None, out var d);
+                    if (ok) value = d.ToString("yyyy-MM-dd", inv);
+                    break;
+                case "time":
+                    ok = DateTime.TryParseExact(s, new[] { "HH:mm", "H:mm", "HH:mm:ss", "H:mm:ss" }, inv, DateTimeStyles.None, out var tm);
+                    if (ok) value = tm.ToString(tm.Second != 0 ? "HH:mm:ss" : "HH:mm", inv);
+                    break;
+                case "datetime-local":
+                    ok = DateTime.TryParseExact(s, new[] { "yyyy-MM-ddTHH:mm", "yyyy-MM-dd HH:mm", "yyyy-M-d H:mm", "yyyy-M-dTH:mm", "yyyy-MM-ddTHH:mm:ss", "yyyy-MM-dd HH:mm:ss" },
+                        inv, DateTimeStyles.None, out var dt);
+                    if (ok) value = dt.ToString(dt.Second != 0 ? "yyyy-MM-ddTHH:mm:ss" : "yyyy-MM-ddTHH:mm", inv);
+                    break;
+                case "month":
+                    ok = DateTime.TryParseExact(s, new[] { "yyyy-MM", "yyyy-M", "yyyy/MM", "yyyy/M" }, inv, DateTimeStyles.None, out var mo);
+                    if (ok) value = mo.ToString("yyyy-MM", inv);
+                    break;
+                case "week":
+                {
+                    var m = Regex.Match(s, @"^(\d{4})-?[Ww](\d{1,2})$");
+                    if (m.Success)
+                    {
+                        int y = int.Parse(m.Groups[1].Value, inv), w = int.Parse(m.Groups[2].Value, inv);
+                        ok = y >= 1000 && w >= 1 && w <= IsoWeekOf(new DateTime(y, 12, 28)).week;
+                        if (ok) value = y.ToString("D4", inv) + "-W" + w.ToString("D2", inv);
+                    }
+                    break;
+                }
+                case "color":
+                {
+                    var m = Regex.Match(s, "^#?([0-9a-fA-F]{6}|[0-9a-fA-F]{3})$");
+                    if (m.Success)
+                    {
+                        string h = m.Groups[1].Value.ToLowerInvariant();
+                        if (h.Length == 3) h = new string(new[] { h[0], h[0], h[1], h[1], h[2], h[2] });
+                        value = "#" + h;
+                        ok = true;
+                    }
+                    break;
+                }
+            }
+            if (!ok) { value = ""; why = "Not a valid " + (WebChoiceNoun(kind) ?? "value") + ": type it as " + WebChoiceExample(kind); return false; }
+            if (kind != "color" && !WebChoiceInRange(kind, value, min, max))
+            {
+                why = "The page takes a " + WebChoiceNoun(kind) + (string.IsNullOrEmpty(min) ? "" : " from " + min) + (string.IsNullOrEmpty(max) ? "" : " up to " + max);
+                value = "";
+                return false;
+            }
+            return true;
+        }
+
+        /// A row tapped: a select's option is chosen (a multiple one ticks or unticks it; a group's title or a disabled
+        /// option does nothing), a field's value is chosen (datetime-local: its date, then the time).
+        private void WebChoicePick(UiListItem item)
+        {
+            var c = _wc;
+            if (c == null || item == null || _wcList == null) return;
+            if (WebChoiceKindNow() == "select")
+            {
+                if (!(item.Tag is int i) || i < 0 || i >= c.Options.Count || c.Options[i].Disabled)
+                {
+                    _wcList.SelectedIndex = c.Multiple ? -1 : _wcCurrentRow; // the light goes back where it was
+                    _wcList.ScrollBy(0f);
+                    return;
+                }
+                if (c.Multiple)
+                {
+                    bool on = !_wcPicked.Remove(i);
+                    if (on) _wcPicked.Add(i);
+                    item.Icon = on ? "☑" : "·";
+                    item.IconColor = on ? UiTheme.Current.Ok : (Color?)null;
+                    _wcList.SelectedIndex = -1; // the ticks show what is chosen
+                    _wcList.ScrollBy(0f);       // drawn again, in place
+                    return;
+                }
+                WebChoiceFinish(i.ToString(CultureInfo.InvariantCulture));
+                return;
+            }
+            if (!(item.Tag is string v)) return;
+            if (c.Kind == "datetime-local" && _wcStep == 0) // the date: now its time, in the same place
+            {
+                _wcDate = v;
+                _wcStep = 1;
+                WebChoiceDropPanel();
+                WebChoiceBuild();
+                return;
+            }
+            WebChoiceFinish(c.Kind == "datetime-local" ? _wcDate + "T" + v : v);
+        }
+
+        /// DONE (a multiple select): the options ticked, in order.
+        private void WebChoiceDone()
+        {
+            if (_wc == null) return;
+            var sb = new StringBuilder();
+            foreach (int i in _wcPicked.OrderBy(x => x)) { if (sb.Length > 0) sb.Append(','); sb.Append(i.ToString(CultureInfo.InvariantCulture)); }
+            WebChoiceFinish(sb.ToString());
+        }
+
+        /// TYPE: any value for the field on the keyboard, checked (WebChoiceValid); Cancel or the same value keeps the
+        /// chooser open, a wrong one says why in a toast.
+        private void WebChoiceType()
+        {
+            var c = _wc;
+            if (c == null) return;
+            int id = c.Id;
+            UiKeyboard.Edit(c.Value, false, null, typed =>
+            {
+                if (_wc == null || _wc.Id != id) return; // closed meanwhile
+                string s = (typed ?? "").Trim();
+                if (s == c.Value) return;
+                if (!WebChoiceValid(c.Kind, s, c.Min, c.Max, c.Required, out string value, out string why)) { Toast(why, "warn"); return; }
+                WebChoiceFinish(value);
+            }, "Type a " + WebChoiceNoun(c.Kind) + ", as " + WebChoiceExample(c.Kind));
+        }
+
+        private void WebChoiceFinish(string answer)
+        {
+            var c = _wc;
+            WebChoiceEnd(false);
+            if (c != null) WebChoiceAnswer(c.Id, answer);
+        }
+
+        /// The chooser's panel goes (the request stays: datetime-local's second step is built after it).
+        private void WebChoiceDropPanel()
+        {
+            var p = _wcPanel;
+            _wcPanel = null;
+            _wcList = null;
+            _wcSearch = null;
+            if (p != null) { Router?.Unregister(p); p.CloseAndDestroy(); }
+        }
+
+        /// The chooser closes; `cancel`: without a choice (the page keeps what it had).
+        private void WebChoiceEnd(bool cancel)
+        {
+            var c = _wc;
+            _wc = null;
+            WebChoiceDropPanel();
+            _wcValues.Clear();
+            _wcPicked.Clear();
+            _wcFilter = "";
+            if (cancel && c != null) WebChoiceCancel(c.Id);
+        }
+
+        private void WebChoiceAnswer(int id, string answer)
+        {
+            _webLastChoice = (id, answer);
+#if UNITY_ANDROID && !UNITY_EDITOR
+            if (_wv == null) return;
+            try { if (!_wv.Call<bool>("selectAnswer", id, answer)) Log("web: the page's chooser was gone (its page changed): nothing written"); }
+            catch (Exception ex) { Log("web selectAnswer: " + ex.Message); }
+#endif
+        }
+
+        private void WebChoiceCancel(int id)
+        {
+            _webLastChoice = (id, null);
+#if UNITY_ANDROID && !UNITY_EDITOR
+            if (_wv != null) try { _wv.Call("selectCancel", id); } catch (Exception ex) { Log("web selectCancel: " + ex.Message); }
+#endif
+        }
+
+        /// Self-tests: a request as the WebView sends it (no WebView in the Editor), the chooser open now (its panel, list
+        /// and SEARCH field), the last answer sent (answer null: cancelled), a search typed.
+        public void WebChoiceForTest(string json) => WebChoiceOpen(json);
+        public UiPanel WebChoicePanelForTest => _wcPanel;
+        public UiList WebChoiceListForTest => _wcList;
+        public UiTextField WebChoiceSearchFieldForTest => _wcSearch;
+        public (int id, string answer) WebLastChoiceForTest => _webLastChoice;
+        public void WebChoiceSearchForTest(string s) => WebChoiceFilter(s);
 
         /// Self-tests: the page the window has, the last touch sent to the page, a panel point in page pixels.
         public string WebUrlForTest => _webCurrent;
