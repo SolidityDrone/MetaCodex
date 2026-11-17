@@ -345,6 +345,8 @@ namespace MetaCodex.Shell
             WebFreeEngine(w);
             if (pg.Large) WebSetLarge(w, false);
             if (w.Panel != null) w.Panel.BaseScale = Vector3.one * UiScaleNow; // the code editor's larger window: the usual size
+            w.FreeScale = 1f;
+            w.Easing = false;
             pg.Current = pg.Error = pg.Mode = "";
             pg.OnStart = false;
             pg.Loading = false;
