@@ -237,8 +237,9 @@ end)
             sb.Append("2. `plugin.json`, all of `main.lua` and `git log --oneline` here: what the plugin does now.\n")
               .Append("The skills are in `~/.claude/skills/<name>/SKILL.md` when your agent does not list them.\n");
             if (kind == "app" && !fromExample)
-                sb.Append("Two complete app plugins are models: `/root/metacodex-projects/plugins/apps/timers` and `.../apps/calendar` when\n")
-                  .Append("the user has added them (`mcx-ui plugin examples` says so): read their `main.lua`; never change them from here.\n");
+                sb.Append("Complete app plugins are models: `/root/metacodex-projects/plugins/apps/timers`, `.../apps/calendar` and `.../apps/weather`\n")
+                  .Append("(data from the network) when the user has added them (`mcx-ui plugin examples` says so): read their `main.lua`;\n")
+                  .Append("never change them from here.\n");
             sb.Append("\n");
             if (kind == "app")
                 sb.Append("## What the app plugin needs (the app checks it)\n\n")
@@ -285,8 +286,10 @@ end)
 
             sb.Append("## Rules\n\n")
               .Append("- Text the user sees is English, with no brand names. No secrets in files.\n")
-              .Append("- Lua runs in a sandbox (no `io`, `require`, `load`, network; for time use `app.clock()` and `app.date()`). One call\n")
+              .Append("- Lua runs in a sandbox (no `io`, `require`, `load`; for time use `app.clock()` and `app.date()`). One call\n")
               .Append("  over 200,000 instructions stops the plugin.\n")
+              .Append("- The network: only `net.get` / `net.post` (https, a callback, never waiting) to the hosts `plugin.json` \"network\" lists\n")
+              .Append("  (skill `quest-plugins`, Network). Never put a key in a file: the user types it, the plugin keeps it in `store`.\n")
               .Append("- The app keeps 72 frames a second: nothing heavy in a callback; a countdown changes only a LIVE text (a `text` with an `id`).\n");
             if (kind == "gesture")
                 sb.Append("- React only to gestures this plugin defines or to the built-ins (`pinch grab point open palm-up clap select`): the examples'\n")

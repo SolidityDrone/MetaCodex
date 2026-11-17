@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Usage: tests/plugins/device-test.sh [timers|calendar]     (WSL; the headset on adb; the app running; NOBODY wearing it)
+# Usage: tests/plugins/device-test.sh [timers|calendar|weather]  (WSL; the headset on adb; the app running; NOBODY wearing it)
 #
 # The app plugins on the headset, after an APK with the plugin API (ui.panel, menu.add, app.clock, json, ui.notify):
 # installs an example plugin, checks its window, tile and voice commands, presses a button, restarts the app and

@@ -1,0 +1,364 @@
+-- Weather: the weather now and the next 3 days for a city the user picks (a preset city, or a typed name).
+--
+-- A MODEL PLUGIN for the network. Copy its shape for any app that shows data from a web API:
+--   * network  plugin.json "network" lists the two hosts it calls; net.get reaches only those, and only over https
+--   * calls    net.get(url, { timeout = 15 }, function(res) ... end) never waits: the reply comes later, to the
+--              callback, as res = { ok, status, body, json, error }
+--   * errors   a failure (offline, a timeout, a bad status, a reply without the fields) keeps the last good data,
+--              says why in the age line and tries again in 5 minutes
+--   * cache    the last good result is in store with its time: after a restart the window shows it at once, with
+--              its age, and asks again only when it is older than 30 minutes
+--   * refresh  one app.at at the result's time + 30 minutes (wall clock), set again after every reply and at load;
+--              REFRESH asks now; one request at a time; a new city cancels the request for the old one (net.cancel)
+--   * LIVE     the age line is a text with an id: once a minute only its text changes (no rebuild)
+--   * credit   the data's licence (CC BY 4.0) asks for a credit and a link next to the data: the dim line and SOURCE
+--   * voice    weather_report says the weather of the city picked last, or of the city named
+-- No key is needed. A service that needs one: the user types it into an input, the plugin keeps it in store
+-- (store is not a vault: any agent that can read the app's files can read it).
+
+local EVERY = 30 * 60     -- seconds between two automatic updates
+local RETRY = 5 * 60      -- after a failure
+local FORECAST = "https://api.open-meteo.com/v1/forecast"
+local SEARCH = "https://geocoding-api.open-meteo.com/v1/search"
+local SITE = "https://open-meteo.com/"
+local CREDIT = "Weather data by Open-Meteo.com, places by GeoNames (CC BY 4.0); rounded here. SOURCE opens the site."
+
+local CITIES = {
+  { id = "london", name = "London", country = "United Kingdom", lat = 51.5085, lon = -0.1257 },
+  { id = "paris", name = "Paris", country = "France", lat = 48.8534, lon = 2.3488 },
+  { id = "berlin", name = "Berlin", country = "Germany", lat = 52.5244, lon = 13.4105 },
+  { id = "madrid", name = "Madrid", country = "Spain", lat = 40.4165, lon = -3.7026 },
+  { id = "rome", name = "Rome", country = "Italy", lat = 41.8919, lon = 12.5113 },
+  { id = "newyork", name = "New York", country = "United States", lat = 40.7143, lon = -74.006 },
+  { id = "tokyo", name = "Tokyo", country = "Japan", lat = 35.6895, lon = 139.6917 },
+  { id = "sydney", name = "Sydney", country = "Australia", lat = -33.8678, lon = 151.2073 },
+}
+
+-- WMO weather codes (the API sends the number only)
+local SKY = {
+  [0] = "Clear sky", [1] = "Mainly clear", [2] = "Partly cloudy", [3] = "Overcast", [45] = "Fog", [48] = "Rime fog",
+  [51] = "Light drizzle", [53] = "Drizzle", [55] = "Dense drizzle", [56] = "Freezing drizzle", [57] = "Freezing drizzle",
+  [61] = "Slight rain", [63] = "Rain", [65] = "Heavy rain", [66] = "Freezing rain", [67] = "Freezing rain",
+  [71] = "Slight snow", [73] = "Snow", [75] = "Heavy snow", [77] = "Snow grains",
+  [80] = "Rain showers", [81] = "Rain showers", [82] = "Violent showers", [85] = "Snow showers", [86] = "Heavy snow showers",
+  [95] = "Thunderstorm", [96] = "Thunderstorm, hail", [97] = "Heavy thunderstorm", [99] = "Thunderstorm, hail",
+}
+local DAYS = { "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday" }
+local COMPASS = { "N", "NE", "E", "SE", "S", "SW", "W", "NW" }
+
+-- The saved state: the place, the last good weather (wx) and when it came (at, app.clock()), the units.
+local S = { place = nil, wx = nil, at = 0, fahrenheit = false }
+local reqId = nil         -- the forecast request in flight
+local lookId = nil        -- the place search in flight
+local looking = nil       -- the name being looked up
+local problem = nil       -- why the last update failed; nil after a good one
+local refreshId = nil     -- the app.at of the next automatic update
+local render              -- forward declaration
+
+------------------------------------------------------------------ small helpers
+
+local function num(v) if type(v) == "number" then return v end return nil end
+
+local function round(v) return math.floor(v + 0.5) end
+
+local function temp(c, short)
+  if not c then return "-" end
+  if S.fahrenheit then return string.format("%d°%s", round(c * 9 / 5 + 32), short and "" or "F") end
+  return string.format("%d°%s", round(c), short and "" or "C")
+end
+
+local function speed(kmh)
+  if not kmh then return "-" end
+  if S.fahrenheit then return round(kmh * 0.621371) .. " mph" end
+  return round(kmh) .. " km/h"
+end
+
+local function sky(code)
+  return (code and SKY[code]) or "-"
+end
+
+local function compass(deg)
+  if not deg then return nil end
+  return COMPASS[math.floor(((deg % 360) + 22.5) / 45) % 8 + 1]
+end
+
+local function weekday(date)
+  local y, m, d = tostring(date):match("^(%d+)-(%d+)-(%d+)$")
+  if not y then return tostring(date) end
+  return DAYS[app.date(app.clock{ year = tonumber(y), month = tonumber(m), day = tonumber(d), hour = 12 }).wday]
+end
+
+local function ago(t)
+  local s = math.max(0, app.clock() - t)
+  if s < 90 then return "just now" end
+  if s < 3600 then return round(s / 60) .. " min ago" end
+  if s < 2 * 86400 then return round(s / 3600) .. " h ago" end
+  return round(s / 86400) .. " days ago"
+end
+
+-- Text in a URL: every byte that is not a letter, a digit or - . _ ~ as %XX (UTF-8 names too).
+local function enc(s)
+  return (tostring(s):gsub("[^%w%-%._~]", function(c) return string.format("%%%02X", string.byte(c)) end))
+end
+
+local function placeName(p)
+  if not p then return "" end
+  if p.country and p.country ~= "" then return p.name .. ", " .. p.country end
+  return p.name
+end
+
+local function presetById(id)
+  for _, c in ipairs(CITIES) do if c.id == id then return c end end
+  return nil
+end
+
+local function presetByName(name)
+  local low = tostring(name):lower():gsub("%s+", "")
+  for _, c in ipairs(CITIES) do if c.name:lower():gsub("%s+", "") == low then return c end end
+  return nil
+end
+
+------------------------------------------------------------------ state
+
+local function save()
+  store.set("state", json.encode(S))
+end
+
+-- The weather as this plugin keeps it, from a reply or from the store. Every field is checked: never trust data
+-- from the network or from an older version.
+local function cleanWx(w)
+  if type(w) ~= "table" or not num(w.temp) then return nil end
+  local out = { temp = w.temp, feels = num(w.feels), hum = num(w.hum), code = num(w.code), wind = num(w.wind), dir = num(w.dir), days = {} }
+  if type(w.days) == "table" then
+    for i = 1, math.min(3, #w.days) do
+      local d = w.days[i]
+      if type(d) == "table" then
+        out.days[#out.days + 1] = { date = tostring(d.date or ""), code = num(d.code), lo = num(d.lo), hi = num(d.hi), rain = num(d.rain) }
+      end
+    end
+  end
+  return out
+end
+
+-- The forecast reply (res.json) -> wx, or nil when the fields are not there.
+local function parse(j)
+  if type(j) ~= "table" or type(j.current) ~= "table" then return nil end
+  local c, d = j.current, type(j.daily) == "table" and j.daily or {}
+  local function at(list, i) return type(list) == "table" and list[i] or nil end
+  local wx = { temp = c.temperature_2m, feels = c.apparent_temperature, hum = c.relative_humidity_2m,
+               code = c.weather_code, wind = c.wind_speed_10m, dir = c.wind_direction_10m, days = {} }
+  if type(d.time) == "table" then
+    for i = 1, math.min(3, #d.time) do
+      wx.days[i] = { date = d.time[i], code = at(d.weather_code, i), lo = at(d.temperature_2m_min, i),
+                     hi = at(d.temperature_2m_max, i), rain = at(d.precipitation_probability_max, i) }
+    end
+  end
+  return cleanWx(wx)
+end
+
+local function load()
+  local t = json.decode(store.get("state") or "")   -- nil when empty or broken: keep the defaults
+  if type(t) ~= "table" then return end
+  local p = t.place
+  if type(p) == "table" and type(p.name) == "string" and num(p.lat) and num(p.lon) then
+    S.place = { id = type(p.id) == "string" and p.id or "typed", name = p.name,
+                country = type(p.country) == "string" and p.country or "", lat = p.lat, lon = p.lon }
+    S.wx = cleanWx(t.wx)
+    S.at = S.wx and num(t.at) or 0
+  end
+  S.fahrenheit = t.fahrenheit == true
+end
+
+local function summary()
+  local wx = S.wx
+  if not (S.place and wx) then return "No weather yet." end
+  local age = app.clock() - S.at > EVERY and (" (from " .. ago(S.at) .. ")") or ""
+  return S.place.name .. ": " .. temp(wx.temp) .. ", " .. sky(wx.code):lower() .. ", wind " .. speed(wx.wind) .. age .. "."
+end
+
+------------------------------------------------------------------ the network
+
+local fetch -- forward declaration (arm and fetch call each other)
+
+-- The next automatic update: 30 minutes after the last good result, 5 minutes after a failure.
+local function arm()
+  if refreshId then app.cancel(refreshId); refreshId = nil end
+  if not S.place then return end
+  local now = app.clock()
+  local at = problem and now + RETRY or S.at + EVERY
+  if at > now + EVERY then at = now + EVERY end    -- a clock that went back
+  refreshId = app.at(at, function() refreshId = nil; fetch() end)   -- a time in the past runs at once
+end
+
+local function forecastUrl(p)
+  return FORECAST .. "?latitude=" .. string.format("%.4f", p.lat) .. "&longitude=" .. string.format("%.4f", p.lon) ..
+    "&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m,wind_direction_10m" ..
+    "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&forecast_days=3"
+end
+
+-- Asks for the weather of the place now. False when there is no place or a request is in flight already.
+-- announce: speak the result when it comes (a voice request).
+fetch = function(announce)
+  local place = S.place
+  if not place or reqId then return false end
+  reqId = net.get(forecastUrl(place), { timeout = 15 }, function(res)
+    reqId = nil
+    if S.place ~= place then return end             -- another city was picked meanwhile
+    local wx = res.ok and parse(res.json) or nil
+    if wx then
+      S.wx, S.at, problem = wx, app.clock(), nil
+      save()
+      if announce then ui.notify{ text = summary(), tone = "info", sound = false, speak = true, panel = "main" } end
+    else
+      problem = res.ok and "the reply had no weather in it" or (res.error or "no reply")
+      log("no update for " .. place.name .. ": " .. problem)
+    end
+    arm()
+    render()
+  end)
+  -- reqId is nil when the request was refused: its callback still comes, with res.error
+  render()
+  return true
+end
+
+local function pick(c, announce)
+  if reqId then net.cancel(reqId); reqId = nil end   -- the old city's reply is not wanted any more
+  S.place = { id = c.id, name = c.name, country = c.country or "", lat = c.lat, lon = c.lon }
+  S.wx, S.at, problem = nil, 0, nil
+  save()
+  fetch(announce)
+end
+
+-- A typed name: a preset by its name, else the place search, then the forecast of the first place found.
+local function search(text, announce)
+  local name = tostring(text or ""):gsub("^%s+", ""):gsub("%s+$", "")
+  if name == "" then ui.toast("Type a city name, for example Lyon", "warn") return end
+  if #name > 60 then name = name:sub(1, 60) end
+  local c = presetByName(name)
+  if c then pick(c, announce) return end
+  if lookId then net.cancel(lookId) end
+  looking = name
+  lookId = net.get(SEARCH .. "?name=" .. enc(name) .. "&count=1&language=en&format=json", { timeout = 15 }, function(res)
+    lookId, looking = nil, nil
+    local list = res.ok and type(res.json) == "table" and res.json.results or nil   -- no "results": nothing found
+    local r = type(list) == "table" and list[1] or nil
+    if type(r) == "table" and num(r.latitude) and num(r.longitude) then
+      pick({ id = "typed", name = type(r.name) == "string" and r.name or name,
+             country = type(r.country) == "string" and r.country or "", lat = r.latitude, lon = r.longitude }, announce)
+    else
+      ui.toast(res.ok and ("No place called " .. name .. " was found") or ("The place search failed: " .. tostring(res.error)), "warn")
+      render()
+    end
+  end)
+  render()
+end
+
+------------------------------------------------------------------ window
+
+local function statusText()
+  if looking then return "Looking up " .. looking .. "…" end
+  if not S.place then return "Pick a city, or type one." end
+  if not S.wx then
+    if reqId then return "Getting the weather…" end
+    return "No weather yet" .. (problem and (": " .. problem) or "") .. ". REFRESH tries again."
+  end
+  local line = "Updated " .. ago(S.at)
+  if reqId then line = line .. " · updating…" end
+  if problem then line = line .. " · no update: " .. problem end
+  return line
+end
+
+local function onEvent(e)
+  if e.type == "cell" and type(e.id) == "string" and e.id:sub(1, 5) == "city-" then
+    local c = presetById(e.id:sub(6))
+    if c then pick(c) end
+  elseif e.type == "input" then
+    search(e.value)
+  elseif e.type == "button" then
+    if e.id == "refresh" then
+      if not S.place then ui.toast("Pick a city first", "warn")
+      elseif not fetch() then ui.toast("Already updating", "info") end
+    elseif e.id == "unit" then
+      S.fahrenheit = not S.fahrenheit
+      save()
+      render()
+    elseif e.id == "source" then
+      browser.open(SITE)
+    end
+  elseif e.type == "open" then
+    render()                                        -- a fresh age line when the window opens
+  end
+end
+
+render = function()
+  local wx, p = S.wx, S.place
+  local nowText, skyText = "--", "Pick a city below, or type one."
+  if wx then
+    local dir = compass(wx.dir)
+    nowText = temp(wx.temp)
+    skyText = "**" .. sky(wx.code) .. "** · " .. placeName(p) .. "\nFeels like " .. temp(wx.feels) .. " · wind " ..
+      speed(wx.wind) .. (dir and (" from " .. dir) or "") .. (wx.hum and (" · humidity " .. round(wx.hum) .. "%") or "")
+  elseif p then
+    skyText = "**" .. placeName(p) .. "**"
+  end
+  local rows = {}
+  for i, d in ipairs(wx and wx.days or {}) do
+    rows[#rows + 1] = { i == 1 and "Today" or i == 2 and "Tomorrow" or weekday(d.date), sky(d.code),
+                        temp(d.lo, true), temp(d.hi, true), d.rain and (round(d.rain) .. "%") or "-" }
+  end
+  if #rows == 0 then rows[1] = { "-", "no data yet", "-", "-", "-" } end
+  local cells = {}
+  for _, c in ipairs(CITIES) do
+    cells[#cells + 1] = { id = "city-" .. c.id, text = c.name, tone = (p and p.id == c.id) and "accent" or nil }
+  end
+  ui.panel{ id = "main", title = "Weather", on = onEvent, components = {
+    { type = "text", id = "now", style = "big", text = nowText },
+    { type = "text", id = "sky", text = skyText },
+    { type = "table", title = "Next 3 days", columns = { "Day", "Sky", "Low", "High", "Rain" }, rows = rows },
+    { type = "grid", id = "cities", columns = 4, cells = cells },
+    { type = "input", id = "search", prompt = "Another city", placeholder = "a city name, for example Lyon" },
+    { type = "buttons", id = "actions", items = {
+      { id = "refresh", label = "REFRESH", tone = "accent" },
+      { id = "unit", label = S.fahrenheit and "°C, KM/H" or "°F, MPH" },
+      { id = "source", label = "SOURCE ▸" } } },
+    { type = "text", id = "status", text = statusText() },
+    { type = "text", tone = "dim", text = CREDIT },
+  } }
+end
+
+------------------------------------------------------------------ voice
+
+voice.command{
+  name = "weather_report",
+  description = "Say the weather now and open the weather window (city: a city name; leave out for the city picked last)",
+  params = { city = { type = "string", description = "a city name, for example Paris or Lyon; leave out for the city picked last", required = false } },
+  phrases = { "(what is|how is) the weather [like] in {city}", "weather (in|for) {city}",
+              "(what is|how is) the weather [like] [today|now|outside]", "(show|open) [me] the weather" },
+  samples = { "what is the weather in Paris", "how is the weather today", "will it rain in London",
+              "show me the weather", "what is the temperature outside", "weather forecast for Tokyo" },
+  vocabulary = { "forecast", "weather" },
+  speak = true,
+  run = function(args)
+    ui.open("main")
+    local city = type(args.city) == "string" and args.city or ""
+    city = city:gsub("%s+today$", ""):gsub("%s+now$", ""):gsub("%s+tomorrow$", ""):gsub("^%s+", ""):gsub("%s+$", "")
+    if city ~= "" then
+      local c = presetByName(city)
+      if c then pick(c, true) return "Getting the weather in " .. c.name .. "." end
+      search(city, true)
+      return "Looking up the weather in " .. city .. "."
+    end
+    if not S.place then return "error: no city picked yet; say for example: weather in Paris" end
+    if not S.wx then fetch(true) return "Getting the weather in " .. S.place.name .. "." end
+    return summary()
+  end,
+}
+
+------------------------------------------------------------------ load
+
+menu.add{ id = "weather", label = "WEATHER", glyph = "◐", icon = "bolt", panel = "main" }
+
+load()
+render()
+if S.place and (not S.wx or app.clock() - S.at >= EVERY) then fetch() else arm() end
+app.every(60, render)    -- the age line (a LIVE text: only its text changes)

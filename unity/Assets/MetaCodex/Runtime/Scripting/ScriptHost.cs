@@ -61,6 +61,45 @@ namespace MetaCodex.Scripting
         /// The app's own path of /root/metacodex-projects/plugins (plugin projects, PluginProject) for the host whose
         /// scripts are in scriptsDir; null: no plugin projects.
         string PluginProjectsDir(string scriptsDir);
+        /// Starts one HTTP request of a plugin (net.get / net.post) and returns at once; never blocks the frame. The host
+        /// has checked the URL, the plugin's declared hosts and the limits. The fetcher calls request.Done once, from any
+        /// thread (the host runs the plugin's callback in a later Tick). It reads at most request.MaxBytes + 1 bytes of
+        /// the body (then TooLarge), gives up after request.TimeoutSeconds, stops on request.Cancel, stores and sends no
+        /// cookies and no credentials of its own, and follows a redirect only when request.CheckRedirect(next) is null.
+        void NetFetch(NetRequest request);
+    }
+
+    /// One plugin HTTP request as the host hands it to the fetcher (IScriptServices.NetFetch). No Unity types.
+    public sealed class NetRequest
+    {
+        /// The plugin's id (logs, the default User-Agent).
+        public string Plugin = "", Method = "GET", Url = "";
+        /// The plugin's own headers (checked by the host; Content-Type is the body's type).
+        public readonly List<KeyValuePair<string, string>> Headers = new List<KeyValuePair<string, string>>();
+        /// The body (POST) or null; ContentType is its type.
+        public byte[] Body;
+        public string ContentType;
+        public int TimeoutSeconds = ScriptHost.NetDefaultTimeout, MaxBytes = ScriptHost.NetMaxBytes;
+        public System.Threading.CancellationToken Cancel;
+        /// null: the fetcher may follow a redirect to this URL; else why not (thread-safe: a pure check).
+        public Func<Uri, string> CheckRedirect;
+        /// Called once, from any thread, with the outcome.
+        public Action<NetReply> Done;
+    }
+
+    /// What the fetcher got: a status and a body, or an error (no reply).
+    public sealed class NetReply
+    {
+        /// The HTTP status; 0 when no reply came.
+        public int Status;
+        /// The body bytes (Length of them are valid; at most MaxBytes when TooLarge).
+        public byte[] Body;
+        public int Length;
+        public string ContentType;
+        /// null: a reply came (any status); else what went wrong ("timeout", "cancelled", a network error).
+        public string Error;
+        /// The body was longer than MaxBytes: the transfer was stopped there.
+        public bool TooLarge;
     }
 
     /// A tile a plugin put in the menu (DOCK and wrist). Window = the full window id it toggles, or null (a `run` tile).
@@ -79,6 +118,9 @@ namespace MetaCodex.Scripting
     ///    and reloaded as one unit.
     /// Each runs in its own sandbox (no io/os/load); every call has an instruction budget (a runaway loop
     /// stops that script, the app keeps its frame rate); enabled flags and `store` survive restarts.
+    /// The network: a plugin's net.get / net.post reach only the https hosts its plugin.json "network" lists (plain http
+    /// only to 127.0.0.1 / localhost), 4 in flight and 60 a minute at most, replies cut at 1 MB; the fetch runs off the
+    /// main thread (IScriptServices.NetFetch) and the callback in a later Tick, never after the plugin unloaded.
     /// Gesture detectors (gesture.define) run as persistent coroutines a few dozen times per second.
     public sealed class ScriptHost
     {
@@ -104,8 +146,14 @@ namespace MetaCodex.Scripting
             public int Runs;
             public int Poses, Detectors;
             public readonly List<string> Log = new List<string>();
+            /// The hosts plugin.json "network" declares (lower case; "*.example.com" = its subdomains); empty: no network.
+            public string[] NetworkHosts = new string[0];
             internal Table Store;
             internal Table[] HandTables;
+            /// net: the start times (session seconds) of the requests of the last minute; what the log said when (throttle).
+            internal readonly Queue<float> NetStarts = new Queue<float>();
+            internal readonly Dictionary<string, float> NetSaid = new Dictionary<string, float>();
+            internal bool NetReplied;
             /// State key: plugins and scripts may share a name.
             public string Key => Kind == "plugin" ? "plugin/" + Name : Name;
         }
@@ -131,8 +179,28 @@ namespace MetaCodex.Scripting
             public double Micros; // average cost per call
         }
 
+        /// A request of net.get / net.post: in flight (Started) or refused (its error waits for the next Tick).
+        private sealed class NetPending
+        {
+            public Entry Owner; public Script Script; public DynValue Fn;
+            public int Id, Timeout; public string Method, Url;
+            /// Session time the watchdog gives up at; set in the first Tick after the start (a request made while the host
+            /// loads, before its first Tick, has no session time yet).
+            public float Deadline = float.NaN;
+            public bool Started, Dropped;
+            public int Finished; // 1 once an outcome is taken (the reply, the watchdog, a refusal); Interlocked
+            public System.Threading.CancellationTokenSource Cts;
+        }
+        /// An outcome for the main thread: text decoded and JSON parsed already (off the main thread for a real reply).
+        private sealed class NetDone { public NetPending P; public int Status; public string Body = "", Error; public JToken Json; }
+
         public const int InstructionBudget = 200_000;
         public const int MaxDetectors = 32;
+        /// net limits: requests in flight and started in a minute per plugin, reply (and request) body bytes, timeout
+        /// seconds (default and most), declared hosts.
+        public const int NetMaxInFlight = 4, NetMaxPerMinute = 60, NetMaxBytes = 1 << 20, NetDefaultTimeout = 15, NetMaxTimeout = 30, NetMaxHosts = 16;
+        /// Outcomes run a tick at most (a burst of replies is spread over frames).
+        private const int NetDeliverPerTick = 8;
         public readonly string Dir;
         public readonly string PluginsDir;
         /// The app's path of /root/metacodex-projects/plugins (plugin projects); null: none.
@@ -157,6 +225,9 @@ namespace MetaCodex.Scripting
         private readonly List<WallTimer> _wallTimers = new List<WallTimer>();
         private readonly List<PlugWin> _windows = new List<PlugWin>();
         private readonly List<TileEntry> _tileEntries = new List<TileEntry>();
+        private readonly List<NetPending> _net = new List<NetPending>();
+        private readonly System.Collections.Concurrent.ConcurrentQueue<NetDone> _netDone = new System.Collections.Concurrent.ConcurrentQueue<NetDone>();
+        private int _netIds;
         private bool _anyDirty;
         public const int MaxWindowsPerPlugin = 4, MaxPluginTiles = 6;
         private static readonly DateTime Epoch = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
@@ -244,6 +315,7 @@ namespace MetaCodex.Scripting
                     Run(t.Owner, t.Fn);
                 }
             }
+            if (_net.Count > 0 || !_netDone.IsEmpty) TickNet();
             if (_anyDirty) FlushWindows(now);
             AfterTick?.Invoke();
         }
@@ -405,6 +477,9 @@ namespace MetaCodex.Scripting
             e.Handlers = 0;
             e.Poses = 0;
             e.Detectors = 0;
+            e.NetworkHosts = new string[0];
+            e.NetSaid.Clear();
+            e.NetReplied = false;
             e.Enabled = !_enabled.TryGetValue(e.Key, out bool en) || en;
             string code = null, chunkName = e.Name + ".lua";
             if (e.Kind == "plugin")
@@ -421,6 +496,9 @@ namespace MetaCodex.Scripting
                 string said = e.Manifest["kind"]?.Type == JTokenType.String ? (string)e.Manifest["kind"] : null;
                 if (e.Project && said != null && PluginProject.NormalizeKind(said) != e.PluginKind)
                     Say(e, "warn plugin.json: \"kind\": \"" + said + "\" is not this project's kind; the kind is " + e.PluginKind + " (fixed by .metacodex/project.json and the folder plugins/" + PluginProject.FolderOf(e.PluginKind) + "): set \"kind\": \"" + e.PluginKind + "\"");
+                var netWarnings = new List<string>();
+                e.NetworkHosts = ParseNetworkHosts(e.Manifest["network"], netWarnings);
+                foreach (var w in netWarnings) Say(e, "warn plugin.json \"network\": " + w);
                 if (!e.Enabled) { Say(e, "disabled"); return; }
                 LoadPoses(e);
                 var main = System.IO.Path.Combine(e.PluginDir, (string)e.Manifest["main"] ?? "main.lua");
@@ -482,6 +560,7 @@ namespace MetaCodex.Scripting
             _handlers.RemoveAll(h => h.Owner == e);
             _sequences.RemoveAll(s => s.Owner == e);
             _timers.RemoveAll(t => t.Owner == e);
+            DropNet(e);
             RemoveOwnedUi(e);
             _detectors.RemoveAll(d => d.Owner == e);
             _svc.Gestures?.RemoveOwnedBy(e.Key);
@@ -1092,6 +1171,10 @@ namespace MetaCodex.Scripting
             foreach (var t in _timers) if (t.Owner == e) timers++;
             foreach (var t in _wallTimers) if (t.Owner == e) timers++;
             sb.Append("\ntimers: ").Append(timers);
+            if (e.NetworkHosts.Length > 0)
+                sb.Append("\nnetwork: ").Append(string.Join(", ", e.NetworkHosts)).Append(" (").Append(NetInFlight(e)).Append(" in flight, ")
+                  .Append(e.NetStarts.Count(t => t > Now - 60f)).Append(" in the last minute)");
+            else sb.Append("\nnetwork: none");
             var bad = new List<string>();
             foreach (var line in e.Log) if (line.StartsWith("warn", StringComparison.Ordinal) || line.StartsWith("ERROR", StringComparison.Ordinal) || line.StartsWith("voice.command ", StringComparison.Ordinal)) bad.Add(line); // voice.command lines are the registry's lint warnings
             foreach (var n in _notes) if (n.Contains("/" + e.Name + ":")) bad.Add("warn " + n); // an older folder this project hides
@@ -1119,6 +1202,349 @@ namespace MetaCodex.Scripting
         {
             var dt = new DateTime(year, 1, 1, 0, 0, 0, DateTimeKind.Local).AddMonths(month - 1).AddDays(day - 1).AddHours(hour).AddMinutes(min).AddSeconds(sec);
             return (dt.ToUniversalTime() - Epoch).TotalSeconds;
+        }
+
+        // ------------------------------------------------------------------ network (net.get / net.post)
+
+        /// The hosts of plugin.json "network": host names ("api.example.com"), "*.example.com" for the subdomains of a
+        /// domain, "127.0.0.1" / "localhost" for this headset's own servers. An entry that is not a host name (a scheme,
+        /// a path, a port, "*") is left out with a warning.
+        public static string[] ParseNetworkHosts(JToken tok, List<string> warnings)
+        {
+            var hosts = new List<string>();
+            if (tok == null || tok.Type == JTokenType.Null) return hosts.ToArray();
+            IEnumerable<JToken> items;
+            if (tok.Type == JTokenType.String) { warnings.Add("write a list: \"network\": [\"" + (string)tok + "\"]"); items = new[] { tok }; }
+            else if (tok is JArray arr) items = arr;
+            else { warnings.Add("must be a list of host names, for example \"network\": [\"api.example.com\"]"); return hosts.ToArray(); }
+            foreach (var it in items)
+            {
+                if (it.Type != JTokenType.String) { warnings.Add(it.ToString(Newtonsoft.Json.Formatting.None) + " is not a host name (a text like \"api.example.com\")"); continue; }
+                string raw = (string)it, h = raw.Trim().TrimEnd('.').ToLowerInvariant();
+                string why = HostEntryProblem(h);
+                if (why != null) { warnings.Add("'" + raw + "': " + why); continue; }
+                if (hosts.Contains(h)) continue;
+                if (hosts.Count >= NetMaxHosts) { warnings.Add("more than " + NetMaxHosts + " hosts; the rest are left out"); break; }
+                hosts.Add(h);
+            }
+            return hosts.ToArray();
+        }
+
+        private static readonly System.Text.RegularExpressions.Regex HostRx =
+            new System.Text.RegularExpressions.Regex(@"^(\*\.)?([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)*[a-z0-9]([a-z0-9-]*[a-z0-9])?$");
+
+        private static string HostEntryProblem(string h)
+        {
+            if (h.Length == 0) return "empty";
+            if (h.Contains("://") || h.Contains("/")) return "write the host name only, without https:// or a path (for example api.example.com)";
+            if (h.Contains(":")) return "write the host name only, without a port (any port of a declared host is allowed)";
+            if (h == "*" || h == "*.") return "every host is not allowed: list the hosts the plugin needs";
+            if (h.Length > 253 || !HostRx.IsMatch(h)) return "not a host name (letters, digits, - and dots: api.example.com, or *.example.com for its subdomains)";
+            if (h.StartsWith("*.", StringComparison.Ordinal) && h.IndexOf('.', 2) < 0) return "a wildcard needs a domain with a dot (*.example.com, not *.com)";
+            if (h.IndexOf('.') < 0 && h != "localhost") return "not a full host name (for example api.example.com)";
+            return null;
+        }
+
+        /// True when the host (lower case) is a declared one: the same name, or a subdomain (any depth) of a "*.domain"
+        /// entry. "*.example.com" does not cover example.com itself: that needs its own entry.
+        public static bool HostDeclared(string host, IReadOnlyList<string> hosts)
+        {
+            if (string.IsNullOrEmpty(host) || hosts == null) return false;
+            for (int i = 0; i < hosts.Count; i++)
+            {
+                string h = hosts[i];
+                if (h.StartsWith("*.", StringComparison.Ordinal))
+                {
+                    if (host.Length > h.Length - 1 && host.EndsWith(h.Substring(1), StringComparison.Ordinal)) return true;
+                }
+                else if (host == h) return true;
+            }
+            return false;
+        }
+
+        /// null when a plugin that declared these hosts may fetch the URL; else why not (the text its log and res.error show).
+        public static string NetCheckUrl(string url, IReadOnlyList<string> hosts)
+        {
+            if (string.IsNullOrEmpty(url)) return "net: the url is empty";
+            if (url.Length > 8192) return "net: the url is longer than 8192 characters";
+            if (!Uri.TryCreate(url, UriKind.Absolute, out var u)) return "net: not a full url like https://api.example.com/path: " + Short(url);
+            return NetCheckUri(u, hosts);
+        }
+
+        /// The same for a parsed URL (also each redirect the fetcher is asked to follow). Thread-safe.
+        public static string NetCheckUri(Uri u, IReadOnlyList<string> hosts)
+        {
+            if (u == null || !u.IsAbsoluteUri) return "net: not a full url";
+            string scheme = u.Scheme.ToLowerInvariant();
+            if (scheme != "https" && scheme != "http") return "net: only https urls (not " + scheme + ":)";
+            if (!string.IsNullOrEmpty(u.UserInfo)) return "net: no user name or password in the url (a key the user typed goes in a header)";
+            string host = HostOf(u);
+            bool loopback = host == "127.0.0.1" || host == "localhost";
+            if (scheme == "http" && !loopback) return "net: http is refused, use https (plain http only to 127.0.0.1 and localhost)";
+            if (!HostDeclared(host, hosts)) return "net: host not declared in plugin.json \"network\": " + host;
+            return null;
+        }
+
+        private static string HostOf(Uri u)
+        {
+            string h;
+            try { h = u.IdnHost; } catch (Exception) { h = u.Host; }
+            return (h ?? "").TrimEnd('.').ToLowerInvariant();
+        }
+
+        /// The URL as logs show it: scheme, host and path, never the query (it may hold a key).
+        private static string LogUrl(string url)
+        {
+            if (!Uri.TryCreate(url ?? "", UriKind.Absolute, out var u)) return Short(url ?? "");
+            string s = u.Scheme + "://" + u.Authority + u.AbsolutePath + (u.Query.Length > 1 ? "?…" : "");
+            return s.Length > 90 ? s.Substring(0, 90) + "…" : s;
+        }
+
+        /// Headers the app's HTTP stack sets itself (framing, hop by hop, proxy): a plugin may not set them.
+        private static readonly string[] AppHeaders = { "host", "content-length", "connection", "transfer-encoding", "keep-alive", "upgrade", "te", "trailer", "expect" };
+
+        private static string HeaderProblem(string name, string value)
+        {
+            if (name.Length == 0 || name.Length > 64) return "a name of 1 to 64 characters";
+            foreach (char c in name)
+                if (!(c < 128 && char.IsLetterOrDigit(c) || "!#$%&'*+-.^_`|~".IndexOf(c) >= 0)) return "a header name has letters, digits and - only";
+            string low = name.ToLowerInvariant();
+            if (Array.IndexOf(AppHeaders, low) >= 0 || low.StartsWith("proxy-", StringComparison.Ordinal)) return "the app sets it, not a plugin";
+            if (value.Length > 4096) return "a value of 4096 characters at most";
+            if (value.IndexOf('\r') >= 0 || value.IndexOf('\n') >= 0) return "no line breaks in a header value";
+            return null;
+        }
+
+        /// Requests of this plugin in flight now (started, no outcome run yet).
+        public int NetInFlight(Entry e)
+        {
+            int n = 0;
+            for (int i = 0; i < _net.Count; i++) if (_net[i].Owner == e && _net[i].Started) n++;
+            return n;
+        }
+
+        /// A log line about the network, at most once in 10 s for the same key (a plugin that loops on a refusal).
+        private void NetSay(Entry e, string line, string key)
+        {
+            if (e.NetSaid.TryGetValue(key, out var at) && Now - at < 10f && Now >= at) return;
+            e.NetSaid[key] = Now;
+            Say(e, line);
+        }
+
+        /// net.get(url, [opts], fn) / net.post(url, body, [opts], fn). Returns the request id, or nil and why when it is
+        /// refused (the callback then gets the same error in the next tick: every request gets exactly one callback).
+        private DynValue NetCall(Entry e, Script s, bool post, CallbackArguments a)
+        {
+            string form = post ? "net.post(url, body, { headers = {...}, timeout = 15 }, function(res) ... end)"
+                               : "net.get(url, { headers = {...}, timeout = 15 }, function(res) ... end)";
+            if (a.Count < 1 || a[0].Type != DataType.String) throw new ScriptRuntimeException(form + ": the url is a text");
+            string url = a[0].String;
+            int i = 1;
+            DynValue body = DynValue.Nil;
+            if (post) { if (a.Count > 1) body = a[1]; i = 2; }
+            Table opts = null;
+            if (i < a.Count && a[i].Type == DataType.Table) { opts = a[i].Table; i++; }
+            else if (i + 1 < a.Count && a[i].IsNil()) i++;
+            var fn = Fn(a, i);
+            if (fn == null) throw new ScriptRuntimeException(form + ": the last argument is the function that gets the reply (a net call never waits)");
+            var req = new NetRequest { Plugin = e.Name, Method = post ? "POST" : "GET", Url = url };
+            bool ua = false;
+            if (opts != null)
+            {
+                var hv = opts.Get("headers");
+                if (!hv.IsNil())
+                {
+                    if (hv.Type != DataType.Table) throw new ScriptRuntimeException(form + ": headers is a table like { Accept = \"application/json\" }");
+                    foreach (var pair in hv.Table.Pairs)
+                    {
+                        if (pair.Value.IsNil()) continue;
+                        if (pair.Key.Type != DataType.String || pair.Value.Type != DataType.String && pair.Value.Type != DataType.Number)
+                            throw new ScriptRuntimeException("net: a header is name = \"text\", for example headers = { Accept = \"application/json\" }");
+                        string name = pair.Key.String, value = pair.Value.Type == DataType.String ? pair.Value.String : Number(pair.Value.Number);
+                        string bad = HeaderProblem(name, value);
+                        if (bad != null) throw new ScriptRuntimeException("net: header " + name + ": " + bad);
+                        if (name.Equals("content-type", StringComparison.OrdinalIgnoreCase)) { req.ContentType = value; continue; }
+                        if (name.Equals("user-agent", StringComparison.OrdinalIgnoreCase)) ua = true;
+                        if (req.Headers.Count >= 32) throw new ScriptRuntimeException("net: 32 headers at most");
+                        req.Headers.Add(new KeyValuePair<string, string>(name, value));
+                    }
+                }
+                var tv = opts.Get("timeout");
+                if (!tv.IsNil())
+                {
+                    if (tv.Type != DataType.Number) throw new ScriptRuntimeException(form + ": timeout is a number of seconds (1 to " + NetMaxTimeout + ")");
+                    req.TimeoutSeconds = (int)Math.Ceiling(Math.Max(1.0, Math.Min(NetMaxTimeout, tv.Number)));
+                }
+            }
+            if (!ua) req.Headers.Add(new KeyValuePair<string, string>("User-Agent", "MetaCodex-plugin/1.0 (" + e.Name + ")"));
+            if (post)
+            {
+                string text = null, type = "text/plain; charset=utf-8";
+                if (body.Type == DataType.Table)
+                {
+                    try { text = LuaJson.Encode(body); }
+                    catch (ScriptRuntimeException ex) { throw new ScriptRuntimeException("net.post: the body table: " + ex.Message); }
+                    type = "application/json";
+                }
+                else if (body.Type == DataType.String) text = body.String;
+                else if (!body.IsNil()) text = body.ToPrintString();
+                req.Body = text == null ? new byte[0] : Encoding.UTF8.GetBytes(text);
+                if (req.ContentType == null) req.ContentType = type;
+            }
+            string why = e.Kind != "plugin" ? "net: only plugins can use the network (a plugin lists its hosts in plugin.json \"network\")"
+                       : req.Body != null && req.Body.Length > NetMaxBytes ? "net: the body is larger than 1 MB"
+                       : NetCheckUrl(url, e.NetworkHosts);
+            if (why == null)
+            {
+                while (e.NetStarts.Count > 0 && (e.NetStarts.Peek() <= Now - 60f || e.NetStarts.Peek() > Now)) e.NetStarts.Dequeue();
+                if (NetInFlight(e) >= NetMaxInFlight) why = "net: " + NetMaxInFlight + " requests in flight already (the most for a plugin); wait for a reply";
+                else if (e.NetStarts.Count >= NetMaxPerMinute) why = "net: " + NetMaxPerMinute + " requests in the last minute (the most for a plugin); wait";
+            }
+            var p = new NetPending { Owner = e, Script = s, Fn = fn, Id = ++_netIds, Method = req.Method, Url = url };
+            _net.Add(p);
+            if (why != null)
+            {
+                p.Finished = 1;
+                NetSay(e, "warn " + why, why);
+                _netDone.Enqueue(new NetDone { P = p, Error = why });
+                return DynValue.NewTuple(DynValue.Nil, DynValue.NewString(why));
+            }
+            p.Started = true;
+            p.Timeout = req.TimeoutSeconds;
+            p.Cts = new System.Threading.CancellationTokenSource();
+            e.NetStarts.Enqueue(Now);
+            req.MaxBytes = NetMaxBytes;
+            req.Cancel = p.Cts.Token;
+            var hosts = e.NetworkHosts;
+            req.CheckRedirect = u => NetCheckUri(u, hosts);
+            req.Done = r => NetReplied(p, r);
+            try { _svc.NetFetch(req); }
+            catch (Exception ex) { NetReplied(p, new NetReply { Error = "the request did not start: " + ex.Message }); }
+            return DynValue.NewNumber(p.Id);
+        }
+
+        /// The fetcher's outcome, on any thread: the first one wins; the text is decoded and JSON parsed here, so the main
+        /// thread only makes the Lua table.
+        private void NetReplied(NetPending p, NetReply r)
+        {
+            if (r == null || System.Threading.Interlocked.CompareExchange(ref p.Finished, 1, 0) != 0) return;
+            var d = new NetDone { P = p, Status = r.Status, Error = r.Error };
+            try
+            {
+                int len = r.Body == null ? 0 : Math.Max(0, Math.Min(r.Length, r.Body.Length));
+                bool tooLarge = r.TooLarge || len > NetMaxBytes;
+                if (len > NetMaxBytes) len = NetMaxBytes;
+                if (len > 0)
+                {
+                    d.Body = Encoding.UTF8.GetString(r.Body, 0, len);
+                    if (d.Body.Length > 0 && d.Body[0] == '﻿') d.Body = d.Body.Substring(1);
+                }
+                if (tooLarge) d.Error = "too large";
+                else if (d.Error == null && LooksJson(r.ContentType, d.Body)) d.Json = ParseJson(d.Body);
+            }
+            catch (Exception ex) { d.Error = d.Error ?? "unreadable reply: " + ex.Message; }
+            _netDone.Enqueue(d);
+        }
+
+        private static bool LooksJson(string type, string body)
+        {
+            if (type != null && type.IndexOf("json", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            for (int i = 0; i < body.Length; i++)
+            {
+                char c = body[i];
+                if (c == ' ' || c == '\t' || c == '\r' || c == '\n') continue;
+                return c == '{' || c == '[';
+            }
+            return false;
+        }
+
+        private static JToken ParseJson(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return null;
+            try
+            {
+                using (var sr = new StringReader(text))
+                using (var r = new Newtonsoft.Json.JsonTextReader(sr) { DateParseHandling = Newtonsoft.Json.DateParseHandling.None, MaxDepth = LuaJson.MaxDepth + 1 })
+                {
+                    var token = JToken.ReadFrom(r);
+                    return r.Read() ? null : token;
+                }
+            }
+            catch (Exception) { return null; }
+        }
+
+        /// Runs the outcomes that came (a few a tick) and times out requests the fetcher never answered.
+        private void TickNet()
+        {
+            for (int n = 0; n < NetDeliverPerTick && _netDone.TryDequeue(out var d); n++) NetDeliver(d.P, d);
+            for (int i = _net.Count - 1; i >= 0; i--)
+            {
+                if (i >= _net.Count) continue; // a callback below changed the list
+                var p = _net[i];
+                if (!p.Started) continue;
+                // the fetcher's own timeout comes first; this one is for a fetcher that hangs (a DNS lookup cannot be stopped)
+                if (float.IsNaN(p.Deadline)) p.Deadline = Now + p.Timeout + 1f;
+                if (Now < p.Deadline) continue;
+                if (System.Threading.Interlocked.CompareExchange(ref p.Finished, 1, 0) != 0) continue; // its outcome is queued
+                try { p.Cts?.Cancel(); } catch (Exception) { }
+                NetDeliver(p, new NetDone { P = p, Error = "timeout" });
+            }
+        }
+
+        /// Runs a request's callback with res = {ok, status, body, json, error}, under the instruction budget. Nothing
+        /// runs for a request that was cancelled or whose plugin unloaded (or reloaded: a new Lua state) since.
+        private void NetDeliver(NetPending p, NetDone d)
+        {
+            if (p.Dropped) return;
+            p.Dropped = true;
+            _net.Remove(p);
+            var e = p.Owner;
+            if (e.Script == null || e.Script != p.Script || e.Error != null || !e.Enabled) return;
+            bool ok = d.Error == null && d.Status >= 200 && d.Status < 300;
+            string err = d.Error ?? (ok ? null : "status " + d.Status);
+            if (p.Started)
+            {
+                if (!ok) NetSay(e, "net: " + p.Method + " " + LogUrl(p.Url) + " -> " + err, "failed");
+                else if (!e.NetReplied)
+                {
+                    e.NetReplied = true;
+                    Say(e, "net: " + p.Method + " " + LogUrl(p.Url) + " -> " + d.Status + " (" + Math.Round((d.Body?.Length ?? 0) / 1024.0, 1).ToString(CultureInfo.InvariantCulture) + " KB)");
+                }
+            }
+            var t = new Table(p.Script);
+            t.Set("ok", DynValue.NewBoolean(ok));
+            t.Set("status", DynValue.NewNumber(d.Status));
+            t.Set("body", DynValue.NewString(d.Body ?? ""));
+            if (d.Json != null)
+            {
+                try { t.Set("json", LuaJson.FromJson(p.Script, d.Json)); }
+                catch (Exception) { }
+            }
+            if (err != null) t.Set("error", DynValue.NewString(err));
+            Run(e, p.Fn, DynValue.NewTable(t));
+        }
+
+        /// net.cancel(id): the request is dropped; its callback never runs.
+        private bool NetCancel(Entry e, int id)
+        {
+            for (int i = 0; i < _net.Count; i++)
+                if (_net[i].Id == id && _net[i].Owner == e) { DropNetAt(i); return true; }
+            return false;
+        }
+
+        /// Unload: every request of the plugin is cancelled and dropped; no callback of it runs after this.
+        private void DropNet(Entry e)
+        {
+            for (int i = _net.Count - 1; i >= 0; i--) if (_net[i].Owner == e) DropNetAt(i);
+        }
+
+        private void DropNetAt(int i)
+        {
+            var p = _net[i];
+            p.Dropped = true;
+            System.Threading.Interlocked.Exchange(ref p.Finished, 1);
+            _net.RemoveAt(i);
+            try { p.Cts?.Cancel(); } catch (Exception) { }
         }
 
         // ------------------------------------------------------------------ the Lua API
@@ -1507,6 +1933,13 @@ namespace MetaCodex.Scripting
             Set(browser, "open", a => { _svc.OpenBrowser(Str(a, 0)); return DynValue.Nil; });
             g.Set("browser", DynValue.NewTable(browser));
 
+            // net: https requests to the hosts plugin.json "network" declares; the reply comes to a callback in a later tick
+            var net = new Table(s);
+            Set(net, "get", a => NetCall(e, s, false, a));
+            Set(net, "post", a => NetCall(e, s, true, a));
+            Set(net, "cancel", a => DynValue.NewBoolean(NetCancel(e, (int)Num(a, 0, -1))));
+            g.Set("net", DynValue.NewTable(net));
+
             var keyboard = new Table(s);
             Set(keyboard, "open", a => { _svc.OpenKeyboard(); return DynValue.Nil; });
             g.Set("keyboard", DynValue.NewTable(keyboard));
@@ -1626,6 +2059,9 @@ namespace MetaCodex.Scripting
                 plugin.Set("version", DynValue.NewString(e.Version ?? ""));
                 plugin.Set("dir", DynValue.NewString(e.LinuxDir));
                 plugin.Set("kind", DynValue.NewString(e.PluginKind));
+                var hostList = new Table(s);
+                foreach (var h in e.NetworkHosts) hostList.Append(DynValue.NewString(h));
+                plugin.Set("network", DynValue.NewTable(hostList));
                 g.Set("plugin", DynValue.NewTable(plugin));
             }
 

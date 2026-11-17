@@ -1,0 +1,8 @@
+{
+  "id": "weather",
+  "name": "Weather",
+  "version": "1.0.0",
+  "kind": "app",
+  "description": "Weather now and the next 3 days for a city you pick (online)",
+  "network": ["api.open-meteo.com", "geocoding-api.open-meteo.com"]
+}

@@ -63,6 +63,7 @@ namespace PluginHarness
         /// Delivers the open / close events the app would send on its next frame (the host never makes them itself).
         public void Pump(ScriptHost host)
         {
+            PumpNet();
             int n = _pending.Count;
             for (int i = 0; i < n; i++)
             {
@@ -172,5 +173,115 @@ namespace PluginHarness
         public void VoiceRun(string text) => VoiceRuns.Add(text);
         public void VoiceListen() => Actions.Add("listen");
         public void Log(string line) => LogLines.Add(line);
+
+        // ------------------------------------------------------------------ the network: canned replies by URL
+
+        /// Every request the host handed to the fetcher, in order.
+        public readonly List<NetRequest> NetRequests = new List<NetRequest>();
+        /// Requests waiting for their canned reply (due = the fake clock time it comes at; never: no reply at all).
+        private readonly List<(double due, NetRequest req, NetFixture fx)> _netPending = new List<(double, NetRequest, NetFixture)>();
+        /// Fixtures this fake answers from (the scenario loads tests/plugins/fixtures/net/*.json); a test may add its own.
+        public readonly List<NetFixture> NetFixtures = new List<NetFixture>(NetFixture.Loaded);
+        /// A request whose URL no fixture matches is a problem (FAIL): the fixtures need a canned reply for it.
+        public bool UnmatchedIsProblem = true;
+
+        public void NetFetch(NetRequest request)
+        {
+            NetRequests.Add(request);
+            var fx = NetFixture.Match(NetFixtures, request.Method, request.Url);
+            if (fx == null)
+            {
+                if (UnmatchedIsProblem) Problem("net: no canned reply for " + request.Method + " " + request.Url + " (add one to tests/plugins/fixtures/net/*.json)");
+                request.Done(new NetReply { Error = "harness: no canned reply for this url" });
+                return;
+            }
+            if (fx.Never) { _netPending.Add((double.MaxValue, request, fx)); return; }
+            _netPending.Add((Clock + fx.Delay, request, fx));
+        }
+
+        /// The fetcher's side of a frame: the replies that are due (a cancelled request gets "cancelled", as the real one).
+        public void PumpNet()
+        {
+            for (int i = 0; i < _netPending.Count; i++)
+            {
+                var (due, req, fx) = _netPending[i];
+                bool cancelled = req.Cancel.IsCancellationRequested;
+                if (!cancelled && due > Clock) continue;
+                _netPending.RemoveAt(i--);
+                req.Done(cancelled ? new NetReply { Error = "cancelled" } : fx.Reply(req.MaxBytes));
+            }
+        }
+
+        /// Requests still waiting for a reply in the fake fetcher.
+        public int NetWaiting => _netPending.Count;
+    }
+
+    /// One canned reply (tests/plugins/fixtures/net/*.json: {"replies": [ {...}, ... ]}):
+    ///   url      the request URL it answers: the start of it (match "prefix", the default) or all of it (match "exact");
+    ///            the longest matching url wins
+    ///   method   GET or POST (default: any)
+    ///   status   default 200; type: the Content-Type (default application/json for "json", text/plain otherwise)
+    ///   json     the body as JSON, or body: the body as text, or bytes: a body of that many bytes (too large tests)
+    ///   delay    seconds of the fake clock before the reply (default 0: the next frame); never: true = no reply (timeout)
+    public sealed class NetFixture
+    {
+        public string Url = "", Mode = "prefix", Method, Type, Body, File;
+        public int Status = 200, Bytes = -1;
+        public double Delay;
+        public bool Never;
+
+        public static readonly List<NetFixture> Loaded = new List<NetFixture>();
+
+        /// Reads every *.json of the folder; returns the problems (bad files) as text lines.
+        public static List<string> LoadDir(string dir)
+        {
+            var problems = new List<string>();
+            if (string.IsNullOrEmpty(dir) || !System.IO.Directory.Exists(dir)) return problems;
+            foreach (var f in System.IO.Directory.GetFiles(dir, "*.json").OrderBy(x => x, StringComparer.Ordinal))
+            {
+                try
+                {
+                    var j = JObject.Parse(System.IO.File.ReadAllText(f));
+                    foreach (var r in (j["replies"] as JArray) ?? new JArray())
+                        if (r is JObject o) Loaded.Add(From(o, System.IO.Path.GetFileName(f)));
+                }
+                catch (Exception ex) { problems.Add(System.IO.Path.GetFileName(f) + ": " + ex.Message); }
+            }
+            return problems;
+        }
+
+        public static NetFixture From(JObject o, string file = "test")
+        {
+            var fx = new NetFixture
+            {
+                Url = (string)o["url"] ?? "", Mode = (string)o["match"] ?? "prefix", Method = (string)o["method"], Type = (string)o["type"],
+                Status = (int?)o["status"] ?? 200, Bytes = (int?)o["bytes"] ?? -1, Delay = (double?)o["delay"] ?? 0, Never = (bool?)o["never"] ?? false, File = file,
+            };
+            if (o["json"] != null) { fx.Body = o["json"].ToString(Newtonsoft.Json.Formatting.None); fx.Type ??= "application/json; charset=utf-8"; }
+            else if (o["body"] != null) { fx.Body = (string)o["body"]; fx.Type ??= "text/plain; charset=utf-8"; }
+            return fx;
+        }
+
+        public static NetFixture Match(IEnumerable<NetFixture> all, string method, string url)
+        {
+            NetFixture best = null;
+            foreach (var fx in all)
+            {
+                if (fx.Method != null && !string.Equals(fx.Method, method, StringComparison.OrdinalIgnoreCase)) continue;
+                bool hit = fx.Mode == "exact" ? url == fx.Url : url.StartsWith(fx.Url, StringComparison.Ordinal);
+                if (hit && (best == null || fx.Url.Length > best.Url.Length)) best = fx;
+            }
+            return best;
+        }
+
+        /// The reply as the real fetcher gives it: at most max + 1 bytes read, TooLarge when there was more.
+        public NetReply Reply(int max)
+        {
+            byte[] bytes = Bytes >= 0 ? new byte[Bytes] : System.Text.Encoding.UTF8.GetBytes(Body ?? "");
+            if (Bytes >= 0) for (int i = 0; i < bytes.Length; i++) bytes[i] = (byte)'x';
+            var r = new NetReply { Status = Status, ContentType = Type, Body = bytes, Length = bytes.Length };
+            if (bytes.Length > max) { r.TooLarge = true; r.Length = max; }
+            return r;
+        }
     }
 }

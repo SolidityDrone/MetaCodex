@@ -1,0 +1,172 @@
+{
+  "about": "Canned Open-Meteo replies (recorded 2026-11-17 from api.open-meteo.com and geocoding-api.open-meteo.com, trimmed) for the weather example plugin. Format: tests/plugins/PluginHarness/Fakes.cs (NetFixture).",
+  "replies": [
+    {
+      "url": "https://api.open-meteo.com/v1/forecast?",
+      "json": {
+        "latitude": 48.853382,
+        "longitude": 2.355208,
+        "generationtime_ms": 0.3826618194580078,
+        "utc_offset_seconds": 3600,
+        "timezone": "Europe/Paris",
+        "timezone_abbreviation": "GMT+1",
+        "elevation": 43.0,
+        "current_units": {
+          "time": "iso8601",
+          "interval": "seconds",
+          "temperature_2m": "°C",
+          "apparent_temperature": "°C",
+          "relative_humidity_2m": "%",
+          "weather_code": "wmo code",
+          "wind_speed_10m": "km/h",
+          "wind_direction_10m": "°"
+        },
+        "current": {
+          "time": "2026-11-17T01:45",
+          "interval": 900,
+          "temperature_2m": 13.4,
+          "apparent_temperature": 12.0,
+          "relative_humidity_2m": 90,
+          "weather_code": 61,
+          "wind_speed_10m": 13.4,
+          "wind_direction_10m": 188
+        },
+        "daily_units": {
+          "time": "iso8601",
+          "weather_code": "wmo code",
+          "temperature_2m_max": "°C",
+          "temperature_2m_min": "°C",
+          "precipitation_probability_max": "%"
+        },
+        "daily": {
+          "time": [
+            "2026-11-17",
+            "2026-11-18",
+            "2026-11-19"
+          ],
+          "weather_code": [
+            80,
+            3,
+            80
+          ],
+          "temperature_2m_max": [
+            17.2,
+            15.1,
+            13.8
+          ],
+          "temperature_2m_min": [
+            11.8,
+            11.1,
+            10.2
+          ],
+          "precipitation_probability_max": [
+            100,
+            23,
+            74
+          ]
+        }
+      }
+    },
+    {
+      "url": "https://api.open-meteo.com/v1/forecast?latitude=45.7491&longitude=4.8479&",
+      "json": {
+        "latitude": 45.75,
+        "longitude": 4.85,
+        "generationtime_ms": 0.3826618194580078,
+        "utc_offset_seconds": 3600,
+        "timezone": "Europe/Paris",
+        "timezone_abbreviation": "GMT+1",
+        "elevation": 173.0,
+        "current_units": {
+          "time": "iso8601",
+          "interval": "seconds",
+          "temperature_2m": "°C",
+          "apparent_temperature": "°C",
+          "relative_humidity_2m": "%",
+          "weather_code": "wmo code",
+          "wind_speed_10m": "km/h",
+          "wind_direction_10m": "°"
+        },
+        "current": {
+          "time": "2026-11-17T01:45",
+          "interval": 900,
+          "temperature_2m": 9.1,
+          "apparent_temperature": 6.8,
+          "relative_humidity_2m": 81,
+          "weather_code": 3,
+          "wind_speed_10m": 21.2,
+          "wind_direction_10m": 340
+        },
+        "daily_units": {
+          "time": "iso8601",
+          "weather_code": "wmo code",
+          "temperature_2m_max": "°C",
+          "temperature_2m_min": "°C",
+          "precipitation_probability_max": "%"
+        },
+        "daily": {
+          "time": [
+            "2026-11-17",
+            "2026-11-18",
+            "2026-11-19"
+          ],
+          "weather_code": [
+            3,
+            0,
+            61
+          ],
+          "temperature_2m_max": [
+            11.0,
+            12.4,
+            9.8
+          ],
+          "temperature_2m_min": [
+            4.2,
+            2.9,
+            5.1
+          ],
+          "precipitation_probability_max": [
+            10,
+            0,
+            80
+          ]
+        }
+      }
+    },
+    {
+      "url": "https://geocoding-api.open-meteo.com/v1/search?",
+      "json": {
+        "generationtime_ms": 0.078082085
+      }
+    },
+    {
+      "url": "https://geocoding-api.open-meteo.com/v1/search?name=Lyon&",
+      "json": {
+        "results": [
+          {
+            "id": 2996944,
+            "name": "Lyon",
+            "latitude": 45.74906,
+            "longitude": 4.84789,
+            "elevation": 173.0,
+            "feature_code": "PPLA",
+            "country_code": "FR",
+            "admin1_id": 11071625,
+            "admin2_id": 2987410,
+            "admin3_id": 2996943,
+            "admin4_id": 6454573,
+            "timezone": "Europe/Paris",
+            "population": 520774,
+            "country_id": 3017382,
+            "country": "France",
+            "admin1": "Auvergne-Rhône-Alpes",
+            "admin2": "Rhône",
+            "admin3": "Arrondissement of Lyon",
+            "admin4": "Lyon"
+          }
+        ],
+        "generationtime_ms": 0.65875053
+      }
+    }
+  ]
+}
