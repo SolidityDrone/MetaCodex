@@ -527,6 +527,7 @@ Third-party components keep their own licences.
 Some of them have copyleft terms and ship as separate binaries.
 One model licence has use restrictions.
 [docs/LICENSES.md](docs/LICENSES.md) lists every part with its licence, source and duties.
+The coding agents (Claude Code, Codex, OpenCode) are not included: see [Third-party coding agents (not included)](docs/LICENSES.md#third-party-coding-agents-not-included).
 It covers what ships in the APK, what the app downloads, what the repository holds and the open gaps.
 It also lists the Debian packages and the runtime packages.
 A copy ships on the headset in `/usr/share/doc/metacodex/`.

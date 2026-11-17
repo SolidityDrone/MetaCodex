@@ -31,6 +31,40 @@ On the headset this file and the licence texts it points to are in `/usr/share/d
 `userland/build-overlay.py`, which ships every file that lies directly in `docs/licenses/`: keep that folder flat). The
 standard texts of the Debian image are also in `/usr/share/common-licenses/` there.
 
+## Third-party coding agents (not included)
+
+MetaCodex works with three coding agents made by other vendors: Claude Code, Codex and OpenCode. None of them is part
+of MetaCodex.
+
+- **Nothing of the agents is in the APK or in this repository.** The APK and the repository contain no part of Claude
+  Code, Anthropic's Agent SDK, the Codex CLI or OpenCode. The app holds only MetaCodex's own code (MIT), which starts
+  the installs and talks to the agents through MQH, and the names of the npm packages inside its install commands. For
+  the Claude Code ACP adapter the command also pins a version (`@agentclientprotocol/claude-agent-acp@0.107.3`). The
+  adapter is not shipped either: npm downloads it on the device. MQH (MIT, our fork of bb) runs the agents through its
+  Codex and ACP provider plugins, which are MIT code of bb. The repository also keeps the MIT source of MQH's own
+  Claude provider plugin (`mqh/plugins/provider-claude-code`) and bb's recorded protocol messages for its tests. That
+  plugin names Anthropic's SDK as a dependency, but the SDK is not in the repository, and the plugin is not in the APK
+  ([gap G8](#8-gaps), closed).
+- **The user installs each agent on their own headset.** The packages come from the official npm registry, in a
+  terminal the user watches. GET and ENABLE THREADS in AGENTS show the exact command before it runs. npm downloads the
+  packages and their dependencies directly from the registry to the device. For Claude Code these are
+  `@anthropic-ai/claude-code` (proprietary), `@agentclientprotocol/claude-agent-acp` (Apache-2.0), and the package the
+  adapter pulls in, `@anthropic-ai/claude-agent-sdk` (proprietary). For Codex it is `@openai/codex` (Apache-2.0), for
+  OpenCode `opencode-ai` (MIT).
+- **Each agent is used under its vendor's own licence and terms**, with the user's own account or API key. The agent's
+  own CLI does the sign-in (for example `claude auth login`, run in a terminal). MetaCodex never reads, stores or sends
+  those login credentials: they stay in the CLI's own files. The sign-in link and code pass through the terminal
+  window, as in any terminal.
+- **API keys are the user's own.** A key the user pastes in AGENTS > API KEY is sealed in the app's vault on the
+  headset and put into MQH's machine environment, so the agents MQH starts find it. Programs in the headset's Linux can
+  also ask the vault for it (`mcx-secret`; the key's policy is "allow"). MetaCodex never writes it to a file in clear
+  text and never sends it off the headset. The agent sends it to its own provider.
+- **No affiliation.** MetaCodex is not affiliated with or endorsed by Anthropic, OpenAI or the makers of OpenCode. The
+  names identify the third-party tools only.
+
+Details: [section 4.2](#42-what-mcx-setup-downloads-on-request) (the CLIs) and [section 4.3](#43-what-the-user-chooses-to-install-system--tools-agents)
+(the install catalogue and the ACP adapter).
+
 ## Summary
 
 | Group | What | Licences | What they ask of us |
@@ -580,7 +614,7 @@ Status of the gaps of 2026-11-10 (G1-G9) and the new ones. "Owner" = a decision 
 | G5 | Launcher icon is Unity's logo (`res/mipmap*/app_icon.png`, `ic_launcher_foreground.png`, checked in APK 0.7.16) | **open** | **code**: set our own icon in `MetaCodexSetup` (drawn from the MetaCodex mark) |
 | G6 | android.jar is downloaded without asking for acceptance of the Android SDK License | **open** (the script prints the name and URL, it does not ask) | **code**: `mcx-setup quest` must show the terms and ask first |
 | G7 | No licence for our code; `local-ai/package.json` says Apache-2.0 | **closed**: MIT, `LICENSE` written; section 2 | **code**: change `local-ai/package.json` `license` to `MIT` at the next bundle |
-| G8 | MQH on the headset must not carry Anthropic's Agent SDK | **closed**: verified absent from `mqh.tar` (APK 0.7.16); MQH's MIT and npm notices are in `docs/licenses/` | keep `tools/mqh-bundle.sh` removing `provider-claude-code` (`provider-pi` is out of `mqh/` since 2026-11-13) |
+| G8 | MQH on the headset must not carry Anthropic's Agent SDK | **closed**: verified absent from `mqh.tar` (APK 0.7.16); MQH's MIT and npm notices are in `docs/licenses/`. Claude Code threads (2026-11-17) do not reopen it: they run through MQH's ACP plugin and the ACP adapter, which the user installs from npm on the headset with the SDK it pulls in ([Third-party coding agents](#third-party-coding-agents-not-included)); the app writes only the adapter's command name into MQH's settings | keep `tools/mqh-bundle.sh` removing `provider-claude-code` (`provider-pi` is out of `mqh/` since 2026-11-13); never bundle the adapter or its SDK |
 | G9 | `UiIcon` shader left without a user | open, tidiness only (still in `Resources/Shaders`, still named by the self-test) | **code**: delete when the orb branch has landed |
 | G10 | **New.** 49 third-party icons in the APK (50 in the repository): `mqh/plugins/provider-acp/icons` (47 in the APK: logos of other agents), `provider-codex/icons` (2), plus `provider-claude-code` (1, repository only; `storage-retention` and `provider-pi` and their icons left `mqh/` on 2026-11-13); licence and provenance unknown (came with bb), trademarks of their owners | **open**: conflicts with the no-logo rule and contest section 4, and the MIT notice of bb does not clearly cover them | **code**: delete the `icons` folders in `tools/mqh-bundle.sh` (the plugins show no icon in the VR terminal) and drop them from `mqh/`, or replace them with our own; **owner** decides |
 | G11 | **New.** Unity-made and UCL files in the repository (TextMesh Pro resources, settings, 36 Unity skills): UCL section 1 allows use and distribution only with content made under a valid Unity engine licence | **noted**, not a block | **owner**: keep the proof of the Unity licence (plan, seat) with the submission; the `LICENSE` scope clause already names these files |
