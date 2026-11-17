@@ -223,7 +223,24 @@ Measured on the PC (WSL, Debian's aapt2, OpenJDK 27, android-34's android.jar, R
 | nothing changed | 0.1 s | 0.1 s |
 
 The zipper: 25 KB APK, `mcx-app verify` ok, `apksigner verify --min-sdk-version 32` ok (v2). The warm JVM held 158 MB
-RSS. On the headset: see the table below once measured.
+RSS.
+
+Measured on the Quest 3S (2026-11-17, MetaCodex 0.7.19 running, adb context, cores 0-2 pinned, OpenJDK 21.0.13; the
+zipper example made with `mcx-app new --example zipper`):
+
+| Step | Time |
+|---|---|
+| `mcx-setup d8` (21 MB download, sha256, LICENSE) | 3.2 s |
+| first build, warm JVM not running (its server compiled once + JVM start 1.9 s, aapt2 0.6 s, javac 4.9 s, D8 4.4 s) | **10.0 s** |
+| one `.java` changed, warm JVM (javac 1.0 s, D8 1.15 s) | **2.2 s**, then 1.9 s |
+| one `.java` changed, a JVM per tool (no daemon: javac 2.2 s, D8 3.0 s) | 5.2 s |
+| nothing changed | 0.0 s (0.4 s with `mcx-app`) |
+| warm JVM | 164 MB RSS, stops after 5 idle minutes |
+| `mcx-app verify` | ok |
+| `adb install` + `am start` | the app opens as a window (`LaunchState: COLD`, 0.3 s); log `starting Zip Test 1.0 (1), launched from outside MetaCodex`; the system file picker (`com.android.documentsui`) answers `ACTION_OPEN_DOCUMENT` and `ACTION_CREATE_DOCUMENT` |
+
+Not tested on the headset yet: `mcx-app install` (the user's INSTALL tap and Android's dialog), LAUNCH from MetaCodex
+with Back / Report, picking and zipping files (needs the user's hands), the C# dialogs.
 
 ## Limits
 

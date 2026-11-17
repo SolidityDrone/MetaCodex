@@ -746,6 +746,12 @@ The way back from a built app:
 - [ ] Open the app again, menu > Report to MetaCodex → back in MetaCodex, the thread's composer says "Feedback on T2 1.0 (1):" with two chips (▣ the app's picture, ⎘ log T2); ◉ to say what you saw, SEND: the agent sees the picture and the log
 - [ ] Open the app again, quit it from the system menu → tell whether MetaCodex comes forward by itself (best effort, the system may refuse)
 
+2D panel apps (a window, Java):
+
+- [ ] THREADS > + PROJECT… > NATIVE APP → a second dialog IMMERSIVE · 2D PANEL; 2D PANEL, name "Zip tool" → THREADS lists it under NATIVE with `2D PANEL · …/native/zip-tool`; in a terminal `cat /root/metacodex-projects/native/zip-tool/.metacodex/project.json` → `"kind": "panel"`, `ls .claude/skills` → only `quest-panel-apps`; an IMMERSIVE project's row says `IMMERSIVE` and has the 13 `quest-native-*` links
+- [ ] In the 2D project's thread ask "an app to zip files" (or `mcx-app new . --example zipper` + `mcx-app run .`) → INSTALL, then LAUNCH: the app opens as a window, MetaCodex goes to the background; ADD FILES… opens the system file picker; pick 2-3 files, ZIP TO… saves `files-<date>.zip` where you choose; progress, then "Saved …: <size> from <size>"; STOP during a big zip deletes the unfinished file
+- [ ] In the zipper's top row BACK TO METACODEX → MetaCodex comes back ("Back from Zip tool"), the zipper closes; launch it again, REPORT → the thread's composer has the window's picture and `log Zip tool`; `mcx-app logs .` shows `starting Zip tool 1.0 (1), launched from MetaCodex`, the picks and the zip
+
 Launches by request (Native projects):
 
 - [ ] In a Native project, with the thread in its most permissive approval mode, ask for a small app → the agent builds and verifies, then a dialog APP READY: <app>: LAUNCH / LATER appears in front of you (and a toast in MESSAGES); nothing opens by itself

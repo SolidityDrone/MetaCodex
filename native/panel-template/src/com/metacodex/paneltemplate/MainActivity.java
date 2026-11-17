@@ -31,7 +31,7 @@ public final class MainActivity extends Activity {
         LinearLayout page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
         int pad = Mcx.dp(this, 32);
-        page.setPadding(pad, Mcx.dp(this, 24), pad, pad);
+        page.setPadding(pad, Mcx.dp(this, 52), pad, pad); // the top: the system's window buttons sit over it
         page.addView(Mcx.topBar(this, Mcx.label()));
 
         TextView intro = Mcx.text(this, "A 2D app in its own window. Point and pinch, or point and click with a controller, "

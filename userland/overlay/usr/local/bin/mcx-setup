@@ -89,7 +89,7 @@ R8_URL=https://dl.google.com/android/maven2/com/android/tools/r8/$R8_VERSION/r8-
 R8_SHA=7c7b67be3069d395cdfbdea4799ffd04d75d81ccecf3d01a78df37b1f5843298
 install_d8() {
   local R=/opt/android-sdk/r8
-  if [ -f $R/r8.jar ] && [ "$(cat $R/VERSION 2>/dev/null)" = "$R8_VERSION" ]; then return 0; fi
+  if [ -f $R/r8.jar ] && [ -f $R/LICENSE ] && [ "$(cat $R/VERSION 2>/dev/null)" = "$R8_VERSION" ]; then return 0; fi
   if ! command -v javac >/dev/null; then
     say "apt: a JDK (javac, for 2D panel apps)"
     "${APT[@]}" update
@@ -99,7 +99,8 @@ install_d8() {
   fetch "$R8_URL" "$R8_SHA" /tmp/r8-$R8_VERSION.jar
   rm -rf $R.part && mkdir -p $R.part
   mv /tmp/r8-$R8_VERSION.jar $R.part/r8.jar
-  unzip -q -o $R.part/r8.jar LICENSE -d $R.part || true   # its licence file (R8 and the libraries in it)
+  # its licence file (R8 and the libraries in it); python, not unzip: `mcx-setup d8` alone may run before unzip is there
+  python3 -I -c 'import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extract("LICENSE", sys.argv[2])' $R.part/r8.jar $R.part
   echo "$R8_VERSION" > $R.part/VERSION
   rm -rf $R && mv $R.part $R
 }

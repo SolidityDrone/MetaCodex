@@ -99,7 +99,7 @@ public final class MainActivity extends Activity {
         LinearLayout page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
         int pad = Mcx.dp(this, 32);
-        page.setPadding(pad, Mcx.dp(this, 24), pad, pad);
+        page.setPadding(pad, Mcx.dp(this, 52), pad, pad); // the top: the system's window buttons sit over it
         page.addView(Mcx.topBar(this, Mcx.label()));
         page.addView(Mcx.text(this, "Pick files, then zip them into one file you choose. Everything stays on this headset.",
                 18, Mcx.DIM, false), margins(0, 12, 0, 20));
