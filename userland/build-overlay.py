@@ -76,6 +76,17 @@ with tarfile.open(fileobj=raw, mode="w", format=tarfile.PAX_FORMAT) as tf:
                     full = os.path.join(dp, f)
                     extra["opt/metacodex/quest-native/skills/" + name + "/" + os.path.relpath(full, os.path.join(nskills, name)).replace(os.sep, "/")] = full
     extra["opt/metacodex/quest-native/project/AGENTS.md"] = os.path.join(native, "project", "AGENTS.md")
+    extra["opt/metacodex/quest-native/project/AGENTS-panel.md"] = os.path.join(native, "project", "AGENTS-panel.md")
+    # 2D panel apps (Java): the template of `mcx-app new --panel` and the zipper example, whole folders (their build/
+    # output stays out)
+    for dst, srcdir in (("opt/metacodex/quest-native/panel-template", os.path.join(native, "panel-template")),
+                        ("opt/metacodex/quest-native/examples/zipper", os.path.join(native, "examples", "zipper"))):
+        for dp, dn, fn in os.walk(srcdir):
+            dn[:] = sorted(d for d in dn if not junk(d) and not (dp == srcdir and d == "build"))
+            for f in sorted(fn):
+                if not junk(f):
+                    full = os.path.join(dp, f)
+                    extra[dst + "/" + os.path.relpath(full, srcdir).replace(os.sep, "/")] = full
     # the native XR layer (mcx-build compiles it once per toolchain) and its worked example
     for f in ("mcx_xr.h", "mcx_xr.cpp", "mcx_font.h"):
         extra[f"opt/metacodex/quest-native/xr/{f}"] = os.path.join(native, "xr", f)

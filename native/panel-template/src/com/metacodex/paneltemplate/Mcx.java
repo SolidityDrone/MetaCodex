@@ -38,6 +38,7 @@ import java.util.concurrent.LinkedBlockingQueue;
  * <ul>
  * <li>{@link #log}: a line to logcat and to MetaCodex (127.0.0.1:47950, what `mcx-app logs` shows), sent off the UI
  * thread; the last 200 lines are kept for a report.</li>
+ * <li>A crash writes its stack trace to that log before the app closes (`mcx-app logs` shows it).</li>
  * <li>{@link #start}: reads who launched the app; {@link #topBar} has BACK TO METACODEX and REPORT when MetaCodex did.
  * Back starts MetaCodex (it brings the thread that launched the app forward) and closes this app; Report also sends a
  * picture of the window and the last 60 log lines, which arrive in that thread as a draft.</li>
@@ -77,6 +78,31 @@ final class Mcx {
             version = "?";
         }
         log("starting %s %s, %s", label, version, fromMetaCodex() ? "launched from MetaCodex" : "launched from outside MetaCodex");
+        // a crash: its stack trace into the log (and to MetaCodex) before Android closes the app
+        Thread.UncaughtExceptionHandler prev = Thread.getDefaultUncaughtExceptionHandler();
+        if (!(prev instanceof CrashLogger)) Thread.setDefaultUncaughtExceptionHandler(new CrashLogger(prev));
+    }
+
+    private static final class CrashLogger implements Thread.UncaughtExceptionHandler {
+        private final Thread.UncaughtExceptionHandler prev;
+
+        CrashLogger(Thread.UncaughtExceptionHandler prev) {
+            this.prev = prev;
+        }
+
+        @Override
+        public void uncaughtException(Thread t, Throwable e) {
+            try {
+                log("CRASH in thread %s: %s", t.getName(), e);
+                for (StackTraceElement el : e.getStackTrace()) log("    at %s", el);
+                for (Throwable c = e.getCause(); c != null; c = c.getCause()) log("  caused by %s", c);
+                long until = System.currentTimeMillis() + 800; // the sender thread takes the lines off the queue
+                while (!OUT.isEmpty() && System.currentTimeMillis() < until) Thread.sleep(20);
+                Thread.sleep(100);
+            } catch (Throwable ignored) {
+            }
+            if (prev != null) prev.uncaughtException(t, e);
+        }
     }
 
     /** The app's name in the Library (android:label). */

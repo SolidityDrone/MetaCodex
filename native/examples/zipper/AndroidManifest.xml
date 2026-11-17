@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Zipper, the 2D example (`mcx-app new <dir>` with the example option zipper): picks files with the system file
+     picker and zips them into a file the user chooses (Storage Access Framework: no storage permission).
+     A 2D panel app: Java and plain Android views, shown by the headset as a window beside the others (no OpenXR, no
+     VR category: the headset opens it as a panel, and MetaCodex goes to the background meanwhile).
+     `mcx-app new` sets package and android:label and moves src/ into the package's folder. Manifest rules from Meta's docs for Android apps (create-app, publish-mobile-manifest, gaze-app-config,
+     checked 2026-11-17): MAIN + LAUNCHER only; a <layout> with the default window size (1024 x 640 dp) and the smallest
+     one the layout works at (360 x 225 dp); resizable; minSdk 32, targetSdk 34; head tracking not required; the
+     supported devices; no eye tracking permission. `mcx-app verify` checks them. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.metacodex.example.zipper"
+    android:versionCode="1"
+    android:versionName="1.0"
+    android:installLocation="auto">
+
+    <uses-sdk android:minSdkVersion="32" android:targetSdkVersion="34" />
+
+    <!-- only for the log lines sent to `mcx-app logs` on 127.0.0.1 (Mcx.log); the files need no permission: the user
+         picks each one in the system's file picker, which grants this app access to it -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Back to MetaCodex / Report to MetaCodex start it (Mcx.back) -->
+    <queries>
+        <package android:name="com.pnncl.metacodex" />
+    </queries>
+
+    <application
+        android:label="Zipper"
+        android:icon="@drawable/icon"
+        android:allowBackup="false"
+        android:theme="@android:style/Theme.Material.NoActionBar">
+        <meta-data android:name="com.oculus.supportedDevices" android:value="quest2|questpro|quest3|quest3s|vrglasses" />
+        <!-- configChanges: a resize re-lays the views out instead of restarting the activity (the state stays) -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:resizeableActivity="true"
+            android:configChanges="density|keyboard|keyboardHidden|navigation|orientation|screenLayout|screenSize|smallestScreenSize|uiMode">
+            <layout
+                android:defaultWidth="1024dp"
+                android:defaultHeight="640dp"
+                android:minWidth="360dp"
+                android:minHeight="225dp" />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

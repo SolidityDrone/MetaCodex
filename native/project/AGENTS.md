@@ -1,7 +1,10 @@
 <!-- metacodex:native-app (written by mcx-project for a Native app project; edits inside this block are replaced) -->
 # Native Quest app (MetaCodex)
 
-This folder is a native Meta Quest 3 / 3S app built in MetaCodex (C++, OpenXR + Meta's extensions, `mcx_xr.h`).
+This folder is a native Meta Quest 3 / 3S app built in MetaCodex (C++, OpenXR + Meta's extensions, `mcx_xr.h`): an
+immersive app (the project's kind, fixed in `.metacodex/project.json`). A 2D app in a window (Java, Android views) is
+the other kind: it needs a project of kind 2D panel and the skill quest-panel-apps
+(`/opt/metacodex/quest-native/skills/quest-panel-apps/SKILL.md`).
 Before anything, read the skill **quest-native-apps** and follow its flow: `.claude/skills/quest-native-apps/SKILL.md`
 (the same at `/opt/metacodex/quest-native/skills/quest-native-apps/SKILL.md`). Features: quest-native-xr; worked
 examples: quest-native-recipes; problems: quest-native-debug; the Runner: quest-native-dev-loop. The kits next to

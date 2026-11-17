@@ -1,15 +1,19 @@
 #!/bin/bash
-# mcx-app: build native Quest apps in MetaCodex's Linux and install them on this headset (skill quest-native-apps).
+# mcx-app: build native Quest apps in MetaCodex's Linux and install them on this headset: immersive apps (C++, OpenXR,
+# skill quest-native-apps) and 2D panel apps (Java, a window; skill quest-panel-apps).
 #   mcx-app doctor                            are the tools there? may MetaCodex install apps? (run it first)
-#   mcx-app new <dir> [--module | --example <name>] [--package <id>] [--label <name>]   a new app (C++, OpenXR, GLES):
-#                                             the template; --module: a module (Runner, mcx-app dev); --example
-#                                             nightvision: a bundled example (/opt/metacodex/quest-native/examples)
+#   mcx-app new <dir> [--panel | --module | --example <name>] [--package <id>] [--label <name>]   a new app: the
+#                                             immersive template (C++, OpenXR, GLES); --panel: the 2D panel template
+#                                             (Java, Android views; also what a 2D panel project gets by default);
+#                                             --module: a module (Runner, mcx-app dev); --example nightvision (immersive)
+#                                             or zipper (2D): a bundled example (/opt/metacodex/quest-native/examples)
 #   mcx-app check [dir]                       compile check only (seconds): errors as file:line:col: error: ...
 #   mcx-app build [dir]                       -> <dir>/build/<dir name>.apk, incremental, on cores 0-2 (the headset keeps 72 fps)
 #   mcx-app verify [dir]                      static checks of the built APK: manifest entries the Meta APIs in use need,
 #                                             unresolved symbols, the OpenXR extensions asked for, icon, devices;
 #                                             then the hands of its last start on the headset (from its log:
-#                                             HAND_TRACKING granted? trackers ready?; launch the app first)
+#                                             HAND_TRACKING granted? trackers ready?; launch the app first). A 2D app:
+#                                             the window size, no VR category, the launcher class in classes.dex, SDKs
 #   mcx-app install [dir|apk]                 Android's installer; tells you what to ask the user; waits up to 5 min
 #   mcx-app launch [dir|package]              asks the user to open the app (LAUNCH in MetaCodex); returns at once
 #   mcx-app run [dir]                         build + install + launch request
@@ -22,12 +26,14 @@
 # Exit codes: 0 ok, 1 failed, 2 waiting for the user timed out, 3 MetaCodex cannot install apps in this build.
 # Shipped by the app (overlay); edits are overwritten.
 set -uo pipefail
-TEMPLATE=/opt/metacodex/quest-native/template
-MODULE_TEMPLATE=/opt/metacodex/quest-native/module-template
-EXAMPLES=/opt/metacodex/quest-native/examples
-RUNNER_SRC=/opt/metacodex/quest-native/runner
+QN=${MCX_QUEST_NATIVE:-/opt/metacodex/quest-native}
+TEMPLATE=$QN/template
+PANEL_TEMPLATE=$QN/panel-template
+MODULE_TEMPLATE=$QN/module-template
+EXAMPLES=$QN/examples
+RUNNER_SRC=$QN/runner
 RUNNER_PKG=${MCX_RUNNER_PKG:-com.metacodex.runner}
-LOGD=/opt/metacodex/quest-native/logd.py
+LOGD=$QN/logd.py
 LOGPORT=47950
 LOGDIR=/tmp/mcx-app-logs
 MCX_BUILD=${MCX_BUILD:-mcx-build}
@@ -45,6 +51,8 @@ dir_of() {
 pkg_of() { sed -n 's/.*package="\([^"]*\)".*/\1/p' "$1/AndroidManifest.xml" | head -1; }
 label_of() { sed -n 's/.*android:label="\([^"]*\)".*/\1/p' "$1/AndroidManifest.xml" | head -1 | tr ' ' '_'; }
 version_of() { sed -n 's/.*android:versionName="\([^"]*\)".*/\1/p' "$1/AndroidManifest.xml" | head -1 | tr ' ' '_'; }
+# a 2D panel app (Java, no native library) rather than an immersive one
+is_panel() { grep -qs '^TYPE=panel' "$1/build.conf" || { ! grep -qs 'android.app.lib_name' "$1/AndroidManifest.xml" && find "$1/src" -name '*.java' -print -quit 2>/dev/null | grep -q .; }; }
 # a package name (has dots, is not a path) or an app folder
 pkg_arg() {
   if [ -n "${1:-}" ] && [ ! -e "$1" ] && [[ "$1" == *.* ]]; then echo "$1"; else pkg_of "$(dir_of "${1:-.}")"; fi
@@ -71,6 +79,12 @@ doctor() {
            /opt/openxr/include/openxr/openxr.h /opt/openxr/lib/arm64-v8a/libopenxr_loader.so "$TEMPLATE/build.sh"; do
     if [ -e "$f" ]; then echo "ok      $f"; else echo "MISSING $f"; bad=1; fi
   done
+  # 2D panel apps: a JDK and D8 (the R8 jar; the first 2D build fetches it when missing)
+  for t in javac java; do
+    if command -v "$t" >/dev/null; then echo "ok      $t (2D apps)"; else echo "MISSING $t (2D apps)"; bad=1; fi
+  done
+  if [ -f /opt/android-sdk/r8/r8.jar ]; then echo "ok      D8 $(cat /opt/android-sdk/r8/VERSION 2>/dev/null) (2D apps)"
+  else echo "note    no D8 yet: the first 2D build fetches it (mcx-setup d8, 21 MB)"; fi
   if [ -f "$HOME/.android/metacodex-debug.keystore" ]; then echo "ok      signing key ~/.android/metacodex-debug.keystore (keep it)"
   else echo "note    no signing key yet: the first build makes ~/.android/metacodex-debug.keystore"; fi
   if off_frame_loop; then echo "builds  here, on cores 0-2 ($(cat /proc/self/cpuset 2>/dev/null))"
@@ -82,10 +96,11 @@ doctor() {
 }
 
 new_app() {
-  local dir="" pkg="" label="" tpl=$TEMPLATE
+  local dir="" pkg="" label="" tpl="" kind="" have=""
   while [ $# -gt 0 ]; do
     case "$1" in
       --module) tpl=$MODULE_TEMPLATE; shift ;;
+      --panel|--2d) kind=panel; shift ;;
       --example)
         [ -n "${2:-}" ] && [ -f "$EXAMPLES/$2/AndroidManifest.xml" ] || die "no example '${2:-}' (examples: $(ls "$EXAMPLES" 2>/dev/null | tr '\n' ' '))"
         tpl=$EXAMPLES/$2; shift 2 ;;
@@ -95,7 +110,23 @@ new_app() {
       *) dir=$1; shift ;;
     esac
   done
-  [ -n "$dir" ] || die "usage: mcx-app new <dir> [--package com.metacodex.user.<name>] [--label \"Name\"]"
+  [ -n "$dir" ] || die "usage: mcx-app new <dir> [--panel] [--package com.metacodex.user.<name>] [--label \"Name\"]"
+  # the kind: the option or the example; a project folder's stored kind (a 2D panel project made by MetaCodex) decides
+  # when nothing is said, and must agree when something is
+  [ -n "$tpl" ] && [ "$tpl" != "$MODULE_TEMPLATE" ] && { is_panel "$tpl" && kind=${kind:-panel} || { [ "$kind" = panel ] && die "the example $(basename "$tpl") is an immersive app, not a 2D one"; }; }
+  if [ -f "$dir/.metacodex/project.json" ] && [ "$(mcx-project type "$dir" 2>/dev/null)" = native ] && grep -qs '"kind"' "$dir/.metacodex/project.json"; then
+    have=$(mcx-project kind "$dir" 2>/dev/null)
+  fi
+  local want=$kind
+  if [ -z "$want" ]; then
+    if [ -n "$tpl" ]; then want=immersive; else want=${have:-immersive}; fi # --module, or an immersive example
+  fi
+  if [ -n "$have" ] && [ "$want" != "$have" ]; then
+    [ "$have" = panel ] && die "$dir is a 2D panel project: mcx-app new $dir --panel (or --example zipper); immersive apps go in a Native app project of kind immersive"
+    die "$dir is an immersive native project: a 2D panel app needs a project of kind 2D panel (MetaCodex: + PROJECT > NATIVE APP > 2D PANEL)"
+  fi
+  kind=$want
+  [ -z "$tpl" ] && { [ "$kind" = panel ] && tpl=$PANEL_TEMPLATE || tpl=$TEMPLATE; }
   # an existing folder is fine when it holds no app yet: a Native app project made by MetaCodex
   # (/root/metacodex-projects/native/<name>: .git, .metacodex, AGENTS.md, CLAUDE.md) gets the app in it, its files kept
   local into=0
@@ -116,15 +147,29 @@ new_app() {
   label=${label:-$base}
   [[ "$label" =~ ^[A-Za-z0-9\ _.,:!?()+-]+$ ]] || die "the label may use letters, digits, spaces and _ . , : ! ? ( ) + -"
   mkdir -p "$(dirname "$dir")"
+  local old; old=$(pkg_of "$tpl")
   if (( into )); then { cp -r --update=none "$tpl/." "$dir/" 2>/dev/null || cp -rn "$tpl/." "$dir/"; } || die "copy failed"; else cp -r "$tpl" "$dir" || die "copy failed"; fi
   rm -rf "$dir/build"
   sed -i -e "0,/package=\"[^\"]*\"/s|package=\"[^\"]*\"|package=\"$pkg\"|" -e "s|android:label=\"[^\"]*\"|android:label=\"$label\"|" \
     -e "s|android:name=\"android.app.lib_name\" android:value=\"hellonative\"|android:name=\"android.app.lib_name\" android:value=\"main\"|" "$dir/AndroidManifest.xml"
   [ -f "$dir/build.sh" ] && chmod +x "$dir/build.sh"
-  # the folder is a Native app project: the quest-native skills and the native AGENTS.md / CLAUDE.md block
-  command -v mcx-project >/dev/null && mcx-project set "$dir" native >/dev/null
-  say "new app $pkg (\"$label\") in $(readlink -f "$dir") (a Native app project: start its threads in this folder)"
-  if [[ "$tpl" == "$EXAMPLES"/* ]]; then
+  if [ "$kind" = panel ] && [ -n "$old" ] && [ "$old" != "$pkg" ] && [ -d "$dir/src/${old//.//}" ]; then
+    # Java: the classes move into the app's package (src/<package path>/), so the manifest's ".MainActivity" and R match
+    local from="$dir/src/${old//.//}" to="$dir/src/${pkg//.//}" f
+    mkdir -p "$to"
+    for f in "$from"/*; do mv "$f" "$to/"; done
+    find "$dir/src" -mindepth 1 -type d -empty -delete
+    local re=${old//./[.]}
+    find "$to" -name '*.java' -exec sed -i -e "s/^package $re;/package $pkg;/" -e "s/\b$re[.]/$pkg./g" {} +
+  fi
+  # the folder is a Native app project of this kind: its skills and the AGENTS.md / CLAUDE.md block
+  command -v mcx-project >/dev/null && mcx-project set "$dir" native --kind "$kind" >/dev/null
+  say "new $([ "$kind" = panel ] && echo "2D panel app" || echo app) $pkg (\"$label\") in $(readlink -f "$dir") (a Native app project: start its threads in this folder)"
+  if [ "$kind" = panel ]; then
+    echo "files: AndroidManifest.xml (package, label, versionCode, the window size), src/${pkg//.//}/MainActivity.java (the app),"
+    echo "       Mcx.java (logs, Back / Report to MetaCodex, the look: keep it), res/ (icon), build.conf (TYPE=panel)"
+    echo "next:  mcx-app build $dir && mcx-app verify $dir   then  mcx-app install $dir && mcx-app launch $dir"
+  elif [[ "$tpl" == "$EXAMPLES"/* ]]; then
     echo "files: AndroidManifest.xml (package, label, versionCode, permissions), src/ (the app on mcx_xr.h), res/ (icon)"
     echo "next:  mcx-app build $dir && mcx-app verify $dir   then  mcx-app install $dir && mcx-app launch $dir"
   elif [ "$tpl" = "$MODULE_TEMPLATE" ]; then
@@ -250,7 +295,7 @@ install_app() {
     echo "RESULT: $r"
     ask "The app is ready: tap INSTALL in MetaCodex when you want it (Android asks once more), then LAUNCH."
     echo "check later: mcx-app status ${d:-$apk}   (a first install waits for the user's tap; nothing else to do now)"
-    [ -n "${d:-}" ] && echo "hint: hands need HAND_TRACKING, which the headset grants at install; after the first launch, mcx-app verify $d shows the hands of that start"
+    [ -n "${d:-}" ] && ! is_panel "$d" && echo "hint: hands need HAND_TRACKING, which the headset grants at install; after the first launch, mcx-app verify $d shows the hands of that start"
     return 0
   fi
   [[ "$r" == installing* ]] || { echo "RESULT: $r"; hint "$r"; return 1; }
@@ -263,7 +308,7 @@ install_app() {
     case "$st" in
       waiting*) (( asked )) || { ask "Android asks to install the app in the headset: tap Install (Update for a new version)."; asked=1; } ;;
       success*) echo "RESULT: installed. $st"
-        [ -n "${d:-}" ] && echo "hint: hands need HAND_TRACKING, which the headset grants at install; after the first launch, mcx-app verify $d shows the hands of that start"
+        [ -n "${d:-}" ] && ! is_panel "$d" && echo "hint: hands need HAND_TRACKING, which the headset grants at install; after the first launch, mcx-app verify $d shows the hands of that start"
         return 0 ;;
       failure*) echo "RESULT: $st"; hint "$st"; return 1 ;;
     esac
@@ -285,7 +330,11 @@ launch_app() {
     echo "check later: mcx-app status ${1:-.}   (do not wait here; never launch it any other way)"
     return 0
   fi
-  if [[ "$r" == ok* ]]; then
+  if [[ "$r" == ok* ]] && [ -n "$d" ] && is_panel "$d"; then
+    echo "RESULT: started $pkg"
+    ask "The app is open as a window; MetaCodex is in the background meanwhile. Its top row has Back to MetaCodex (closes the app and brings you here) and Report (also sends me a picture of the window and its log). The headset's own menu and app library always work too."
+    echo "its log: mcx-app logs $pkg"
+  elif [[ "$r" == ok* ]]; then
     echo "RESULT: started $pkg"
     ask "The app is open in the headset. Its menu (left controller's menu button, or the left hand's menu gesture: palm towards your face, then pinch) has Back to MetaCodex and Report to MetaCodex: a report brings a picture and the app's log back into this thread. The headset's own menu always works too."
     echo "its log: mcx-app logs $pkg"
@@ -347,7 +396,7 @@ case "$cmd" in
     launch_app "${1:-.}" ;;
   status) echo "$(ui system launch-status "$(pkg_arg "${1:-}")")" ;;
   dev) dev_app "${1:-.}" ;;
-  verify) rc=0; "$MCX_BUILD" --verify "$(dir_of "${1:-.}")" || rc=$?; hands_state "${1:-.}"; exit $rc ;;
+  verify) rc=0; "$MCX_BUILD" --verify "$(dir_of "${1:-.}")" || rc=$?; is_panel "$(dir_of "${1:-.}")" || hands_state "${1:-.}"; exit $rc ;;
   runner) runner_app ;;
   logs) logs_app "$@" ;;
   info) echo "$(ui system app "$(pkg_arg "${1:-}")")" ;;
