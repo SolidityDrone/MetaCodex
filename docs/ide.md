@@ -29,7 +29,7 @@ here and in [LICENSES.md](LICENSES.md).
 | Its data | `/root/.local/share/mcx-ide`: settings (`User/settings.json`), extensions, state, `password`, `run/` (pid, port, the server's log), `mcx-ide.log` |
 | Needs | the Linux (setup step 3), internet for the install and for extensions; glibc 2.28 or later (the Linux has 2.41) |
 
-Install from **SYSTEM > TOOLS > EDITORS > code editor** (INSTALL), from the **CODE** tile, or by voice ("open the code
+Install from **MQH > PLUGINS > INSTALLABLE APPS > code editor** (INSTALL, then OPEN ▸ and DELETE), from **SYSTEM > TOOLS > EDITORS > code editor** (INSTALL), from the **CODE** tile, or by voice ("open the code
 editor": it asks first). The install runs `mcx-ide install` in a new terminal, so the download's progress shows; it is
 resumable, checked against the pinned sha256 and unpacked into a temporary folder that is renamed only when complete.
 The editor opens by itself when it is done. Nothing is downloaded or started at app start.

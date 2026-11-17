@@ -540,6 +540,22 @@ namespace MetaCodex.Shell
                     Tag = x,
                 });
             }
+            // the code editor: an app installed apart (a download; not in the APK), listed with the apps (owner 2026-11-17)
+            if (only == null || only == KindApps)
+            {
+                bool ide = IdeInstalled;
+                items.Add(new UiListItem { Icon = "", Title = "INSTALLABLE APPS  (1)", TitleColor = t.TextAccent, Tag = null });
+                items.Add(new UiListItem
+                {
+                    Icon = ide ? "◫" : "⇣",
+                    IconColor = ide ? t.Ok : t.Accent,
+                    Title = "code editor",
+                    Sub = ide ? "installed · OPEN ▸ starts it" : $"app · about {IdeDownloadMB} MB download, needs internet",
+                    Badge = ide ? "INSTALLED" : "INSTALL",
+                    BadgeColor = ide ? t.Ok : t.Accent,
+                    Tag = IdeRowTag,
+                });
+            }
             // the examples that ship in the app and are not installed yet: a tap picks one, + ADD makes it a plugin
             // project (apps first: timers, calendar; then the gesture examples)
             var examples = GestureExampleIds.Where(id => (Scripts == null || Scripts.Find("plugin/" + id) == null) && (only == null || ExampleKindOf(id) == only))
@@ -617,6 +633,20 @@ namespace MetaCodex.Shell
             // OPEN ▸ for an app plugin only (its window); the row closes up when it is hidden
             bool app = tag is ScriptHost.Entry pa && PluginKindOf(pa) == KindApps;
             if (_pluginOpen != null && _pluginOpen.Visible != app) { _pluginOpen.SetVisible(app); LayPluginRow(); }
+            if (ReferenceEquals(tag, IdeRowTag))
+            {
+                bool ide = IdeInstalled;
+                _pluginToggle?.SetText(ide ? "OPEN ▸" : "INSTALL");
+                _pluginToggle?.SetEnabled(true);
+                _pluginDelete?.SetEnabled(ide);
+                _gPluginDetail.Set($"<b>code editor</b> · an app installed apart\nA full code editor in this headset's Linux (an open-source IDE server, {IdeVersion}), " +
+                                   "opened signed in, in the WEB window: files, editor, its own terminal, search, git, extensions.\n\n" +
+                                   (ide ? $"Installed ({IdeInstalledVersion}). OPEN ▸ starts it; DELETE removes the program ({IdeDiskMB} MB; settings and extensions stay)."
+                                        : $"INSTALL downloads about {IdeDownloadMB} MB (needs internet) and takes about {IdeDiskMB} MB; it opens by itself when it is done.") +
+                                   " Also: SYSTEM > TOOLS, the CODE tile, or say \"open the code editor\". A keyboard works best.", t.TextDim);
+                ShowPluginThreads(null, "Not a plugin project: no threads here.");
+                return;
+            }
             if (tag is GestureExampleRow ex)
             {
                 _pluginToggle?.SetText("+ ADD");
@@ -818,6 +848,13 @@ namespace MetaCodex.Shell
         private void TogglePickedPlugin()
         {
             var tag = SelectedPluginTag();
+            if (ReferenceEquals(tag, IdeRowTag))
+            {
+                if (IdeInstalled) OpenIde(null); // it says itself why it cannot start
+                else if (InstallIde(true, null)) Toast($"Installing the code editor in a terminal (about {IdeDownloadMB} MB): it opens by itself", "info");
+                RefreshPluginList();
+                return;
+            }
             if (tag is GestureExampleRow ex)
             {
                 string err = InstallGestureExample(ex.Id);
@@ -837,9 +874,24 @@ namespace MetaCodex.Shell
             });
         }
 
+        /// The code editor's row in PLUGINS (one object: the list's tag).
+        private static readonly object IdeRowTag = new object();
+
         private void DeletePickedPlugin()
         {
             var tag = SelectedPluginTag();
+            if (ReferenceEquals(tag, IdeRowTag))
+            {
+                if (!IdeInstalled) { Toast("The code editor is not installed", "info"); return; }
+                Modal("REMOVE THE CODE EDITOR", $"Stop it and remove the program (about {IdeDiskMB} MB)? Your projects, its settings and its extensions stay.", new[] { "REMOVE", "CANCEL" }, i =>
+                {
+                    if (i != 0) return;
+                    StopIde();
+                    if (RunInNewTerminal("mcx-ide uninstall ; echo; echo '(done: the code editor is removed)'")) Toast("Removing the code editor in a terminal", "info");
+                    RefreshPluginList();
+                });
+                return;
+            }
             if (tag is JObject m)
             {
                 Toast((string)m["provenance"] == "builtin" ? "Comes with MQH: turn it off instead" : $"Remove it with: mqh plugin uninstall {(string)m["id"]}", "warn");
