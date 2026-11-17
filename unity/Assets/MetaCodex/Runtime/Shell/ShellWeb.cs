@@ -289,6 +289,17 @@ namespace MetaCodex.Shell
                 Router?.Unregister(p);
                 p.CloseAndDestroy();
             }
+            WebFreeEngine(w);
+            var tex = pg.Tex;
+            pg.Tex = null;
+            if (tex != null) After(1f, () => Destroy(tex)); // after the window's closing (its quad shows it until then)
+            Log(w.Id + ": closed, its page and its memory freed (" + _webWins.Count + " web window" + (_webWins.Count == 1 ? "" : "s") + " left)");
+        }
+
+        /// A page's dialog and its WebView go (its display, buffers, history and memory); the next opening makes a new one.
+        private void WebFreeEngine(WebWindow w)
+        {
+            var pg = w.Page;
             if (pg.Dialog != null) { var d = pg.Dialog; pg.Dialog = null; if (d.IsOpen) d.Close(); }
 #if UNITY_ANDROID && !UNITY_EDITOR
             if (pg.Wv != null)
@@ -299,10 +310,43 @@ namespace MetaCodex.Shell
                 pg.Pixels = default;
             }
 #endif
-            var tex = pg.Tex;
-            pg.Tex = null;
-            if (tex != null) After(1f, () => Destroy(tex)); // after the window's closing (its quad shows it until then)
-            Log(w.Id + ": closed, its page and its memory freed (" + _webWins.Count + " web window" + (_webWins.Count == 1 ? "" : "s") + " left)");
+        }
+
+        /// The closed first window reused by ❐ NEW WINDOW (owner 2026-11-17: it came back with its old page): a fresh
+        /// window, as web-2 and web-3 are. Its WebView goes (a new one is made when it opens: no history, so ◀ never goes
+        /// back to the old page), its page state is cleared and its size is the usual one; on opening it shows its start
+        /// page (WebOpened). The WEB tile and voice still bring the first window back as it was (WebShow, not this).
+        private void WebFreshWindow(WebWindow w)
+        {
+            var pg = w.Page;
+            if (WebIsOpen(w) || w.Extra) return;
+            bool had = pg.Current.Length > 0 || !pg.OnStart;
+#if UNITY_ANDROID && !UNITY_EDITOR
+            had |= pg.Wv != null;
+#endif
+            WebFreeEngine(w);
+            if (pg.Large) WebSetLarge(w, false);
+            if (w.Panel != null) w.Panel.BaseScale = Vector3.one * UiScaleNow; // the code editor's larger window: the usual size
+            pg.Current = pg.Error = pg.Mode = "";
+            pg.OnStart = false;
+            pg.Loading = false;
+            pg.JsShown = pg.JsAnswered = pg.JsDismissed = 0; // a new engine counts its dialogs from 1 again
+            pg.LastHover = new Vector2(-1f, -1f);
+            pg.NextState = 0f;
+            pg.ReadState = true;
+            WebFullscreen(w, false);
+            w.Reload?.SetText("⟳");
+            w.Progress?.SetVisible(false);
+            w.ProgressShown = -1;
+            w.Back?.SetEnabled(false);
+            w.Fwd?.SetEnabled(false);
+            w.Url?.Set("");
+            w.TitleShown = null;
+            w.TitleLabel?.Set("");
+            pg.Dark = false;
+            WebFillDark(pg); // not the old page's last frame while the new engine starts
+            WebRefreshNote(w);
+            if (had) Log(w.Id + ": NEW WINDOW reuses it as a fresh window (its old page and history gone)");
         }
 
         /// A new extra window ("web-2", "web-3"), made closed: the caller opens it.
@@ -342,11 +386,13 @@ namespace MetaCodex.Shell
             WebMarkTouched(w);
         }
 
-        /// ❐ NEW WINDOW: another web window beside this one, on its start page.
+        /// ❐ NEW WINDOW: another web window beside this one, always on its start page (the closed first window, when it is
+        /// the spare one, comes as a fresh window: WebFreshWindow).
         private void WebNewWindow(WebWindow from)
         {
             var w = WebSpare();
             if (w == null) return;
+            if (!w.Extra) WebFreshWindow(w);
             WebShow(w, from);
             Log(w.Id + ": a new web window beside " + from.Id);
         }
