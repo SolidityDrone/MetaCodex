@@ -130,6 +130,13 @@ namespace MetaCodex.Shell
 
         private WebWindow WebFirst => _webWins.Count > 0 ? _webWins[0] : null;
 
+        /// The windows exist: a page or a window asked for during the staged start completes it first (as OpenPanel does).
+        private bool WebReady()
+        {
+            if (_webWins.Count == 0 && _staging) CompleteStartNow();
+            return _webWins.Count > 0;
+        }
+
         /// The window touched last (the first one before any): the self-tests' window.
         private WebWindow WebCur => _webLast ?? WebFirst;
 
@@ -313,7 +320,11 @@ namespace MetaCodex.Shell
         private WebWindow WebSpare()
         {
             for (int n = 2; n <= WebMaxWindows; n++)
-                if (WebWindowById("web-" + n) == null) return WebMakeWindow(n);
+            {
+                var x = WebWindowById("web-" + n);
+                if (x == null) return WebMakeWindow(n);
+                if (!WebIsOpen(x)) return x; // made and not opened (never left so): it is the free one
+            }
             var first = WebFirst;
             if (first != null && !WebIsOpen(first)) return first;
             Toast(WebMaxWindows + " web windows are open, the most there can be: close one first", "warn");
@@ -355,6 +366,7 @@ namespace MetaCodex.Shell
         /// none open, shows the first window (a new one when the first shows the editor).
         public void ToggleWebWindow()
         {
+            if (!WebReady()) return;
             var w = WebLastOpen(true);
             if (w != null) { ClosePanel(w.Id); return; }
             var first = WebFirst;
@@ -395,7 +407,7 @@ namespace MetaCodex.Shell
 
         /// The code editor's own window: the one that shows it, else a new one (a free extra slot first, so the first
         /// window stays the browser); null with a toast when WebMaxWindows are open.
-        private UiPanel WebIdePanel() => (WebIdeWindow() ?? WebSpare())?.Panel;
+        private UiPanel WebIdePanel() => WebReady() ? (WebIdeWindow() ?? WebSpare())?.Panel : null;
 
         /// Loads `url` in the window of the panel (opening it): the code editor's page in its window.
         private void WebOpenOn(UiPanel p, string url)
@@ -493,7 +505,7 @@ namespace MetaCodex.Shell
         {
             string u = WebAddress(url);
             if (IsSignInPage(u)) { OpenSystemBrowser(u); return; }
-            var w = WebForPage();
+            var w = WebReady() ? WebForPage() : null;
             if (w == null) return;
             WebOpenIn(w, u, WebIsOpen(w) ? null : WebIdeWindow());
         }
@@ -504,7 +516,7 @@ namespace MetaCodex.Shell
         {
             string u = WebAddress(url);
             if (IsSignInPage(u)) { OpenSystemBrowser(u); return; }
-            var w = WebForPage();
+            var w = WebReady() ? WebForPage() : null;
             if (w == null) return;
             WebSetLarge(w, large);
             WebOpenIn(w, u, WebIsOpen(w) ? null : WebIdeWindow());
