@@ -1,0 +1,92 @@
+<!doctype html>
+<!-- WEB's chooser on the headset (docs/TEST_CHECKLIST.md, WEB): every kind of dropdown and picker on one page.
+     In a terminal: cd /root/MetaCodex/tests/web && python3 -m http.server 8000, then WEB: localhost:8000/select.html
+     Each choice prints its input and change events in the box at the bottom (the page's code sees it). -->
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width">
+<title>WEB: dropdowns and pickers</title>
+<style>
+body { font-family: sans-serif; background: #0b1622; color: #e2f4ff; margin: 20px 36px; font-size: 19px }
+h2 { margin: 0 0 6px; color: #8febff; letter-spacing: 2px }
+label { display: block; margin: 14px 0 5px; color: #aacadd }
+select, input, button { font-size: 19px; padding: 5px 9px; min-width: 250px }
+.row { display: flex; gap: 40px } .col { flex: 1 }
+#log { margin-top: 18px; padding: 8px 12px; background: #122436; font-family: monospace; font-size: 15px; white-space: pre; min-height: 110px }
+iframe { width: 330px; height: 52px; border: 1px solid #2a9fd6 }
+</style>
+</head>
+<body>
+<h2>DROPDOWNS AND PICKERS</h2>
+<div class="row">
+<div class="col">
+  <label for="city">1. City: groups, a disabled option</label>
+  <select id="city">
+    <option value="">Choose…</option>
+    <optgroup label="Italy"><option>Rome</option><option disabled>Milan (closed)</option><option>Turin</option></optgroup>
+    <optgroup label="France"><option>Paris</option><option>Lyon</option></optgroup>
+    <option>Other</option>
+  </select>
+  <label for="country">2. Country: a long list (SEARCH)</label>
+  <select id="country"></select>
+  <label for="langs">3. Languages: multiple, as a dropdown (size 1)</label>
+  <select id="langs" multiple size="1">
+    <option selected>English</option><option>German</option><option>Spanish</option>
+    <option disabled selected>Latin (locked)</option><option>Japanese</option>
+  </select>
+  <label for="tags">3b. Tags: multiple, as a list (a recent engine draws it in the page)</label>
+  <select id="tags" multiple size="3"><option>red</option><option selected>green</option><option>blue</option><option>black</option></select>
+  <label>4. In a shadow root</label><div id="shadow"></div>
+  <label>5. In a frame of this page</label><iframe id="frame"></iframe>
+  <label>6. Added after the page loaded</label><button id="add">ADD A DROPDOWN</button> <span id="later"></span>
+</div>
+<div class="col">
+  <label for="d">7. Date (from 2026-11-01)</label><input id="d" type="date" min="2026-11-01" value="2026-11-17">
+  <label for="t">8. Time (every 30 minutes)</label><input id="t" type="time" step="1800" value="09:30">
+  <label for="dt">9. Date and time</label><input id="dt" type="datetime-local" value="2026-11-17T09:30">
+  <label for="m">10. Month</label><input id="m" type="month">
+  <label for="w">11. Week</label><input id="w" type="week">
+  <label for="c">12. Colour</label><input id="c" type="color" value="#3366ff">
+</div>
+</div>
+<div id="log">input and change events show here</div>
+<script>
+var log = document.getElementById('log'), lines = [];
+function note(e) {
+  var t = e.target, v = t.multiple ? Array.prototype.map.call(t.selectedOptions, function (o) { return o.text; }).join(', ') : t.value;
+  lines.unshift(e.type + '  ' + (t.id || t.tagName.toLowerCase()) + ' = ' + v);
+  lines = lines.slice(0, 7);
+  log.textContent = lines.join('\n');
+}
+document.addEventListener('input', note, true);
+document.addEventListener('change', note, true);
+
+var names = ['Argentina', 'Australia', 'Austria', 'Belgium', 'Brazil', 'Canada', 'Chile', 'China', 'Colombia', 'Croatia',
+  'Czechia', 'Denmark', 'Egypt', 'Estonia', 'Finland', 'France', 'Germany', 'Greece', 'Haiti', 'Hungary', 'Iceland',
+  'India', 'Indonesia', 'Ireland', 'Israel', 'Italy', 'Japan', 'Kenya', 'Latvia', 'Lithuania', 'Malta', 'Mexico',
+  'Morocco', 'Netherlands', 'New Zealand', 'Nigeria', 'Norway', 'Peru', 'Poland', 'Portugal', 'Romania', 'Senegal',
+  'Singapore', 'Slovakia', 'Slovenia', 'South Africa', 'South Korea', 'Spain', 'Sweden', 'Switzerland', 'Thailand',
+  'Tunisia', 'Turkey', 'Ukraine', 'United Kingdom', 'United States', 'Uruguay', 'Vietnam'];
+for (var i = names.length + 1; i <= 200; i++) names.push('Region ' + i);
+var country = document.getElementById('country');
+names.forEach(function (n) { var o = document.createElement('option'); o.text = n; country.add(o); });
+country.value = 'Italy';
+
+var root = document.getElementById('shadow').attachShadow({ mode: 'open' });
+root.innerHTML = '<select style="font-size:19px;min-width:250px"><option>alpha</option><option>beta</option><option>gamma</option></select>';
+root.addEventListener('change', note); // change does not leave a shadow root
+
+var frame = document.getElementById('frame');
+frame.addEventListener('load', function () { frame.contentDocument.addEventListener('change', note); });
+frame.srcdoc = '<body style="margin:6px;background:#0b1622"><select style="font-size:17px"><option>one</option><option>two</option><option>three</option></select></body>';
+
+document.getElementById('add').addEventListener('click', function () {
+  var s = document.createElement('select');
+  s.id = 'later' + document.querySelectorAll('[id^=later]').length;
+  ['red', 'green', 'blue'].forEach(function (n) { var o = document.createElement('option'); o.text = n; s.add(o); });
+  document.getElementById('later').appendChild(s);
+});
+</script>
+</body>
+</html>
