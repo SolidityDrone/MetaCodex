@@ -45,6 +45,14 @@ namespace MetaCodex.Shell
     /// its own. The hardware keyboard types into the window touched last. A closed window does nothing per frame: no
     /// poll, no copy, its page paused with the WebView's own onPause (never the process-wide pauseTimers: that would
     /// freeze the other windows' pages). Tabs come later: a window shows one WebPage; a page could move to another window.
+    ///
+    /// GROUPS (owner 2026-11-17: "a grouping mechanic like we did for threads, for the web windows"): a web window is a
+    /// group member (WebWindow : GroupMember, ShellThreadGroups) as a thread window is: drop its title bar on another
+    /// window or a group to group, join or swap, drag it out to free it; groups mix threads and web windows. In a group
+    /// it has the group's scale and stays flat (on its cell's tangent plane when the group bends); its page, toolbar,
+    /// keyboard, chooser (placed from the window's world transform and scale), dialogs and full screen (inside its page
+    /// area, as always) work as in a free window. Its ✕ closes it alone. Nothing more per frame: the page copy is still
+    /// only on new frames.
     public sealed partial class MetaCodexShell
     {
         public const int WebW = 1280, WebH = 800, WebLargeW = 1600, WebLargeH = 1000;
@@ -76,11 +84,16 @@ namespace MetaCodex.Shell
 #endif
         }
 
-        /// A web window: its panel, toolbar and page area, and the page it shows.
-        private sealed class WebWindow
+        /// A web window: its panel, toolbar and page area, and the page it shows. A group member (ShellThreadGroups): its id,
+        /// panel, group, drag and glide are GroupMember's; it never bends (in a bent group it lies flat on its cell's
+        /// tangent plane, so the page and the pointer agree).
+        private sealed class WebWindow : GroupMember
         {
-            public string Id, Title;
-            public UiPanel Panel;
+            public readonly string Title;
+            public bool Removed;                 // an extra window closed for good (WebDestroy): a group lets it go
+            public WebWindow(string id, string title) : base(id) { Title = title; }
+            public override bool Flat => true;
+            public override bool Gone => Removed;
             public UiTextField Url;
             public UiLabel TitleLabel, Note;
             public UiButton Back, Fwd, Reload, Go, ZoomOut, ZoomIn, ExitFull;
@@ -96,6 +109,9 @@ namespace MetaCodex.Shell
         private readonly List<WebWindow> _webWins = new List<WebWindow>(WebMaxWindows); // the first window first
         private WebWindow _webLast;              // the window touched last
         private UiPanel _webOpener;              // while a new window opens: the window it opens beside (ContextOpener)
+        /// ❐ NEW WINDOW pressed again within this many seconds of the last press (on any web window) does nothing.
+        public const float WebNewDebounce = 0.8f;
+        private float _webNewAt = -10f;          // the last ❐ press that opened (or tried to open) a window
         private Mesh _webQuad;                   // the page's quad: one mesh for every window
         private (int action, Vector2 page) _webLastTouch = (-1, default);
         private (int id, bool ok) _webLastJsAnswer;
@@ -187,7 +203,7 @@ namespace MetaCodex.Shell
         private void BuildWeb()
         {
             WebChoiceEnd(true); // built again (accent colour): an open chooser goes, the page keeps its value
-            if (_webWins.Count == 0) _webWins.Add(new WebWindow { Id = WebFirstId, Title = "WEB" });
+            if (_webWins.Count == 0) _webWins.Add(new WebWindow(WebFirstId, "WEB"));
             foreach (var w in _webWins) BuildWebWindow(w);
             if (_webLast == null) _webLast = _webWins[0];
         }
@@ -268,6 +284,7 @@ namespace MetaCodex.Shell
         /// it stays for when the window opens again), another window goes for good with its page.
         private void WebClosed(WebWindow w)
         {
+            if (w.Group != null) RemoveFromGroup(w, false); // its ✕ in a group: it alone (a group of one goes; ShellThreadGroups)
             if (_webKeys && _webKeysWin == w) WebTakeKeys(w, false);
             if (_wc != null && _wcWin == w) WebChoiceEnd(true);
             if (w.Extra) WebDestroy(w);
@@ -281,6 +298,7 @@ namespace MetaCodex.Shell
             var p = w.Panel;
             var pg = w.Page;
             _webWins.Remove(w);
+            w.Removed = true;
             if (p != null)
             {
                 if (_panels.TryGetValue(w.Id, out var q) && q == p) _panels.Remove(w.Id);
@@ -289,6 +307,17 @@ namespace MetaCodex.Shell
                 Router?.Unregister(p);
                 p.CloseAndDestroy();
             }
+            WebFreeEngine(w);
+            var tex = pg.Tex;
+            pg.Tex = null;
+            if (tex != null) After(1f, () => Destroy(tex)); // after the window's closing (its quad shows it until then)
+            Log(w.Id + ": closed, its page and its memory freed (" + _webWins.Count + " web window" + (_webWins.Count == 1 ? "" : "s") + " left)");
+        }
+
+        /// A page's dialog and its WebView go (its display, buffers, history and memory); the next opening makes a new one.
+        private void WebFreeEngine(WebWindow w)
+        {
+            var pg = w.Page;
             if (pg.Dialog != null) { var d = pg.Dialog; pg.Dialog = null; if (d.IsOpen) d.Close(); }
 #if UNITY_ANDROID && !UNITY_EDITOR
             if (pg.Wv != null)
@@ -299,16 +328,51 @@ namespace MetaCodex.Shell
                 pg.Pixels = default;
             }
 #endif
-            var tex = pg.Tex;
-            pg.Tex = null;
-            if (tex != null) After(1f, () => Destroy(tex)); // after the window's closing (its quad shows it until then)
-            Log(w.Id + ": closed, its page and its memory freed (" + _webWins.Count + " web window" + (_webWins.Count == 1 ? "" : "s") + " left)");
+        }
+
+        /// The closed first window reused by ❐ NEW WINDOW (owner 2026-11-17: it came back with its old page): a fresh
+        /// window, as web-2 and web-3 are. Its WebView goes (a new one is made when it opens: no history, so ◀ never goes
+        /// back to the old page), its page state is cleared and its size is the usual one; on opening it shows its start
+        /// page (WebOpened). The WEB tile and voice still bring the first window back as it was (WebShow, not this).
+        private void WebFreshWindow(WebWindow w)
+        {
+            var pg = w.Page;
+            if (WebIsOpen(w) || w.Extra) return;
+            bool had = pg.Current.Length > 0 || !pg.OnStart;
+#if UNITY_ANDROID && !UNITY_EDITOR
+            had |= pg.Wv != null;
+#endif
+            WebFreeEngine(w);
+            if (pg.Large) WebSetLarge(w, false);
+            if (w.Panel != null) w.Panel.BaseScale = Vector3.one * UiScaleNow; // the code editor's larger window: the usual size
+            w.FreeScale = 1f;
+            w.Easing = false;
+            pg.Current = pg.Error = pg.Mode = "";
+            pg.OnStart = false;
+            pg.Loading = false;
+            pg.JsShown = pg.JsAnswered = pg.JsDismissed = 0; // a new engine counts its dialogs from 1 again
+            pg.LastHover = new Vector2(-1f, -1f);
+            pg.NextState = 0f;
+            pg.ReadState = true;
+            WebFullscreen(w, false);
+            w.Reload?.SetText("⟳");
+            w.Progress?.SetVisible(false);
+            w.ProgressShown = -1;
+            w.Back?.SetEnabled(false);
+            w.Fwd?.SetEnabled(false);
+            w.Url?.Set("");
+            w.TitleShown = null;
+            w.TitleLabel?.Set("");
+            pg.Dark = false;
+            WebFillDark(pg); // not the old page's last frame while the new engine starts
+            WebRefreshNote(w);
+            if (had) Log(w.Id + ": NEW WINDOW reuses it as a fresh window (its old page and history gone)");
         }
 
         /// A new extra window ("web-2", "web-3"), made closed: the caller opens it.
         private WebWindow WebMakeWindow(int n)
         {
-            var w = new WebWindow { Id = "web-" + n, Title = "WEB " + n };
+            var w = new WebWindow("web-" + n, "WEB " + n);
             _webWins.Add(w);
             BuildWebWindow(w);
             w.Panel.BaseScale = Vector3.one * UiScaleNow;
@@ -332,21 +396,29 @@ namespace MetaCodex.Shell
             return null;
         }
 
-        /// Opens a window (beside `from` when it is placed anew) and makes it the one touched last.
+        /// Opens a window (beside `from` when it is placed anew; beside its group when `from` is in one) and makes it the
+        /// one touched last. A window in a group stays in it (it is open: its frame flashes).
         private void WebShow(WebWindow w, WebWindow from = null)
         {
             if (w?.Panel == null) return;
-            _webOpener = from != null && from != w && WebIsOpen(from) ? from.Panel : null;
+            _webOpener = from != null && from != w && WebIsOpen(from) ? (from.Group?.Panel ?? from.Panel) : null;
             try { OpenPanel(w.Id); }
             finally { _webOpener = null; }
             WebMarkTouched(w);
         }
 
-        /// ❐ NEW WINDOW: another web window beside this one, on its start page.
+        /// ❐ NEW WINDOW: another web window beside this one, always on its start page (the closed first window, when it is
+        /// the spare one, comes as a fresh window: WebFreshWindow). Pressed on a window in a group: the new one opens free,
+        /// beside the group (it joins nothing by itself).
         private void WebNewWindow(WebWindow from)
         {
+            // one press, one window (owner b16: one pinch gave three calls in 0.4 s: two windows and the limit toast)
+            float now = Time.unscaledTime;
+            if (now - _webNewAt < WebNewDebounce) return;
+            _webNewAt = now;
             var w = WebSpare();
             if (w == null) return;
+            if (!w.Extra) WebFreshWindow(w);
             WebShow(w, from);
             Log(w.Id + ": a new web window beside " + from.Id);
         }
@@ -387,8 +459,13 @@ namespace MetaCodex.Shell
             return w?.Id ?? WebFirstId;
         }
 
-        /// The web window panels opened from WEB go beside (links, clipboard): the open one touched last.
-        private UiPanel WebOpenPanel() => WebLastOpen(false)?.Panel;
+        /// The web window panels opened from WEB go beside (links, clipboard): the open one touched last (its group when it
+        /// is in one).
+        private UiPanel WebOpenPanel()
+        {
+            var w = WebLastOpen(false);
+            return w?.Group?.Panel ?? w?.Panel;
+        }
 
         // ---- the code editor's window (ShellIde)
 
@@ -563,15 +640,18 @@ namespace MetaCodex.Shell
                 if (pg.Wv != null) try { pg.Wv.Call("resize", pw, ph); } catch (Exception ex) { Log(w.Id + " resize: " + ex.Message); }
 #endif
             }
-            if (w.Panel != null && was && !large) w.Panel.BaseScale = Vector3.one * UiScaleNow;
+            // in a group (or easing out of one): the group's size now, this one when it is free (the code editor's 1.25 kept)
+            if (w.Group != null || w.Easing) w.FreeScale = large ? WebLargeScale : WebShowsIde(w) ? IdeWebScale : 1f;
+            else if (w.Panel != null && was && !large) w.Panel.BaseScale = Vector3.one * UiScaleNow;
             WebApplyScale(w);
         }
 
         /// While large, the window keeps 1.25 times the UI scale (the shell sets every window back to the UI scale when
-        /// it changes). Not large: the window's scale is left alone.
+        /// it changes). Not large: the window's scale is left alone. In a group (the group's scale) or easing out of one
+        /// (to its FreeScale, ShellThreadGroups.TickMember): left alone.
         private void WebApplyScale(WebWindow w)
         {
-            if (!w.Page.Large || w.Panel == null) return;
+            if (!w.Page.Large || w.Panel == null || w.Group != null || w.Easing) return;
             float s = UiScaleNow * WebLargeScale;
             if (Mathf.Abs(w.Panel.BaseScale.x - s) > 1e-4f) w.Panel.BaseScale = Vector3.one * s;
         }
@@ -1270,16 +1350,17 @@ namespace MetaCodex.Shell
             p.BaseScale = Vector3.one * (web.RestLossyScale.x / rootScale);
             _wcWebPos = wt.position;
             _wcWebRot = wt.rotation;
-            _wcWebScale = web.BaseScale.x;
+            _wcWebScale = web.RestLossyScale.x;
         }
 
-        /// Each frame while it is open: its window moved or was scaled, the chooser goes with it (compares only).
+        /// Each frame while it is open: its window moved or was scaled (its own scale, or its group's: RESIZE), the chooser
+        /// goes with it (compares only).
         private void WebChoiceFollow()
         {
             var web = _wcWin?.Panel;
             if (web == null) return;
             var wt = web.transform;
-            if (wt.position != _wcWebPos || wt.rotation != _wcWebRot || web.BaseScale.x != _wcWebScale) WebChoicePlace();
+            if (wt.position != _wcWebPos || wt.rotation != _wcWebRot || web.RestLossyScale.x != _wcWebScale) WebChoicePlace();
         }
 
         private void WebChoiceFilter(string s)
@@ -1689,6 +1770,6 @@ namespace MetaCodex.Shell
         public IEnumerable<string> WebWindowIdsForTest => _webWins.Select(w => w.Id);
         public string WebLastWindowForTest => WebCur?.Id;
         public string WebKeysWindowForTest => _webKeysWin?.Id;
-        public void WebNewWindowForTest() { var w = WebCur; if (w != null) WebNewWindow(w); }
+        public void WebNewWindowForTest() { var w = WebCur; _webNewAt = -10f; if (w != null) WebNewWindow(w); } // as a separate press (no debounce)
     }
 }

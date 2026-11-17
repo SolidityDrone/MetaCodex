@@ -36,7 +36,7 @@ namespace MetaCodex.Shell
 
         private IEnumerable<UiPanel> LayoutPanels()
         {
-            foreach (var kv in _panels) if (kv.Key != "dock" && kv.Key != "picker" && kv.Key != ControlId && kv.Key != SidebarId && !IsGroupedPanel(kv.Value)) yield return kv.Value; // CONTROL's rail and THREAD's sidebar ride with their window; a grouped thread window with its group
+            foreach (var kv in _panels) if (kv.Key != "dock" && kv.Key != "picker" && kv.Key != ControlId && kv.Key != SidebarId && !IsGroupedPanel(kv.Value)) yield return kv.Value; // CONTROL's rail and THREAD's sidebar ride with their window; a grouped window (thread or web) with its group
             foreach (var f in _frames.Values) yield return f;
         }
 
@@ -230,8 +230,8 @@ namespace MetaCodex.Shell
         }
 
         /// Windows that never bend: terminals (their text grid cannot bend yet) and WEB (the page is one flat picture,
-        /// so a bent frame around it would not match where the pointer touches the page). A thread group bends; its
-        /// windows lie on its curve (ShellThreadGroups.FitGroupMembers).
+        /// so a bent frame around it would not match where the pointer touches the page). A window group bends; its
+        /// thread windows lie on its curve, its web windows flat on their cells' tangent planes (ShellThreadGroups).
         public static bool StaysFlat(UiPanel p) => p.Id.StartsWith("term-") || IsWebPanelId(p.Id); // every web window (ShellWeb)
 
         // ---- curve mode's lean (owner 2026-11-16: "if a panel is above a certain height, curve mode should not only curve it

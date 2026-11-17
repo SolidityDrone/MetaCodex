@@ -23,20 +23,17 @@ namespace MetaCodex.Shell
         public const int MaxThreadWindows = 6;
         public const float ThreadH = 0.66f;
 
-        private sealed class ThreadWindow
+        /// Its id, panel, group, drag and glide are a group member's (GroupMember, ShellThreadGroups): a group holds thread
+        /// windows and web windows.
+        private sealed class ThreadWindow : GroupMember
         {
-            public readonly string Id;
             public readonly int Number;
-            public UiPanel Panel;
             public bool Dead;                 // closed for good (an extra window): late callbacks are dropped
-            public ThreadGroup Group;         // the group it is in (ShellThreadGroups), or null
             public float FocusedAt;
-            public bool Dragging;             // its title bar is held (drop onto a window or group: ShellThreadGroups)
-            public bool Gliding;              // FIXED: eases to GlideTo (leaving a group by UNGROUP)
-            public Vector3 GlidePos;
-            public Quaternion GlideRot;
             public UiButton CloseButton;
-            public ThreadWindow(string id, int number) { Id = id; Number = number; }
+            public ThreadWindow(string id, int number) : base(id) { Number = number; }
+            public override bool Flat => false;   // in a bent group it lies on the group's curve
+            public override bool Gone => Dead;
 
             public string threadOpen;
             public string threadOpenProject;
