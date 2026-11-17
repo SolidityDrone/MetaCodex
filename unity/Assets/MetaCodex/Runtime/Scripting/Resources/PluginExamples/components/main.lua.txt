@@ -1,0 +1,139 @@
+-- description: a gallery of the components a plugin window can use: tabs, a card, checkbox, toggle, radio, segmented,
+-- select, slider, stepper, progress, stats, date and time pickers, colour swatches, a selectable list with a field,
+-- dialogs and a canvas. Every control works: what it sends shows in the line at the top, and the values are saved.
+-- Copy what you need: one render() builds the whole window from the state S; on(e) changes S and calls render().
+
+local S = {
+  tab = "choose", notify = true, sound = false, size = "M", view = "Week", city = "Rome",
+  volume = 40, minutes = 25, day = "", at = "07:30", tint = "#3987E5",
+  items = { { id = "i1", text = "Buy bread" }, { id = "i2", text = "Call the plumber" }, { id = "i3", text = "Water the plants" } },
+  next = 4, picked = "", shape = "",
+  last = "Use any control: what it sends shows here",
+}
+local CITIES = { "Amsterdam", "Athens", "Barcelona", "Berlin", "Brussels", "Budapest", "Copenhagen", "Dublin", "Helsinki",
+  "Lisbon", "London", "Madrid", "Oslo", "Paris", "Prague", "Rome", "Stockholm", "Vienna", "Warsaw", "Zurich" }
+local ROOMS = { living = "Living room", kitchen = "Kitchen", bath = "Bathroom", lamp = "Lamp", walk = "Walk", gauge = "Gauge" }
+
+local function save() store.set("state", json.encode(S)) end
+local function load()
+  local t = json.decode(store.get("state") or "")
+  if type(t) == "table" then for k, v in pairs(t) do S[k] = v end end
+end
+local function today() local d = app.date(); return string.format("%04d-%02d-%02d", d.year, d.month, d.day) end
+
+local render -- below
+
+local function list_items()
+  local out = {}
+  for i, it in ipairs(S.items) do
+    out[#out + 1] = { id = it.id, text = it.text, tone = it.id == S.picked and "accent" or nil }
+    if #out >= 20 then break end
+  end
+  return out
+end
+
+local function canvas()
+  return { type = "canvas", id = "plan", width = 100, height = 56, selected = S.shape ~= "" and S.shape or nil, shapes = {
+    { id = "living", type = "rect", x = 2, y = 2, w = 56, h = 34, label = "Living", tone = "accent" },
+    { id = "kitchen", type = "rect", x = 60, y = 2, w = 38, h = 20, label = "Kitchen", tone = "ok" },
+    { id = "bath", type = "polygon", points = { { 60, 24 }, { 98, 24 }, { 98, 54 }, { 84, 54 }, { 84, 36 }, { 60, 36 } }, label = "Bath", tone = "violet" },
+    { id = "lamp", type = "circle", x = 18, y = 18, r = 4, tone = "warn", opacity = 0.5 },
+    { id = "walk", type = "polyline", points = { { 6, 46 }, { 24, 42 }, { 40, 50 }, { 56, 44 } }, tone = "dim", stroke_width = 2 },
+    { id = "gauge", type = "arc", x = 72, y = 50, r = 5, from = -120, to = 120, tone = "warn" },
+    { type = "text", x = 30, y = 53, text = "tap a room", size = 8, tone = "dim" },
+  } }
+end
+
+local function on(e)
+  if e.type == "open" or e.type == "close" then return end
+  S.last = e.type .. "  " .. (e.id ~= "" and e.id or "-") .. "  =  " .. tostring(e.value)
+  if e.type == "tab" then S.tab = e.value
+  elseif e.type == "toggle" and e.id == "notify" then S.notify = e.value
+  elseif e.type == "toggle" and e.id == "sound" then S.sound = e.value
+  elseif e.type == "radio" then S.size = e.value
+  elseif e.type == "segmented" then S.view = e.value
+  elseif e.type == "select" then S.city = e.value
+  elseif e.type == "slider" then S.volume = tonumber(e.value) or S.volume
+  elseif e.type == "stepper" then S.minutes = tonumber(e.value) or S.minutes
+  elseif e.type == "date" then S.day = e.value
+  elseif e.type == "time" then S.at = e.value
+  elseif e.type == "color" then S.tint = e.value
+  elseif e.type == "list" then S.picked = e.id
+  elseif e.type == "shape" then
+    S.shape = e.id
+    if e.id ~= "" then S.last = "shape  " .. (ROOMS[e.id] or e.id) .. "  at  " .. e.value end
+  elseif e.type == "input" and e.id == "add" then
+    local text = (e.value or ""):gsub("^%s+", ""):gsub("%s+$", "")
+    if text == "" then ui.toast("Type something to add", "warn") return end
+    S.items[#S.items + 1] = { id = "i" .. S.next, text = text:sub(1, 60) }
+    S.next = S.next + 1
+    while #S.items > 20 do table.remove(S.items, 1) end
+  elseif e.type == "button" then
+    if e.id == "remove" then
+      for i, it in ipairs(S.items) do if it.id == S.picked then table.remove(S.items, i) break end end
+      S.picked = ""
+    elseif e.id == "reset" then
+      S.volume, S.minutes = 40, 25
+    elseif e.id == "alert" then
+      ui.modal("Alert", "A dialog with one button: it closes when tapped.", { "OK" })
+    elseif e.id == "confirm" then
+      ui.modal("Confirm", "Empty the list on the Lists tab?", { "EMPTY", "CANCEL" }, function(i)
+        if i == 1 then S.items = {}; S.picked = ""; save(); render() end
+      end)
+    elseif e.id == "toast" then
+      ui.toast("A toast: a short line that fades", "ok")
+    elseif e.id == "notify" then
+      ui.notify{ text = "A callout: a tap opens this window", tone = "info", sound = "ping", panel = "main" }
+    end
+  end
+  save(); render()
+end
+
+render = function()
+  ui.panel{ id = "main", title = "Components", on = on, components = {
+    { type = "text", id = "status", text = S.last, tone = "dim" },
+    { type = "tabs", id = "pages", value = S.tab, tabs = {
+      { id = "choose", label = "Choose", components = {
+        { type = "card", title = "Options", components = {
+          { type = "checkbox", id = "notify", label = "Remind me", value = S.notify },
+          { type = "toggle", id = "sound", label = "Sound", value = S.sound },
+          { type = "radio", id = "size", options = { "S", "M", "L" }, value = S.size, inline = true },
+        } },
+        { type = "segmented", id = "view", label = "View", options = { "Day", "Week", "Month" }, value = S.view },
+        { type = "select", id = "city", label = "City", options = CITIES, value = S.city },
+      } },
+      { id = "numbers", label = "Numbers", components = {
+        { type = "slider", id = "volume", label = "Volume", min = 0, max = 100, step = 5, value = S.volume, unit = "%" },
+        { type = "row", align = "center", components = {
+          { type = "stepper", id = "minutes", label = "Focus", min = 5, max = 90, step = 5, value = S.minutes, unit = "min", weight = 3 },
+          { type = "buttons", items = { { id = "reset", label = "RESET" } }, weight = 1 },
+        } },
+        { type = "progress", items = { { label = "volume", value = S.volume / 100 } } },
+        { type = "stats", items = { { label = "Volume", value = S.volume .. "%" }, { label = "Focus", value = S.minutes .. " min" } } },
+      } },
+      { id = "pick", label = "Pick", components = {
+        { type = "date", id = "day", value = S.day ~= "" and S.day or nil, time = true, min = today() },
+        { type = "time", id = "at", label = "Alarm", value = S.at, step = 5 },
+        { type = "color", id = "tint", value = S.tint },
+      } },
+      { id = "lists", label = "Lists", components = {
+        { type = "list", id = "todo", items = list_items(), selected = S.picked ~= "" and S.picked or nil, rows = 5 },
+        { type = "field", id = "add", label = "New", placeholder = "a new item", clear = true },
+        { type = "buttons", items = { { id = "remove", label = "REMOVE", tone = "error" } } },
+      } },
+      { id = "canvas", label = "Canvas", components = {
+        canvas(),
+      } },
+      { id = "dialogs", label = "Dialogs", components = {
+        { type = "text", text = "Dialogs come from **ui.modal**; a toast from **ui.toast**; a callout from **ui.notify**." },
+        { type = "buttons", items = { { id = "alert", label = "ALERT" }, { id = "confirm", label = "CONFIRM", tone = "accent" },
+                                      { id = "toast", label = "TOAST" }, { id = "notify", label = "CALLOUT" } } },
+      } },
+    } },
+  } }
+end
+
+load()
+if #S.items == 0 then S.items = { { id = "i1", text = "Buy bread" } } end
+render()
+menu.add{ id = "components", label = "UI KIT", glyph = "▣", icon = "star", panel = "main" }
