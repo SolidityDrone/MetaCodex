@@ -395,11 +395,12 @@ namespace MetaCodex.Shell
             {
                 case "terminals": return Frame();
                 case "files": return Frame() ?? FocusedThreadAnchor();
-                case "clipboard": return FocusedThreadAnchor() ?? OpenOne("web");
-                case "browser": return OpenOne("web");
+                case "clipboard": return FocusedThreadAnchor() ?? WebOpenPanel();
+                case "browser": return WebOpenPanel(); // the open web window touched last (ShellWeb)
                 case "thread-new": return OpenOne("threads");
                 case "workspaces": return OpenOne("threads") ?? FocusedThreadAnchor();
-                default: return IsThreadWindowId(id) ? _twOpener ?? OpenOne("threads") : null; // another thread window: beside the one it came from
+                default: return IsWebPanelId(id) ? _webOpener // a new web window: beside the one it came from (ShellWeb)
+                    : IsThreadWindowId(id) ? _twOpener ?? OpenOne("threads") : null; // another thread window: beside the one it came from
             }
         }
 

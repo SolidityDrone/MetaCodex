@@ -1195,7 +1195,7 @@ namespace MetaCodex.Shell
                     "let me see my files", "pull up the git history", "i want to check the agents", "take me to the settings page", "display the vault",
                     "i want to rearrange the tiles of my wrist menu",
                 },
-                Run = a => { string id = (string)a["panel"]; return OpenPanel(id) ? "Opened " + Label(id) : "error: no panel " + id; },
+                Run = a => { string id = WebVoicePanel((string)a["panel"], true); return OpenPanel(id) ? "Opened " + Label(id) : "error: no panel " + id; }, // web: the window touched last (ShellWeb)
             });
             Voice.Register(new VoiceCommand
             {
@@ -1208,7 +1208,7 @@ namespace MetaCodex.Shell
                 {
                     "put away the files", "close the git window", "dismiss the settings", "i am done with the vault",
                 },
-                Run = a => { string id = (string)a["panel"]; return ClosePanel(id) ? "Closed " + Label(id) : "error: no panel " + id; },
+                Run = a => { string id = WebVoicePanel((string)a["panel"], false); return ClosePanel(id) ? "Closed " + Label(id) : "error: no panel " + id; },
             });
             Voice.Register(new VoiceCommand
             {
