@@ -59,13 +59,14 @@ namespace MetaCodex.Shell
             var r2 = rs.Next(t.ButtonHeight);
             float bw2 = (r2.width - t.Gap * 2) / 3f;
             _agentToggle = p.Add(new UiButton("DISABLE", ToggleAgentEnabled) { Rect = new Rect(r2.x, r2.y, bw2, r2.height) });
-            p.Add(new UiButton("NEW THREAD →", () => OpenNewThread(_agentSel)) { Rect = new Rect(r2.x + bw2 + t.Gap, r2.y, bw2, r2.height) });
+            // NEW THREAD, or ENABLE THREADS for an agent that runs only in a terminal yet (Claude Code without its thread adapter)
+            _agentNewThread = p.Add(new UiButton("NEW THREAD →", AgentNewThreadPressed) { Rect = new Rect(r2.x + bw2 + t.Gap, r2.y, bw2, r2.height) });
             _agentUpdate = p.Add(new UiButton("UPDATE", () => InstallAgent(_agentSel)) { Rect = new Rect(r2.x + (bw2 + t.Gap) * 2, r2.y, bw2, r2.height) });
             _agentUpdate.SetVisible(false);
-            _agentHint = p.Add(new UiLabel("GET installs an agent here. API KEY: paste your provider's key once (sealed in the vault, given to the agents MQH starts). SIGN IN runs the provider's own login in a new terminal: ⇗ on that terminal opens its link in the system browser (COPY LINK copies it), codes go back with ⎘ PASTE; those logins stay in the CLI's own files, MetaCodex never reads them.", t.SmallSize) { Rect = rs.Rest(), Wrap = true, Color = t.TextDim, Align = TextAlignmentOptions.TopLeft });
+            _agentHint = p.Add(new UiLabel("GET installs an agent here. API KEY: paste your provider's key once (sealed in the vault, given to the agents MQH starts). SIGN IN runs the provider's own login in a new terminal: ⇗ on that terminal opens its link in the system browser (COPY LINK copies it), codes go back with ⎘ PASTE; those logins stay in the CLI's own files, MetaCodex never reads them. Claude Code threads need its thread adapter: GET installs it, ENABLE THREADS adds it to a CLI installed before.", t.SmallSize) { Rect = rs.Rest(), Wrap = true, Color = t.TextDim, Align = TextAlignmentOptions.TopLeft });
         }
 
-        /// MQH's provider id (acp-opencode, codex, claude-code) -> the GET agent it is (opencode, codex, claude).
+        /// MQH's provider id (acp-opencode, codex, acp-claude-code) -> the GET agent it is (opencode, codex, claude).
         private static string AgentIdFor(string providerId) =>
             providerId == null ? "opencode" : providerId.Contains("opencode") ? "opencode" : providerId.Contains("codex") ? "codex" : providerId.Contains("claude") ? "claude" : "opencode";
 
@@ -112,28 +113,47 @@ namespace MetaCodex.Shell
         }
 
         /// The agents MetaCodex supports (owner 2026-11-10: "leave Claude Code, Codex, OpenCode"; Cursor and the rest are
-        /// not shown and are switched off in MQH), in this order. Claude Code runs in a terminal until its MQH provider
-        /// plugin installs at first use (its bundle carries Anthropic's SDK: never in the APK).
+        /// not shown and are switched off in MQH), in this order. Claude Code runs MQH threads through MQH's ACP provider
+        /// (acp-claude-code: the ACP adapter the user installs, ShellAgentGet), the way OpenCode does; without the adapter
+        /// it runs in a terminal (TERMINAL, ENABLE THREADS). MQH's own Claude plugin carries Anthropic's SDK: never in the APK.
         public static readonly (string id, string name, string agent)[] SupportedProviders =
-            { ("claude-code", "Claude Code", "claude"), ("codex", "Codex", "codex"), ("acp-opencode", "OpenCode", "opencode") };
+            { (ClaudeThreadsProvider, "Claude Code", "claude"), ("codex", "Codex", "codex"), ("acp-opencode", "OpenCode", "opencode") };
 
-        /// MQH's providers cut to the supported three (each present: as MQH has it, or what GET knows about it).
+        private static string LoginCommandFor(string agent) => agent == "claude" ? "claude auth login" : agent == "opencode" ? "opencode auth login" : "codex login";
+
+        /// MQH's providers cut to the supported three (each present: as MQH has it, or what GET knows about it). Claude
+        /// Code: MQH's state once its adapter is registered and installed (READY ...); with only the CLI, TERMINAL.
         private JArray SupportedOnly(JArray states)
         {
             var result = new JArray();
             foreach (var (id, name, agent) in SupportedProviders)
             {
                 var mqh = states.FirstOrDefault(x => (string)x["providerId"] == id) as JObject;
-                if (mqh != null) { mqh["displayName"] = name; result.Add(mqh); continue; }
                 bool installed = _agentVersions.TryGetValue(agent, out var v) && v != null;
+                bool adapter = _agentAdapters.TryGetValue(agent, out var av) && av != null;
+                // MQH has Claude Code but its adapter is gone (or not seen yet) while the CLI is here: TERMINAL below
+                if (mqh != null && !(agent == "claude" && installed && (string)mqh["status"] == "not_installed"))
+                {
+                    mqh["displayName"] = name;
+                    if (mqh["loginCommand"]?.Type != JTokenType.String) mqh["loginCommand"] = LoginCommandFor(agent);
+                    // MQH reads the adapter's version for Claude Code: the CLI's is the one people know
+                    if (agent == "claude" && installed && (string)mqh["status"] != "not_installed") mqh["installedVersion"] = v;
+                    if ((string)mqh["status"] == "not_installed" && mqh["statusMessage"]?.Type != JTokenType.String) mqh["statusMessage"] = "GET it above";
+                    result.Add(mqh);
+                    continue;
+                }
+                bool terminal = installed && agent == "claude";
                 result.Add(new JObject
                 {
                     ["providerId"] = id,
                     ["displayName"] = name,
-                    ["status"] = !installed ? "not_installed" : id == "claude-code" ? "terminal" : "ready",
+                    ["status"] = !installed ? "not_installed" : terminal ? "terminal" : "ready",
                     ["installedVersion"] = v,
-                    ["loginCommand"] = id == "claude-code" ? "claude auth login" : id == "acp-opencode" ? "opencode auth login" : "codex login",
-                    ["statusMessage"] = id == "claude-code" ? "runs in a terminal (MQH threads with it: soon)" : !installed ? "GET it above" : null,
+                    ["loginCommand"] = LoginCommandFor(agent),
+                    ["statusMessage"] = !installed ? "GET it above"
+                        : !terminal ? null
+                        : adapter ? $"thread adapter {av} installed: MQH takes it up in a moment (⟳)"
+                        : "runs in a terminal; ENABLE THREADS installs its thread adapter, then MQH runs its threads",
                 });
             }
             return result;
@@ -148,7 +168,8 @@ namespace MetaCodex.Shell
             foreach (var x in _providerStates)
             {
                 string id = (string)x["providerId"];
-                if (string.IsNullOrEmpty(id) || SupportedProviders.Any(sp => sp.id == id) || !_providersSwitchedOff.Add(id)) continue;
+                // claude-code: MQH's own Claude plugin, only in a developer's MQH on a PC (never in the APK): left as it is
+                if (string.IsNullOrEmpty(id) || id == "claude-code" || SupportedProviders.Any(sp => sp.id == id) || !_providersSwitchedOff.Add(id)) continue;
                 Mqh.SetProviderEnabled(id, false, r => { if (r == null) _providersSwitchedOff.Remove(id); });
             }
         }
@@ -212,7 +233,7 @@ namespace MetaCodex.Shell
         private JToken AgentState(string id) => _providerStates.FirstOrDefault(x => (string)x["providerId"] == id);
         private JToken AgentCatalog(string id) => _providerCatalog.FirstOrDefault(x => (string)x["id"] == id);
 
-        private UiButton _agentToggle, _agentUpdate;
+        private UiButton _agentToggle, _agentUpdate, _agentNewThread;
 
         /// AGENTS' buttons show the one action that applies to the picked agent.
         private void ShowAgentButtons(JToken st, JToken cat)
@@ -221,6 +242,18 @@ namespace MetaCodex.Shell
             _agentToggle?.SetText(enabled ? "DISABLE" : "ENABLE");
             _agentToggle?.SetEnabled(cat != null);
             _agentUpdate?.SetVisible(st != null && (string)st["status"] != "not_installed");
+            _agentNewThread?.SetText((string)st?["status"] == "terminal" ? "ENABLE THREADS" : "NEW THREAD →");
+        }
+
+        /// NEW THREAD → for an agent MQH runs; ENABLE THREADS for one that runs only in a terminal yet (its adapter).
+        private void AgentNewThreadPressed()
+        {
+            if ((string)AgentState(_agentSel)?["status"] == "terminal")
+            {
+                var a = GetAgents.FirstOrDefault(x => x.Id == AgentIdFor(_agentSel));
+                if (a?.ThreadsPackage != null) { StartThreadsInstall(a); return; }
+            }
+            OpenNewThread(_agentSel);
         }
 
         private void ShowAgent()
@@ -272,6 +305,14 @@ namespace MetaCodex.Shell
         {
             var st = AgentState(providerId);
             if (st == null) return;
+            // MQH cannot update this one (the ACP agents: Claude Code, OpenCode), or it runs only in a terminal: GET's own
+            // install again, in a terminal you watch (for Claude Code the CLI and its thread adapter)
+            var get = GetAgents.FirstOrDefault(x => x.Id == AgentIdFor(providerId));
+            if (get != null && ((string)st["status"] == "terminal" || st["canUpdate"]?.Type == JTokenType.Boolean && !(bool)st["canUpdate"]))
+            {
+                StartAgentInstall(get);
+                return;
+            }
             bool update = (string)st["status"] != "not_installed";
             EnsureHost(() =>
             {
@@ -1532,7 +1573,7 @@ namespace MetaCodex.Shell
                 void Render()
                 {
                     _providerStates = SupportedOnly(raw);
-                    // MQH can run Codex and OpenCode once they are installed (Claude Code: in a terminal, for now)
+                    // MQH runs an agent once it is installed (Claude Code: once its thread adapter is; TERMINAL before that)
                     var list = _providerStates.Where(x => (string)x["status"] != "not_installed" && (string)x["status"] != "terminal").ToList();
                     _ntProviders.SetItems(list.Select(x => new UiListItem
                     {
