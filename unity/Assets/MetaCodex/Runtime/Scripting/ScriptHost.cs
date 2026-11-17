@@ -178,6 +178,7 @@ namespace MetaCodex.Scripting
             public bool Waiting;      // changed while the app did not show it: sent when it opens
             public bool TitleDefault; // ui.panel gave no title (the plugin's is used)
             public bool FastOk;       // Spec was checked and none of its LIVE texts breaks a text rule: SameSpec may run
+            public bool LintSaid;     // the ui.panel lint has spoken about this window
         }
         private struct LiveSlot { public string Id, Style; public JValue Tok; }
         private sealed class SetText { public string FromPanel, Text; }
@@ -1074,19 +1075,17 @@ namespace MetaCodex.Scripting
 
         /// A timer callback runs (app.every, app.after, app.at): the ui.panel lint counts only those calls.
         private bool _inTimer;
-        /// Windows the lint below has spoken about in this session (once per window).
-        private readonly HashSet<string> _lintSaid = new HashSet<string>(StringComparer.Ordinal);
         public const int LintCallsPerMinute = 20;
         public const string LintText = "called every second with only LIVE texts changing: use ui.set(...) and ui.shown(...) (quest-plugins: Performance rules)";
 
         /// A timer called ui.panel and only LIVE texts changed (or nothing): more than LintCallsPerMinute in a minute is one
-        /// warn line in the plugin's log, once per window a session.
+        /// warn line in the plugin's log, once per window while the plugin is loaded (a reload, after a fix, checks again).
         private void LintLiveOnly(Entry e, PlugWin w)
         {
-            if (_lintSaid.Contains(w.FullId)) return;
+            if (w.LintSaid) return;
             if (Now - w.LintFrom > 60f) { w.LintFrom = Now; w.LintCalls = 0; }
             if (++w.LintCalls <= LintCallsPerMinute) return;
-            _lintSaid.Add(w.FullId);
+            w.LintSaid = true;
             Say(e, "warn ui.panel " + w.LocalId + ": " + LintText);
         }
 

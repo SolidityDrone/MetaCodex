@@ -213,7 +213,7 @@ app.every(1, function() n = n + 1; render() end)
             int lint = r.E.Log.Count(l => l.Contains(ScriptHost.LintText));
             Check(lint == 1, "a timer calling ui.panel with only LIVE texts changing: one lint line (" + lint + "): " + r.E.Log.FirstOrDefault(l => l.Contains(ScriptHost.LintText)));
             r.For(120.0, 1.0);
-            Check(r.E.Log.Count(l => l.Contains(ScriptHost.LintText)) == 1, "the lint is said once a window a session");
+            Check(r.E.Log.Count(l => l.Contains(ScriptHost.LintText)) == 1, "the lint is said once a window (while the plugin is loaded)");
 
             // user events that only change LIVE texts are no timer: no lint for them
             var q = Make(root, "uitap", TickLua.Replace("app.every(1, function() n = n + 1; render() end)", ""));
