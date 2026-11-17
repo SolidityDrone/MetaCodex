@@ -33,11 +33,14 @@ namespace MetaCodex.UI
         // heights (m): a thread row is 46 mm, far above the 22 mm a pinch needs
         public const float HeadHeight = 0.056f, HeadHeightOneLine = 0.044f, RowHeight = 0.046f, SectionHeight = 0.032f,
             NoteHeight = 0.042f, NoteHeightTwoLines = 0.052f, PlainHeight = 0.040f, GapHeight = 0.012f;
-        /// The space between two cards, and under a card's last row (inside it).
-        public const float CardGap = 0.014f, CardPadBottom = 0.006f;
+        /// The space between two cards (two theme gaps: 14 mm), under a card's last row (inside it), and a card's padding on
+        /// the right.
+        public float CardGap => Theme.Gap * 2f;
+        public float CardPadBottom => Theme.Gap * 0.85f;
+        public float Pad => Theme.Padding * 0.7f;
         // x from the card's left edge (m): the stripe, the guide (under the head's fold triangle), a row's plate, its dot's
-        // centre and its title; the head's name; the padding on the right
-        public const float StripeWidth = 0.0035f, GuideX = 0.020f, RowX = 0.028f, DotX = 0.037f, TextX = 0.050f, NameX = 0.034f, Pad = 0.010f;
+        // centre and its title; the head's name
+        public const float StripeWidth = 0.0035f, GuideX = 0.020f, RowX = 0.028f, DotX = 0.037f, TextX = 0.050f, NameX = 0.034f;
         /// The head's + (drawn), its target (the head's full height, this wide), and the count's column (counts line up).
         public const float PlusSize = 0.032f, PlusHitWidth = 0.050f, CountWidth = 0.088f;
         private const float ScrollLane = 0.012f; // the scroll bar's lane on the right

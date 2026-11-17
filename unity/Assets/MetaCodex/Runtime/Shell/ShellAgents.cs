@@ -639,7 +639,7 @@ namespace MetaCodex.Shell
             int shown = all ? _projects.Count : byType.TryGetValue(_threadsFilter, out var sl) ? sl.Count : 0;
             if (_projects.Count == 0) _threadsStatus.Set("No project yet: + PROJECT… makes one in " + ProjectKinds.Root + "/ (native, default, research or a plugin).", t.TextDim);
             else _threadsStatus.Set((all ? ThreadPulse.Plural(_projects.Count, "project") : $"{shown} of {_projects.Count} projects") + " · " + ThreadPulse.Plural(total, "thread")
-                + (run > 0 ? $" · <color=#{UiViz.Hex(t.Ok)}>{run} running</color>" : "") + (need > 0 ? $" · <color=#{UiViz.Hex(t.Warn)}>{need} need you</color>" : "") + " · tap a name to fold it", t.TextDim);
+                + (run > 0 ? $" · <color=#{UiViz.Hex(t.Ok)}>{run} running</color>" : "") + (need > 0 ? $" · <color=#{UiViz.Hex(t.Warn)}>{need} need you</color>" : "") + (run + need == 0 ? " · tap a name to fold it" : ""), t.TextDim);
             _threadList.SetItems(items, keepScroll: !_tvScrollTop);
             _tvScrollTop = false;
             _threadList.SelectIndex(items.FindIndex(i => i.Tag as string == "t:" + _threadOpen), notify: false); // -1: none lit
