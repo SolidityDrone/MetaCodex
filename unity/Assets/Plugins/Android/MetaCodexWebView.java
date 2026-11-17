@@ -173,8 +173,11 @@ public final class MetaCodexWebView {
     private static final int SELECT_MAX_JSON = 400000, SELECT_MAX_OPTIONS = 5000, SELECT_MAX_GROUPS = 1000, SELECT_MAX_TEXT = 200;
     private static final String SELECT_KINDS = "|select|date|time|datetime-local|month|week|color|";
     private static final SecureRandom RNG = new SecureRandom();
+    /** Instances made so far: each one's number names its virtual display and its log lines (several web windows). */
+    private static final AtomicInteger MADE = new AtomicInteger(0);
 
     private final Activity activity;
+    private final int num;                         // this instance's number (MADE)
     private volatile int width, height;            // changed only by resize, under the lock
     private volatile ByteBuffer pixels;            // RGBA, width * height * 4, read by Unity between poll and endRead
     private ByteBuffer oldPixels;                  // kept until Unity has taken the new one (its view points here)
@@ -262,10 +265,11 @@ public final class MetaCodexWebView {
 
     public MetaCodexWebView(Activity activity, int width, int height) {
         this.activity = activity;
+        this.num = MADE.incrementAndGet();
         this.width = width;
         this.height = height;
         pixels = ByteBuffer.allocateDirect(width * height * 4).order(ByteOrder.nativeOrder());
-        thread = new HandlerThread("mcx-webview-copy");
+        thread = new HandlerThread("mcx-webview-copy-" + num);
         thread.start();
         copier = new Handler(thread.getLooper());
         ui.post(this::create);
@@ -281,12 +285,19 @@ public final class MetaCodexWebView {
             scrollFactorH = Math.max(1f, vc.getScaledHorizontalScrollFactor());
             reader = newReader();
             web = makeWeb();
+            web.resumeTimers();                        // process-wide: on while the app runs (a window closed during a pause
+                                                       // must not leave them paused for the pages made after it)
             host = new FrameLayout(activity);
             host.setBackgroundColor(Color.WHITE);
             host.addView(web, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
             if (!showOnDisplay()) showOffScreen("the virtual display could not be made");
             life = new Application.ActivityLifecycleCallbacks() {
-                @Override public void onActivityResumed(Activity a) { if (a == activity) { activityPaused = false; applyPause(); } }
+                @Override public void onActivityResumed(Activity a) {
+                    if (a != activity) return;
+                    activityPaused = false;
+                    if (web != null) web.resumeTimers();   // process-wide: whichever window paused them (see applyPause)
+                    applyPause();
+                }
                 @Override public void onActivityPaused(Activity a) { if (a == activity) { activityPaused = true; applyPause(); } }
                 @Override public void onActivityCreated(Activity a, Bundle b) { }
                 @Override public void onActivityStarted(Activity a) { }
@@ -346,7 +357,7 @@ public final class MetaCodexWebView {
             DisplayManager dm = (DisplayManager) activity.getSystemService(Context.DISPLAY_SERVICE);
             int dpi = activity.getResources().getDisplayMetrics().densityDpi; // the page lays out as it did in the activity
             imagesSeen = 0;
-            vd = dm.createVirtualDisplay("metacodex-web", width, height, dpi, reader.getSurface(), DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY);
+            vd = dm.createVirtualDisplay("metacodex-web-" + num, width, height, dpi, reader.getSurface(), DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY);
             if (vd == null) { Log.w(TAG, "web: createVirtualDisplay returned nothing"); return false; }
             p = new Presentation(activity, vd.getDisplay()) {
                 @Override protected void onCreate(Bundle b) {
@@ -367,7 +378,7 @@ public final class MetaCodexWebView {
             canvasMode = false;
             mode = "display";
             web.requestFocus();                        // the page has the focus inside its own window (fields, keys)
-            Log.i(TAG, "web: capture=virtual-display " + width + "x" + height + " dpi " + dpi);
+            Log.i(TAG, "web #" + num + ": capture=virtual-display " + width + "x" + height + " dpi " + dpi);
             final int gen = ++displayGen;
             ui.postDelayed(() -> checkDisplayFrames(gen), 3000);
             return true;
@@ -617,17 +628,23 @@ public final class MetaCodexWebView {
         if (cb != null) try { cb.onCustomViewHidden(); } catch (Throwable ignored) { }
     }
 
-    /** The window closed or the app paused: the page's media pause, then the page and its timers. */
+    /** The window closed or the app paused: the page's media pause, then this page (onPause: its drawing, animations
+     *  and media; this WebView only). The engine's timers are process-wide (pauseTimers stops every WebView of the
+     *  app, the other web windows' pages too): they pause only while the whole activity is paused (every window is out
+     *  of view then), never when one window closes; every instance resumes them when the activity resumes. */
     private void applyPause() {
         boolean p = paused || activityPaused;
         if (web == null || p == appliedPause) return;
         appliedPause = p;
         final WebView w = web;
         if (p) {
-            w.evaluateJavascript(PAUSE_MEDIA, v -> { if (appliedPause && w == web) { w.onPause(); w.pauseTimers(); } });
+            w.evaluateJavascript(PAUSE_MEDIA, v -> {
+                if (!appliedPause || w != web) return;
+                w.onPause();
+                if (activityPaused) w.pauseTimers();
+            });
         } else {
             w.onResume();
-            w.resumeTimers();
             scheduleDraw();
         }
     }
@@ -1225,8 +1242,12 @@ public final class MetaCodexWebView {
         ui.post(this::applyPause);
     }
 
+    /** The window went for good (an extra web window closed): the page, its display, its reader, its copy thread and
+     *  the lifecycle callback go; this instance is not used again. */
     public void close() {
+        if (closed) return;
         closed = true;
+        Log.i(TAG, "web #" + num + ": closed");
         pageToken = "";
         clearSelect();
         ui.post(() -> {
