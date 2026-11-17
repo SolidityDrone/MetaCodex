@@ -41,6 +41,8 @@ namespace MetaCodex.Shell
             public string Shape;
             public readonly List<TextSlot> Texts = new List<TextSlot>();
             public sealed class TextSlot { public int Index; public UiLabel Label; public float Width, Height; public bool Big; }
+            /// Plugin windows: the built controls that take a new spec in place (ShellViewControls.Bind, UiViewWatch).
+            public readonly List<ViewBinding> Bindings = new List<ViewBinding>();
         }
 
         private readonly List<AgentView> _viewList = new List<AgentView>();
@@ -60,6 +62,11 @@ namespace MetaCodex.Shell
             "  kanban {columns:[{title,cards:[..]}]} | kv {items:[{key,value}]} | choices {prompt?, options:[..]} | input {prompt?, placeholder?}\n" +
             "  buttons {items:[{id,label,tone?}]} | toggle {id,label,value} | grid {columns:1..7, cells:[{id?,text,sub?,tone?}]} | text {text, style?:big}\n" +
             "  image {path: /root/plot.png} | scene3d {size:[w,d], gravity:[0,-9.81,0], bodies:[{shape,size,pos,vel,mass,color,bounce,count}]}\n" +
+            "form: checkbox {id,label,value} | radio {id,options,value,inline?} | segmented {id,options (2-5),value} | select {id,label,options,value}\n" +
+            "  slider {id,label,min,max,step,value,unit?,live?} | stepper {id,label,min,max,step,value,unit?} | field {id,label,value,placeholder?}\n" +
+            "  date {id,value:YYYY-MM-DD,min?,max?,time?} | time {id,label,value:HH:MM,step?} | color {id,value:#RRGGBB,options?} | list {items:[{id,text,sub?,tone?}],selected?}\n" +
+            "layout: card {title?,tone?,components} | row {components,align?} (child weight) | tabs {id,value,tabs:[{id,label,components}]} | divider | spacer\n" +
+            "canvas {width,height (units) | fit:lonlat,bounds:[w,s,e,n]; shapes:[{id?,type:rect|circle|line|polyline|polygon|text|arc,...,tone,fill,stroke,label}],selected?}\n" +
             "tones: ok warn error accent dim, or #RRGGBB. Answers (choices/input) go to the thread or `mcx-ui view wait <id>`.";
 
         // ------------------------------------------------------------------ blocks in messages
@@ -202,17 +209,18 @@ namespace MetaCodex.Shell
             if (had) { pos = old.transform.position; rot = old.transform.rotation; wasOpen = old.IsOpen; bend = old.BendNow; DestroyViewPanel(pid); }
             v.Live.Clear();
             v.Texts.Clear();
+            v.Bindings.Clear();
             v.Shape = null;
             bool plugin = v.Source == "plugin";
             var comps = ViewComponents(v.Spec);
             int columns = Mathf.Clamp(I(v.Spec["columns"], 1), 1, 3);
             var size = Fl(v.Spec["size"]);
-            float w = size != null && size.Length > 0 ? Mathf.Clamp(size[0], 0.3f, 1.2f) : comps.Any(c => Is(c, "kanban", "table", "graph", "mermaid", "flowchart", "sequence")) ? 0.68f : 0.58f;
+            float w = size != null && size.Length > 0 ? Mathf.Clamp(size[0], 0.3f, 1.2f) : comps.Any(c => Is(c, "kanban", "table", "graph", "mermaid", "flowchart", "sequence", "canvas", "tabs")) ? 0.68f : 0.58f;
             float innerW = w - 2 * t.Padding;
             float colW = (innerW - t.Gap * (columns - 1)) / columns;
             // rows: up to `columns` components side by side; wide ones (diagrams, tables, boards, code, scenes, or
             // "wide": true) take a row of their own
-            bool Wide(JObject c) => columns > 1 && (c["wide"]?.Type == JTokenType.Boolean ? (bool)c["wide"] : Is(c, "graph", "flowchart", "mermaid", "sequence", "diagram", "table", "kanban", "code", "diff", "log", "scene3d", "physics", "timeline"));
+            bool Wide(JObject c) => columns > 1 && (c["wide"]?.Type == JTokenType.Boolean ? (bool)c["wide"] : Is(c, "graph", "flowchart", "mermaid", "sequence", "diagram", "table", "kanban", "code", "diff", "log", "scene3d", "physics", "timeline", "tabs"));
             var rows = new List<List<int>>();
             for (int i = 0; i < comps.Count; i++)
             {
@@ -243,7 +251,7 @@ namespace MetaCodex.Shell
                     int i = rw[col];
                     var rect = wide ? new Rect(c0.x, y, innerW, rh) : new Rect(c0.x + col * (colW + t.Gap), y, colW, rh);
                     int textsBefore = v.Texts.Count;
-                    try { AddViewComponent(p, v, comps[i], rect); }
+                    try { AddViewComponent(p, v, comps[i], rect, "components[" + i + "]"); }
                     catch (Exception ex)
                     {
                         if (v.Texts.Count > textsBefore) v.Texts.RemoveRange(textsBefore, v.Texts.Count - textsBefore);
@@ -254,6 +262,7 @@ namespace MetaCodex.Shell
                 y += rh + t.Gap;
             }
             if (comps.Count == 0) p.Add(new UiLabel("(this view has no components)", t.SmallSize) { Rect = c0, Color = t.TextDim, Align = TextAlignmentOptions.Center });
+            if (plugin && v.Bindings.Count > 0) p.Add(new UiViewWatch(v)); // in-place updates of the controls (ShellViewControls)
             if (had)
             {
                 p.transform.SetPositionAndRotation(pos, rot);
@@ -268,18 +277,65 @@ namespace MetaCodex.Shell
         /// A spec without the texts of its text components (text, markdown, note; a missing type is text, as in
         /// AddViewComponent): what a built window's layout depends on besides its texts. Two specs with the same shape
         /// differ only in their texts, so the built labels can take the new texts (ShellPluginUi.TryUpdateInPlace).
+        /// The values of the library's controls (ShellViewControls: checkbox, slider, select, the date...), the items' texts
+        /// and values of stats, progress, kv, checklist and timeline blocks, and the canvas shapes' tones and labels are left
+        /// out too, in containers (card, row, tabs) as well: the window's watcher (UiViewWatch) sets those in place.
         public static string ShapeOf(JObject spec)
         {
             var c = (JObject)spec.DeepClone();
-            if (c["components"] is JArray comps)
-                foreach (var tok in comps)
-                {
-                    if (!(tok is JObject co)) continue;
-                    string type = co["type"] is JValue tv && tv.Value != null ? tv.ToString().ToLowerInvariant() : "text";
-                    if (!MetaCodex.Scripting.ViewSpecCheck.IsTextType(type)) continue;
-                    co.Remove("text"); co.Remove("markdown"); co.Remove("value");
-                }
+            StripLive(c["components"] as JArray, 0);
             return c.ToString(Newtonsoft.Json.Formatting.None);
+        }
+
+        private static readonly string[] BlockItemKeys = { "value", "label", "text", "delta", "tone", "done", "time", "when", "key", "max" };
+
+        private static void StripLive(JArray comps, int depth)
+        {
+            if (comps == null || depth > 4) return;
+            foreach (var tok in comps)
+            {
+                if (!(tok is JObject co)) continue;
+                string type = co["type"] is JValue tv && tv.Value != null ? tv.ToString().ToLowerInvariant() : "text";
+                switch (type)
+                {
+                    case "text": case "markdown": case "note":
+                        co.Remove("text"); co.Remove("markdown"); co.Remove("value");
+                        break;
+                    case "toggle": case "checkbox": case "radio": case "segmented": case "select": case "slider": case "stepper":
+                    case "field": case "date": case "time": case "color": case "tabs":
+                        co.Remove("value");
+                        break;
+                    case "canvas":
+                        co.Remove("selected");
+                        if (co["shapes"] is JArray shapes)
+                            foreach (var sh in shapes) if (sh is JObject so) { so.Remove("tone"); so.Remove("color"); so.Remove("fill"); so.Remove("stroke"); so.Remove("label"); so.Remove("opacity"); if ((string)so["type"] == "text") so.Remove("text"); }
+                        break;
+                    case "list":
+                        if (co["items"] is JArray li && li.Any(x => x is JObject o && o["id"] != null))
+                        {
+                            co.Remove("selected");
+                            foreach (var it in li) if (it is JObject io) { io.Remove("text"); io.Remove("label"); io.Remove("sub"); io.Remove("tone"); io.Remove("badge"); }
+                        }
+                        else StripItems(co);
+                        break;
+                    case "stats": case "kpi": case "progress": case "checklist": case "todo": case "timeline": case "kv":
+                        StripItems(co);
+                        break;
+                }
+                StripLive(co["components"] as JArray, depth + 1);
+                if (co["tabs"] is JArray tabs) foreach (var tb in tabs) if (tb is JObject to) StripLive(to["components"] as JArray, depth + 1);
+            }
+        }
+
+        private static void StripItems(JObject co)
+        {
+            if (co["items"] is JArray items)
+                for (int i = 0; i < items.Count; i++)
+                {
+                    if (items[i] is JObject io) foreach (var k in BlockItemKeys) io.Remove(k);
+                    else if (items[i] is JValue) items[i] = "";
+                }
+            else if (co["items"] is JObject map) foreach (var pp in map.Properties()) pp.Value = "";
         }
 
         /// The text a text component shows (AddViewComponent's default branch: text, else markdown, else value).
@@ -289,17 +345,19 @@ namespace MetaCodex.Shell
 
         private float DesiredHeight(JObject c, float width)
         {
-            float explicitH = Fl1(c["height"], -1f);
-            if (explicitH > 0) return Mathf.Clamp(explicitH, 0.03f, 0.8f);
             string type = ((string)c["type"] ?? "text").ToLowerInvariant();
+            float explicitH = type == "canvas" ? -1f : Fl1(c["height"], -1f); // a canvas's height is in its own units
+            if (explicitH > 0) return Mathf.Clamp(explicitH, 0.03f, 0.8f);
             // a title row above the content (charts draw their own; choices / input use it as the prompt)
-            bool titled = !string.IsNullOrEmpty((string)c["title"]) && !Is(c, "chart", "choices", "buttons", "input", "text", "markdown", "note", "scene3d", "physics");
+            bool titled = !string.IsNullOrEmpty((string)c["title"]) && !Is(c, "chart", "choices", "buttons", "input", "text", "markdown", "note", "scene3d", "physics", "card", "tabs", "row", "divider", "spacer");
             return BaseHeight(c, type, width) + (titled ? 0.02f : 0f);
         }
 
         private float BaseHeight(JObject c, string type, float width)
         {
             int Count(string key) => (c[key] as JArray)?.Count ?? 0;
+            float rich = RichHeight(c, type, width); // the component library (ShellViewControls)
+            if (rich >= 0f) return rich;
             switch (type)
             {
                 case "stats": case "kpi": return 0.07f * Mathf.CeilToInt(Mathf.Max(1, Count("items")) / 4f);
@@ -335,11 +393,15 @@ namespace MetaCodex.Shell
             }
         }
 
-        private void AddViewComponent(UiPanel p, AgentView v, JObject c, Rect r)
+        /// `path`: where the component is in the spec ("components[3]", "components[1].components[0]" in a card or row):
+        /// the in-place updates find it there (ShellViewControls.Bind); a top-level text also gets its slot in v.Texts.
+        private void AddViewComponent(UiPanel p, AgentView v, JObject c, Rect r, string path)
         {
             var t = UiTheme.Current;
             string type = ((string)c["type"] ?? "text").ToLowerInvariant();
             string title = (string)c["title"];
+            bool top = path != null && path.IndexOf('.') < 0;
+            if (IsRich(c, type)) { AddRichComponent(p, v, c, r, path, type); return; }
             switch (type)
             {
                 case "chart":
@@ -410,8 +472,11 @@ namespace MetaCodex.Shell
                     break;
                 }
                 case "stats": case "kpi": case "progress": case "checklist": case "todo": case "timeline": case "kanban": case "kv": case "list":
-                    p.Add(new UiViewBlock(type, c) { Rect = TitleRow(p, r, title) });
+                {
+                    var block = p.Add(new UiViewBlock(type, c) { Rect = TitleRow(p, r, title) });
+                    if (type != "kanban") Bind(v, path, c, () => -10f, n => block.SetSpec(n));
                     break;
+                }
                 case "choices": case "buttons":
                 {
                     var st = new UiStack(r, t.Gap * 0.6f);
@@ -445,7 +510,9 @@ namespace MetaCodex.Shell
                     string tid = (string)c["id"] ?? "";
                     string label = (string)c["label"] ?? (string)c["text"] ?? tid;
                     bool on = c["value"]?.Type == JTokenType.Boolean && (bool)c["value"];
-                    p.Add(new UiToggle(UiViz.NoParse(label), on, now => ViewEvent(v, "toggle", tid, now ? "true" : "false", label + ": " + (now ? "on" : "off"))) { Rect = new Rect(r.x, r.y, r.width, Mathf.Min(r.height, t.ButtonHeight)) });
+                    float at = -10f;
+                    var tg = p.Add(new UiToggle(UiViz.NoParse(label), on, now => { at = Time.unscaledTime; ViewEvent(v, "toggle", tid, now ? "true" : "false", label + ": " + (now ? "on" : "off")); }) { Rect = new Rect(r.x, r.y, r.width, Mathf.Min(r.height, t.ButtonHeight)) });
+                    Bind(v, path, c, () => at, n => tg.Set(n["value"]?.Type == JTokenType.Boolean && (bool)n["value"]));
                     break;
                 }
                 case "grid":
@@ -507,8 +574,8 @@ namespace MetaCodex.Shell
                 case "image":
                 {
                     var area = TitleRow(p, r, title);
-                    string path = (string)c["path"] ?? (string)c["src"];
-                    string err = AddImage(p, path, area);
+                    string file = (string)c["path"] ?? (string)c["src"];
+                    string err = AddImage(p, file, area);
                     if (err != null) p.Add(new UiLabel("⚠ image: " + err, t.SmallSize) { Rect = area, Color = t.Warn, Wrap = true });
                     break;
                 }
@@ -520,7 +587,11 @@ namespace MetaCodex.Shell
                     var lab = p.Add(new UiLabel(MdLite(text), big ? t.SmallSize * 2.8f : t.SmallSize * 1.1f) { Rect = r, Wrap = !big, UseDisplay = big, Align = big ? TextAlignmentOptions.Center : TextAlignmentOptions.TopLeft, Color = UiViz.Tone((string)c["tone"], t.Text) });
                     string liveId = (string)c["id"];
                     if (!string.IsNullOrEmpty(liveId)) v.Live[liveId] = lab; // LIVE text: a plugin window sets it without a rebuild
-                    if (MetaCodex.Scripting.ViewSpecCheck.IsTextType(type)) v.Texts.Add(new AgentView.TextSlot { Label = lab, Width = r.width, Height = r.height, Big = big }); // in place (ShapeOf)
+                    if (MetaCodex.Scripting.ViewSpecCheck.IsTextType(type))
+                    {
+                        if (top) v.Texts.Add(new AgentView.TextSlot { Label = lab, Width = r.width, Height = r.height, Big = big }); // in place (ShapeOf)
+                        else Bind(v, path, c, () => -10f, n => { string shown = MdLite(ViewText(n)); if (lab.Text != shown) lab.Set(shown); }); // in a card, row or tab
+                    }
                     break;
                 }
             }
@@ -735,8 +806,11 @@ namespace MetaCodex.Shell
     public sealed class UiViewBlock : UiCanvas
     {
         private readonly string _type;
-        private readonly JObject _spec;
+        private JObject _spec;
         public UiViewBlock(string type, JObject spec) { _type = type; _spec = spec ?? new JObject(); }
+
+        /// The same block with new values (the window's watcher: same item count, so the same layout).
+        public void SetSpec(JObject spec) { _spec = spec ?? new JObject(); Redraw(); }
 
         private IEnumerable<JToken> Items => _spec["items"] as JArray ?? (_spec["items"] is JObject o ? new JArray(o.Properties().Select(p => new JObject { ["key"] = p.Name, ["value"] = p.Value })) : new JArray());
 

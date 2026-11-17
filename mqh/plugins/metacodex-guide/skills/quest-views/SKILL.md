@@ -1,6 +1,6 @@
 ---
 name: quest-views
-description: "Show things to the user in the MetaCodex headset as floating views instead of walls of text - charts (bar, line, area, scatter, donut), diagrams (flowcharts, sequence diagrams: a Mermaid subset), tables, stats, progress, checklists, timelines, kanban boards, code and diffs, images, choices the user taps to answer, and small Unity physics scenes. Use when a picture beats prose - \"show me\", \"visualize\", \"diagram\", \"chart\", \"compare\", \"plan\", \"architecture\", \"progress\", \"which option\", \"simulate\" - or when you want the user to pick between options, and when a script should push live data to a panel."
+description: "Show things to the user in the MetaCodex headset as floating views instead of walls of text - charts (bar, line, area, scatter, donut), diagrams (flowcharts, sequence diagrams: a Mermaid subset), tables, stats, progress, checklists, timelines, kanban boards, code and diffs, images, choices the user taps to answer, form controls and pickers (date, time, select, slider, stepper, checkbox), cards and tabs, a drawing canvas (maps, floor plans, gauges), and small Unity physics scenes. Use when a picture beats prose - \"show me\", \"visualize\", \"diagram\", \"chart\", \"compare\", \"plan\", \"architecture\", \"progress\", \"which option\", \"simulate\" - or when you want the user to pick between options, and when a script should push live data to a panel."
 ---
 
 # Quest views: draw in the headset
@@ -69,6 +69,32 @@ content. A single component object (with `"type"`) is accepted as a whole view.
 | `grid` | `columns` (1-7), `cells: [{id, text, sub, tone}]` (1-49; a cell without `id` is not tappable) | a month, a launcher, a board |
 | `image` | `path` (PNG/JPG in Linux: `/root/...`, `/mnt/quest/...`) | anything you can render to a file (matplotlib, graphviz) |
 | `scene3d` | `size: [w, d]`, `gravity: [0,-9.81,0]`, `walls`, `timeScale`, `bodies: [{shape: sphere\|box\|capsule\|cylinder, size, pos: [x,y,z], vel, spin, mass, color, bounce, friction, static, count, spread}]` | physics demos: the user pushes bodies with a fingertip |
+
+The component library (fields, events and design rules in the `quest-plugins` skill's `reference/components.md`;
+the same components in views and plugin windows):
+
+| type | fields | use |
+|---|---|---|
+| `card` | `title`, `tone`, `components: [...]` | group related things under a title |
+| `row` | `components: [...]` (each `weight`), `align: top\|center\|bottom` | two or three things side by side |
+| `tabs` | `id`, `value`, `tabs: [{id, label, components}]` (2-6) | pages of one view |
+| `divider`, `spacer` | (`spacer`: `height`, `weight` in a row) | a line, room |
+| `checkbox` | `id`, `label`, `value` (bool) | an item or option to tick |
+| `radio` | `id`, `options`, `value`, `inline` | one of 2-8 |
+| `segmented` | `id`, `label`, `options` (2-5), `value` | a mode or a view |
+| `select` | `id`, `label`, `options` (1-200, search above 15), `value` | one of many |
+| `slider` | `id`, `label`, `min`, `max`, `step`, `value`, `unit` | a number in a range |
+| `stepper` | `id`, `label`, `min`, `max`, `step`, `value`, `unit` | a count, minutes |
+| `field` | `id`, `label`, `value`, `placeholder` | a labelled text box |
+| `date` | `id`, `value: "YYYY-MM-DD"`, `min`, `max`, `time: true` (`"YYYY-MM-DDTHH:MM"`) | pick a day (and a time) |
+| `time` | `id`, `label`, `value: "HH:MM"`, `step` (minutes) | a time of day |
+| `color` | `id`, `value: "#RRGGBB"`, `options` | a colour |
+| `list` with ids | `items: [{id, text, sub, tone, badge}]`, `selected` | rows to pick |
+| `canvas` | `width`, `height` (its units; y down) or `fit: "lonlat"`, `bounds: [w, s, e, n]`; `shapes: [{id, type: rect\|circle\|line\|polyline\|polygon\|text\|arc, ..., tone, fill, stroke, label}]`, `selected` | maps, floor plans, gauges, anything you draw; the user taps a shape |
+
+Pick the control for the value: a day is a `date`, a long choice a `select`, a place a `canvas`; never a wall of
+buttons. In a view, a changed control answers the thread with `"<label>: <value>"` (sliders and steppers once they
+rest for 1.5 s), a canvas tap with the shape's id.
 
 A `text` with `style: "big"` is one short centred line in large type (a number, a clock).
 Every component takes an optional `title` and `height` (metres). Tones: `ok`, `warn`, `error`, `accent`,

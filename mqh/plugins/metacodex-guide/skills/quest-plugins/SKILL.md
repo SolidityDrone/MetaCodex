@@ -166,6 +166,19 @@ Rules:
 - Do not draw your own frame, header or close button: the app does. One symbol in a label is fine; no emoji walls.
 - Text is English. No brand names.
 
+### The component library: read `reference/components.md` before you design a window
+
+More components than the table above: controls `checkbox`, `radio`, `segmented`, `select` (a dropdown with search),
+`slider`, `stepper`, `field`; pickers `date` (a month grid, `time = true` adds hour and minute), `time`, `color`; a
+`list` of rows to pick (items with ids); layout `card`, `row`, `tabs`, `divider`, `spacer`; and `canvas` (draw rects,
+circles, lines, polygons, arcs and texts in your own units; a tap tells you the shape). **Pick the control for the
+value, never a wall of buttons**: a day is a `date` (not a grid of day buttons), a number a `stepper` or `slider`, a
+long choice a `select`, anything spatial (a map, a floor plan, a gauge) a `canvas`; buttons only for 1-4 actions.
+They send `toggle` (a checkbox, boolean), `radio`, `segmented`, `select`, `slider`, `stepper`, `date`, `time`, `color`,
+`list`, `tab`, `shape` (e.value is text: `tonumber` numbers), and values you pass back update in place. Fields,
+events, examples, design rules and a checklist: `reference/components.md`; the example `components`
+(`mcx-ui plugin example components`) shows every one working.
+
 ### LIVE text: a number every second, for free
 
 A `text` component **with an `id`** is LIVE. When a new spec differs from the shown one only in the `text` of LIVE

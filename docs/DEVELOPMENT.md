@@ -125,7 +125,7 @@ Inside the headset, in a terminal:
 - The app writes `files/session_log.txt`.
 - Dev AI service: `tools/local-ai-dev.sh device start` (on the headset, over adb) or `tools/local-ai-dev.sh pc start` (in WSL).
 - Return-path tests: `tools/return-test.sh <pkg> [report] [cold]` and `tools/gpu-switch-test.sh <pkg> 10`.
-- App plugins on the headset: `tests/plugins/device-test.sh [timers|calendar]`.
+- App plugins on the headset: `tests/plugins/device-test.sh [timers|calendar|weather]`.
 - The checklist is [TEST_CHECKLIST.md](TEST_CHECKLIST.md), by area.
 
 ## Release build and debuggable build

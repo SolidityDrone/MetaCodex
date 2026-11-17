@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # README
 # ------
-# Usage: tests/plugins/run-plugin-tests.sh [--verbose] [--rules] [--net] [--scaffolds] [--examples] [<plugin-folder>...]
+# Usage: tests/plugins/run-plugin-tests.sh [--verbose] [--rules] [--net] [--specs] [--scaffolds] [--examples] [<plugin-folder>...]
 #        tests/plugins/run-plugin-tests.sh --scaffold <app|gesture|behaviour> <id> <dest> [name]
 #   --examples    the shipped example plugins
 #   --rules       the plugin project rules (folder + marker, kinds, ids, reload, create, delete): PluginHarness/Rules.cs
 #   --net         the network API (net.get / net.post, plugin.json "network", limits, unload) and the weather example
 #                 against canned replies: PluginHarness/NetTests.cs
+#   --specs       the component library's spec rules (ViewSpecCheck): a window with every component passes, each broken
+#                 spec is refused with a clear error, doubtful ones warn: PluginHarness/Specs.cs
 #   --scaffolds   a new project of each kind, as the app makes it, through the scenario below
 #   --scaffold    writes a new plugin project's files (the app's scaffold and its marker) into <dest> and stops
 #   --example-project <example id> <dest>   the shipped example as the app adds it (+ ADD): its files, AGENTS.md, marker
@@ -33,8 +35,10 @@
 #     with a window points to one of the plugin's windows. A gesture or behaviour project: no tile (never shown).
 #  3. Tap each tile; its window is open and got an "open" event; no Error.
 #  4. Use every interactive thing in each window's last spec (every button, toggle, the first 3 tappable grid cells,
-#     the first option of every choices, every input with the text "test 1 in 5 minutes"), 0.1 s of app time between;
-#     then tap the notifications. The plugin must keep running.
+#     the first option of every choices, every input with the text "test 1 in 5 minutes"; the component library too,
+#     inside cards, rows and tabs: checkbox (as a toggle), radio / segmented / select (two options), slider (middle and
+#     max), stepper (up and down), field, date (3 days on), time, color, every tab, 3 list rows, 5 canvas shapes and a tap
+#     on no shape), 0.1 s of app time between; then tap the notifications. The plugin must keep running.
 # 4b. Gestures: every gesture it reacts to is a built-in or its own (else FAIL: a fresh headset has no example poses); a
 #     gesture plugin defines or reacts to one at least. Each reaction is simulated (start and end, a clap's tap, each
 #     sequence in order) and what it did is printed; then hand shapes (open, palm up, fist, point, pinch, thumbs up /
@@ -68,13 +72,14 @@ EXDIR="$ROOT/unity/Assets/MetaCodex/Runtime/Scripting/Resources/PluginExamples"
 RT="$ROOT/unity/Assets/MetaCodex/Runtime"
 W() { wslpath -w "$1"; }
 
-VERBOSE=(); FOLDERS=(); EXAMPLES=0; RULES=(); NET=(); SCAFFOLDS=0; SCAFFOLD=(); EXAMPLE_PROJECT=()
+VERBOSE=(); FOLDERS=(); EXAMPLES=0; RULES=(); NET=(); SPECS=(); SCAFFOLDS=0; SCAFFOLD=(); EXAMPLE_PROJECT=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --verbose) VERBOSE=(--verbose) ;;
     --examples) EXAMPLES=1 ;;
     --rules) RULES=(--rules) ;;
     --net) NET=(--net "$(wslpath -w "$EXDIR")") ;;
+    --specs) SPECS=(--specs) ;;
     --scaffolds) SCAFFOLDS=1 ;;
     --example-project) [[ $# -ge 3 ]] || { echo "usage: $0 --example-project <example id> <dest>"; exit 2; }
                 [[ -d "$EXDIR/$2" ]] || { echo "no example $2 in $EXDIR"; exit 2; }
@@ -90,7 +95,7 @@ if [[ "$EXAMPLES" == 1 ]]; then
   [[ -d "$EXDIR" ]] || { echo "no examples folder: $EXDIR"; exit 1; }
   for d in "$EXDIR"/*/; do [[ -f "${d}plugin.json" ]] && FOLDERS+=("${d%/}"); done
 fi
-[[ ${#FOLDERS[@]} -gt 0 || ${#RULES[@]} -gt 0 || ${#NET[@]} -gt 0 || "$SCAFFOLDS" == 1 || ${#SCAFFOLD[@]} -gt 0 || ${#EXAMPLE_PROJECT[@]} -gt 0 ]] || { echo "usage: $0 [--verbose] [--rules] [--scaffolds] [--examples] [<plugin-folder>...] | --scaffold <kind> <id> <dest> [name]"; exit 2; }
+[[ ${#FOLDERS[@]} -gt 0 || ${#RULES[@]} -gt 0 || ${#NET[@]} -gt 0 || ${#SPECS[@]} -gt 0 || "$SCAFFOLDS" == 1 || ${#SCAFFOLD[@]} -gt 0 || ${#EXAMPLE_PROJECT[@]} -gt 0 ]] || { echo "usage: $0 [--verbose] [--rules] [--scaffolds] [--examples] [<plugin-folder>...] | --scaffold <kind> <id> <dest> [name]"; exit 2; }
 
 if [[ -z "${MCX_SKIP_RAM_CHECK:-}" ]]; then
   avail=$(timeout 20 powershell.exe -NoProfile -Command "[int]((Get-Counter '\Memory\Available MBytes').CounterSamples[0].CookedValue)" 2>/dev/null | tr -dc '0-9')
@@ -116,7 +121,8 @@ RSP="$OUT/plugins.rsp"
   echo "-r:\"$(W "$OUT/MoonSharp.Interpreter.dll")\""
   for s in "$RT/Scripting/ScriptHost.cs" "$RT/Scripting/PluginProject.cs" "$RT/Scripting/LuaJson.cs" "$RT/Scripting/ViewSpecCheck.cs" "$RT/AI/VoiceCommands.cs" \
            "$ROOT/tests/plugins/PluginHarness/Stubs.cs" "$ROOT/tests/plugins/PluginHarness/Fakes.cs" "$ROOT/tests/plugins/PluginHarness/Program.cs" \
-           "$ROOT/tests/plugins/PluginHarness/Rules.cs" "$ROOT/tests/plugins/PluginHarness/NetTests.cs"; do
+           "$ROOT/tests/plugins/PluginHarness/Rules.cs" "$ROOT/tests/plugins/PluginHarness/NetTests.cs" \
+           "$ROOT/tests/plugins/PluginHarness/Specs.cs"; do
     echo "\"$(W "$s")\""
   done
 } > "$RSP"
@@ -178,5 +184,5 @@ for f in "${FOLDERS[@]}"; do
 done
 
 set +e
-RUN --run "$(W "$OUT/run")" --fixtures "$(W "$ROOT/tests/plugins/fixtures/net")" ${VERBOSE[@]+"${VERBOSE[@]}"} ${RULES[@]+"${RULES[@]}"} ${NET[@]+"${NET[@]}"} ${IDS[@]+"${IDS[@]}"}
+RUN --run "$(W "$OUT/run")" --fixtures "$(W "$ROOT/tests/plugins/fixtures/net")" ${VERBOSE[@]+"${VERBOSE[@]}"} ${RULES[@]+"${RULES[@]}"} ${NET[@]+"${NET[@]}"} ${SPECS[@]+"${SPECS[@]}"} ${IDS[@]+"${IDS[@]}"}
 exit $?
