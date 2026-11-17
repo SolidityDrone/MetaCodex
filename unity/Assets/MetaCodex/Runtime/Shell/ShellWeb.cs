@@ -96,6 +96,9 @@ namespace MetaCodex.Shell
         private readonly List<WebWindow> _webWins = new List<WebWindow>(WebMaxWindows); // the first window first
         private WebWindow _webLast;              // the window touched last
         private UiPanel _webOpener;              // while a new window opens: the window it opens beside (ContextOpener)
+        /// ❐ NEW WINDOW pressed again within this many seconds of the last press (on any web window) does nothing.
+        public const float WebNewDebounce = 0.8f;
+        private float _webNewAt = -10f;          // the last ❐ press that opened (or tried to open) a window
         private Mesh _webQuad;                   // the page's quad: one mesh for every window
         private (int action, Vector2 page) _webLastTouch = (-1, default);
         private (int id, bool ok) _webLastJsAnswer;
@@ -390,6 +393,10 @@ namespace MetaCodex.Shell
         /// the spare one, comes as a fresh window: WebFreshWindow).
         private void WebNewWindow(WebWindow from)
         {
+            // one press, one window (owner b16: one pinch gave three calls in 0.4 s: two windows and the limit toast)
+            float now = Time.unscaledTime;
+            if (now - _webNewAt < WebNewDebounce) return;
+            _webNewAt = now;
             var w = WebSpare();
             if (w == null) return;
             if (!w.Extra) WebFreshWindow(w);
@@ -1735,6 +1742,6 @@ namespace MetaCodex.Shell
         public IEnumerable<string> WebWindowIdsForTest => _webWins.Select(w => w.Id);
         public string WebLastWindowForTest => WebCur?.Id;
         public string WebKeysWindowForTest => _webKeysWin?.Id;
-        public void WebNewWindowForTest() { var w = WebCur; if (w != null) WebNewWindow(w); }
+        public void WebNewWindowForTest() { var w = WebCur; _webNewAt = -10f; if (w != null) WebNewWindow(w); } // as a separate press (no debounce)
     }
 }
