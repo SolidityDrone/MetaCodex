@@ -671,6 +671,16 @@ namespace MetaCodex.UI
         /// Variable lists only, a Compact row: a connector to the row above it: a vertical guide under the parent's icon
         /// (one level up) and a short tick to this row's dot or icon. Its indent must be 2 or more.
         public bool Guide;
+        /// UiCardList only, a CardHead: a small badge on the right (THREADS: the project's type and kind, "PLUGIN · APP"),
+        /// in ChipColor (null: the accent).
+        public string Chip = "";
+        public Color? ChipColor;
+        /// UiCardList only, a CardHead: the glyph of a button on its right (THREADS: "+", a new thread in that project);
+        /// a tap on it calls the list's OnAction instead of OnSelect. Empty: no button.
+        public string Action = "";
+        /// UiCardList only: the row is lit as open (THREADS: a thread shown in a window that is not the focused one; the
+        /// focused one is the list's SelectedIndex).
+        public bool Highlight;
     }
 
     /// The kinds of row of a Variable list. Row: the list's RowHeight, one line (the title, the sub and the badge side by
@@ -679,7 +689,11 @@ namespace MetaCodex.UI
     /// under the title in small dim text (a project and its caption), its Dot before the badge. Compact: 0.8 rows and smaller
     /// text (a thread, a folder, a hint). Gap: 0.6 rows, blank: nothing is drawn and a tap does nothing (THREADS' space above
     /// each type).
-    public enum UiListKind { Row = 0, Band = 1, Stacked = 2, Compact = 3, Gap = 4 }
+    /// UiCardList (THREADS' project cards) adds: CardHead (a card's head: the fold triangle, the name and its caption, the
+    /// Chip, the Badge, the Action button; it starts a card), CardRow (a thread in the card: a status dot, the title and a
+    /// dim second line), CardSection (a folder the next rows work in) and CardNote (a hint with an action; without a head
+    /// before it, a card of its own). A UiList draws the card kinds as Rows.
+    public enum UiListKind { Row = 0, Band = 1, Stacked = 2, Compact = 3, Gap = 4, CardHead = 5, CardRow = 6, CardSection = 7, CardNote = 8 }
 
     /// A scrolling list with a fixed row height: a pool of rows reused while scrolling (drag up/down, or the
     /// arrows). Tap selects a row.
