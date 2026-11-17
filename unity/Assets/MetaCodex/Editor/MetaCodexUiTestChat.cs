@@ -27,7 +27,7 @@ namespace MetaCodex.EditorTools
             shell.SetLayout("fixed");
             shell.ForgetSidebarMemoryForTest(); // THREAD alone (its sidebar folded)
             // the glyphs the chat draws
-            string glyphs = "◌◐◓◑◒✦⌕↗☰◆⚙✎✓✕▸▾▌⚠↓◉▶▲│─•";
+            string glyphs = "◌◐◓◑◒✦⌕↗☰◆⚙✎✓✕▸▾▌⚠↓◉▶▲│─•●■";
             UiTheme.Current.Body.HasCharacters(glyphs, out uint[] missing, true, true);
             Check(missing == null || missing.Length == 0, "the chat's glyphs are in the fonts" + (missing != null && missing.Length > 0 ? ": missing " + string.Join(" ", missing.Select(c => "U+" + c.ToString("X4"))) : ""));
 
@@ -76,8 +76,8 @@ namespace MetaCodex.EditorTools
             Check(all.Contains("Working") && all.Contains("Read 2 files  panel.js, chat.js") && all.Contains("$ npm run docs"), "the live exchange: work open, the two reads on one line, the running command shown");
             string status = shell.ThreadStatusTextForTest;
             var pulse = shell.OpenThreadPulse;
-            Check(pulse != null && pulse.State == "working" && pulse.Phase == "running" && status.Contains("Running `npm run docs`") && status.Contains("0:30") && status.Contains("turn 1:00"),
-                $"the status line: what it does, for how long, the turn's time ({UiChatView.Esc(status).Length} chars): " + Trim(status.Replace("<noparse>", "").Replace("</noparse>", ""), 140));
+            Check(pulse != null && pulse.State == "working" && pulse.Phase == "running" && chat.NowText.Contains("RUNNING") && chat.NowText.Contains("$ npm run docs") && chat.NowTimeText == "0:30" && status.Contains("turn 1:00"),
+                $"NOW strip: what it does and for how long (“{chat.NowText}” {chat.NowTimeText}); the status line keeps the turn's time: " + Trim(status.Replace("<noparse>", "").Replace("</noparse>", ""), 140));
             // the sticky prompt: at the bottom the live exchange fills the view, its prompt scrolled away above
             Check(chat.StickyShown && chat.StickyText.StartsWith("Now write the docs for the chat view"), "the prompt of what is on screen stays pinned at the top: “" + Trim(chat.StickyText, 50) + "”");
             chat.ClickStickyForTest();

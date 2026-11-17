@@ -24,6 +24,7 @@ namespace MetaCodex.AI
         public string Text = "";    // the long part: the message, the reasoning, the output, the detail
         public string Sub = "";     // a little extra: "add" / "update" for edits, the tool's argument
         public string Status = "";  // pending | completed | error | interrupted ("" = none)
+        public string Cwd = "";     // a command's working folder (MQH's cwd; "" when not sent)
         public long StartedAt, EndedAt;
         public int? ExitCode;
         public int Added, Removed;
@@ -256,6 +257,7 @@ namespace MetaCodex.AI
                     s.Kind = StepKind.Command;
                     s.Title = OneLine(S(r["command"]) ?? "");
                     s.Text = S(r["output"]) ?? "";
+                    s.Cwd = S(r["cwd"]) ?? "";
                     if (r["exitCode"] != null && (r["exitCode"].Type == JTokenType.Integer || r["exitCode"].Type == JTokenType.Float)) s.ExitCode = (int)r["exitCode"];
                     // a command that only reads or searches (cat, rg, ls) is shown as what it does
                     var intents = (r["activityIntents"] as JArray)?.OfType<JObject>().ToList();

@@ -119,8 +119,8 @@ namespace MetaCodex.Shell
             MoveY(_attMenuClose, -d);
         }
 
-        /// The chat area is shorter by the growth: the chat, its scroll buttons, the status line, the approval row and
-        /// the ↓ NEW button follow. Not forced: only when the box moved ComposerRelayoutMin since the last layout (the
+        /// The chat area is shorter by the growth: the chat, its scrollbar, the status line, the approval row and
+        /// the ↓ LATEST button follow. Not forced: only when the box moved ComposerRelayoutMin since the last layout (the
         /// caller runs it at most four times a second); forced at the end of a drag, a voice command or a reset.
         private void SyncComposerChat(bool force)
         {
