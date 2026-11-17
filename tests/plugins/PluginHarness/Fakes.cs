@@ -113,15 +113,24 @@ namespace PluginHarness
         {
             if (!Windows.TryGetValue(windowId, out var w) || !w.Built) return false;
             w.TextUpdates++;
-            if (w.Spec["components"] is JArray comps)
-                foreach (var item in comps)
+            SetTexts(w.Spec["components"] as JArray, texts, 0);
+            return true;
+        }
+
+        /// As the shell: LIVE texts at the top level and in cards, rows and tabs.
+        private static void SetTexts(JArray comps, IDictionary<string, string> texts, int depth)
+        {
+            if (comps == null || depth > 4) return;
+            foreach (var item in comps)
+            {
+                if (!(item is JObject co)) continue;
+                if (co["id"] is JValue iv && iv.Value is string id && texts.TryGetValue(id, out var text))
                 {
-                    if (!(item is JObject co)) continue;
-                    string id = (string)co["id"];
-                    if (id == null || !texts.TryGetValue(id, out var text)) continue;
                     if (co["markdown"] != null && co["text"] == null) co["markdown"] = text; else co["text"] = text;
                 }
-            return true;
+                SetTexts(co["components"] as JArray, texts, depth + 1);
+                if (co["tabs"] is JArray tabs) foreach (var tb in tabs) if (tb is JObject to) SetTexts(to["components"] as JArray, texts, depth + 1);
+            }
         }
 
         public bool PluginWindowShow(string windowId, int mode)

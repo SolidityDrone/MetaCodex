@@ -1,0 +1,7 @@
+{
+  "id": "sveglia",
+  "name": "sveglia",
+  "version": "0.3.0",
+  "kind": "app",
+  "description": "Alarms at many times, a picker of hours and minutes, its own ring pattern, voice commands"
+}

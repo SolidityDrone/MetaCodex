@@ -10,7 +10,8 @@
 --              its age, and asks again only when it is older than 30 minutes
 --   * refresh  one app.at at the result's time + 30 minutes (wall clock), set again after every reply and at load;
 --              REFRESH asks now; one request at a time; a new city cancels the request for the old one (net.cancel)
---   * LIVE     the age line is a text with an id: once a minute only its text changes (no rebuild)
+--   * LIVE     the age line is a text with an id: once a minute ui.set changes only that label, and only
+--              while the window shows (ui.shown); its "open" event renders it fresh
 --   * credit   the data's licence (CC BY 4.0) asks for a credit and a link next to the data: the dim line and SOURCE
 --   * voice    weather_report says the weather of the city picked last, or of the city named
 -- No key is needed. A service that needs one: the user types it into an input, the plugin keeps it in store
@@ -361,4 +362,7 @@ menu.add{ id = "weather", label = "WEATHER", glyph = "◐", icon = "bolt", panel
 load()
 render()
 if S.place and (not S.wx or app.clock() - S.at >= EVERY) then fetch() else arm() end
-app.every(60, render)    -- the age line (a LIVE text: only its text changes)
+-- the age line once a minute: one LIVE text (no spec), and nothing at all while the window is closed
+app.every(60, function()
+  if ui.shown("main") then ui.set("main", "status", statusText()) end
+end)

@@ -492,7 +492,11 @@ ui.panel{ id = 'main', title = 'Net test', components = { { type = 'text', text 
             Check(env.Text("now") == "9°C" && (env.Text("status") ?? "").StartsWith("Updated 2 h ago") && env.Requests("https://api.open-meteo.com/v1/forecast").Count == 1,
                 "restart 2 h later: the cached weather with its age at once (" + env.Text("now") + ", " + env.Text("status") + "), and one request");
             env.StepFor(2.5);
-            Check(env.Text("status") == "Updated just now", "then the new weather: " + env.Text("status"));
+            // a closed window gets nothing from the host until it opens (no window work while hidden): open it
+            string closed = env.Text("status");
+            env.Host.TileTapped("weather", "weather");
+            env.Step(); env.Step();
+            Check(env.Text("status") == "Updated just now", "then the new weather, shown when the window opens: " + env.Text("status") + " (while closed the app kept: " + closed + ")");
 
             // voice
             var cmd = env.Fake.Voice.All.FirstOrDefault(c => c.Name == "weather_report");

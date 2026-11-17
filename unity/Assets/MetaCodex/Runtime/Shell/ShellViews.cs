@@ -48,7 +48,12 @@ namespace MetaCodex.Shell
         private readonly List<AgentView> _viewList = new List<AgentView>();
         private readonly Dictionary<string, ViewStage> _stages = new Dictionary<string, ViewStage>();
         public IReadOnlyList<AgentView> Views => _viewList;
-        public AgentView FindView(string id) => _viewList.FirstOrDefault(v => v.Id == id);
+        public AgentView FindView(string id)
+        {
+            // a loop, not LINQ: plugins ask for their window's state every second (ui.shown, the host's flush)
+            for (int i = 0; i < _viewList.Count; i++) if (_viewList[i].Id == id) return _viewList[i];
+            return null;
+        }
         private int _viewCounter;
         private const int MaxViewPanels = 12;
 

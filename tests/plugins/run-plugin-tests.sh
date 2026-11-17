@@ -1,12 +1,17 @@
 #!/usr/bin/env bash
 # README
 # ------
-# Usage: tests/plugins/run-plugin-tests.sh [--verbose] [--rules] [--net] [--specs] [--scaffolds] [--examples] [<plugin-folder>...]
+# Usage: tests/plugins/run-plugin-tests.sh [--verbose] [--time] [--ui] [--rules] [--net] [--specs] [--scaffolds] [--examples] [<plugin-folder>...]
 #        tests/plugins/run-plugin-tests.sh --scaffold <app|gesture|behaviour> <id> <dest> [name]
 #   --examples    the shipped example plugins
+#   --time        per plugin, after the load: 300 ticks of 1 s with its windows closed, then open, and what the host
+#                 spent in them (PC, Stopwatch): Lua, ui.panel (ToJson, Check), ui.set, the flush (signature + diff, the
+#                 calls into the fake app), full specs and text updates sent, bytes allocated a tick
 #   --rules       the plugin project rules (folder + marker, kinds, ids, reload, create, delete): PluginHarness/Rules.cs
 #   --net         the network API (net.get / net.post, plugin.json "network", limits, unload) and the weather example
 #                 against canned replies: PluginHarness/NetTests.cs
+#   --ui          the window API's cheap paths: ui.set and ui.shown, the LIVE-only fast path of ui.panel, no window work
+#                 while a window is hidden, the performance lint, the reused coroutines: PluginHarness/UiTests.cs
 #   --specs       the component library's spec rules (ViewSpecCheck): a window with every component passes, each broken
 #                 spec is refused with a clear error, doubtful ones warn: PluginHarness/Specs.cs
 #   --scaffolds   a new project of each kind, as the app makes it, through the scenario below
@@ -52,7 +57,10 @@
 #  7. Restart: a new fake app and a new ScriptHost on the same folders: same window ids, same tile ids, no Error, and
 #     the plugin's store section of .state.json is unchanged.
 #  8. Unload (SetEnabled false): all its windows removed, no tiles, no voice commands of it.
-#  9. Log: any plugin log line starting with ERROR or warn, at any point, = FAIL.
+#  9. Log: any plugin log line starting with ERROR or warn, at any point, = FAIL. Except the host's performance lint
+#     ("warn ui.panel <id>: called every second with only LIVE texts changing ..."): a "warn [id] performance:" line for
+#     a plugin under test, a FAIL for the shipped examples (--examples).
+# 5b. The 3 h run prints what the plugin's ticks cost the host on this PC (timers: Lua + ui calls; flush), per second.
 # Network: no request leaves the PC. The fake fetcher answers from canned replies by URL, tests/plugins/fixtures/net/*.json
 # (NetFixture in Fakes.cs: url prefix, status, json or body, delay, never); a request no fixture answers is a FAIL that
 # names the URL (add a reply for it there, never to the plugin). A plugin that declares hosts: at most one request a
@@ -72,14 +80,16 @@ EXDIR="$ROOT/unity/Assets/MetaCodex/Runtime/Scripting/Resources/PluginExamples"
 RT="$ROOT/unity/Assets/MetaCodex/Runtime"
 W() { wslpath -w "$1"; }
 
-VERBOSE=(); FOLDERS=(); EXAMPLES=0; RULES=(); NET=(); SPECS=(); SCAFFOLDS=0; SCAFFOLD=(); EXAMPLE_PROJECT=()
+VERBOSE=(); TIME=(); UI=(); STRICT=(); FOLDERS=(); EXAMPLES=0; RULES=(); NET=(); SPECS=(); SCAFFOLDS=0; SCAFFOLD=(); EXAMPLE_PROJECT=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --verbose) VERBOSE=(--verbose) ;;
+    --time) TIME=(--time) ;;
     --examples) EXAMPLES=1 ;;
     --rules) RULES=(--rules) ;;
     --net) NET=(--net "$(wslpath -w "$EXDIR")") ;;
     --specs) SPECS=(--specs) ;;
+    --ui) UI=(--ui) ;;
     --scaffolds) SCAFFOLDS=1 ;;
     --example-project) [[ $# -ge 3 ]] || { echo "usage: $0 --example-project <example id> <dest>"; exit 2; }
                 [[ -d "$EXDIR/$2" ]] || { echo "no example $2 in $EXDIR"; exit 2; }
@@ -95,7 +105,7 @@ if [[ "$EXAMPLES" == 1 ]]; then
   [[ -d "$EXDIR" ]] || { echo "no examples folder: $EXDIR"; exit 1; }
   for d in "$EXDIR"/*/; do [[ -f "${d}plugin.json" ]] && FOLDERS+=("${d%/}"); done
 fi
-[[ ${#FOLDERS[@]} -gt 0 || ${#RULES[@]} -gt 0 || ${#NET[@]} -gt 0 || ${#SPECS[@]} -gt 0 || "$SCAFFOLDS" == 1 || ${#SCAFFOLD[@]} -gt 0 || ${#EXAMPLE_PROJECT[@]} -gt 0 ]] || { echo "usage: $0 [--verbose] [--rules] [--scaffolds] [--examples] [<plugin-folder>...] | --scaffold <kind> <id> <dest> [name]"; exit 2; }
+[[ ${#FOLDERS[@]} -gt 0 || ${#UI[@]} -gt 0 || ${#RULES[@]} -gt 0 || ${#NET[@]} -gt 0 || ${#SPECS[@]} -gt 0 || "$SCAFFOLDS" == 1 || ${#SCAFFOLD[@]} -gt 0 || ${#EXAMPLE_PROJECT[@]} -gt 0 ]] || { echo "usage: $0 [--verbose] [--rules] [--scaffolds] [--examples] [<plugin-folder>...] | --scaffold <kind> <id> <dest> [name]"; exit 2; }
 
 if [[ -z "${MCX_SKIP_RAM_CHECK:-}" ]]; then
   avail=$(timeout 20 powershell.exe -NoProfile -Command "[int]((Get-Counter '\Memory\Available MBytes').CounterSamples[0].CookedValue)" 2>/dev/null | tr -dc '0-9')
@@ -122,7 +132,7 @@ RSP="$OUT/plugins.rsp"
   for s in "$RT/Scripting/ScriptHost.cs" "$RT/Scripting/PluginProject.cs" "$RT/Scripting/LuaJson.cs" "$RT/Scripting/ViewSpecCheck.cs" "$RT/AI/VoiceCommands.cs" \
            "$ROOT/tests/plugins/PluginHarness/Stubs.cs" "$ROOT/tests/plugins/PluginHarness/Fakes.cs" "$ROOT/tests/plugins/PluginHarness/Program.cs" \
            "$ROOT/tests/plugins/PluginHarness/Rules.cs" "$ROOT/tests/plugins/PluginHarness/NetTests.cs" \
-           "$ROOT/tests/plugins/PluginHarness/Specs.cs"; do
+           "$ROOT/tests/plugins/PluginHarness/Specs.cs" "$ROOT/tests/plugins/PluginHarness/UiTests.cs"; do
     echo "\"$(W "$s")\""
   done
 } > "$RSP"
@@ -181,8 +191,9 @@ for f in "${FOLDERS[@]}"; do
   find "$dest" -name '*.meta' -delete
   if [[ -f "$dest/main.lua.txt" && ! -f "$dest/main.lua" ]]; then mv "$dest/main.lua.txt" "$dest/main.lua"; fi
   IDS+=("$slot")
+  [[ "$(cd "$f" && pwd)" == "$EXDIR"/* ]] && STRICT+=(--strict "$slot") # a shipped example: the performance lint is a FAIL
 done
 
 set +e
-RUN --run "$(W "$OUT/run")" --fixtures "$(W "$ROOT/tests/plugins/fixtures/net")" ${VERBOSE[@]+"${VERBOSE[@]}"} ${RULES[@]+"${RULES[@]}"} ${NET[@]+"${NET[@]}"} ${SPECS[@]+"${SPECS[@]}"} ${IDS[@]+"${IDS[@]}"}
+RUN --run "$(W "$OUT/run")" --fixtures "$(W "$ROOT/tests/plugins/fixtures/net")" ${VERBOSE[@]+"${VERBOSE[@]}"} ${TIME[@]+"${TIME[@]}"} ${UI[@]+"${UI[@]}"} ${STRICT[@]+"${STRICT[@]}"} ${RULES[@]+"${RULES[@]}"} ${NET[@]+"${NET[@]}"} ${SPECS[@]+"${SPECS[@]}"} ${IDS[@]+"${IDS[@]}"}
 exit $?

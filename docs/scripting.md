@@ -57,6 +57,8 @@ project's AGENTS.md and git, so a thread on it can change it. Their files are in
 |---|---|
 | `ui.panel{ id?, title, components, columns?, size?, open?, on = function(e) end }` | Makes or replaces one of the plugin's windows (window id `plugin-<plugin id>-<id>`, `id` default `main`). `open` defaults to false: the tile or the user opens it, and it is built at the first open. At most 4 windows a plugin. |
 | `ui.open(id)`, `ui.close(id)`, `ui.toggle(id)` | Also take the plugin's own windows, by local or full id. |
+| `ui.set(window, id, text)` | Sets one LIVE text (a `text`, `markdown` or `note` component with that id, at the top level or in a card, row or tab) without a spec; `text` is a string or a number. Returns false when the window or such a text does not exist (yet). The text is kept in the window's spec: a later `ui.panel` that still gives the old text for that id keeps it; a new text in the spec wins. The text rules apply (a `big` text: one line, 24 characters). |
+| `ui.shown(window)` | True while the window shows (or an open is pending). A per-second tick returns at once when it is false. |
 | `ui.notify{ text, tone?, sound?, speak?, panel? }` | A callout by the Whisp. `tone`: info, ok, warn, error. `speak`: true speaks the text, a string speaks that string. `panel`: a tap opens that window. |
 | `ui.sound(name)` | `click`, `open`, `close`, `ping`, `toast`, `alert`, `error`. |
 | `menu.add{ id, label, glyph?, icon?, panel = <window> or run = function() end }`, `menu.remove(id)` | A tile on the DOCK and the wrist menu. The label is upper case, 8 characters at most. A `panel` tile toggles that window and is lit while it is open. At most 6 plugin tiles in the whole menu; the menus rebuild once, 0.3 s after a change. |
@@ -105,7 +107,8 @@ and the example plugin `components` shows every one working.
   with `label: value` after 1.5 s of quiet.
 - `mcx-ui plugin event <id> <type> <component id> [value]` takes the library's event types too.
 
-A `text` with an `id` is LIVE: when only such texts change, the app sets the labels and does not rebuild the window.
+A `text` with an `id` is LIVE: `ui.set` sets its label; and when a new spec differs only in such texts, the app sets
+the labels and does not rebuild the window.
 A new spec with the same components (kinds, ids, sizes, columns, title, count) also sets the texts of its `text`
 components in place, whether they have an `id` or not, as long as each new text fits its row. Any other change
 rebuilds the window at most once a second.
@@ -117,6 +120,25 @@ element it hit. (The app logs `plugin window <id>: rebuild deferred until the pr
 The spec is checked before anything is built (`Runtime/Scripting/ViewSpecCheck.cs`): an error (an unknown component,
 a missing id, more than 16 components or 49 cells, a duplicate id) raises a Lua error that names the component and
 the field; a warning (a long title or label, more than 8 components) goes to the plugin's log as `warn ...`.
+
+#### What a window update costs (2026-11-17)
+
+The headset log of b15/b17 had a 28 ms frame every second (`[hitch] ... scripts 10-13 ms`): an alarm plugin called
+`ui.panel` with its whole spec (a 36-button picker) from `app.every(1, ...)` to change two LIVE texts. The host now:
+
+- runs plugin callbacks on reused coroutines (`ScriptHost.RunPooled`): a new MoonSharp coroutine allocates 2 MB (two
+  preallocated 128K-entry stacks), and one was made for every callback; the instruction budget still counts one call;
+- takes a fast path in `ui.panel` when the window exists and the Lua table has the stored spec's structure (walked
+  against the stored JSON, LIVE texts aside): no LuaJson, no ViewSpecCheck, no signature; only the changed LIVE texts;
+- sends nothing to the app for a window that is not shown (it waits; `ui.open`, a tile, a notification tap or the
+  app's own `open` event sends the newest first); a window never sent still goes at once;
+- warns once a window (while the plugin is loaded) when a timer calls `ui.panel` more than 20 times a minute with only LIVE texts
+  changing (`warn ui.panel <id>: called every second with only LIVE texts changing: use ui.set(...) and ui.shown(...)`);
+  the PC harness prints it as a warning for a plugin under test and fails it for the shipped examples.
+
+PC harness, the alarm plugin unchanged, per 1 s tick: timers 0.68-0.79 -> 0.14 ms, ui.panel 0.25 -> 0.016 ms, flush
+0.09-0.14 -> 0 ms, 2225 -> 97 KB allocated (`tests/plugins/run-plugin-tests.sh --time <folder>` prints the split). With
+`ui.set` + `ui.shown` (the Timers example) a closed window's tick is the plugin's own logic only.
 
 ### The network
 
@@ -183,13 +205,17 @@ SOURCE that the data's licence (CC BY 4.0) asks for ([LICENSES.md](LICENSES.md),
 
 ## Tests
 
-- `tests/plugins/run-plugin-tests.sh <plugin dir>... | --examples | --scaffolds | --rules | --specs`: on the PC, no editor. The
+- `tests/plugins/run-plugin-tests.sh <plugin dir>... | --examples | --scaffolds | --rules | --specs | --ui | --time`: on the PC, no editor. The
   real `ScriptHost` and the Lua interpreter with a fake app: load (a folder with the marker as a project of its kind),
   the tile, every button, the gestures it reacts to and hand shapes through a stand-in engine, three hours of clock,
   voice lint, a restart and the unload. `--rules`: the marker and kind rules, id clashes, reload, create, delete.
   `--net`: the network API and the Weather example, offline: the fake fetcher answers from canned replies by URL
   (`tests/plugins/fixtures/net/*.json`); a request no reply matches is a FAIL that names the URL.
   `--specs`: the component library's spec rules (a window with every component passes; broken specs are refused).
+  `--ui`: `ui.set`, `ui.shown`, the LIVE-only fast path, no window work while hidden, the lint, the reused coroutines.
+  `--time`: what one 1 s tick costs the host, split (Lua, ui.panel: ToJson and Check, the flush, bytes allocated),
+  with the windows closed and open. `tests/plugins/fixtures/plugins/sveglia`: the owner's alarm plugin as it was on
+  the headset (it has the per-second `ui.panel`; the lint is a warning for it).
   `--scaffold <kind> <id> <dest>` and `--example-project <id> <dest>` write a project as the app makes it.
 - `tests/plugins/device-test.sh [timers|calendar|weather]`: the same plugin on the headset.
 - Editor self-test sections `scripts`, `agentscript`, `gestureplugins` and `agentplugin`.
