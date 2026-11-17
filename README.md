@@ -264,7 +264,7 @@ None of them needs an APK rebuild.
 | MQH plugins | Node.js in the Linux, TypeScript | The MQH API, project files and processes. |
 | Gesture plugins | In the app. Lua detectors and JSON poses. | App actions, panels, terminal input, settings, hands. |
 | Lua scripts | In the app, in a soft sandbox | The same actions. No files, no network. |
-| App plugins | In the app. Lua with a `plugin.json`. | Their own windows, main menu tiles, voice commands, alarms and saved state. |
+| App plugins | In the app. Lua with a `plugin.json`. | Their own windows, main menu tiles, voice commands, alarms and saved state. Https requests only to the hosts their `plugin.json` lists. |
 | Provider integrations | MQH plugins for agent CLIs | The agent processes MQH starts. |
 | Agent views | Fenced blocks in a thread message | Panels: charts, tables, diffs, graphs, a physics stage. |
 
