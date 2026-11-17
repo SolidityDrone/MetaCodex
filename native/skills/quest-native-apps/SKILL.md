@@ -1,9 +1,15 @@
 ---
 name: quest-native-apps
-description: Make a native Meta Quest app (Quest 3 / 3S, Horizon OS) on this headset, from a one-line request to an installed app with its own Library icon - C++ with OpenXR and Meta's extensions (passthrough, environment depth, hands, controllers, the room, anchors), built, checked, installed and launched by MetaCodex itself (mcx-app; no PC, no Unity, no Gradle). Use whenever the user wants a native, standalone, separate, "real" or headset app, a VR or mixed-reality app, a game, tool, toy, demo, viewer, utility or experiment that runs on its own in the headset, or asks to build, install, launch, update or fix such an app. Entry point of the quest-native-* skills. For behaviour inside MetaCodex itself use quest-scripting, quest-gesture-plugins or quest-views instead.
+description: Make a native Meta Quest app (Quest 3 / 3S, Horizon OS) on this headset, from a one-line request to an installed app with its own Library icon - C++ with OpenXR and Meta's extensions (passthrough, environment depth, hands, controllers, the room, anchors), built, checked, installed and launched by MetaCodex itself (mcx-app; no PC, no Unity, no Gradle). Use whenever the user wants a native, standalone, separate, "real" or headset app, a VR or mixed-reality app, a game, tool, toy, demo, viewer, utility or experiment that runs on its own in the headset, or asks to build, install, launch, update or fix such an app. Entry point of the quest-native-* skills. For behaviour inside MetaCodex itself use quest-scripting, quest-gesture-plugins or quest-views instead; for a 2D app in a window (Java, Android views) use quest-panel-apps.
 ---
 
 # Native Quest apps: from "I want an app that ..." to an app in the Library
+
+> **Immersive or 2D?** This skill makes **immersive** apps (C++, OpenXR: a 3D scene, the room, hands). A **2D panel
+> app** (Java, Android views, shown as a window beside the user's other windows: a tool, a file utility, notes, a
+> form) is the other kind of native app: skill **quest-panel-apps**
+> (`/opt/metacodex/quest-native/skills/quest-panel-apps/SKILL.md`). A project's kind is fixed
+> (`mcx-project kind <dir>`: immersive or panel); in a 2D panel project, follow quest-panel-apps, not this skill.
 
 > **Always.** Every app runs on `mcx::App` (`#include <mcx_xr.h>`, the template's loop) and keeps its built-in app
 > menu (the left hand's menu gesture, or the left controller's menu button; the hand rules are in quest-native-hands-first,
@@ -129,7 +135,7 @@ Decide these yourself; do not ask. Base = the nightvision example (hands, passth
 | Command | Does |
 |---|---|
 | `mcx-app doctor` | tools present? where builds run? may MetaCodex install apps? |
-| `mcx-app new <dir> [--module \| --example nightvision] [--package <id>] [--label <name>]` | a new app folder |
+| `mcx-app new <dir> [--module \| --example nightvision] [--package <id>] [--label <name>]` | a new app folder (`--panel` / `--example zipper`: a 2D app, quest-panel-apps) |
 | `mcx-app check [dir]` | compile check only |
 | `mcx-app build [dir]` | incremental build -> `<dir>/build/<dir name>.apk` |
 | `mcx-app verify [dir]` | static checks of the APK (manifest vs the Meta APIs used, symbols, icon, devices); then the hands of the last start (HAND_TRACKING granted, trackers ready) from the app's log |

@@ -4296,6 +4296,10 @@ end)
             Check(ProjectKinds.TypeFromJson("{\n  \"type\": \"general\"\n}") == "default" && ProjectKinds.TypeFromJson("{\"type\": \"research\"}") == "research" && ProjectKinds.TypeFromJson("{}") == null,
                 "a project's type from .metacodex/project.json (the old “general” is DEFAULT)");
             Check(ProjectKinds.DraftTitle("atlas") == "New thread · atlas" && ProjectKinds.DraftTitle(null) == "New thread · no project", "a draft thread's title: New thread · <project>");
+            Check(ProjectKinds.NativeKindFromJson("{\n  \"type\": \"native\",\n  \"kind\": \"panel\"\n}") == "panel" && ProjectKinds.NativeKindFromJson("{\"type\": \"native\"}") == "immersive"
+                  && ProjectKinds.NativeKindFromJson("{\"type\": \"native\", \"kind\": \"immersive\"}") == "immersive" && ProjectKinds.NativeKindFromJson("{\"type\": \"plugins\", \"kind\": \"app\"}") == null
+                  && ProjectKinds.NativeKinds.SequenceEqual(new[] { "immersive", "panel" }) && ProjectKinds.NativeKindLabel("panel") == "2D panel" && ProjectKinds.NativeKindLabel(null) == "Immersive",
+                "a native project's kind from its marker: panel (2D panel) or immersive, also when none is stored (projects from before the kinds)");
             var projects = new JArray
             {
                 new JObject { ["id"] = "p1", ["name"] = "metacodex", ["sources"] = new JArray { new JObject { ["path"] = R + "/native/metacodex" } } },

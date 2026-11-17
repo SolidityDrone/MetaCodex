@@ -1,18 +1,25 @@
 #!/usr/bin/python3 -I
-"""mcx-build: the incremental build of a native Quest app (C/C++, OpenXR, OpenGL ES / Vulkan) into a signed APK.
+"""mcx-build: the incremental build of a native Quest app (C/C++, OpenXR, OpenGL ES / Vulkan) or of a 2D panel app
+(Java, Android views) into a signed APK.
 
   mcx-build [options] <app dir>       -> <dir>/build/<dir name>.apk
   mcx-build --check [options] <dir>   syntax and type check only (no objects, no APK): the fast loop
   mcx-build --module-only <dir>       a module app (build.conf TYPE=module): only build/lib/arm64-v8a/libapp.so, for
                                       `mcx-app dev` (the Runner loads it without an APK)
 App types (build.conf TYPE=): app (default: NativeActivity sources) | module (src/ -> libapp.so, packed with the
-native host libmcxhost.so) | runner (the host alone + assets/mcx-dev.pub: the Runner app of `mcx-app dev`).
+native host libmcxhost.so) | runner (the host alone + assets/mcx-dev.pub: the Runner app of `mcx-app dev`) | panel (a
+2D app shown as a window: src/**/*.java -> javac -> D8 -> classes.dex; also chosen when the manifest names no native
+library and src/ holds .java files).
   mcx-build --verify <dir>            static checks of the built APK: manifest, symbols, OpenXR extensions and the
                                       permissions / features the Meta APIs in use need
   mcx-build --warm                    fill the shared cache (glue object, precompiled headers): mcx-buildd does it at start
 Options: -j N parallel compiles (default 2) | --clean (drop build/ first) | --json (last line: MCX-BUILD-JSON {...})
          --signer auto|python|apksigner (default auto: the built-in v2 signer, apksigner when it cannot run)
 
+2D panel apps: aapt2 links the manifest and res/ first and writes R.java (build/.cache/gen), javac compiles src/ + R.java
+against android.jar (+ libs/*.jar) with --release 17, D8 (/opt/android-sdk/r8/r8.jar; `mcx-setup d8` fetches it when
+missing) dexes them for the manifest's minSdkVersion; javac and D8 run in mcx-buildd's warm JVM when the daemon is up
+(MCX_BUILD_JVM=0: never), else as plain JVM processes; both are skipped when no .java, R.java or jar changed.
 What it skips (docs/native-build-and-install.md, "speed"):
   * objects whose source, headers and flags did not change (clang depfiles); the NDK's native_app_glue object is
     compiled once per toolchain into ~/.cache/mcx-build and shared by every app;
@@ -243,6 +250,25 @@ class Toolchain:
         # the native XR layer (mcx_xr.h: passthrough, depth, hands, controllers, scene, anchors, text, ...)
         self.xr = os.environ.get("MCX_XR_SRC") or "/opt/metacodex/quest-native/xr"
         self.ar = os.path.join(self.bin, "llvm-ar")
+        # 2D panel apps: the JDK (javac, java) and D8 (the R8 jar, `mcx-setup d8`)
+        self.javac = os.environ.get("JAVAC") or shutil.which("javac") or "javac"
+        self.java = os.environ.get("JAVA") or shutil.which("java") or "java"
+        self.r8 = os.environ.get("MCX_R8_JAR") or os.path.join(sdk, "r8", "r8.jar")
+
+    def missing_panel(self, need_package):
+        """What a 2D panel app needs (D8 apart: it is fetched on the first build)."""
+        miss = [p for p in (self.android_jar,) if not os.path.exists(p)]
+        for name, tool in (("javac", self.javac), ("aapt2", self.aapt2)) + ((("java", self.java),) if need_package else ()):
+            if not shutil.which(tool) and not os.path.exists(tool):
+                miss.append(name)
+        return miss
+
+    def java_ident(self):
+        try:
+            st = os.stat(os.path.realpath(shutil.which(self.javac) or self.javac))
+            return f"{os.path.realpath(shutil.which(self.javac) or self.javac)}:{st.st_size}:{int(st.st_mtime)}"
+        except OSError:
+            return self.javac
 
     def missing(self, need_package):
         miss = [p for p in (self.cxx, self.cc, os.path.join(self.glue, "android_native_app_glue.c"),
@@ -273,13 +299,8 @@ class App:
         m = open(self.manifest, encoding="utf-8").read()
         pk = re.search(r'package="([^"]+)"', m)
         lib = re.search(r'android\.app\.lib_name"\s+android:value="([^"]+)"', m)
-        if not pk or not lib:
-            raise SystemExit("mcx-build: AndroidManifest.xml needs package=\"...\" and the android.app.lib_name meta-data")
         msdk = re.search(r'minSdkVersion="(\d+)"', m)
-        self.pkg, self.lib = pk.group(1), lib.group(1)
-        self.api = int(msdk.group(1)) if msdk else 32
         self.name = os.path.basename(self.dir)
-        self.type = "app"  # app: classic NativeActivity sources | module: src/ -> libapp.so + the host | runner: the host alone
         self.out = os.path.join(self.dir, "build")
         self.cache = os.path.join(self.out, ".cache")
         self.conf = {}
@@ -290,18 +311,33 @@ class App:
                 if line and not line.startswith("#") and "=" in line:
                     k, v = line.split("=", 1)
                     self.conf[k.strip()] = v.strip()
-        self.type = self.conf.get("TYPE", "app")
-        if self.type not in ("app", "module", "runner"):
-            raise SystemExit(f"mcx-build: build.conf TYPE={self.type}: use app, module or runner")
+        # app: classic NativeActivity sources | module: src/ -> libapp.so + the host | runner: the host alone |
+        # panel: a 2D app in Java (no native library: the manifest has no android.app.lib_name)
+        self.type = self.conf.get("TYPE") or ("panel" if not lib and self.java_sources() else "app")
+        if self.type not in ("app", "module", "runner", "panel"):
+            raise SystemExit(f"mcx-build: build.conf TYPE={self.type}: use app, module, runner or panel")
+        if not pk or (not lib and self.type != "panel"):
+            raise SystemExit("mcx-build: AndroidManifest.xml needs package=\"...\" and the android.app.lib_name meta-data"
+                             " (a 2D panel app: build.conf TYPE=panel and its .java files in src/)")
+        self.pkg, self.lib = pk.group(1), lib.group(1) if lib else ""
+        self.api = int(msdk.group(1)) if msdk else 32
 
-    def sources(self):
+    def sources(self, exts=(".cpp", ".cc", ".cxx", ".c")):
         out = []
         for root, dirs, files in os.walk(os.path.join(self.dir, "src")):
             dirs[:] = sorted(d for d in dirs if not d.startswith("."))
             for f in sorted(files):
-                if f.endswith((".cpp", ".cc", ".cxx", ".c")):
+                if f.endswith(exts):
                     out.append(os.path.join(root, f))
         return out
+
+    def java_sources(self):
+        return self.sources((".java",))
+
+    def jars(self):
+        """libs/*.jar: plain Java libraries compiled against and dexed into the app (no .aar, no Gradle)."""
+        d = os.path.join(self.dir, "libs")
+        return sorted(os.path.join(d, f) for f in os.listdir(d) if f.endswith(".jar")) if os.path.isdir(d) else []
 
 
 def split_flags(s):
@@ -685,16 +721,21 @@ def tree_stamp(paths):
     return h.hexdigest()
 
 
-def aapt2_base(tc, app, st, gen_assets=None):
-    """The resource part of the APK (manifest, resources.arsc, res/, assets/), linked again only when it changed."""
+def aapt2_base(tc, app, st, gen_assets=None, java_gen=None):
+    """The resource part of the APK (manifest, resources.arsc, res/, assets/), linked again only when it changed.
+    java_gen: a folder for R.java (2D panel apps), written by the same link."""
     os.makedirs(app.cache, exist_ok=True)
     base = os.path.join(app.cache, "base.apk")
     res, assets = os.path.join(app.dir, "res"), os.path.join(app.dir, "assets")
-    key = tree_stamp([app.manifest, res, assets, tc.android_jar] + ([gen_assets] if gen_assets else [])) + f"|{VERSION}"
+    key = tree_stamp([app.manifest, res, assets, tc.android_jar] + ([gen_assets] if gen_assets else [])) + f"|{VERSION}|java={bool(java_gen)}"
     stamp = base + ".stamp"
-    if os.path.exists(base) and os.path.exists(stamp) and open(stamp).read() == key:
+    if os.path.exists(base) and os.path.exists(stamp) and open(stamp).read() == key and (not java_gen or os.path.isdir(java_gen)):
         return base, False
     cmd = [tc.aapt2, "link", "-o", base + ".tmp", "--manifest", app.manifest, "-I", tc.android_jar]
+    if java_gen:  # R.java of the manifest's package; a renamed package must not leave its old R behind
+        shutil.rmtree(java_gen, ignore_errors=True)
+        os.makedirs(java_gen, exist_ok=True)
+        cmd += ["--java", java_gen]
     if os.path.isdir(res):
         rz = os.path.join(app.cache, "res.zip")
         rc, out, cpu, rss = run([tc.aapt2, "compile", "--dir", res, "-o", rz], "package", capture=True)
@@ -795,11 +836,13 @@ def runner_assets(tc, app):
     return d
 
 
-def do_package(tc, app, libs):
+def do_package(tc, app, libs, dex=None, base=None, linked=False):
+    """The APK's bytes: aapt2's base (linked here unless given) + the native libraries, or the dex files of a 2D app."""
     with Stage("package") as st:
-        gen = runner_assets(tc, app) if app.type == "runner" else None
-        base, linked = aapt2_base(tc, app, st, gen)
-        entries = [e for e in raw_entries(base) if not e[0].startswith("lib/")]
+        if base is None:
+            gen = runner_assets(tc, app) if app.type == "runner" else None
+            base, linked = aapt2_base(tc, app, st, gen)
+        entries = [e for e in raw_entries(base) if not e[0].startswith("lib/") and not re.match(r"classes\d*\.dex$", e[0])]
         zc = os.path.join(app.cache, "z")
         os.makedirs(zc, exist_ok=True)
         hits = 0
@@ -808,11 +851,172 @@ def do_package(tc, app, libs):
             crc, usize, raw, hit = deflated(path, zc)
             hits += hit
             entries.append((f"lib/arm64-v8a/{f}", zipfile.ZIP_DEFLATED, crc, len(raw), usize, raw))
+        for path in dex or []:  # classes.dex, classes2.dex, ... (D8 splits past 64K methods)
+            crc, usize, raw, hit = deflated(path, zc)
+            hits += hit
+            entries.append((os.path.basename(path), zipfile.ZIP_DEFLATED, crc, len(raw), usize, raw))
         # AndroidManifest.xml first (as aapt2 writes it)
         entries.sort(key=lambda e: (e[0] != "AndroidManifest.xml",))
         data, cd_off = write_zip(entries)
-        st.note = ("aapt2 linked" if linked else "aapt2 skipped (manifest, res, assets unchanged)") + f", {hits} lib(s) from cache"
+        what = f"{len(dex)} dex file(s)" if dex is not None else f"{len(libs)} lib(s)"
+        st.note = ("aapt2 linked" if linked else "aapt2 skipped (manifest, res, assets unchanged)") + f", {what}, {hits} from cache"
     return data, cd_off
+
+
+# ------------------------------------------------------------------------------------------------ 2D panel apps (Java)
+
+JAVA_RELEASE_DEFAULT = "17"  # javac --release: Java 17 language and library; D8 lowers it for the app's minSdkVersion
+BUILDD_DIR = os.environ.get("MCX_BUILDD_DIR", "/tmp/mcx-buildd")
+_jvm_note = []
+
+
+def daemon_java(tool, args):
+    """javac / D8 in mcx-buildd's warm JVM: (exit, output, ms), or None when no daemon (or an older one, or no JVM there)
+    can run it: the caller starts a JVM of its own."""
+    sock = os.path.join(BUILDD_DIR, "sock")
+    if os.environ.get("MCX_BUILD_JVM", "1") == "0" or not os.path.exists(sock):
+        return None
+    import socket
+    try:
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        s.settimeout(3)
+        s.connect(sock)
+        s.settimeout(900)
+        s.sendall((json.dumps({"op": "java", "tool": tool, "argv": args}) + "\n").encode())
+        line = s.makefile("rb").readline()
+        s.close()
+        msg = json.loads(line.decode("utf-8", "replace") or "{}")
+    except (OSError, ValueError):
+        return None
+    if msg.get("op") != "java":  # a daemon from before the warm JVM took it for a build job: closing the socket cancelled it
+        return None
+    if "exit" not in msg:
+        if msg.get("unavailable") and not _jvm_note:
+            _jvm_note.append(1)
+            say(f"   note: no warm JVM ({msg['unavailable']}): a JVM of its own")
+        return None
+    return int(msg["exit"]), msg.get("out", ""), int(msg.get("ms", 0))
+
+
+def java_tool(tc, tool, args, st):
+    """Runs javac or D8 (the arguments are the same either way): in the daemon's warm JVM, else a new JVM process with
+    flags for a short run. Returns (exit code, output, how)."""
+    r = daemon_java(tool, args)
+    if r is not None:
+        code, out, ms = r
+        if code == 4 and out.startswith("mcx-buildd: stopped"):
+            raise Stop(out.strip())
+        return code, out, "warm JVM"
+    short = ["-XX:+UseSerialGC", "-XX:TieredStopAtLevel=1", "-Xshare:auto", "-Xmx512m"]
+    if tool == "javac":
+        cmd = [tc.javac] + ["-J" + f for f in short] + args
+    else:
+        cmd = [tc.java] + short + ["-cp", tc.r8, "com.android.tools.r8.D8"] + args
+    rc, out, cpu, rss = run(cmd, st.name, capture=True)
+    st.add(cpu, rss)
+    return rc, out, "new JVM"
+
+
+def ensure_d8(tc):
+    """D8 (the R8 jar) is fetched on the first 2D build when `mcx-setup quest` ran before it existed."""
+    if os.path.exists(tc.r8):
+        return True
+    setup = shutil.which("mcx-setup")
+    if not setup:
+        return False
+    say("   D8 is not installed yet: mcx-setup d8 (21 MB download, once)")
+    r = subprocess.run(["nice", "-n", "10", setup, "d8"])
+    return r.returncode == 0 and os.path.exists(tc.r8)
+
+
+JAVAC_ERR = re.compile(r"^(?P<file>[^\n:]+\.java):(?P<line>\d+): (?P<kind>error|warning): (?P<msg>.*)$", re.M)
+
+
+def javac_diagnostics(text):
+    return [{"file": m["file"], "line": int(m["line"]), "col": 0, "kind": m["kind"], "message": m["msg"]} for m in JAVAC_ERR.finditer(text)]
+
+
+def panel_resources(tc, app):
+    """aapt2: the manifest, res/ and assets/ into base.apk, and R.java into build/.cache/gen (only when they changed)."""
+    gen = os.path.join(app.cache, "gen")
+    with Stage("resources") as st:
+        base, linked = aapt2_base(tc, app, st, java_gen=gen)
+        st.note = "aapt2 linked, R.java written" if linked else "aapt2 skipped (manifest, res, assets unchanged)"
+    return base, linked, gen
+
+
+def compile_java(tc, app, gen, check):
+    """javac over src/**/*.java + R.java -> classes; then (a build) D8 -> build/.cache/dex/classes*.dex. Both skipped when
+    no source, R.java, jar or flag changed. Returns the dex files (a build) or None (check)."""
+    srcs = app.java_sources()
+    if not srcs:
+        say("mcx-build: no .java files in src/ (a 2D panel app: src/<package path>/MainActivity.java)")
+        raise Fail("no sources")
+    gens = [os.path.join(r, f) for r, _, fs in os.walk(gen) for f in sorted(fs) if f.endswith(".java")] if os.path.isdir(gen) else []
+    jars = app.jars()
+    release = app.conf.get("JAVA_RELEASE", JAVA_RELEASE_DEFAULT)
+    flags = ["--release", release, "-encoding", "UTF-8", "-g", "-proc:none", "-Xmaxerrs", "50", "-Xlint:-options"] + \
+        split_flags(app.conf.get("JAVACFLAGS", ""))
+    dexdir = os.path.join(app.cache, "dex")
+    key = tree_stamp(srcs + gens + jars + [tc.android_jar]) + "|" + " ".join(flags) + f"|api{app.api}|{tc.java_ident()}|v{VERSION}"
+    stamp = os.path.join(dexdir, ".stamp")
+    dex = sorted(glob.glob(os.path.join(dexdir, "classes*.dex")))
+    if not check and dex and os.path.exists(stamp) and open(stamp).read() == key:
+        STATS.stages.append({"stage": "javac", "wall_s": 0.0, "cpu_s": 0.0, "peak_rss_mb": 0.0, "note": "up to date", "ok": True})
+        say("   javac + D8: up to date (no .java, R.java or jar changed)")
+        return dex
+    classes = os.path.join(app.cache, "check-classes" if check else "classes")
+    shutil.rmtree(classes, ignore_errors=True)  # a deleted source must not leave its classes behind
+    os.makedirs(classes, exist_ok=True)
+    with Stage("check" if check else "javac") as st:
+        args = flags + ["-cp", os.pathsep.join([tc.android_jar] + jars), "-d", classes] + srcs + gens
+        rc, out, how = java_tool(tc, "javac", args, st)
+        if out.strip():
+            sys.stdout.write(out if out.endswith("\n") else out + "\n")
+        STATS.diags = javac_diagnostics(out)
+        st.note = f"{len(srcs)} source(s){' + R.java' if gens else ''}, {how}"
+    if rc != 0:
+        errs = [d for d in STATS.diags if d["kind"] == "error"]
+        say(f"RESULT: {len(errs) or 'some'} error(s) in {len(set(d['file'] for d in errs)) or '?'} file(s): fix them, then {'check' if check else 'build'} again")
+        raise Fail("javac errors")
+    if check:
+        shutil.rmtree(classes, ignore_errors=True)
+        return None
+    if not ensure_d8(tc):
+        say("RESULT: no D8 (" + tc.r8 + "): run mcx-setup d8 (needs the network once)")
+        raise Fail("no D8")
+    with Stage("dex") as st:
+        jar = os.path.join(app.cache, "classes.jar")  # D8 takes jars: every class of this build, stored
+        with zipfile.ZipFile(jar + ".tmp", "w", zipfile.ZIP_STORED) as z:
+            for r, _, fs in os.walk(classes):
+                for f in sorted(fs):
+                    if f.endswith(".class"):
+                        full = os.path.join(r, f)
+                        z.write(full, os.path.relpath(full, classes).replace(os.sep, "/"))
+        os.replace(jar + ".tmp", jar)
+        shutil.rmtree(dexdir, ignore_errors=True)
+        os.makedirs(dexdir, exist_ok=True)
+        args = ["--release", "--min-api", str(app.api), "--lib", tc.android_jar, "--thread-count", "2", "--output", dexdir, jar] + jars
+        rc, out, how = java_tool(tc, "d8", args, st)
+        if out.strip():
+            sys.stdout.write(out if out.endswith("\n") else out + "\n")
+        dex = sorted(glob.glob(os.path.join(dexdir, "classes*.dex")))
+        st.note = f"{len(dex)} dex file(s), min API {app.api}, {how}"
+    if rc != 0 or not dex:
+        say("RESULT: D8 failed (see the lines above): a jar in libs/ that is not plain Java, or a class Android does not have")
+        raise Fail("d8")
+    with open(stamp, "w") as f:
+        f.write(key)
+    return dex
+
+
+def build_panel(tc, app, check):
+    """A 2D panel app: resources (+ R.java) -> javac -> D8 -> the APK's bytes (None for a check)."""
+    base, linked, gen = panel_resources(tc, app)
+    dex = compile_java(tc, app, gen, check)
+    if check:
+        return None
+    return do_package(tc, app, [], dex=dex, base=base, linked=linked)
 
 
 # ------------------------------------------------------------------------------------------------ signing (APK v2)
@@ -1033,6 +1237,8 @@ def verify(d):
     if not os.path.exists(apk):
         say(f"mcx-build: no {apk}: build first")
         return 1
+    if app.type == "panel":
+        return verify_panel(app, tc, apk)
     problems = []
     r = subprocess.run([tc.aapt2, "dump", "badging", apk], capture_output=True, text=True)
     badging = r.stdout
@@ -1140,6 +1346,105 @@ def verify(d):
     return 0 if not problems else 1
 
 
+# Meta's list of Android permissions that fail a store upload (resources/permissions-prohibited, 2025-04-30): the
+# ones a small app might ask for by habit
+PROHIBITED = {"ACCESS_BACKGROUND_LOCATION", "ACCOUNT_MANAGER", "ACTIVITY_RECOGNITION", "BIND_ACCESSIBILITY_SERVICE",
+              "BIND_DEVICE_ADMIN", "BIND_NOTIFICATION_LISTENER_SERVICE", "BODY_SENSORS", "CALL_PHONE", "CHANGE_CONFIGURATION",
+              "GET_ACCOUNTS", "INSTALL_PACKAGES", "MANAGE_DOCUMENTS", "MANAGE_MEDIA", "PACKAGE_USAGE_STATS", "QUERY_ALL_PACKAGES",
+              "READ_CALENDAR", "READ_CALL_LOG", "READ_CONTACTS", "READ_LOGS", "READ_PHONE_NUMBERS", "READ_PHONE_STATE", "READ_SMS",
+              "REQUEST_DELETE_PACKAGES", "REQUEST_INSTALL_PACKAGES", "SEND_SMS", "SET_TIME", "SET_TIME_ZONE", "SYSTEM_ALERT_WINDOW",
+              "WRITE_CALENDAR", "WRITE_CALL_LOG", "WRITE_CONTACTS", "WRITE_SECURE_SETTINGS", "WRITE_SETTINGS", "USE_SIP"}
+
+
+def verify_panel(app, tc, apk):
+    """Static checks of a 2D panel app against Meta's manifest rules for Android apps on the headset (android-apps
+    create-app and port-an-existing-app, publish-mobile-manifest, gaze-app-config, checked 2026-11-17): a launcher
+    activity that is in classes.dex, no immersive (VR) category or NativeActivity, a <layout> with the default window
+    size, resizable, SDK levels the headset takes, no required head tracking, supported devices, an icon, no eye
+    tracking and no prohibited permissions, INTERNET when the code uses the network."""
+    problems, notes = [], []
+    badging = subprocess.run([tc.aapt2, "dump", "badging", apk], capture_output=True, text=True).stdout
+    tree = subprocess.run([tc.aapt2, "dump", "xmltree", apk, "--file", "AndroidManifest.xml"], capture_output=True, text=True).stdout
+    perms = sorted(set(re.findall(r"uses-permission: name='([^']+)'", badging)))
+    label = re.search(r"application-label:'([^']*)'", badging)
+    icon = re.search(r"application: label='[^']*' icon='([^']*)'", badging)
+    sdk = re.search(r"sdkVersion:'(\d+)'", badging)
+    tsdk = re.search(r"targetSdkVersion:'(\d+)'", badging)
+    launch = re.search(r"launchable-activity: name='([^']+)'", badging)
+    with zipfile.ZipFile(apk) as z:
+        dexes = [z.read(n) for n in z.namelist() if re.match(r"classes\d*\.dex$", n)]
+        has_lib = any(n.startswith("lib/") for n in z.namelist())
+    code = b"".join(dexes)
+    say(f"== verify {app.pkg} (2D panel app): {apk} ({os.path.getsize(apk) // 1024} KB)")
+    say(f"   label {label.group(1) if label else '-'}, icon {icon.group(1) if icon and icon.group(1) else 'NONE'}, "
+        f"minSdk {sdk.group(1) if sdk else '?'}, targetSdk {tsdk.group(1) if tsdk else '?'}, {len(dexes)} dex file(s){', native libraries' if has_lib else ''}")
+    say("   permissions: " + (", ".join(perms) or "none"))
+    if not dexes:
+        problems.append("no classes.dex in the APK: build it again (mcx-app build)")
+    if not launch:
+        problems.append("no launcher activity: one <activity android:exported=\"true\"> needs an <intent-filter> with "
+                        "android.intent.action.MAIN and android.intent.category.LAUNCHER (else the Library has no tile)")
+    else:
+        cls = launch.group(1)
+        found = ("L" + cls.replace(".", "/") + ";").encode() in code
+        say(f"   launcher activity {cls}: {'in classes.dex' if found else 'NOT in classes.dex'}")
+        if not found:
+            problems.append(f"the manifest starts {cls}, but classes.dex has no such class: the activity's android:name and "
+                            f"the Java package + class name must match (src/{cls.replace('.', '/')}.java)")
+    if "com.oculus.intent.category.VR" in tree or "IMMERSIVE_HMD" in tree:
+        problems.append("an immersive category (com.oculus.intent.category.VR / IMMERSIVE_HMD) in an intent filter: the "
+                        "headset would start it as a VR app, not as a window. Remove it (2D apps: MAIN + LAUNCHER only)")
+    if "android.app.NativeActivity" in tree or re.search(r"hasCode\([^)]*\)=\(type 0x12\)0x0\b", tree):
+        problems.append("NativeActivity or android:hasCode=\"false\": that is an immersive native app's manifest, not a 2D app's")
+    lay = {k: re.search(k + r"\([^)]*\)=([0-9.]+)dp", tree) for k in ("defaultWidth", "defaultHeight", "minWidth", "minHeight")}
+    if lay["defaultWidth"] and lay["defaultHeight"]:
+        dw, dh = float(lay["defaultWidth"].group(1)), float(lay["defaultHeight"].group(1))
+        mw = float(lay["minWidth"].group(1)) if lay["minWidth"] else None
+        mh = float(lay["minHeight"].group(1)) if lay["minHeight"] else None
+        say(f"   window: {dw:.0f} x {dh:.0f} dp" + (f", at least {mw:.0f} x {mh or 0:.0f} dp" if mw else ""))
+        if mw and mw > 360:
+            notes.append(f"minWidth {mw:.0f}dp: the system may make the window as narrow as 360dp (Look and Pinch scaling); "
+                         "set minWidth=\"360dp\" or less and keep the layout usable there")
+    else:
+        problems.append("no <layout android:defaultWidth=\"...dp\" android:defaultHeight=\"...dp\"> in the activity: the window "
+                        "opens at the system's size (Meta's manifest rules: 1024dp x 640dp, minWidth 360dp, minHeight 225dp)")
+    if re.search(r"resizeableActivity\([^)]*\)=\(type 0x12\)0x0\b", tree):
+        problems.append("android:resizeableActivity=\"false\": the user (and the system) resize windows; leave it true")
+    if sdk and int(sdk.group(1)) > 34:
+        problems.append(f"minSdkVersion {sdk.group(1)}: the headset is Android 14 (API 34); it would refuse to install (use 32)")
+    if not tsdk or int(tsdk.group(1)) < 32:
+        problems.append("targetSdkVersion below 32: set 34 (the headset's API; required for new apps on the store)")
+    elif int(tsdk.group(1)) != 34:
+        notes.append(f"targetSdkVersion {tsdk.group(1)}: 34 is what the headset runs and what new store apps must target")
+    if re.search(r"^\s*uses-feature: name='android\.hardware\.vr\.headtracking'", badging, re.M):
+        problems.append("android.hardware.vr.headtracking is required: a 2D app must leave it out (or android:required=\"false\")")
+    eye = [p_ for p_ in perms if p_.endswith(".EYE_TRACKING")]
+    if eye:
+        problems.append(f"{', '.join(eye)}: a 2D app must not ask for eye tracking (Look and Pinch gives it touch events)")
+    bad = [p_ for p_ in perms if p_.startswith("android.permission.") and p_.split(".")[-1] in PROHIBITED]
+    if bad:
+        problems.append(f"{', '.join(bad)}: prohibited on the headset's store (Meta's list); remove it")
+    store = [p_ for p_ in perms if p_.split(".")[-1] in ("READ_EXTERNAL_STORAGE", "WRITE_EXTERNAL_STORAGE", "MANAGE_EXTERNAL_STORAGE", "READ_MEDIA_IMAGES", "READ_MEDIA_VIDEO")]
+    if store:
+        notes.append(f"{', '.join(store)}: files are picked with the system file picker (ACTION_OPEN_DOCUMENT / CREATE_DOCUMENT), no permission needed")
+    if (b"Ljava/net/" in code or b"Ljavax/net/" in code) and "android.permission.INTERNET" not in perms:
+        problems.append("the code uses the network (java.net: also the LOG lines to `mcx-app logs`) but the manifest has no "
+                        "<uses-permission android:name=\"android.permission.INTERNET\" />")
+    devices = re.search(r"com\.oculus\.supportedDevices.*?:value\([^)]*\)='([^']*)'", tree.replace('"', "'"), re.S)
+    if devices:
+        say(f"   supportedDevices: {devices.group(1)}")
+    else:
+        problems.append("no com.oculus.supportedDevices meta-data (Meta's manifest rules: quest2|questpro|quest3|quest3s|vrglasses)")
+    if not icon or not icon.group(1):
+        problems.append("no android:icon: the Library shows a generic tile (add res/drawable/icon.png + android:icon=\"@drawable/icon\")")
+    for n in notes:
+        say("   note: " + n)
+    for p_ in problems:
+        say("   PROBLEM: " + p_)
+    say(f"RESULT: verify {'ok' if not problems else 'found %d problem(s)' % len(problems)}")
+    return 0 if not problems else 1
+
+
 def warm():
     """Fills the shared cache (glue object, precompiled headers for check and build) so the first build is warm."""
     tc = Toolchain()
@@ -1196,7 +1501,7 @@ def main(argv):
         i += 1
     app = App(d or ".")
     tc = Toolchain()
-    miss = tc.missing(not check)
+    miss = tc.missing_panel(not check) if app.type == "panel" else tc.missing(not check)
     if miss:
         say("mcx-build: missing " + ", ".join(miss) + " (run: mcx-setup quest)")
         return 3
@@ -1204,13 +1509,22 @@ def main(argv):
         shutil.rmtree(app.out, ignore_errors=True)
     t0 = time.time()
     code, result, apk = 0, "", None
-    say(f"== {'check' if check else 'build'} {app.pkg} (lib{app.lib}.so, API {app.api}, -j{jobs}, pid {os.getpid()})")
+    what = "2D panel app, Java" if app.type == "panel" else f"lib{app.lib}.so"
+    say(f"== {'check' if check else 'build'} {app.pkg} ({what}, API {app.api}, -j{jobs}, pid {os.getpid()})")
     try:
         if module_only and app.type != "module":
             raise Fail("--module-only is for module apps (build.conf TYPE=module)")
-        if app.type != "runner":
+        if app.type == "panel":  # Java: resources, javac, D8, package (build_panel), then the same signer
+            built = build_panel(tc, app, check)
+            if built:
+                apk = do_sign(tc, app, built[0], built[1], signer)
+        elif app.type != "runner":
             do_compile(tc, app, jobs, check)
-        if check:
+        if app.type == "panel" and check:
+            result = f"check ok ({len(app.java_sources())} file(s), {time.time() - t0:.1f} s)"
+        elif app.type == "panel":
+            result = f"APK {apk} ({os.path.getsize(apk) // 1024} KB) package {app.pkg}, {time.time() - t0:.1f} s"
+        elif check:
             result = f"check ok ({len(app.sources())} file(s), {time.time() - t0:.1f} s)"
         elif module_only:
             libs = do_link(tc, app, module_only=True)

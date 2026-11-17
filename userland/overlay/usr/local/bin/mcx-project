@@ -1,26 +1,36 @@
 #!/bin/bash
-# mcx-project: the type of a project folder in MetaCodex: native (a Quest app), default (any coding), research, or plugins
-# (a plugin of the MetaCodex app with a fixed kind: app, gesture or behaviour).
+# mcx-project: the type of a project folder in MetaCodex: native (a Quest app, kind immersive or 2D panel), default (any
+# coding), research, or plugins (a plugin of the MetaCodex app with a fixed kind: app, gesture or behaviour).
 #   mcx-project type <dir>                         native | default | research | plugins (stored in <dir>/.metacodex/project.json;
 #                                                  without it: native when the folder is an app, AndroidManifest.xml +
 #                                                  src/, else default; an old "general" reads as default)
-#   mcx-project set <dir> native|default|research  store it and lay / remove what the type brings ("general" = default);
-#                                                  a plugins project's type and kind are fixed (refused)
+#   mcx-project set <dir> native|default|research [--kind immersive|panel]
+#                                                  store it and lay / remove what the type brings ("general" = default);
+#                                                  a native project's kind (immersive: C++ / OpenXR, the default; panel: a
+#                                                  2D app in a window, Java) is fixed once stored: another one is refused;
+#                                                  without --kind the stored one stays, else the folder's app decides
+#                                                  (Java sources and no native library: panel); a plugins project's type
+#                                                  and kind are fixed (refused)
 #   mcx-project new plugins --kind app|gesture|behaviour <name>
 #                                                  a plugin project: the app makes /root/metacodex-projects/plugins/
 #                                                  <apps|gestures|behaviours>/<id> (its scaffold, the read-only marker, git,
 #                                                  its THREADS project) and runs it at once (needs the app: mcx-ui)
-#   mcx-project kind <dir>                         a plugins project's kind (its marker; checked against its folder)
+#   mcx-project kind <dir>                         a plugins project's kind (its marker; checked against its folder), or a
+#                                                  native project's: immersive | panel (no kind stored: immersive)
 # New projects live in /root/metacodex-projects/<type>/<name> (the app makes them there, with git init).
-# Native: the quest-native-* skills linked into <dir>/.claude/skills (Claude Code reads project skills there; the other
-# agents read the AGENTS.md block that points at them) and the native block in AGENTS.md and CLAUDE.md (between
-# <!-- metacodex:native-app --> markers; the rest of those files stays the user's). Research: no native skills or rules;
+# Native: the skills of its kind linked into <dir>/.claude/skills (immersive: the quest-native-* skills; panel:
+# quest-panel-apps; Claude Code reads project skills there; the other agents read the AGENTS.md block that points at
+# them) and the native block of its kind in AGENTS.md and CLAUDE.md (between <!-- metacodex:native-app --> markers; the
+# rest of those files stays the user's). Research: no native skills or rules;
 # a short research block in AGENTS.md and CLAUDE.md (<!-- metacodex:research --> markers): notes and findings in
 # Markdown, sources cited, no app build. Default: none of it.
 # Shipped by the app (overlay); edits are overwritten.
 set -uo pipefail
-S=/opt/metacodex/quest-native/skills
-T=/opt/metacodex/quest-native/project/AGENTS.md
+QN=${MCX_QUEST_NATIVE:-/opt/metacodex/quest-native}
+S=$QN/skills
+T=$QN/project/AGENTS.md
+TP=$QN/project/AGENTS-panel.md
+PANEL_NAMES="quest-panel-apps"
 NAMES="quest-native-hands-first quest-native-quality quest-native-art-direction quest-native-apps quest-native-xr quest-native-rendering quest-native-ui-design quest-native-physics quest-native-3d-models quest-native-performance quest-native-recipes quest-native-dev-loop quest-native-debug"
 RESEARCH='<!-- metacodex:research (written by mcx-project for a Research project; edits inside this block are replaced) -->
 # Research project (MetaCodex)
@@ -68,9 +78,27 @@ elif os.path.exists(path):
 PY
 }
 
-# kind_of <dir>: app | gesture | behaviour from the marker; dies when it is not a plugins project or the folder disagrees
+# native_kind <dir>: the stored kind of a native project (immersive | panel; none stored: immersive)
+native_kind() {
+  local k
+  k=$(sed -n 's/.*"kind": *"\([a-z]*\)".*/\1/p' "$1/.metacodex/project.json" 2>/dev/null | head -1)
+  [ "$k" = panel ] && echo panel || echo immersive
+}
+
+# app_kind <dir>: what the folder's app is: panel (Java sources, no native library), immersive (an app with a native
+# library), or nothing (no app yet)
+app_kind() {
+  [ -f "$1/AndroidManifest.xml" ] || return 0
+  if grep -q 'android.app.lib_name' "$1/AndroidManifest.xml"; then echo immersive
+  elif grep -qs '^TYPE=panel' "$1/build.conf" || find "$1/src" -name '*.java' -print -quit 2>/dev/null | grep -q .; then echo panel
+  else echo immersive; fi
+}
+
+# kind_of <dir>: app | gesture | behaviour from the marker; dies when it is not a plugins project or the folder disagrees.
+# A native project: immersive | panel.
 kind_of() {
   local f="$1/.metacodex/project.json" k folder want
+  [ "$(type_of "$1")" = native ] && { native_kind "$1"; return; }
   [ -f "$f" ] || die "$1 is not a plugin project (no .metacodex/project.json)"
   [ "$(type_of "$1")" = plugins ] || die "$1 is a $(type_of "$1") project, not a plugin project"
   k=$(sed -n 's/.*"kind": *"\([a-z]*\)".*/\1/p' "$f" | head -1)
@@ -100,27 +128,54 @@ new_project() {
 }
 
 set_type() {
-  local dir t n
+  local dir t n kind="" have_kind="" tpl names
   [ -d "${1:-}" ] || die "no folder ${1:-}"
   dir=$(readlink -f "$1"); t=${2:-}
+  shift 2 || true
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --kind) kind=${2:-}; shift 2 || shift ;;
+      --kind=*) kind=${1#--kind=}; shift ;;
+      *) die "unknown option $1" ;;
+    esac
+  done
   [ "$t" = general ] && t=default
   [ "$(type_of "$dir")" = plugins ] && die "$dir is a plugin project: its type and kind are fixed (.metacodex/project.json); make a new project instead"
   [ "$t" = plugins ] && die "plugin projects are made by the app: mcx-project new plugins --kind app|gesture|behaviour <name>"
   [[ "$t" == native || "$t" == default || "$t" == research ]] || die "type: native, default or research"
-  mkdir -p "$dir/.metacodex"
-  printf '{\n  "type": "%s"\n}\n' "$t" > "$dir/.metacodex/project.json"
+  [ "$kind" = 2d ] && kind=panel
+  [ -z "$kind" ] || [ "$t" = native ] || die "--kind is for native projects (immersive or panel)"
+  [[ -z "$kind" || "$kind" == immersive || "$kind" == panel ]] || die "kind: immersive (C++, OpenXR) or panel (a 2D app in a window, Java)"
   if [ "$t" = native ]; then
-    [ -d "$S/quest-native-apps" ] || die "no native skills in $S (update MetaCodex)"
+    # the kind is fixed once stored (like a plugin's): the skills, rules and template differ
+    if [ "$(type_of "$dir")" = native ] && grep -qs '"kind"' "$dir/.metacodex/project.json"; then have_kind=$(native_kind "$dir"); fi
+    [ -n "$have_kind" ] && [ -n "$kind" ] && [ "$kind" != "$have_kind" ] &&
+      die "$dir is a native project of kind $have_kind: the kind is fixed (.metacodex/project.json); make a new project of kind $kind"
+    kind=${kind:-${have_kind:-$(app_kind "$dir")}}
+    kind=${kind:-immersive}
+    [ -n "$(app_kind "$dir")" ] && [ "$(app_kind "$dir")" != "$kind" ] &&
+      die "the app in $dir is $(app_kind "$dir"), not $kind (the kind follows the app: mcx-project set $dir native)"
+  fi
+  mkdir -p "$dir/.metacodex"
+  if [ "$t" = native ]; then printf '{\n  "type": "native",\n  "kind": "%s"\n}\n' "$kind" > "$dir/.metacodex/project.json"
+  else printf '{\n  "type": "%s"\n}\n' "$t" > "$dir/.metacodex/project.json"; fi
+  # the links of either kind come out first: a project has its kind's skills only
+  for n in $NAMES $PANEL_NAMES; do [ -L "$dir/.claude/skills/$n" ] && rm -f "$dir/.claude/skills/$n"; done
+  if [ "$t" = native ]; then
+    if [ "$kind" = panel ]; then tpl=$TP; names=$PANEL_NAMES; else tpl=$T; names=$NAMES; fi
+    [ -d "$S/${names%% *}" ] || die "no native skills in $S (update MetaCodex)"
+    [ -f "$tpl" ] || die "no $tpl (update MetaCodex)"
     mkdir -p "$dir/.claude/skills"
-    for n in $NAMES; do ln -sfn "$S/$n" "$dir/.claude/skills/$n"; done
+    for n in $names; do ln -sfn "$S/$n" "$dir/.claude/skills/$n"; done
     block "$dir/AGENTS.md" metacodex:research out; block "$dir/CLAUDE.md" metacodex:research out
-    block "$dir/AGENTS.md" metacodex:native-app in "$(cat "$T")"; block "$dir/CLAUDE.md" metacodex:native-app in "$(cat "$T")"
+    block "$dir/AGENTS.md" metacodex:native-app in "$(cat "$tpl")"; block "$dir/CLAUDE.md" metacodex:native-app in "$(cat "$tpl")"
     # the links are this headset's: keep them out of the project's git history
-    if [ -d "$dir/.git" ] && ! grep -qs "quest-native-" "$dir/.git/info/exclude"; then
-      mkdir -p "$dir/.git/info"; echo ".claude/skills/quest-native-*" >> "$dir/.git/info/exclude"
+    if [ -d "$dir/.git" ]; then
+      mkdir -p "$dir/.git/info"
+      grep -qs "quest-native-" "$dir/.git/info/exclude" || echo ".claude/skills/quest-native-*" >> "$dir/.git/info/exclude"
+      grep -qs "quest-panel-" "$dir/.git/info/exclude" || echo ".claude/skills/quest-panel-*" >> "$dir/.git/info/exclude"
     fi
   else
-    for n in $NAMES; do [ -L "$dir/.claude/skills/$n" ] && rm -f "$dir/.claude/skills/$n"; done
     rmdir "$dir/.claude/skills" "$dir/.claude" 2>/dev/null || true
     block "$dir/AGENTS.md" metacodex:native-app out; block "$dir/CLAUDE.md" metacodex:native-app out
     if [ "$t" = research ]; then
@@ -129,13 +184,13 @@ set_type() {
       block "$dir/AGENTS.md" metacodex:research out; block "$dir/CLAUDE.md" metacodex:research out
     fi
   fi
-  echo "RESULT: $dir is a $(case "$t" in native) echo 'Native app (Quest)';; research) echo 'Research';; *) echo 'Default';; esac) project"
+  echo "RESULT: $dir is a $(case "$t" in native) [ "$kind" = panel ] && echo 'Native app (Quest), 2D panel,' || echo 'Native app (Quest), immersive,';; research) echo 'Research';; *) echo 'Default';; esac) project"
 }
 
 case "${1:-}" in
   type) [ -d "${2:-}" ] || die "no folder ${2:-}"; type_of "$(readlink -f "$2")" ;;
   kind) [ -d "${2:-}" ] || die "no folder ${2:-}"; kind_of "$(readlink -f "$2")" ;;
-  set) set_type "${2:-}" "${3:-}" ;;
+  set) shift; set_type "$@" ;;
   new) shift; new_project "$@" ;;
   *) sed -n '2,/^set -uo/p' "$0" | sed '$d'; exit 2 ;;
 esac
