@@ -640,7 +640,8 @@ namespace MetaCodex.Shell
                 if (pg.Wv != null) try { pg.Wv.Call("resize", pw, ph); } catch (Exception ex) { Log(w.Id + " resize: " + ex.Message); }
 #endif
             }
-            if (w.Group != null) w.FreeScale = large ? WebLargeScale : 1f; // in a group: the group's size; this one when it leaves
+            // in a group (or easing out of one): the group's size now, this one when it is free (the code editor's 1.25 kept)
+            if (w.Group != null || w.Easing) w.FreeScale = large ? WebLargeScale : WebShowsIde(w) ? IdeWebScale : 1f;
             else if (w.Panel != null && was && !large) w.Panel.BaseScale = Vector3.one * UiScaleNow;
             WebApplyScale(w);
         }
