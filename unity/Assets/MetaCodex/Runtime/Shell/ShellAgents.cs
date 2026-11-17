@@ -379,7 +379,12 @@ namespace MetaCodex.Shell
                 RenderThreadGroups();
                 return;
             }
-            if (tag.StartsWith("n:")) { NewProjectNamed(tag.Substring(2)); return; } // an empty type's row: a project of that type
+            if (tag.StartsWith("n:")) // an empty type's row: a project of that type (NATIVE asks immersive or 2D panel first)
+            {
+                string type = tag.Substring(2);
+                if (type == "native") NewNativeKindPrompt(null); else NewProjectNamed(type);
+                return;
+            }
             if (tag.StartsWith("p:"))
             {
                 string pid = tag.Substring(2);
@@ -480,6 +485,7 @@ namespace MetaCodex.Shell
                 bool folded = _collapsedProjects.Contains(pid);
                 string path = (string)pr["sources"]?.FirstOrDefault()?["path"] ?? "";
                 string plugin = PluginProject.KindFromLinuxPath(path); // a plugin project: its kind is the caption
+                string nativeKind = plugin == null && ProjectType(path) == "native" ? NativeKind(path) : null; // IMMERSIVE / 2D PANEL
                 items.Add(new UiListItem
                 {
                     Kind = UiListKind.Stacked, // level 1: a divider above, a bold name, the fold triangle, its caption under it
@@ -490,7 +496,9 @@ namespace MetaCodex.Shell
                     IconColor = t.TextAccent,
                     Title = (string)pr["name"] ?? "project",
                     TitleColor = pid == _projectSel ? t.TextAccent : t.Text,
-                    Sub = plugin != null ? PluginProject.Label(plugin).ToUpperInvariant() : Cut(ProjectKinds.ShortPath(path), 34),
+                    Sub = plugin != null ? PluginProject.Label(plugin).ToUpperInvariant()
+                        : nativeKind != null ? ProjectKinds.NativeKindLabel(nativeKind).ToUpperInvariant() + " · " + Cut(ProjectKinds.ShortPath(path), 24)
+                        : Cut(ProjectKinds.ShortPath(path), 34),
                     // folded: a dot for what is inside that needs you (amber) or runs (green), so the folded row still says it
                     Dot = folded && (asks > 0 || running > 0) ? (Color?)(asks > 0 ? t.Warn : t.Ok) : null,
                     DotLit = true,
@@ -596,6 +604,25 @@ namespace MetaCodex.Shell
             return type;
         }
 
+        // a native project's kind (immersive or panel) from its marker, read at most every 30 s per folder like the type
+        private readonly Dictionary<string, (string kind, float at)> _nativeKinds = new Dictionary<string, (string, float)>();
+
+        private string NativeKind(string linuxPath)
+        {
+            if (string.IsNullOrEmpty(linuxPath)) return null;
+            if (_nativeKinds.TryGetValue(linuxPath, out var c) && Time.unscaledTime - c.at < 30f) return c.kind;
+            string kind = "immersive"; // no marker or no kind: immersive (projects from before the kinds)
+            try
+            {
+                string host = AndroidPathOf(linuxPath);
+                string j = host == null ? null : Path.Combine(host, ".metacodex", "project.json");
+                if (j != null && File.Exists(j)) kind = ProjectKinds.NativeKindFromJson(File.ReadAllText(j)) ?? "immersive";
+            }
+            catch (Exception) { }
+            _nativeKinds[linuxPath] = (kind, Time.unscaledTime);
+            return kind;
+        }
+
         /// + PROJECT…: first the type (one dialog; PLUGIN asks its kind in a second one), then the name (the keyboard);
         /// the project is made in metacodex-projects/<type>/<folder from the name> (a plugin: plugins/<kind folder>/<id>)
         /// with git. EXISTING FOLDER… adds a folder that is there.
@@ -607,9 +634,28 @@ namespace MetaCodex.Shell
             Modal("NEW PROJECT", (name != null ? "“" + name.Trim() + "”: what" : "What") + " will this project be? NATIVE APP: a Quest app (native skills and rules). DEFAULT: any other coding. RESEARCH: notes and findings, no app build. PLUGIN: a part of this app (a window and a menu tile, gestures or a behaviour) that runs at once.",
                 new[] { "NATIVE APP", "DEFAULT", "RESEARCH", "PLUGIN", "EXISTING…" }, choice =>
                 {
-                    if (choice >= 0 && choice < 3) { if (name != null) CreateNewProject(ProjectKinds.Types[choice], name); else NewProjectNamed(ProjectKinds.Types[choice]); }
+                    if (choice == 0) NewNativeKindPrompt(name); // immersive or 2D panel first
+                    else if (choice > 0 && choice < 3) { if (name != null) CreateNewProject(ProjectKinds.Types[choice], name); else NewProjectNamed(ProjectKinds.Types[choice]); }
                     else if (choice == 3) NewPluginKindPrompt(name);
                     else if (choice == 4) ExistingProjectPrompt();
+                });
+        }
+
+        /// NEW PROJECT > NATIVE APP (owner 2026-11-17): the kind, IMMERSIVE (C++ / OpenXR, a 3D app around the user) or
+        /// 2D PANEL (a Java app the headset shows as a window), then the name. The kind is fixed by the project's marker.
+        /// name: already known: made as soon as the kind is picked. Voice does not come here (its native projects stay
+        /// immersive: the voice registry is unchanged).
+        private void NewNativeKindPrompt(string name, Action<string> picked = null)
+        {
+            Modal("NATIVE APP", (name != null ? "“" + name.Trim() + "”: what" : "What") + " kind of app? IMMERSIVE: around you in the room, in 3D, with your hands (a game, a scene, the room). 2D PANEL: a window beside your other windows (a tool, files, notes, a form); it opens outside this app. The kind stays fixed.",
+                new[] { "IMMERSIVE", "2D PANEL" }, choice =>
+                {
+                    if (choice < 0 || choice >= ProjectKinds.NativeKinds.Length) return;
+                    string kind = ProjectKinds.NativeKinds[choice];
+                    if (picked != null) picked(kind);
+                    else if (!string.IsNullOrWhiteSpace(name)) CreateNewProject("native", name, kind);
+                    else UiKeyboard.Edit("", false, null, n => { if (!string.IsNullOrWhiteSpace(n)) CreateNewProject("native", n, kind); },
+                        "NEW " + ProjectKinds.NativeKindLabel(kind).ToUpperInvariant() + " APP PROJECT · its name (e.g. " + (kind == "panel" ? "Zip tool" : "Solar system") + ")");
                 });
         }
 
@@ -652,6 +698,8 @@ namespace MetaCodex.Shell
         public string CreateNewProject(string type, string name, string kind = null)
         {
             if (type == ProjectKinds.Plugins) return CreatePluginProject(kind, name);
+            // a native project's kind: immersive unless 2D panel was picked (voice and the control port make immersive ones)
+            string nativeKind = type == "native" ? (kind == "panel" ? "panel" : "immersive") : null;
             name = (name ?? "").Trim();
             string path = ProjectKinds.PathFor(type, name);
             if (path == null) { Toast("Name the project with letters or digits", "warn"); return "error: say a name with letters or digits"; }
@@ -665,7 +713,7 @@ namespace MetaCodex.Shell
                 Settings.lastProject = _projectSel;
                 _collapsedProjects.Remove(_projectSel);
                 _collapsedTypes.Remove(type);
-                Toast($"Project {r["name"]} made in {path} ({ProjectKinds.Label(type)})", "ok");
+                Toast($"Project {r["name"]} made in {path} ({ProjectKinds.Label(type)}{(nativeKind != null ? ", " + ProjectKinds.NativeKindLabel(nativeKind).ToLowerInvariant() : "")})", "ok");
                 RefreshThreads();
             }));
             if (Git == null || !Git.InUserland) { Add(); return "Adding the project " + name; } // the Editor: MQH only
@@ -674,7 +722,7 @@ namespace MetaCodex.Shell
                          $"mkdir -p {q} && git -c init.defaultBranch=main init -q {q} && " +
                          $"{{ git -C {q} config --get user.name >/dev/null || git -C {q} config user.name MetaCodex; }} && " +
                          $"{{ git -C {q} config --get user.email >/dev/null || git -C {q} config user.email metacodex@localhost; }} || exit 19; " +
-                         $"mcx-project set {q} {type} || exit 18";
+                         $"mcx-project set {q} {type}" + (nativeKind != null ? " --kind " + nativeKind : "") + " || exit 18";
             System.Threading.Tasks.Task.Run(async () =>
             {
                 var res = await Git.Shell(cmd, 30000);
@@ -684,6 +732,7 @@ namespace MetaCodex.Shell
                     if (res.code == 18) Toast("Project type not set (its folder says it): " + Cut(res.output ?? "", 80), "warn");
                     else if (res.code != 0) { Toast("Project folder not made: " + Cut(res.output ?? "", 90), "error"); return; }
                     _projectTypes.Remove(path);
+                    _nativeKinds.Remove(path);
                     Add();
                 });
             });
@@ -766,24 +815,33 @@ namespace MetaCodex.Shell
                 {
                     if (choice < 0 || choice >= ProjectKinds.Types.Length) return;
                     string type = ProjectKinds.Types[choice];
-                    void Create() => EnsureHost(() => Mqh.CreateProject(path.Split('/').Last(), _hostId, path, r =>
-                    {
-                        if (r == null) { Toast("Project not added: " + Mqh.LastError, "error"); return; }
-                        _projectSel = (string)r["id"];
-                        Settings.lastProject = _projectSel;
-                        _collapsedProjects.Remove(_projectSel);
-                        _projectTypes.Remove(path);
-                        Toast("Project " + r["name"] + " added (" + ProjectKinds.Label(type) + ")", "ok");
-                        RefreshThreads();
-                    }));
-                    if (Git == null || !Git.InUserland) { Create(); return; }
-                    System.Threading.Tasks.Task.Run(async () =>
-                    {
-                        var res = await Git.Shell("mkdir -p " + GitService.Quote(path) + " && mcx-project set " + GitService.Quote(path) + " " + type, 20000);
-                        _main.Enqueue(() => { if (res.code != 0) Toast("Project type not set: " + Cut(res.output ?? "", 80), "warn"); Create(); });
-                    });
+                    if (type == "native") NewNativeKindPrompt(null, kind => AddExisting(path, type, kind)); // immersive or 2D panel
+                    else AddExisting(path, type, null);
                 });
             }, "NEW PROJECT · the folder that is there (Linux path)");
+        }
+
+        /// EXISTING FOLDER… once its type (and a native project's kind) is known: mcx-project set, then the MQH project.
+        private void AddExisting(string path, string type, string kind)
+        {
+            void Create() => EnsureHost(() => Mqh.CreateProject(path.Split('/').Last(), _hostId, path, r =>
+            {
+                if (r == null) { Toast("Project not added: " + Mqh.LastError, "error"); return; }
+                _projectSel = (string)r["id"];
+                Settings.lastProject = _projectSel;
+                _collapsedProjects.Remove(_projectSel);
+                _projectTypes.Remove(path);
+                _nativeKinds.Remove(path);
+                Toast("Project " + r["name"] + " added (" + ProjectKinds.Label(type) + (kind != null ? ", " + ProjectKinds.NativeKindLabel(kind).ToLowerInvariant() : "") + ")", "ok");
+                RefreshThreads();
+            }));
+            if (Git == null || !Git.InUserland) { Create(); return; }
+            System.Threading.Tasks.Task.Run(async () =>
+            {
+                // a folder whose stored kind (or app) is the other kind keeps it: mcx-project refuses, the toast says why
+                var res = await Git.Shell("mkdir -p " + GitService.Quote(path) + " && mcx-project set " + GitService.Quote(path) + " " + type + (kind != null ? " --kind " + kind : ""), 20000);
+                _main.Enqueue(() => { if (res.code != 0) Toast("Project type not set: " + Cut(res.output ?? "", 80), "warn"); Create(); });
+            });
         }
 
         // ------------------------------------------------------------------ THREAD
@@ -1917,6 +1975,22 @@ namespace MetaCodex.Shell
         public const string Plugins = "plugins";
         /// The types in THREADS' order (and the NEW PROJECT dialog's).
         public static readonly string[] Types = { "native", "default", "research", Plugins };
+
+        /// A native project's kinds (owner 2026-11-17), in the NATIVE APP dialog's order: immersive (C++ / OpenXR, a 3D app
+        /// around the user) or panel (a 2D Java app the headset shows as a window). Fixed by the marker's "kind", like a
+        /// plugin's; a native marker without one is immersive (projects from before the kinds).
+        public static readonly string[] NativeKinds = { "immersive", "panel" };
+
+        public static string NativeKindLabel(string kind) => kind == "panel" ? "2D panel" : "Immersive";
+
+        /// The kind in a native project's marker: "panel" or "immersive" (no kind, or an unknown one); null when the
+        /// marker is not a native one.
+        public static string NativeKindFromJson(string json)
+        {
+            if (TypeFromJson(json) != "native") return null;
+            var m = Regex.Match(json ?? "", "\"kind\"\\s*:\\s*\"([a-z]+)\"");
+            return m.Success && m.Groups[1].Value == "panel" ? "panel" : "immersive";
+        }
 
         public static string Header(string type) => type == "native" ? "NATIVE" : type == "default" ? "DEFAULT" : type == "research" ? "RESEARCH" : type == Plugins ? "PLUGINS" : "OTHER";
         public static string Label(string type) => type == "native" ? "Native app" : type == "default" ? "Default" : type == "research" ? "Research" : type == Plugins ? "Plugin" : "Other";

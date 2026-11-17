@@ -1,7 +1,8 @@
 # Native apps: build, install, launch and return, on the headset
 
-An agent in a native project, or the user by hand, takes a native headset app (C/C++, OpenXR, OpenGL ES) from code
-to check, build, verify, install and launch, on the headset itself. The built app lives in the Library and runs
+An agent in a native project, or the user by hand, takes a native headset app from code to check, build, verify,
+install and launch, on the headset itself. Two kinds: **immersive** apps (C/C++, OpenXR, OpenGL ES; most of this file)
+and **2D panel** apps (Java, Android views, shown as a window: [2D panel apps](#2d-panel-apps)). The built app lives in the Library and runs
 without MetaCodex. The README has the user's view (the warning before native apps, the permissions); this file is the
 reference.
 
@@ -18,8 +19,9 @@ reference.
 | Return | the app's built-in menu | Back to MetaCodex, or Report with a picture and the log. |
 
 The toolchain is not in the APK. `mcx-setup quest` installs it: a community arm64 build of the NDK (r27d),
-android.jar 34, the OpenXR 1.1.65 headers and loader, and the Debian packages aapt, zipalign, apksigner and a headless
-JDK; about 400 MB to download and 2.5 GB on disk, each download pinned by SHA-256.
+android.jar 34, the OpenXR 1.1.65 headers and loader, D8 (the R8 9.5.32 jar from Google Maven, for 2D apps), and the
+Debian packages aapt, zipalign, apksigner and a headless JDK (OpenJDK 21); about 420 MB to download and 2.5 GB on
+disk, each download pinned by SHA-256.
 
 ## How a build runs
 
@@ -72,12 +74,14 @@ JDK; about 400 MB to download and 2.5 GB on disk, each download pinned by SHA-25
 
 ## Project types
 
-`mcx-project set <dir> native|default|research` writes `.metacodex/project.json`. A native project gets the 13
-`quest-native-*` skills linked into its `.claude/skills` and a managed block in `AGENTS.md` and `CLAUDE.md` with the
-rules; a research project gets a research note instead; default removes both. The native skills are not global (MQH
+`mcx-project set <dir> native|default|research [--kind immersive|panel]` writes `.metacodex/project.json`. A native
+project has a kind, fixed once stored (`"kind": "immersive"` or `"panel"`; a marker without one is immersive): an
+immersive one gets the 13 `quest-native-*` skills linked into its `.claude/skills` and a managed block in `AGENTS.md`
+and `CLAUDE.md` with the rules (`native/project/AGENTS.md`); a 2D panel one gets the skill `quest-panel-apps` and its
+block (`native/project/AGENTS-panel.md`); a research project gets a research note instead; default removes them. The native skills are not global (MQH
 hands its global skills to every thread), so a website thread never sees native rules. `mcx-app new` marks app
-folders native; + PROJECT asks NATIVE APP, DEFAULT or RESEARCH and makes the project in
-`/root/metacodex-projects/<type>/`.
+folders native with the kind of what it copied; + PROJECT asks NATIVE APP (then IMMERSIVE or 2D PANEL), DEFAULT or
+RESEARCH and makes the project in `/root/metacodex-projects/<type>/` (2D panel projects too: `native/<name>`).
 
 ## The skills
 
@@ -162,6 +166,64 @@ Other measurements: builds on cores 0-2 cost no measurable frame rate (72.5 fps 
 and 71 without a build); 5 builds in a row took 4.1 s each with no slowdown; with the headset asleep, 139 builds ran
 in 240 s and the CPU was never suspended; free memory with MetaCodex, MQH and the local AI idle was 2.0-2.1 GB, and
 1,868 MB at the lowest during a build. A precompiled header cuts a syntax check from 2.75 to 0.68 s.
+
+## 2D panel apps
+
+A 2D panel app is a plain Android app (an Activity with Android views, Java) that Horizon OS shows as a window beside
+the user's other windows: no OpenXR, no VR category. Opening it puts MetaCodex in the background; the app's top row has
+Back to MetaCodex and Report (from the template's `Mcx.java`, with the same launch id and extras as `mcx_xr`), so the
+loop with the agent's thread is the same as for immersive apps. Skill: `quest-panel-apps` (with `references/design.md`,
+`android-apis.md`, `debug.md`). Projects: + PROJECT > NATIVE APP > 2D PANEL (kind `panel`); `mcx-app new . --panel`
+(the template: a window with a counter) or `--example zipper` (pick files with the system file picker, zip them into a
+file the user chooses, progress, stop, the result size; no storage permission).
+
+**Manifest rules** (Meta's docs for Android apps, checked with the metavr docs search on 2026-11-17: create-app,
+port-an-existing-app, publish-mobile-manifest, gaze-app-config, permissions-prohibited; `mcx-app verify` checks each):
+MAIN + LAUNCHER and no `com.oculus.intent.category.VR`; `<layout android:defaultWidth="1024dp"
+android:defaultHeight="640dp" android:minWidth="360dp" android:minHeight="225dp" />` in the activity (the system may
+shrink a window to 360dp wide for Look and Pinch); resizable; `minSdkVersion` 32 and `targetSdkVersion` 34 (2D apps
+may target 32-37; new store apps 34); `android.hardware.vr.headtracking` absent or not required;
+`com.oculus.supportedDevices` (`quest2|questpro|quest3|quest3s|vrglasses`); no eye tracking permission; nothing from
+Meta's prohibited list; INTERNET when the code uses `java.net` (the log lines do); the launcher class present in
+`classes.dex`. Design (verify cannot see it; the skill teaches it): targets 48dp+ (60dp main), 16dp apart, hover states,
+18sp text, contrast 4.5:1, no pure white or black, usable from 360 to 1280dp wide.
+
+**The build** (`mcx-build`, app type `panel`: `build.conf TYPE=panel`, or no `android.app.lib_name` and `.java` files in
+`src/`):
+
+| Stage | What | Skipped when |
+|---|---|---|
+| resources | aapt2 links the manifest, `res/`, `assets/` into the base APK and writes `R.java` (build/.cache/gen) | none of them changed |
+| javac | `javac --release 17 -g -proc:none -cp android.jar[:libs/*.jar]` over `src/**/*.java` + `R.java` | no `.java`, `R.java`, jar or flag changed (then D8 is skipped too) |
+| dex | D8 (`--release --min-api <minSdkVersion> --lib android.jar --thread-count 2`) over the classes (+ `libs/*.jar`) -> `classes*.dex` | as javac |
+| package, sign | the base APK's entries + the dex files (deflated once per content), stored entries aligned; the same v2 signer and key | |
+
+javac and D8 run in **mcx-buildd's warm JVM** (`McxJavaServer`, shipped as source in
+`/opt/metacodex/quest-native/jserver/` and compiled once per JDK into `~/.cache/mcx-build/jserver-*`): javac through
+`javax.tools`, D8 through its API, one request at a time, asked for over the daemon's socket (`{"op": "java"}`, served
+outside the job queue). The JVM starts on the first request at the daemon's nice level on cores 0-2
+(`-XX:+UseSerialGC -Xmx512m -XX:ActiveProcessorCount=2`, heap given back after each request), and stops after
+`MCX_BUILDD_JVM_IDLE` seconds without one (300), when MemAvailable stays under `MCX_BUILD_MIN_MB` while idle, when it
+falls under `MCX_BUILD_KILL_MB` during a request (the build stops with exit 4), or with the daemon; its CPU counts in a
+job's background budget; `mcx-buildd status` shows it (`jvm`). Without a daemon (or with one from before) `mcx-build`
+starts a JVM per tool (`-XX:TieredStopAtLevel=1 -XX:+UseSerialGC`). D8 is fetched by `mcx-setup d8` on the first 2D
+build when it is missing.
+
+Java: the Java 17 language; `android.*` is checked against API 34, but `java.*` against Java 17 (a Java 17 API that
+Android lacks compiles and fails at run time: the skill lists what is safe). No Gradle, AndroidX, Kotlin or Google Play
+Services; plain jars in `libs/`.
+
+Measured on the PC (WSL, Debian's aapt2, OpenJDK 27, android-34's android.jar, R8 9.5.32; a dry run of the same
+`mcx-build`), the template app:
+
+| Build | JVM per tool | Warm JVM (mcx-buildd) |
+|---|---|---|
+| first build (aapt2 + javac + D8 + sign) | 5.1 s | 5.1 s (JVM start 1.5 s) |
+| one `.java` changed | 3.5 s (javac 1.8, D8 1.7) | **1.3-1.5 s** (javac 0.8-0.9, D8 0.45-0.5) |
+| nothing changed | 0.1 s | 0.1 s |
+
+The zipper: 25 KB APK, `mcx-app verify` ok, `apksigner verify --min-sdk-version 32` ok (v2). The warm JVM held 158 MB
+RSS. On the headset: see the table below once measured.
 
 ## Limits
 
