@@ -148,11 +148,14 @@ namespace MetaCodex.Shell
             return new Vector2(w > 0f ? w : ThreadW, h > 0f ? h : ThreadH);
         }
 
-        private static string GroupTitle(WindowGroup g)
+        private static string GroupTitle(WindowGroup g) => $"✥ Group {g.Number} · {GroupCount(g)}";
+
+        /// "3 threads" (thread windows only), else "3 windows" (with web windows).
+        private static string GroupCount(WindowGroup g)
         {
             int threads = 0;
             foreach (var m in g.Members) if (m is ThreadWindow) threads++;
-            return threads == g.Members.Count ? $"✥ Group {g.Number} · {g.Members.Count} threads" : $"✥ Group {g.Number} · {g.Members.Count} windows";
+            return g.Members.Count + (threads == g.Members.Count ? " threads" : " windows");
         }
 
         // ------------------------------------------------------------------ the group's curve (Bend panels)
@@ -547,7 +550,7 @@ namespace MetaCodex.Shell
                 if (g == null) g = MakeGroup(f, o);
                 else if (!MoveToGroup(o, g, -1)) break;
             }
-            return $"Group {g?.Number}: {g?.Members.Count} threads";
+            return g != null ? $"Group {g.Number}: {GroupCount(g)}" : "error: no group was made";
         }
 
         // ------------------------------------------------------------------ scales (the UI scale setting, a group's size)
