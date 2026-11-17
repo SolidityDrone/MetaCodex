@@ -226,6 +226,7 @@ namespace MetaCodex.UI
 
         public static float QuadMargin(in UiShape s)
         {
+            if (s.Kind == UiShapeKind.Tri) return 0f;
             if (s.Kind == UiShapeKind.Line) return Mathf.Min(s.Margin, AaMargin);
             if (s.Kind == UiShapeKind.Bar && (s.State >= 0.9999f || s.State <= 0.0001f))
             {
@@ -248,7 +249,7 @@ namespace MetaCodex.UI
 
         private static bool SameLayout(in UiShape a, in UiShape b) =>
             a.Center == b.Center && a.Size == b.Size && a.Kind == b.Kind && a.CutBig == b.CutBig && a.CutSmall == b.CutSmall
-            && a.Border == b.Border && a.Margin == b.Margin && a.Rotation == b.Rotation && a.Visible == b.Visible;
+            && a.Border == b.Border && a.Margin == b.Margin && a.Rotation == b.Rotation && a.Visible == b.Visible && a.B == b.B && a.C == b.C;
 
         public void Set(int id, UiShape s)
         {
@@ -345,6 +346,20 @@ namespace MetaCodex.UI
             {
                 _first.Add(-1); _count.Add(0);
                 if (!s.Visible) continue;
+                if (s.Kind == UiShapeKind.Tri)
+                {
+                    // one triangle, drawn as the inside of a 1 m flat box (uv at its middle): the tint and alpha, no edge
+                    int t0 = _v.Count;
+                    _first[_first.Count - 1] = t0;
+                    _count[_count.Count - 1] = 3;
+                    var tl = UiTheme.Lin(s.Tint);
+                    var tshape = new Vector4(1f, 1f, 0f, (float)UiShapeKind.Flat);
+                    var tstyle = new Vector4(s.CutBig, s.CutSmall, s.Border, s.State);
+                    _v.Add(s.Center); _v.Add(new Vector3(s.B.x, s.B.y, s.Center.z)); _v.Add(new Vector3(s.C.x, s.C.y, s.Center.z));
+                    for (int k = 0; k < 3; k++) { _uv.Add(new Vector2(0.5f, 0.5f)); _c.Add(tl); _shape.Add(tshape); _style.Add(tstyle); }
+                    _tris.Add(t0); _tris.Add(t0 + 1); _tris.Add(t0 + 2);
+                    continue;
+                }
                 float margin = QuadMargin(s);
                 float hw = s.Size.x * 0.5f + margin, hh = s.Size.y * 0.5f + margin;
                 var lin = UiTheme.Lin(s.Tint);

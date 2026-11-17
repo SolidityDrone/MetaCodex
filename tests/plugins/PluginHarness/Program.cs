@@ -20,13 +20,14 @@ namespace PluginHarness
         public static int Main(string[] args)
         {
             string runDir = null;
-            bool rules = false;
+            bool rules = false, specs = false;
             var folders = new List<string>();
             for (int i = 0; i < args.Length; i++)
             {
                 if (args[i] == "--verbose") Verbose = true;
                 else if (args[i] == "--run" && i + 1 < args.Length) runDir = args[++i];
                 else if (args[i] == "--rules") rules = true;
+                else if (args[i] == "--specs") specs = true;
                 else if (args[i] == "--scaffold" && i + 3 < args.Length)
                 {
                     // --scaffold <kind> <id> <dest> [name]: a new plugin project's files, as the app makes them
@@ -48,7 +49,13 @@ namespace PluginHarness
                 }
                 else folders.Add(args[i]);
             }
-            if (runDir == null || folders.Count == 0 && !rules)
+            if (specs)
+            {
+                try { Specs.Run(); }
+                catch (Exception ex) { Fails++; Console.WriteLine("FAIL [specs] the harness itself crashed: " + ex); }
+                if (runDir == null) { Console.WriteLine(Fails == 0 ? "PASS: specs" : "FAILED: " + Fails + " check(s)"); return Math.Min(Fails, 120); }
+            }
+            if (runDir == null || folders.Count == 0 && !rules && !specs)
             {
                 Console.WriteLine("usage: PluginTests.dll --run <run dir> [--verbose] [--rules] <plugin folder name>... | --scaffold <kind> <id> <dest> [name]");
                 return 2;
@@ -288,44 +295,7 @@ namespace PluginHarness
                 foreach (var win in OwnWindows())
                 {
                     if (!(win.Spec["components"] is JArray comps)) continue;
-                    var list = comps.ToList();
-                    for (int ci = 0; ci < list.Count; ci++)
-                    {
-                        if (!(list[ci] is JObject comp)) continue;
-                        string type = (string)comp["type"] ?? "";
-                        string cid = (string)comp["id"] ?? "";
-                        string prefix = win.Id + "#" + ci + "|";
-                        if (type == "buttons" && comp["items"] is JArray items)
-                        {
-                            foreach (var it in items.OfType<JObject>())
-                                sent += Send(done, counts, win, prefix + "button|" + (string)it["id"], "button", "button", (string)it["id"] ?? "", (string)it["label"] ?? "");
-                        }
-                        else if (type == "toggle")
-                        {
-                            bool cur = comp["value"] != null && comp["value"].Type == JTokenType.Boolean && (bool)comp["value"];
-                            sent += Send(done, counts, win, prefix + "toggle", "toggle", "toggle", cid, cur ? "false" : "true");
-                        }
-                        else if (type == "grid" && comp["cells"] is JArray cells)
-                        {
-                            int taps = 0;
-                            foreach (var cell in cells.OfType<JObject>())
-                            {
-                                string cellId = (string)cell["id"];
-                                if (string.IsNullOrEmpty(cellId)) continue;
-                                if (taps++ >= 3) break;
-                                sent += Send(done, counts, win, prefix + "cell|" + cellId, "cell", "cell", cellId, (string)cell["text"] ?? "");
-                            }
-                        }
-                        else if ((type == "choices" || type == "buttons") && comp["options"] is JArray opts && opts.Count > 0)
-                        {
-                            string v = OptionValue(opts[0]);
-                            sent += Send(done, counts, win, prefix + "choice", "choice", "choice", cid, v);
-                        }
-                        else if (type == "input")
-                        {
-                            sent += Send(done, counts, win, prefix + "input", "input", "input", cid, InputText);
-                        }
-                    }
+                    sent += UseAll(comps, win, win.Id + "#", done, counts);
                 }
                 StepFor(1.2); // lets the host send the rebuilt spec (one full rebuild a second a window)
                 if (sent == 0) break;
@@ -343,6 +313,143 @@ namespace PluginHarness
             if (NoError("interactions"))
                 Ok("used " + (counts.Count > 0 ? string.Join(", ", counts.Select(kv => kv.Value + " " + kv.Key)) : OwnWindows().Count == 0 ? "nothing (no window)" : "nothing (the windows have no interactive component)") + "; no error");
             if (Program.Verbose) foreach (var w in OwnWindows()) PrintSpec(w, "last spec");
+        }
+
+        /// Uses every interactive component of a list, and those inside cards, rows and tabs (the component library):
+        /// what a tap, a pick or a drag would send. Returns the events sent.
+        private int UseAll(JArray comps, WindowRec win, string at, HashSet<string> done, SortedDictionary<string, int> counts)
+        {
+            int sent = 0;
+            var list = comps.ToList();
+            for (int ci = 0; ci < list.Count; ci++)
+            {
+                if (!(list[ci] is JObject comp)) continue;
+                string type = (string)comp["type"] ?? "";
+                string cid = (string)comp["id"] ?? "";
+                string prefix = at + ci + "|";
+                if (type == "buttons" && comp["items"] is JArray items)
+                {
+                    foreach (var it in items.OfType<JObject>())
+                        sent += Send(done, counts, win, prefix + "button|" + (string)it["id"], "button", "button", (string)it["id"] ?? "", (string)it["label"] ?? "");
+                }
+                else if (type == "toggle" || type == "checkbox")
+                {
+                    bool cur = comp["value"] != null && comp["value"].Type == JTokenType.Boolean && (bool)comp["value"];
+                    sent += Send(done, counts, win, prefix + "toggle", type, "toggle", cid, cur ? "false" : "true");
+                }
+                else if (type == "grid" && comp["cells"] is JArray cells)
+                {
+                    int taps = 0;
+                    foreach (var cell in cells.OfType<JObject>())
+                    {
+                        string cellId = (string)cell["id"];
+                        if (string.IsNullOrEmpty(cellId)) continue;
+                        if (taps++ >= 3) break;
+                        sent += Send(done, counts, win, prefix + "cell|" + cellId, "cell", "cell", cellId, (string)cell["text"] ?? "");
+                    }
+                }
+                else if ((type == "choices" || type == "buttons") && comp["options"] is JArray opts && opts.Count > 0)
+                {
+                    string v = OptionValue(opts[0]);
+                    sent += Send(done, counts, win, prefix + "choice", "choice", "choice", cid, v);
+                }
+                else if (type == "input" || type == "field")
+                {
+                    sent += Send(done, counts, win, prefix + "input", type, "input", cid, InputText);
+                }
+                else if ((type == "radio" || type == "segmented" || type == "select") && comp["options"] is JArray o2 && o2.Count > 0)
+                {
+                    // the first option that is not the current one, then the last
+                    string cur = (string)comp["value"];
+                    var vals = o2.Select(OptionValue).ToList();
+                    string pick = vals.FirstOrDefault(x => x != cur) ?? vals[0];
+                    sent += Send(done, counts, win, prefix + type + "|1", type, type, cid, pick);
+                    if (vals.Count > 1 && vals[vals.Count - 1] != pick) sent += Send(done, counts, win, prefix + type + "|2", type, type, cid, vals[vals.Count - 1]);
+                }
+                else if (type == "slider")
+                {
+                    double mn = Num(comp["min"], 0), mx = Num(comp["max"], 100), st = Num(comp["step"], 0);
+                    double v = mn + (mx - mn) * 0.5;
+                    if (st > 0) v = mn + Math.Round((v - mn) / st) * st;
+                    sent += Send(done, counts, win, prefix + "slider|mid", "slider", "slider", cid, N(v));
+                    sent += Send(done, counts, win, prefix + "slider|max", "slider", "slider", cid, N(mx));
+                }
+                else if (type == "stepper")
+                {
+                    double st = Num(comp["step"], 1), v = Num(comp["value"], 0), mx = Num(comp["max"], double.MaxValue), mn = Num(comp["min"], double.MinValue);
+                    sent += Send(done, counts, win, prefix + "stepper|up", "stepper", "stepper", cid, N(Math.Min(mx, v + st)));
+                    sent += Send(done, counts, win, prefix + "stepper|down", "stepper", "stepper", cid, N(Math.Max(mn, v - st)));
+                }
+                else if (type == "date")
+                {
+                    bool time = comp["time"] != null && comp["time"].Type == JTokenType.Boolean && (bool)comp["time"];
+                    var d = DateTimeOffset.FromUnixTimeSeconds((long)_fake.Clock).LocalDateTime.Date.AddDays(3);
+                    string v = d.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + (time ? "T18:30" : "");
+                    sent += Send(done, counts, win, prefix + "date", "date", "date", cid, v);
+                }
+                else if (type == "time")
+                {
+                    sent += Send(done, counts, win, prefix + "time", "time", "time", cid, "18:30");
+                }
+                else if (type == "color")
+                {
+                    string v = comp["options"] is JArray co && co.Count > 0 ? ((string)co[co.Count - 1] ?? "#3987E5").ToUpperInvariant() : "#199E70";
+                    sent += Send(done, counts, win, prefix + "color", "color", "color", cid, v);
+                }
+                else if (type == "list" && comp["items"] is JArray li && li.Any(x => x is JObject xo && xo["id"] != null))
+                {
+                    int taps = 0;
+                    foreach (var it in li.OfType<JObject>())
+                    {
+                        string rid = (string)it["id"];
+                        if (string.IsNullOrEmpty(rid)) continue;
+                        if (taps++ >= 3) break;
+                        sent += Send(done, counts, win, prefix + "list|" + rid, "list row", "list", rid, (string)it["text"] ?? (string)it["label"] ?? "");
+                    }
+                }
+                else if (type == "canvas" && comp["shapes"] is JArray shapes)
+                {
+                    int taps = 0;
+                    foreach (var sh in shapes.OfType<JObject>())
+                    {
+                        string sid = (string)sh["id"];
+                        if (string.IsNullOrEmpty(sid)) continue;
+                        if (taps++ >= 5) break;
+                        sent += Send(done, counts, win, prefix + "shape|" + sid, "canvas shape", "shape", sid, ShapePoint(sh));
+                    }
+                    sent += Send(done, counts, win, prefix + "shape|-", "canvas background", "shape", "", "1,1"); // a tap on no shape
+                }
+                if (type == "tabs" && comp["tabs"] is JArray tabs)
+                {
+                    var tl = tabs.OfType<JObject>().ToList();
+                    for (int k = 0; k < tl.Count; k++)
+                    {
+                        sent += Send(done, counts, win, prefix + "tab|" + (string)tl[k]["id"], "tab", "tab", cid, (string)tl[k]["id"] ?? "");
+                        if (tl[k]["components"] is JArray kids) sent += UseAll(kids, win, prefix + "t" + k + "/", done, counts);
+                    }
+                }
+                if (comp["components"] is JArray inner) sent += UseAll(inner, win, prefix + "/", done, counts);
+            }
+            return sent;
+        }
+
+        private static double Num(JToken t, double def) => t != null && (t.Type == JTokenType.Integer || t.Type == JTokenType.Float) ? (double)t : def;
+        private static string N(double v) => v.ToString("0.####", CultureInfo.InvariantCulture);
+
+        /// A point inside a canvas shape (what a tap on it sends as the value): a rect's middle, a circle's centre, the
+        /// first point of a line or polygon.
+        private static string ShapePoint(JObject s)
+        {
+            double x = Num(s["x"], 0), y = Num(s["y"], 0);
+            if ((string)s["type"] == "rect") { x += Num(s["w"] ?? s["width"], 0) / 2; y += Num(s["h"] ?? s["height"], 0) / 2; }
+            else if (s["points"] is JArray pts && pts.Count > 0)
+            {
+                var p0 = pts[0];
+                if (p0 is JArray pa && pa.Count >= 2) { x = Num(pa[0], 0); y = Num(pa[1], 0); }
+                else if (p0 is JObject po) { x = Num(po["x"] ?? po["lon"], 0); y = Num(po["y"] ?? po["lat"], 0); }
+            }
+            else if ((string)s["type"] == "line") { x = Num(s["x1"], 0); y = Num(s["y1"], 0); }
+            return N(x) + "," + N(y);
         }
 
         private static string OptionValue(JToken o)

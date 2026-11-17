@@ -169,8 +169,12 @@ namespace MetaCodex.UI
         /// Radians, counter-clockwise in the panel plane (0: axis-aligned).
         public float Rotation;
         public bool Visible;
+        /// Tri only: the triangle's other two corners (local x, y; Center is the first corner and gives the depth).
+        public Vector2 B, C;
     }
 
-    public enum UiShapeKind { Panel = 0, Button = 1, Header = 2, Selection = 3, Bar = 4, Line = 5, Dot = 6, Flat = 9 }
+    /// Tri (10) is not a shader kind: UiShapeMesh draws it as one triangle of the flat kind (9) with every corner at the
+    /// middle of a large box, so the shader fills it with the tint and alpha as they are (canvas polygons' soft fill).
+    public enum UiShapeKind { Panel = 0, Button = 1, Header = 2, Selection = 3, Bar = 4, Line = 5, Dot = 6, Flat = 9, Tri = 10 }
 
 }
