@@ -983,11 +983,11 @@ namespace MetaCodex.Shell
                     // event <window> <type> <id> [value]: what a tap or a sent text does in a plugin window (agents test
                     // inputs, toggles, cells and buttons with it); <window>: the full id or the plugin id (its main window)
                     var a = id.Split(new[] { ' ' }, 4, StringSplitOptions.RemoveEmptyEntries);
-                    const string usage = "error: plugin event <window> button|input|toggle|cell|choice|open|close <component id> [value]";
+                    const string usage = "error: plugin event <window> button|input|toggle|cell|choice|radio|segmented|select|slider|stepper|date|time|color|list|tab|shape|open|close <component id> [value]";
                     if (a.Length < 2) return usage;
                     string win = a[0].StartsWith("plugin-") ? a[0] : "plugin-" + a[0] + "-main";
                     string type = a[1], cid = a.Length > 2 ? a[2] : "", val = a.Length > 3 ? a[3] : "";
-                    if (Array.IndexOf(new[] { "button", "input", "toggle", "cell", "choice", "open", "close" }, type) < 0) return usage;
+                    if (Array.IndexOf(PluginEventTypes, type) < 0) return usage;
                     var owner = Scripts.WindowOwner(win);
                     if (owner == null) return "error: no plugin window " + win + " (plugin check <id> lists the windows)";
                     Scripts.WindowEvent(win, type, cid, val);
@@ -997,6 +997,10 @@ namespace MetaCodex.Shell
                 default: return "error: plugin list | new <name> app|gesture|behaviour | examples | example <id> | enable <id> | disable <id> | reload | log <id> | delete <id> | event <window> <type> <id> [value] | dir";
             }
         }
+
+        /// What `plugin event` may send: the window events of every component (the library's too, ShellViewControls).
+        private static readonly string[] PluginEventTypes =
+            { "button", "input", "toggle", "cell", "choice", "radio", "segmented", "select", "slider", "stepper", "date", "time", "color", "list", "tab", "shape", "open", "close" };
 
         // ------------------------------------------------------------------ STATUS (the tab's id: daemon)
 

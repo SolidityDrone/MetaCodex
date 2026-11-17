@@ -42,8 +42,8 @@ A plugin is a project of type `plugins` with a fixed kind (`Runtime/Scripting/Pl
 An app plugin makes windows drawn with the app's own UI kit, and tiles on the DOCK and on the wrist menu's outer ring.
 It loads again at every start, and its `main.lua` makes its windows and tiles again from its saved `store`.
 
-Two examples ship with the app: **Timers** (a focus timer in the tomato style, with alarms) and **Calendar** (a month
-grid with entries and reminders). Install one from CONTROL > MQH > PLUGINS (EXAMPLES TO ADD, + ADD), by voice, or with
+Examples ship with the app: **Timers** (a focus timer in the tomato style, with alarms), **Calendar** (a month
+grid with entries and reminders) and **Components** (a gallery of every window component, working). Install one from CONTROL > MQH > PLUGINS (EXAMPLES TO ADD, + ADD), by voice, or with
 `mcx-ui plugin example timers`: it becomes a plugin project (`plugins/apps/timers`) with the example's files, the
 project's AGENTS.md and git, so a thread on it can change it. Their files are in
 `Runtime/Scripting/Resources/PluginExamples/<id>/`.
@@ -77,6 +77,30 @@ Plugin windows use the same view components as the agents' views (`text`, `stats
 
 In an agent's view, `buttons`, `toggle` and `cell` answer the thread, as `choices` do.
 
+#### The component library (`Shell/ShellViewControls.cs`, `UI/UiViewControls.cs`)
+
+Plugin windows and agent views also have controls, pickers, layout and a canvas; the guide for agents (fields,
+events, examples, design rules, checklist) is `mqh/plugins/metacodex-guide/skills/quest-plugins/reference/components.md`,
+and the example plugin `components` shows every one working.
+
+- Controls: `checkbox` (event `toggle`, boolean), `radio`, `segmented` (2-5), `select` (1-200 options; a tap opens a
+  list window in front, with a search field above 15), `slider` (event on release; `live` also while dragging, 5 a
+  second at most), `stepper`, `field` (event `input`); pickers `date` (month grid, Monday first, today ringed, min /
+  max, `time = true` adds hour and minute: `YYYY-MM-DD[THH:MM]`), `time` (`HH:MM`), `color` (`#RRGGBB`); a `list` whose
+  items have ids (event `list`, e.id = the row).
+- Layout: `card` (a titled group), `row` (children side by side by `weight`), `tabs` (2-6 pages, switched without a
+  rebuild, event `tab`), `divider`, `spacer`. 48 components in all, nesting 3 deep, no tabs in tabs, no 3D scene or
+  image inside containers.
+- `canvas`: its own units (`width` x `height`, y down) or `fit = "lonlat"` with `bounds`; rect, circle, line,
+  polyline, polygon, text, arc; outlines are strokes, fills are flat boxes or triangles (ear clipping; the C#-only
+  shape kind `Tri` of `UiShapeMesh`, drawn as the shader's flat kind). A tap sends `shape` with the topmost shape with
+  an id and `"x,y"` in canvas units. 120 shapes, 64 points a shape, 1200 points, 40 texts.
+- In place: a new spec that differs only in values (the controls' `value`, `selected`, block items, canvas tones and
+  labels, texts; `ShapeOf` leaves them out) is applied to the built controls by the window's watcher (`UiViewWatch`)
+  without a rebuild; a value within 1 s of the user's own change waits. In a view, value controls answer the thread
+  with `label: value` after 1.5 s of quiet.
+- `mcx-ui plugin event <id> <type> <component id> [value]` takes the library's event types too.
+
 A `text` with an `id` is LIVE: when only such texts change, the app sets the labels and does not rebuild the window.
 A new spec with the same components (kinds, ids, sizes, columns, title, count) also sets the texts of its `text`
 components in place, whether they have an `id` or not, as long as each new text fits its row. Any other change
@@ -106,10 +130,11 @@ the field; a warning (a long title or label, more than 8 components) goes to the
 
 ## Tests
 
-- `tests/plugins/run-plugin-tests.sh <plugin dir>... | --examples | --scaffolds | --rules`: on the PC, no editor. The
+- `tests/plugins/run-plugin-tests.sh <plugin dir>... | --examples | --scaffolds | --rules | --specs`: on the PC, no editor. The
   real `ScriptHost` and the Lua interpreter with a fake app: load (a folder with the marker as a project of its kind),
   the tile, every button, the gestures it reacts to and hand shapes through a stand-in engine, three hours of clock,
   voice lint, a restart and the unload. `--rules`: the marker and kind rules, id clashes, reload, create, delete.
+  `--specs`: the component library's spec rules (a window with every component passes; broken specs are refused).
   `--scaffold <kind> <id> <dest>` and `--example-project <id> <dest>` write a project as the app makes it.
 - `tests/plugins/device-test.sh [timers|calendar]`: the same plugin on the headset.
 - Editor self-test sections `scripts`, `agentscript`, `gestureplugins` and `agentplugin`.
