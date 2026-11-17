@@ -187,10 +187,15 @@ above 15 options). For 6-200 options. `id`, `label?`, `options` (strings or `{la
 ```
 
 **`field`**: a labelled one-line text box; a tap opens the system keyboard. `id`, `label?`, `value?`,
-`placeholder?`, `secure?` (dots), `clear?` (empties itself after sending). Event `input` when the keyboard closes.
-For a send box with a SEND button use `input` (`id`, `prompt?`, `placeholder?`).
+`placeholder?`, `secure?` (dots), `clear?` (empties itself after sending). Event `input` with the text when the
+keyboard closes (the user closes it before tapping anything else in the window).
+- In a **form** (the text plus other values, then an ADD or SAVE button): keep the text in your state
+  (`input` -> `S.text = e.value`), pass it back as `value = S.text`, read `S.text` when ADD is tapped, then set
+  `S.text = ""` and `render()`: the field empties in place. No `clear` here (it would empty the box before ADD).
+- As a **send box** (the keyboard's Enter is the action: a quick note, a search): `clear = true`, act in `on(e)`.
+- For a send box with its own SEND button use `input` (`id`, `prompt?`, `placeholder?`).
 ```lua
-{ type = "field", id = "title", label = "What", placeholder = "call mum", clear = true }
+{ type = "field", id = "title", label = "What", value = S.text, placeholder = "call mum" }   -- a form's text
 ```
 
 **`buttons`**: 1-12 actions `{id, label, tone?}`, 4 a row; `tone = "accent"` for the one primary action,
@@ -226,7 +231,8 @@ that read well on the glass). Event `color`.
 ### Lists
 
 **`list` with ids**: rows to pick (a title, a dim second text on the right, a tone bar, a badge); the chosen row
-lit; scrolls by dragging when there are more rows than fit. `items = { {id, text, sub?, tone?, badge?}, ... }`
+lit; scrolls by dragging when there are more rows than fit (so a `list` holds all its rows, up to 100: no "+3
+more" line, unlike other components). `items = { {id, text, sub?, tone?, badge?}, ... }`
 (1-100), `selected?` (a row id), `rows?` (rows shown, default 6). Event `list` (e.id = the row's id). A `list`
 without ids is the old read-only bullet list.
 ```lua
@@ -340,7 +346,8 @@ render = function()
   } }
 end
 ```
-(`on`: `date` -> `S.when = e.value`; `input` -> `S.text = e.value`; `button add` -> check both, append, clear
+(`on`: `date` -> `S.when = e.value`; `input` -> `S.text = e.value` (sent when the keyboard closes, before the
+tap on ADD); `button add` -> check both, append, clear
 `S.text`, set the alarm with `app.at`, `ui.toast`.)
 
 **A settings page**: one card per topic, the right control per value, no buttons except a reset.
