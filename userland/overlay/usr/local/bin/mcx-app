@@ -100,7 +100,8 @@ new_app() {
   while [ $# -gt 0 ]; do
     case "$1" in
       --module) tpl=$MODULE_TEMPLATE; shift ;;
-      --panel|--2d) kind=panel; shift ;;
+      --panel) kind=panel; shift ;;
+      --2d) kind=panel; shift ;;
       --example)
         [ -n "${2:-}" ] && [ -f "$EXAMPLES/$2/AndroidManifest.xml" ] || die "no example '${2:-}' (examples: $(ls "$EXAMPLES" 2>/dev/null | tr '\n' ' '))"
         tpl=$EXAMPLES/$2; shift 2 ;;
