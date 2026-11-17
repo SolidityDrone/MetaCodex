@@ -455,6 +455,19 @@ WEB:
 - [ ] Move the WEB window, close and reopen it → the page is still there; with "Bend panels" on it stays flat
 - [ ] WEB open on a scrolling page → 72 fps; closed: no cost
 
+WEB, several windows (2026-11-17: a video and the code editor fought over one window):
+
+- [ ] Video in one window, the code editor in another: play a video in WEB (sound on), then CODE (or SYSTEM > TOOLS > code editor > Open) → the editor opens in a second window (title WEB 2) beside the others, larger; the video keeps playing in the first window, with sound; both pages update; 72 fps with the video playing and the editor open
+- [ ] A link from a terminal (`⇗`), a bookmark in LINKS or voice "browse to example dot org" while both are open → it opens in the video's window (the web window touched last that is not the editor's), never in the editor's window; touch the editor's window, then open a link again → still not in the editor's window
+- [ ] Only the editor's window open (the first one closed): a terminal link → the first window opens again (or, when the first window showed the editor, a new window beside the editor's) with the page
+- [ ] CODE lights while the editor's window is open; CODE again → only the editor's window closes, the video window stays; CODE → it opens again (the editor reloads in a new window, the server was not stopped); SYSTEM > TOOLS > code editor > STOP → the editor's window closes
+- [ ] Three windows: ❐ on the toolbar → a new window (WEB 2) opens beside that window on its start page, not over another window; ❐ on it → WEB 3 beside it; ❐ again → a toast "3 web windows are open, the most there can be: close one first", nothing opens; with the three open and none showing the editor, CODE → the same toast, no page is replaced
+- [ ] The keyboard goes to the window touched last: with a Bluetooth keyboard, tap a field in window 1, type → it types there; tap a field in window 2, type → only window 2 gets the keys; touch window 1's toolbar, type → the keys go to window 1; tap a terminal → the terminal gets them again
+- [ ] Each window's own: a dropdown in window 2 opens its chooser over window 2 (move window 2: the chooser follows); an alert in window 1 opens its dialog over window 1; full screen in window 1 shows EXIT FULL SCREEN only in window 1; ⎘ PASTE and ⌨ type into the window they are on
+- [ ] Closing frees: close WEB 2 and WEB 3 → their sound stops at once and the session log shows `web-2: closed, its page and its memory freed (…)`; logcat `MetaCodexWeb` shows `web #N: closed`; free memory (CONTROL > SYSTEM or `dumpsys meminfo`) goes back up; close the first window while a video plays in WEB 2 → WEB 2's video and page keep running (a closed window no longer freezes the others)
+- [ ] The WEB tile (wrist or dock): with a page window and the editor open → WEB hides the page window, not the editor's; again → the first window shows; voice "close the browser" closes the window touched last
+- [ ] Every web window stays flat with "Bend panels" on; a closed window costs nothing (72 fps with one window open on a still page, the others closed)
+
 CLIPBOARD (captures):
 
 - [ ] SELECT, then pinch-drag over a window (also at a low PANEL OPACITY) → CLIPBOARD has the capture, opaque, with nothing of the room or the hands and no orange border; the orange frame goes as soon as the capture is taken; no hitch at the moment of the capture (72 fps)

@@ -213,7 +213,7 @@ namespace MetaCodex.Shell
                 Router.Head = Head;
                 Router.Settings = Settings.gestures;
                 Router.Init();
-                Router.Touched = OnPanelTouched; // a press on a thread window focuses it first (ShellThreadWindows)
+                Router.Touched = OnAnyPanelTouched; // a press on a thread window focuses it first (ShellThreadWindows); on a web window, pages and keys go there (ShellWeb)
                 if (hands == null && (leftHand != null || rightHand != null)) hands = new OvrHandSource(leftHand, rightHand);
                 if (hands == null) { SimHands = new SimulatedHands(); hands = SimHands; }
                 else SimHands = hands as SimulatedHands;

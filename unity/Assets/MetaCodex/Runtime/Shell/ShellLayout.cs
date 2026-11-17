@@ -232,7 +232,7 @@ namespace MetaCodex.Shell
         /// Windows that never bend: terminals (their text grid cannot bend yet) and WEB (the page is one flat picture,
         /// so a bent frame around it would not match where the pointer touches the page). A thread group bends; its
         /// windows lie on its curve (ShellThreadGroups.FitGroupMembers).
-        public static bool StaysFlat(UiPanel p) => p.Id.StartsWith("term-") || p.Id == "web";
+        public static bool StaysFlat(UiPanel p) => p.Id.StartsWith("term-") || IsWebPanelId(p.Id); // every web window (ShellWeb)
 
         // ---- curve mode's lean (owner 2026-11-16: "if a panel is above a certain height, curve mode should not only curve it
         // but also tilt it, so a panel high up faces slightly toward my eyes"): a bent window high in the view leans its top

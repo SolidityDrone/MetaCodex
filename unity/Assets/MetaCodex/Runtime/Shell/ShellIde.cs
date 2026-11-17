@@ -16,8 +16,8 @@ using UnityEngine;
 namespace MetaCodex.Shell
 {
     /// CODE EDITOR (owner 2026-11-16: "an actual IDE ... to work for real without using the agents too"): an open-source
-    /// browser IDE server (docs/ide.md; its name and licence in docs/LICENSES.md) in the headset's Linux, shown in the
-    /// WEB window. `mcx-ide` (userland) installs, runs and stops it. Nothing is downloaded or started by itself: the user
+    /// browser IDE server (docs/ide.md; its name and licence in docs/LICENSES.md) in the headset's Linux, shown in a
+    /// web window of its own. `mcx-ide` (userland) installs, runs and stops it. Nothing is downloaded or started by itself: the user
     /// installs it (SYSTEM > TOOLS > code editor, the CODE tile, voice; about IdeDownloadMB, in a terminal) and opens it.
     ///   OPEN    when it is not running: `exec mcx-ide run` through the AI service process, like MQH (cores 0-2, away from
     ///           the frame loop; a server started by the hidden shell runner would die with it: proot --kill-on-exit);
@@ -28,7 +28,8 @@ namespace MetaCodex.Shell
     ///           value, so the app sets that cookie for the editor's address in its WebView's cookie store
     ///           (MetaCodexIde.java: host-only, HttpOnly, SameSite=Strict) and opens the page signed in. Nobody types it;
     ///           `mcx-ide password` shows it for another browser.
-    ///   SHOW    OpenBrowser(url) in the WEB window, made larger while it shows the editor.
+    ///   SHOW    in a web window of its own (ShellWeb: the one that shows it, else a new one, never the window a page
+    ///           plays in), made larger while it shows the editor. Closing that window leaves the server running.
     ///   STOP    `mcx-ide stop`, then the service drops its child: its memory comes back.
     /// Voice: open_code_editor (a project's folder too), stop_code_editor. Control port: `system ide start|open|stop|status`
     /// (`mcx-ide start` in a terminal asks the app, so the server runs in the service there too).
@@ -46,7 +47,7 @@ namespace MetaCodex.Shell
         public const string IdeDefaultFolder = "/root/metacodex-projects";
         /// The server's session cookie (its src/common/http.ts CookieKeys.Session).
         public const string IdeCookieName = "code-server-session";
-        /// The WEB window's size while it shows the editor (x the UI scale): code wants room.
+        /// Its web window's size while it shows the editor (x the UI scale): code wants room.
         public const float IdeWebScale = 1.25f;
         private const string IdeServiceName = "ide";
         private const string IdeServiceClass = "com.pnncl.metacodex.ai.MetaCodexAiService";
@@ -60,7 +61,7 @@ namespace MetaCodex.Shell
         private string _ideFolderAfterInstall;
         private string _ideFileNext, _ideFileFor; // a file to show when the editor's page opens next on that folder (OpenIdeAt)
         private bool _ideInstallWatch;
-        private UiPanel _ideWebHooked;     // the WEB window whose Closed puts its size back
+        private UiPanel _ideWebHooked;     // the web window whose Closed puts its size back
 
         private string IdePath(string linuxPath) => AndroidPathOf(linuxPath);
 
@@ -73,17 +74,17 @@ namespace MetaCodex.Shell
             get { try { var p = IdePath(IdeMarker); return p != null && File.Exists(p) ? File.ReadAllText(p).Trim() : ""; } catch (Exception) { return ""; } }
         }
 
-        /// The WEB window shows the editor (the CODE tile is lit). Cheap: every frame while the wrist menu shows.
-        public bool IdeShowing => _ideUrl != null && IsPanelOpen("web") && (WebUrlForTest ?? "").StartsWith(_ideUrl, StringComparison.Ordinal);
+        /// The editor's web window is open (the CODE tile is lit). Cheap: every frame while the wrist menu shows.
+        public bool IdeShowing => _ideUrl != null && WebIdeShown;
 
-        /// The CODE tile: shows the editor, or puts the WEB window away when it shows it.
+        /// The CODE tile: shows the editor, or puts its web window away when it shows.
         public void ToggleIde()
         {
-            if (IdeShowing) { ClosePanel("web"); return; }
+            if (IdeShowing) { WebCloseIde(); return; }
             OpenIde(null);
         }
 
-        /// Opens the editor in the WEB window (`folder`: a Linux folder to open in it; null: the last one). Not installed:
+        /// Opens the editor in its web window (`folder`: a Linux folder to open in it; null: the last one). Not installed:
         /// asks to install it first. Returns what happened, for voice ("error: ..." when it cannot).
         public string OpenIde(string folder) => IdeEnsure(true, folder);
 
@@ -166,7 +167,7 @@ namespace MetaCodex.Shell
             Toast("Code editor: " + why, "error");
         }
 
-        /// The editor's page in the WEB window, larger than a web page (put back when the window closes).
+        /// The editor's page in its own web window, larger than a web page (put back when the window closes).
         private void ShowIdePage(string folder)
         {
             if (_ideUrl == null) return;
@@ -181,17 +182,16 @@ namespace MetaCodex.Shell
                 string payload = new JArray(new JArray("openFile", fileUri)).ToString(Newtonsoft.Json.Formatting.None);
                 url += (url.Contains("?") ? "&" : "?") + "payload=" + Uri.EscapeDataString(payload);
             }
-            if (_panels.TryGetValue("web", out var web) && web != null)
+            var web = WebIdePanel(); // its own web window (ShellWeb); null: the most web windows are open (a toast says so)
+            if (web == null) return;
+            web.BaseScale = Vector3.one * UiScaleNow * IdeWebScale; // before it opens: it is placed at its new size
+            if (_ideWebHooked != web)
             {
-                web.BaseScale = Vector3.one * UiScaleNow * IdeWebScale; // before it opens: it is placed at its new size
-                if (_ideWebHooked != web)
-                {
-                    _ideWebHooked = web;
-                    // after its closing animation (it shrinks from the size it had), unless it opened again meanwhile
-                    web.Closed += p => After(0.6f, () => { if (p != null && !p.IsOpen) p.BaseScale = Vector3.one * UiScaleNow; });
-                }
+                _ideWebHooked = web;
+                // after its closing animation (it shrinks from the size it had), unless it opened again meanwhile
+                web.Closed += p => After(0.6f, () => { if (p != null && !p.IsOpen) p.BaseScale = Vector3.one * UiScaleNow; });
             }
-            OpenBrowser(url);
+            WebOpenOn(web, url);
         }
 
         /// The port it listens on (mcx-ide writes it when it starts; the default before that).
@@ -323,14 +323,13 @@ namespace MetaCodex.Shell
             }
         }
 
-        /// STOP: the server ends (mcx-ide stop: TERM, then KILL), then the service drops its child. Its WEB page closes.
+        /// STOP: the server ends (mcx-ide stop: TERM, then KILL), then the service drops its child. Its web window closes.
         public string StopIde()
         {
             if (Application.isEditor || app?.Host == null) return "error: the code editor runs on the headset";
-            bool showing = IdeShowing;
+            if (IdeShowing) WebCloseIde(); // before its address is forgotten: that finds its window
             _ideUrl = null;
             IdeState = "off";
-            if (showing) ClosePanel("web");
             Task.Run(async () =>
             {
                 var r = await Git.Shell("mcx-ide stop", 30000);
@@ -348,7 +347,7 @@ namespace MetaCodex.Shell
 
         private void AskIdeInstall(string folder)
         {
-            Modal("CODE EDITOR", $"A full code editor in the WEB window: files, search, git, a terminal, extensions. Install it? " +
+            Modal("CODE EDITOR", $"A full code editor in a web window of its own: files, search, git, a terminal, extensions. Install it? " +
                 $"About {IdeDownloadMB} MB to download (needs internet), {IdeDiskMB} MB on the headset. It installs in a terminal and opens when it is done.",
                 new[] { "INSTALL", "CANCEL" }, i => { if (i == 0) InstallIde(true, folder); });
         }
@@ -395,15 +394,15 @@ namespace MetaCodex.Shell
                 items.Add(new UiListItem { Icon = "⇣", Title = "Install the code editor", Sub = $"about {IdeDownloadMB} MB download, needs internet · {IdeDiskMB} MB on the headset", Tag = "install" });
             else
             {
-                items.Add(new UiListItem { Icon = "▶", Title = "Open", Sub = "in the WEB window, signed in", Tag = "open" });
+                items.Add(new UiListItem { Icon = "▶", Title = "Open", Sub = "in its own web window, signed in", Tag = "open" });
                 if (IdeState == "running" || IdeState == "starting") items.Add(new UiListItem { Icon = "■", Title = "Stop", Sub = "its memory comes back; your files stay", Tag = "stop" });
                 if (have.Length > 0 && have != IdeVersion) items.Add(new UiListItem { Icon = "⟳", Title = "Update to " + IdeVersion, Sub = $"about {IdeDownloadMB} MB download; settings and extensions stay", Tag = "update" });
                 items.Add(new UiListItem { Icon = "▤", Title = "Status and log", Sub = "mcx-ide status, mcx-ide log (in a terminal)", Tag = "log" });
                 items.Add(new UiListItem { Icon = "✕", Title = "Remove", Sub = "mcx-ide uninstall: its settings and extensions stay; your projects stay", TitleColor = t.Danger, Tag = "remove" });
             }
             string hint = installed
-                ? $"Version {have} · a full code editor from the Linux, in the WEB window. A Bluetooth keyboard is best; the system keyboard (⌨ in WEB) works for short edits."
-                : "A full code editor from the Linux, in the WEB window: files, search, git, a terminal, extensions. Not installed.";
+                ? $"Version {have} · a full code editor from the Linux, in a web window of its own. A Bluetooth keyboard is best; the system keyboard (⌨ in WEB) works for short edits."
+                : "A full code editor from the Linux, in a web window of its own: files, search, git, a terminal, extensions. Not installed.";
             ShowPicker(IdeToolName, hint, items, item =>
             {
                 switch (item.Tag as string)

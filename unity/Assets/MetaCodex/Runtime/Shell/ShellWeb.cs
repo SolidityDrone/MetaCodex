@@ -13,9 +13,9 @@ using IsKeyboard = UnityEngine.InputSystem.Keyboard;
 
 namespace MetaCodex.Shell
 {
-    /// WEB: the in-app browser window (owner 2026-11-10: "it's boring to have the system browser turn the app off";
+    /// WEB: the in-app browser windows (owner 2026-11-10: "it's boring to have the system browser turn the app off";
     /// Horizon OS cannot show its browser beside an immersive app: even its Web Tasks send the app to the background).
-    /// On the headset the page is Android's own WebView (MetaCodexWebView.java): the content of a hardware-accelerated
+    /// On the headset each page is Android's own WebView (MetaCodexWebView.java): the content of a hardware-accelerated
     /// window on a private virtual display that renders into an ImageReader (video plays, the page animates at the
     /// display's rate); each new frame is copied into one buffer (60 a second at most, nothing while the page is still),
     /// uploaded here into a texture on a flat quad (the window never bends: ShellLayout.StaysFlat, so the page and the
@@ -29,128 +29,404 @@ namespace MetaCodex.Shell
     /// (video) fills the page area and EXIT FULL SCREEN takes the address's place. Page dialogs (alert, confirm) open
     /// as the app's dialogs; downloads, file pickers, other apps' links and camera, microphone or location requests
     /// are refused with a toast. Every page the app opens (GO, bookmarks, local servers, terminal links, voice, Lua
-    /// browser.open) opens here; ⇗ sends the page to Horizon OS's browser (sign-in pages that refuse embedded browsers).
+    /// browser.open) opens in a web window; ⇗ sends the page to Horizon OS's browser (sign-in pages that refuse embedded browsers).
     /// A page's dropdown (<select>) and its date, time and colour pickers open as the app's chooser over the page (the
     /// engine's own ones are dialogs the headset never shows): see "a page's dropdowns and pickers" below.
     /// Remote debugging is on: chrome://inspect on the PC (adb) shows the page's console. In the Editor there is no
     /// WebView: the window works, the page area says so.
+    ///
+    /// SEVERAL WINDOWS (owner 2026-11-17: "if I open a video and then the code editor, they fight over the window"): up to
+    /// WebMaxWindows web windows, each with its own page (its own WebView, texture, toolbar, dialogs, chooser, full
+    /// screen). The first is "web" (layouts, tests, voice and the wrist tile name it) and stays when closed (its page
+    /// paused, as before); ❐ NEW WINDOW opens "web-2" or "web-3" beside the window it was pressed on, on its start page;
+    /// closing one of those destroys its WebView (its memory comes back). A page the app opens (OpenBrowser) goes to the
+    /// open window touched last that does not show the code editor (none: the first window, or a new one beside the
+    /// editor's); GO and the address field load in their own window. The code editor (ShellIde) always has a window of
+    /// its own. The hardware keyboard types into the window touched last. A closed window does nothing per frame: no
+    /// poll, no copy, its page paused with the WebView's own onPause (never the process-wide pauseTimers: that would
+    /// freeze the other windows' pages). Tabs come later: a window shows one WebPage; a page could move to another window.
     public sealed partial class MetaCodexShell
     {
         public const int WebW = 1280, WebH = 800, WebLargeW = 1600, WebLargeH = 1000;
         public const float WebLargeScale = 1.25f;
+        /// Web windows at once at most (each page has its own engine and buffers: memory).
+        public const int WebMaxWindows = 3;
+        /// The first web window's panel id; the others are "web-2", "web-3".
+        public const string WebFirstId = "web";
         private static readonly Color32 WebDarkFill = new Color32(6, 16, 28, 255);
-        private UiPanel _web;
-        private UiTextField _webUrl;
-        private UiLabel _webTitle, _webNote;
-        private UiButton _webBack, _webFwd, _webReload, _webGo, _webZoomOut, _webZoomIn, _webExitFull;
-        private int _webPageW = WebW, _webPageH = WebH; // the page's size now (WebW x WebH, or the large one)
-        private bool _webLarge;
-        private UiProgress _webProgress;
-        private WebPage _webPage;
-        private Texture2D _webTex;
-        private Mesh _webQuad;
-        private string _webCurrent = "", _webError = "", _webMode = "", _webTitleShown, _webNoteShown;
-        private bool _webOnStart, _webLoading, _webFull, _webDark, _webReadState;
-        private int _webProgressShown = -1, _webJsShown, _webJsAnswered, _webJsDismissed;
-        private (int id, bool ok) _webLastJsAnswer;
-        private float _webNextState;
-        private Vector2 _webLastHover = new Vector2(-1f, -1f);
-        private (int action, Vector2 page) _webLastTouch = (-1, default);
+
+        /// A page: its engine (the WebView), its picture (the texture), its address and state, its dialog. A window shows
+        /// one page; with tabs a window would hold several and a page could move to another window, so nothing here
+        /// knows its window.
+        private sealed class WebPage
+        {
+            public Texture2D Tex;
+            public int W = WebW, H = WebH;      // the page's size now (WebW x WebH, or the large one)
+            public bool Large;
+            public string Current = "", Error = "", Mode = "";
+            public bool OnStart, Loading, Full, Dark, ReadState, Swallow;
+            public int JsShown, JsAnswered, JsDismissed;
+            public UiPanel Dialog;               // the page's alert or confirm while it shows
+            public float NextState;
+            public Vector2 LastHover = new Vector2(-1f, -1f);
 #if UNITY_ANDROID && !UNITY_EDITOR
-        private AndroidJavaObject _wv;
-        private Unity.Collections.NativeArray<byte> _wvPixels; // a view of the Java buffer (no copy, no unsafe code)
-        // the calls made every frame (poll, endRead) or per pointer move (touch, hover): raw JNI with the method ids
-        // looked up once and one argument array, so they allocate nothing (AndroidJavaObject.Call builds a signature
-        // string and boxes its arguments on every call)
-        private IntPtr _wvPoll, _wvEndRead, _wvTouch, _wvHover, _wvKeyMeta;
-        private readonly jvalue[] _wvArgs = new jvalue[3];
+            public AndroidJavaObject Wv;
+            public Unity.Collections.NativeArray<byte> Pixels;  // a view of the Java buffer (no copy, no unsafe code)
+            public readonly jvalue[] Args = new jvalue[3];      // the raw JNI calls' arguments: one array per page
+#endif
+        }
+
+        /// A web window: its panel, toolbar and page area, and the page it shows.
+        private sealed class WebWindow
+        {
+            public string Id, Title;
+            public UiPanel Panel;
+            public UiTextField Url;
+            public UiLabel TitleLabel, Note;
+            public UiButton Back, Fwd, Reload, Go, ZoomOut, ZoomIn, ExitFull;
+            public UiProgress Progress;
+            public WebPageArea Area;
+            public string TitleShown, NoteShown;
+            public int ProgressShown = -1;
+            public float TouchedAt;              // its last press (or opening): pages the app opens go to the one touched last
+            public readonly WebPage Page = new WebPage();
+            public bool Extra => Id != WebFirstId;
+        }
+
+        private readonly List<WebWindow> _webWins = new List<WebWindow>(WebMaxWindows); // the first window first
+        private WebWindow _webLast;              // the window touched last
+        private UiPanel _webOpener;              // while a new window opens: the window it opens beside (ContextOpener)
+        private Mesh _webQuad;                   // the page's quad: one mesh for every window
+        private (int action, Vector2 page) _webLastTouch = (-1, default);
+        private (int id, bool ok) _webLastJsAnswer;
+#if UNITY_ANDROID && !UNITY_EDITOR
+        // the calls made every frame (poll, endRead) or per pointer move (touch, hover, keys): raw JNI with the method ids
+        // looked up once (one Java class: every page shares them) and each page's own argument array, so they allocate
+        // nothing (AndroidJavaObject.Call builds a signature string and boxes its arguments on every call)
+        private static IntPtr WvPoll, WvEndRead, WvTouch, WvHover, WvKeyMeta;
         private static readonly jvalue[] WvNoArgs = new jvalue[0];
 #endif
 
-        /// The page area: a pointer on it, in page pixels (top-left origin), goes to the page.
-        private sealed class WebPage : UiElement
+        /// A window's page area: a pointer on it, in page pixels (top-left origin), goes to the window's page.
+        private sealed class WebPageArea : UiElement
         {
             private readonly MetaCodexShell _shell;
+            private readonly WebWindow _win;
             public override bool Interactive => true;
-            public WebPage(MetaCodexShell shell) { _shell = shell; }
+            public WebPageArea(MetaCodexShell shell, WebWindow win) { _shell = shell; _win = win; }
             protected override void Build() { }
-            public Vector2 ToPage(Vector2 p) => new Vector2(Mathf.Clamp01((p.x - Rect.x) / Rect.width) * _shell._webPageW, Mathf.Clamp01((p.y - Rect.y) / Rect.height) * _shell._webPageH);
-            public override void OnPress(UiPointerEvent e) => _shell.WebTouch(0, ToPage(e.Point));
-            public override void OnDrag(UiPointerEvent e) => _shell.WebTouch(2, ToPage(e.Point));
-            public override void OnRelease(UiPointerEvent e, bool inside) => _shell.WebTouch(1, ToPage(e.Point));
-            public override void OnHover(UiPointerEvent e) => _shell.WebHover(ToPage(e.Point));
+            public Vector2 ToPage(Vector2 p) => new Vector2(Mathf.Clamp01((p.x - Rect.x) / Rect.width) * _win.Page.W, Mathf.Clamp01((p.y - Rect.y) / Rect.height) * _win.Page.H);
+            public override void OnPress(UiPointerEvent e) => _shell.WebTouch(_win, 0, ToPage(e.Point));
+            public override void OnDrag(UiPointerEvent e) => _shell.WebTouch(_win, 2, ToPage(e.Point));
+            public override void OnRelease(UiPointerEvent e, bool inside) => _shell.WebTouch(_win, 1, ToPage(e.Point));
+            public override void OnHover(UiPointerEvent e) => _shell.WebHover(_win, ToPage(e.Point));
         }
 
+        // ---- the windows
+
+        /// A web window's panel id: "web", "web-2", "web-3" (StaysFlat, placement, voice).
+        public static bool IsWebPanelId(string id) =>
+            id == WebFirstId || id != null && id.Length == 5 && id.StartsWith("web-", StringComparison.Ordinal) && char.IsDigit(id[4]);
+
+        private WebWindow WebFirst => _webWins.Count > 0 ? _webWins[0] : null;
+
+        /// The windows exist: a page or a window asked for during the staged start completes it first (as OpenPanel does).
+        private bool WebReady()
+        {
+            if (_webWins.Count == 0 && _staging) CompleteStartNow();
+            return _webWins.Count > 0;
+        }
+
+        /// The window touched last (the first one before any): the self-tests' window.
+        private WebWindow WebCur => _webLast ?? WebFirst;
+
+        private static bool WebIsOpen(WebWindow w) => w != null && w.Panel != null && w.Panel.IsOpen;
+
+        private WebWindow WebWindowOf(UiPanel p)
+        {
+            if (p == null) return null;
+            foreach (var w in _webWins) if (w.Panel == p) return w;
+            return null;
+        }
+
+        private WebWindow WebWindowById(string id)
+        {
+            foreach (var w in _webWins) if (w.Id == id) return w;
+            return null;
+        }
+
+        /// The open window touched last (`noIde`: not the one that shows the code editor), or null. No allocation.
+        private WebWindow WebLastOpen(bool noIde)
+        {
+            WebWindow best = null;
+            foreach (var w in _webWins)
+                if (WebIsOpen(w) && (!noIde || !WebShowsIde(w)) && (best == null || w.TouchedAt > best.TouchedAt)) best = w;
+            return best;
+        }
+
+        private void WebMarkTouched(WebWindow w)
+        {
+            w.TouchedAt = Time.unscaledTime;
+            _webLast = w;
+        }
+
+        /// UiInputRouter.Touched (a press or grab on any panel, before its element sees it): a thread window gets the
+        /// focus (ShellThreadWindows); a web window becomes the one touched last, and when a page has the hardware
+        /// keyboard, the keys go to this window's page now.
+        private void OnAnyPanelTouched(UiPanel p)
+        {
+            OnPanelTouched(p);
+            if (p == null || !IsWebPanelId(p.Id)) return;
+            var w = WebWindowOf(p);
+            if (w == null) return;
+            WebMarkTouched(w);
+            if (_webKeys) _webKeysWin = w;
+        }
+
+        /// The web windows' panels (BuildPanels; again on an accent change: the open extra windows too, with their pages).
         private void BuildWeb()
         {
             WebChoiceEnd(true); // built again (accent colour): an open chooser goes, the page keeps its value
+            if (_webWins.Count == 0) _webWins.Add(new WebWindow { Id = WebFirstId, Title = "WEB" });
+            foreach (var w in _webWins) BuildWebWindow(w);
+            if (_webLast == null) _webLast = _webWins[0];
+        }
+
+        private void BuildWebWindow(WebWindow w)
+        {
             var t = UiTheme.Current;
-            var p = Panel<UiPanel>("web", "WEB", 0.80f, 0.61f);
-            _web = p;
+            var pg = w.Page;
+            var p = Panel<UiPanel>(w.Id, w.Title, 0.80f, 0.61f);
+            w.Panel = p;
             var c = p.Content;
             float bh = t.ButtonHeight, sq = 0.036f, x = c.x;
-            UiButton B(string text, Action act, float w, UiButtonStyle style = UiButtonStyle.Normal)
+            UiButton B(string text, Action act, float bw, UiButtonStyle style = UiButtonStyle.Normal)
             {
-                var b = p.Add(new UiButton(text, act, style) { Rect = new Rect(x, c.y, w, bh) });
-                x += w + t.Gap;
+                var b = p.Add(new UiButton(text, act, style) { Rect = new Rect(x, c.y, bw, bh) });
+                x += bw + t.Gap;
                 return b;
             }
-            _webBack = B("◀", () => WebCall("back"), sq);       // in full screen: leaves it
-            _webFwd = B("▶", () => WebCall("forward"), sq);
-            _webReload = B("⟳", () => WebCall(_webLoading ? "stop" : "reload"), sq); // ✕ while a page loads: stops it
-            float right = 0.056f + (sq + t.Gap) * 8f; // GO, then ⌨ ⎘ ⏎ ⌫ - + ☰ ⇗
+            w.Back = B("◀", () => WebCall(w, "back"), sq);       // in full screen: leaves it
+            w.Fwd = B("▶", () => WebCall(w, "forward"), sq);
+            w.Reload = B("⟳", () => WebCall(w, w.Page.Loading ? "stop" : "reload"), sq); // ✕ while a page loads: stops it
+            float right = 0.056f + (sq + t.Gap) * 9f; // GO, then ⌨ ⎘ ⏎ ⌫ - + ☰ ❐ ⇗
             float urlX = x;
-            _webUrl = p.Add(new UiTextField("", "", u => OpenBrowser(u), "an address, or words to search") { Rect = new Rect(urlX, c.y, c.xMax - right - urlX - t.Gap, bh) });
+            w.Url = p.Add(new UiTextField("", "", u => WebGo(w, u), "an address, or words to search") { Rect = new Rect(urlX, c.y, c.xMax - right - urlX - t.Gap, bh) });
             x = c.xMax - right;
-            _webGo = B("GO", () => OpenBrowser(_webUrl.Text), 0.056f, UiButtonStyle.Primary);
+            w.Go = B("GO", () => WebGo(w, w.Url.Text), 0.056f, UiButtonStyle.Primary);
             // a page in full screen: one button where the address and GO are
-            _webExitFull = p.Add(new UiButton("EXIT FULL SCREEN", () => WebCall("exitFullscreen"), UiButtonStyle.Primary) { Rect = new Rect(urlX, c.y, c.xMax - right + 0.056f - urlX, bh) });
-            _webExitFull.SetVisible(false);
-            B("⌨", WebType, sq);
-            B("⎘", WebPaste, sq);          // the clipboard (terminals and CLIP fill it) into the page's focused field
-            B("⏎", () => WebKey(66), sq);  // KEYCODE_ENTER
-            B("⌫", () => WebKey(67), sq);  // KEYCODE_DEL
-            _webZoomOut = B("-", () => WebCallInt("zoom", -1), sq);
-            _webZoomIn = B("+", () => WebCallInt("zoom", 1), sq);
+            w.ExitFull = p.Add(new UiButton("EXIT FULL SCREEN", () => WebCall(w, "exitFullscreen"), UiButtonStyle.Primary) { Rect = new Rect(urlX, c.y, c.xMax - right + 0.056f - urlX, bh) });
+            w.ExitFull.SetVisible(false);
+            B("⌨", () => WebType(w), sq);
+            B("⎘", () => WebPaste(w), sq);          // the clipboard (terminals and CLIP fill it) into the page's focused field
+            B("⏎", () => WebKey(w, 66), sq);  // KEYCODE_ENTER
+            B("⌫", () => WebKey(w, 67), sq);  // KEYCODE_DEL
+            w.ZoomOut = B("-", () => WebCallInt(w, "zoom", -1), sq);
+            w.ZoomIn = B("+", () => WebCallInt(w, "zoom", 1), sq);
             B("☰", () => OpenPanel("links"), sq); // bookmarks and local servers, beside this window
-            B("⇗", () => OpenSystemBrowser(_webCurrent), sq);
+            B("❐", () => WebNewWindow(w), sq);    // NEW WINDOW: another web window beside this one
+            B("⇗", () => OpenSystemBrowser(w.Page.Current), sq);
             // how far the page has loaded: a line under the toolbar, only while it loads
-            _webProgress = p.Add(new UiProgress(0f) { Rect = new Rect(c.x, c.y + bh + 0.0008f, c.width, 0.0022f) });
-            _webProgress.SetVisible(false);
-            _webProgressShown = -1;
+            w.Progress = p.Add(new UiProgress(0f) { Rect = new Rect(c.x, c.y + bh + 0.0008f, c.width, 0.0022f) });
+            w.Progress.SetVisible(false);
+            w.ProgressShown = -1;
             float titleY = c.y + bh + t.Gap * 0.5f, top = titleY + 0.016f;
-            _webTitle = p.Add(new UiLabel("", t.SmallSize) { Rect = new Rect(c.x, titleY, c.width, 0.016f), Color = t.TextDim });
-            _webTitleShown = null;
+            w.TitleLabel = p.Add(new UiLabel("", t.SmallSize) { Rect = new Rect(c.x, titleY, c.width, 0.016f), Color = t.TextDim });
+            w.TitleShown = null;
             float pw = c.width, ph = pw * WebH / WebW;
             if (top + ph > c.yMax) { ph = c.yMax - top; pw = ph * WebW / WebH; }
             var area = new Rect(c.x + (c.width - pw) * 0.5f, top, pw, ph);
-            _webPage = p.Add(new WebPage(this) { Rect = area });
-            if (_webTex == null) // kept when the panels are rebuilt (accent colour)
+            w.Area = p.Add(new WebPageArea(this, w) { Rect = area });
+            if (pg.Tex == null) // kept when the panels are rebuilt (accent colour)
             {
-                _webTex = new Texture2D(_webPageW, _webPageH, TextureFormat.RGBA32, false, false) { name = "web page", wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
-                WebFillDark();
+                pg.Tex = new Texture2D(pg.W, pg.H, TextureFormat.RGBA32, false, false) { name = "web page", wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
+                WebFillDark(pg);
             }
-            AddWebQuad(p, area);
+            AddWebQuad(p, area, pg.Tex);
             // the Editor's hint, a fatal error, or the page that did not open (its text over the darkened page)
-            _webNote = p.Add(new UiLabel("", t.BodySize) { Rect = new Rect(area.x + 0.03f, area.y + area.height * 0.25f, area.width - 0.06f, area.height * 0.5f), Align = TextAlignmentOptions.Center, Color = t.TextDim, Wrap = true });
-            _webNoteShown = null;
-            _webFull = false;
-            _webLoading = false;
-            _webReadState = true; // a rebuilt window (accent colour) takes the page's state at once
-            WebRefreshNote();
-            p.Tick += _ => TickWeb();
-            p.Opened += _ =>
-            {
-                WebEnsure();
-                WebCallBool("setPaused", false);
-                if (string.IsNullOrEmpty(_webCurrent)) { WebStartPage(); ProbeLocalServers(); }
-            };
-            p.Closed += _ => { WebCallBool("setPaused", true); WebTakeKeys(false); WebChoiceEnd(true); }; // the page's media pause; no drawing, no copying while closed
-            WebApplyScale();
+            w.Note = p.Add(new UiLabel("", t.BodySize) { Rect = new Rect(area.x + 0.03f, area.y + area.height * 0.25f, area.width - 0.06f, area.height * 0.5f), Align = TextAlignmentOptions.Center, Color = t.TextDim, Wrap = true });
+            w.NoteShown = null;
+            pg.Full = false;
+            pg.Loading = false;
+            pg.ReadState = true; // a rebuilt window (accent colour) takes the page's state at once
+            WebRefreshNote(w);
+            p.Tick += _ => TickWeb(w);
+            p.Opened += _ => WebOpened(w);
+            p.Closed += _ => WebClosed(w);
+            WebApplyScale(w);
         }
 
+        private void WebOpened(WebWindow w)
+        {
+            WebMarkTouched(w);
+            WebEnsure(w);
+            WebCallBool(w, "setPaused", false);
+            if (string.IsNullOrEmpty(w.Page.Current)) { WebStartPage(w); ProbeLocalServers(); }
+        }
+
+        /// A window closed: its keyboard, chooser and dialog go; the first window's page pauses (media, drawing, copying;
+        /// it stays for when the window opens again), another window goes for good with its page.
+        private void WebClosed(WebWindow w)
+        {
+            if (_webKeys && _webKeysWin == w) WebTakeKeys(w, false);
+            if (_wc != null && _wcWin == w) WebChoiceEnd(true);
+            if (w.Extra) WebDestroy(w);
+            else WebCallBool(w, "setPaused", true); // the page's media pause; no drawing, no copying while closed
+            if (_webLast == w) _webLast = WebLastOpen(false) ?? WebFirst;
+        }
+
+        /// An extra window closed: its panel, its page's WebView (its display, buffers and memory) and its texture go.
+        private void WebDestroy(WebWindow w)
+        {
+            var p = w.Panel;
+            var pg = w.Page;
+            _webWins.Remove(w);
+            if (p != null)
+            {
+                if (_panels.TryGetValue(w.Id, out var q) && q == p) _panels.Remove(w.Id);
+                _placed.Remove(w.Id);
+                if (Floating) _slots.Remove(p.transform);
+                Router?.Unregister(p);
+                p.CloseAndDestroy();
+            }
+            if (pg.Dialog != null) { var d = pg.Dialog; pg.Dialog = null; if (d.IsOpen) d.Close(); }
+#if UNITY_ANDROID && !UNITY_EDITOR
+            if (pg.Wv != null)
+            {
+                try { pg.Wv.Call("close"); } catch (Exception ex) { Log(w.Id + " close: " + ex.Message); }
+                pg.Wv.Dispose();
+                pg.Wv = null;
+                pg.Pixels = default;
+            }
+#endif
+            var tex = pg.Tex;
+            pg.Tex = null;
+            if (tex != null) After(1f, () => Destroy(tex)); // after the window's closing (its quad shows it until then)
+            Log(w.Id + ": closed, its page and its memory freed (" + _webWins.Count + " web window" + (_webWins.Count == 1 ? "" : "s") + " left)");
+        }
+
+        /// A new extra window ("web-2", "web-3"), made closed: the caller opens it.
+        private WebWindow WebMakeWindow(int n)
+        {
+            var w = new WebWindow { Id = "web-" + n, Title = "WEB " + n };
+            _webWins.Add(w);
+            BuildWebWindow(w);
+            w.Panel.BaseScale = Vector3.one * UiScaleNow;
+            return w;
+        }
+
+        /// Another window for a page: a free extra slot (made now, still closed), else the first window when it is the
+        /// closed one; null when WebMaxWindows are open (a toast says so).
+        private WebWindow WebSpare()
+        {
+            for (int n = 2; n <= WebMaxWindows; n++)
+            {
+                var x = WebWindowById("web-" + n);
+                if (x == null) return WebMakeWindow(n);
+                if (!WebIsOpen(x)) return x; // made and not opened (never left so): it is the free one
+            }
+            var first = WebFirst;
+            if (first != null && !WebIsOpen(first)) return first;
+            Toast(WebMaxWindows + " web windows are open, the most there can be: close one first", "warn");
+            Log("web: no new window (" + WebMaxWindows + " open)");
+            return null;
+        }
+
+        /// Opens a window (beside `from` when it is placed anew) and makes it the one touched last.
+        private void WebShow(WebWindow w, WebWindow from = null)
+        {
+            if (w?.Panel == null) return;
+            _webOpener = from != null && from != w && WebIsOpen(from) ? from.Panel : null;
+            try { OpenPanel(w.Id); }
+            finally { _webOpener = null; }
+            WebMarkTouched(w);
+        }
+
+        /// ❐ NEW WINDOW: another web window beside this one, on its start page.
+        private void WebNewWindow(WebWindow from)
+        {
+            var w = WebSpare();
+            if (w == null) return;
+            WebShow(w, from);
+            Log(w.Id + ": a new web window beside " + from.Id);
+        }
+
+        /// Where a page the app opens goes: the open window touched last that does not show the code editor; none: the
+        /// first window when it does not show the editor (it opens again), else a new window (beside the editor's).
+        private WebWindow WebForPage()
+        {
+            var w = WebLastOpen(true);
+            if (w != null) return w;
+            var first = WebFirst;
+            if (first == null) return null; // before the shell is up
+            return !WebShowsIde(first) ? first : WebSpare();
+        }
+
+        /// The WEB tile (wrist menu, dock): hides the open window touched last that does not show the code editor; with
+        /// none open, shows the first window (a new one when the first shows the editor).
+        public void ToggleWebWindow()
+        {
+            if (!WebReady()) return;
+            var w = WebLastOpen(true);
+            if (w != null) { ClosePanel(w.Id); return; }
+            var first = WebFirst;
+            if (first == null) return;
+            WebShow(!WebShowsIde(first) ? first : WebSpare() ?? first);
+        }
+
+        /// The WEB tile is lit: a web window without the code editor is open (every frame while the menu shows: no allocation).
+        public bool WebWindowShown => WebLastOpen(true) != null;
+
+        /// Voice's open_panel and close_panel "web": the window the user means (open: as the WEB tile shows one; close:
+        /// the open window touched last). Other panels are themselves.
+        private string WebVoicePanel(string id, bool open)
+        {
+            if (id != WebFirstId) return id;
+            var first = WebFirst;
+            var w = open ? WebLastOpen(true) ?? (first != null && !WebShowsIde(first) ? first : null) : WebLastOpen(false);
+            return w?.Id ?? WebFirstId;
+        }
+
+        /// The web window panels opened from WEB go beside (links, clipboard): the open one touched last.
+        private UiPanel WebOpenPanel() => WebLastOpen(false)?.Panel;
+
+        // ---- the code editor's window (ShellIde)
+
+        private bool WebShowsIde(WebWindow w) => _ideUrl != null && w != null && w.Page.Current.StartsWith(_ideUrl, StringComparison.Ordinal);
+
+        /// The window that shows the code editor (open or not), or null. No allocation (CODE's light, every frame).
+        private WebWindow WebIdeWindow()
+        {
+            if (_ideUrl == null) return null;
+            foreach (var w in _webWins) if (WebShowsIde(w)) return w;
+            return null;
+        }
+
+        /// The code editor's window is open.
+        private bool WebIdeShown => WebIsOpen(WebIdeWindow());
+
+        /// The code editor's own window: the one that shows it, else a new one (a free extra slot first, so the first
+        /// window stays the browser); null with a toast when WebMaxWindows are open.
+        private UiPanel WebIdePanel() => WebReady() ? (WebIdeWindow() ?? WebSpare())?.Panel : null;
+
+        /// Loads `url` in the window of the panel (opening it): the code editor's page in its window.
+        private void WebOpenOn(UiPanel p, string url)
+        {
+            var w = WebWindowOf(p);
+            if (w != null) WebOpenIn(w, WebAddress(url));
+        }
+
+        /// Closes the code editor's window when it is open (CODE, STOP). Its server keeps running.
+        private void WebCloseIde()
+        {
+            var w = WebIdeWindow();
+            if (WebIsOpen(w)) ClosePanel(w.Id);
+        }
+
+        // ---- the page
+
         /// The page's quad, 1 mm in front of the window, its rows top first (the WebView's order).
-        private void AddWebQuad(UiPanel p, Rect area)
+        private void AddWebQuad(UiPanel p, Rect area, Texture2D tex)
         {
             if (_webQuad == null)
             {
@@ -169,7 +445,7 @@ namespace MetaCodex.Shell
             var sh = Resources.Load<Shader>("Shaders/ViewImage") ?? Shader.Find("MetaCodex/ViewImage");
             if (sh != null) mr.sharedMaterial = new Material(sh) { name = "web page" };
             var mpb = new MaterialPropertyBlock();
-            mpb.SetTexture("_MainTex", _webTex);
+            mpb.SetTexture("_MainTex", tex);
             mr.SetPropertyBlock(mpb);
             p.TagRenderer(mr, Vector3.zero); // the window's slot: the page is cast with it
             mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
@@ -178,12 +454,12 @@ namespace MetaCodex.Shell
 
         /// The page area in the window's dark colour (at start, and under a page that did not open). Writes into the
         /// texture's own memory: no array.
-        private void WebFillDark()
+        private static void WebFillDark(WebPage pg)
         {
-            if (_webTex == null) return;
-            var px = _webTex.GetPixelData<Color32>(0);
+            if (pg.Tex == null) return;
+            var px = pg.Tex.GetPixelData<Color32>(0);
             for (int i = 0; i < px.Length; i++) px[i] = WebDarkFill;
-            _webTex.Apply(false, false);
+            pg.Tex.Apply(false, false);
         }
 
         /// What a typed address means: a scheme is kept; localhost, a LAN IP or a host with a port is http; a word with
@@ -201,7 +477,7 @@ namespace MetaCodex.Shell
             return "https://duckduckgo.com/?q=" + Uri.EscapeDataString(u);
         }
 
-        /// Sign-in pages never open in the WEB window: its WebView keeps cookies, so an account's web session would
+        /// Sign-in pages never open in a web window: its WebView keeps cookies, so an account's web session would
         /// stay inside MetaCodex (the app never handles or keeps sign-in credentials; the agent CLIs sign in through
         /// Horizon OS's browser, which shares the loopback with the userland, and keep their own tokens). Google also
         /// refuses sign-in inside embedded browsers. A host here matches itself and its subdomains.
@@ -223,71 +499,104 @@ namespace MetaCodex.Shell
             return false;
         }
 
-        /// Opens a page in the WEB window (every page the app opens comes here; sign-in pages go to the system browser).
+        /// Opens a page in a web window (every page the app opens comes here; sign-in pages go to the system browser):
+        /// the open window touched last that does not show the code editor (WebForPage).
         public void OpenBrowser(string url)
         {
             string u = WebAddress(url);
             if (IsSignInPage(u)) { OpenSystemBrowser(u); return; }
-            OpenPanel("web");
-            if (u.Length == 0) return;
-            _webCurrent = u;
-            _webOnStart = false;
-            _webUrl?.Set(u);
-            if (!WebEnsure()) { OpenSystemBrowser(u); return; } // no WebView on this device: the system's browser after all
-            WebCall("load", u);
+            var w = WebReady() ? WebForPage() : null;
+            if (w == null) return;
+            WebOpenIn(w, u, WebIsOpen(w) ? null : WebIdeWindow());
         }
 
-        /// Opens a page in the WEB window at a size: large is 1.25 times the window with a 1600 x 1000 page (code editors:
+        /// Opens a page in a web window at a size: large is 1.25 times the window with a 1600 x 1000 page (code editors:
         /// more lines and columns, the text as sharp); not large is the usual 1280 x 800. OpenBrowser(url) keeps the size.
         public void OpenBrowser(string url, bool large)
         {
-            WebSetLarge(large);
-            OpenBrowser(url);
-            WebApplyScale(); // after opening: the window has its large scale at once
+            string u = WebAddress(url);
+            if (IsSignInPage(u)) { OpenSystemBrowser(u); return; }
+            var w = WebReady() ? WebForPage() : null;
+            if (w == null) return;
+            WebSetLarge(w, large);
+            WebOpenIn(w, u, WebIsOpen(w) ? null : WebIdeWindow());
+            WebApplyScale(w); // after opening: the window has its large scale at once
         }
 
-        /// The window's size (large or not): the page's pixels follow (the WebView gets a display of that size, the
-        /// texture is made again), the window's scale is the UI scale times 1.25 while large.
-        public void WebSetLarge(bool large)
+        /// GO and the address field: the page in this window.
+        private void WebGo(WebWindow w, string typed)
         {
-            bool was = _webLarge;
-            _webLarge = large;
-            int w = large ? WebLargeW : WebW, h = large ? WebLargeH : WebH;
-            if (w != _webPageW || h != _webPageH)
+            string u = WebAddress(typed);
+            if (IsSignInPage(u)) { OpenSystemBrowser(u); return; }
+            WebOpenIn(w, u);
+        }
+
+        /// A page in this window (opened beside `from` when it is placed anew; "" only opens it).
+        private void WebOpenIn(WebWindow w, string u, WebWindow from = null)
+        {
+            var pg = w.Page;
+            if (u.Length > 0) { pg.Current = u; pg.OnStart = false; } // before it opens: a new window shows no start page first
+            WebShow(w, from);
+            if (u.Length == 0) return;
+            w.Url?.Set(u);
+            if (!WebEnsure(w)) { OpenSystemBrowser(u); return; } // no WebView on this device: the system's browser after all
+            WebCall(w, "load", u);
+        }
+
+        /// The size of the window touched last (large or not): see WebSetLarge(window, large).
+        public void WebSetLarge(bool large) { var w = WebCur; if (w != null) WebSetLarge(w, large); }
+
+        /// A window's size (large or not): the page's pixels follow (the WebView gets a display of that size, the
+        /// texture is made again), the window's scale is the UI scale times 1.25 while large.
+        private void WebSetLarge(WebWindow w, bool large)
+        {
+            var pg = w.Page;
+            bool was = pg.Large;
+            pg.Large = large;
+            int pw = large ? WebLargeW : WebW, ph = large ? WebLargeH : WebH;
+            if (pw != pg.W || ph != pg.H)
             {
-                _webPageW = w;
-                _webPageH = h;
-                if (_webTex != null) { _webTex.Reinitialize(w, h); WebFillDark(); }
+                pg.W = pw;
+                pg.H = ph;
+                if (pg.Tex != null) { pg.Tex.Reinitialize(pw, ph); WebFillDark(pg); }
 #if UNITY_ANDROID && !UNITY_EDITOR
-                if (_wv != null) try { _wv.Call("resize", w, h); } catch (Exception ex) { Log("web resize: " + ex.Message); }
+                if (pg.Wv != null) try { pg.Wv.Call("resize", pw, ph); } catch (Exception ex) { Log(w.Id + " resize: " + ex.Message); }
 #endif
             }
-            if (_web != null && was && !large) _web.BaseScale = Vector3.one * UiScaleNow;
-            WebApplyScale();
+            if (w.Panel != null && was && !large) w.Panel.BaseScale = Vector3.one * UiScaleNow;
+            WebApplyScale(w);
         }
 
         /// While large, the window keeps 1.25 times the UI scale (the shell sets every window back to the UI scale when
         /// it changes). Not large: the window's scale is left alone.
-        private void WebApplyScale()
+        private void WebApplyScale(WebWindow w)
         {
-            if (!_webLarge || _web == null) return;
+            if (!w.Page.Large || w.Panel == null) return;
             float s = UiScaleNow * WebLargeScale;
-            if (Mathf.Abs(_web.BaseScale.x - s) > 1e-4f) _web.BaseScale = Vector3.one * s;
+            if (Mathf.Abs(w.Panel.BaseScale.x - s) > 1e-4f) w.Panel.BaseScale = Vector3.one * s;
         }
 
-        /// The page in Horizon OS's browser (the app goes to the background while it shows).
+        /// The page in Horizon OS's browser (the app goes to the background while it shows); no address: the page of the
+        /// window touched last.
         public void OpenSystemBrowser(string url)
         {
-            string u = WebAddress(string.IsNullOrEmpty(url) ? _webCurrent : url);
+            string u = WebAddress(string.IsNullOrEmpty(url) ? WebCur?.Page.Current : url);
             if (u.Length == 0) { Toast("No page open", "warn"); return; }
             bool ok = SystemBridge.OpenBrowser(u);
             Toast(ok ? "Opening " + u + " in the system browser" : SystemBridge.LastResult, ok ? "info" : "warn");
         }
 
+        /// A window shows its start page (kept under the old field's name: ShellPanels refreshes the start pages when the
+        /// local servers were probed).
+        private bool _webOnStart { get { foreach (var w in _webWins) if (w.Page.OnStart) return true; return false; } }
+
+        /// Every window on its start page lists the bookmarks and local servers again.
+        private void WebStartPage() { foreach (var w in _webWins) if (w.Page.OnStart) WebStartPage(w); }
+
         /// The start page: bookmarks and the local servers found, as big links.
-        private void WebStartPage()
+        private void WebStartPage(WebWindow w)
         {
-            _webOnStart = true;
+            w.Page.OnStart = true;
             var sb = new StringBuilder();
             sb.Append("<html><head><meta name=viewport content='width=device-width'><style>body{background:#06101c;color:#cfeaff;font-family:sans-serif;margin:40px 56px}" +
                       "h1{color:#8febff;letter-spacing:4px;font-size:30px}h2{color:#9dbdd2;font-size:20px;margin-top:34px}a{display:block;padding:18px 24px;margin:10px 0;" +
@@ -299,81 +608,93 @@ namespace MetaCodex.Shell
             if (local == null || local.Count == 0) sb.Append("<p>None found on the usual dev ports (3000, 5173, 8080…).</p>");
             else foreach (var l in local) sb.Append("<a href=\"").Append(Escape(l)).Append("\">").Append(Escape(l)).Append("</a>");
             sb.Append("</body></html>");
-            _webTitle?.Set("start page");
-            _webTitleShown = "start page";
-            _webUrl?.Set("");
-            WebCall("loadHtml", sb.ToString(), "about:blank");
+            w.TitleLabel?.Set("start page");
+            w.TitleShown = "start page";
+            w.Url?.Set("");
+            WebCall(w, "loadHtml", sb.ToString(), "about:blank");
         }
 
         private static string Escape(string s) => (s ?? "").Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;").Replace("\"", "&quot;");
 
         /// ⌨: what is typed on the system keyboard goes into the page's focused field (tap the field first).
-        private void WebType() => UiKeyboard.Edit("", false, null, text => { if (!string.IsNullOrEmpty(text)) WebCall("text", text); }, "Type into the page");
+        private void WebType(WebWindow w) => UiKeyboard.Edit("", false, null, text => { if (!string.IsNullOrEmpty(text)) WebCall(w, "text", text); }, "Type into the page");
 
         /// ⎘ (and Ctrl+V on a hardware keyboard): the clipboard into the page, as a paste the page can take (code
         /// editors) or typed into its focused field.
-        private void WebPaste()
+        private void WebPaste(WebWindow w)
         {
             string clip = GUIUtility.systemCopyBuffer;
             if (string.IsNullOrEmpty(clip)) { Toast("The clipboard is empty", "info"); return; }
             _webLastPaste = clip;
-            WebCall("paste", clip);
+            WebCall(w, "paste", clip);
         }
 
-        private void WebKey(int code) => WebCallInt("key", code);
+        private void WebKey(WebWindow w, int code) => WebCallInt(w, "key", code);
 
-        private void WebTouch(int action, Vector2 page)
+        private void WebTouch(WebWindow w, int action, Vector2 page)
         {
-            // a press on the page while a chooser is open closes it (the page keeps its value), as a tap beside a
-            // dropdown does; that touch goes nowhere, up to its release
-            if (action == 0) { _webSwallow = _wcPanel != null; if (_webSwallow) { WebChoiceEnd(true); return; } }
-            else if (_webSwallow) { if (action == 1) _webSwallow = false; return; }
+            var pg = w.Page;
+            // a press on the page while its chooser is open closes it (the page keeps its value), as a tap beside a
+            // dropdown does; that touch goes nowhere, up to its release. A press on another window's page closes it too
+            // and goes on to that page.
+            if (action == 0)
+            {
+                pg.Swallow = _wcPanel != null && _wcWin == w;
+                if (_wcPanel != null) { WebChoiceEnd(true); if (pg.Swallow) return; }
+            }
+            else if (pg.Swallow) { if (action == 1) pg.Swallow = false; return; }
             _webLastTouch = (action, page);
-            if (action == 0) WebTakeKeys(true); // a hardware keyboard types into the page now
+            if (action == 0) WebTakeKeys(w, true); // a hardware keyboard types into this page now
 #if UNITY_ANDROID && !UNITY_EDITOR
-            if (_wv == null || _wvTouch == IntPtr.Zero) return;
-            _wvArgs[0].i = action;
-            _wvArgs[1].f = page.x;
-            _wvArgs[2].f = page.y;
-            AndroidJNI.CallVoidMethod(_wv.GetRawObject(), _wvTouch, _wvArgs);
+            if (pg.Wv == null || WvTouch == IntPtr.Zero) return;
+            pg.Args[0].i = action;
+            pg.Args[1].f = page.x;
+            pg.Args[2].f = page.y;
+            AndroidJNI.CallVoidMethod(pg.Wv.GetRawObject(), WvTouch, pg.Args);
             WebJniOk();
 #endif
         }
 
-        private void WebHover(Vector2 page)
+        private void WebHover(WebWindow w, Vector2 page)
         {
-            if ((page - _webLastHover).sqrMagnitude < 4f) return; // only when it moved two pixels
-            _webLastHover = page;
+            var pg = w.Page;
+            if ((page - pg.LastHover).sqrMagnitude < 4f) return; // only when it moved two pixels
+            pg.LastHover = page;
 #if UNITY_ANDROID && !UNITY_EDITOR
-            if (_wv == null || _wvHover == IntPtr.Zero) return;
-            _wvArgs[0].f = page.x;
-            _wvArgs[1].f = page.y;
-            AndroidJNI.CallVoidMethod(_wv.GetRawObject(), _wvHover, _wvArgs);
+            if (pg.Wv == null || WvHover == IntPtr.Zero) return;
+            pg.Args[0].f = page.x;
+            pg.Args[1].f = page.y;
+            AndroidJNI.CallVoidMethod(pg.Wv.GetRawObject(), WvHover, pg.Args);
             WebJniOk();
 #endif
         }
 
-        /// The WebView on the headset, made the first time the window opens (false where there is none: a failure).
-        private bool WebEnsure()
+        /// The page's WebView on the headset, made the first time its window opens (false where there is none: a failure).
+        private bool WebEnsure(WebWindow w)
         {
 #if UNITY_ANDROID && !UNITY_EDITOR
-            if (_webError.StartsWith("webview:")) return false; // it failed once: the system browser from now on
-            if (_wv != null) return true;
+            var pg = w.Page;
+            if (pg.Error.StartsWith("webview:")) return false; // it failed once: the system browser from now on
+            if (pg.Wv != null) return true;
             try
             {
                 using (var player = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
                 using (var activity = player.GetStatic<AndroidJavaObject>("currentActivity"))
-                    _wv = new AndroidJavaObject("com.pnncl.metacodex.web.MetaCodexWebView", activity, _webPageW, _webPageH);
-                _wv.Call("setExternal", string.Join("\n", SignInHosts), string.Join("\n", SignInPaths));
-                using (var buf = _wv.Call<AndroidJavaObject>("pixels")) _wvPixels = AndroidJNI.GetDirectByteBuffer(buf.GetRawObject());
-                _wvPoll = WebMethod("poll", "()I");
-                _wvEndRead = WebMethod("endRead", "()V");
-                _wvTouch = WebMethod("touch", "(IFF)V");
-                _wvHover = WebMethod("hover", "(FF)V");
-                _wvKeyMeta = WebMethod("keyMeta", "(II)V");
+                    pg.Wv = new AndroidJavaObject("com.pnncl.metacodex.web.MetaCodexWebView", activity, pg.W, pg.H);
+                pg.Wv.Call("setExternal", string.Join("\n", SignInHosts), string.Join("\n", SignInPaths));
+                using (var buf = pg.Wv.Call<AndroidJavaObject>("pixels")) pg.Pixels = AndroidJNI.GetDirectByteBuffer(buf.GetRawObject());
+                if (WvPoll == IntPtr.Zero) // one class: looked up once, for every page
+                {
+                    WvPoll = WebMethod(pg.Wv, "poll", "()I");
+                    WvEndRead = WebMethod(pg.Wv, "endRead", "()V");
+                    WvTouch = WebMethod(pg.Wv, "touch", "(IFF)V");
+                    WvHover = WebMethod(pg.Wv, "hover", "(FF)V");
+                    WvKeyMeta = WebMethod(pg.Wv, "keyMeta", "(II)V");
+                }
+                Log(w.Id + ": a page engine made (" + _webWins.Count + " web window" + (_webWins.Count == 1 ? "" : "s") + ")");
                 return true;
             }
-            catch (Exception ex) { Log("web: " + ex.Message); _webError = "webview: " + ex.Message; _wv = null; WebRefreshNote(); return false; }
+            catch (Exception ex) { Log(w.Id + ": " + ex.Message); pg.Error = "webview: " + ex.Message; pg.Wv = null; WebRefreshNote(w); return false; }
 #else
             return true; // the Editor: the window works without a page
 #endif
@@ -390,92 +711,96 @@ namespace MetaCodex.Shell
             return false;
         }
 
-        private IntPtr WebMethod(string name, string signature)
+        private IntPtr WebMethod(AndroidJavaObject wv, string name, string signature)
         {
-            IntPtr id = AndroidJNI.GetMethodID(_wv.GetRawClass(), name, signature);
+            IntPtr id = AndroidJNI.GetMethodID(wv.GetRawClass(), name, signature);
             if (WebJniOk() && id != IntPtr.Zero) return id;
             Log("web: no method " + name + signature);
             return IntPtr.Zero;
         }
 #endif
 
-        private void WebCall(string method, params object[] args)
+        private void WebCall(WebWindow w, string method, params object[] args)
         {
 #if UNITY_ANDROID && !UNITY_EDITOR
-            if (_wv == null && !WebEnsure()) return;
-            try { _wv.Call(method, args); } catch (Exception ex) { Log("web " + method + ": " + ex.Message); }
+            var pg = w.Page;
+            if (pg.Wv == null && !WebEnsure(w)) return;
+            try { pg.Wv.Call(method, args); } catch (Exception ex) { Log(w.Id + " " + method + ": " + ex.Message); }
 #endif
         }
 
-        private void WebCallBool(string method, bool v)
+        private void WebCallBool(WebWindow w, string method, bool v)
         {
 #if UNITY_ANDROID && !UNITY_EDITOR
-            if (_wv != null) try { _wv.Call(method, v); } catch (Exception) { }
+            if (w.Page.Wv != null) try { w.Page.Wv.Call(method, v); } catch (Exception) { }
 #endif
         }
 
-        private void WebCallInt(string method, int v)
+        private void WebCallInt(WebWindow w, string method, int v)
         {
 #if UNITY_ANDROID && !UNITY_EDITOR
-            if (_wv != null) try { _wv.Call(method, v); } catch (Exception) { }
+            if (w.Page.Wv != null) try { w.Page.Wv.Call(method, v); } catch (Exception) { }
 #endif
         }
 
-        /// While the window is open, each frame: a new frame of the page into the texture (only when there is one; never
+        /// While a window is open, each frame: a new frame of its page into the texture (only when there is one; never
         /// waits: while the copy thread writes, the frame comes next time; nothing allocated), the toolbar from the page's
-        /// state when it changed (four times a second at most).
-        private void TickWeb()
+        /// state when it changed (four times a second at most). A closed window's panel does not tick: nothing at all.
+        private void TickWeb(WebWindow w)
         {
-            WebDialogTick();
-            WebKeysTick();
-            WebApplyScale();
-            if (_wcPanel != null) WebChoiceFollow();
+            var pg = w.Page;
+            WebDialogTick(w);
+            if (_webKeysWin == w) WebKeysTick(w);
+            WebApplyScale(w);
+            if (_wcPanel != null && _wcWin == w) WebChoiceFollow();
 #if UNITY_ANDROID && !UNITY_EDITOR
-            if (_wv == null || _webTex == null || _wvPoll == IntPtr.Zero) return;
-            IntPtr obj = _wv.GetRawObject();
-            int bits = AndroidJNI.CallIntMethod(obj, _wvPoll, WvNoArgs);
+            if (pg.Wv == null || pg.Tex == null || WvPoll == IntPtr.Zero) return;
+            IntPtr obj = pg.Wv.GetRawObject();
+            int bits = AndroidJNI.CallIntMethod(obj, WvPoll, WvNoArgs);
             if (!WebJniOk()) return;
-            if ((bits & 4) != 0) { WebTakeSize(); return; } // a new page size: its buffer, the texture (once per resize)
+            if ((bits & 4) != 0) { WebTakeSize(w); return; } // a new page size: its buffer, the texture (once per resize)
             if ((bits & 1) != 0) // a new frame, the buffer locked until endRead
             {
-                bool upload = !_webDark && _wvPixels.IsCreated && _wvPixels.Length >= _webTex.width * _webTex.height * 4;
-                try { if (upload) _webTex.LoadRawTextureData(_wvPixels); }
-                catch (Exception ex) { upload = false; Log("web frame: " + ex.Message); }
-                finally { AndroidJNI.CallVoidMethod(obj, _wvEndRead, WvNoArgs); WebJniOk(); }
-                if (upload) _webTex.Apply(false, false);
+                bool upload = !pg.Dark && pg.Pixels.IsCreated && pg.Pixels.Length >= pg.Tex.width * pg.Tex.height * 4;
+                try { if (upload) pg.Tex.LoadRawTextureData(pg.Pixels); }
+                catch (Exception ex) { upload = false; Log(w.Id + " frame: " + ex.Message); }
+                finally { AndroidJNI.CallVoidMethod(obj, WvEndRead, WvNoArgs); WebJniOk(); }
+                if (upload) pg.Tex.Apply(false, false);
             }
-            if ((bits & 8) != 0) WebChoiceTake(); // a page's dropdown or picker opened (or the page it was on is gone)
-            if (((bits & 2) == 0 && !_webReadState) || Time.unscaledTime < _webNextState) return;
-            _webNextState = Time.unscaledTime + 0.25f;
-            _webReadState = false;
+            if ((bits & 8) != 0) WebChoiceTake(w); // a page's dropdown or picker opened (or the page it was on is gone)
+            if (((bits & 2) == 0 && !pg.ReadState) || Time.unscaledTime < pg.NextState) return;
+            pg.NextState = Time.unscaledTime + 0.25f;
+            pg.ReadState = false;
             string state;
-            try { state = _wv.Call<string>("state"); } catch (Exception) { return; }
-            WebApplyState(state);
+            try { state = pg.Wv.Call<string>("state"); } catch (Exception) { return; }
+            WebApplyState(w, state);
 #endif
         }
 
 #if UNITY_ANDROID && !UNITY_EDITOR
         /// The WebView has a new page size: a view of its new buffer, the texture at that size, then the old buffer goes.
-        private void WebTakeSize()
+        private void WebTakeSize(WebWindow w)
         {
+            var pg = w.Page;
             try
             {
-                int w = _wv.Call<int>("width"), h = _wv.Call<int>("height");
-                using (var buf = _wv.Call<AndroidJavaObject>("pixels")) _wvPixels = AndroidJNI.GetDirectByteBuffer(buf.GetRawObject());
-                if (_webTex.width != w || _webTex.height != h) { _webTex.Reinitialize(w, h); WebFillDark(); }
-                _wv.Call("sizeTaken");
-                Log("web: page " + w + "x" + h);
+                int pw = pg.Wv.Call<int>("width"), ph = pg.Wv.Call<int>("height");
+                using (var buf = pg.Wv.Call<AndroidJavaObject>("pixels")) pg.Pixels = AndroidJNI.GetDirectByteBuffer(buf.GetRawObject());
+                if (pg.Tex.width != pw || pg.Tex.height != ph) { pg.Tex.Reinitialize(pw, ph); WebFillDark(pg); }
+                pg.Wv.Call("sizeTaken");
+                Log(w.Id + ": page " + pw + "x" + ph);
             }
-            catch (Exception ex) { Log("web size: " + ex.Message); }
+            catch (Exception ex) { Log(w.Id + " size: " + ex.Message); }
         }
 #endif
 
         private static string WebField(string[] st, int i) => i < st.Length ? st[i] : "";
 
-        /// The page's state (MetaCodexWebView.state(): tab separated) onto the toolbar, the note and the dialogs. Only
+        /// The page's state (MetaCodexWebView.state(): tab separated) onto its window's toolbar, note and dialogs. Only
         /// when it changed; labels only when their text changes.
-        private void WebApplyState(string state)
+        private void WebApplyState(WebWindow w, string state)
         {
+            var pg = w.Page;
             var st = (state ?? "").Split('\t');
             if (st.Length < 7) return;
             string signIn = WebField(st, 7), notice = WebField(st, 8);
@@ -486,88 +811,95 @@ namespace MetaCodex.Shell
             }
             if (notice.Length > 0) Toast(notice, "info"); // a download, a refused permission, another app's link
             string url = st[0];
-            if (url.Length > 0 && url != _webCurrent && !url.StartsWith("data:") && url != "about:blank") { _webCurrent = url; _webOnStart = false; _webUrl?.Set(url); }
+            if (url.Length > 0 && url != pg.Current && !url.StartsWith("data:") && url != "about:blank") { pg.Current = url; pg.OnStart = false; w.Url?.Set(url); }
             bool loading = st[5] == "1";
-            if (loading != _webLoading) { _webLoading = loading; _webReload?.SetText(loading ? "✕" : "⟳"); _webProgress?.SetVisible(loading); }
+            if (loading != pg.Loading) { pg.Loading = loading; w.Reload?.SetText(loading ? "✕" : "⟳"); w.Progress?.SetVisible(loading); }
             int.TryParse(st[2], out int progress);
-            if (progress != _webProgressShown) { _webProgressShown = progress; _webProgress?.Set(progress / 100f); }
-            string title = (loading ? "loading · " : "") + (_webOnStart ? "start page" : st[1]);
-            if (title != _webTitleShown) { _webTitleShown = title; _webTitle?.Set(title); }
-            _webBack?.SetEnabled(st[3] == "1" || WebField(st, 9) == "1");
-            _webFwd?.SetEnabled(st[4] == "1");
-            WebFullscreen(WebField(st, 9) == "1");
+            if (progress != w.ProgressShown) { w.ProgressShown = progress; w.Progress?.Set(progress / 100f); }
+            string title = (loading ? "loading · " : "") + (pg.OnStart ? "start page" : st[1]);
+            if (title != w.TitleShown) { w.TitleShown = title; w.TitleLabel?.Set(title); }
+            w.Back?.SetEnabled(st[3] == "1" || WebField(st, 9) == "1");
+            w.Fwd?.SetEnabled(st[4] == "1");
+            WebFullscreen(w, WebField(st, 9) == "1");
             string mode = WebField(st, 10);
-            if (mode.Length > 0 && mode != _webMode)
+            if (mode.Length > 0 && mode != pg.Mode)
             {
-                _webMode = mode;
-                Log(mode == "display" ? "web: capture display (the page renders on its own virtual display)"
-                    : "web: capture " + mode + " (fallback: video may stop after a few frames; logcat tag MetaCodexWeb says why)");
+                pg.Mode = mode;
+                Log(mode == "display" ? w.Id + ": capture display (the page renders on its own virtual display)"
+                    : w.Id + ": capture " + mode + " (fallback: video may stop after a few frames; logcat tag MetaCodexWeb says why)");
             }
-            if (!_webError.StartsWith("webview:")) _webError = st[6];
-            WebRefreshNote();
+            if (!pg.Error.StartsWith("webview:")) pg.Error = st[6];
+            WebRefreshNote(w);
             int.TryParse(WebField(st, 12), out int jsId);
-            WebDialog(WebField(st, 11), jsId, WebField(st, 13));
+            WebDialog(w, WebField(st, 11), jsId, WebField(st, 13));
         }
 
         /// A page in full screen (a video's ⛶): EXIT FULL SCREEN where the address and GO are; ◀ leaves it too.
-        private void WebFullscreen(bool on)
+        private void WebFullscreen(WebWindow w, bool on)
         {
-            if (on == _webFull) return;
-            _webFull = on;
-            _webUrl?.SetVisible(!on);
-            _webGo?.SetVisible(!on);
-            _webExitFull?.SetVisible(on);
-            _webZoomOut?.SetEnabled(!on);
-            _webZoomIn?.SetEnabled(!on);
+            if (on == w.Page.Full) return;
+            w.Page.Full = on;
+            w.Url?.SetVisible(!on);
+            w.Go?.SetVisible(!on);
+            w.ExitFull?.SetVisible(on);
+            w.ZoomOut?.SetEnabled(!on);
+            w.ZoomIn?.SetEnabled(!on);
         }
 
         /// The note over the page: a page that did not open (why, its address, what to do; the page under it dark and
         /// not updated until the next page starts), a WebView that could not be made, or the Editor's hint.
-        private void WebRefreshNote()
+        private void WebRefreshNote(WebWindow w)
         {
-            bool fatal = _webError.StartsWith("webview:");
-            bool failed = !fatal && _webError.Length > 0;
-            if (failed != _webDark) { _webDark = failed; if (failed) WebFillDark(); }
-            string note = fatal ? "⚠ " + _webError
-                : failed ? "⚠ This page did not open\n" + _webError + "\n\n" + _webCurrent + "\n\n⟳ tries again · ◀ goes back"
+            var pg = w.Page;
+            bool fatal = pg.Error.StartsWith("webview:");
+            bool failed = !fatal && pg.Error.Length > 0;
+            if (failed != pg.Dark) { pg.Dark = failed; if (failed) WebFillDark(pg); }
+            string note = fatal ? "⚠ " + pg.Error
+                : failed ? "⚠ This page did not open\n" + pg.Error + "\n\n" + pg.Current + "\n\n⟳ tries again · ◀ goes back"
                 : Application.isEditor ? "The page shows on the headset (Android's WebView). ⇗ opens it in your browser here." : "";
-            if (note == _webNoteShown) return;
-            _webNoteShown = note;
-            _webNote?.Set(note);
+            if (note == w.NoteShown) return;
+            w.NoteShown = note;
+            w.Note?.Set(note);
         }
 
-        /// The page's alert or confirm as the app's dialog over the window; OK or CANCEL is the page's answer, a dialog
+        /// The page's alert or confirm as the app's dialog over its window; OK or CANCEL is the page's answer, a dialog
         /// closed with its ✕ answers CANCEL (the page waits for an answer).
-        private void WebDialog(string kind, int id, string message)
+        private void WebDialog(WebWindow w, string kind, int id, string message)
         {
-            if (kind.Length == 0 || id == 0 || id == _webJsShown || Router == null) return;
-            _webJsShown = id;
+            var pg = w.Page;
+            if (kind.Length == 0 || id == 0 || id == pg.JsShown || Router == null) return;
+            pg.JsShown = id;
             string text = message.Length > 400 ? message.Substring(0, 400) + "…" : message;
             var dlg = UiModal.Show(Router, Head, "THE PAGE SAYS", text, kind == "confirm" ? new[] { "OK", "CANCEL" } : new[] { "OK" },
-                k => WebAnswer(id, k == 0), _root, _web);
+                k => WebAnswer(w, id, k == 0), _root, w.Panel);
             // closed by any means (its buttons close it before they answer): no answer by the next frame is CANCEL
-            if (dlg != null) dlg.Closed += _ => _webJsDismissed = id;
+            if (dlg == null) return;
+            pg.Dialog = dlg;
+            dlg.Closed += _ => { pg.JsDismissed = id; if (pg.Dialog == dlg) pg.Dialog = null; };
         }
 
-        private void WebAnswer(int id, bool ok)
+        private void WebAnswer(WebWindow w, int id, bool ok)
         {
-            if (_webJsAnswered == id) return;
-            _webJsAnswered = id;
+            var pg = w.Page;
+            if (pg.JsAnswered == id) return;
+            pg.JsAnswered = id;
             _webLastJsAnswer = (id, ok);
 #if UNITY_ANDROID && !UNITY_EDITOR
-            if (_wv != null) try { _wv.Call("jsAnswer", id, ok); } catch (Exception ex) { Log("web jsAnswer: " + ex.Message); }
+            if (pg.Wv != null) try { pg.Wv.Call("jsAnswer", id, ok); } catch (Exception ex) { Log(w.Id + " jsAnswer: " + ex.Message); }
 #endif
         }
 
-        private void WebDialogTick()
+        private void WebDialogTick(WebWindow w)
         {
-            if (_webJsDismissed == 0) return;
-            int id = _webJsDismissed;
-            _webJsDismissed = 0;
-            if (_webJsAnswered != id) WebAnswer(id, false);
+            var pg = w.Page;
+            if (pg.JsDismissed == 0) return;
+            int id = pg.JsDismissed;
+            pg.JsDismissed = 0;
+            if (pg.JsAnswered != id) WebAnswer(w, id, false);
         }
 
-        // ---- a hardware keyboard into the page (after a touch on the page, until a terminal or a text field takes the keys)
+        // ---- a hardware keyboard into the page (after a touch on the page, until a terminal or a text field takes the
+        // keys); one window's page has it at a time: the window touched last (OnAnyPanelTouched moves it)
 
         /// Keys with no text: KeyEvent codes (Enter, Backspace, Tab, Esc, arrows, Home / End, Page Up / Down, Insert,
         /// Delete, F1-F12), sent with the modifiers held; they repeat while held.
@@ -592,6 +924,7 @@ namespace MetaCodex.Shell
         };
         private const int WebKeyV = 50, WebKeyInsert = 124, WebKeyEscape = 111;
         private bool _webKeys, _webTermWasOn, _webFocusHooked;
+        private WebWindow _webKeysWin; // the window whose page has the keyboard
         private IsKeyboard _webKb;
         private readonly StringBuilder _webTyped = new StringBuilder(32);
         private IsKey _webRepeatKey;
@@ -600,24 +933,26 @@ namespace MetaCodex.Shell
         private string _webLastPaste;
         private (int code, int mods) _webLastKey = (-1, 0);
 
-        /// The page takes the hardware keyboard (a touch on it) or gives it back (a terminal focused, a text field or the
-        /// terminal's system keyboard opened, the window closed). While the page has it, the terminal's keyboard input is
-        /// off, so a key never types in both.
-        private void WebTakeKeys(bool on)
+        /// A page takes the hardware keyboard (a touch on it; already taken: it moves to this page) or gives it back (a
+        /// terminal focused, a text field or the terminal's system keyboard opened, the window closed). While a page has
+        /// it, the terminal's keyboard input is off, so a key never types in both.
+        private void WebTakeKeys(WebWindow w, bool on)
         {
-            if (on == _webKeys) return;
+            if (on == _webKeys) { if (on && w != null) _webKeysWin = w; return; }
             var input = app != null ? app.Input : null;
             if (on)
             {
-                if (UiKeyboard.Active) return;
+                if (UiKeyboard.Active || w == null) return;
                 _webKeys = true;
+                _webKeysWin = w;
                 if (input != null) { _webTermWasOn = input.enabled; input.enabled = false; }
-                if (!_webFocusHooked && app != null) { _webFocusHooked = true; app.FocusChanged += _ => WebTakeKeys(false); }
+                if (!_webFocusHooked && app != null) { _webFocusHooked = true; app.FocusChanged += _ => WebTakeKeys(null, false); }
                 WebHookKeyboard(IsKeyboard.current);
             }
             else
             {
                 _webKeys = false;
+                _webKeysWin = null;
                 WebHookKeyboard(null);
                 _webTyped.Clear();
                 _webRepeatCode = -1;
@@ -642,23 +977,23 @@ namespace MetaCodex.Shell
             _webTyped.Append(ch);
         }
 
-        /// Each frame while the page has the keyboard: the text typed since the last frame (as key events), the keys
-        /// pressed (with their modifiers), a held key repeating. No allocation unless something was typed.
-        private void WebKeysTick()
+        /// Each frame while this window's page has the keyboard: the text typed since the last frame (as key events),
+        /// the keys pressed (with their modifiers), a held key repeating. No allocation unless something was typed.
+        private void WebKeysTick(WebWindow w)
         {
             if (!_webKeys) return;
             var input = app != null ? app.Input : null;
-            if (UiKeyboard.Active || (input != null && SystemKeyboard.IsOpenFor(input))) { WebTakeKeys(false); return; }
+            if (UiKeyboard.Active || (input != null && SystemKeyboard.IsOpenFor(input))) { WebTakeKeys(w, false); return; }
             var kb = IsKeyboard.current;
             WebHookKeyboard(kb);
             if (kb == null || SystemKeyboard.Busy) { _webTyped.Clear(); _webRepeatCode = -1; return; } // the system keyboard's own keys
-            if (_webTyped.Length > 0) { WebCall("typeText", _webTyped.ToString()); _webTyped.Clear(); }
+            if (_webTyped.Length > 0) { WebCall(w, "typeText", _webTyped.ToString()); _webTyped.Clear(); }
             int mods = (kb.ctrlKey.isPressed ? 1 : 0) | (kb.shiftKey.isPressed ? 2 : 0) | (kb.altKey.isPressed ? 4 : 0) | (kb.leftMetaKey.isPressed || kb.rightMetaKey.isPressed ? 8 : 0);
             foreach (var (key, code) in WebNavKeys)
             {
                 if (!kb[key].wasPressedThisFrame) continue;
-                if (code == WebKeyInsert && mods == 2) { WebPaste(); continue; } // Shift+Insert
-                WebKeyMods(code, mods);
+                if (code == WebKeyInsert && mods == 2) { WebPaste(w); continue; } // Shift+Insert
+                WebKeyMods(w, code, mods);
                 _webRepeatKey = key;
                 _webRepeatCode = code;
                 _webRepeatAt = Time.unscaledTime + 0.45f;
@@ -666,27 +1001,28 @@ namespace MetaCodex.Shell
             if (_webRepeatCode >= 0)
             {
                 if (!kb[_webRepeatKey].isPressed) _webRepeatCode = -1;
-                else if (Time.unscaledTime >= _webRepeatAt) { WebKeyMods(_webRepeatCode, mods); _webRepeatAt = Time.unscaledTime + 0.04f; }
+                else if (Time.unscaledTime >= _webRepeatAt) { WebKeyMods(w, _webRepeatCode, mods); _webRepeatAt = Time.unscaledTime + 0.04f; }
             }
             if ((mods & (1 | 4 | 8)) == 0) return;
             foreach (var (key, code) in WebChordKeys)
             {
                 if (!kb[key].wasPressedThisFrame) continue;
-                if (code == WebKeyV && (mods & 1) != 0 && (mods & (4 | 8)) == 0) { WebPaste(); continue; } // Ctrl+V, Ctrl+Shift+V: the clipboard
-                WebKeyMods(code, mods);
+                if (code == WebKeyV && (mods & 1) != 0 && (mods & (4 | 8)) == 0) { WebPaste(w); continue; } // Ctrl+V, Ctrl+Shift+V: the clipboard
+                WebKeyMods(w, code, mods);
             }
         }
 
         /// A key with modifiers (bits 1 Ctrl, 2 Shift, 4 Alt, 8 Meta) into the page; raw JNI, nothing allocated.
-        private void WebKeyMods(int code, int mods)
+        private void WebKeyMods(WebWindow w, int code, int mods)
         {
-            if (code == WebKeyEscape && mods == 0 && _wcPanel != null) { WebChoiceEnd(true); return; } // Esc closes the chooser
+            if (code == WebKeyEscape && mods == 0 && _wcPanel != null && _wcWin == w) { WebChoiceEnd(true); return; } // Esc closes the chooser
             _webLastKey = (code, mods);
 #if UNITY_ANDROID && !UNITY_EDITOR
-            if (_wv == null || _wvKeyMeta == IntPtr.Zero) return;
-            _wvArgs[0].i = code;
-            _wvArgs[1].i = mods;
-            AndroidJNI.CallVoidMethod(_wv.GetRawObject(), _wvKeyMeta, _wvArgs);
+            var pg = w.Page;
+            if (pg.Wv == null || WvKeyMeta == IntPtr.Zero) return;
+            pg.Args[0].i = code;
+            pg.Args[1].i = mods;
+            AndroidJNI.CallVoidMethod(pg.Wv.GetRawObject(), WvKeyMeta, pg.Args);
             WebJniOk();
 #endif
         }
@@ -732,7 +1068,7 @@ namespace MetaCodex.Shell
         private Vector3 _wcWebPos;
         private Quaternion _wcWebRot;
         private float _wcWebScale;
-        private bool _webSwallow;
+        private WebWindow _wcWin; // the window whose page the chooser is for
         private (int id, string answer) _webLastChoice;
 
         private static readonly (string name, string hex)[] WebColours =
@@ -808,29 +1144,31 @@ namespace MetaCodex.Shell
 
 #if UNITY_ANDROID && !UNITY_EDITOR
         /// Poll bit 8: the page's request (or "", none waits any more).
-        private void WebChoiceTake()
+        private void WebChoiceTake(WebWindow w)
         {
             string json;
-            try { json = _wv.Call<string>("selectPayload"); } catch (Exception ex) { Log("web selectPayload: " + ex.Message); return; }
-            WebChoiceOpen(json);
+            try { json = w.Page.Wv.Call<string>("selectPayload"); } catch (Exception ex) { Log(w.Id + " selectPayload: " + ex.Message); return; }
+            WebChoiceOpen(w, json);
         }
 #endif
 
-        /// A request from the page opens the chooser; "" (the page it was on is gone) closes it.
-        private void WebChoiceOpen(string json)
+        /// A request from a window's page opens the chooser over that window; "" (the page it was on is gone) closes it.
+        /// One chooser at a time: another window's open one is cancelled there.
+        private void WebChoiceOpen(WebWindow w, string json)
         {
-            if (string.IsNullOrEmpty(json)) { if (_wc != null) WebChoiceEnd(false); return; }
+            if (string.IsNullOrEmpty(json)) { if (_wc != null && _wcWin == w) WebChoiceEnd(false); return; }
             var c = ParseWebChoice(json);
-            if (c == null) { Log("web: a chooser request from the page could not be read"); return; }
-            if (_wc != null && _wc.Id == c.Id) return;
-            WebChoiceEnd(false); // an older one: the WebView keeps only the newest
-            if (_web == null || !_web.IsOpen || _webPage == null || Router == null) { WebChoiceCancel(c.Id); return; }
+            if (c == null) { Log(w.Id + ": a chooser request from the page could not be read"); return; }
+            if (_wc != null && _wcWin == w && _wc.Id == c.Id) return;
+            WebChoiceEnd(_wcWin != w); // an older one of this page: the WebView keeps only the newest; another window's: cancelled
+            if (!WebIsOpen(w) || w.Area == null || Router == null) { WebChoiceCancel(w, c.Id); return; }
             _wc = c;
+            _wcWin = w;
             _wcStep = 0;
             _wcDate = "";
             _wcPicked.Clear();
             if (c.Multiple) for (int i = 0; i < c.Options.Count; i++) if (c.Options[i].Selected) _wcPicked.Add(i);
-            Log($"web: chooser {c.Kind}{(c.Multiple ? " (multiple)" : "")}{(c.Kind == "select" ? ", " + c.Options.Count + " options" : "")}");
+            Log($"{w.Id}: chooser {c.Kind}{(c.Multiple ? " (multiple)" : "")}{(c.Kind == "select" ? ", " + c.Options.Count + " options" : "")}");
             WebChoiceBuild();
         }
 
@@ -859,18 +1197,19 @@ namespace MetaCodex.Shell
             max = Part(_wc.Max, true) == _wcDate ? Part(_wc.Max, false) : "";
         }
 
-        /// The chooser's panel, over the WEB window at the element (once per opening: it may allocate).
+        /// The chooser's panel, over its web window at the element (once per opening: it may allocate).
         private void WebChoiceBuild()
         {
             var t = UiTheme.Current;
             var c = _wc;
-            if (c == null || _web == null || _webPage == null || Router == null) return;
+            var win = _wcWin;
+            if (c == null || win?.Panel == null || win.Area == null || Router == null) return;
             string kind = WebChoiceKindNow();
             if (kind != "select") WebChoiceValues(kind);
             int n = kind == "select" ? c.Options.Count(o => !o.Hidden) + c.Groups.Count : _wcValues.Count;
             bool search = n > WebChoiceSearchOver;
             int rows = Mathf.Clamp(n, 1, WebChoiceRows);
-            float bh = t.ButtonHeight, w = Mathf.Clamp(c.Box.width * _webPage.Rect.width + 0.02f, 0.30f, 0.42f);
+            float bh = t.ButtonHeight, w = Mathf.Clamp(c.Box.width * win.Area.Rect.width + 0.02f, 0.30f, 0.42f);
             float h = t.HeaderHeight + t.Padding + (search ? bh + t.Gap : 0f) + rows * WebChoiceRowH + t.Gap + bh + t.Padding;
             string title = c.Label.Length > 0 ? c.Label : WebChoiceTitle(c.Kind);
             if (c.Kind == "datetime-local") title = (c.Label.Length > 0 ? c.Label + " · " : "") + (_wcStep == 0 ? "DATE" : "TIME");
@@ -915,30 +1254,32 @@ namespace MetaCodex.Shell
         {
             var p = _wcPanel;
             var c = _wc;
-            if (p == null || c == null || _web == null || _webPage == null) return;
-            var area = _webPage.Rect;
+            var web = _wcWin?.Panel;
+            if (p == null || c == null || web == null || _wcWin.Area == null) return;
+            var area = _wcWin.Area.Rect;
             float ex = area.x + Mathf.Clamp01(c.Box.x) * area.width;
             float top = area.y + Mathf.Clamp01(c.Box.y) * area.height, bottom = area.y + Mathf.Clamp01(c.Box.yMax) * area.height;
-            float left = Mathf.Clamp(ex, 0f, Mathf.Max(0f, _web.Width - p.Width));
-            float y = bottom + 0.004f + p.Height <= _web.Height ? bottom + 0.004f
+            float left = Mathf.Clamp(ex, 0f, Mathf.Max(0f, web.Width - p.Width));
+            float y = bottom + 0.004f + p.Height <= web.Height ? bottom + 0.004f
                 : top - 0.004f - p.Height >= 0f ? top - 0.004f - p.Height
-                : Mathf.Clamp(bottom, 0f, Mathf.Max(0f, _web.Height - p.Height));
-            var wt = _web.transform;
-            var centre = wt.TransformPoint(_web.PanelToLocal(new Vector2(left + p.Width * 0.5f, y + p.Height * 0.5f)));
+                : Mathf.Clamp(bottom, 0f, Mathf.Max(0f, web.Height - p.Height));
+            var wt = web.transform;
+            var centre = wt.TransformPoint(web.PanelToLocal(new Vector2(left + p.Width * 0.5f, y + p.Height * 0.5f)));
             p.transform.SetPositionAndRotation(centre - wt.forward * WebChoiceGap, wt.rotation); // towards the user
             float rootScale = _root != null ? Mathf.Max(1e-4f, _root.lossyScale.x) : 1f;
-            p.BaseScale = Vector3.one * (_web.RestLossyScale.x / rootScale);
+            p.BaseScale = Vector3.one * (web.RestLossyScale.x / rootScale);
             _wcWebPos = wt.position;
             _wcWebRot = wt.rotation;
-            _wcWebScale = _web.BaseScale.x;
+            _wcWebScale = web.BaseScale.x;
         }
 
-        /// Each frame while it is open: the window moved or was scaled, the chooser goes with it (compares only).
+        /// Each frame while it is open: its window moved or was scaled, the chooser goes with it (compares only).
         private void WebChoiceFollow()
         {
-            if (_web == null) return;
-            var wt = _web.transform;
-            if (wt.position != _wcWebPos || wt.rotation != _wcWebRot || _web.BaseScale.x != _wcWebScale) WebChoicePlace();
+            var web = _wcWin?.Panel;
+            if (web == null) return;
+            var wt = web.transform;
+            if (wt.position != _wcWebPos || wt.rotation != _wcWebRot || web.BaseScale.x != _wcWebScale) WebChoicePlace();
         }
 
         private void WebChoiceFilter(string s)
@@ -1245,11 +1586,12 @@ namespace MetaCodex.Shell
         private void WebChoiceType()
         {
             var c = _wc;
+            var win = _wcWin;
             if (c == null) return;
             int id = c.Id;
             UiKeyboard.Edit(c.Value, false, null, typed =>
             {
-                if (_wc == null || _wc.Id != id) return; // closed meanwhile
+                if (_wc == null || _wc.Id != id || _wcWin != win) return; // closed meanwhile
                 string s = (typed ?? "").Trim();
                 if (s == c.Value) return;
                 if (!WebChoiceValid(c.Kind, s, c.Min, c.Max, c.Required, out string value, out string why)) { Toast(why, "warn"); return; }
@@ -1260,8 +1602,9 @@ namespace MetaCodex.Shell
         private void WebChoiceFinish(string answer)
         {
             var c = _wc;
+            var win = _wcWin;
             WebChoiceEnd(false);
-            if (c != null) WebChoiceAnswer(c.Id, answer);
+            if (c != null && win != null) WebChoiceAnswer(win, c.Id, answer);
         }
 
         /// The chooser's panel goes (the request stays: datetime-local's second step is built after it).
@@ -1274,67 +1617,78 @@ namespace MetaCodex.Shell
             if (p != null) { Router?.Unregister(p); p.CloseAndDestroy(); }
         }
 
-        /// The chooser closes; `cancel`: without a choice (the page keeps what it had).
+        /// The chooser closes; `cancel`: without a choice (its page keeps what it had).
         private void WebChoiceEnd(bool cancel)
         {
             var c = _wc;
+            var win = _wcWin;
             _wc = null;
+            _wcWin = null;
             WebChoiceDropPanel();
             _wcValues.Clear();
             _wcPicked.Clear();
             _wcFilter = "";
-            if (cancel && c != null) WebChoiceCancel(c.Id);
+            if (cancel && c != null && win != null) WebChoiceCancel(win, c.Id);
         }
 
-        private void WebChoiceAnswer(int id, string answer)
+        private void WebChoiceAnswer(WebWindow w, int id, string answer)
         {
             _webLastChoice = (id, answer);
 #if UNITY_ANDROID && !UNITY_EDITOR
-            if (_wv == null) return;
-            try { if (!_wv.Call<bool>("selectAnswer", id, answer)) Log("web: the page's chooser was gone (its page changed): nothing written"); }
-            catch (Exception ex) { Log("web selectAnswer: " + ex.Message); }
+            var wv = w.Page.Wv;
+            if (wv == null) return;
+            try { if (!wv.Call<bool>("selectAnswer", id, answer)) Log(w.Id + ": the page's chooser was gone (its page changed): nothing written"); }
+            catch (Exception ex) { Log(w.Id + " selectAnswer: " + ex.Message); }
 #endif
         }
 
-        private void WebChoiceCancel(int id)
+        private void WebChoiceCancel(WebWindow w, int id)
         {
             _webLastChoice = (id, null);
 #if UNITY_ANDROID && !UNITY_EDITOR
-            if (_wv != null) try { _wv.Call("selectCancel", id); } catch (Exception ex) { Log("web selectCancel: " + ex.Message); }
+            var wv = w.Page.Wv;
+            if (wv != null) try { wv.Call("selectCancel", id); } catch (Exception ex) { Log(w.Id + " selectCancel: " + ex.Message); }
 #endif
         }
 
-        /// Self-tests: a request as the WebView sends it (no WebView in the Editor), the chooser open now (its panel, list
-        /// and SEARCH field), the last answer sent (answer null: cancelled), a search typed.
-        public void WebChoiceForTest(string json) => WebChoiceOpen(json);
+        /// Self-tests: a request as the WebView sends it (no WebView in the Editor; for the window touched last), the
+        /// chooser open now (its panel, list and SEARCH field), the last answer sent (answer null: cancelled), a search typed.
+        public void WebChoiceForTest(string json) { var w = WebCur; if (w != null) WebChoiceOpen(w, json); }
         public UiPanel WebChoicePanelForTest => _wcPanel;
         public UiList WebChoiceListForTest => _wcList;
         public UiTextField WebChoiceSearchFieldForTest => _wcSearch;
         public (int id, string answer) WebLastChoiceForTest => _webLastChoice;
         public void WebChoiceSearchForTest(string s) => WebChoiceFilter(s);
 
-        /// Self-tests: the page the window has, the last touch sent to the page, a panel point in page pixels.
-        public string WebUrlForTest => _webCurrent;
-        public bool WebOnStartForTest => _webOnStart;
+        /// Self-tests (the window touched last, the first one before any): the page it has, the last touch sent to a
+        /// page, a panel point in page pixels.
+        public string WebUrlForTest => WebCur?.Page.Current ?? "";
+        public bool WebOnStartForTest => WebCur != null && WebCur.Page.OnStart;
         public (int action, Vector2 page) WebLastTouchForTest => _webLastTouch;
-        public Rect WebPageRectForTest => _webPage != null ? _webPage.Rect : default;
-        public Texture2D WebTextureForTest => _webTex;
+        public Rect WebPageRectForTest => WebCur?.Area != null ? WebCur.Area.Rect : default;
+        public Texture2D WebTextureForTest => WebCur?.Page.Tex;
         /// Self-tests: the page's state as the WebView reports it (no WebView in the Editor), a frame of the window, what
         /// the window shows, the last answer to a page dialog.
-        public void WebApplyStateForTest(string state) => WebApplyState(state);
-        public void WebTickForTest() => TickWeb();
-        public bool WebFullscreenForTest => _webFull;
-        public bool WebErrorShownForTest => _webDark;
-        public string WebNoteForTest => _webNoteShown ?? "";
-        public string WebTitleForTest => _webTitleShown ?? "";
+        public void WebApplyStateForTest(string state) { var w = WebCur; if (w != null) WebApplyState(w, state); }
+        public void WebTickForTest() { var w = WebCur; if (w != null) TickWeb(w); }
+        public bool WebFullscreenForTest => WebCur != null && WebCur.Page.Full;
+        public bool WebErrorShownForTest => WebCur != null && WebCur.Page.Dark;
+        public string WebNoteForTest => WebCur?.NoteShown ?? "";
+        public string WebTitleForTest => WebCur?.TitleShown ?? "";
         public (int id, bool ok) WebLastDialogAnswerForTest => _webLastJsAnswer;
-        /// Self-tests: the page's size, whether the page has the hardware keyboard, the last key sent, the last paste,
+        /// Self-tests: the page's size, whether a page has the hardware keyboard, the last key sent, the last paste,
         /// a key into the page as the keyboard would send it.
-        public Vector2Int WebPageSizeForTest => new Vector2Int(_webPageW, _webPageH);
+        public Vector2Int WebPageSizeForTest => WebCur != null ? new Vector2Int(WebCur.Page.W, WebCur.Page.H) : default;
         public bool WebHasKeysForTest => _webKeys;
         public (int code, int mods) WebLastKeyForTest => _webLastKey;
         public string WebLastPasteForTest => _webLastPaste;
-        public void WebPasteForTest() => WebPaste();
-        public void WebTakeKeysForTest(bool on) => WebTakeKeys(on);
+        public void WebPasteForTest() { var w = WebCur; if (w != null) WebPaste(w); }
+        public void WebTakeKeysForTest(bool on) => WebTakeKeys(WebCur, on);
+        /// Self-tests: the web windows there are (the first one first), the one touched last, the one whose page has the
+        /// keyboard, ❐ NEW WINDOW pressed on the window touched last.
+        public IEnumerable<string> WebWindowIdsForTest => _webWins.Select(w => w.Id);
+        public string WebLastWindowForTest => WebCur?.Id;
+        public string WebKeysWindowForTest => _webKeysWin?.Id;
+        public void WebNewWindowForTest() { var w = WebCur; if (w != null) WebNewWindow(w); }
     }
 }

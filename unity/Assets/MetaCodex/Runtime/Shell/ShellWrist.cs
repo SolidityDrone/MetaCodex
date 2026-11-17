@@ -154,7 +154,7 @@ namespace MetaCodex.Shell
             I(false, "▤", "windows", "TERMS", () => TogglePanel("terminals"), () => IsPanelOpen("terminals"), lockStep: 3);
             I(false, "◫", "folder", "FILES", () => TogglePanel("files"), () => IsPanelOpen("files"), lockStep: 3);
             I(false, "☰", "threads", "THREADS", () => TogglePanel("threads"), () => IsPanelOpen("threads"), lockStep: 4);
-            I(false, "◎", "globe", "WEB", () => TogglePanel("web"), () => IsPanelOpen("web"));
+            I(false, "◎", "globe", "WEB", () => ToggleWebWindow(), () => WebWindowShown); // the web window touched last that is not the code editor's (ShellWeb)
             // settings, voice, agents, MQH (skills, plugins, scripts, gestures, status), vault and git, system: one place
             I(false, "⚙", "gear", "CONTROL", () => ToggleControl(), () => ControlRailPage != null);
             I(true, "▣", "photos", "CLIP", () => TogglePanel("clipboard"), () => IsPanelOpen("clipboard"));
