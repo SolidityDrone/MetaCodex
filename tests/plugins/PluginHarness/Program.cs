@@ -20,13 +20,20 @@ namespace PluginHarness
         public static int Main(string[] args)
         {
             string runDir = null;
-            bool rules = false;
+            bool rules = false, net = false;
+            string examplesDir = null;
             var folders = new List<string>();
             for (int i = 0; i < args.Length; i++)
             {
                 if (args[i] == "--verbose") Verbose = true;
                 else if (args[i] == "--run" && i + 1 < args.Length) runDir = args[++i];
                 else if (args[i] == "--rules") rules = true;
+                else if (args[i] == "--net" && i + 1 < args.Length) { net = true; examplesDir = args[++i]; } // the API and the weather example
+                else if (args[i] == "--fixtures" && i + 1 < args.Length)
+                {
+                    // canned network replies (tests/plugins/fixtures/net/*.json): every fake app answers from them
+                    foreach (var bad in NetFixture.LoadDir(args[++i])) { Fails++; Console.WriteLine("FAIL [fixtures] " + bad); }
+                }
                 else if (args[i] == "--scaffold" && i + 3 < args.Length)
                 {
                     // --scaffold <kind> <id> <dest> [name]: a new plugin project's files, as the app makes them
@@ -48,15 +55,20 @@ namespace PluginHarness
                 }
                 else folders.Add(args[i]);
             }
-            if (runDir == null || folders.Count == 0 && !rules)
+            if (runDir == null || folders.Count == 0 && !rules && !net)
             {
-                Console.WriteLine("usage: PluginTests.dll --run <run dir> [--verbose] [--rules] <plugin folder name>... | --scaffold <kind> <id> <dest> [name]");
+                Console.WriteLine("usage: PluginTests.dll --run <run dir> [--verbose] [--rules] [--net <examples dir>] [--fixtures <dir>] <plugin folder name>... | --scaffold <kind> <id> <dest> [name]");
                 return 2;
             }
             if (rules)
             {
                 try { Rules.Run(runDir); }
                 catch (Exception ex) { Fails++; Console.WriteLine("FAIL [rules] the harness itself crashed: " + ex); }
+            }
+            if (net)
+            {
+                try { NetTests.Run(runDir, examplesDir); }
+                catch (Exception ex) { Fails++; Console.WriteLine("FAIL [net] the harness itself crashed: " + ex); }
             }
             foreach (var name in folders)
             {
@@ -245,6 +257,9 @@ namespace PluginHarness
             foreach (var t in tiles.Where(t => t.Window != null))
                 Check(wins.Any(w => w.Id == t.Window), "tile " + t.Label + " points to one of the plugin's windows (" + t.Window + ")");
             foreach (var w in wins) PrintSpec(w, "spec");
+            if (_entry.NetworkHosts.Length > 0 || _fake.NetRequests.Count > 0)
+                Ok("network: declares " + (_entry.NetworkHosts.Length == 0 ? "no host" : string.Join(", ", _entry.NetworkHosts)) + "; " + _fake.NetRequests.Count + " request(s) while loading" +
+                   (_fake.NetRequests.Count > 0 ? " (" + string.Join(", ", _fake.NetRequests.Select(r => r.Method + " " + Cut(r.Url, 70)).Take(3)) + ")" : ""));
         }
 
         // 3. Tap each tile
@@ -535,6 +550,7 @@ namespace PluginHarness
             }
             if (main.Count > 0) Ok("pressed the main action before the long run: " + string.Join(", ", main));
             StepFor(1.2);
+            int net0 = _fake.NetRequests.Count;
             var builds0 = _fake.Windows.ToDictionary(kv => kv.Key, kv => kv.Value.Builds);
             var texts0 = _fake.Windows.ToDictionary(kv => kv.Key, kv => kv.Value.TextUpdates);
             int notices0 = _fake.Notices.Count;
@@ -561,6 +577,10 @@ namespace PluginHarness
                     Check(kv.Value <= 3, "window " + kv.Key + ": at most " + kv.Value + " full rebuilds in any minute with nobody touching it (limit 3)" +
                         (kv.Value <= 3 ? "" : "; a countdown must change only a LIVE text (a text component with an id) and keep the rest of the spec the same"));
             if (_entry.Error != null) return;
+            int netRun = _fake.NetRequests.Count - net0;
+            if (netRun > 0 || _entry.NetworkHosts.Length > 0)
+                Check(netRun <= RunSeconds / 60, "network in 3 h with nobody touching it: " + netRun + " request(s) (limit " + RunSeconds / 60 + ", one a minute on average)" +
+                    (netRun <= RunSeconds / 60 ? "" : "; refresh less often (keep the last reply in store and show its age)"));
             var parts = new List<string>();
             foreach (var w in OwnWindows())
             {
@@ -625,7 +645,7 @@ namespace PluginHarness
             var wins = OwnWindows();
             _summary = "windows=" + wins.Count + " tiles=" + OwnTiles().Count + " voice=" + cmds.Count +
                        " builds=" + wins.Sum(w => w.Builds) + " text-updates=" + wins.Sum(w => w.TextUpdates) +
-                       " notifications=" + _fake.Notices.Count + " events=" + _fake.Events;
+                       " notifications=" + _fake.Notices.Count + " events=" + _fake.Events + (_fake.NetRequests.Count > 0 ? " net=" + _fake.NetRequests.Count : "");
         }
 
         // 7. Restart: a new app and a new host on the same folders
@@ -724,6 +744,7 @@ namespace PluginHarness
             Check(OwnWindows().Count == 0 && winIds.All(id => _fake.Removed.Contains(id)), "unload: " + winIds.Count + " window(s) removed from the app");
             Check(OwnTiles().Count == 0, "unload: the plugin's tiles are gone");
             Check(OwnVoice().Count == 0, "unload: no voice command of the plugin is left");
+            if (_entry.NetworkHosts.Length > 0) Check(_host.NetInFlight(_entry) == 0, "unload: no request of the plugin is left in flight");
         }
 
         // 9. Log lines

@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # README
 # ------
-# Usage: tests/plugins/run-plugin-tests.sh [--verbose] [--rules] [--scaffolds] [--examples] [<plugin-folder>...]
+# Usage: tests/plugins/run-plugin-tests.sh [--verbose] [--rules] [--net] [--scaffolds] [--examples] [<plugin-folder>...]
 #        tests/plugins/run-plugin-tests.sh --scaffold <app|gesture|behaviour> <id> <dest> [name]
 #   --examples    the shipped example plugins
 #   --rules       the plugin project rules (folder + marker, kinds, ids, reload, create, delete): PluginHarness/Rules.cs
+#   --net         the network API (net.get / net.post, plugin.json "network", limits, unload) and the weather example
+#                 against canned replies: PluginHarness/NetTests.cs
 #   --scaffolds   a new project of each kind, as the app makes it, through the scenario below
 #   --scaffold    writes a new plugin project's files (the app's scaffold and its marker) into <dest> and stops
 #   --example-project <example id> <dest>   the shipped example as the app adds it (+ ADD): its files, AGENTS.md, marker
@@ -47,6 +49,10 @@
 #     the plugin's store section of .state.json is unchanged.
 #  8. Unload (SetEnabled false): all its windows removed, no tiles, no voice commands of it.
 #  9. Log: any plugin log line starting with ERROR or warn, at any point, = FAIL.
+# Network: no request leaves the PC. The fake fetcher answers from canned replies by URL, tests/plugins/fixtures/net/*.json
+# (NetFixture in Fakes.cs: url prefix, status, json or body, delay, never); a request no fixture answers is a FAIL that
+# names the URL (add a reply for it there, never to the plugin). A plugin that declares hosts: at most one request a
+# minute on average in the 3 h with nobody touching it, none left in flight after the unload.
 # Every spec the fake app receives is checked again with ViewSpecCheck (errors and warnings both count) and may have
 # at most 16 components. --verbose prints each window's spec (compact JSON, cut at 600 characters).
 # Exit code: the number of FAILs (at most 120); 0 = pass. A summary line per plugin: windows, tiles, voice commands,
@@ -62,12 +68,13 @@ EXDIR="$ROOT/unity/Assets/MetaCodex/Runtime/Scripting/Resources/PluginExamples"
 RT="$ROOT/unity/Assets/MetaCodex/Runtime"
 W() { wslpath -w "$1"; }
 
-VERBOSE=(); FOLDERS=(); EXAMPLES=0; RULES=(); SCAFFOLDS=0; SCAFFOLD=(); EXAMPLE_PROJECT=()
+VERBOSE=(); FOLDERS=(); EXAMPLES=0; RULES=(); NET=(); SCAFFOLDS=0; SCAFFOLD=(); EXAMPLE_PROJECT=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --verbose) VERBOSE=(--verbose) ;;
     --examples) EXAMPLES=1 ;;
     --rules) RULES=(--rules) ;;
+    --net) NET=(--net "$(wslpath -w "$EXDIR")") ;;
     --scaffolds) SCAFFOLDS=1 ;;
     --example-project) [[ $# -ge 3 ]] || { echo "usage: $0 --example-project <example id> <dest>"; exit 2; }
                 [[ -d "$EXDIR/$2" ]] || { echo "no example $2 in $EXDIR"; exit 2; }
@@ -83,7 +90,7 @@ if [[ "$EXAMPLES" == 1 ]]; then
   [[ -d "$EXDIR" ]] || { echo "no examples folder: $EXDIR"; exit 1; }
   for d in "$EXDIR"/*/; do [[ -f "${d}plugin.json" ]] && FOLDERS+=("${d%/}"); done
 fi
-[[ ${#FOLDERS[@]} -gt 0 || ${#RULES[@]} -gt 0 || "$SCAFFOLDS" == 1 || ${#SCAFFOLD[@]} -gt 0 || ${#EXAMPLE_PROJECT[@]} -gt 0 ]] || { echo "usage: $0 [--verbose] [--rules] [--scaffolds] [--examples] [<plugin-folder>...] | --scaffold <kind> <id> <dest> [name]"; exit 2; }
+[[ ${#FOLDERS[@]} -gt 0 || ${#RULES[@]} -gt 0 || ${#NET[@]} -gt 0 || "$SCAFFOLDS" == 1 || ${#SCAFFOLD[@]} -gt 0 || ${#EXAMPLE_PROJECT[@]} -gt 0 ]] || { echo "usage: $0 [--verbose] [--rules] [--scaffolds] [--examples] [<plugin-folder>...] | --scaffold <kind> <id> <dest> [name]"; exit 2; }
 
 if [[ -z "${MCX_SKIP_RAM_CHECK:-}" ]]; then
   avail=$(timeout 20 powershell.exe -NoProfile -Command "[int]((Get-Counter '\Memory\Available MBytes').CounterSamples[0].CookedValue)" 2>/dev/null | tr -dc '0-9')
@@ -109,7 +116,7 @@ RSP="$OUT/plugins.rsp"
   echo "-r:\"$(W "$OUT/MoonSharp.Interpreter.dll")\""
   for s in "$RT/Scripting/ScriptHost.cs" "$RT/Scripting/PluginProject.cs" "$RT/Scripting/LuaJson.cs" "$RT/Scripting/ViewSpecCheck.cs" "$RT/AI/VoiceCommands.cs" \
            "$ROOT/tests/plugins/PluginHarness/Stubs.cs" "$ROOT/tests/plugins/PluginHarness/Fakes.cs" "$ROOT/tests/plugins/PluginHarness/Program.cs" \
-           "$ROOT/tests/plugins/PluginHarness/Rules.cs"; do
+           "$ROOT/tests/plugins/PluginHarness/Rules.cs" "$ROOT/tests/plugins/PluginHarness/NetTests.cs"; do
     echo "\"$(W "$s")\""
   done
 } > "$RSP"
@@ -171,5 +178,5 @@ for f in "${FOLDERS[@]}"; do
 done
 
 set +e
-RUN --run "$(W "$OUT/run")" ${VERBOSE[@]+"${VERBOSE[@]}"} ${RULES[@]+"${RULES[@]}"} ${IDS[@]+"${IDS[@]}"}
+RUN --run "$(W "$OUT/run")" --fixtures "$(W "$ROOT/tests/plugins/fixtures/net")" ${VERBOSE[@]+"${VERBOSE[@]}"} ${RULES[@]+"${RULES[@]}"} ${NET[@]+"${NET[@]}"} ${IDS[@]+"${IDS[@]}"}
 exit $?
