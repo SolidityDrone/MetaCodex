@@ -656,6 +656,7 @@ namespace MetaCodex.Shell
                                      : $"an older plugin folder: {e.LinuxDir} (no project)";
             _gPluginDetail.Set($"<b>{e.Title}</b> {e.Version}\n{e.Description}\n\n{where}\n{(e.Enabled ? "enabled" : "disabled")} · {e.Handlers} handlers · {e.Poses} poses · {e.Detectors} detectors\n" +
                                (gestures.Count > 0 ? "gestures: " + string.Join(", ", gestures) + "\n" : "") +
+                               (e.NetworkHosts.Length > 0 ? "uses the network: " + string.Join(", ", e.NetworkHosts) + "\n" : "") +
                                (e.Error != null ? $"<color=#FF5468>ERROR {e.Error}</color>\n" : "") + string.Join("\n", e.Log.Skip(Math.Max(0, e.Log.Count - 3))), e.Error != null ? t.Danger : t.TextDim);
             if (!e.Project) { ShowPluginThreads(null, "An older plugin folder: no project, so no threads. + NEW PLUGIN makes a project an agent can work in."); return; }
             ShowPluginThreads(e, null);
