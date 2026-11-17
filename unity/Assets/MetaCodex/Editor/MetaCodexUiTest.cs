@@ -1334,11 +1334,11 @@ end)
             var ap = shell.PanelsById["agents"];
             var agents = ap.Elements.OfType<UiList>().First();
             Check(agents.Items.Count >= 3, "AGENTS lists MQH's providers: " + string.Join(", ", agents.Items.Select(i => i.Title + "=" + i.Badge)));
-            int cc = agents.Items.ToList().FindIndex(i => (string)i.Tag == "claude-code");
+            int cc = agents.Items.ToList().FindIndex(i => (string)i.Tag == MetaCodexShell.ClaudeThreadsProvider);
             if (cc >= 0) agents.SelectIndex(cc);
             ap.ForceRefresh();
             RenderPanel(ap, "ui-agents.png");
-            shell.SignIn("claude-code");
+            shell.SignIn(MetaCodexShell.ClaudeThreadsProvider);
             Check(shell.Toasts.Last != null && shell.Toasts.Last.Contains("claude auth login"), "SIGN IN uses the provider's own login command: " + shell.Toasts.Last);
 
             shell.ClosePanel("agents");
@@ -2213,6 +2213,13 @@ end)
             string cmd = MetaCodexShell.InstallCommand(MetaCodexShell.GetAgents.First(a => a.Id == "opencode"));
             Check(cmd.StartsWith("npm i -g --allow-scripts=opencode-ai opencode-ai@latest") && cmd.Contains("opencode --version"),
                 "GET runs the official npm package in a terminal, its install script allowed (npm 11 skips it otherwise): " + cmd);
+            // Claude Code: GET installs the CLI and its ACP adapter (pinned) in one npm command; ENABLE THREADS only the adapter
+            var claudeDef = MetaCodexShell.GetAgents.First(a => a.Id == "claude");
+            string ccmd = MetaCodexShell.InstallCommand(claudeDef), tcmd = MetaCodexShell.ThreadsInstallCommand(claudeDef);
+            string pin = "@agentclientprotocol/claude-agent-acp@" + MetaCodexShell.ClaudeAdapterVersion;
+            Check(ccmd.StartsWith("npm i -g --allow-scripts=@anthropic-ai/claude-code @anthropic-ai/claude-code@latest " + pin + " &&") && ccmd.Contains("claude-agent-acp --version")
+                && tcmd.StartsWith("npm i -g " + pin + " &&") && !tcmd.Contains("@anthropic-ai/claude-code") && !ccmd.Contains("npx") && !tcmd.Contains("npx"),
+                $"GET CLAUDE CODE installs the CLI and its thread adapter ({ccmd}); ENABLE THREADS the adapter alone ({tcmd})");
             RenderPanel(ap, "ui-agents-get.png");
 
             // API KEY: the providers of the agent, a key sealed (allow) and kept for MQH until it answers
@@ -2266,9 +2273,34 @@ end)
             var mqhStates = JArray.Parse("[{\"providerId\":\"acp-cursor\",\"displayName\":\"Cursor\",\"status\":\"not_installed\"},{\"providerId\":\"pi\",\"displayName\":\"Pi\",\"status\":\"not_installed\"},{\"providerId\":\"codex\",\"displayName\":\"Codex\",\"status\":\"ready\"}]");
             var supported = shell.SupportedOnlyForTest(mqhStates);
             string names = string.Join(", ", supported.Select(x => (string)x["displayName"] + ":" + (string)x["status"]));
-            Check(supported.Count == 3 && (string)supported[0]["providerId"] == "claude-code" && (string)supported[1]["providerId"] == "codex" && (string)supported[2]["providerId"] == "acp-opencode"
+            Check(supported.Count == 3 && (string)supported[0]["providerId"] == MetaCodexShell.ClaudeThreadsProvider && (string)supported[1]["providerId"] == "codex" && (string)supported[2]["providerId"] == "acp-opencode"
                 && !supported.Any(x => ((string)x["providerId"]).Contains("cursor") || (string)x["providerId"] == "pi") && (string)supported[1]["status"] == "ready",
                 "AGENTS lists Claude Code, Codex, OpenCode only (no Cursor, no Pi): " + names);
+
+            // Claude Code: the CLI alone runs in a terminal (TERMINAL, ENABLE THREADS); with its adapter registered, MQH's state
+            shell.AgentProbeForTest = () => "opencode -\nclaude 2.1.322 (Claude Code)\nclaude+threads -\ncodex -";
+            shell.ProbeAgents();
+            shell.AgentProbeForTest = null;
+            var term = shell.SupportedOnlyForTest(new JArray())[0];
+            var ready = shell.SupportedOnlyForTest(JArray.Parse("[{\"providerId\":\"acp-claude-code\",\"displayName\":\"Claude Code\",\"status\":\"ready\",\"installedVersion\":\"0.107.3\",\"loginCommand\":null,\"canUpdate\":false}]"))[0];
+            var gone = shell.SupportedOnlyForTest(JArray.Parse("[{\"providerId\":\"acp-claude-code\",\"displayName\":\"Claude Code\",\"status\":\"not_installed\"}]"))[0];
+            Check((string)term["status"] == "terminal" && ((string)term["statusMessage"] ?? "").Contains("ENABLE THREADS") && (string)term["loginCommand"] == "claude auth login"
+                && (string)ready["status"] == "ready" && (string)ready["installedVersion"] == "2.1.322 (Claude Code)" && (string)ready["loginCommand"] == "claude auth login"
+                && (string)gone["status"] == "terminal" && shell.AgentAdaptersForTest.TryGetValue("claude", out var ad) && ad == null,
+                $"Claude Code: CLI only → {term["status"]} “{term["statusMessage"]}”; adapter registered → {ready["status"]} {ready["installedVersion"]}, sign in “{ready["loginCommand"]}”; adapter gone → {gone["status"]}");
+            shell.AgentProbeForTest = () => "opencode -\nclaude -\nclaude+threads -\ncodex -";
+            shell.ProbeAgents();
+            shell.AgentProbeForTest = null;
+
+            // provider-acp's customAgents: Claude Code's entry added (global bin, never npx), the user's others kept, once
+            string s1 = MetaCodexShell.WithClaudeThreadsAgent("", out bool ch1, out string e1);
+            string s2 = MetaCodexShell.WithClaudeThreadsAgent(s1, out bool ch2, out string e2);
+            string s3 = MetaCodexShell.WithClaudeThreadsAgent("[{\"id\":\"mine\",\"displayName\":\"Mine\",\"command\":\"mine-acp\"},{\"id\":\"claude-code\",\"displayName\":\"Claude Code\",\"command\":\"npx\",\"args\":[\"-y\",\"x\"]}]", out bool ch3, out _);
+            MetaCodexShell.WithClaudeThreadsAgent("{\"not\":\"an array\"}", out bool ch4, out string e4);
+            var a1 = JArray.Parse(s1); var a3 = JArray.Parse(s3);
+            Check(ch1 && e1 == null && a1.Count == 1 && (string)a1[0]["id"] == "claude-code" && (string)a1[0]["command"] == "claude-agent-acp" && (string)a1[0]["displayName"] == "Claude Code"
+                && !ch2 && e2 == null && s2 == s1 && ch3 && a3.Count == 2 && (string)a3[0]["id"] == "mine" && (string)a3[1]["command"] == "claude-agent-acp" && !ch4 && e4 != null,
+                $"Claude Code joins the ACP provider's custom agents as claude-agent-acp (added {ch1}, again unchanged {!ch2}, the user's entry kept and an npx entry put right {ch3}, a broken setting left alone {!ch4})");
 
             string V(string said) { var m = shell.Voice.FastMatch(said); return m == null ? "none" : m.Command.Name + " " + (string)m.Args["agent"]; }
             Check(V("install opencode") == "install_agent opencode" && V("download codex") == "install_agent codex" && V("add an api key for claude code") == "agent_key claude",

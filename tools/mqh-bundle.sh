@@ -5,7 +5,8 @@
 #   unity/Assets/StreamingAssets/linux/mqh.tar.gz + mqh.json (sha256)      (both generated, gitignored)
 # laid by the app over the rootfs at /opt/mqh (LinuxHost.ApplyBundles) and started by /opt/mqh/bin/mqh-run.
 # What goes in: the server, host daemon and CLI bundles (esbuild, no node_modules), the bundled plugins except
-# provider-claude-code (its bundle contains Anthropic's Agent SDK: never shipped; installed at first use), and the
+# provider-claude-code (its bundle contains Anthropic's Agent SDK: never shipped; Claude Code threads run through
+# provider-acp and the ACP adapter the user installs, docs/mqh.md "Claude Code through ACP"), and the
 # three native modules, as prebuilt linux-arm64 binaries: better-sqlite3 (its GitHub release for Node 24, ABI 137,
 # sha256-pinned below), node-pty (its own linux-arm64 prebuild) and @parcel/watcher (its linux-arm64-glibc package).
 set -euo pipefail

@@ -31,6 +31,40 @@ On the headset this file and the licence texts it points to are in `/usr/share/d
 `userland/build-overlay.py`, which ships every file that lies directly in `docs/licenses/`: keep that folder flat). The
 standard texts of the Debian image are also in `/usr/share/common-licenses/` there.
 
+## Third-party coding agents (not included)
+
+MetaCodex works with three coding agents made by other vendors: Claude Code, Codex and OpenCode. None of them is part
+of MetaCodex.
+
+- **Nothing of the agents is in the APK or in this repository.** The APK and the repository contain no part of Claude
+  Code, Anthropic's Agent SDK, the Codex CLI or OpenCode. The app holds only MetaCodex's own code (MIT), which starts
+  the installs and talks to the agents through MQH, and the names of the npm packages inside its install commands. For
+  the Claude Code ACP adapter the command also pins a version (`@agentclientprotocol/claude-agent-acp@0.107.3`). The
+  adapter is not shipped either: npm downloads it on the device. MQH (MIT, our fork of bb) runs the agents through its
+  Codex and ACP provider plugins, which are MIT code of bb. The repository also keeps the MIT source of MQH's own
+  Claude provider plugin (`mqh/plugins/provider-claude-code`) and bb's recorded protocol messages for its tests. That
+  plugin names Anthropic's SDK as a dependency, but the SDK is not in the repository, and the plugin is not in the APK
+  ([gap G8](#8-gaps), closed).
+- **The user installs each agent on their own headset.** The packages come from the official npm registry, in a
+  terminal the user watches. GET and ENABLE THREADS in AGENTS show the exact command before it runs. npm downloads the
+  packages and their dependencies directly from the registry to the device. For Claude Code these are
+  `@anthropic-ai/claude-code` (proprietary), `@agentclientprotocol/claude-agent-acp` (Apache-2.0), and the package the
+  adapter pulls in, `@anthropic-ai/claude-agent-sdk` (proprietary). For Codex it is `@openai/codex` (Apache-2.0), for
+  OpenCode `opencode-ai` (MIT).
+- **Each agent is used under its vendor's own licence and terms**, with the user's own account or API key. The agent's
+  own CLI does the sign-in (for example `claude auth login`, run in a terminal). MetaCodex never reads, stores or sends
+  those login credentials: they stay in the CLI's own files. The sign-in link and code pass through the terminal
+  window, as in any terminal.
+- **API keys are the user's own.** A key the user pastes in AGENTS > API KEY is sealed in the app's vault on the
+  headset and put into MQH's machine environment, so the agents MQH starts find it. Programs in the headset's Linux can
+  also ask the vault for it (`mcx-secret`; the key's policy is "allow"). MetaCodex never writes it to a file in clear
+  text and never sends it off the headset. The agent sends it to its own provider.
+- **No affiliation.** MetaCodex is not affiliated with or endorsed by Anthropic, OpenAI or the makers of OpenCode. The
+  names identify the third-party tools only.
+
+Details: [section 4.2](#42-what-mcx-setup-downloads-on-request) (the CLIs) and [section 4.3](#43-what-the-user-chooses-to-install-system--tools-agents)
+(the install catalogue and the ACP adapter).
+
 ## Summary
 
 | Group | What | Licences | What they ask of us |
@@ -50,7 +84,7 @@ standard texts of the Debian image are also in `/usr/share/common-licenses/` the
 | **B. Downloaded on request** | the optional local coder: Qwen2.5-Coder 0.5B | Apache-2.0 | none for us (the user's device downloads it); keep the pointer |
 | | NDK (community build), OpenXR 1.1.65, 144 Debian packages (`mcx-setup quest`) | MIT, Apache-2.0, LLVM exception, GPL/LGPL/... | none for us (the user's device downloads them); keep the pointers |
 | | android.jar | Android SDK License Agreement | the user must accept it (gap G6) |
-| | agent CLIs the user installs | Claude Code: proprietary, Anthropic's terms; OpenCode MIT; Codex Apache-2.0 | never bundled |
+| | agent CLIs the user installs, and Claude Code's ACP adapter | Claude Code: proprietary, Anthropic's terms; OpenCode MIT; Codex Apache-2.0; the adapter `@agentclientprotocol/claude-agent-acp` Apache-2.0, with Anthropic's Agent SDK (proprietary) that npm pulls in | never bundled ([not included](#third-party-coding-agents-not-included)) |
 | | the code editor: code-server 4.145.2 (`mcx-ide install`, [section 4.4](#44-the-code-editor-mcx-ide-install-on-request)) | MIT (code-server; the VS Code "Code - OSS" build in it), Node.js MIT, the notices of its bundled parts; GitHub's Copilot CLI package inside it: GitHub's terms | never bundled: the user's device downloads the official release; we keep the pointer |
 | **C. Build / development only** | Unity Editor, build tools, MQH dev tree (1,012 npm packages), voice-bench packages and models, diagram fonts | many; none is shipped | listed for completeness |
 
@@ -371,7 +405,9 @@ What is in the tar (read from `opt/mqh/`):
   `pty.node` (node-pty 1.2.0-beta.15, MIT, (c) 2012-2015 Christopher Jeffrey, (c) 2016 Daniel Imms), `watcher.node` twice
   (@parcel/watcher 2.6.0, MIT, (c) 2017-present Devon Govett; the glibc and the musl build).
 - **Not in the APK** (verified: no `claude-agent-sdk`, no `provider-claude-code`; `provider-pi` is out of `mqh/`): Anthropic's Agent
-  SDK, which carries a Claude Code binary (proprietary).
+  SDK, which carries a Claude Code binary (proprietary). Claude Code threads use the bundled `provider-acp` plugin with
+  the ACP adapter that the user installs on the headset ([section 4.3](#43-what-the-user-chooses-to-install-system--tools-agents));
+  the app adds the adapter to that plugin's `customAgents` setting (the command name `claude-agent-acp`, nothing else).
 - **49 SVG icons** inside the bundled plugins (47 in `provider-acp/icons`, 2 in `provider-codex/icons`; the
   `storage-retention` plugin and its icon are out of `mqh/` since 2026-11-13): logos of third-party agents and generic icons inherited from bb, of **unknown licence and
   provenance**, trademarks of their owners (gap G10).
@@ -463,6 +499,26 @@ Apache-2.0, sh.rustup.rs), the agents Claude Code (proprietary, above), Codex CL
 and OpenCode (above), and Debian packages through `apt` (python3-pip, build-essential, clang, cmake, ninja-build, go,
 adb, glslc, git, curl, wget, openssh-client, jq, ripgrep, fd-find, fzf, tmux, sqlite3, nano, vim, neovim). The code
 editor (TOOLS > code editor) has its own section, 4.4.
+
+**Claude Code's ACP adapter** (AGENTS > GET CLAUDE CODE installs it with the CLI in the same npm command; ENABLE THREADS
+installs it alone; `npm i -g @agentclientprotocol/claude-agent-acp@0.107.3`, pinned in `ShellAgentGet.cs`). It lets
+MQH's ACP plugin run Claude Code threads (`docs/mqh.md`). Read from the npm registry on 2026-11-17 (metadata and the
+package's own files, nothing run):
+
+| Package (npm resolves it on the headset) | Version | Licence | Notes |
+|---|---|---|---|
+| `@agentclientprotocol/claude-agent-acp` (bin `claude-agent-acp`) | 0.107.3 | Apache-2.0 | Node >= 22 (the image has 24); no install script; `--version` prints its version |
+| `@agentclientprotocol/sdk` | 2.7.0 | Apache-2.0 | |
+| `zod` | 4.6.7 | MIT | |
+| `diff` | 9.0.0 | BSD-3-Clause | |
+| `@anthropic-ai/claude-agent-sdk` | 0.3.325 | **proprietary** ("SEE LICENSE IN README.md", Anthropic's terms) | no install script; its Claude Code binary comes in a platform package |
+| `@anthropic-ai/claude-agent-sdk-linux-arm64` | 0.3.325 | **proprietary** ("SEE LICENSE IN LICENSE.md") | the build npm picks on the headset (linux, arm64, glibc); 365 MB unpacked |
+| peers of the SDK: `@anthropic-ai/sdk` (>= 0.93.0), `@modelcontextprotocol/sdk` (^1.29.0) | 1.9.0, 1.32.2 at the latest | Apache-2.0, MIT | npm installs peers itself |
+
+**Never bundled**: not in the APK, the image, the overlay, MQH's bundle or the repository. The user's device downloads
+every one of these packages from the registry, under each package's own licence; the proprietary SDK runs under
+Anthropic's terms with the user's own Claude Code login or API key. Duties for us: none beyond keeping it out of what
+we ship (G8) and this pointer.
 
 ### 4.4 The code editor (`mcx-ide install`, on request)
 
@@ -563,7 +619,7 @@ through the issue tracker of that repository (the contact must be confirmed by t
 | OpenRAIL-M: licence copy; use restrictions passed to users | Supertonic 3 | `Supertonic-3-OpenRAIL-M.txt`; summary in 4.1 and in the ABOUT tab (names it, points here) | partly: VOICE panel next to the models (G4) |
 | Android SDK License accepted by the user | android.jar | `mcx-setup` prints the licence name and URL | not done: it does not ask (G6) |
 | No third-party trademark use in the app | contest section 4 | no tool logos; | open: launcher icon (G5), MQH icons (G10) |
-| Never bundle Anthropic's proprietary CLI/SDK | Claude Code, `claude-agent-sdk` | verified absent from the APK | done |
+| Never bundle Anthropic's proprietary CLI/SDK | Claude Code, `claude-agent-sdk` (also when Claude Code threads run through the ACP adapter: the user installs the adapter and npm brings the SDK, section 4.3) | verified absent from the APK | done |
 | Never redistribute the code editor's release (it carries GitHub's Copilot CLI package under GitHub's terms) | code-server 4.145.2 | `mcx-ide install` downloads it on the headset from the official release; not in the APK, the image or the repository | done |
 
 ## 8. Gaps
@@ -580,7 +636,7 @@ Status of the gaps of 2026-11-10 (G1-G9) and the new ones. "Owner" = a decision 
 | G5 | Launcher icon is Unity's logo (`res/mipmap*/app_icon.png`, `ic_launcher_foreground.png`, checked in APK 0.7.16) | **open** | **code**: set our own icon in `MetaCodexSetup` (drawn from the MetaCodex mark) |
 | G6 | android.jar is downloaded without asking for acceptance of the Android SDK License | **open** (the script prints the name and URL, it does not ask) | **code**: `mcx-setup quest` must show the terms and ask first |
 | G7 | No licence for our code; `local-ai/package.json` says Apache-2.0 | **closed**: MIT, `LICENSE` written; section 2 | **code**: change `local-ai/package.json` `license` to `MIT` at the next bundle |
-| G8 | MQH on the headset must not carry Anthropic's Agent SDK | **closed**: verified absent from `mqh.tar` (APK 0.7.16); MQH's MIT and npm notices are in `docs/licenses/` | keep `tools/mqh-bundle.sh` removing `provider-claude-code` (`provider-pi` is out of `mqh/` since 2026-11-13) |
+| G8 | MQH on the headset must not carry Anthropic's Agent SDK | **closed**: verified absent from `mqh.tar` (APK 0.7.16); MQH's MIT and npm notices are in `docs/licenses/`. Claude Code threads (2026-11-17) do not reopen it: they run through MQH's ACP plugin and the ACP adapter, which the user installs from npm on the headset with the SDK it pulls in ([Third-party coding agents](#third-party-coding-agents-not-included)); the app writes only the adapter's command name into MQH's settings | keep `tools/mqh-bundle.sh` removing `provider-claude-code` (`provider-pi` is out of `mqh/` since 2026-11-13); never bundle the adapter or its SDK |
 | G9 | `UiIcon` shader left without a user | open, tidiness only (still in `Resources/Shaders`, still named by the self-test) | **code**: delete when the orb branch has landed |
 | G10 | **New.** 49 third-party icons in the APK (50 in the repository): `mqh/plugins/provider-acp/icons` (47 in the APK: logos of other agents), `provider-codex/icons` (2), plus `provider-claude-code` (1, repository only; `storage-retention` and `provider-pi` and their icons left `mqh/` on 2026-11-13); licence and provenance unknown (came with bb), trademarks of their owners | **open**: conflicts with the no-logo rule and contest section 4, and the MIT notice of bb does not clearly cover them | **code**: delete the `icons` folders in `tools/mqh-bundle.sh` (the plugins show no icon in the VR terminal) and drop them from `mqh/`, or replace them with our own; **owner** decides |
 | G11 | **New.** Unity-made and UCL files in the repository (TextMesh Pro resources, settings, 36 Unity skills): UCL section 1 allows use and distribution only with content made under a valid Unity engine licence | **noted**, not a block | **owner**: keep the proof of the Unity licence (plan, seat) with the submission; the `LICENSE` scope clause already names these files |

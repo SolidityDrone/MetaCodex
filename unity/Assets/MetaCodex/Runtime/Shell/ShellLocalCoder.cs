@@ -8,9 +8,11 @@ namespace MetaCodex.Shell
 {
     /// The local coder (docs/local-coder.md): a small coding model (Qwen2.5 Coder 0.5B, 430 MB, optional; a demonstration that agents run offline) in the local AI service,
     /// usable by the agent harnesses MQH runs. Installing it sets three variables in MQH's machine environment:
-    /// MCX_LOCAL_CODER_URL + MCX_LOCAL_CODER_KEY (Claude Code and Codex then list "Local coder (this headset, slow)",
-    /// and only a thread on that model uses it) and OPENCODE_CONFIG (an extra OpenCode config with the provider
-    /// "MetaCodex (this headset)"). While it works, voice waits (the service holds the interface AI; TALK says so).
+    /// MCX_LOCAL_CODER_URL + MCX_LOCAL_CODER_KEY (MQH's own Claude plugin, in a PC's MQH only, then lists "Local coder
+    /// (this headset, slow)", and only a thread on that model uses it; the headset's Claude Code threads run through the
+    /// ACP adapter, which does not list it) and OPENCODE_CONFIG (an extra OpenCode config with the provider
+    /// "MetaCodex (this headset)": OpenCode lists the model first under that name). While it works, voice waits (the
+    /// service holds the interface AI; TALK says so).
     public sealed partial class MetaCodexShell
     {
         public const string LocalCoderUrl = "http://127.0.0.1:47810";
@@ -121,7 +123,7 @@ namespace MetaCodex.Shell
             catch (Exception ex) { Log("[coder] opencode config: " + ex.Message); return; }
             int pending = key != null ? 3 : 1;
             bool ok = true;
-            void Done(JToken r) { if (r == null) ok = false; if (--pending == 0) { _coderEnvSynced = ok; if (ok) Log(key != null ? "[coder] MQH environment set: Claude Code, Codex and OpenCode list the local coder" : "[coder] OpenCode config set (no snapshots)"); } }
+            void Done(JToken r) { if (r == null) ok = false; if (--pending == 0) { _coderEnvSynced = ok; if (ok) Log(key != null ? "[coder] MQH environment set: OpenCode lists the local coder" : "[coder] OpenCode config set (no snapshots)"); } }
             if (key != null)
             {
                 Mqh.SetMachineEnvironment("MCX_LOCAL_CODER_URL", LocalCoderUrl, "MetaCodex local coder (AI service on this headset)", Done);
