@@ -237,8 +237,9 @@ end)
             sb.Append("2. `plugin.json`, all of `main.lua` and `git log --oneline` here: what the plugin does now.\n")
               .Append("The skills are in `~/.claude/skills/<name>/SKILL.md` when your agent does not list them.\n");
             if (kind == "app" && !fromExample)
-                sb.Append("Two complete app plugins are models: `/root/metacodex-projects/plugins/apps/timers` and `.../apps/calendar` when\n")
-                  .Append("the user has added them (`mcx-ui plugin examples` says so): read their `main.lua`; never change them from here.\n");
+                sb.Append("Complete app plugins are models: `/root/metacodex-projects/plugins/apps/timers`, `.../apps/calendar` and `.../apps/weather`\n")
+                  .Append("(data from the network) when the user has added them (`mcx-ui plugin examples` says so): read their `main.lua`;\n")
+                  .Append("never change them from here.\n");
             sb.Append("\n");
             if (kind == "app")
                 sb.Append("## What the app plugin needs (the app checks it)\n\n")

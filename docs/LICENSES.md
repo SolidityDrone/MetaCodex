@@ -483,6 +483,18 @@ The CODE EDITOR of the app ([ide.md](ide.md)) is **code-server**, downloaded on 
 Duties: none for us beyond keeping this pointer (the user's device downloads the official release, whose licence and
 notices files stay in it). Brand rule: the app shows no logo and names it only by its function.
 
+### 4.5 Data an example plugin fetches (on request)
+
+The Weather example app plugin (`Runtime/Scripting/Resources/PluginExamples/weather`, opt-in: MQH > PLUGINS > EXAMPLES TO
+ADD) asks two public endpoints that need no key, from the headset, only after the user picks or types a city, then every
+30 minutes while it is installed and enabled. Nothing of the data ships in the APK or the repository, except the trimmed
+replies the PC tests use (`tests/plugins/fixtures/net/open-meteo.json`, recorded 2026-11-17).
+
+| What | From | Licence and terms | Duties, and where they are met |
+|---|---|---|---|
+| Weather now and the 3-day forecast | `api.open-meteo.com/v1/forecast` (Open-Meteo, open-source weather API) | the data: **CC BY 4.0** (open-meteo.com/en/licence); the free API: non-commercial use only, under 10,000 calls a day, 5,000 an hour, 600 a minute (open-meteo.com/en/terms) | credit, a link next to the data and a note of changes: the window's dim line "Weather data by Open-Meteo.com, places by GeoNames (CC BY 4.0); rounded here." and its SOURCE button (opens open-meteo.com); the plugin calls about 50 times a day |
+| Place names and coordinates of a typed city | `geocoding-api.open-meteo.com/v1/search` (data from GeoNames) | **CC BY 4.0** (GeoNames) | the same credit line names GeoNames |
+
 ## 5. Group C: used only to build or develop (not shipped)
 
 | What | Licence | Note |
@@ -582,7 +594,8 @@ The user's own accounts and the providers' terms apply: Anthropic (Claude Code l
 OpenCode's model providers, GitHub (only if the user stores a token in VAULT > GIT), Hugging Face and the QVAC registry
 (model downloads), Debian mirrors, nodejs.org, the npm registry, Google's SDK repository (android.jar), Maven Central,
 GitHub Releases (the NDK, the code editor), Open VSX (extensions the user installs in the code editor), skills.sh
-(MQH's skill registry). MetaCodex never reads or stores provider login tokens.
+(MQH's skill registry), Open-Meteo's forecast and geocoding APIs (the Weather example plugin, section 4.5), and any host
+an app plugin lists in its `plugin.json` `"network"` (the plugin's own terms; MQH > PLUGINS shows the hosts). MetaCodex never reads or stores provider login tokens.
 
 ## 10. How this was checked (rerun before every submission)
 
