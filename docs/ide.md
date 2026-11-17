@@ -17,7 +17,10 @@ here and in [LICENSES.md](LICENSES.md).
   (about 220 MB of the 645 MB). The defaults turn its AI features off (`chat.disableAIFeatures`); it would need your
   own GitHub account and GitHub's terms (see [LICENSES.md](LICENSES.md)).
 - Your projects: it opens `/root/metacodex-projects` by default, the folder where THREADS, FILES and the agents keep
-  them; a project opens by voice ("open the weather project in the code editor").
+  them; a project opens by voice ("open the weather project in the code editor"), and from a thread's sidebar FILES:
+  EDITOR ▸ opens the thread's project folder, EDIT on a file opens that file in it (the address's `?folder=` and the
+  workbench's `payload` `[["openFile","vscode-remote://127.0.0.1:<port>/<path>"]]`). Not installed: the button reads
+  GET EDITOR and installs it, then opens there.
 
 ## Install, size, where things go
 

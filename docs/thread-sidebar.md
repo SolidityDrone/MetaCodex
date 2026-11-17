@@ -38,9 +38,11 @@ the side bar offers INIT GIT. Code: `Runtime/Shell/ShellThreadSidebar.cs`.
   only and say so; binaries are named; an untracked file shows all its lines added; a file git sees no change in shows
   the agent's last edit from the timeline. The open diff reloads in place when the agent edits that file again.
 - **FILES**: the project folder with a breadcrumb (`repo › src`, a tap goes back up; never above the project folder;
-  `⌂` back to it), folders first, `.git` hidden, changed files coloured with their letter, folders holding changes
+  `⌂` back to it; **EDITOR ▸** opens the project folder in the code editor, **GET EDITOR** while it is not installed asks
+  to install it and opens it there when done, see [ide.md](ide.md)), folders first, `.git` hidden, changed files coloured with their letter, folders holding changes
   marked `●`. A file opens read-only in the code view (line numbers, syntax colours, 2 MB at most and it says so;
-  binaries named): `‹ BACK`, WRAP, `@ ASK`, EDIT (nano in a terminal), DIFF (CHANGES on it).
+  binaries named): `‹ BACK`, WRAP, `@ ASK`, EDIT (the file in the code editor, in its project folder; not installed:
+  GET CODE EDITOR, or TERMINAL for nano now), DIFF (CHANGES on it).
 - **GIT**: only in a repo: the branch, ahead / behind, upstream, clean or N changed (and the repo's own folder when the
   project is a subfolder of it), the status (a tap opens that file's diff), the recent commits (hash, subject, refs,
   when); FETCH, PULL, COMMIT…, PUSH, TERMINAL. Not a repo: `NOT A GIT REPOSITORY`, the path, one **INIT GIT**

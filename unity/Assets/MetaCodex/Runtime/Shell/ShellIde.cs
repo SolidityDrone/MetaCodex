@@ -58,6 +58,7 @@ namespace MetaCodex.Shell
         private bool _ideBusy;             // a start or a sign-in is under way
         private bool _ideOpenAfterInstall; // the user asked to open it: it opens when the install is done
         private string _ideFolderAfterInstall;
+        private string _ideFileNext, _ideFileFor; // a file to show when the editor's page opens next on that folder (OpenIdeAt)
         private bool _ideInstallWatch;
         private UiPanel _ideWebHooked;     // the WEB window whose Closed puts its size back
 
@@ -85,6 +86,13 @@ namespace MetaCodex.Shell
         /// Opens the editor in the WEB window (`folder`: a Linux folder to open in it; null: the last one). Not installed:
         /// asks to install it first. Returns what happened, for voice ("error: ..." when it cannot).
         public string OpenIde(string folder) => IdeEnsure(true, folder);
+
+        /// Opens the editor on `folder` with `file` (a Linux path; null: only the folder) open in it: THREAD's sidebar FILES.
+        public string OpenIdeAt(string folder, string file)
+        {
+            _ideFileNext = file; _ideFileFor = folder;
+            return IdeEnsure(true, folder);
+        }
 
         /// Starts it (the control port's `system ide start`, from `mcx-ide start`) or opens it.
         private string IdeEnsure(bool show, string folder)
@@ -163,6 +171,16 @@ namespace MetaCodex.Shell
         {
             if (_ideUrl == null) return;
             string url = _ideUrl + (string.IsNullOrEmpty(folder) ? "" : "?folder=" + Uri.EscapeDataString(folder));
+            string file = folder != null && folder == _ideFileFor ? _ideFileNext : null; // a stale request (cancelled install) never opens elsewhere
+            _ideFileNext = _ideFileFor = null;
+            if (!string.IsNullOrEmpty(file) && file.StartsWith("/", StringComparison.Ordinal))
+            {
+                // the workbench's own way to open a file from the address (its payload "openFile"): a remote URI on the
+                // server's host:port, the authority it gives the folder too
+                string fileUri = "vscode-remote://" + new Uri(_ideUrl).Authority + string.Join("/", file.Split('/').Select(Uri.EscapeDataString));
+                string payload = new JArray(new JArray("openFile", fileUri)).ToString(Newtonsoft.Json.Formatting.None);
+                url += (url.Contains("?") ? "&" : "?") + "payload=" + Uri.EscapeDataString(payload);
+            }
             if (_panels.TryGetValue("web", out var web) && web != null)
             {
                 web.BaseScale = Vector3.one * UiScaleNow * IdeWebScale; // before it opens: it is placed at its new size

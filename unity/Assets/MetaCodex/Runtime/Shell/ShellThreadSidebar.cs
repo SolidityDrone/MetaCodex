@@ -55,6 +55,8 @@ namespace MetaCodex.Shell
         // FILES
         private string _sbDir, _sbFile;
         private UiCrumbs _sbCrumbs;
+        private UiButton _sbEditorBtn;   // FILES: EDITOR ▸ (the project in the code editor) or GET EDITOR (install it)
+        private bool _sbEditorShown;     // the label _sbEditorBtn has now (installed or not)
         private UiRows _sbTree;
         private UiLabel _sbFileLabel;
         private UiSourceView _sbCode;
@@ -136,14 +138,18 @@ namespace MetaCodex.Shell
 
             // FILES: the folder, or one file
             Func<bool> fList = () => _sbFile == null, fFile = () => _sbFile != null;
-            _sbCrumbs = SbAdd(TabFiles, fList, new UiCrumbs { Rect = new Rect(area.x + 0.004f, area.y, area.width - 0.104f, labelH), OnPick = SbCrumbPicked });
+            const float edW = 0.13f;
+            _sbCrumbs = SbAdd(TabFiles, fList, new UiCrumbs { Rect = new Rect(area.x + 0.004f, area.y, area.width - 0.104f - edW - g, labelH), OnPick = SbCrumbPicked });
+            _sbEditorShown = IdeInstalled;
+            _sbEditorBtn = SbAdd(TabFiles, fList, new UiButton(_sbEditorShown ? "EDITOR ▸" : "GET EDITOR", () => SbOpenInEditor(null))
+                { Rect = new Rect(area.xMax - 0.096f - edW - g, area.y, edW, labelH), TextSize = Mathf.Min(t.SmallSize * 1.05f, labelH * 0.5f) });
             SbAdd(TabFiles, fList, new UiButton("⌂", () => { _sbDir = _sbRoot; SbRefreshTree(); }) { Rect = new Rect(area.xMax - 0.096f, area.y, 0.046f, labelH), TextSize = t.BodySize });
             SbAdd(TabFiles, fList, new UiButton("⟳", () => SbRefreshTree()) { Rect = new Rect(area.xMax - 0.046f, area.y, 0.046f, labelH), TextSize = t.BodySize });
             _sbTree = SbAdd(TabFiles, fList, new UiRows { Rect = new Rect(area.x, area.y + labelH + g, area.width, area.height - labelH - g), OnPick = (row, i) => SbTreePicked(row.Tag as FileEntry) });
             SbButtons(TabFiles, fFile, new Rect(area.x, area.y, area.width, bh),
                 ("‹ BACK", () => { _sbFile = null; SbShow(); SbRefreshTree(); }, 1.3f), ("WRAP", () => SbToggleWrap(_sbCode, _sbCodeWrap), 0.9f),
                 ("@ ASK", () => { if (_sbFile != null) MentionInComposer(ThreadChanges.Rel(_sbRoot, _sbFile)); }, 0.9f),
-                ("EDIT", () => { if (_sbFile != null) RunInNewTerminal("nano " + GitService.Quote(_sbFile)); }, 0.9f),
+                ("EDIT", () => { if (_sbFile != null) SbOpenInEditor(_sbFile); }, 0.9f),
                 ("DIFF", () => SbDiffOfOpenFile(), 0.9f));
             _sbCodeWrap = (UiButton)_sbEls[_sbEls.Count - 4].el;
             _sbFileLabel = SbAdd(TabFiles, fFile, new UiLabel("", 0.015f) { Rect = new Rect(area.x + 0.004f, area.y + bh + g, area.width - 0.008f, labelH), UseMono = true });
@@ -670,11 +676,29 @@ namespace MetaCodex.Shell
 
         // ------------------------------------------------------------------ FILES
 
+        /// FILES' EDITOR ▸ (file null: the thread's project folder) and EDIT (that file, in its project folder) in the code
+        /// editor. Not installed: EDITOR asks to install it (it opens there when done); EDIT also offers a terminal editor.
+        private void SbOpenInEditor(string file)
+        {
+            if (_sbRoot == null) { Toast("This thread has no folder yet", "info"); return; }
+            string root = _sbRoot;
+            if (IdeInstalled || file == null) { OpenIdeAt(root, file); return; }
+            Modal("EDIT", $"Edit {SbRel(file)} in the code editor? It is not installed yet: about {IdeDownloadMB} MB to download, " +
+                $"{IdeDiskMB} MB on the headset; it opens on this file when it is installed. Or edit it now in a terminal.",
+                new[] { "GET CODE EDITOR", "TERMINAL", "CANCEL" }, i =>
+                {
+                    if (i == 0) { _ideFileNext = file; _ideFileFor = root; InstallIde(true, root); }
+                    else if (i == 1) RunInNewTerminal("nano " + GitService.Quote(file));
+                });
+        }
+
         private void SbRefreshTree()
         {
             if (_sbTree == null) return;
             var t = UiTheme.Current;
             _sbNextTree = Time.unscaledTime + 5f;
+            bool ide = IdeInstalled; // a file check, every 5 s while FILES shows: the label follows an install or a removal
+            if (_sbEditorBtn != null && ide != _sbEditorShown) { _sbEditorShown = ide; _sbEditorBtn.SetText(ide ? "EDITOR ▸" : "GET EDITOR"); }
             if (_sbRoot == null) { _sbCrumbs.Set(new[] { "no folder yet" }); _sbTree.Empty = "This thread has no folder yet: MQH makes it when the first turn starts."; _sbTree.SetRows(new UiRows.Row[0]); return; }
             if (_sbDir == null || !(_sbDir == _sbRoot || _sbDir.StartsWith(_sbRoot.TrimEnd('/') + "/"))) _sbDir = _sbRoot; // never above the project folder
             string rootName = _sbRoot == "/" ? "/" : _sbRoot.Split('/').Last();
