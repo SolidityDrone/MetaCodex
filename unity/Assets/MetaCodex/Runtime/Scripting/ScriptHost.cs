@@ -229,6 +229,18 @@ namespace MetaCodex.Scripting
         private readonly System.Collections.Concurrent.ConcurrentQueue<NetDone> _netDone = new System.Collections.Concurrent.ConcurrentQueue<NetDone>();
         private int _netIds;
         private bool _anyDirty;
+        /// Where plugin window time goes (the PC harness's --time and its 3 h run read it). Off by default: a bool check.
+        public bool MeasureUi;
+        public readonly UiCost Cost = new UiCost();
+        /// Stopwatch ticks (Stopwatch.Frequency a second) and counts since Clear: timer callbacks (Lua and the ui calls they
+        /// make), ui.panel's C# part (Json: the Lua table to JSON, Check: ViewSpecCheck), the window flush (Sig: signature
+        /// and LIVE diff, App: the calls into the app).
+        public sealed class UiCost
+        {
+            public long Timers, Panel, Json, Check, Flush, Sig, App, Calls, FastCalls, Sets, Builds, TextSends;
+            public void Clear() { Timers = Panel = Json = Check = Flush = Sig = App = Calls = FastCalls = Sets = Builds = TextSends = 0; }
+        }
+        private long Ts() => MeasureUi ? System.Diagnostics.Stopwatch.GetTimestamp() : 0L;
         public const int MaxWindowsPerPlugin = 4, MaxPluginTiles = 6;
         private static readonly DateTime Epoch = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         public static readonly string[] SoundNames = { "click", "open", "close", "ping", "toast", "alert", "error" };
@@ -297,6 +309,7 @@ namespace MetaCodex.Scripting
             }
             var ready = System.Threading.Interlocked.Exchange(ref _scanReady, null);
             if (ready != null) { _scanOut = false; if (ready.Found != null && ready.Gen == _scanGen) Apply(ready.Found); }
+            long t0 = Ts();
             for (int i = 0; i < _timers.Count; i++)
             {
                 var t = _timers[i];
@@ -315,8 +328,9 @@ namespace MetaCodex.Scripting
                     Run(t.Owner, t.Fn);
                 }
             }
+            if (MeasureUi) Cost.Timers += Ts() - t0;
             if (_net.Count > 0 || !_netDone.IsEmpty) TickNet();
-            if (_anyDirty) FlushWindows(now);
+            if (_anyDirty) { long f0 = Ts(); FlushWindows(now); if (MeasureUi) Cost.Flush += Ts() - f0; }
             AfterTick?.Invoke();
         }
 
@@ -1058,6 +1072,7 @@ namespace MetaCodex.Scripting
         /// (at most once a second a window, the first one at once). False = still dirty (waiting for the rate limit).
         private bool FlushWindow(PlugWin w, float now, bool force)
         {
+            long s0 = Ts();
             if (w.Sig == null) w.Sig = Signature(w.Spec, out w.Live);
             if (w.EverSent && w.Sig == w.LastSig)
             {
@@ -1065,22 +1080,28 @@ namespace MetaCodex.Scripting
                 foreach (var kv in w.Live)
                     if (w.LastLive == null || !w.LastLive.TryGetValue(kv.Key, out var old) || old != kv.Value)
                         (changed ??= new Dictionary<string, string>()).Add(kv.Key, kv.Value);
+                if (MeasureUi) Cost.Sig += Ts() - s0;
                 w.Dirty = false;
                 w.LastLive = w.Live;
                 bool open = w.OpenRequested;
                 w.OpenRequested = false;
                 if (changed != null)
                 {
+                    long a0 = Ts();
+                    if (MeasureUi) Cost.TextSends++;
                     if (!_svc.PluginWindowText(w.FullId, changed))
                     {
                         w.Builds++;
                         w.LastBuild = now;
+                        if (MeasureUi) Cost.Builds++;
                         _svc.PluginWindow(w.FullId, w.Spec.ToString(Newtonsoft.Json.Formatting.None), false);
                     }
+                    if (MeasureUi) Cost.App += Ts() - a0;
                 }
                 if (open) _svc.PluginWindowShow(w.FullId, 1);
                 return true;
             }
+            if (MeasureUi) Cost.Sig += Ts() - s0;
             if (w.EverSent && !force && now - w.LastBuild < 1f) return false;
             w.Dirty = false;
             w.EverSent = true;
@@ -1090,7 +1111,9 @@ namespace MetaCodex.Scripting
             w.Builds++;
             bool show = w.OpenRequested;
             w.OpenRequested = false;
+            long b0 = Ts();
             _svc.PluginWindow(w.FullId, w.Spec.ToString(Newtonsoft.Json.Formatting.None), show);
+            if (MeasureUi) { Cost.App += Ts() - b0; Cost.Builds++; }
             return true;
         }
 
@@ -1772,6 +1795,7 @@ namespace MetaCodex.Scripting
                 var idv = t.Get("id");
                 string local = SafeId(idv.IsNil() ? "main" : idv.ToPrintString());
                 if (local.Length == 0) throw new ScriptRuntimeException("ui.panel: id needs letters or digits, for example id=\"main\"");
+                long p0 = Ts();
                 var spec = new JObject { ["id"] = local };
                 try
                 {
@@ -1783,9 +1807,11 @@ namespace MetaCodex.Scripting
                 }
                 catch (ScriptRuntimeException ex) { throw new ScriptRuntimeException("ui.panel: " + ex.Message); }
                 if (spec["title"] == null) spec["title"] = string.IsNullOrEmpty(e.Title) ? e.Name : e.Title;
+                long p1 = Ts();
                 var errors = new List<string>();
                 var warnings = new List<string>();
                 ViewSpecCheck.Check(spec, errors, warnings);
+                if (MeasureUi) { long p2 = Ts(); Cost.Json += p1 - p0; Cost.Check += p2 - p1; }
                 if (errors.Count > 0) throw new ScriptRuntimeException("ui.panel: " + string.Join("; ", errors.Take(3)) + "  (form: " + form + ")");
                 string full = "plugin-" + e.Name + "-" + local;
                 var w = OwnWindow(e, full);
@@ -1808,6 +1834,7 @@ namespace MetaCodex.Scripting
                 w.Dirty = true;
                 if (t.Get("open").CastToBool()) w.OpenRequested = true;
                 _anyDirty = true;
+                if (MeasureUi) { Cost.Panel += Ts() - p0; Cost.Calls++; }
                 return DynValue.NewString(full);
             });
             Set(ui, "sound", a =>

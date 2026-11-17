@@ -16,6 +16,8 @@ namespace PluginHarness
     {
         public static int Fails;
         public static bool Verbose;
+        /// --time: what one second of each plugin costs the host, split (PluginRun.Timing).
+        public static bool Time;
 
         public static int Main(string[] args)
         {
@@ -26,6 +28,7 @@ namespace PluginHarness
             for (int i = 0; i < args.Length; i++)
             {
                 if (args[i] == "--verbose") Verbose = true;
+                else if (args[i] == "--time") Time = true;
                 else if (args[i] == "--run" && i + 1 < args.Length) runDir = args[++i];
                 else if (args[i] == "--rules") rules = true;
                 else if (args[i] == "--net" && i + 1 < args.Length) { net = true; examplesDir = args[++i]; } // the API and the weather example
@@ -206,6 +209,7 @@ namespace PluginHarness
             _host = NewHost();
             if (Load())
             {
+                if (Program.Time) Timing();
                 Made();
                 Taps();
                 Interact();
@@ -240,6 +244,57 @@ namespace PluginHarness
             Ok("loaded without error (" + _entry.Title + (_entry.Version.Length > 0 ? " " + _entry.Version : "") + "), kind " + _kind +
                (_entry.Project ? " (a plugin project: " + _entry.LinuxDir + ")" : " (an older plugin folder)"));
             return true;
+        }
+
+        // --time: N ticks of 1 s with the plugin's windows closed, then open; what the host spends, split
+        private void Timing()
+        {
+            const int N = 300, Warm = 30;
+            var ids = _host.WindowsOf(_entry);
+            foreach (bool open in new[] { false, true })
+            {
+                if (open)
+                {
+                    if (ids.Count == 0) break;
+                    foreach (var id in ids) _host.OpenWindowOf(_entry, id);
+                    StepFor(0.3);
+                }
+                for (int i = 0; i < Warm; i++) Step(1.0); // the JIT and the plugin's first calls
+                var c = _host.Cost;
+                c.Clear();
+                _host.MeasureUi = true;
+                var per = new double[N];
+                long bytes = 0;
+                for (int i = 0; i < N; i++)
+                {
+                    _fake.Pump(_host);
+                    _t += 1.0;
+                    _fake.Clock += 1.0;
+                    long m0 = GC.GetAllocatedBytesForCurrentThread();
+                    long a = System.Diagnostics.Stopwatch.GetTimestamp();
+                    _host.Tick((float)_t);
+                    long b = System.Diagnostics.Stopwatch.GetTimestamp();
+                    bytes += GC.GetAllocatedBytesForCurrentThread() - m0;
+                    per[i] = (b - a) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+                    DrainProblems();
+                    if (_entry.Error != null) break;
+                }
+                _host.MeasureUi = false;
+                if (!NoError("timing")) return;
+                double Ms(long ticks) => ticks * 1000.0 / System.Diagnostics.Stopwatch.Frequency / N;
+                string F(double ms) => ms.ToString("0.000", CultureInfo.InvariantCulture);
+                Array.Sort(per);
+                double lua = Ms(c.Timers - c.Panel);
+                double panelRest = Ms(c.Panel - c.Json - c.Check);
+                double flushRest = Ms(c.Flush - c.Sig - c.App);
+                Ok("time, windows " + (open ? "open" : "closed") + ", per 1 s tick (PC, " + N + " ticks): host Tick median " + F(per[N / 2]) + " ms, max " + F(per[N - 1]) +
+                   " | timers " + F(Ms(c.Timers)) + " = Lua " + F(lua) + " + ui.panel " + F(Ms(c.Panel)) + " (ToJson " + F(Ms(c.Json)) + ", Check " + F(Ms(c.Check)) + ", rest " + F(panelRest) + ")" +
+                   " | flush " + F(Ms(c.Flush)) + " (signature+diff " + F(Ms(c.Sig)) + ", app " + F(Ms(c.App)) + ", rest " + F(flushRest) + ")" +
+                   " | ui.panel calls " + c.Calls + " (fast " + c.FastCalls + "), ui.set " + c.Sets + ", full specs sent " + c.Builds + ", text sends " + c.TextSends +
+                   " | allocated " + (bytes / N / 1024.0).ToString("0.0", CultureInfo.InvariantCulture) + " KB a tick");
+            }
+            foreach (var id in ids) if (_fake.PluginWindowIsOpen(id)) _fake.PluginWindowShow(id, 0);
+            StepFor(0.3);
         }
 
         // 2. Windows and tiles

@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 # README
 # ------
-# Usage: tests/plugins/run-plugin-tests.sh [--verbose] [--rules] [--net] [--specs] [--scaffolds] [--examples] [<plugin-folder>...]
+# Usage: tests/plugins/run-plugin-tests.sh [--verbose] [--time] [--rules] [--net] [--specs] [--scaffolds] [--examples] [<plugin-folder>...]
 #        tests/plugins/run-plugin-tests.sh --scaffold <app|gesture|behaviour> <id> <dest> [name]
 #   --examples    the shipped example plugins
+#   --time        per plugin, after the load: 300 ticks of 1 s with its windows closed, then open, and what the host
+#                 spent in them (PC, Stopwatch): Lua, ui.panel (ToJson, Check), ui.set, the flush (signature + diff, the
+#                 calls into the fake app), full specs and text updates sent, bytes allocated a tick
 #   --rules       the plugin project rules (folder + marker, kinds, ids, reload, create, delete): PluginHarness/Rules.cs
 #   --net         the network API (net.get / net.post, plugin.json "network", limits, unload) and the weather example
 #                 against canned replies: PluginHarness/NetTests.cs
@@ -72,10 +75,11 @@ EXDIR="$ROOT/unity/Assets/MetaCodex/Runtime/Scripting/Resources/PluginExamples"
 RT="$ROOT/unity/Assets/MetaCodex/Runtime"
 W() { wslpath -w "$1"; }
 
-VERBOSE=(); FOLDERS=(); EXAMPLES=0; RULES=(); NET=(); SPECS=(); SCAFFOLDS=0; SCAFFOLD=(); EXAMPLE_PROJECT=()
+VERBOSE=(); TIME=(); FOLDERS=(); EXAMPLES=0; RULES=(); NET=(); SPECS=(); SCAFFOLDS=0; SCAFFOLD=(); EXAMPLE_PROJECT=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --verbose) VERBOSE=(--verbose) ;;
+    --time) TIME=(--time) ;;
     --examples) EXAMPLES=1 ;;
     --rules) RULES=(--rules) ;;
     --net) NET=(--net "$(wslpath -w "$EXDIR")") ;;
@@ -184,5 +188,5 @@ for f in "${FOLDERS[@]}"; do
 done
 
 set +e
-RUN --run "$(W "$OUT/run")" --fixtures "$(W "$ROOT/tests/plugins/fixtures/net")" ${VERBOSE[@]+"${VERBOSE[@]}"} ${RULES[@]+"${RULES[@]}"} ${NET[@]+"${NET[@]}"} ${SPECS[@]+"${SPECS[@]}"} ${IDS[@]+"${IDS[@]}"}
+RUN --run "$(W "$OUT/run")" --fixtures "$(W "$ROOT/tests/plugins/fixtures/net")" ${VERBOSE[@]+"${VERBOSE[@]}"} ${TIME[@]+"${TIME[@]}"} ${RULES[@]+"${RULES[@]}"} ${NET[@]+"${NET[@]}"} ${SPECS[@]+"${SPECS[@]}"} ${IDS[@]+"${IDS[@]}"}
 exit $?
