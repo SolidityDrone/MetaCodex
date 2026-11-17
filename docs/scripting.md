@@ -94,7 +94,7 @@ and the example plugin `components` shows every one working.
 - `canvas`: its own units (`width` x `height`, y down) or `fit = "lonlat"` with `bounds`; rect, circle, line,
   polyline, polygon, text, arc; outlines are strokes, fills are flat boxes or triangles (ear clipping; the C#-only
   shape kind `Tri` of `UiShapeMesh`, drawn as the shader's flat kind). A tap sends `shape` with the topmost shape with
-  an id and `"x,y"` in canvas units. 120 shapes, 64 points a shape, 1200 points, 40 texts.
+  an id and `"x,y"` in canvas units. 120 shapes, 64 points a shape, 1200 points, 60 texts and labels.
 - In place: a new spec that differs only in values (the controls' `value`, `selected`, block items, canvas tones and
   labels, texts; `ShapeOf` leaves them out) is applied to the built controls by the window's watcher (`UiViewWatch`)
   without a rebuild; a value within 1 s of the user's own change waits. In a view, value controls answer the thread

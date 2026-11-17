@@ -622,7 +622,7 @@ namespace MetaCodex.UI
         public bool Selectable = true;
         public Action<string, Vector2> OnTap;
 
-        public const int MaxShapes = 120, MaxPoints = 64, MaxTotalPoints = 1200, MaxTexts = 40;
+        public const int MaxShapes = 120, MaxPoints = 64, MaxTotalPoints = 1200, MaxTexts = 60; // texts and labels
 
         private float _s;
         private Vector2 _o;

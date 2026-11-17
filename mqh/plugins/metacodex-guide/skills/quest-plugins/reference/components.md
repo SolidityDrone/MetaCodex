@@ -279,7 +279,7 @@ set `selected`.
 ```
 How it draws: outlines are strokes in the panel's own mesh; soft fills are flat boxes (rects, circles) or
 triangles (polygons, split by ear clipping), all bent with the window. Limits: 120 shapes, 64 points a shape,
-1200 points in all, 40 texts. Simplify shapes to what the eye needs at 60 cm: 8-30 points per area is plenty.
+1200 points in all, 60 texts and labels. Simplify shapes to what the eye needs at 60 cm: 8-30 points per area is plenty.
 Change only tones, labels, fills and `selected` to highlight things: that updates in place; moving or adding
 shapes rebuilds the window (at most once a second).
 
@@ -374,7 +374,7 @@ have no real coordinates and say so in a dim text ("schematic").
 | tabs | 2-6 |
 | options: radio / segmented / select | 2-8 / 2-5 / 1-200 |
 | list rows | 100 |
-| canvas | 120 shapes, 64 points a shape, 1200 points, 40 texts |
+| canvas | 120 shapes, 64 points a shape, 1200 points, 60 texts and labels |
 | `scene3d`, `physics`, `image` | top level only |
 
 ## 7. Checklist before you ship a window

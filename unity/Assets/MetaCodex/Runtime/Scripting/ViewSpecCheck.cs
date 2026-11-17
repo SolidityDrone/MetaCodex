@@ -14,7 +14,7 @@ namespace MetaCodex.Scripting
         /// children of one card or tab, of one row; tabs; options of a select, radio, segmented; canvas limits (the
         /// shapes, the corners of one polyline or polygon and of all shapes, the texts: each text is its own mesh).
         public const int MaxAllComponents = 48, MaxChildren = 12, MaxRowChildren = 6, MaxTabs = 6, MaxSelectOptions = 200,
-            MaxRadioOptions = 8, MaxListItems = 100, MaxCanvasShapes = 120, MaxShapePoints = 64, MaxCanvasPoints = 1200, MaxCanvasTexts = 40;
+            MaxRadioOptions = 8, MaxListItems = 100, MaxCanvasShapes = 120, MaxShapePoints = 64, MaxCanvasPoints = 1200, MaxCanvasTexts = 60;
 
         /// Every component type the app draws (aliases included).
         public static readonly string[] Types =
@@ -315,6 +315,7 @@ namespace MetaCodex.Scripting
                 foreach (var k in need) if (!IsNum(s[k])) errors.Add(b + ": " + k + " must be a number");
                 if (type == "rect" && !IsNum(s["w"] ?? s["width"])) errors.Add(b + ": w and h (its size in canvas units) must be numbers");
                 if (type == "text") { texts++; if (string.IsNullOrEmpty(Str(s["text"]))) errors.Add(b + ": no text"); }
+                if (!string.IsNullOrEmpty(Str(s["label"]))) texts++;
                 if (type == "arc" && (s["from"] != null && !IsNum(s["from"]) || s["to"] != null && !IsNum(s["to"]))) errors.Add(b + ": from and to are angles in degrees (0 = up, clockwise)");
                 if (type == "line" && s["points"] == null)
                 {
@@ -336,7 +337,7 @@ namespace MetaCodex.Scripting
                 if (s["opacity"] != null && (!IsNum(s["opacity"]) || (double)s["opacity"] < 0 || (double)s["opacity"] > 1)) errors.Add(b + ": opacity must be 0..1");
             }
             if (points > MaxCanvasPoints) errors.Add(at + ": " + points + " points in all; the most is " + MaxCanvasPoints);
-            if (texts > MaxCanvasTexts) errors.Add(at + ": " + texts + " texts; the most is " + MaxCanvasTexts + " (use labels on fewer shapes)");
+            if (texts > MaxCanvasTexts) errors.Add(at + ": " + texts + " texts and labels; the most is " + MaxCanvasTexts + " (each is its own text mesh: label fewer shapes)");
             string sel = Str(c["selected"]);
             if (!string.IsNullOrEmpty(sel) && !ids.Contains(sel)) warnings.Add(at + ": selected '" + sel + "' is not the id of one of its shapes");
         }

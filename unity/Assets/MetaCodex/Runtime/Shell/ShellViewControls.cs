@@ -94,7 +94,7 @@ namespace MetaCodex.Shell
                     var kids = (c["components"] as JArray ?? new JArray()).OfType<JObject>().Take(6).ToList();
                     if (kids.Count == 0) return 0.03f;
                     float total = kids.Sum(Weight), avail = width - t.Gap * (kids.Count - 1), h = 0f;
-                    foreach (var k in kids) h = Mathf.Max(h, DesiredHeight(k, avail * Weight(k) / total));
+                    foreach (var k in kids) h = Mathf.Max(h, ChildHeight(k, avail * Weight(k) / total));
                     return h;
                 }
                 case "tabs":
@@ -109,12 +109,30 @@ namespace MetaCodex.Shell
 
         private static float Weight(JObject c) => Mathf.Clamp(Fl1(c["weight"], 1f), 0.1f, 10f);
 
+        /// A component's height inside a card, row or tab: buttons, choices and an input without a prompt or title take
+        /// only their buttons' height there (at the top level they keep the room for a prompt they had before).
+        private float ChildHeight(JObject k, float width)
+        {
+            var t = UiTheme.Current;
+            string type = ((string)k["type"] ?? "text").ToLowerInvariant();
+            bool prompt = !string.IsNullOrEmpty(S(k["prompt"])) || !string.IsNullOrEmpty(S(k["title"]));
+            if (prompt || k["height"] != null) return DesiredHeight(k, width);
+            if (type == "buttons" || type == "choices")
+            {
+                int n = Mathf.Clamp((k[type == "buttons" && k["items"] is JArray ? "items" : "options"] as JArray)?.Count ?? 1, 1, 12);
+                int rows = (n + 3) / 4;
+                return t.ButtonHeight * rows + t.Gap * 0.6f * (rows - 1);
+            }
+            if (type == "input") return t.ButtonHeight;
+            return DesiredHeight(k, width);
+        }
+
         private float StackHeight(JArray kids, float width)
         {
             var t = UiTheme.Current;
             if (kids == null) return 0.02f;
             float h = 0f; int n = 0;
-            foreach (var k in kids.OfType<JObject>().Take(12)) { h += DesiredHeight(k, width); n++; }
+            foreach (var k in kids.OfType<JObject>().Take(12)) { h += ChildHeight(k, width); n++; }
             return n == 0 ? 0.02f : h + t.Gap * (n - 1);
         }
 
@@ -133,14 +151,14 @@ namespace MetaCodex.Shell
                 for (int j = 0; j < list.Count; j++)
                 {
                     float w = avail * Weight(list[j]) / total;
-                    float h = Mathf.Min(area.height, DesiredHeight(list[j], w));
+                    float h = Mathf.Min(area.height, ChildHeight(list[j], w));
                     float y = align == "center" ? area.y + (area.height - h) * 0.5f : align == "bottom" ? area.yMax - h : area.y;
                     AddChild(p, v, list[j], new Rect(x, y, w, h), basePath + "[" + j + "]");
                     x += w + t.Gap;
                 }
                 return;
             }
-            var hs = list.Select(k => DesiredHeight(k, area.width)).ToList();
+            var hs = list.Select(k => ChildHeight(k, area.width)).ToList();
             float sum = hs.Sum(), gaps = t.Gap * (list.Count - 1);
             float k2 = sum + gaps > area.height ? Mathf.Max(0.01f, area.height - gaps) / Mathf.Max(0.01f, sum) : 1f;
             float yy = area.y;
@@ -481,6 +499,7 @@ namespace MetaCodex.Shell
                 if (so["stroke_width"] != null || so["width"] != null && s.Type != UiDrawCanvas.Kind.Rect) s.WidthMm = Fl1(so["stroke_width"] ?? so["width"], s.WidthMm);
                 if (so["size"] != null) s.SizeMm = Mathf.Clamp(Fl1(so["size"], 11f), 5f, 40f);
                 StyleShape(s, so);
+                if (!string.IsNullOrEmpty(s.Label) && texts++ >= UiDrawCanvas.MaxTexts) s.Label = null; // texts and labels: 60 meshes at most
                 if (s.Type == UiDrawCanvas.Kind.Polygon && s.Fill) s.Tris = UiDrawCanvas.Triangulate(s.Pts);
                 s.LabelAt = UiDrawCanvas.LabelPoint(s);
                 cv.Shapes.Add(s);
