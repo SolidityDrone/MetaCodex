@@ -539,8 +539,12 @@ Agent views:
 
 Projects and the THREADS list:
 
-- [ ] Open THREADS → it shows NATIVE, DEFAULT, RESEARCH, PLUGINS (dim headers, in that order); OTHER only when a project is outside `/root/metacodex-projects/` and has no type; a tap on a header folds it, a tap on a project folds it; threads stay under their project (and its worktree rows); the project row says how many run / need you; a tap on a thread opens it; each thread shows its status (running / error / NEEDS YOU) and the list refreshes
-- [ ] An empty type says "no … project yet: tap to make one" → the tap asks the name of a project of that type
+- [ ] Open THREADS → a filter bar on top: ALL · NATIVE · DEFAULT · RESEARCH · PLUGINS, each with a colour swatch and its count of projects (OTHER only when a project is outside `/root/metacodex-projects/` and has no type); under ALL, a card per project with a stripe in its type's colour and a clear gap between cards; projects and threads are told apart at a glance, the text is easy to read at arm's length
+- [ ] A card's head: the name in bold, its folder under it, a chip (NATIVE · 2D PANEL, PLUGIN · APP, RESEARCH …), the thread count and + → a tap on the name folds / unfolds the card; + opens NEW THREAD with that project chosen
+- [ ] Inside a card the threads sit well in from the card's edge along a thin line: a status dot, the title, RUNNING / NEEDS YOU / ERROR on the right, and a dim line "agent · 5 min ago · 2 edits"; a tap opens the thread and its row lights; worktree folders (▣ / ⎇) show inside the card with their threads under them
+- [ ] Tap NATIVE → only native projects, the chips say IMMERSIVE / 2D PANEL; restart the app → THREADS opens on NATIVE again with the same cards folded; say "open the thread about <a default project's thread>" → the filter switches to DEFAULT and the thread is in view
+- [ ] A type with no project shows one card "No … project yet" with + NEW … PROJECT → the tap asks the name of a project of that type
+- [ ] Scroll a long list (several cards open) → it scrolls by rows, no stutter, a card whose head scrolled away is cut cleanly at the top; about 72 fps while scrolling
 - [ ] THREADS: + PROJECT… → DEFAULT → name "My Test" → the project is listed under DEFAULT (`…/default/my-test`)
 - [ ] + PROJECT… asks NATIVE APP / DEFAULT / RESEARCH / EXISTING…, then the name on the keyboard (empty field, the hint in its caption) → "Weather App" makes `/root/metacodex-projects/native/weather-app`; EXISTING… picks a folder, then PROJECT TYPE: NATIVE APP, DEFAULT or RESEARCH, and the project is listed under that type
 - [ ] In a terminal: `cd /root/metacodex-projects/native/weather-app && git status && git config user.name && cat .metacodex/project.json && ls -la .claude/skills` → a git repository on `main`, an identity (yours when a global one is set, else MetaCodex), type native, the 13 `quest-native-*` links (`quest-native-art-direction` among them)

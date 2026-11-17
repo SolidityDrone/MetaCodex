@@ -412,6 +412,7 @@ namespace MetaCodex.Shell
                 _projectSel = pid;
                 Settings.lastProject = pid;
                 if (!_collapsedProjects.Remove(pid)) _collapsedProjects.Add(pid);
+                else ShowInThreads(pid); // unfolded: its rows scroll into view, its head kept
                 RenderThreadGroups();
                 return;
             }
@@ -642,11 +643,17 @@ namespace MetaCodex.Shell
             _threadList.SetItems(items, keepScroll: !_tvScrollTop);
             _tvScrollTop = false;
             _threadList.SelectIndex(items.FindIndex(i => i.Tag as string == "t:" + _threadOpen), notify: false); // -1: none lit
-            if (_tvRevealProject != null)
+            if (_tvRevealProject != null) // into view: the opened thread, else the whole card as far as it fits, its head first
             {
+                int head = items.FindIndex(i => i.Tag as string == "p:" + _tvRevealProject);
                 int k = _tvRevealThread != null ? items.FindIndex(i => i.Tag as string == "t:" + _tvRevealThread) : -1;
-                if (k < 0) k = items.FindIndex(i => i.Tag as string == "p:" + _tvRevealProject);
-                _threadList.Reveal(k);
+                if (k >= 0) _threadList.Reveal(k);
+                else if (head >= 0)
+                {
+                    int next = items.FindIndex(head + 1, i => i.Kind == UiListKind.CardHead);
+                    _threadList.Reveal((next < 0 ? items.Count : next) - 1);
+                    _threadList.Reveal(head);
+                }
                 _tvRevealProject = null;
                 _tvRevealThread = null;
             }

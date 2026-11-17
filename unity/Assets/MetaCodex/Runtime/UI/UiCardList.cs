@@ -39,7 +39,7 @@ namespace MetaCodex.UI
         // centre and its title; the head's name; the padding on the right
         public const float StripeWidth = 0.0035f, GuideX = 0.020f, RowX = 0.028f, DotX = 0.037f, TextX = 0.050f, NameX = 0.034f, Pad = 0.010f;
         /// The head's + (drawn), its target (the head's full height, this wide), and the count's column (counts line up).
-        public const float PlusSize = 0.032f, PlusHitWidth = 0.050f, CountWidth = 0.076f;
+        public const float PlusSize = 0.032f, PlusHitWidth = 0.050f, CountWidth = 0.088f;
         private const float ScrollLane = 0.012f; // the scroll bar's lane on the right
         private const float DotSize = 0.011f, Hair = 0.0012f, LineH = 0.022f, SubH = 0.017f;
 
@@ -210,16 +210,18 @@ namespace MetaCodex.UI
 
         public void ScrollBy(float items) { _scroll = Mathf.Clamp(_scroll + items, 0f, _maxFirst); Render(); }
 
-        /// Scrolls the least that shows item idx whole (with its card's head when both fit). Nothing when it is shown.
+        /// Scrolls the least that shows item idx whole: down until it fits at the bottom, or up to it (from its card's head
+        /// when both fit). Nothing when it is shown.
         public void Reveal(int idx)
         {
             if (idx < 0 || idx >= _items.Count) return;
-            int f = Mathf.FloorToInt(_scroll);
+            int f0 = Mathf.Clamp(Mathf.FloorToInt(_scroll), 0, _items.Count - 1), f = f0;
             float bottom = _tops[idx] + HeightOf(_items[idx]);
-            if (idx >= f && bottom - _tops[f] <= Rect.height) return;
-            int s = _cardOf[idx];
-            f = s >= 0 && s < idx && bottom - _tops[s] <= Rect.height ? s : idx;
-            _scroll = Mathf.Clamp(f, 0, _maxFirst);
+            if (idx < f) { int s = _cardOf[idx]; f = s >= 0 && bottom - _tops[s] <= Rect.height ? s : idx; }
+            else while (f < idx && bottom - _tops[f] > Rect.height) f++;
+            f = Mathf.Clamp(f, 0, _maxFirst);
+            if (f == f0) return;
+            _scroll = f;
             Render();
         }
 
@@ -361,7 +363,7 @@ namespace MetaCodex.UI
             else ShowShape(row.plate, false);
             ShowShape(row.tick, false);
             bool two = !string.IsNullOrEmpty(it.Sub);
-            float ny = two ? r.y + 0.007f : r.center.y - LineH * 0.5f;
+            float ny = two ? r.y + 0.0085f : r.center.y - LineH * 0.5f;
             float nameW = Mathf.Max(0.04f, (string.IsNullOrEmpty(it.Chip) ? count.x : chip.x) - Theme.Gap - (r.x + NameX));
             row.icon.SetVisible(true);
             SetSize(row.icon, Theme.BodySize, false);
