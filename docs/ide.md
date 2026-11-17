@@ -3,7 +3,7 @@
 The owner asked (2026-11-16): "Could we put an actual VS Code or an actual IDE in it? It would be cool to have an IDE
 to work for real without using the agents too." The CODE EDITOR is that: **code-server** (MIT, by Coder: the
 open-source VS Code ("Code - OSS") build that runs as a server in a browser), installed on request into the headset's
-Linux and shown in the app's WEB window. In the app it is called CODE EDITOR or CODE; the product names appear only
+Linux and shown in a web window of its own (see [ui.md](ui.md), WEB). In the app it is called CODE EDITOR or CODE; the product names appear only
 here and in [LICENSES.md](LICENSES.md).
 
 ## What you get
@@ -51,7 +51,7 @@ The editor opens by itself when it is done. Nothing is downloaded or started at 
 ## How to open it
 
 - **The CODE tile**: off the menu at first; add it on CONTROL > WRIST MENU (drag it from the SYSTEM tiles onto a ring).
-  It is lit while the WEB window shows the editor; a tap then puts the window away.
+  It is lit while the editor's web window is open; a tap then puts that window away.
 - **SYSTEM > TOOLS > code editor**: OPEN, STOP, UPDATE (when the app brings a newer version), STATUS AND LOG, REMOVE.
 - **Voice**: "open the code editor", "start the IDE", "open the notes project in the editor", "edit my current project
   in the editor"; "stop the code editor" frees its memory (registry commands `open_code_editor [project]`,
@@ -59,8 +59,17 @@ The editor opens by itself when it is done. Nothing is downloaded or started at 
 - **Agents and scripts**: `mcx-ui system ide open [folder] | start | stop | status`.
 
 OPEN starts the server when it is not running (how long it takes is not measured yet; the app waits up to 150 s), signs
-the WEB window in and shows the page, larger than a web page (x1.25; back to its size when the window closes). Closing
-the WEB window leaves the server running, so the next OPEN is quick; STOP (or "stop the code editor") ends it.
+the web window in and shows the page, larger than a web page (x1.25; back to its size when the window closes).
+
+**The editor has a window of its own** (owner 2026-11-17: "if I open a video and then the code editor, they fight over
+the window"). OPEN shows it in the web window that already shows it; otherwise in a new web window (`web-2` or `web-3`;
+the first window `web` stays the browser; the first window only when it is closed and the two others are open). With
+three web windows open it says so in a toast and replaces nothing: close one. Pages the app opens (links, bookmarks,
+voice, scripts) never go to the editor's window: they go to the web window touched last, or a new one beside the
+editor. GO and the address field of the editor's window still load there (the editor's page is then gone from it). The
+hardware keyboard types into the web window touched last. Closing the editor's window leaves the server running, so
+the next OPEN is quick (a `web-2` / `web-3` window is destroyed when closed, so its page loads again); STOP (or "stop
+the code editor") ends the server and closes its window.
 
 ## Where it runs, and what it costs
 
@@ -68,7 +77,7 @@ the WEB window leaves the server running, so the next OPEN is quick; STOP (or "s
   MQH runs), which Android places on cores 0-2, away from the cores 3-5 of the frame loop; at `nice 10`. The service
   is a foreground service while it has children, so the editor keeps running while another app is in front. A server
   started by the app's hidden shell runner would not survive: that proot runs with `--kill-on-exit`.
-- **Fewer frames to copy.** The WEB window copies the page into VR only when it changes. The defaults the install
+- **Fewer frames to copy.** A web window copies its page into VR only when it changes. The defaults the install
   writes (once; your changes stay) keep the page still when nothing happens: a solid cursor (no blinking), reduced
   motion, no smooth scrolling, no minimap. Also: autosave after a short delay (Ctrl+S needs a keyboard), text 16 px,
   the app name out of the window title, `keyboard.dispatch: keyCode` (Android keyboards report key codes, not physical
