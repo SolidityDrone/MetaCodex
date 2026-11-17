@@ -36,6 +36,11 @@ namespace MetaCodex.Shell
 
         // ------------------------------------------------------------------ building
 
+        /// The chat's text against the theme's small size (owner 2026-11-17: "slightly bigger text, a few px: it's hard to
+        /// read"): 1.22 is 13 % over the 1.08 it was; the terminal font scales with it, and the line heights are the
+        /// fonts' own at that size (UiChatView.Metrics).
+        public const float ChatTextScale = 1.22f;
+
         private void BuildThreadChat(UiPanel p, Rect statusRow)
         {
             var t = UiTheme.Current;
@@ -44,15 +49,33 @@ namespace MetaCodex.Shell
             _thTimeline = p.Add(new UiChatView
             {
                 Rect = TimelineRect(false),
-                TextSize = t.SmallSize * 1.08f,
+                TextSize = t.SmallSize * ChatTextScale,
                 Empty = "Nothing here yet. Write below, or ◉ to say it.",
                 OnToggled = (b, open) => RefreshNewButton(),
+                OnScrolled = Bind(RefreshNewButton),
+                OnLinkClicked = Bind<ChatBlock>(ChatBlockLink),
+                NowMs = () => NowMs,
+                Log = Log,
             });
-            _tlUp = p.Add(new UiButton("▲", () => { _thTimeline.ScrollBy(6); RefreshNewButton(); }, UiButtonStyle.Ghost));
-            _tlDown = p.Add(new UiButton("▼", () => { _thTimeline.ScrollBy(-6); RefreshNewButton(); }, UiButtonStyle.Ghost));
-            _thNewBtn = p.Add(new UiButton("↓ NEW", () => { _thTimeline.ScrollToBottom(); RefreshNewButton(); }, UiButtonStyle.Primary) { TextSize = t.SmallSize * 0.95f });
+            // a real scrollbar on the chat's right edge (owner 2026-11-17; it replaced ▲ ▼): drag its thumb, tap its track
+            // to page; LayoutChatExtras places it in the column the two buttons had
+            _thScroll = p.Add(new UiScrollbar());
+            _thTimeline.AttachScrollbar(_thScroll);
+            _thNewBtn = p.Add(new UiButton("↓ LATEST", () => { _thTimeline.ScrollToBottom(); RefreshNewButton(); }, UiButtonStyle.Primary) { TextSize = t.SmallSize * 0.95f });
             _thStatus = p.Add(new UiLabel("", t.SmallSize * 1.04f) { Rect = statusRow, Color = t.TextDim });
             _thNewBtn.SetVisible(false);
+        }
+
+        /// A tap on a block that does not open: an edit without a diff of its own opens the file's diff in the sidebar's
+        /// CHANGES (the diff jump).
+        private void ChatBlockLink(ChatBlock b)
+        {
+            if (!(b?.Tag is string path) || path.Length == 0) return;
+            SetSidebar(true, TabChanges);
+            string rel = SbRel(path);
+            var f = _sbFiles.FirstOrDefault(x => x.Path == rel || x.Path == path);
+            if (f != null) SbOpenDiff(f);
+            else Toast("CHANGES lists " + ThreadPulse.FileName(path) + " once it has read the folder", "info");
         }
 
         // ------------------------------------------------------------------ "it answered": the orb says so, the window pulses
@@ -174,7 +197,18 @@ namespace MetaCodex.Shell
 
         private void LayoutChatExtras(Rect chat)
         {
-            _thNewBtn?.SetRect(new Rect(chat.xMax - 0.082f, chat.yMax - 0.030f, 0.078f, 0.026f));
+            // the scrollbar in the column right of the chat (where ▲ ▼ were): a 4 cm wide target for a pinch, a thin track
+            _thScroll?.SetRect(new Rect(chat.xMax + 0.006f, chat.y, Mathf.Max(0.024f, _tlArea.xMax - chat.xMax - 0.006f), chat.height));
+            PlaceNewButton(chat);
+        }
+
+        /// ↓ LATEST sits at the chat's bottom right, above the NOW strip while that shows.
+        private void PlaceNewButton(Rect chat)
+        {
+            if (_thNewBtn == null) return;
+            float foot = _thTimeline != null ? _thTimeline.FooterHeight : 0f;
+            var r = new Rect(chat.xMax - 0.090f, chat.yMax - foot - 0.032f, 0.086f, 0.026f);
+            if (_thNewBtn.Rect != r) _thNewBtn.SetRect(r);
         }
 
         private void RefreshNewButton()
@@ -182,7 +216,10 @@ namespace MetaCodex.Shell
             if (_thNewBtn == null || _thTimeline == null) return;
             bool show = !_thTimeline.AtBottom && !_amOpen;
             _thNewBtn.SetVisible(show);
-            if (show) _thNewBtn.SetText(_thTimeline.NewLines > 0 ? "↓ NEW" : "↓ END");
+            if (!show) return;
+            PlaceNewButton(_thTimeline.Rect);
+            string label = _thTimeline.NewLines > 0 ? "↓ NEW" : "↓ LATEST";
+            if (_thNewBtn.Text != label) _thNewBtn.SetText(label);
         }
 
         /// Every frame while THREAD is open: the status line (timers, spinner) 4 times a second, the usage limits
@@ -214,6 +251,7 @@ namespace MetaCodex.Shell
             _tlFields = new JObject();
             _thPulse = null;
             _thTimeline?.ResetState();
+            _thTimeline?.ClearNow();
             _thTimeline?.SetBlocks(new List<ChatBlock>());
             _thStatus?.Set("");
             ShowLimits();
@@ -298,7 +336,7 @@ namespace MetaCodex.Shell
             u.Fields = fields;
             u.Model = ThreadTimeline.Parse(rows, fields, StatusOfRow(threadRow));
             u.Pulse = ThreadPulse.From(u.Model, threadRow, now);
-            u.Blocks = ChatBlocks(u.Model, u.Pulse);
+            u.Blocks = ChatBlocks(u.Model, u.Pulse, (string)threadRow?["environmentPath"]);
             // the files it changed, here too (0.7.19: walked over the whole timeline on the main thread at every update)
             u.TouchedRoot = touchRoot;
             u.Touched = ThreadChanges.FromTimeline(rows, touchRoot);
@@ -349,7 +387,7 @@ namespace MetaCodex.Shell
         {
             _tlModel = ThreadTimeline.Parse(_tlRaw, _tlFields, StatusOfRow(_threadInfo));
             RefreshThreadPulse();
-            _thTimeline?.SetBlocks(ChatBlocks(_tlModel, _thPulse));
+            _thTimeline?.SetBlocks(ChatBlocks(_tlModel, _thPulse, (string)_threadInfo?["environmentPath"]));
             RefreshNewButton();
         }
 
@@ -359,21 +397,40 @@ namespace MetaCodex.Shell
             _thPulse = ready ?? ThreadPulse.From(_tlModel, _threadInfo, NowMs);
             CtxPulse(_threadOpen, _thPulse);
             ShowThreadStatus();
+            ShowNowRunning();
         }
 
         // ------------------------------------------------------------------ the model as chat blocks
 
-        /// The model as chat blocks (pure: runs on the pool thread too; `pulse` gives the live header its words).
-        public List<ChatBlock> ChatBlocks(ThreadTimeline tl, ThreadPulse pulse)
+        /// The model as chat blocks (pure: runs on the pool thread too; `pulse` gives the live header its words and the
+        /// agent's name, `root` is the thread's folder: a command run elsewhere says where).
+        public List<ChatBlock> ChatBlocks(ThreadTimeline tl, ThreadPulse pulse, string root = null)
         {
             var list = new List<ChatBlock>();
+            string agent = UiChatView.Esc(ProviderLabel(pulse?.Provider));
+            if (pulse == null || string.IsNullOrEmpty(pulse.Provider)) agent = "Agent";
             foreach (var ex in tl.Exchanges)
             {
                 string exKey = ex.Prompt?.Id ?? ex.Key;
-                if (ex.Prompt != null) list.Add(new ChatBlock { Key = ex.Prompt.Id, Kind = ChatKind.Prompt, Body = ex.Prompt.Text, Exchange = exKey, BodyMaxChars = 3000 });
+                if (ex.Prompt != null)
+                {
+                    // your turn: "You · 14:05" over the bubble on the right
+                    string when = ClockOf(ex.Prompt.StartedAt > 0 ? ex.Prompt.StartedAt : ex.Prompt.EndedAt);
+                    list.Add(new ChatBlock { Key = ex.Prompt.Id + ":who", Kind = ChatKind.Meta, AlignRight = true, Head = "You" + (when.Length > 0 ? "  ·  " + when : ""), Exchange = exKey });
+                    list.Add(new ChatBlock { Key = ex.Prompt.Id, Kind = ChatKind.Prompt, Body = ex.Prompt.Text, Exchange = exKey, BodyMaxChars = 3000 });
+                }
                 var shown = ex.Steps.Where(NoticeShown).ToList();
+                if (shown.Count > 0 || ex.Answer != null)
+                {
+                    // the agent's turn: its name line on the left
+                    long at = ex.Steps.Count > 0 && ex.Steps[0].StartedAt > 0 ? ex.Steps[0].StartedAt : ex.Answer?.StartedAt ?? ex.StartedAt;
+                    string when = ClockOf(at);
+                    list.Add(new ChatBlock { Key = exKey + ":agent", Kind = ChatKind.Meta, Head = "<color=#B28CFF>◆</color> " + agent + (when.Length > 0 ? "  ·  " + when : ""), Exchange = exKey });
+                }
                 var outside = new List<ChatBlock>(); // errors and questions to the user stay visible when the work closes
                 int inGroup = shown.Count(s => !Outside(s));
+                // the newest command of the turn shows more of its output
+                string lastCmd = shown.LastOrDefault(s => s.Kind == StepKind.Command)?.Id;
                 if (inGroup > 0)
                 {
                     string wk = exKey + ":work";
@@ -386,7 +443,7 @@ namespace MetaCodex.Shell
                     for (int i = 0; i < shown.Count; i++)
                     {
                         var s = shown[i];
-                        if (Outside(s)) { outside.Add(StepBlock(s, null, exKey)); continue; }
+                        if (Outside(s)) { outside.Add(StepBlock(s, null, exKey, root, lastCmd)); continue; }
                         // reads and searches in a row: one line that opens to the list
                         if ((s.Kind == StepKind.Read || s.Kind == StepKind.Search) && !s.Live)
                         {
@@ -394,10 +451,10 @@ namespace MetaCodex.Shell
                             while (j + 1 < shown.Count && (shown[j + 1].Kind == StepKind.Read || shown[j + 1].Kind == StepKind.Search) && !shown[j + 1].Live) j++;
                             if (j > i) { list.Add(ReadsBlock(shown.GetRange(i, j - i + 1), wk, exKey)); i = j; continue; }
                         }
-                        list.Add(StepBlock(s, wk, exKey));
+                        list.Add(StepBlock(s, wk, exKey, root, lastCmd));
                     }
                 }
-                else foreach (var s in shown) outside.Add(StepBlock(s, null, exKey));
+                else foreach (var s in shown) outside.Add(StepBlock(s, null, exKey, root, lastCmd));
                 list.AddRange(outside);
                 if (ex.Answer != null)
                     list.Add(new ChatBlock { Key = ex.Answer.Id, Kind = ChatKind.Answer, Body = StripViewBlocks(ex.Answer.Text), Live = ex.Answer.Live, Exchange = exKey });
@@ -437,54 +494,92 @@ namespace MetaCodex.Shell
             return string.Join(" · ", parts);
         }
 
-        private string StepRight(ThreadStep s)
+        /// A step's status chip: "● running" (the chat adds its running time), "✓ ok 4 s", "✕ exit 1 · 4 s", "■ stopped".
+        private static string StepRight(ThreadStep s)
         {
-            if (s.Live) return "<color=#8FEBFF>running</color>";
+            if (s.Live) return "<color=#8FEBFF>● running</color>";
             string took = s.Seconds >= 1 ? " " + ThreadPulse.Dur((int)Math.Round(s.Seconds)) : "";
-            if (s.Status == "interrupted") return "<color=#FFB547>stopped</color>";
-            if (s.Failed) return "<color=#FF5468>✕" + (s.ExitCode.HasValue ? " exit " + s.ExitCode.Value : "") + "</color>" + took;
-            return s.Kind == StepKind.Command || s.Kind == StepKind.Tool || s.Kind == StepKind.Agent ? "<color=#4DFFA6>✓</color>" + took : took.Trim();
+            if (s.Status == "interrupted") return "<color=#FFB547>■ stopped</color>" + took;
+            if (s.Failed) return "<color=#FF5468>✕ " + (s.ExitCode.HasValue ? "exit " + s.ExitCode.Value : "failed") + "</color>" + took;
+            return s.Kind == StepKind.Command || s.Kind == StepKind.Tool || s.Kind == StepKind.Agent ? "<color=#4DFFA6>✓ ok</color>" + took : took.Trim();
         }
 
-        private ChatBlock StepBlock(ThreadStep s, string parent, string exKey)
+        /// The chip's colour (null: no chip).
+        private static Color? StepTint(ThreadStep s)
+        {
+            var t = UiTheme.Current;
+            if (t == null) return null;
+            if (s.Live) return t.Accent;
+            if (s.Status == "interrupted") return t.Warn;
+            if (s.Failed) return t.Danger;
+            return s.Kind == StepKind.Command || s.Kind == StepKind.Tool || s.Kind == StepKind.Agent ? t.Ok : (Color?)null;
+        }
+
+        /// Where a command ran, when not in the thread's own folder: "in src/" (inside it) or "in /tmp/x" (elsewhere).
+        private static string CwdNote(string cwd, string root)
+        {
+            if (string.IsNullOrEmpty(cwd)) return "";
+            string c = cwd.Replace('\\', '/').TrimEnd('/'), r = (root ?? "").Replace('\\', '/').TrimEnd('/');
+            if (c.Length == 0 || r.Length > 0 && c == r) return "";
+            string rel = ThreadChanges.Rel(r, c);
+            if (rel.StartsWith("/root/", StringComparison.Ordinal)) rel = "~/" + rel.Substring(6);
+            else if (rel == "/root") rel = "~";
+            return "in " + ThreadPulse.Clip(rel, 48) + (rel.StartsWith("/") || rel.StartsWith("~") ? "" : "/");
+        }
+
+        private ChatBlock StepBlock(ThreadStep s, string parent, string exKey, string root = null, string lastCmd = null)
         {
             var b = new ChatBlock { Key = s.Id.Length > 0 ? s.Id : (parent ?? exKey) + ":" + s.Kind + ":" + s.StartedAt, Kind = ChatKind.Step, Parent = parent, Indent = parent != null ? 1 : 0, Exchange = exKey, Live = s.Live };
             string E(string x) => UiChatView.Esc(x);
+            var t = UiTheme.Current;
             switch (s.Kind)
             {
                 case StepKind.Thinking:
                 {
+                    // the agent's thinking, when its provider sends it: dim, closed to its first sentence
                     b.Kind = ChatKind.Thinking;
                     string headline = ThreadPulse.Clip(ThreadPulse.FirstSentence(s.Text), 96);
                     b.Head = s.Live ? "◌ <color=#B28CFF>Thinking…</color>"
                         : "<color=#B28CFF>✦ Thought</color>" + (s.Seconds >= 1 ? " " + ThreadPulse.Dur((int)Math.Round(s.Seconds)) : "") + (headline.Length > 0 ? "  " + Dim + "<i>" + E(headline) + "</i>" + Endc : "");
                     b.Body = s.Text;
                     b.Collapsible = s.Text.Trim().Length > 0;
-                    b.Tint = UiTheme.Current.Violet;
+                    b.Tint = t?.Violet;
                     if (s.Live) b.Preview = ThreadPulse.Clip(ThreadPulse.LastSentence(s.Text), 130);
                     break;
                 }
                 case StepKind.Command:
                 {
-                    b.Head = "<color=#FFB547>$</color> " + E(ThreadPulse.Clip(s.Title, 220));
+                    // `$ command` in the terminal font, where it ran when that is not the thread's folder, a status chip
+                    // with its time, and the last lines of its output (live while it runs); a tap shows all of it
+                    string cwd = CwdNote(s.Cwd, root);
+                    b.MonoHead = true;
+                    b.Head = "<color=#FFB547>$</color> " + E(ThreadPulse.Clip(s.Title, 220)) + (cwd.Length > 0 ? "  " + Dim + E(cwd) + Endc : "");
                     b.Right = StepRight(s);
+                    b.RightTint = StepTint(s);
+                    b.LiveSince = s.Live ? s.StartedAt : 0;
                     string outp = (s.Text ?? "").Trim();
-                    b.Collapsible = outp.Length > 0 && outp != "(no output)";
+                    bool has = outp.Length > 0 && outp != "(no output)";
+                    b.Collapsible = has;
                     b.Body = s.Text;
                     b.MonoBody = true;
-                    b.BodyMaxChars = 2400;
-                    if (s.Failed && b.Collapsible) b.Preview = ThreadPulse.Clip(LastLine(outp), 120);
+                    b.BodyMaxChars = 8000;
+                    b.Tail = has ? ChatText.Tail(s.Text, 6) : "";
+                    b.TailLines = s.Live || s.Failed || s.Id == lastCmd ? 6 : 3;
                     break;
                 }
                 case StepKind.Edit:
-                    b.Head = "<color=#FFB547>✎</color> " + E(SbRel(s.Title)) + (s.Added + s.Removed > 0 ? $"  <color=#4DFFA6>+{s.Added}</color> <color=#FF5468>−{s.Removed}</color>" : "")
-                             + (s.Sub == "add" ? "  " + Dim + "new" + Endc : s.Sub == "delete" ? "  <color=#FF5468>deleted</color>" : s.Sub == "move" ? "  " + Dim + "moved" + Endc : "");
+                {
+                    string verb = s.Sub == "add" ? "Created" : s.Sub == "delete" ? "<color=#FF5468>Deleted</color>" : s.Sub == "move" ? "Moved" : "Edited";
+                    b.Head = "<color=#FFB547>✎</color> " + verb + " " + E(SbRel(s.Title)) + (s.Added + s.Removed > 0 ? $"  {Dim}(</color><color=#4DFFA6>+{s.Added}</color> <color=#FF5468>−{s.Removed}</color>{Dim})</color>" : "");
                     b.Right = s.Live ? StepRight(s) : "";
-                    if (!string.IsNullOrEmpty(s.Text)) { b.Body = s.Text; b.MonoBody = true; b.Collapsible = true; b.BodyMaxChars = 3000; }
+                    b.LiveSince = s.Live ? s.StartedAt : 0;
+                    if (!string.IsNullOrEmpty(s.Text)) { b.Body = s.Text; b.MonoBody = true; b.Collapsible = true; b.BodyMaxChars = 6000; b.Diff = true; }
+                    else b.Tag = s.Title; // no diff of its own: a tap opens the file's diff in CHANGES
                     break;
-                case StepKind.Read: b.Head = "<color=#7FA9BF>⌕</color> Read " + E(ThreadPulse.Clip(SbRel(s.Title), 160)); b.Right = s.Live ? StepRight(s) : ""; break;
+                }
+                case StepKind.Read: b.Head = "<color=#7FA9BF>⌕</color> Read " + E(ThreadPulse.Clip(SbRel(s.Title), 160)) + (s.Sub == "image" ? "  " + Dim + "image" + Endc : ""); b.Right = s.Live ? StepRight(s) : ""; break;
                 case StepKind.Search: b.Head = "<color=#7FA9BF>⌕</color> Searched " + E(ThreadPulse.Clip(s.Title, 160)); b.Right = s.Live ? StepRight(s) : ""; break;
-                case StepKind.Web: b.Head = "<color=#8FEBFF>↗</color> " + E(ThreadPulse.Clip(s.Title, 160)); b.Right = StepRight(s); break;
+                case StepKind.Web: b.Head = "<color=#8FEBFF>↗</color> " + E(ThreadPulse.Clip(s.Title, 160)); b.Right = StepRight(s); b.RightTint = s.Live ? StepTint(s) : null; b.LiveSince = s.Live ? s.StartedAt : 0; break;
                 case StepKind.Plan:
                     b.Head = "<color=#8FEBFF>☰</color> " + E(s.Title);
                     b.Body = s.Text; b.Collapsible = s.Text.Length > 0; b.Expanded = s.Live;
@@ -492,15 +587,21 @@ namespace MetaCodex.Shell
                 case StepKind.Agent:
                     b.Head = "<color=#B28CFF>◆</color> " + E(ThreadPulse.Clip(s.Title, 160));
                     b.Right = StepRight(s);
+                    b.RightTint = StepTint(s);
+                    b.LiveSince = s.Live ? s.StartedAt : 0;
                     b.Body = s.Text; b.Collapsible = s.Text.Trim().Length > 0; b.BodyMaxChars = 2400;
                     break;
                 case StepKind.Approval:
-                    b.Head = "<color=#FFB547>⚠ Asks your approval:</color> " + E(ThreadPulse.Clip(s.Title, 140)) + (s.Live ? "" : "  " + Dim + E(s.Sub) + Endc);
-                    b.Tint = UiTheme.Current.Warn;
+                    // waiting for you: an amber card (ALLOW / DENY are under the chat)
+                    b.Head = s.Live ? "<color=#FFB547>⚠ NEEDS YOUR APPROVAL</color>  " + E(ThreadPulse.Clip(s.Title, 140))
+                        : "<color=#FFB547>⚠ Asked your approval:</color> " + E(ThreadPulse.Clip(s.Title, 140)) + "  " + Dim + E(s.Sub) + Endc;
+                    if (s.Live) { b.Preview = "Answer with ALLOW ONCE, ALLOW SESSION or DENY under the chat."; b.Card = true; }
+                    b.Tint = t?.Warn;
                     break;
                 case StepKind.Question:
-                    b.Head = "<color=#FFB547>? Asks you:</color> " + E(ThreadPulse.Clip(s.Title, 160));
-                    b.Tint = UiTheme.Current.Warn;
+                    b.Head = s.Live ? "<color=#FFB547>? THE AGENT ASKS YOU</color>  " + E(ThreadPulse.Clip(s.Title, 160)) : "<color=#FFB547>? Asked you:</color> " + E(ThreadPulse.Clip(s.Title, 160));
+                    b.Card = s.Live;
+                    b.Tint = t?.Warn;
                     break;
                 case StepKind.Update:
                     b.Kind = ChatKind.Update;
@@ -513,6 +614,8 @@ namespace MetaCodex.Shell
                     b.Body = s.Text;
                     b.Collapsible = s.Text.Trim().Length > 0;
                     b.Expanded = true;
+                    b.Card = true;
+                    b.Tint = t?.Danger;
                     break;
                 case StepKind.Notice:
                     b.Kind = ChatKind.Notice;
@@ -521,7 +624,10 @@ namespace MetaCodex.Shell
                 default: // tools
                     b.Head = "<color=#B28CFF>⚙</color> " + E(ThreadPulse.Clip(s.Title, 60)) + (s.Sub.Length > 0 ? "  " + Dim + E(ThreadPulse.Clip(s.Sub, 120)) + Endc : "");
                     b.Right = StepRight(s);
+                    b.RightTint = StepTint(s);
+                    b.LiveSince = s.Live ? s.StartedAt : 0;
                     b.Body = s.Text; b.MonoBody = true; b.Collapsible = s.Text.Trim().Length > 0; b.BodyMaxChars = 2000;
+                    if (s.Live && b.Collapsible) { b.Tail = ChatText.Tail(s.Text, 3); b.TailLines = 3; }
                     break;
             }
             return b;
@@ -538,12 +644,6 @@ namespace MetaCodex.Shell
                 Head = "<color=#7FA9BF>⌕</color> " + what + (names.Count > 0 ? "  " + Dim + UiChatView.Esc(string.Join(", ", names) + (reads > names.Count ? ", …" : "")) + Endc : ""),
                 Body = string.Join("\n", steps.Select(s => (s.Kind == StepKind.Read ? "• " + SbRel(s.Title) : "• search " + s.Title))),
             };
-        }
-
-        private static string LastLine(string s)
-        {
-            var lines = (s ?? "").Replace("\r", "").Split('\n').Select(l => l.Trim()).Where(l => l.Length > 0).ToList();
-            return lines.Count > 0 ? lines[lines.Count - 1] : "";
         }
 
         // ------------------------------------------------------------------ the status line
@@ -567,9 +667,12 @@ namespace MetaCodex.Shell
                         text = $"⚠ No news for {ThreadPulse.Clock(p.QuietSecs)} while {E(p.Doing)}: it may be stuck. ■ STOP ends the turn.";
                         break;
                     }
-                    col = t.TextAccent;
-                    text = $"{spin} {E(Cap(p.Doing))}" + (p.PhaseSecs > 0 && p.Phase != "between" ? $" · {ThreadPulse.Clock(p.PhaseSecs)}" : "")
-                           + $"   {Dim}turn {ThreadPulse.Clock(p.TurnSecs)}" + (p.QuietSecs >= 15 ? $" · quiet {ThreadPulse.Clock(p.QuietSecs)}" : " · live") + Endc;
+                    // the step and its time are in the chat's NOW strip; this line keeps the turn: its time, live or
+                    // quiet, the to-do in progress, the pattern (fixing, testing ...)
+                    col = t.TextDim;
+                    text = $"{spin} turn {ThreadPulse.Clock(p.TurnSecs)}" + (p.QuietSecs >= 15 ? $" · quiet {ThreadPulse.Clock(p.QuietSecs)}" : " · live")
+                           + (_tlModel != null && _tlModel.TodoTotal > 0 ? $" · to-do {_tlModel.TodoDone}/{_tlModel.TodoTotal}" + (_tlModel.TodoNow.Length > 0 ? ": " + E(ThreadPulse.Clip(_tlModel.TodoNow, 60)) : "") : "")
+                           + (p.PatternText.Length > 0 && p.Pattern != "done" ? $"   {Dim}{E(ThreadPulse.Clip(p.PatternText, 90))}{Endc}" : "");
                     break;
                 case "waiting": col = t.Warn; text = "⚠ " + E(Cap(p.Doing)); break;
                 case "held": col = t.Warn; text = "⏸ " + E(Cap(p.Doing)); break; // MQH's workspace guard (ShellWorkspaces): SEND NOW beside it
@@ -585,6 +688,49 @@ namespace MetaCodex.Shell
             }
             if (p.Queued.Length > 0) text += $"   {Dim}queued: {E(p.Queued)}{Endc}";
             _thStatus.Set(text, col);
+        }
+
+        // ------------------------------------------------------------------ NOW RUNNING (the strip at the chat's bottom)
+
+        /// What the agent does this second, in the chat's NOW strip (owner 2026-11-17: "hard to see what is running
+        /// now"): RUNNING `$ npm test`, THINKING its newest sentence, EDITING a file, WRITING THE ANSWER, NEEDS YOU ...,
+        /// a spinner and the time it has been at it; gone when the thread is idle. Each pulse (once a second and at each
+        /// timeline answer): the strip changes only when its words do.
+        private void ShowNowRunning()
+        {
+            var chat = _thTimeline;
+            if (chat == null) return;
+            var p = _thPulse;
+            if (p == null || _threadOpen == null || !p.Working) { chat.ClearNow(); return; }
+            var t = UiTheme.Current;
+            var ex = _tlModel?.Last;
+            ThreadStep step = null;
+            if (ex != null) step = ex.Answer != null && ex.Answer.Live ? ex.Answer : ex.Steps.LastOrDefault(s => s.Live);
+            string label, detail = "";
+            Color tint = t.Accent;
+            switch (p.Phase)
+            {
+                case "running": label = "RUNNING"; detail = "$ " + ThreadPulse.Clip(p.CurrentCommand ?? step?.Title ?? "", 200); tint = t.Warn; break;
+                case "thinking": label = "THINKING…"; detail = p.LastThought; tint = t.Violet; break;
+                case "editing": label = "EDITING"; detail = step != null ? SbRel(step.Title) : ""; tint = t.Warn; break;
+                case "reading": label = "READING"; detail = step != null ? SbRel(step.Title) : ""; break;
+                case "searching": label = "SEARCHING"; detail = step?.Title ?? ""; break;
+                case "browsing": label = "ON THE WEB"; detail = step?.Title ?? ""; break;
+                case "tool": label = "USING"; detail = step == null ? "" : step.Title + (step.Sub.Length > 0 ? "  " + step.Sub : ""); tint = t.Violet; break;
+                case "agent": label = "SUBAGENT"; detail = step?.Title ?? ""; tint = t.Violet; break;
+                case "answering": label = "WRITING THE ANSWER"; tint = t.Ok; break;
+                case "waiting": label = "NEEDS YOU"; detail = p.Doing; tint = t.Warn; break;
+                case "starting": label = "STARTING"; detail = p.Doing == "starting" ? "" : p.Doing; break;
+                default:
+                {
+                    label = "WORKING";
+                    var last = ex?.Steps.LastOrDefault(s => s.IsAction);
+                    if (last != null) detail = "last: " + (last.Kind == StepKind.Command ? "$ " + ThreadPulse.Clip(last.Title, 120) + (last.Failed ? $" (exit {last.ExitCode?.ToString() ?? "error"})" : "") : ThreadPulse.Clip(last.Title, 120));
+                    break;
+                }
+            }
+            if (p.MayBeStuck) tint = t.Warn;
+            chat.SetNow(label, detail, p.PhaseStart > 0 ? p.PhaseStart : p.TurnStart, tint);
         }
 
         // ------------------------------------------------------------------ usage limits and the context ring

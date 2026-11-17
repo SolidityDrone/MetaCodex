@@ -30,7 +30,7 @@ namespace MetaCodex.UI
         /// **bold**, `code` and [links](url) become spans. Blank lines collapse to one; trailing ones go.
         public static List<ChatPara> Paragraphs(string src, int maxChars = 6000)
         {
-            src = (src ?? "").Replace("\r", "").Replace("\t", "    ");
+            src = Sanitize(src ?? ""); // tabs, CR, form feeds, terminal codes (the layout counts every break)
             if (src.Length > maxChars) src = src.Substring(0, maxChars) + " …";
             var paras = new List<ChatPara>();
             bool inCode = false, blank = false;
@@ -129,6 +129,86 @@ namespace MetaCodex.UI
 
         /// Text shown as it is (no rich-text tags from agents or users).
         public static string Esc(string s) => string.IsNullOrEmpty(s) ? "" : "<noparse>" + s.Replace("</noparse>", "") + "</noparse>";
+
+        private static readonly Regex Ansi = new Regex(@"\x1B(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1B]*(?:\x07|\x1B\\)?|[@-Z\\-_])");
+
+        /// Agent and command text made safe for the chat's layout (2026-11-17, the overlap fix): TextMeshPro breaks a
+        /// line at \v, \f, U+2028 / U+2029 and stops at NUL / ETX, which the line measuring did not count, so a drawn
+        /// block could come out taller than its slot. Those become line breaks or go; terminal colour codes go; a
+        /// carriage return keeps what was written last on its line (progress bars). Tabs become 4 spaces. Returns the
+        /// same string when nothing needs a change (no allocation for the common case).
+        public static string Sanitize(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return s ?? "";
+            bool dirty = false;
+            for (int i = 0; i < s.Length && !dirty; i++)
+            {
+                char c = s[i];
+                dirty = c < 0x20 && c != '\n' || c == 0x7F || c == '\u2028' || c == '\u2029' || c == '\uFEFF';
+            }
+            if (!dirty) return s;
+            if (s.IndexOf('\x1B') >= 0) s = Ansi.Replace(s, "");
+            var sb = new StringBuilder(s.Length);
+            int lineStart = 0;
+            for (int i = 0; i < s.Length; i++)
+            {
+                char c = s[i];
+                if (c == '\r')
+                {
+                    if (i + 1 < s.Length && s[i + 1] == '\n') continue; // CRLF: the LF ends the line
+                    // a lone CR: the text after it overwrites the line (keep the last version, unless nothing follows)
+                    int next = i + 1;
+                    if (next < s.Length && s[next] != '\n' && s[next] != '\r') sb.Length = lineStart;
+                    continue;
+                }
+                if (c == '\n' || c == '\v' || c == '\f' || c == '\u2028' || c == '\u2029') { sb.Append('\n'); lineStart = sb.Length; continue; }
+                if (c == '\t') { sb.Append("    "); continue; }
+                if (c < 0x20 || c == 0x7F || c == '\uFEFF') continue;
+                sb.Append(c);
+            }
+            return sb.ToString();
+        }
+
+        /// One line for a header: breaks become " ⏎ ", other control characters go.
+        public static string OneLine(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return s ?? "";
+            s = Sanitize(s);
+            return s.IndexOf('\n') < 0 ? s : s.Replace("\n", " ⏎ ");
+        }
+
+        /// The last `lines` lines of an output that hold something (a command's tail while it runs), at most `maxChars`
+        /// from the end, without splitting the whole text. "" when there is nothing.
+        public static string Tail(string s, int lines, int maxChars = 1600)
+        {
+            if (string.IsNullOrEmpty(s) || lines <= 0) return "";
+            int end = s.Length;
+            while (end > 0 && char.IsWhiteSpace(s[end - 1])) end--;
+            if (end == 0) return "";
+            int start = end, found = 0, floor = Math.Max(0, end - maxChars);
+            while (start > floor)
+            {
+                int nl = s.LastIndexOf('\n', start - 1, start - floor);
+                if (nl < 0) { start = floor; break; }
+                // count only lines with text in them
+                bool text = false;
+                for (int k = nl + 1; k < start && !text; k++) text = !char.IsWhiteSpace(s[k]);
+                if (text) found++;
+                if (found >= lines) { start = nl + 1; break; }
+                start = nl;
+            }
+            string t = s.Substring(start, end - start);
+            return Sanitize(t).Trim('\n');
+        }
+
+        /// How many lines a text has (a cheap count of its breaks).
+        public static int LineCount(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return 0;
+            int n = 1;
+            foreach (char c in s) if (c == '\n') n++;
+            return n;
+        }
 
         /// Rich text back to what a reader sees (self-tests).
         public static string Strip(string s) => Regex.Replace(s ?? "", @"</?noparse>|<color=[^>]*>|</color>|<alpha=[^>]*>|<i>|</i>|<b>|</b>|<size=[^>]*>|</size>", "");

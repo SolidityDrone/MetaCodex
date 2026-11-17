@@ -50,8 +50,9 @@ namespace MetaCodex.Shell
             public UiButton thPermChip;
             public UiButton thWsChip;
             public UiRing thContext;
-            public UiButton tlUp;
+            public UiButton tlUp;             // unused since the scrollbar (2026-11-17); kept null: older callers hide them
             public UiButton tlDown;
+            public UiScrollbar thScroll;      // the chat's scrollbar (UiChatView.AttachScrollbar)
             public Rect tlArea;
             public JObject thExec;
             public JToken thUsage;
@@ -132,6 +133,7 @@ namespace MetaCodex.Shell
         private UiRing _thContext { get => _tw.thContext; set => _tw.thContext = value; }
         private UiButton _tlUp { get => _tw.tlUp; set => _tw.tlUp = value; }
         private UiButton _tlDown { get => _tw.tlDown; set => _tw.tlDown = value; }
+        private UiScrollbar _thScroll { get => _tw.thScroll; set => _tw.thScroll = value; }
         private Rect _tlArea { get => _tw.tlArea; set => _tw.tlArea = value; }
         private JObject _thExec { get => _tw.thExec; set => _tw.thExec = value; }
         private JToken _thUsage { get => _tw.thUsage; set => _tw.thUsage = value; }
