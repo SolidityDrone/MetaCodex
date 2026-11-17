@@ -17,11 +17,15 @@ While a job runs /tmp/mcx-buildd/busy exists (MetaCodex's service holds a wake l
 The dev server: the Runner app (another Android app, so TCP on 127.0.0.1) asks for the current module with a nonce;
 the answer carries an RSA signature (the APK signing key) over "MCXR1|<nonce>|<sha256>", which the Runner checks
 with the public key in its assets: an app that takes the port first cannot feed it code, old modules cannot be
-replayed. While MetaCodex is in the background (its :ai process at oom_score_adj >= 600, i.e. no foreground service) a job is
+replayed. The warm JVM (2D panel apps): mcx-build asks the daemon ({"op": "java"}) to run javac or D8 in one JVM
+(McxJavaServer: javax.tools and D8's API), started on the first request on the same cores and nice level, stopped after
+MCX_BUILDD_JVM_IDLE seconds (default 300) without one, when memory runs low, or with the daemon; without a daemon
+mcx-build starts a JVM per tool. While MetaCodex is in the background (its :ai process at oom_score_adj >= 600, i.e. no foreground service) a job is
 paused whenever the builder's CPU over the last 5 minutes would pass 15 %: Android kills the whole :ai process
 (MQH, agents, local AI) when its children pass 25 %. A client that goes away (Ctrl+C) cancels its job. Exit 100 from `run`: no daemon (mcx-app then builds itself).
 Shipped by MetaCodex (overlay); edits are overwritten.
 """
+import hashlib
 import json
 import os
 import shutil
@@ -40,6 +44,31 @@ LOG = os.environ.get("MCX_BUILDD_LOG", os.path.expanduser("~/.metacodex/buildd.l
 NICE = int(os.environ.get("MCX_BUILDD_NICE", "10"))
 MAX_QUEUE = 4
 HERE = os.path.dirname(os.path.realpath(__file__))
+
+
+CACHE = os.environ.get("MCX_BUILD_CACHE", os.path.expanduser("~/.cache/mcx-build"))
+JSERVER_SRC = os.environ.get("MCX_JSERVER_SRC", "/opt/metacodex/quest-native/jserver/McxJavaServer.java")
+JVM_IDLE = float(os.environ.get("MCX_BUILDD_JVM_IDLE", "300"))
+MIN_MB = int(os.environ.get("MCX_BUILD_MIN_MB", "900"))
+KILL_MB = int(os.environ.get("MCX_BUILD_KILL_MB", "450"))
+
+
+def mem_available_mb():
+    for line in read("/proc/meminfo").splitlines():
+        if line.startswith("MemAvailable:"):
+            return int(line.split()[1]) // 1024
+    return -1
+
+
+def proc_cpu(pid):
+    """CPU seconds of one process (and the children it reaped)."""
+    try:
+        with open(f"/proc/{pid}/stat") as f:
+            st = f.read()
+        f_ = st[st.rindex(")") + 2:].split()
+        return (int(f_[11]) + int(f_[12]) + int(f_[13]) + int(f_[14])) / os.sysconf("SC_CLK_TCK")
+    except (OSError, ValueError, IndexError):
+        return 0.0
 
 
 def mcx_build():
@@ -163,12 +192,14 @@ class CpuBudget:
             return 0.0
         return cur - self.samples[0][1]
 
-    def watch(self, pgid, done):
+    def watch(self, pgid, done, extra=None):
+        """extra: the warm JVM's CPU seconds (another process group, working for this job)."""
         stopped = False
         last_cpu = 0.0
+        extra0 = extra() if extra else 0.0
         while not done.is_set():
             now = time.time()
-            cpu = group_cpu(pgid)
+            cpu = group_cpu(pgid) + (max(0.0, extra() - extra0) if extra else 0.0)
             last_cpu = max(last_cpu, cpu)
             cur = self.base + last_cpu
             self.samples.append((now, cur))
@@ -299,6 +330,174 @@ class DevServer:
             return {"port": DEV_PORT, "error": self.error, "module": self.module, "fetches": self.fetches[-5:]}
 
 
+class JavaServer:
+    """The warm JVM of 2D panel builds: McxJavaServer (javac through javax.tools, D8 through its API) in one process,
+    compiled once per source and JDK into the build cache, started on the first request at the daemon's nice level on
+    its cores, stopped after JVM_IDLE s without a request, when MemAvailable stays under MIN_MB while idle, under
+    KILL_MB during a request (exit 4, as mcx-build's own guard), or with the daemon. One request at a time."""
+
+    def __init__(self, pin):
+        self.pin = pin
+        self.lock = threading.Lock()
+        self.p = None
+        self.last = 0.0
+        self.calls = 0
+        self.started = 0.0
+        self.error = None
+        threading.Thread(target=self._idler, daemon=True).start()
+
+    @staticmethod
+    def tools():
+        sdk = os.environ.get("ANDROID_HOME") or "/opt/android-sdk"
+        return (os.environ.get("JAVA") or shutil.which("java"), os.environ.get("JAVAC") or shutil.which("javac"),
+                os.environ.get("MCX_R8_JAR") or os.path.join(sdk, "r8", "r8.jar"))
+
+    def _classes(self, javac, r8):
+        src = open(JSERVER_SRC, "rb").read()
+        st = os.stat(os.path.realpath(javac))
+        key = hashlib.sha256(src + f"|{os.path.realpath(javac)}:{st.st_size}:{int(st.st_mtime)}|{os.path.getsize(r8)}".encode()).hexdigest()[:16]
+        out = os.path.join(CACHE, f"jserver-{key}")
+        if os.path.exists(os.path.join(out, "McxJavaServer.class")):
+            return out
+        tmp = out + f".{os.getpid()}.tmp"
+        shutil.rmtree(tmp, ignore_errors=True)
+        os.makedirs(tmp)
+        r = subprocess.run(["nice", "-n", str(NICE)] + self.pin + [javac, "-J-XX:+UseSerialGC", "-J-XX:TieredStopAtLevel=1",
+                            "--release", "17", "-encoding", "UTF-8", "-proc:none", "-cp", r8, "-d", tmp, JSERVER_SRC],
+                           capture_output=True, text=True, timeout=300)
+        if r.returncode != 0:
+            shutil.rmtree(tmp, ignore_errors=True)
+            raise OSError("its server did not compile: " + (r.stdout + r.stderr).strip()[-300:])
+        shutil.rmtree(out, ignore_errors=True)
+        os.replace(tmp, out)
+        return out
+
+    def _start(self):
+        java, javac, r8 = self.tools()
+        if not java or not javac:
+            raise OSError("no JDK (mcx-setup quest)")
+        if not os.path.exists(r8):
+            raise OSError("no D8 yet (mcx-setup d8)")
+        if not os.path.exists(JSERVER_SRC):
+            raise OSError(f"no {JSERVER_SRC} (update MetaCodex)")
+        mb = mem_available_mb()
+        if 0 <= mb < MIN_MB:
+            raise OSError(f"MemAvailable {mb} MB < {MIN_MB} MB")
+        t0 = time.time()
+        cls = self._classes(javac, r8)
+        cmd = ["nice", "-n", str(NICE)] + self.pin + [
+            java, "-XX:+UseSerialGC", "-Xms32m", "-Xmx512m", "-XX:MinHeapFreeRatio=10", "-XX:MaxHeapFreeRatio=30",
+            "-XX:ActiveProcessorCount=2", "-XX:CICompilerCount=2", "-XX:+ExitOnOutOfMemoryError", "-Xshare:auto",
+            "-cp", cls + os.pathsep + r8, "McxJavaServer"]
+        err = open(LOG, "a")
+        p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=err, start_new_session=True)
+        err.close()
+        hello = p.stdout.readline()
+        if not hello.startswith(b"READY"):
+            try:
+                p.kill()
+            except OSError:
+                pass
+            raise OSError("it did not start (see " + LOG + ")")
+        self.p, self.started, self.calls = p, time.time(), 0
+        log(f"warm JVM: pid {p.pid}, Java {hello.decode().split()[-1]}, ready in {time.time() - t0:.1f} s")
+
+    def stop(self, why):
+        p, self.p = self.p, None
+        if p is None:
+            return
+        try:
+            p.stdin.close()  # the server ends at the end of its input
+            p.wait(3)
+        except (OSError, subprocess.TimeoutExpired):
+            try:
+                p.kill()
+            except OSError:
+                pass
+        log(f"warm JVM stopped: {why} (after {self.calls} request(s))")
+
+    def _idler(self):
+        while True:
+            time.sleep(5)
+            if self.p is None:
+                continue
+            idle = time.time() - self.last
+            mb = mem_available_mb()
+            why = f"idle {idle:.0f} s" if idle > JVM_IDLE else (f"MemAvailable {mb} MB < {MIN_MB} MB" if 0 <= mb < MIN_MB else None)
+            if why and self.lock.acquire(blocking=False):
+                try:
+                    self.stop(why)
+                finally:
+                    self.lock.release()
+
+    def cpu(self):
+        p = self.p
+        return proc_cpu(p.pid) if p is not None and p.poll() is None else 0.0
+
+    def call(self, tool, argv):
+        """(exit, output, ms) of javac or D8 in the warm JVM; OSError when it cannot run (the caller starts its own)."""
+        with self.lock:
+            if self.p is not None and self.p.poll() is not None:
+                self.p = None
+            if self.p is None:
+                self._start()
+            self.last = time.time()
+            p = self.p
+            killed, done = [], threading.Event()
+
+            def watch():
+                while not done.wait(0.25):
+                    mb = mem_available_mb()
+                    if 0 <= mb < KILL_MB:
+                        killed.append(mb)
+                        try:
+                            p.kill()
+                        except OSError:
+                            pass
+                        return
+
+            threading.Thread(target=watch, daemon=True).start()
+            try:
+                p.stdin.write((f"RUN {tool} {len(argv)}\n" + "".join(a + "\n" for a in argv)).encode())
+                p.stdin.flush()
+                head = p.stdout.readline().split()
+                n = int(head[1])
+                body = b""
+                while len(body) < n:
+                    chunk = p.stdout.read(n - len(body))
+                    if not chunk:
+                        raise OSError("short answer")
+                    body += chunk
+                tail = p.stdout.readline().split()
+                code, ms = int(tail[1]), int(tail[2])
+            except (OSError, ValueError, IndexError):
+                done.set()
+                self.p = None
+                try:
+                    p.kill()
+                except OSError:
+                    pass
+                if killed:
+                    log(f"warm JVM killed: MemAvailable {killed[0]} MB < {KILL_MB} MB")
+                    return 4, f"mcx-buildd: stopped {tool}: MemAvailable {killed[0]} MB < {KILL_MB} MB (the warm JVM was killed to keep MetaCodex alive)", 0
+                raise OSError("it ended during a request")
+            done.set()
+            self.calls += 1
+            self.last = time.time()
+            return code, body.decode("utf-8", "replace"), ms
+
+    def status(self):
+        p = self.p
+        if p is None or p.poll() is not None:
+            return {"running": False}
+        rss = 0
+        for line in read(f"/proc/{p.pid}/status").splitlines():
+            if line.startswith("VmRSS:"):
+                rss = int(line.split()[1]) // 1024
+        return {"running": True, "pid": p.pid, "requests": self.calls, "idle_s": round(time.time() - self.last),
+                "up_s": round(time.time() - self.started), "rss_mb": rss, "idle_stop_s": JVM_IDLE}
+
+
 class Daemon:
     def __init__(self):
         self.dev = DevServer()
@@ -315,6 +514,7 @@ class Daemon:
                 self.pin = ["taskset", "-c", "0-2"]
         except OSError:
             pass
+        self.jvm = JavaServer(self.pin)
 
     def status(self):
         with self.lock:
@@ -325,7 +525,8 @@ class Daemon:
             return {"pid": os.getpid(), "cpuset": read("/proc/self/cpuset").strip(), "cpus": cpus(),
                     "app_pid": self.budget.app, "app_adj": adj, "budget": self.budget.state,
                     "budget_paused_s": round(self.budget.paused_s), "cpu_last_5min_s": round(self.budget.used(time.time(), self.budget.samples[-1][1]) if self.budget.samples else 0.0, 1),
-                    "pinned": bool(self.pin), "nice": NICE, "running": run, "queued": len(self.queue), "last": self.last}
+                    "pinned": bool(self.pin), "nice": NICE, "running": run, "queued": len(self.queue), "last": self.last,
+                    "jvm": self.jvm.status()}
 
     def handle(self, conn):
         f = conn.makefile("rwb", buffering=0)
@@ -354,6 +555,18 @@ class Daemon:
             return
         if op == "dev-status":
             send(self.dev.status())
+            return
+        if op == "java":  # javac / D8 for a 2D panel build (mcx-build), outside the job queue: the job asking is running
+            tool, argv = req.get("tool"), [str(a) for a in req.get("argv", [])]
+            if tool not in ("javac", "d8") or any("\n" in a for a in argv):
+                send({"op": "java", "unavailable": "bad request"})
+                return
+            try:
+                code, out, ms = self.jvm.call(tool, argv)
+            except OSError as e:
+                send({"op": "java", "unavailable": str(e)})
+                return
+            send({"op": "java", "exit": code, "out": out, "ms": ms})
             return
         if op == "stop":
             send({"ok": True})
@@ -411,7 +624,7 @@ class Daemon:
                                  env=env, start_new_session=True)
             with self.lock:
                 self.running["pid"] = p.pid
-            threading.Thread(target=self.budget.watch, args=(p.pid, budget_done), daemon=True).start()
+            threading.Thread(target=self.budget.watch, args=(p.pid, budget_done, self.jvm.cpu), daemon=True).start()
 
             def killer():
                 gone.wait()
@@ -485,6 +698,7 @@ class Daemon:
             f.write(str(os.getpid()))
 
         def bye(*_):
+            self.jvm.stop("the daemon stops")
             for p in (SOCK, PIDF, BUSY):
                 try:
                     os.remove(p)
