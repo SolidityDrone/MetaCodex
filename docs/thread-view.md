@@ -22,25 +22,73 @@ conversation.
 
 ## The chat (`UI/UiChatView.cs`, `Shell/ShellThreadView.cs`)
 
-- An exchange = your prompt (a bubble on the right), the agent's work under one header, the answer (full width, a
-  green bar; markdown-lite: headings, bullets, quotes, code blocks and tables in the terminal font, **bold** / `code`
-  / links coloured).
+- An exchange (owner 2026-11-17: clearly yours and the agent's): a dim `You · 14:05` line, your prompt in a bubble on
+  the right (accent tint); then a dim `◆ <agent> · 14:06` line on the left, the agent's work under one header and the
+  answer (full width, a green bar; markdown-lite: headings, bullets, quotes, code blocks and tables in the terminal
+  font on a dark panel, **bold** / `code` / links coloured, long lines wrapped). A faint rule and a wider gap separate
+  the turns. The chat text is 13 % larger than before (`ChatTextScale` 1.22 x the theme's small size; it was 1.08),
+  the terminal font in proportion; line heights are the fonts' own at that size.
 - The work header: `◐ Working  2 thoughts · 4 commands (1 failed) · 3 files +40 −12` while it works (open: every
-  step on its own line), `⚙ Worked 4:31 …` once done (closed; a tap opens it). Steps: `✦ Thought 2 s  <its first
-  sentence>` (a tap shows the reasoning; while thinking, its newest sentence streams under the header), `$ command`
-  with ✓ / ✕ exit and its time (a tap shows the output; a failed one shows its last output line), `✎ path +3 −1`,
-  reads and searches in a row as one line (`⌕ Read 6 files  a.cs, b.cs, …`), web, tools, plans, subagents, the
-  agent's updates in dim text. Errors and questions to you stay outside the closed header.
+  step on its own line), `⚙ Worked 4:31 …` once done (closed; a tap opens it). Steps:
+  - `✦ Thought 2 s  <its first sentence>`: the agent's thinking when its provider sends it, dim, a tap shows it all;
+    while thinking, its newest sentence streams under the header.
+  - A command is a block: `$ npm test` in the terminal font, `in src/` (dim) when it ran outside the thread's folder,
+    a status chip on the right (`● running 0:12` with its live time, `✓ ok 4 s`, `✕ exit 1 4 s`, `■ stopped`), and
+    under it the last lines of its output on a dark panel: 6 while it runs, when it failed and for the newest command
+    of the turn, 3 for older ones that passed. The output follows the polls (0.8 s while the agent works, so at most
+    about one update a second). A tap shows the whole output (its last 8000 characters); a tap again closes it.
+  - `✎ Edited src/app.ts (+3 −1)` (`Created`, `Deleted`, `Moved`): a tap opens its diff in place (+ lines green, −
+    lines red); an edit without a diff of its own opens the file's diff in the sidebar's CHANGES.
+  - Reads and searches: one compact line each (`⌕ Read src/panel.js`), several in a row as one line
+    (`⌕ Read 6 files  a.cs, b.cs, …`, a tap lists them). Web, tools, plans, subagents, the agent's updates in dim text.
+  - Waiting for you: `⚠ NEEDS YOUR APPROVAL  <tool>` or `? THE AGENT ASKS YOU …` as an amber card with "Answer with
+    ALLOW ONCE, ALLOW SESSION or DENY under the chat." Errors are red cards. Both stay outside the closed header.
+- NOW RUNNING: while the agent works, a tinted strip at the bottom of the chat (above the status line and the
+  composer) says what it does this second, with a spinner and how long it has been at it: `RUNNING  $ npm test 0:45`,
+  `THINKING…  <its newest sentence>`, `EDITING src/app.ts`, `READING …`, `SEARCHING …`, `ON THE WEB …`,
+  `USING <tool>`, `SUBAGENT …`, `WRITING THE ANSWER`, `NEEDS YOU …` (amber), `WORKING  last: $ npm test`. It goes when
+  the thread is idle. A tap on it scrolls to the end. Its spinner and time are two labels set 4 times a second while it
+  shows; the chat is not drawn again for them, and nothing runs while the thread is idle.
 - The sticky prompt: when the prompt of what is on screen scrolled away above, it is pinned on top (two lines); a tap
   scrolls back to it.
-- Scrolling: drag, or ▲ ▼. At the bottom the view follows new text; scrolled up it holds still and `↓ NEW` appears.
-- The status line under the chat: `◐ Running npm test · 0:45   turn 3:12 · live` (or `quiet 0:40`); amber
-  `⚠ No news for 2:30 while thinking: it may be stuck. ■ STOP ends the turn.`; `⚠ Waiting for your approval (…)`;
-  `✓ Answered 14:05 · took 4:31`.
+- Scrolling: drag the chat, or the scrollbar on its right edge (`UI/UiScrollbar.cs`, it replaced ▲ ▼): a thin track
+  and a thumb as tall as the part on screen. Pinch (ray) or poke the thumb and drag it; a tap on the track above or
+  below the thumb pages up or down. At the bottom the view follows new text; scrolled up it holds still and
+  `↓ NEW` (new lines came) or `↓ LATEST` appears; a tap goes back to the end and following. The bar draws only when the
+  view or its hover changes. `UiScrollbar` is a plain element (`SetState(view, content, offset)`, `OnScrollTo`,
+  `OnPage`); only the chat uses it now.
+- The status line under the chat: `◐ turn 3:12 · live · to-do 2/5: … · <pattern>` while it works (the step is in the
+  NOW strip), amber `⚠ No news for 2:30 while thinking: it may be stuck. ■ STOP ends the turn.`,
+  `⚠ Waiting for your approval (…)`, `✓ Answered 14:05 · took 4:31`.
 - The meta row: provider · project · path · branch, and on the right the plan and usage windows (amber ≥ 70 %, red
   ≥ 90 %). The CONTEXT ring stays in the chips; its picker lists the usage windows with their reset times.
 - `◉` beside SEND (also in a draft, for its first message): speech to text into the field (a pause of 2 s or ◉ again
   ends it; up to 30 s); SEND stays yours.
+
+### How the chat lays out (and why blocks never overlap)
+
+- Every line has a fixed slot: its font's line height at the chat's size (the font face's line height, as
+  TextMeshPro spaces lines) plus the gaps around it. Blocks are laid out one after the other from these slots; the
+  line tops are kept as running sums, so scrolling and the scrollbar find lines by binary search.
+- Each block keeps its laid-out lines while what it is made of stays the same: an update (a token of the answer, a
+  line of output) wraps only the blocks that changed; the others are copied.
+- The overlap the owner saw (2026-11-17, "sometimes my message overlaps with the agent's answer"): TextMeshPro drew
+  some texts taller than their slots. A line with a glyph from a symbol fallback font (Noto Sans Symbols: 2.05 em per
+  line, Symbols 2: 1.70 em, Inter: 1.21 em; for example ⌕ ⎯ ⏳ ⏸ ⛔ 🟥 🟩 ⭐) pushed that line and every line after it
+  in the same text object down, and a text whose first line had one moved down as a whole. A few such lines in an
+  answer ran into the next block, often your next prompt. The same made one-line headers with ⌕ (the Read and Search
+  rows) taller than their rect, and TextMeshPro's ellipsis then dropped their whole text. TextMeshPro also turned
+  `\n` written in agent text into a line break (escape parsing is on in TMP Settings), and \v, \f, U+2028 and NUL
+  broke or cut lines that the measuring had not counted.
+- The fix: each drawn text is placed by its first baseline (Baseline alignment, so a tall glyph cannot move the first
+  line) and its lines are spaced with a fixed `<line-height>` equal to the layout's line height; escape parsing is off
+  for the chat's texts and its measurer; `ChatText.Sanitize` turns \v, \f, U+2028/9 into breaks, drops other control
+  characters and terminal colour codes, keeps the last version of a line rewritten with \r (progress bars); headers
+  are made one line (`ChatText.OneLine`).
+- The guard: once after each draw, when TextMeshPro has built the meshes, the chat compares each drawn text's line
+  count with the lines laid out for it. One with more lines gets the room it needs under its last line and the chat
+  flows again; the session log says `chat re-flow: block <key> drew N lines where M were laid out: +X mm under it`.
+  It reads only the texts on screen, and only after a draw.
 
 ## The message box
 
@@ -238,7 +286,7 @@ Each thread opens in a full window, and windows can be grouped. A group can hold
 
 ## Tests
 
-- Editor self-test sections `chat` (`Editor/MetaCodexUiTestChat.cs`), `threadwindows`, `threadgroups` and `archive`;
+- Editor self-test sections `chat` (`Editor/MetaCodexUiTestChat.cs`; the NOW strip's words and time), `threadwindows`, `threadgroups` and `archive`;
   `context` and `workspace` check the thread state too.
 - The chat's parsing was checked outside the repository with the engine's own .NET 8 and Roslyn: a real thread from
   the headset, synthetic turns, deltas, the chat's markdown and line mapping (30 checks).

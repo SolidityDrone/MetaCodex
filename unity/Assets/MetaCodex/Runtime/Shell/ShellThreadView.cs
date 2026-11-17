@@ -527,6 +527,11 @@ namespace MetaCodex.Shell
             return "in " + ThreadPulse.Clip(rel, 48) + (rel.StartsWith("/") || rel.StartsWith("~") ? "" : "/");
         }
 
+        // a command's last output lines, per output string: a poll keeps the same string for a row that did not change
+        // (the merged JSON keeps its tokens), so the blocks of every poll do not cut every output again
+        private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<string, string> TailCache = new System.Runtime.CompilerServices.ConditionalWeakTable<string, string>();
+        private static string CommandTail(string output) => string.IsNullOrEmpty(output) ? "" : TailCache.GetValue(output, o => ChatText.Tail(o, 6));
+
         private ChatBlock StepBlock(ThreadStep s, string parent, string exKey, string root = null, string lastCmd = null)
         {
             var b = new ChatBlock { Key = s.Id.Length > 0 ? s.Id : (parent ?? exKey) + ":" + s.Kind + ":" + s.StartedAt, Kind = ChatKind.Step, Parent = parent, Indent = parent != null ? 1 : 0, Exchange = exKey, Live = s.Live };
@@ -563,7 +568,7 @@ namespace MetaCodex.Shell
                     b.Body = s.Text;
                     b.MonoBody = true;
                     b.BodyMaxChars = 8000;
-                    b.Tail = has ? ChatText.Tail(s.Text, 6) : "";
+                    b.Tail = has ? CommandTail(s.Text) : "";
                     b.TailLines = s.Live || s.Failed || s.Id == lastCmd ? 6 : 3;
                     break;
                 }

@@ -566,16 +566,24 @@ A new thread:
 The chat:
 
 - [ ] Composer: type with the keyboard → SEND: the message appears; the agent answers
-- [ ] Send a task → your message in a bubble on the right; under it `◐ Working` with the steps appearing one by one (thoughts, `$ commands`, `✎ files`)
+- [ ] Send a task → `You · <time>` and your message in a tinted bubble on the right; under it `◆ <agent> · <time>` on the left and `◐ Working` with the steps appearing one by one (thoughts, `$ commands`, `✎ Edited files`)
 - [ ] While it thinks → "Thinking…" with its newest sentence under it; a tap on a thought opens its text
-- [ ] The status line under the chat → what it does now and for how long (`Running npm test · 0:45   turn 3:12 · live`)
+- [ ] While it works → a tinted NOW strip at the bottom of the chat says what it does this second with a spinner and a running time (`RUNNING  $ npm test  0:45`, `THINKING…`, `EDITING src/app.ts`, `WRITING THE ANSWER`); it goes when the thread is idle; a tap on it goes to the end
+- [ ] The status line under the chat → the turn (`turn 3:12 · live`, the to-do, what it is up to)
+- [ ] A command → `$ command` in the terminal font, a chip on the right (`● running 0:12` counting, then `✓ ok 4 s` or `✕ exit 1 …` in red), the last lines of its output under it on a dark panel, growing while it runs; a tap shows the whole output, a tap again closes it
+- [ ] A command run outside the thread's folder → `in <folder>` dim after the command
+- [ ] An edit → `✎ Edited <path> (+a −b)`; a tap opens the diff (+ green, − red)
+- [ ] Reads → `⌕ Read <file>` lines are visible (they were blank before 2026-11-17), several in a row as one line
+- [ ] An approval → an amber card `⚠ NEEDS YOUR APPROVAL  <tool>` in the chat and ALLOW / DENY under it
+- [ ] An answer with status emoji or symbols (ask: "answer with a list of 8 lines that start with 🟥, 🟩, ⏳, ⛔, ⭐, ✅"), then send a new message → no line of the answer runs into your bubble or the lines under it; long agent output with `\n` in it shows the backslash and the n
+- [ ] The chat's text → about 13 % larger than before (2026-11-16 APK), easy to read at arm's length; code and output in the terminal font in proportion
 - [ ] Wait for the answer → it appears in full under the work and grows while it is written (a caret at its end); the work header closes to `⚙ Worked 4:31 · …` when it is done, a tap opens it again
 - [ ] Ask for something long (several commands) → when the steps push your prompt off the top, it stays pinned there; a tap on it scrolls back to it
-- [ ] Scroll up while it works → the view holds still, `↓ NEW` shows; a tap goes back to the end; a tap on a header opens and closes it
+- [ ] Scroll up while it works → the view holds still, `↓ NEW` (or `↓ LATEST`) shows above the NOW strip; a tap goes back to the end and the view follows again; a tap on a header opens and closes it
+- [ ] The scrollbar on the chat's right edge (no ▲ ▼ any more) → a thumb as tall as the part on screen; pinch the thumb and drag: the chat follows; poke it and drag: the same; drag it to the bottom → the view follows new text again; tap the track above or below the thumb → one page up or down; a short chat has no bar
 - [ ] An approval row shows and goes → the chat keeps its place and text
 - [ ] With EDITS, a command needing approval → ALLOW ONCE / ALLOW SESSION / DENY buttons appear and work
 - [ ] ■ STOP stops a running turn → within 2 s the header leaves WORKING and the chat stops "writing"
-- [ ] Press ▲ ▼ on a long thread → the timeline scrolls
 - [ ] Press FILES, GIT or TERMINAL in a thread → each jumps to the thread's workspace (the worktree path for WORKTREE threads)
 - [ ] Look at the meta row → it shows the plan and the usage windows (for example 5 h · week · month); the CONTEXT ring's picker lists them with their resets
 - [ ] Chips under the composer: MODEL ▾ (models of the provider, then effort) → the next message uses it; ACCESS ▾ (Edits / Auto / Full access); the workspace chip; the CONTEXT ring with % (tap: compact or fork); ■ STOP

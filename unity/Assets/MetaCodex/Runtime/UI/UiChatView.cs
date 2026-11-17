@@ -298,7 +298,7 @@ namespace MetaCodex.UI
         public bool NowShown => _nowShown;
         /// The height the NOW strip takes from the bottom of the chat (0 when hidden).
         public float FooterHeight => _nowShown ? NowH : 0f;
-        /// Each drawn text's lines against the lines laid out for it: (drawn, laid out); the guard's view (self-tests).
+        /// How often the re-flow guard found a drawn text taller than its slots and made room (self-tests, logs).
         public int ReflowCount { get; private set; }
         public void ClickLineForTest(int line) { var p = new Vector2(Rect.x + 0.02f, YOfLine(line)); var e = new UiPointerEvent { Point = p, PressPoint = p }; OnPress(e); OnRelease(e, true); }
         public void ClickStickyForTest() { var p = _band.center; var e = new UiPointerEvent { Point = p, PressPoint = p }; OnPress(e); OnRelease(e, true); }
@@ -792,7 +792,7 @@ namespace MetaCodex.UI
 
         private void DrawNow(float view)
         {
-            if (!_nowShown || !Visible) { ShowNowTexts(false); _nowRect = default; return; }
+            if (!_nowShown || !Visible || _nowSpin == null) { ShowNowTexts(false); _nowRect = default; return; }
             var r = _nowRect = new Rect(Rect.x, Rect.y + view + 0.004f, Wide, NowH - 0.004f);
             var c = _nowTint;
             Box(r, new Color(c.r, c.g, c.b, 0.15f), 0.005f, 1, 0f, 0.001f);
