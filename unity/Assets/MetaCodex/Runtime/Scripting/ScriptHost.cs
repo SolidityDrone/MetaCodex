@@ -150,6 +150,9 @@ namespace MetaCodex.Scripting
             public string[] NetworkHosts = new string[0];
             internal Table Store;
             internal Table[] HandTables;
+            /// Run's reusable coroutines (MakeRunner): the runner function, its mark and the idle ones.
+            internal DynValue Runner, RunMark;
+            internal readonly Stack<DynValue> IdleRunners = new Stack<DynValue>();
             /// net: the start times (session seconds) of the requests of the last minute; what the log said when (throttle).
             internal readonly Queue<float> NetStarts = new Queue<float>();
             internal readonly Dictionary<string, float> NetSaid = new Dictionary<string, float>();
@@ -165,12 +168,19 @@ namespace MetaCodex.Scripting
         /// One window of a plugin (ui.panel): the spec the plugin made, what the app has of it, and the flush state.
         private sealed class PlugWin
         {
-            public Entry Owner; public string LocalId, FullId; public JObject Spec; public DynValue On;
-            public string Sig, LastSig, Warned;                 // Sig: of the pending spec; LastSig: of the one the app has
-            public Dictionary<string, string> Live, LastLive;   // live texts: pending, and what the app has
-            public float LastBuild; public int Builds;
+            public Entry Owner; public string LocalId, FullId; public JObject Spec; public DynValue On, FullIdValue;
+            public string Sig, LastSig, Warned, SetWarned;      // Sig: structure of Spec (null: not computed); LastSig: what the app has
+            public readonly List<LiveSlot> Slots = new List<LiveSlot>();   // the LIVE texts of Spec (made with Sig)
+            public readonly Dictionary<string, string> LastLive = new Dictionary<string, string>(StringComparer.Ordinal); // LIVE texts the app has
+            public Dictionary<string, SetText> Sets;            // ui.set texts that win over the spec's (ApplySets, LiveText)
+            public float LastBuild, LintFrom; public int Builds, LintCalls;
             public bool Dirty, EverSent, OpenRequested;
+            public bool Waiting;      // changed while the app did not show it: sent when it opens
+            public bool TitleDefault; // ui.panel gave no title (the plugin's is used)
+            public bool FastOk;       // Spec was checked and none of its LIVE texts breaks a text rule: SameSpec may run
         }
+        private struct LiveSlot { public string Id, Style; public JValue Tok; }
+        private sealed class SetText { public string FromPanel, Text; }
         private sealed class TileEntry { public Entry Owner; public PluginTile Tile; public DynValue Run; }
         private sealed class Detector
         {
@@ -315,7 +325,10 @@ namespace MetaCodex.Scripting
                 var t = _timers[i];
                 if (t.At > now || !t.Owner.Enabled || t.Owner.Error != null) continue;
                 if (t.Every > 0f) t.At = now + t.Every; else { _timers.RemoveAt(i); i--; }
-                Run(t.Owner, t.Fn);
+                bool was = _inTimer;
+                _inTimer = true;
+                try { Run(t.Owner, t.Fn); }
+                finally { _inTimer = was; }
             }
             if (_wallTimers.Count > 0)
             {
@@ -325,7 +338,10 @@ namespace MetaCodex.Scripting
                     var t = _wallTimers[i];
                     if (t.At > wc || !t.Owner.Enabled || t.Owner.Error != null) continue;
                     _wallTimers.RemoveAt(i); i--;
-                    Run(t.Owner, t.Fn);
+                    bool was = _inTimer;
+                    _inTimer = true;
+                    try { Run(t.Owner, t.Fn); }
+                    finally { _inTimer = was; }
                 }
             }
             if (MeasureUi) Cost.Timers += Ts() - t0;
@@ -533,6 +549,7 @@ namespace MetaCodex.Scripting
             script.Options.DebugPrint = s => Say(e, s);
             e.Script = script;
             e.Store = new Table(script);
+            MakeRunner(e, script);
             Install(e, script);
             if (code == null) { Say(e, $"loaded ({e.Poses} poses)"); return; }
             try
@@ -581,6 +598,8 @@ namespace MetaCodex.Scripting
             _svc.Voice?.RemoveOwnedBy(e.Key);
             e.Script = null;
             e.HandTables = null;
+            e.Runner = e.RunMark = null;
+            e.IdleRunners.Clear();
         }
 
         private static string FirstComment(string code)
@@ -758,10 +777,41 @@ namespace MetaCodex.Scripting
 
         private static string Short(string s) => s.Length > 90 ? s.Substring(0, 90) + "…" : s;
 
+        /// Run's coroutines, reused: a MoonSharp coroutine allocates 2 MB when it is made (two preallocated 128K-entry
+        /// stacks), and Run used to make one for every call (every timer tick, event and callback: 2 MB of garbage each,
+        /// measured 2048 KB on the PC). A runner is a Lua loop that calls the function it is resumed with and yields its
+        /// results after a mark, so it waits for the next call; one that ends in any other state (an error, the instruction
+        /// budget, the plugin's own coroutine.yield) is dropped. coroutine.yield is taken before main.lua runs.
+        private const string RunnerLua =
+            "local mark, yield = ...\n" +
+            "local function call(fn, n, a, b) if n == 0 then return fn() elseif n == 1 then return fn(a) end return fn(a, b) end\n" +
+            "return function(fn, n, a, b) while true do fn, n, a, b = yield(mark, call(fn, n, a, b)) end end";
+        private const int MaxIdleRunners = 4;
+        private static readonly DynValue[] RunArgCount = { DynValue.NewNumber(0), DynValue.NewNumber(1), DynValue.NewNumber(2) };
+
+        private static void MakeRunner(Entry e, Script script)
+        {
+            e.Runner = e.RunMark = null;
+            e.IdleRunners.Clear();
+            try
+            {
+                var co = script.Globals.Get("coroutine");
+                var yield = co.Type == DataType.Table ? co.Table.Get("yield") : DynValue.Nil;
+                if (yield.Type != DataType.ClrFunction && yield.Type != DataType.Function) return;
+                var mark = DynValue.NewTable(new Table(script));
+                var fn = script.Call(script.LoadString(RunnerLua, null, "runner"), mark, yield);
+                if (fn.Type != DataType.Function) return;
+                e.Runner = fn;
+                e.RunMark = mark;
+            }
+            catch (Exception) { e.Runner = e.RunMark = null; } // Run falls back to a new coroutine a call
+        }
+
         /// Runs a Lua function as a coroutine with an instruction budget. Over budget = the script is stopped.
         private DynValue Run(Entry e, DynValue fn, params DynValue[] args)
         {
             if (e.Script == null || e.Error != null || fn == null || fn.Type != DataType.Function && fn.Type != DataType.ClrFunction) return DynValue.Nil;
+            if (e.Runner != null && args.Length <= 2) return RunPooled(e, fn, args);
             try
             {
                 var co = e.Script.CreateCoroutine(fn);
@@ -778,6 +828,49 @@ namespace MetaCodex.Scripting
             catch (InterpreterException ex) { Fail(e, ex.DecoratedMessage ?? ex.Message); }
             catch (Exception ex) { Fail(e, ex.Message); }
             return DynValue.Nil;
+        }
+
+        /// Run on a reused runner coroutine (MakeRunner): the same budget, errors and results as a new coroutine.
+        private DynValue RunPooled(Entry e, DynValue fn, DynValue[] args)
+        {
+            try
+            {
+                var co = e.IdleRunners.Count > 0 ? e.IdleRunners.Pop() : e.Script.CreateCoroutine(e.Runner);
+                var c = co.Coroutine;
+                c.AutoYieldCounter = InstructionBudget;
+                var result = args.Length == 0 ? c.Resume(fn, RunArgCount[0])
+                    : args.Length == 1 ? c.Resume(fn, RunArgCount[1], args[0])
+                    : c.Resume(fn, RunArgCount[2], args[0], args[1]);
+                e.Runs++;
+                if (c.State == CoroutineState.ForceSuspended)
+                {
+                    Fail(e, $"ran more than {InstructionBudget} instructions in one call (endless loop?); stopped");
+                    return DynValue.Nil;
+                }
+                if (c.State != CoroutineState.Suspended || e.RunMark == null) return result;
+                // the runner's yield: (mark, results...); anything else is the plugin's own coroutine.yield (runner dropped)
+                var mark = e.RunMark.Table;
+                if (result.Type == DataType.Table && result.Table == mark) { Idle(e, co); return DynValue.Void; }
+                if (result.Type == DataType.Tuple && result.Tuple.Length > 0 && result.Tuple[0].Type == DataType.Table && result.Tuple[0].Table == mark)
+                {
+                    Idle(e, co);
+                    var t = result.Tuple;
+                    if (t.Length == 1) return DynValue.Void;
+                    if (t.Length == 2) return t[1];
+                    var rest = new DynValue[t.Length - 1];
+                    Array.Copy(t, 1, rest, 0, rest.Length);
+                    return DynValue.NewTuple(rest);
+                }
+                return result;
+            }
+            catch (InterpreterException ex) { Fail(e, ex.DecoratedMessage ?? ex.Message); }
+            catch (Exception ex) { Fail(e, ex.Message); }
+            return DynValue.Nil;
+        }
+
+        private static void Idle(Entry e, DynValue co)
+        {
+            if (e.Script != null && e.IdleRunners.Count < MaxIdleRunners) e.IdleRunners.Push(co);
         }
 
         /// A gesture (or UI) event: runs `gesture.on` handlers and advances `gesture.sequence` matchers.
@@ -968,6 +1061,35 @@ namespace MetaCodex.Scripting
 
         public static bool IsSoundName(string n) => n != null && Array.IndexOf(SoundNames, n) >= 0;
 
+        /// A window of the plugin by its local or full id as given (no allocation); null: none (OwnWindow also tries SafeId).
+        private PlugWin LocalWindow(Entry e, string id)
+        {
+            for (int i = 0; i < _windows.Count; i++)
+            {
+                var w = _windows[i];
+                if (w.Owner == e && (string.Equals(w.LocalId, id, StringComparison.Ordinal) || string.Equals(w.FullId, id, StringComparison.Ordinal))) return w;
+            }
+            return null;
+        }
+
+        /// A timer callback runs (app.every, app.after, app.at): the ui.panel lint counts only those calls.
+        private bool _inTimer;
+        /// Windows the lint below has spoken about in this session (once per window).
+        private readonly HashSet<string> _lintSaid = new HashSet<string>(StringComparer.Ordinal);
+        public const int LintCallsPerMinute = 20;
+        public const string LintText = "called every second with only LIVE texts changing: use ui.set(...) and ui.shown(...) (quest-plugins: Performance rules)";
+
+        /// A timer called ui.panel and only LIVE texts changed (or nothing): more than LintCallsPerMinute in a minute is one
+        /// warn line in the plugin's log, once per window a session.
+        private void LintLiveOnly(Entry e, PlugWin w)
+        {
+            if (_lintSaid.Contains(w.FullId)) return;
+            if (Now - w.LintFrom > 60f) { w.LintFrom = Now; w.LintCalls = 0; }
+            if (++w.LintCalls <= LintCallsPerMinute) return;
+            _lintSaid.Add(w.FullId);
+            Say(e, "warn ui.panel " + w.LocalId + ": " + LintText);
+        }
+
         private PlugWin OwnWindow(Entry e, string id)
         {
             if (string.IsNullOrEmpty(id)) return null;
@@ -1034,26 +1156,281 @@ namespace MetaCodex.Scripting
             _svc.SetPluginTiles(list);
         }
 
-        /// The spec as JSON text with the `text` of LIVE text components (type text/markdown/note with an id) blanked,
-        /// and those texts by component id.
-        private static string Signature(JObject spec, out Dictionary<string, string> live)
+        // ------------------------------------------------------------------ plugin windows: LIVE texts and the flush
+
+        /// LIVE texts are text components (text, markdown, note) with an id, at the top level or inside a card, a row or a
+        /// tab (as deep as MaxLiveNest): the shell keeps their labels (AgentView.Live) and sets them without a rebuild.
+        private const int MaxLiveNest = 4;
+
+        private static string JStr(JToken t) => t is JValue v && v.Type == JTokenType.String ? (string)v.Value : null;
+
+        /// The key that holds a LIVE text component's text: `text`, else `markdown`; null when it is not a LIVE text.
+        private static string LiveKey(JObject co, out string id, out string type)
         {
-            live = new Dictionary<string, string>();
-            var c = (JObject)spec.DeepClone();
-            if (c["components"] is JArray comps)
-                foreach (var item in comps)
+            id = JStr(co["id"]);
+            type = JStr(co["type"]);
+            if (string.IsNullOrEmpty(id) || !ViewSpecCheck.IsTextType(type)) return null;
+            return co["text"] != null ? "text" : co["markdown"] != null ? "markdown" : null;
+        }
+
+        /// Collects the LIVE texts of a component list (and of its cards, rows and tabs) whose text is a string.
+        private static void CollectSlots(JArray comps, int nest, List<LiveSlot> slots)
+        {
+            if (comps == null) return;
+            for (int i = 0; i < comps.Count; i++)
+            {
+                if (!(comps[i] is JObject co)) continue;
+                string key = LiveKey(co, out var id, out var type);
+                if (key != null && co[key] is JValue tv && tv.Type == JTokenType.String)
+                    slots.Add(new LiveSlot { Id = id, Tok = tv, Style = JStr(co["style"]) });
+                if (nest >= MaxLiveNest) continue;
+                if (type == "card" || type == "row") CollectSlots(co["components"] as JArray, nest + 1, slots);
+                else if (type == "tabs" && co["tabs"] is JArray tabs)
+                    for (int k = 0; k < tabs.Count; k++) if (tabs[k] is JObject tab) CollectSlots(tab["components"] as JArray, nest + 1, slots);
+            }
+        }
+
+        /// The LIVE text component with that id (its text token), or null; style: the component's style.
+        private static JValue FindLive(JArray comps, string id, int nest, out string style)
+        {
+            style = null;
+            if (comps == null) return null;
+            for (int i = 0; i < comps.Count; i++)
+            {
+                if (!(comps[i] is JObject co)) continue;
+                string key = LiveKey(co, out var cid, out var type);
+                if (key != null && cid == id) { style = JStr(co["style"]); return co[key] is JValue tv && tv.Type == JTokenType.String ? tv : null; }
+                if (nest >= MaxLiveNest) continue;
+                JValue hit = null;
+                if (type == "card" || type == "row") hit = FindLive(co["components"] as JArray, id, nest + 1, out style);
+                else if (type == "tabs" && co["tabs"] is JArray tabs)
+                    for (int k = 0; k < tabs.Count && hit == null; k++) if (tabs[k] is JObject tab) hit = FindLive(tab["components"] as JArray, id, nest + 1, out style);
+                if (hit != null) return hit;
+            }
+            return null;
+        }
+
+        private readonly List<string> _sigSaved = new List<string>();
+
+        /// The window's structure: its spec as JSON text with the LIVE texts blanked (w.Sig), and its LIVE texts (w.Slots).
+        /// Returns true when a LIVE text breaks a text rule (ViewSpecCheck.TextWarning): such a window takes the full path.
+        private bool ComputeSig(PlugWin w)
+        {
+            w.Slots.Clear();
+            CollectSlots(w.Spec["components"] as JArray, 0, w.Slots);
+            bool warns = false;
+            _sigSaved.Clear();
+            for (int i = 0; i < w.Slots.Count; i++)
+            {
+                var sl = w.Slots[i];
+                string text = (string)sl.Tok.Value;
+                if (ViewSpecCheck.TextWarning(sl.Style, text) != null) warns = true;
+                _sigSaved.Add(text);
+                sl.Tok.Value = "";
+            }
+            try { w.Sig = w.Spec.ToString(Newtonsoft.Json.Formatting.None); }
+            finally { for (int i = 0; i < w.Slots.Count; i++) w.Slots[i].Tok.Value = _sigSaved[i]; }
+            return warns;
+        }
+
+        /// ui.set texts the new spec still gives their old text for stay; the others are dropped (the spec's text wins).
+        private readonly List<string> _setsGone = new List<string>();
+        private static void ApplySets(PlugWin w, List<string> gone)
+        {
+            if (w.Sets == null || w.Sets.Count == 0) return;
+            gone.Clear();
+            foreach (var kv in w.Sets)
+            {
+                var tok = FindLive(w.Spec["components"] as JArray, kv.Key, 0, out _);
+                if (tok != null && string.Equals((string)tok.Value, kv.Value.FromPanel, StringComparison.Ordinal)) tok.Value = kv.Value.Text;
+                else gone.Add(kv.Key);
+            }
+            for (int i = 0; i < gone.Count; i++) w.Sets.Remove(gone[i]);
+        }
+
+        // ---- ui.panel's fast path: a spec table with the structure the host has (only LIVE texts differ) skips LuaJson,
+        // ViewSpecCheck and the signature. The walk compares the Lua table with the stored spec the way LuaJson.ToJson would
+        // convert it (arrays 1..n, other tables objects with string keys, integers and floats); anything it is unsure of
+        // (number keys in an object, a non-string LIVE text, a text rule broken) returns false and the full path runs.
+
+        /// The LIVE texts a same-structure walk found changed: the token, the new text, the id, and whether a ui.set text
+        /// for that id is dropped (the plugin's spec gives a new text).
+        private readonly List<(JValue tok, string text, string id, bool dropSet)> _liveBuf = new List<(JValue, string, string, bool)>();
+        private PlugWin _walkWin;
+
+        private bool SameSpec(Table t, PlugWin w)
+        {
+            _liveBuf.Clear();
+            _walkWin = w;
+            var spec = w.Spec;
+            var title = t.Get("title");
+            if (title.IsNil()) { if (!w.TitleDefault) return false; }
+            else if (w.TitleDefault || !SameValue(title, spec["title"], 1)) return false;
+            if (!SameKey(t, "columns", spec) || !SameKey(t, "size", spec)) return false;
+            var comps = t.Get("components");
+            var ctok = spec["components"];
+            if (comps.IsNil()) return ctok == null;
+            return comps.Type == DataType.Table && ctok is JArray arr && SameList(comps.Table, arr, 1, 0);
+        }
+
+        private static bool SameKey(Table t, string key, JObject spec)
+        {
+            var v = t.Get(key);
+            var tok = spec[key];
+            return v.IsNil() ? tok == null : SameValue(v, tok, 1);
+        }
+
+        private static bool SameValue(DynValue v, JToken tok, int depth)
+        {
+            if (tok == null) return false;
+            switch (v.Type)
+            {
+                case DataType.Boolean:
+                    return tok.Type == JTokenType.Boolean && ((JValue)tok).Value is bool b && b == v.Boolean;
+                case DataType.Number:
                 {
-                    if (!(item is JObject co)) continue;
-                    string type = co["type"]?.Type == JTokenType.String ? (string)co["type"] : null;
-                    string id = co["id"]?.Type == JTokenType.String ? (string)co["id"] : null;
-                    if (string.IsNullOrEmpty(id) || !ViewSpecCheck.IsTextType(type)) continue;
-                    string text = co["text"] != null && co["text"].Type != JTokenType.Null ? (string)co["text"]
-                        : co["markdown"] != null && co["markdown"].Type != JTokenType.Null ? (string)co["markdown"] : "";
-                    live[id] = text ?? "";
-                    if (co["text"] != null) co["text"] = "";
-                    if (co["markdown"] != null) co["markdown"] = "";
+                    double d = v.Number;
+                    if (double.IsNaN(d) || double.IsInfinity(d)) return false;
+                    if (d == Math.Floor(d) && Math.Abs(d) < 9e15) return tok.Type == JTokenType.Integer && ((JValue)tok).Value is long l && l == (long)d;
+                    return tok.Type == JTokenType.Float && ((JValue)tok).Value is double x && x == d;
                 }
-            return c.ToString(Newtonsoft.Json.Formatting.None);
+                case DataType.String:
+                    return tok.Type == JTokenType.String && string.Equals((string)((JValue)tok).Value, v.String, StringComparison.Ordinal);
+                case DataType.Table:
+                    return SameTable(v.Table, tok, depth);
+                default:
+                    return false;
+            }
+        }
+
+        private static bool SameTable(Table t, JToken tok, int depth)
+        {
+            if (depth >= LuaJson.MaxDepth) return false;
+            int count = 0;
+            if (tok is JArray arr)
+            {
+                foreach (var pair in t.Pairs)
+                {
+                    if (pair.Value.IsNil()) continue;
+                    if (pair.Key.Type != DataType.Number) return false;
+                    double k = pair.Key.Number;
+                    if (k != Math.Floor(k) || k < 1 || k > arr.Count) return false;
+                    count++;
+                    if (!SameValue(pair.Value, arr[(int)k - 1], depth + 1)) return false;
+                }
+                return count == arr.Count;
+            }
+            if (!(tok is JObject obj)) return false;
+            foreach (var pair in t.Pairs)
+            {
+                if (pair.Value.IsNil()) continue;
+                if (pair.Key.Type != DataType.String) return false;
+                count++;
+                if (!SameValue(pair.Value, obj[pair.Key.String], depth + 1)) return false;
+            }
+            return count == obj.Count;
+        }
+
+        /// A list of components (the window's, a card's or row's, a tab's).
+        private bool SameList(Table t, JArray arr, int depth, int nest)
+        {
+            if (depth >= LuaJson.MaxDepth) return false;
+            int count = 0;
+            foreach (var pair in t.Pairs)
+            {
+                if (pair.Value.IsNil()) continue;
+                if (pair.Key.Type != DataType.Number) return false;
+                double k = pair.Key.Number;
+                if (k != Math.Floor(k) || k < 1 || k > arr.Count) return false;
+                count++;
+                if (pair.Value.Type != DataType.Table || !(arr[(int)k - 1] is JObject co) || !SameComp(pair.Value.Table, co, depth + 1, nest)) return false;
+            }
+            return count == arr.Count;
+        }
+
+        private bool SameComp(Table t, JObject co, int depth, int nest)
+        {
+            string liveKey = LiveKey(co, out var id, out var type);
+            bool card = nest < MaxLiveNest && (type == "card" || type == "row"), tabs = nest < MaxLiveNest && type == "tabs";
+            int count = 0;
+            foreach (var pair in t.Pairs)
+            {
+                if (pair.Value.IsNil()) continue;
+                if (pair.Key.Type != DataType.String) return false;
+                string key = pair.Key.String;
+                var tok = co[key];
+                if (tok == null) return false;
+                count++;
+                if (liveKey != null && key == liveKey)
+                {
+                    if (pair.Value.Type != DataType.String || !(tok is JValue tv) || tv.Type != JTokenType.String) return false;
+                    if (!LiveText(id, tv, pair.Value.String, JStr(co["style"]))) return false;
+                }
+                else if (card && key == "components")
+                {
+                    if (pair.Value.Type != DataType.Table || !(tok is JArray ca) || !SameList(pair.Value.Table, ca, depth + 1, nest + 1)) return false;
+                }
+                else if (tabs && key == "tabs")
+                {
+                    if (pair.Value.Type != DataType.Table || !(tok is JArray ta) || !SameTabs(pair.Value.Table, ta, depth + 1, nest + 1)) return false;
+                }
+                else if (!SameValue(pair.Value, tok, depth + 1)) return false;
+            }
+            return count == co.Count;
+        }
+
+        private bool SameTabs(Table t, JArray arr, int depth, int nest)
+        {
+            int count = 0;
+            foreach (var pair in t.Pairs)
+            {
+                if (pair.Value.IsNil()) continue;
+                if (pair.Key.Type != DataType.Number) return false;
+                double k = pair.Key.Number;
+                if (k != Math.Floor(k) || k < 1 || k > arr.Count) return false;
+                count++;
+                if (pair.Value.Type != DataType.Table || !(arr[(int)k - 1] is JObject tab)) return false;
+                int keys = 0;
+                foreach (var tp in pair.Value.Table.Pairs)
+                {
+                    if (tp.Value.IsNil()) continue;
+                    if (tp.Key.Type != DataType.String) return false;
+                    var tok = tab[tp.Key.String];
+                    if (tok == null) return false;
+                    keys++;
+                    if (tp.Key.String == "components")
+                    {
+                        if (tp.Value.Type != DataType.Table || !(tok is JArray ca) || !SameList(tp.Value.Table, ca, depth + 2, nest)) return false;
+                    }
+                    else if (!SameValue(tp.Value, tok, depth + 2)) return false;
+                }
+                if (keys != tab.Count) return false;
+            }
+            return count == arr.Count;
+        }
+
+        /// A LIVE text in a same-structure walk: a ui.set text stays while the spec gives the text it was set over; a new
+        /// text is noted (and must keep the text rules, else the full path says why).
+        private bool LiveText(string id, JValue tok, string now, string style)
+        {
+            var w = _walkWin;
+            bool drop = false;
+            if (w.Sets != null && w.Sets.TryGetValue(id, out var st))
+            {
+                if (string.Equals(now, st.FromPanel, StringComparison.Ordinal)) return true;
+                drop = true;
+            }
+            if (!drop && string.Equals(now, (string)tok.Value, StringComparison.Ordinal)) return true;
+            if (ViewSpecCheck.TextWarning(style, now) != null) return false;
+            _liveBuf.Add((tok, now, id, drop));
+            return true;
+        }
+
+        /// The window has something new for the app: the next Tick flushes it.
+        private void MarkDirty(PlugWin w)
+        {
+            w.Dirty = true;
+            _anyDirty = true;
         }
 
         private void FlushWindows(float now)
@@ -1068,34 +1445,52 @@ namespace MetaCodex.Scripting
             _anyDirty = pending;
         }
 
+        /// The changed LIVE texts of one flush (handed to the app, which does not keep it).
+        private readonly Dictionary<string, string> _textBuf = new Dictionary<string, string>(StringComparer.Ordinal);
+
         /// Sends a dirty window to the app: only the changed LIVE texts when nothing else changed, else the whole spec
-        /// (at most once a second a window, the first one at once). False = still dirty (waiting for the rate limit).
+        /// (at most once a second a window, the first one at once). A window the app has but does not show gets nothing
+        /// until it opens (ShowOwn, its "open" event): it waits. force: now (the window opens). False = still dirty
+        /// (waiting for the rate limit).
         private bool FlushWindow(PlugWin w, float now, bool force)
         {
             long s0 = Ts();
-            if (w.Sig == null) w.Sig = Signature(w.Spec, out w.Live);
+            if (w.EverSent && !force && !w.OpenRequested && !_svc.PluginWindowIsOpen(w.FullId))
+            {
+                w.Dirty = false;
+                w.Waiting = true;
+                if (MeasureUi) Cost.Sig += Ts() - s0;
+                return true;
+            }
+            if (w.Sig == null) w.FastOk = !ComputeSig(w);
             if (w.EverSent && w.Sig == w.LastSig)
             {
-                Dictionary<string, string> changed = null;
-                foreach (var kv in w.Live)
-                    if (w.LastLive == null || !w.LastLive.TryGetValue(kv.Key, out var old) || old != kv.Value)
-                        (changed ??= new Dictionary<string, string>()).Add(kv.Key, kv.Value);
+                _textBuf.Clear();
+                for (int i = 0; i < w.Slots.Count; i++)
+                {
+                    var sl = w.Slots[i];
+                    string cur = sl.Tok.Value as string ?? "";
+                    if (w.LastLive.TryGetValue(sl.Id, out var old) && string.Equals(old, cur, StringComparison.Ordinal)) continue;
+                    _textBuf[sl.Id] = cur;
+                    w.LastLive[sl.Id] = cur;
+                }
                 if (MeasureUi) Cost.Sig += Ts() - s0;
                 w.Dirty = false;
-                w.LastLive = w.Live;
+                w.Waiting = false;
                 bool open = w.OpenRequested;
                 w.OpenRequested = false;
-                if (changed != null)
+                if (_textBuf.Count > 0)
                 {
                     long a0 = Ts();
                     if (MeasureUi) Cost.TextSends++;
-                    if (!_svc.PluginWindowText(w.FullId, changed))
+                    if (!_svc.PluginWindowText(w.FullId, _textBuf))
                     {
                         w.Builds++;
                         w.LastBuild = now;
                         if (MeasureUi) Cost.Builds++;
                         _svc.PluginWindow(w.FullId, w.Spec.ToString(Newtonsoft.Json.Formatting.None), false);
                     }
+                    _textBuf.Clear();
                     if (MeasureUi) Cost.App += Ts() - a0;
                 }
                 if (open) _svc.PluginWindowShow(w.FullId, 1);
@@ -1104,10 +1499,12 @@ namespace MetaCodex.Scripting
             if (MeasureUi) Cost.Sig += Ts() - s0;
             if (w.EverSent && !force && now - w.LastBuild < 1f) return false;
             w.Dirty = false;
+            w.Waiting = false;
             w.EverSent = true;
             w.LastBuild = now;
             w.LastSig = w.Sig;
-            w.LastLive = w.Live;
+            w.LastLive.Clear();
+            for (int i = 0; i < w.Slots.Count; i++) w.LastLive[w.Slots[i].Id] = w.Slots[i].Tok.Value as string ?? "";
             w.Builds++;
             bool show = w.OpenRequested;
             w.OpenRequested = false;
@@ -1117,15 +1514,16 @@ namespace MetaCodex.Scripting
             return true;
         }
 
-        /// A window the app has never got (ui.panel and ui.open in the same frame): sends it now.
-        private void EnsureSent(PlugWin w)
+        /// Before a window opens: what it waits for goes to the app first (a window the app never got: at once).
+        private void FlushBeforeOpen(PlugWin w, int mode)
         {
-            if (!w.EverSent && w.Dirty) FlushWindow(w, Now, true);
+            if (!w.Dirty && !w.Waiting) return;
+            if (!w.EverSent || mode == 1 || mode == 2 && !_svc.PluginWindowIsOpen(w.FullId)) FlushWindow(w, Now, true);
         }
 
         private bool ShowOwn(PlugWin w, int mode)
         {
-            EnsureSent(w);
+            if (mode != 0) FlushBeforeOpen(w, mode);
             return _svc.PluginWindowShow(w.FullId, mode);
         }
 
@@ -1155,6 +1553,8 @@ namespace MetaCodex.Scripting
         public void WindowEvent(string windowId, string type, string id, string value)
         {
             var w = FindWindow(windowId);
+            // the app opened the window by itself (its own menu, a restored layout): what it waited for goes now
+            if (w != null && type == "open" && (w.Dirty || w.Waiting)) FlushWindow(w, Now, true);
             if (w == null || w.On == null || w.Owner.Script == null) return;
             var t = new Table(w.Owner.Script);
             t.Set("type", DynValue.NewString(type ?? ""));
@@ -1793,9 +2193,34 @@ namespace MetaCodex.Scripting
                 if (a.Count < 1 || a[0].Type != DataType.Table) throw new ScriptRuntimeException(form);
                 var t = a[0].Table;
                 var idv = t.Get("id");
+                long p0 = Ts();
+                // the fast path: the window exists and only LIVE texts changed (no LuaJson, no Check, no signature)
+                var fw = idv.IsNil() ? LocalWindow(e, "main") : idv.Type == DataType.String ? LocalWindow(e, idv.String) : null;
+                if (fw != null && fw.Spec != null && fw.FastOk && SameSpec(t, fw))
+                {
+                    bool changed = false;
+                    for (int i = 0; i < _liveBuf.Count; i++)
+                    {
+                        var x = _liveBuf[i];
+                        if (x.dropSet) fw.Sets.Remove(x.id);
+                        if (string.Equals((string)x.tok.Value, x.text, StringComparison.Ordinal)) continue;
+                        x.tok.Value = x.text;
+                        changed = true;
+                    }
+                    _liveBuf.Clear();
+                    _walkWin = null;
+                    var fon = t.Get("on");
+                    fw.On = fon.Type == DataType.Function || fon.Type == DataType.ClrFunction ? fon : null;
+                    if (t.Get("open").CastToBool()) { fw.OpenRequested = true; changed = true; }
+                    if (changed) MarkDirty(fw);
+                    if (_inTimer) LintLiveOnly(e, fw);
+                    if (MeasureUi) { Cost.Panel += Ts() - p0; Cost.Calls++; Cost.FastCalls++; }
+                    return fw.FullIdValue;
+                }
+                _liveBuf.Clear();
+                _walkWin = null;
                 string local = SafeId(idv.IsNil() ? "main" : idv.ToPrintString());
                 if (local.Length == 0) throw new ScriptRuntimeException("ui.panel: id needs letters or digits, for example id=\"main\"");
-                long p0 = Ts();
                 var spec = new JObject { ["id"] = local };
                 try
                 {
@@ -1821,7 +2246,7 @@ namespace MetaCodex.Scripting
                     foreach (var x in _windows) if (x.Owner == e) mine++;
                     if (mine >= MaxWindowsPerPlugin) throw new ScriptRuntimeException("ui.panel: at most " + MaxWindowsPerPlugin + " windows a plugin");
                     if (FindWindow(full) != null) throw new ScriptRuntimeException("ui.panel: the window id " + full + " belongs to another plugin or script");
-                    w = new PlugWin { Owner = e, LocalId = local, FullId = full };
+                    w = new PlugWin { Owner = e, LocalId = local, FullId = full, FullIdValue = DynValue.NewString(full).AsReadOnly() };
                     _windows.Add(w);
                 }
                 string warned = string.Join("; ", warnings);
@@ -1829,13 +2254,51 @@ namespace MetaCodex.Scripting
                 w.Warned = warned;
                 var on = t.Get("on");
                 w.On = on.Type == DataType.Function || on.Type == DataType.ClrFunction ? on : null;
+                w.TitleDefault = t.Get("title").IsNil();
                 w.Spec = spec;
-                w.Sig = null;
-                w.Dirty = true;
+                ApplySets(w, _setsGone);
+                w.FastOk = !ComputeSig(w);
                 if (t.Get("open").CastToBool()) w.OpenRequested = true;
-                _anyDirty = true;
+                MarkDirty(w);
                 if (MeasureUi) { Cost.Panel += Ts() - p0; Cost.Calls++; }
-                return DynValue.NewString(full);
+                return w.FullIdValue;
+            });
+            Set(ui, "set", a =>
+            {
+                // ui.set(window, id, text): one LIVE text (a text component with that id) without a spec
+                const string form = "ui.set(\"main\", \"clock\", \"12:30\")";
+                if (a.Count < 3 || a[0].Type != DataType.String || a[1].Type != DataType.String)
+                    throw new ScriptRuntimeException("ui.set(window, id, text): window and id are strings, for example " + form);
+                var tv = a[2];
+                string text = tv.Type == DataType.String ? tv.String : tv.Type == DataType.Number ? tv.ToPrintString() : null;
+                if (text == null) throw new ScriptRuntimeException("ui.set: text must be a string (or a number), for example " + form);
+                long p0 = Ts();
+                var w = LocalWindow(e, a[0].String) ?? OwnWindow(e, a[0].String);
+                string id = a[1].String;
+                string style = null;
+                var tok = w?.Spec != null ? FindLive(w.Spec["components"] as JArray, id, 0, out style) : null;
+                if (tok == null) return DynValue.False; // no such window or LIVE text (yet): the plugin may check the result
+                w.Sets ??= new Dictionary<string, SetText>(StringComparer.Ordinal);
+                if (!w.Sets.TryGetValue(id, out var st)) { st = new SetText { FromPanel = (string)tok.Value }; w.Sets[id] = st; }
+                st.Text = text;
+                string warn = ViewSpecCheck.TextWarning(style, text);
+                if (warn != null)
+                {
+                    string said = id + ": " + warn;
+                    if (said != w.SetWarned) Say(e, "warn ui.set " + w.LocalId + " " + said);
+                    w.SetWarned = said;
+                }
+                if (!string.Equals((string)tok.Value, text, StringComparison.Ordinal)) { tok.Value = text; MarkDirty(w); }
+                if (MeasureUi) { Cost.Panel += Ts() - p0; Cost.Sets++; }
+                return DynValue.True;
+            });
+            Set(ui, "shown", a =>
+            {
+                // ui.shown(window): true while the window shows (a tick can skip its work when nothing shows)
+                if (a.Count < 1 || a[0].Type != DataType.String)
+                    throw new ScriptRuntimeException("ui.shown(window): window is the id of one of this plugin's windows, for example ui.shown(\"main\")");
+                var w = LocalWindow(e, a[0].String) ?? OwnWindow(e, a[0].String);
+                return w != null && (w.OpenRequested || _svc.PluginWindowIsOpen(w.FullId)) ? DynValue.True : DynValue.False;
             });
             Set(ui, "sound", a =>
             {

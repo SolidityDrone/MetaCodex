@@ -42,6 +42,16 @@ namespace MetaCodex.Scripting
         /// A `text`-like component (its `text` can be LIVE when it has an `id`).
         public static bool IsTextType(string type) => type == "text" || type == "markdown" || type == "note";
 
+        /// The rules for a text's content alone (a LIVE text that ui.set or a same-structure ui.panel changes): null when it
+        /// keeps them, else the first warning (Check words it the same, with the component's number).
+        public static string TextWarning(string style, string text) =>
+            TooLong(text) ? LongText(text) : BigTooLong(style, text) ? BigText : null;
+
+        private static bool TooLong(string text) => text != null && text.Length > 600;
+        private static string LongText(string text) => text.Length + " characters; more than 600 is too much to read in VR";
+        private static bool BigTooLong(string style, string text) => style == "big" && text != null && (text.Length > 24 || text.IndexOf('\n') >= 0);
+        private const string BigText = "a \"big\" text is one short line (24 characters at most)";
+
         public static void Check(JObject spec, List<string> errors, List<string> warnings)
         {
             if (spec == null) { errors.Add("the spec is missing"); return; }
@@ -104,10 +114,10 @@ namespace MetaCodex.Scripting
                     case "note":
                     {
                         string text = Str(c["text"]) ?? Str(c["markdown"]);
-                        if (text != null && text.Length > 600) warnings.Add(at + ": " + text.Length + " characters; more than 600 is too much to read in VR");
                         string style = Str(c["style"]);
+                        if (TooLong(text)) warnings.Add(at + ": " + LongText(text));
                         if (style != null && style != "big") errors.Add(at + ": style must be \"big\" or left out");
-                        if (style == "big" && text != null && (text.Length > 24 || text.Contains("\n"))) warnings.Add(at + ": a \"big\" text is one short line (24 characters at most)");
+                        if (BigTooLong(style, text)) warnings.Add(at + ": " + BigText);
                         break;
                     }
                     case "choices":

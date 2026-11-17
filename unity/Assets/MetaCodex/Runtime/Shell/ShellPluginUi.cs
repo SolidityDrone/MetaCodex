@@ -172,10 +172,26 @@ namespace MetaCodex.Shell
             // the spec the next build uses: the deferred one when an update waits for a press to end, else the built one
             int at = PendingIndex(v);
             var spec = at >= 0 ? _pendingWin[at].spec : v.Spec;
-            if (spec != null && spec["components"] is JArray comps)
-                foreach (var tok in comps)
-                    if (tok is JObject c && (string)c["id"] is string cid && texts.TryGetValue(cid, out var txt)) c["text"] = txt;
+            if (spec != null) SetLiveTexts(spec["components"] as JArray, texts, 0);
             return true;
+        }
+
+        /// LIVE texts into a spec: text components with those ids, at the top level and in cards, rows and tabs (as the
+        /// host finds them, ScriptHost.CollectSlots), so a later build shows the newest texts.
+        private static void SetLiveTexts(JArray comps, IDictionary<string, string> texts, int depth)
+        {
+            if (comps == null || depth > 4) return;
+            for (int i = 0; i < comps.Count; i++)
+            {
+                if (!(comps[i] is JObject c)) continue;
+                if (c["id"] is JValue iv && iv.Value is string cid && texts.TryGetValue(cid, out var txt))
+                {
+                    if (c["markdown"] != null && c["text"] == null) c["markdown"] = txt; else c["text"] = txt;
+                }
+                SetLiveTexts(c["components"] as JArray, texts, depth + 1);
+                if (c["tabs"] is JArray tabs)
+                    for (int k = 0; k < tabs.Count; k++) if (tabs[k] is JObject tab) SetLiveTexts(tab["components"] as JArray, texts, depth + 1);
+            }
         }
 
         /// mode 1 = open, 0 = close, 2 = toggle; returns the open state after.
