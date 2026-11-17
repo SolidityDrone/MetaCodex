@@ -18,11 +18,14 @@ namespace PluginHarness
         public static bool Verbose;
         /// --time: what one second of each plugin costs the host, split (PluginRun.Timing).
         public static bool Time;
+        /// Run folder slots of the shipped examples (--strict): the host's performance lint is a FAIL for them, a warning
+        /// for any other plugin.
+        public static readonly HashSet<string> Strict = new HashSet<string>(StringComparer.Ordinal);
 
         public static int Main(string[] args)
         {
             string runDir = null;
-            bool rules = false, net = false, specs = false;
+            bool rules = false, net = false, specs = false, ui = false;
             string examplesDir = null;
             var folders = new List<string>();
             for (int i = 0; i < args.Length; i++)
@@ -38,6 +41,8 @@ namespace PluginHarness
                     foreach (var bad in NetFixture.LoadDir(args[++i])) { Fails++; Console.WriteLine("FAIL [fixtures] " + bad); }
                 }
                 else if (args[i] == "--specs") specs = true;
+                else if (args[i] == "--ui") ui = true;
+                else if (args[i] == "--strict" && i + 1 < args.Length) Strict.Add(args[++i]); // a shipped example: the lint is a FAIL
                 else if (args[i] == "--scaffold" && i + 3 < args.Length)
                 {
                     // --scaffold <kind> <id> <dest> [name]: a new plugin project's files, as the app makes them
@@ -65,15 +70,20 @@ namespace PluginHarness
                 catch (Exception ex) { Fails++; Console.WriteLine("FAIL [specs] the harness itself crashed: " + ex); }
                 if (runDir == null) { Console.WriteLine(Fails == 0 ? "PASS: specs" : "FAILED: " + Fails + " check(s)"); return Math.Min(Fails, 120); }
             }
-            if (runDir == null || folders.Count == 0 && !rules && !net && !specs)
+            if (runDir == null || folders.Count == 0 && !rules && !net && !specs && !ui)
             {
-                Console.WriteLine("usage: PluginTests.dll --run <run dir> [--verbose] [--rules] [--net <examples dir>] [--fixtures <dir>] <plugin folder name>... | --scaffold <kind> <id> <dest> [name]");
+                Console.WriteLine("usage: PluginTests.dll --run <run dir> [--verbose] [--rules] [--net <examples dir>] [--fixtures <dir>] [--ui] [--time] [--strict <slot>] <plugin folder name>... | --scaffold <kind> <id> <dest> [name]");
                 return 2;
             }
             if (rules)
             {
                 try { Rules.Run(runDir); }
                 catch (Exception ex) { Fails++; Console.WriteLine("FAIL [rules] the harness itself crashed: " + ex); }
+            }
+            if (ui)
+            {
+                try { UiTests.Run(runDir); }
+                catch (Exception ex) { Fails++; Console.WriteLine("FAIL [ui] the harness itself crashed: " + ex); }
             }
             if (net)
             {
@@ -720,9 +730,13 @@ namespace PluginHarness
             // the whole window for a countdown (use a LIVE text: a text component with an id)
             var minuteStart = _fake.Windows.ToDictionary(kv => kv.Key, kv => kv.Value.Builds);
             var worst = new Dictionary<string, int>();
+            _host.Cost.Clear();
+            _host.MeasureUi = true;
+            int ran = 0;
             for (int i = 0; i < RunSeconds; i++)
             {
                 Step(1.0);
+                ran++;
                 if (_entry.Error != null) { NoError("after " + (i + 1) + " s of app time"); break; }
                 if ((i + 1) % 60 == 0)
                 {
@@ -734,6 +748,12 @@ namespace PluginHarness
                     }
                 }
             }
+            _host.MeasureUi = false;
+            var c = _host.Cost;
+            double Ms(long ticks) => ticks * 1000.0 / System.Diagnostics.Stopwatch.Frequency / Math.Max(1, ran);
+            string cost = "the host's cost a second on this PC: timers (Lua + ui calls) " + Ms(c.Timers).ToString("0.000", CultureInfo.InvariantCulture) +
+                " ms, of it ui.panel " + Ms(c.Panel).ToString("0.000", CultureInfo.InvariantCulture) + " ms; flush " + Ms(c.Flush).ToString("0.000", CultureInfo.InvariantCulture) +
+                " ms; ui.panel " + c.Calls + " calls (" + c.FastCalls + " LIVE-only), ui.set " + c.Sets;
             foreach (var kv in worst)
                 if (kv.Key.StartsWith(_prefix, StringComparison.Ordinal))
                     Check(kv.Value <= 3, "window " + kv.Key + ": at most " + kv.Value + " full rebuilds in any minute with nobody touching it (limit 3)" +
@@ -756,7 +776,7 @@ namespace PluginHarness
                     (rate <= MaxRebuildsPerSecond ? "" : "; it redraws the whole window too often, use a text component with an id for the countdown"));
             }
             if (parts.Count == 0 && _loadWindowIds.Count > 0) Fail("no window left after 3 h of app time");
-            Ok("3 h of app time and wall clock in 1 s steps, no error; " + (_fake.Notices.Count - notices0) + " notification(s) in that time");
+            Ok("3 h of app time and wall clock in 1 s steps, no error; " + (_fake.Notices.Count - notices0) + " notification(s) in that time; " + cost);
         }
 
         // 6. Voice commands
@@ -923,6 +943,15 @@ namespace PluginHarness
         private void LogCheck()
         {
             CollectLog();
+            // the host's performance lint (a timer rebuilding a window for LIVE texts): a warning for a plugin under test, a
+            // FAIL for the shipped examples (ours must never do it)
+            bool strict = Program.Strict.Contains(_raw);
+            for (int i = _badLog.Count - 1; i >= 0 && !strict; i--)
+            {
+                if (!_badLog[i].Contains(ScriptHost.LintText)) continue;
+                Console.WriteLine("warn [" + _id + "] performance: " + Cut(_badLog[i], 300));
+                _badLog.RemoveAt(i);
+            }
             if (_badLog.Count == 0) { Ok("the plugin log has no ERROR or warn line"); return; }
             foreach (var line in _badLog.Take(10)) Fail("log: " + Cut(line, 300));
             if (_badLog.Count > 10) Fail("log: and " + (_badLog.Count - 10) + " more ERROR or warn lines");
