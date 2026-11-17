@@ -48,8 +48,8 @@ namespace MetaCodex.EditorTools
             shell.FoldsForTest(null, open: true); // p1 open: its folders and threads are the rows checked here
             var rows = shell.ThreadListForTest.Items;
             var tags = rows.Select(i => i.Tag as string).ToList();
-            int o = tags.IndexOf("p:p1"); // under OTHER: /root/app is outside metacodex-projects/
-            Check(o > 0 && tags[o - 1] == "g:other" && tags.Skip(o).SequenceEqual(new[] { "p:p1", "w:p1|dir:/root/app", "t:a1", "t:a2", "w:p1|env:env-wt", "t:a3", "w:p1|env:env-old" })
+            int o = tags.IndexOf("p:p1"); // its card: OTHER (/root/app is outside metacodex-projects/)
+            Check(o == 0 && rows[o].Kind == UiListKind.CardHead && rows[o].Chip == "OTHER" && tags.Skip(o).SequenceEqual(new[] { "p:p1", "w:p1|dir:/root/app", "t:a1", "t:a2", "w:p1|env:env-wt", "t:a3", "w:p1|env:env-old" })
                   && rows[o + 1].Badge == "1 WAITING" && rows[o + 1].Sub == "shared folder" && rows[o + 3].Dot != null && !rows[o + 3].DotLit && rows[o + 4].Title == "feat/menu" && rows[o + 4].Sub == "from main",
                 "THREADS: app's checkout (shared: one works, one waits), the worktree feat/menu with its thread, a worktree left behind: " + string.Join(" ", tags));
             shell.PanelsById["threads"].ForceRefresh();

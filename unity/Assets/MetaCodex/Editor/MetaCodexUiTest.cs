@@ -1345,7 +1345,7 @@ end)
             shell.OpenPanel("threads");
             shell.PumpForTest(6f);
             var tp = shell.PanelsById["threads"];
-            var projects = tp.Elements.OfType<UiList>().First();
+            var projects = tp.Elements.OfType<UiCardList>().First();
             Line($"     projects: {string.Join(", ", projects.Items.Select(i => i.Title))}");
             tp.ForceRefresh();
             RenderPanel(tp, "ui-threads.png");
@@ -4312,47 +4312,61 @@ end)
             shell.FoldsForTest(null); // nothing picked: every project folds on its first sight
             shell.SetThreadsForTest(projects, threads);
             var list = shell.ThreadListForTest;
-            var tags = list.Items.Select(i => i.Kind == UiListKind.Gap ? "_" : i.Tag as string).ToList(); // "_": a gap row
-            // a gap above each type, then the types NATIVE, DEFAULT, RESEARCH, PLUGINS (each shown; an empty one offers a
-            // project), then OTHER (p3: no folder); p1, p2 and p3 are folded, so their threads are not listed
-            Check(tags.SequenceEqual(new[] { "_", "g:native", "p:p1", "_", "g:default", "n:default", "_", "g:research", "p:p2", "_", "g:plugins", "n:plugins", "_", "g:other", "p:p3" })
-                  && list.Items[1].Title == "NATIVE" && list.Items[1].Badge == "1 RUNNING" && list.Items[7].Badge == "1 NEED YOU" && list.Items[13].Title == "OTHER"
-                  && list.Items[2].Badge == "2" && list.Items[8].Badge == "1" && list.Items[2].Sub == "…/native/metacodex",
-                "THREADS: a gap above each type, the type bands with one count each, the projects folded with their counts: " + string.Join(" ", tags));
-            // the rows' kinds: a gap, a type band, a bold project with a divider and a fold triangle (▸); a folded project shows
-            // a lit dot for what is inside that needs you (p2, amber) or runs (p1, green); an empty one (p3) none
-            Check(list.Items[0].Kind == UiListKind.Gap && list.Items[1].Kind == UiListKind.Band && list.Items[2].Kind == UiListKind.Stacked
-                  && list.Items[2].Bold && list.Items[2].Divider && list.Items[2].Icon == "▸" && list.Items[2].Dot != null && list.Items[2].DotLit
-                  && list.Items[8].Dot != null && list.Items[14].Dot == null && list.Items[14].Icon == "▸" && list.IndentStep == 0.045f,
-                "the rows' kinds: gap, band, bold project with a divider, a dot on a folded project with something urgent, THREADS' indent 0.045 m");
-            // a tap on the project unfolds it: its folders (the checkout, the worktree) at level 2, their threads at level 3 under
-            // a connector, a status dot, no fold triangle
+            var bar = shell.ThreadsFilterBarForTest;
+            List<string> Tags() => shell.ThreadListForTest.Items.Select(i => i.Tag as string).ToList();
+            var tags = Tags();
+            // the type is a filter (ALL, the four types, OTHER while a project is outside them; each with its count of
+            // projects); under ALL a card per project, by type: p1 (native), p2 (research), p3 (no folder: OTHER), all folded
+            Check(bar.Count == 6 && bar.Selected == 0 && bar.LabelOf(0) == "ALL" && bar.CountOf(0) == "3" && bar.LabelOf(1) == "NATIVE" && bar.CountOf(1) == "1"
+                  && bar.CountOf(2) == "0" && bar.LabelOf(3) == "RESEARCH" && bar.LabelOf(4) == "PLUGINS" && bar.LabelOf(5) == "OTHER" && bar.CountOf(5) == "1",
+                "THREADS' filter: ALL 3 · NATIVE 1 · DEFAULT 0 · RESEARCH 1 · PLUGINS 0 · OTHER 1");
+            Check(tags.SequenceEqual(new[] { "p:p1", "p:p2", "p:p3" }) && list.Items.All(i => i.Kind == UiListKind.CardHead && i.Bold && i.Action == "+")
+                  && list.Items[0].Chip == "NATIVE · IMMERSIVE" && list.Items[1].Chip == "RESEARCH" && list.Items[2].Chip == "OTHER"
+                  && list.Items[0].Badge == "2 threads" && list.Items[1].Badge == "1 thread" && list.Items[0].Sub == "…/native/metacodex" && list.Items[0].Icon == "▸",
+                "THREADS under ALL: a card per project, its chip (type · kind), its thread count, its folder, a +: " + string.Join(" ", tags));
+            // a folded card shows a lit dot for what is inside that needs you (p2, amber) or runs (p1, green); an empty one none
+            Check(list.Items[0].Dot != null && list.Items[0].DotLit && list.Items[1].Dot != null && list.Items[2].Dot == null, "a folded card's dot: something runs or needs you inside");
+            // a tap on the head unfolds it: its folders (the checkout, the worktree), the threads under the one they work in,
+            // each with a status dot, its status word and a dim line (agent · last activity)
             shell.PickThreadRowForTest("p:p1");
             var open1 = shell.ThreadListForTest.Items;
-            var tagsOpen = open1.Select(i => i.Kind == UiListKind.Gap ? "_" : i.Tag as string).ToList();
-            Check(tagsOpen.SequenceEqual(new[] { "_", "g:native", "p:p1", "w:p1|checkout", "t:t1", "w:p1|wt:feat/x", "t:t2", "_", "g:default", "n:default", "_", "g:research", "p:p2", "_", "g:plugins", "n:plugins", "_", "g:other", "p:p3" })
-                  && open1[2].Icon == "▾" && open1[2].Dot == null && open1[3].Indent == 2 && open1[3].Guide && open1[4].Indent == 3 && open1[4].Guide
-                  && string.IsNullOrEmpty(open1[4].Icon) && open1[4].Dot != null && !open1[4].DotLit && open1[6].DotLit,
-                "tapping a project unfolds it (▾, no dot): its folders at level 2, its threads at level 3 with a connector and a dot: " + string.Join(" ", tagsOpen));
+            var tagsOpen = Tags();
+            Check(tagsOpen.SequenceEqual(new[] { "p:p1", "w:p1|checkout", "t:t1", "w:p1|wt:feat/x", "t:t2", "p:p2", "p:p3" })
+                  && open1[0].Icon == "▾" && open1[0].Dot == null && open1[1].Kind == UiListKind.CardSection && open1[2].Kind == UiListKind.CardRow
+                  && open1[2].Dot != null && !open1[2].DotLit && open1[2].Badge == "" && open1[4].DotLit && open1[4].Badge == "RUNNING"
+                  && open1[2].Sub.StartsWith("claude-code · ") && open1[2].Sub.Contains(" ago"),
+                "tapping a card's head unfolds it: its folders, its threads with a dot, a status word and agent · last activity: " + string.Join(" ", tagsOpen) + " | " + open1[2].Sub);
             shell.PickThreadRowForTest("p:p1");
-            Check(shell.ThreadListForTest.Items.Count == 15 && shell.ThreadListForTest.Items[2].Icon == "▸", "tapping it again folds it");
-            // a type header folds its projects; its gap stays above it
-            shell.PickThreadRowForTest("g:research");
-            Check(shell.ThreadListForTest.Items.Count == 14 && shell.ThreadListForTest.Items[7].Icon == "▸" && shell.ThreadListForTest.Items[7].Tag as string == "g:research"
-                  && shell.ThreadListForTest.Items[12].Tag as string == "g:other", "tapping a type header folds its projects, the gap above the type stays");
-            shell.PickThreadRowForTest("g:research");
-            shell.SetThreadsForTest(new JArray { projects[2] }, new JArray());
-            var other = shell.ThreadListForTest.Items.Select(i => i.Kind == UiListKind.Gap ? "_" : i.Tag as string).ToList();
-            Check(other.SequenceEqual(new[] { "_", "g:native", "n:native", "_", "g:default", "n:default", "_", "g:research", "n:research", "_", "g:plugins", "n:plugins", "_", "g:other", "p:p3" }),
-                "OTHER only when a project is outside the types: " + string.Join(" ", other));
+            Check(Tags().SequenceEqual(new[] { "p:p1", "p:p2", "p:p3" }) && shell.ThreadListForTest.Items[0].Icon == "▸", "tapping it again folds it");
+            // a type: only its cards; the chip says the kind only (the type is the filter's); a type with none: a card to make one
+            shell.ThreadsFilterForTest("research");
+            Check(Tags().SequenceEqual(new[] { "p:p2" }) && shell.ThreadListForTest.Items[0].Chip == "" && bar.Selected == 3, "RESEARCH: only its project; no chip (no kind)");
+            shell.ThreadsFilterForTest("default");
+            var none = shell.ThreadListForTest.Items;
+            Check(none.Count == 1 && none[0].Kind == UiListKind.CardNote && none[0].Tag as string == "n:default" && none[0].Badge.Contains("NEW DEFAULT PROJECT"),
+                "DEFAULT with no project: one card that makes one");
+            shell.ThreadsFilterForTest("other");
             shell.SetThreadsForTest(new JArray { projects[0] }, new JArray());
-            Check(!shell.ThreadListForTest.Items.Any(i => i.Tag as string == "g:other"), "no OTHER header when every project has a type");
+            Check(bar.Count == 5 && shell.ThreadsFilterNowForTest == MetaCodexShell.ThreadsAll && Tags().SequenceEqual(new[] { "p:p1" }) && shell.ThreadListForTest.Items[0].Badge == "0 threads",
+                "no OTHER segment when every project has a type (its filter falls back to ALL)");
+            shell.SetThreadsForTest(new JArray(), new JArray());
+            Check(shell.ThreadListForTest.Items.Count == 1 && shell.ThreadListForTest.Items[0].Tag as string == "n:", "no project at all: one card, + PROJECT…");
             // the picked project is open at its first sight, the others fold
             shell.SetThreadsForTest(projects, threads);
             shell.FoldsForTest("p2");
-            var picked = shell.ThreadListForTest.Items.Select(i => i.Kind == UiListKind.Gap ? "_" : i.Tag as string).ToList();
-            Check(picked.SequenceEqual(new[] { "_", "g:native", "p:p1", "_", "g:default", "n:default", "_", "g:research", "p:p2", "t:t3", "_", "g:plugins", "n:plugins", "_", "g:other", "p:p3" }),
+            var picked = Tags();
+            Check(picked.SequenceEqual(new[] { "p:p1", "p:p2", "t:t3", "p:p3" }) && shell.ThreadListForTest.Items[2].Badge == "NEEDS YOU",
                 "the picked project is open at its first sight (p2 here), the others fold: " + string.Join(" ", picked));
+            // a card's +: NEW THREAD with that project chosen
+            shell.PickThreadCardActionForTest("p:p2");
+            Check(shell.IsPanelOpen("thread-new") && shell.NewThreadSummaryForTest.Contains("sandbox"), "a card's +: NEW THREAD on that project: " + shell.NewThreadSummaryForTest);
+            shell.ClosePanel("thread-new");
+            // a thread opened from elsewhere (voice, a callout) while the filter hides its project: the filter shows its type
+            shell.ThreadsFilterForTest("native");
+            shell.OpenThread("t3");
+            Check(shell.ThreadsFilterNowForTest == "research" && Tags().Contains("t:t3") && shell.ThreadListForTest.SelectedIndex == Tags().IndexOf("t:t3"),
+                "opening a thread the filter hid: THREADS shows its type, the thread lit: " + shell.ThreadsFilterNowForTest);
+            foreach (var id in shell.PanelIds.Where(x => x != "threads").ToList()) shell.ClosePanel(id);
             shell.FoldsForTest("p1"); // the screenshot: the project with the running thread open, the others folded
             shell.PanelsById["threads"].ForceRefresh();
             RenderPanel(shell.PanelsById["threads"], "ui-threads-grouped.png");

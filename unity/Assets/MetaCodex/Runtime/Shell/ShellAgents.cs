@@ -27,7 +27,7 @@ namespace MetaCodex.Shell
         private string _ntProvider, _ntModel;
         private JArray _ntModels = new JArray();
 
-        private UiList _agentList, _projectList, _threadList, _ntProviders, _ntModelList;
+        private UiList _agentList, _ntProviders, _ntModelList;
         private UiLabel _agentDetail, _agentHint, _threadsStatus, _ntSummary;
         private UiSegmented _ntPerm, _ntWork;
 
@@ -337,29 +337,44 @@ namespace MetaCodex.Shell
 
         private readonly HashSet<string> _collapsedProjects = new HashSet<string>();
         private readonly HashSet<string> _seenProjects = new HashSet<string>(); // the projects THREADS has shown (each folds on its first sight)
-        private readonly HashSet<string> _collapsedTypes = new HashSet<string>(); // NATIVE, DEFAULT, RESEARCH, OTHER headers folded
+        private UiCardList _threadList;
+        private UiFilterBar _threadsFilterBar;
+        /// THREADS' type filter: ThreadsAll or a project type (ProjectKinds.Types, "other"); remembered (threads-view.txt).
+        private string _threadsFilter = ThreadsAll;
+        private readonly List<string> _threadsFilterKeys = new List<string>(); // the bar's segments now, in order
+        private string _tvLastSel;        // _projectSel at the last render: a project picked elsewhere is brought into view
+        private string _tvRevealProject;  // a project to bring into view at the next render (its type in the filter, scrolled to)
+        private string _tvRevealThread;   // and its thread (opened)
+        private bool _tvScrollTop;        // the next render starts at the top (another filter)
+        public const string ThreadsAll = "all";
 
-        /// Threads grouped like bb's sidebar, under the project types (owner 2026-11-13): a type band (NATIVE, DEFAULT,
-        /// RESEARCH, PLUGINS, then OTHER when there are any; tap: fold / unfold), its projects (tap: fold / unfold, the name
-        /// with its caption under it), and each project's threads under it, newest first (a status dot, the age); a tap on a
-        /// thread opens it. Three levels (owner 2026-11-16): a gap row, then the type band (level 0); a project, bold, with a
-        /// fold triangle (level 1); its threads, under a connector, with a status dot (level 2, or 3 under a worktree's folder).
-        /// The levels are their indents (0.045 m a level); the list is a variable-height list (UiList).
+        /// THREADS (owner 2026-11-17, the third layout: "not clear enough to distinguish projects and groups"): the project
+        /// TYPE is a filter, not a level (a bar on top: ALL, NATIVE, DEFAULT, RESEARCH, PLUGINS, then OTHER while there is a
+        /// project outside them, each with its count; remembered). Each PROJECT is a card (UiCardList): a stripe in its type's
+        /// colour, its name in bold with its folder under it, a chip with its type and kind, its thread count and a + (a new
+        /// thread there); a tap on the head folds it (remembered per project). Its THREADS are rows set in from the card's
+        /// edge along a guide line: a status dot, the title, a status word, and a dim line with the agent, the last activity
+        /// and the files it edited (when known); a project with a worktree lists its folders with their threads under them.
         private void BuildThreads()
         {
             var t = UiTheme.Current;
-            var p = Panel<UiPanel>("threads", "Threads", 0.60f, 0.60f);
+            LoadThreadsView();
+            var p = Panel<UiPanel>("threads", "Threads", 0.62f, 0.66f);
             var c = p.Content;
-            var st = new UiStack(c, t.Gap);
+            float y = c.y;
             // the status line, and on its right the ARCHIVED toggle (owner 2026-11-14: archived threads, RESTORE / DELETE)
-            var sr = st.Next(0.03f);
+            var sr = new Rect(c.x, y, c.width, 0.028f);
+            y += sr.height + t.Gap;
             float abw = 0.13f;
-            _threadsStatus = p.Add(new UiLabel("", t.SmallSize) { Rect = new Rect(sr.x, sr.y, sr.width - abw - t.Gap, sr.height), Color = t.TextDim });
+            _threadsStatus = p.Add(new UiLabel("", t.SmallSize * 1.12f) { Rect = new Rect(sr.x, sr.y, sr.width - abw - t.Gap, sr.height), Color = t.TextDim });
             _threadsArchBtn = p.Add(new UiButton(_threadsArchived ? "◂ ACTIVE" : "▤ ARCHIVED", ToggleArchivedThreads) { Rect = new Rect(sr.xMax - abw, sr.y, abw, sr.height), TextSize = t.SmallSize * 1.02f });
             _threadsArchBtn.SetSelected(_threadsArchived);
-            _threadList = p.Add(new UiList(0.034f, (item, idx) => ThreadRowPicked(item)) { Rect = st.Next(c.height - 0.03f - t.ButtonHeight - t.Gap * 2), Variable = true, IndentStep = 0.045f });
-            _projectList = _threadList; // one list now (projects are its group rows)
-            AddButtons(p, st.Next(t.ButtonHeight), new (string, Action)[]
+            // the type filter
+            _threadsFilterBar = p.Add(new UiFilterBar { Rect = new Rect(c.x, y, c.width, 0.036f), OnChanged = ThreadsFilterPicked });
+            y += 0.036f + t.Gap * 1.5f;
+            var br = new Rect(c.x, c.yMax - t.ButtonHeight, c.width, t.ButtonHeight);
+            _threadList = p.Add(new UiCardList { Rect = new Rect(c.x, y, c.width, br.y - t.Gap - y), OnSelect = (item, idx) => ThreadRowPicked(item), OnAction = (item, idx) => ThreadCardAction(item) });
+            AddButtons(p, br, new (string, Action)[]
             {
                 ("+ NEW THREAD…", () => OpenNewThread(null)),
                 ("+ PROJECT…", NewProjectPrompt),
@@ -369,34 +384,64 @@ namespace MetaCodex.Shell
             }, primary: 0);
         }
 
+        private void ThreadsFilterPicked(int i)
+        {
+            if (i < 0 || i >= _threadsFilterKeys.Count) return;
+            if (_threadsFilter == _threadsFilterKeys[i]) return;
+            _threadsFilter = _threadsFilterKeys[i];
+            _tvScrollTop = true;
+            RenderThreadGroups();
+        }
+
         private void ThreadRowPicked(UiListItem item)
         {
             if (!(item.Tag is string tag)) return;
-            if (tag.StartsWith("g:"))
+            if (tag.StartsWith("n:")) // an empty state: a project (of the filter's type; NATIVE asks immersive or 2D panel first)
             {
                 string type = tag.Substring(2);
-                if (!_collapsedTypes.Remove(type)) _collapsedTypes.Add(type);
-                RenderThreadGroups();
+                if (type.Length == 0) NewProjectPrompt();
+                else if (type == "native") NewNativeKindPrompt(null);
+                else if (type == "other") ExistingProjectPrompt();
+                else NewProjectNamed(type);
                 return;
             }
-            if (tag.StartsWith("n:")) // an empty type's row: a project of that type (NATIVE asks immersive or 2D panel first)
-            {
-                string type = tag.Substring(2);
-                if (type == "native") NewNativeKindPrompt(null); else NewProjectNamed(type);
-                return;
-            }
-            if (tag.StartsWith("p:"))
+            if (tag.StartsWith("+:")) { NewThreadInProject(tag.Substring(2)); return; } // "no threads yet" in a card
+            if (tag.StartsWith("p:")) // a card's head: fold / unfold it (remembered)
             {
                 string pid = tag.Substring(2);
                 _projectSel = pid;
                 Settings.lastProject = pid;
                 if (!_collapsedProjects.Remove(pid)) _collapsedProjects.Add(pid);
+                else ShowInThreads(pid); // unfolded: its rows scroll into view, its head kept
                 RenderThreadGroups();
                 return;
             }
             if (tag.StartsWith("a:")) { ArchivedRowPicked(tag.Substring(2)); return; } // an archived thread: RESTORE or DELETE
             if (tag.StartsWith("t:")) { _threadSel = tag.Substring(2); OpenThread(_threadSel); }
             if (tag.StartsWith("w:")) OpenWorkspacesOn(tag.Substring(2)); // a workspace row: the WORKSPACES window on it
+        }
+
+        /// A card's + : NEW THREAD with that project chosen.
+        private void ThreadCardAction(UiListItem item)
+        {
+            if (item.Tag is string tag && tag.StartsWith("p:")) NewThreadInProject(tag.Substring(2));
+        }
+
+        private void NewThreadInProject(string pid)
+        {
+            if (string.IsNullOrEmpty(pid)) return;
+            _projectSel = pid;
+            Settings.lastProject = pid;
+            OpenNewThread(null);
+            RenderThreadGroups();
+        }
+
+        /// A project (and its thread) to bring into view in THREADS: the filter shows its type, the list scrolls to it.
+        private void ShowInThreads(string projectId, string threadId = null)
+        {
+            if (string.IsNullOrEmpty(projectId)) return;
+            _tvRevealProject = projectId;
+            _tvRevealThread = threadId;
         }
 
         public void RefreshThreads()
@@ -430,10 +475,20 @@ namespace MetaCodex.Shell
 
         private static string ThreadStatus(JToken x) => (string)x["runtime"]?["displayStatus"] ?? (string)x["status"] ?? "";
 
+        private static string PathOf(JToken pr) => (string)pr?["sources"]?.FirstOrDefault()?["path"] ?? "";
+
+        /// THREADS' list, made again from the data (MQH's answers, a fold, a filter, a window that opens or closes; never per
+        /// frame): the filter bar's counts, then a card per project of the filter's type(s).
         private void RenderThreadGroups()
         {
             if (_threadList == null) return;
-            if (_threadsArchived) { RenderArchivedThreads(); return; } // ARCHIVED is on: the archived list instead
+            LoadThreadsView();
+            if (_threadsArchived) // ARCHIVED is on: the archived list instead (the filter waits, dimmed)
+            {
+                _threadsFilterBar?.Apply(_threadsFilterBar.Count, _threadsFilterBar.Selected, true);
+                RenderArchivedThreads();
+                return;
+            }
             var t = UiTheme.Current;
             // a project folds the first time THREADS sees it, unless it is the picked one: one project open, the rest folded
             foreach (var pr in _projects)
@@ -441,109 +496,131 @@ namespace MetaCodex.Shell
                 string seen = (string)pr["id"];
                 if (seen != null && _seenProjects.Add(seen) && seen != _projectSel) _collapsedProjects.Add(seen);
             }
-            Color threadText = Color.Lerp(t.Text, t.TextDim, 0.25f); // a thread's title: a step dimmer than a project's
+            Color threadText = Color.Lerp(t.Text, t.TextDim, 0.18f); // a thread's title: a step dimmer than a project's
             var byProject = _threads.GroupBy(x => (string)x["projectId"] ?? "").ToDictionary(g => g.Key, g => g.OrderByDescending(x => x["updatedAt"]?.Value<long>() ?? 0).ToList());
             var spaces = WorkspaceMap.Build(_threads, _environments);
-            long Latest(JToken pr) => byProject.TryGetValue((string)pr["id"], out var l) && l.Count > 0 ? l[0]["updatedAt"]?.Value<long>() ?? 0 : 0;
-            List<JToken> ThreadsOf(JToken pr) => byProject.TryGetValue((string)pr["id"], out var l) ? l : new List<JToken>();
-            var items = new List<UiListItem>();
+            long Latest(JToken pr) => byProject.TryGetValue((string)pr["id"] ?? "", out var l) && l.Count > 0 ? l[0]["updatedAt"]?.Value<long>() ?? 0 : 0;
+            List<JToken> ThreadsOf(JToken pr) => byProject.TryGetValue((string)pr["id"] ?? "", out var l) ? l : new List<JToken>();
+            bool Asks(JToken x) => x["hasPendingInteraction"]?.Value<bool>() == true;
+            bool Runs(JToken x) => ThreadTimeline.IsWorking(ThreadStatus(x));
             // the type of each project (its path under metacodex-projects/, else .metacodex/project.json, cached)
-            var byType = _projects.GroupBy(pr => ProjectType((string)pr["sources"]?.FirstOrDefault()?["path"]) ?? "other").ToDictionary(g => g.Key, g => g.OrderByDescending(Latest).ToList());
-            var order = ProjectKinds.Types.Concat(byType.ContainsKey("other") ? new[] { "other" } : new string[0]);
-            foreach (var type in order)
+            var typeOf = new Dictionary<string, string>();
+            foreach (var pr in _projects) typeOf[(string)pr["id"] ?? ""] = ProjectType(PathOf(pr)) ?? "other";
+            var byType = _projects.GroupBy(pr => typeOf[(string)pr["id"] ?? ""]).ToDictionary(g => g.Key, g => g.OrderByDescending(Latest).ToList());
+            // a project picked elsewhere (voice, a new project, NEW THREAD on a plugin) or a thread opened: the filter shows its type
+            if (_projectSel != _tvLastSel)
             {
-                byType.TryGetValue(type, out var projects);
-                projects = projects ?? new List<JToken>();
-                var all = projects.SelectMany(ThreadsOf).ToList();
-                int tRun = all.Count(x => ThreadTimeline.IsWorking(ThreadStatus(x))), tAsk = all.Count(x => x["hasPendingInteraction"]?.Value<bool>() == true);
-                bool typeFolded = _collapsedTypes.Contains(type);
-                items.Add(new UiListItem { Kind = UiListKind.Gap }); // the space above each type: types read as sections
-                // the type band: its colour is the bar, the fold icon and the rule; one count (needs you, else running, else the projects)
-                items.Add(new UiListItem
-                {
-                    Kind = UiListKind.Band,
-                    BarColor = TypeColor(t, type),
-                    Icon = typeFolded ? "▸" : "▾",
-                    IconColor = TypeColor(t, type),
-                    Title = ProjectKinds.Header(type),
-                    TitleColor = t.Text,
-                    Sub = type == "other" ? "outside metacodex-projects/" : "",
-                    Badge = tAsk > 0 ? tAsk + " NEED YOU" : tRun > 0 ? tRun + " RUNNING" : projects.Count == 1 ? "1 project" : projects.Count + " projects",
-                    BadgeColor = tAsk > 0 ? t.Warn : tRun > 0 ? t.Ok : t.TextDim,
-                    Tag = "g:" + type,
-                });
-                if (typeFolded) continue;
-                if (projects.Count == 0)
-                    items.Add(new UiListItem { Kind = UiListKind.Compact, Indent = 1, Icon = "+", IconColor = t.TextDim, Title = "no " + ProjectKinds.Label(type).ToLowerInvariant() + " project yet: tap to make one", TitleColor = t.TextDim, Tag = "n:" + type });
-                foreach (var pr in projects) ProjectRows(pr, ThreadsOf(pr));
+                if (_tvLastSel != null && _projectSel != null && _tvRevealProject == null) _tvRevealProject = _projectSel;
+                _tvLastSel = _projectSel;
             }
-            void ProjectRows(JToken pr, List<JToken> list)
+            if (_tvRevealProject != null && typeOf.TryGetValue(_tvRevealProject, out var revealType) && _threadsFilter != ThreadsAll && _threadsFilter != revealType)
+            {
+                _threadsFilter = revealType;
+                _tvScrollTop = true;
+            }
+            // the filter's segments: ALL, the four types, OTHER while a project is outside them; each with its count of
+            // projects, amber when a thread there needs you, green when one runs
+            _threadsFilterKeys.Clear();
+            _threadsFilterKeys.Add(ThreadsAll);
+            _threadsFilterKeys.AddRange(ProjectKinds.Types);
+            if (byType.ContainsKey("other")) _threadsFilterKeys.Add("other");
+            if (!_threadsFilterKeys.Contains(_threadsFilter)) { _threadsFilter = ThreadsAll; _tvScrollTop = true; }
+            Color countDim = Color.Lerp(t.TextDim, t.Text, 0.2f);
+            for (int i = 0; i < _threadsFilterKeys.Count && _threadsFilterBar != null; i++)
+            {
+                string key = _threadsFilterKeys[i];
+                List<JToken> of = key == ThreadsAll ? null : byType.TryGetValue(key, out var l) ? l : new List<JToken>();
+                int n = of?.Count ?? _projects.Count;
+                bool segAsks = false, segRuns = false;
+                foreach (var pr in (IEnumerable<JToken>)of ?? _projects)
+                    foreach (var x in ThreadsOf(pr)) { segAsks |= Asks(x); segRuns |= Runs(x); }
+                _threadsFilterBar.SetSegment(i, key == ThreadsAll ? "ALL" : ProjectKinds.Header(key), n.ToString(),
+                    key == ThreadsAll ? (Color?)null : TypeColor(t, key), segAsks ? t.Warn : segRuns ? t.Ok : countDim);
+            }
+            _threadsFilterBar?.Apply(_threadsFilterKeys.Count, _threadsFilterKeys.IndexOf(_threadsFilter), false);
+            bool all = _threadsFilter == ThreadsAll;
+            var items = new List<UiListItem>();
+            foreach (var type in ProjectKinds.Types.Concat(new[] { "other" }))
+            {
+                if (!all && type != _threadsFilter) continue;
+                if (byType.TryGetValue(type, out var projects)) foreach (var pr in projects) ProjectCard(pr, ThreadsOf(pr), type);
+            }
+            if (items.Count == 0) // the empty states: one card that says what to do, its action on the right
+                items.Add(all
+                    ? new UiListItem { Kind = UiListKind.CardNote, BarColor = t.Accent, Icon = "+", IconColor = t.TextAccent, Title = "No project yet",
+                        Sub = "A project is a folder its threads work in, in " + ProjectKinds.Root + "/", Badge = "+ PROJECT…", BadgeColor = t.Accent, Tag = "n:" }
+                    : new UiListItem { Kind = UiListKind.CardNote, BarColor = TypeColor(t, _threadsFilter), Icon = "+", IconColor = t.TextAccent,
+                        Title = "No " + ProjectKinds.Label(_threadsFilter).ToLowerInvariant() + " project yet", Sub = "ALL shows the projects of every type",
+                        Badge = "+ NEW " + (_threadsFilter == ProjectKinds.Plugins ? "PLUGIN" : ProjectKinds.Header(_threadsFilter)) + " PROJECT", BadgeColor = t.Accent, Tag = "n:" + _threadsFilter });
+
+            // one card: the head (folds it), then its threads (or its folders with their threads), newest first
+            void ProjectCard(JToken pr, List<JToken> list, string type)
             {
                 string pid = (string)pr["id"];
-                int running = list.Count(x => ThreadTimeline.IsWorking(ThreadStatus(x)));
-                int asks = list.Count(x => x["hasPendingInteraction"]?.Value<bool>() == true);
+                int running = list.Count(Runs), asks = list.Count(Asks);
                 bool folded = _collapsedProjects.Contains(pid);
-                string path = (string)pr["sources"]?.FirstOrDefault()?["path"] ?? "";
-                string plugin = PluginProject.KindFromLinuxPath(path); // a plugin project: its kind is the caption
-                string nativeKind = plugin == null && ProjectType(path) == "native" ? NativeKind(path) : null; // IMMERSIVE / 2D PANEL
+                string path = PathOf(pr);
+                string plugin = PluginProject.KindFromLinuxPath(path); // a plugin project: its kind (APP, GESTURE, BEHAVIOUR)
+                string nativeKind = plugin == null && type == "native" ? NativeKind(path) : null; // IMMERSIVE / 2D PANEL
+                string kind = plugin != null ? PluginProject.Label(plugin).ToUpperInvariant() : nativeKind != null ? ProjectKinds.NativeKindLabel(nativeKind).ToUpperInvariant() : null;
+                // the chip: the type and the kind under ALL ("PLUGIN · APP", "NATIVE · 2D PANEL"); the kind alone under a type
+                string typeName = type == ProjectKinds.Plugins ? "PLUGIN" : ProjectKinds.Header(type);
+                Color typeColor = TypeColor(t, type);
                 items.Add(new UiListItem
                 {
-                    Kind = UiListKind.Stacked, // level 1: a divider above, a bold name, the fold triangle, its caption under it
-                    Indent = 1,
-                    Divider = true,
-                    Bold = true,
+                    Kind = UiListKind.CardHead,
+                    BarColor = typeColor,
+                    ChipColor = typeColor,
                     Icon = folded ? "▸" : "▾",
                     IconColor = t.TextAccent,
+                    Bold = true,
                     Title = (string)pr["name"] ?? "project",
                     TitleColor = pid == _projectSel ? t.TextAccent : t.Text,
-                    Sub = plugin != null ? PluginProject.Label(plugin).ToUpperInvariant()
-                        : nativeKind != null ? ProjectKinds.NativeKindLabel(nativeKind).ToUpperInvariant() + " · " + Cut(ProjectKinds.ShortPath(path), 24)
-                        : Cut(ProjectKinds.ShortPath(path), 34),
-                    // folded: a dot for what is inside that needs you (amber) or runs (green), so the folded row still says it
+                    Sub = Cut(ProjectKinds.ShortPath(path), 56),
+                    Chip = all ? typeName + (kind != null ? " · " + kind : "") : kind ?? "",
+                    Badge = ThreadPulse.Plural(list.Count, "thread"), // coloured by what they do (needs you, running)
+                    BadgeColor = asks > 0 ? t.Warn : running > 0 ? t.Ok : t.TextDim,
+                    // folded: a dot for what is inside that needs you (amber) or runs (green), so the folded card still says it
                     Dot = folded && (asks > 0 || running > 0) ? (Color?)(asks > 0 ? t.Warn : t.Ok) : null,
                     DotLit = true,
-                    Badge = list.Count.ToString(), // the threads; coloured by what they do (needs you, running)
-                    BadgeColor = asks > 0 ? t.Warn : running > 0 ? t.Ok : t.TextDim,
+                    Action = "+",
                     Tag = "p:" + pid,
                 });
                 if (folded) return;
-                // the folders its threads work in: when there is more than the checkout (a worktree), each is a row
-                // with its threads under it, so who shares what (and two agents in one folder) is plain
+                // the folders its threads work in: when there is more than the checkout (a worktree), each is a row with
+                // its threads under it, so who shares what (and two agents in one folder) is plain
                 spaces.TryGetValue(pid, out var groups);
                 groups = groups ?? new List<WorkspaceGroup>();
                 bool showSpaces = groups.Count > 1 || groups.Any(g => g.IsWorktree);
-                void ThreadRow(JToken x, int indent)
+                void ThreadRow(JToken x)
                 {
                     string st = ThreadStatus(x);
-                    bool working = ThreadTimeline.IsWorking(st);
-                    bool pending = x["hasPendingInteraction"]?.Value<bool>() == true;
+                    bool working = ThreadTimeline.IsWorking(st), pending = Asks(x), error = st == "error";
                     bool held = (string)x["queuedWork"] == "waiting" && !working;
                     string id = (string)x["id"];
+                    bool open = id == _threadOpen || OpenWindowShowing(id) != null; // open in a window (any of them)
                     items.Add(new UiListItem
                     {
-                        Kind = UiListKind.Compact, // level 2 (3 under a folder): a connector, a status dot, a smaller title; no fold triangle
-                        Indent = indent,
-                        Guide = true,
-                        // the status dot: running and needs you lit; waiting (held) and error and idle dim
-                        Dot = pending || held ? t.Warn : working ? t.Ok : st == "error" ? t.Danger : t.TextDim,
-                        DotLit = pending || working || st == "error",
+                        Kind = UiListKind.CardRow,
+                        // the status dot: running and needs you lit; waiting (held) and error and done dim
+                        Dot = pending || held ? t.Warn : working ? t.Ok : error ? t.Danger : t.TextDim,
+                        DotLit = pending || working || error,
                         Title = (string)x["title"] ?? (string)x["titleFallback"] ?? id,
-                        TitleColor = id == _threadOpen || OpenWindowShowing(id) != null ? t.TextAccent : threadText, // open in a window (any of them)
-                        Sub = showSpaces ? $"{x["providerId"]}" : $"{x["providerId"]} · {(x["environmentIsWorktree"]?.Value<bool>() == true ? "⎇ " + x["environmentBranchName"] : "checkout")}",
-                        Badge = Ago(x["updatedAt"]?.Value<long>() ?? 0), // the age, dim, on the right
-                        BadgeColor = t.TextDim,
+                        TitleColor = open ? t.TextAccent : threadText,
+                        Sub = ThreadMeta(x, id),
+                        Badge = pending ? "NEEDS YOU" : held ? "WAITING" : working ? "RUNNING" : error ? "ERROR" : "",
+                        BadgeColor = pending || held ? t.Warn : working ? t.Ok : t.Danger,
+                        Highlight = open,
                         Tag = "t:" + id,
                     });
                 }
-                if (!showSpaces) foreach (var x in list) ThreadRow(x, 2);
+                if (!showSpaces) foreach (var x in list) ThreadRow(x);
                 else
                     foreach (var g in groups)
                     {
-                        items.Add(new UiListItem // level 2: a folder the threads below work in (level 3)
+                        items.Add(new UiListItem // a folder the threads below work in
                         {
-                            Kind = UiListKind.Compact,
-                            Indent = 2,
-                            Guide = true,
+                            Kind = UiListKind.CardSection,
                             Icon = g.Starting ? "◌" : g.IsWorktree ? "⎇" : "▣",
                             IconColor = g.Clash ? t.Danger : t.TextDim,
                             Title = g.Starting ? "setting up" : g.IsWorktree ? (g.Branch.Length > 0 ? g.Branch : "worktree") : "checkout" + (g.Branch.Length > 0 ? " · " + g.Branch : ""),
@@ -553,16 +630,52 @@ namespace MetaCodex.Shell
                             BadgeColor = g.Clash ? t.Danger : t.Warn,
                             Tag = "w:" + pid + "|" + g.Key,
                         });
-                        foreach (var x in g.Threads) ThreadRow(x, 3);
+                        foreach (var x in g.Threads) ThreadRow(x);
                     }
-                if (list.Count == 0) items.Add(new UiListItem { Kind = UiListKind.Compact, Indent = 2, Guide = true, Icon = "·", IconColor = t.TextDim, Title = "no threads yet: + NEW THREAD…", TitleColor = t.TextDim, Tag = "p:" + pid });
+                if (list.Count == 0) items.Add(new UiListItem { Kind = UiListKind.CardNote, Icon = "+", IconColor = t.TextAccent, Title = "No threads yet", TitleColor = t.TextDim, Badge = "+ NEW THREAD", BadgeColor = t.Accent, Tag = "+:" + pid });
             }
-            int total = _threads.Count, run = _threads.Count(x => ThreadTimeline.IsWorking(ThreadStatus(x))), need = _threads.Count(x => x["hasPendingInteraction"]?.Value<bool>() == true);
+
+            int total = _threads.Count, run = _threads.Count(Runs), need = _threads.Count(Asks);
+            int shown = all ? _projects.Count : byType.TryGetValue(_threadsFilter, out var sl) ? sl.Count : 0;
             if (_projects.Count == 0) _threadsStatus.Set("No project yet: + PROJECT… makes one in " + ProjectKinds.Root + "/ (native, default, research or a plugin).", t.TextDim);
-            else _threadsStatus.Set($"{_projects.Count} projects · {total} threads" + (run > 0 ? $" · <color=#{UiViz.Hex(t.Ok)}>{run} running</color>" : "") + (need > 0 ? $" · <color=#{UiViz.Hex(t.Warn)}>{need} need you</color>" : "") + " · tap a type or a project to fold it", t.TextDim);
-            _threadList.SetItems(items, keepScroll: true);
-            int sel = items.FindIndex(i => i.Tag as string == "t:" + _threadOpen);
-            if (sel >= 0) _threadList.SelectIndex(sel, notify: false);
+            else _threadsStatus.Set((all ? ThreadPulse.Plural(_projects.Count, "project") : $"{shown} of {_projects.Count} projects") + " · " + ThreadPulse.Plural(total, "thread")
+                + (run > 0 ? $" · <color=#{UiViz.Hex(t.Ok)}>{run} running</color>" : "") + (need > 0 ? $" · <color=#{UiViz.Hex(t.Warn)}>{need} need you</color>" : "") + (run + need == 0 ? " · tap a name to fold it" : ""), t.TextDim);
+            _threadList.SetItems(items, keepScroll: !_tvScrollTop);
+            _tvScrollTop = false;
+            _threadList.SelectIndex(items.FindIndex(i => i.Tag as string == "t:" + _threadOpen), notify: false); // -1: none lit
+            if (_tvRevealProject != null) // into view: the opened thread, else the whole card as far as it fits, its head first
+            {
+                int head = items.FindIndex(i => i.Tag as string == "p:" + _tvRevealProject);
+                int k = _tvRevealThread != null ? items.FindIndex(i => i.Tag as string == "t:" + _tvRevealThread) : -1;
+                if (k >= 0) _threadList.Reveal(k);
+                else if (head >= 0)
+                {
+                    int next = items.FindIndex(head + 1, i => i.Kind == UiListKind.CardHead);
+                    _threadList.Reveal((next < 0 ? items.Count : next) - 1);
+                    _threadList.Reveal(head);
+                }
+                _tvRevealProject = null;
+                _tvRevealThread = null;
+            }
+            SaveThreadsView();
+        }
+
+        /// A thread row's dim second line: its agent, its last activity, and the files it edited in its last turn when the
+        /// app knows it (the pulse of a thread it read: the open ones and the ones that work).
+        private string ThreadMeta(JToken x, string id)
+        {
+            string s = AgentName((string)x["providerId"]);
+            string ago = Ago(x["updatedAt"]?.Value<long>() ?? 0);
+            if (ago.Length > 0) s += " · " + (ago == "now" ? "just now" : ago + " ago");
+            if (id != null && _pulses.TryGetValue(id, out var pu) && pu != null && pu.Files > 0) s += " · " + ThreadPulse.Plural(pu.Files, "edit");
+            return s;
+        }
+
+        private static string AgentName(string providerId)
+        {
+            if (string.IsNullOrEmpty(providerId)) return "agent";
+            foreach (var sp in SupportedProviders) if (sp.id == providerId) return sp.name;
+            return providerId;
         }
 
         private static string Ago(long ms)
@@ -572,10 +685,66 @@ namespace MetaCodex.Shell
             return d.TotalMinutes < 1 ? "now" : d.TotalHours < 1 ? $"{(int)d.TotalMinutes} min" : d.TotalDays < 1 ? $"{(int)d.TotalHours} h" : $"{(int)d.TotalDays} d";
         }
 
-        /// A type's colour in THREADS (its band's bar, rule and fold icon): NATIVE the accent, DEFAULT violet, RESEARCH green,
-        /// PLUGINS amber, OTHER steel.
+        /// A type's colour in THREADS (its cards' stripe and chip, its filter's swatch): NATIVE the accent, DEFAULT violet,
+        /// RESEARCH green, PLUGINS amber, OTHER steel.
         private static Color TypeColor(UiTheme t, string type) =>
             type == "native" ? t.Accent : type == "default" ? t.Violet : type == "research" ? t.Ok : type == ProjectKinds.Plugins ? t.Warn : t.Frame;
+
+        // THREADS' view, kept across restarts (owner 2026-11-17: "the choice is remembered"): the filter and each project
+        // seen, folded or open. A small text file beside the settings, written only when it changed (never per frame), not
+        // in the Editor's tests.
+        private bool _tvLoaded;
+        private int _tvSavedSig;
+        private static string ThreadsViewPath => Path.Combine(Application.persistentDataPath, "threads-view.txt");
+
+        private void LoadThreadsView()
+        {
+            if (_tvLoaded) return;
+            _tvLoaded = true;
+            if (!Application.isPlaying) return;
+            try
+            {
+                if (File.Exists(ThreadsViewPath))
+                    foreach (var line in File.ReadAllLines(ThreadsViewPath))
+                    {
+                        int sp = line.IndexOf(' ');
+                        if (sp <= 0) continue;
+                        string k = line.Substring(0, sp), v = line.Substring(sp + 1).Trim();
+                        if (v.Length == 0) continue;
+                        if (k == "filter") _threadsFilter = v;
+                        else if (k == "fold") { _seenProjects.Add(v); _collapsedProjects.Add(v); }
+                        else if (k == "open") { _seenProjects.Add(v); _collapsedProjects.Remove(v); }
+                    }
+            }
+            catch (Exception e) { Log("threads view not read: " + e.Message); }
+            _tvSavedSig = ThreadsViewSig();
+        }
+
+        /// A cheap fingerprint of the view (no allocation): the filter, the projects seen and the folded ones.
+        private int ThreadsViewSig()
+        {
+            int h = (_threadsFilter ?? "").GetHashCode() * 31 + _seenProjects.Count * 7919 + _collapsedProjects.Count;
+            foreach (var s in _seenProjects) h += s.GetHashCode() * (_collapsedProjects.Contains(s) ? 3 : 5);
+            return h;
+        }
+
+        private void SaveThreadsView()
+        {
+            if (!_tvLoaded || !Application.isPlaying) return;
+            int sig = ThreadsViewSig();
+            if (sig == _tvSavedSig) return;
+            _tvSavedSig = sig;
+            var sb = new StringBuilder();
+            sb.Append("filter ").Append(_threadsFilter).Append('\n');
+            int n = 0;
+            foreach (var s in _seenProjects)
+            {
+                if (++n > 400) break;
+                sb.Append(_collapsedProjects.Contains(s) ? "fold " : "open ").Append(s).Append('\n');
+            }
+            try { File.WriteAllText(ThreadsViewPath, sb.ToString()); }
+            catch (Exception e) { Log("threads view not saved: " + e.Message); }
+        }
 
         // a project's type (mcx-project): where it is (metacodex-projects/<type>/...), else .metacodex/project.json, else an
         // app folder (AndroidManifest.xml + src/) is native; null (OTHER) when nothing says. Read at most every 30 s per
@@ -712,7 +881,7 @@ namespace MetaCodex.Shell
                 _projectSel = (string)r["id"];
                 Settings.lastProject = _projectSel;
                 _collapsedProjects.Remove(_projectSel);
-                _collapsedTypes.Remove(type);
+                ShowInThreads(_projectSel); // THREADS' filter shows its type
                 Toast($"Project {r["name"]} made in {path} ({ProjectKinds.Label(type)}{(nativeKind != null ? ", " + ProjectKinds.NativeKindLabel(nativeKind).ToLowerInvariant() : "")})", "ok");
                 RefreshThreads();
             }));
@@ -767,7 +936,6 @@ namespace MetaCodex.Shell
             if (e == null) { Toast("Plugin not made: " + err, "warn"); return "error: " + err; }
             Log($"plugin project {id} ({k}) made in {path}" + (e.Error != null ? ", error: " + e.Error : ""));
             _projectTypes.Remove(path);
-            _collapsedTypes.Remove(ProjectKinds.Plugins);
             RefreshPluginList();
             SelectPluginForTest(id);
             void Add() => EnsureHost(() => Mqh.CreateProject(name, _hostId, path, r =>
@@ -776,6 +944,7 @@ namespace MetaCodex.Shell
                 _projectSel = (string)r["id"];
                 Settings.lastProject = _projectSel;
                 _collapsedProjects.Remove(_projectSel);
+                ShowInThreads(_projectSel); // THREADS' filter shows PLUGINS (or ALL)
                 _pluginProjects = null; // the PLUGINS tab reads MQH's projects (and this plugin's threads) again
                 _pluginThreadsFor = null;
                 Toast($"Plugin {name} made ({PluginProject.Label(k).ToLowerInvariant()}): THREADS > PLUGINS has its project; a thread there lets an agent change it", "ok");
@@ -830,6 +999,7 @@ namespace MetaCodex.Shell
                 _projectSel = (string)r["id"];
                 Settings.lastProject = _projectSel;
                 _collapsedProjects.Remove(_projectSel);
+                ShowInThreads(_projectSel);
                 _projectTypes.Remove(path);
                 _nativeKinds.Remove(path);
                 Toast("Project " + r["name"] + " added (" + ProjectKinds.Label(type) + (kind != null ? ", " + ProjectKinds.NativeKindLabel(kind).ToLowerInvariant() : "") + ")", "ok");
@@ -1047,7 +1217,7 @@ namespace MetaCodex.Shell
             UpdateThreadActions();
             RefreshAttachRow(); // each thread keeps its own attachments for its next message
             var row = _threads.FirstOrDefault(x => (string)x["id"] == id) as JObject;
-            if (row != null) { _threadInfo = row; _threadOpenProject = (string)row["projectId"]; _collapsedProjects.Remove(_threadOpenProject); } // its project is open in THREADS
+            if (row != null) { _threadInfo = row; _threadOpenProject = (string)row["projectId"]; _collapsedProjects.Remove(_threadOpenProject); ShowInThreads(_threadOpenProject, id); } // its project is open in THREADS, in view
             else _threadOpenProject = null;
             _tlMaxSeq = -1;
             _tlOpenSeq = -1;
@@ -1480,11 +1650,16 @@ namespace MetaCodex.Shell
         /// The folds as at a start (self-tests): each project folds on its first sight but the picked one; open: none folds.
         public void FoldsForTest(string picked, bool open = false)
         {
-            _seenProjects.Clear(); _collapsedProjects.Clear(); _projectSel = picked;
+            _seenProjects.Clear(); _collapsedProjects.Clear(); _projectSel = picked; _tvLastSel = picked; _threadsFilter = ThreadsAll; _tvScrollTop = true;
             if (open) foreach (var pr in _projects) _seenProjects.Add((string)pr["id"]);
             RenderThreadGroups();
         }
-        public UiList ThreadListForTest => _threadList;
+        public UiCardList ThreadListForTest => _threadList;
+        public UiFilterBar ThreadsFilterBarForTest => _threadsFilterBar;
+        public string ThreadsFilterNowForTest => _threadsFilter;
+        /// THREADS' type filter as a tap on its segment would set it (ThreadsAll or a type).
+        public void ThreadsFilterForTest(string key) { _threadsFilter = key ?? ThreadsAll; _tvScrollTop = true; RenderThreadGroups(); }
+        public void PickThreadCardActionForTest(string tag) => ThreadCardAction(_threadList.Items.First(i => i.Tag as string == tag));
         public void PickThreadRowForTest(int index) => ThreadRowPicked(_threadList.Items[index]);
         public void PickThreadRowForTest(string tag) => ThreadRowPicked(_threadList.Items.First(i => i.Tag as string == tag));
         /// Self-tests: START in NEW THREAD (THREAD opens as a draft), and the draft's create request for a first message.
