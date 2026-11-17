@@ -184,7 +184,9 @@ namespace MetaCodex.Shell
             }
             var web = WebIdePanel(); // its own web window (ShellWeb); null: the most web windows are open (a toast says so)
             if (web == null) return;
-            web.BaseScale = Vector3.one * UiScaleNow * IdeWebScale; // before it opens: it is placed at its new size
+            var ww = WebWindowOf(web);
+            if (ww != null && ww.Group != null) ww.FreeScale = IdeWebScale; // in a group: the group's size; its own when it leaves
+            else web.BaseScale = Vector3.one * UiScaleNow * IdeWebScale; // before it opens: it is placed at its new size
             if (_ideWebHooked != web)
             {
                 _ideWebHooked = web;

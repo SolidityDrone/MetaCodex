@@ -8,21 +8,30 @@ using UnityEngine;
 
 namespace MetaCodex.Shell
 {
-    /// Thread groups (owner 2026-11-14, docs/thread-view.md "Thread windows and groups"). A group is a window of its own
-    /// ("tgroup-1" ...) that holds thread windows in a grid: 2 -> 2x1, 3-4 -> 2x2, 5-6 -> 3x2. The windows are its
-    /// children at their full layout, shrunk by the group's scale: they keep their whole chat, composer and approvals and
-    /// work as free windows. The group is one unit for placement, RECENTER and the FLOAT ring (it is in the panel list;
-    /// its windows are not: IsGroupedPanel).
-    /// - Drop a thread window (its title bar) on another one: the two make a group; on a group's window: it joins that
-    ///   group at that place; on a window of its own group: the two swap places. The target lights up while it is under.
+    /// Window groups (owner 2026-11-14 for threads, 2026-11-17 "a grouping mechanic like we did for threads, for the web
+    /// windows"; docs/thread-view.md "Thread windows and groups"). A group is a window of its own ("tgroup-1" ...) that
+    /// holds thread windows and web windows (browser pages, the code editor), mixed as the user likes, in a grid: 2 -> 2x1,
+    /// 3-4 -> 2x2, 5-6 -> 3x2. A cell is as wide as the widest of its windows and as tall as the tallest (a thread window
+    /// 0.73 x 0.66, a web window 0.80 x 0.61); each window is centred in its cell, its top at the cell's top. The windows
+    /// are its children at their full layout, shrunk by the group's scale: a thread keeps its whole chat, composer and
+    /// approvals, a page its toolbar, touch, scroll, keyboard, chooser, dialogs and full screen (inside its cell: a page's
+    /// full screen fills its page area, never the window). The group is one unit for placement, RECENTER and the FLOAT
+    /// ring (it is in the panel list; its windows are not: IsGroupedPanel).
+    /// - Drop a window (its title bar) on another one: the two make a group; on a group's window: it joins that group at
+    ///   that place; on a window of its own group: the two swap places. The target lights up while it is under.
     /// - Let a grouped window go outside its group: it comes out (full size, where it was let go). Its ✕ closes it alone.
     /// - The group's title bar moves it; ⇲ UNGROUP sets every window free; ✕ closes them all; the RESIZE grip (bottom
     ///   right) scales the group and its windows (the top-left corner stays).
     /// - A thread of a project that has a window open joins that window's group when it opens (AutoGroup), unless the
     ///   user took that thread out of a group by hand while its window was open.
     /// - Moves are eased (about 0.25 s): a window joining, leaving or changing place glides to its cell and size.
-    /// - Bent ("Bend panels"): the group bends like any window; its windows have no curve of their own, they lie on the
-    ///   group's (CellPose, FitMemberBend), so rays and pokes hit them where they are drawn.
+    /// - Bent ("Bend panels"): the group bends like any window; its thread windows have no curve of their own, they lie on
+    ///   the group's (CellPose, FitMemberBend), so rays and pokes hit them where they are drawn. A web window never bends:
+    ///   it lies flat on the tangent plane at its cell's centre (CellPose's centre and normal), moved towards the user just
+    ///   enough that its side edges are CellDepth in front of the curve, so the page is never behind the group's frame and
+    ///   its page and pointer agree (UiPanel's flat ray maths, WebPageArea.ToPage).
+    /// - Thread-only: AutoGroup (a project's threads) and _pulledOut; the voice command `thread_windows` (its group /
+    ///   ungroup act on the focused thread window's group, which may hold web windows too).
     /// Simplified: groups are not kept across restarts; a group's grid size changes by making its frame again (its old
     /// frame fades out, the new one fades in; the windows glide).
     public sealed partial class MetaCodexShell
@@ -33,28 +42,77 @@ namespace MetaCodex.Shell
         /// the user): the nearest panel along a ray is the window inside its cell, the group in its bar, frame and gaps.
         public const float CellDepth = -0.01f;
 
-        private sealed class ThreadGroup
+        /// A window a group can hold: a thread window (ShellThreadWindows) or a web window (ShellWeb: a page or the code
+        /// editor). What the group needs of it: its panel and id, its group, its drag and glide, whether it may bend.
+        private abstract class GroupMember
+        {
+            public readonly string Id;
+            public UiPanel Panel;
+            public WindowGroup Group;         // the group it is in, or null
+            public bool Dragging;             // its title bar is held (drop onto a window or group)
+            public bool Gliding;              // FIXED: eases to GlidePos (leaving a group by UNGROUP)
+            public bool Easing;               // it left a group: its size eases back to FreeScale (TickMember)
+            public Vector3 GlidePos;
+            public Quaternion GlideRot;
+            /// Its size when free, over the UI scale: 1, or a web window's 1.25 (a large page, the code editor), kept while
+            /// it is in a group (there it has the group's scale) and eased back to when it leaves.
+            public float FreeScale = 1f;
+            protected GroupMember(string id) { Id = id; }
+            /// Never bent (a web page is one flat picture): in a bent group it lies flat on its cell's tangent plane.
+            public abstract bool Flat { get; }
+            /// Closed for good: its group lets it go.
+            public abstract bool Gone { get; }
+        }
+
+        private sealed class WindowGroup
         {
             public readonly int Number;
             public string Id => "tgroup-" + Number;
             public UiPanel Panel;
-            public readonly List<ThreadWindow> Members = new List<ThreadWindow>();
+            public readonly List<GroupMember> Members = new List<GroupMember>();
             public float Scale;
             public bool UserScaled, Closing, Resizing;
             public int Cols, Rows;
+            public float CellW = ThreadW, CellH = ThreadH; // a cell (group units): its widest and its tallest window
             public Vector3 ResizeAnchor;
             public float ResizeFrom, ResizeScale0;
             public float FitR; // the group's drawn bend its windows were last put on (FitGroupMembers)
-            public ThreadGroup(int n) { Number = n; }
+            public WindowGroup(int n) { Number = n; }
         }
 
-        private readonly List<ThreadGroup> _groups = new List<ThreadGroup>();
+        private readonly List<WindowGroup> _groups = new List<WindowGroup>();
         private readonly HashSet<UiPanel> _groupedPanels = new HashSet<UiPanel>();
         private readonly HashSet<string> _pulledOut = new HashSet<string>(); // threads taken out of a group by hand (while open)
         private UiPanel _dropLit;
-        private ThreadWindow _newGroupAt;
+        private GroupMember _newGroupAt;
 
         private bool IsGroupedPanel(UiPanel p) => p != null && _groupedPanels.Contains(p);
+
+        private static bool MemberOpen(GroupMember m) => m != null && !m.Gone && m.Panel != null && m.Panel.IsOpen;
+
+        /// The group a window's panel is in (a thread or web window in a group), or null. No allocation.
+        private WindowGroup GroupOfMemberPanel(UiPanel p)
+        {
+            if (p == null || !_groupedPanels.Contains(p)) return null;
+            foreach (var g in _groups)
+                foreach (var m in g.Members)
+                    if (m.Panel == p) return g;
+            return null;
+        }
+
+        /// A press on a window (or a drop that grouped it): a thread window gets the focus, a web window becomes the one
+        /// touched last (pages the app opens and the hardware keyboard go there).
+        private void MemberTouched(GroupMember m)
+        {
+            if (m is ThreadWindow tw) FocusWindow(tw);
+            else if (m is WebWindow ww) WebMarkTouched(ww);
+        }
+
+        /// A thread put in a group by hand may join groups by itself again (AutoGroup).
+        private void ClearPulledOut(GroupMember m)
+        {
+            if (m is ThreadWindow tw && tw.threadOpen != null) _pulledOut.Remove(tw.threadOpen);
+        }
 
         private bool IsResizing(UiPanel p)
         {
@@ -62,7 +120,7 @@ namespace MetaCodex.Shell
             return false;
         }
 
-        private ThreadGroup GroupOfPanel(UiPanel p)
+        private WindowGroup GroupOfPanel(UiPanel p)
         {
             if (p == null) return null;
             foreach (var g in _groups) if (g.Panel == p) return g;
@@ -74,24 +132,50 @@ namespace MetaCodex.Shell
         public static float DefaultGroupScale(int n) => n <= 2 ? 0.72f : n <= 4 ? 0.6f : 0.5f;
 
         /// A window's cell in its group (group panel units, the windows at their full layout size).
-        private static Rect CellRect(ThreadGroup g, int i)
+        private static Rect CellRect(WindowGroup g, int i)
         {
             int c = i % Mathf.Max(1, g.Cols), r = i / Mathf.Max(1, g.Cols);
-            return new Rect(GroupPad + c * (ThreadW + GroupGap), UiTheme.Current.HeaderHeight + GroupPad + r * (ThreadH + GroupGap), ThreadW, ThreadH);
+            return new Rect(GroupPad + c * (g.CellW + GroupGap), UiTheme.Current.HeaderHeight + GroupPad + r * (g.CellH + GroupGap), g.CellW, g.CellH);
         }
 
-        private static string GroupTitle(ThreadGroup g) => $"✥ Group {g.Number} · {g.Members.Count} threads";
+        /// The cell for the group's windows now: the widest and the tallest of them (a thread window ThreadW x ThreadH, a
+        /// web window 0.80 x 0.61), so each fits its cell at the group's scale.
+        private static Vector2 CellSizeFor(WindowGroup g)
+        {
+            float w = 0f, h = 0f;
+            foreach (var m in g.Members)
+                if (m.Panel != null) { w = Mathf.Max(w, m.Panel.Width); h = Mathf.Max(h, m.Panel.Height); }
+            return new Vector2(w > 0f ? w : ThreadW, h > 0f ? h : ThreadH);
+        }
+
+        private static string GroupTitle(WindowGroup g)
+        {
+            int threads = 0;
+            foreach (var m in g.Members) if (m is ThreadWindow) threads++;
+            return threads == g.Members.Count ? $"✥ Group {g.Number} · {g.Members.Count} threads" : $"✥ Group {g.Number} · {g.Members.Count} windows";
+        }
 
         // ------------------------------------------------------------------ the group's curve (Bend panels)
 
-        /// Where cell `i` is drawn in its group (group-local), `depth` off the surface along its normal. Bent (radius
-        /// `bend`, the group's units): on the group's arc at the cell centre's angle, turned to face the group's axis;
-        /// flat: the cell's centre, not turned.
-        private static void CellPose(ThreadGroup g, int i, float bend, float depth, out Vector3 pos, out Quaternion rot)
+        /// Where the window in cell `i` is drawn in its group (group-local), `depth` off the surface along its normal: its
+        /// centre is the cell's centre across, its top the cell's top. Bent (radius `bend`, the group's units): on the
+        /// group's arc at that centre's angle, turned to face the group's axis; a flat window (a web page) on the tangent
+        /// plane there, nearer the axis by as much as its half width needs, so its side edges are `depth` in front of the
+        /// curve (the frame never covers the page; e > h always but on a curve tighter than the window). Flat group: the
+        /// centre, not turned.
+        private static void CellPose(WindowGroup g, int i, float bend, float depth, out Vector3 pos, out Quaternion rot)
         {
-            var c = g.Panel.PanelToLocal(CellRect(g, i).center, depth);
+            var cell = CellRect(g, i);
+            var m = i >= 0 && i < g.Members.Count ? g.Members[i] : null;
+            float mh = m != null && m.Panel != null ? Mathf.Min(m.Panel.Height, cell.height) : cell.height; // its height in the group (scale 1)
+            var c = g.Panel.PanelToLocal(new Vector2(cell.center.x, cell.y + mh * 0.5f), depth);
             if (bend <= 0f) { pos = c; rot = Quaternion.identity; return; }
             float a = c.x / bend, rr = bend + depth; // the same arc as UiPanel.SurfacePoint
+            if (m != null && m.Flat && m.Panel != null)
+            {
+                float h = m.Panel.Width * 0.5f * m.Panel.BaseScale.x; // its half width in the group's units (it eases to 1 when it joins)
+                rr = rr > h ? Mathf.Sqrt(rr * rr - h * h) : rr * 0.5f;
+            }
             pos = new Vector3(rr * Mathf.Sin(a), c.y, -bend + rr * Mathf.Cos(a));
             rot = Quaternion.Euler(0f, a * Mathf.Rad2Deg, 0f);
         }
@@ -100,10 +184,12 @@ namespace MetaCodex.Shell
         /// with the group's radius less that depth, in the window's units (its scale in the group), its axis is the
         /// group's axis: the two surfaces are concentric, the window lies on the group's curve edge to edge, and its own
         /// ray maths (UiPanel.Intersect) is the surface it is drawn on.
-        private static void FitMemberBend(UiPanel m, float groupBend)
+        /// A flat window (a web page) has no bend at all.
+        private static void FitMemberBend(GroupMember w, float groupBend)
         {
+            var m = w.Panel;
             float s = Mathf.Max(1e-4f, m.transform.localScale.x);
-            float r = groupBend > 0f ? (groupBend + CellDepth) / s : 0f;
+            float r = groupBend > 0f && !w.Flat ? (groupBend + CellDepth) / s : 0f;
             if (r < 0.05f) r = 0f; // UiPanel.SetBend's floor: never asked again every frame
             if (m.BendRadius == r && m.BendNow == r) return;
             m.SetBend(r);
@@ -114,7 +200,7 @@ namespace MetaCodex.Shell
         /// follows the new curve exactly; one still gliding to its cell moves by `k` (0: not this time). Called every
         /// frame (TickThreadGroups) and when the group's drawn bend changes (UiPanel.BendChanged: in the same tick it
         /// eases, so a window is never a frame off the curve). No allocation.
-        private void FitGroupMembers(ThreadGroup g, float k)
+        private void FitGroupMembers(WindowGroup g, float k)
         {
             var gp = g.Panel;
             if (gp == null) return;
@@ -144,7 +230,7 @@ namespace MetaCodex.Shell
                         if (t.localRotation != lq) t.localRotation = Quaternion.Angle(t.localRotation, lq) < 0.2f ? lq : Quaternion.Slerp(t.localRotation, lq, k);
                     }
                 }
-                FitMemberBend(m.Panel, bend);
+                FitMemberBend(m, bend);
             }
         }
 
@@ -160,15 +246,18 @@ namespace MetaCodex.Shell
 
         // ------------------------------------------------------------------ the group's window
 
-        /// Makes the group's window (again: a new grid size, RebuildPanels) and puts its thread windows in it. `rebuilt`:
+        /// Makes the group's window (again: a new grid or cell size, RebuildPanels) and puts its windows in it. `rebuilt`:
         /// the old frame is gone already (RebuildPanels); it is not opened here (the rebuild restores what was open).
-        private void BuildGroupPanel(ThreadGroup g, bool rebuilt = false)
+        private void BuildGroupPanel(WindowGroup g, bool rebuilt = false)
         {
             var t = UiTheme.Current;
             (g.Cols, g.Rows) = GroupGrid(g.Members.Count);
+            var cell = CellSizeFor(g);
+            g.CellW = cell.x;
+            g.CellH = cell.y;
             if (!g.UserScaled) g.Scale = DefaultGroupScale(g.Members.Count);
-            float w = g.Cols * ThreadW + (g.Cols - 1) * GroupGap + 2 * GroupPad;
-            float h = t.HeaderHeight + 2 * GroupPad + g.Rows * ThreadH + (g.Rows - 1) * GroupGap + GroupFooter;
+            float w = g.Cols * g.CellW + (g.Cols - 1) * GroupGap + 2 * GroupPad;
+            float h = t.HeaderHeight + 2 * GroupPad + g.Rows * g.CellH + (g.Rows - 1) * GroupGap + GroupFooter;
             var old = g.Panel;
             bool hadOld = old != null; // a destroyed one compares equal to null (RebuildPanels)
             bool wasOpen = hadOld && old.IsOpen;
@@ -228,29 +317,33 @@ namespace MetaCodex.Shell
             UpdateThreadWindowVoice();
         }
 
-        /// The groups' windows again (RebuildPanels destroyed them with their thread windows, which BuildThread made anew).
+        /// The groups' windows again (RebuildPanels destroyed them with their windows, which BuildWeb and BuildThread made
+        /// anew: BuildWeb runs first, so this, from BuildThread, finds every member's new panel).
         private void RebuildGroupPanels()
         {
             _groupedPanels.Clear();
             foreach (var g in _groups.ToList())
             {
-                g.Members.RemoveAll(m => m.Dead || m.Panel == null);
+                g.Members.RemoveAll(m => m.Gone || m.Panel == null);
                 if (g.Members.Count < 2) { foreach (var m in g.Members) m.Group = null; _groups.Remove(g); continue; }
                 g.Panel = null;
                 BuildGroupPanel(g, true);
             }
         }
 
-        /// A thread window goes into the group's window: it keeps its place and size in the world for now and eases into
-        /// its cell (TickThreadGroups); `snap`: at once.
-        private void AttachToGroup(ThreadWindow w, ThreadGroup g, bool snap)
+        /// A window goes into the group's window: it keeps its place and size in the world for now and eases into its cell
+        /// (TickThreadGroups); `snap`: at once. A web window coming in free keeps its free size (FreeScale) for when it leaves.
+        private void AttachToGroup(GroupMember w, WindowGroup g, bool snap)
         {
             if (w.Panel == null || g.Panel == null) return;
             var t = w.Panel.transform;
+            if (w is WebWindow && w.Group == null && !w.Easing && !snap)
+                w.FreeScale = Mathf.Clamp(w.Panel.BaseScale.x / Mathf.Max(1e-4f, UiScaleNow), 0.5f, 2f);
             float rel = w.Panel.RestLossyScale.x / Mathf.Max(1e-5f, g.Panel.RestLossyScale.x); // its world size kept, in the group's units
             if (Floating) _slots.Remove(t);
             t.SetParent(g.Panel.transform, true);
             w.Group = g;
+            w.Easing = false;
             _groupedPanels.Add(w.Panel);
             w.Gliding = false;
             if (snap)
@@ -261,11 +354,11 @@ namespace MetaCodex.Shell
                 w.Panel.BaseScale = Vector3.one;
             }
             else w.Panel.BaseScale = Vector3.one * (float.IsNaN(rel) || rel <= 0f ? 1f : rel);
-            FitMemberBend(w.Panel, g.Panel.BendNow); // no curve of its own from now: the group's (flat group: flat)
+            FitMemberBend(w, g.Panel.BendNow); // no curve of its own from now: the group's (flat group, a web page: flat)
         }
 
         /// A window leaves its group's window: it stays where it is in the world and eases back to its full size.
-        private void DetachFromGroup(ThreadWindow w)
+        private void DetachFromGroup(GroupMember w)
         {
             var g = w.Group;
             w.Group = null;
@@ -276,24 +369,27 @@ namespace MetaCodex.Shell
             float world = w.Panel.RestLossyScale.x / Mathf.Max(1e-5f, _root != null ? _root.lossyScale.x : 1f);
             t.SetParent(_root, true);
             // open: it keeps its size in the world and eases to its full size; closed: at its full size at once
-            w.Panel.BaseScale = Vector3.one * (!w.Panel.IsOpen || float.IsNaN(world) || world <= 0f ? UiScaleNow : world);
+            w.Panel.BaseScale = Vector3.one * (!w.Panel.IsOpen || float.IsNaN(world) || world <= 0f ? UiScaleNow * w.FreeScale : world);
+            w.Easing = w.Panel.IsOpen;
             // its own bend again: the layout's from the next frame, eased from the group's curve (its radius in the world is
             // kept by the new scale); "Bend panels" off: flat now (the frame loop bends nothing then)
-            if (Settings == null || !Settings.bendPanels) { w.Panel.SetBend(0f); w.Panel.SnapBend(); }
+            if (Settings == null || !Settings.bendPanels || w.Flat) { w.Panel.SetBend(0f); w.Panel.SnapBend(); }
             FaceUser(w.Panel);
             if (w.Panel.IsOpen) _placed.Add(w.Id);
             if (Floating && _carousel != null && w.Panel.IsOpen) Slot(t);
         }
 
-        /// The group after a window came or went: two or more stay a group (its grid made again when it changed), one
-        /// alone is set free.
-        private void RefreshGroup(ThreadGroup g)
+        /// The group after a window came or went: two or more stay a group (its grid made again when it or its cell size
+        /// changed), one alone is set free.
+        private void RefreshGroup(WindowGroup g)
         {
             if (g.Closing) return;
-            g.Members.RemoveAll(m => m.Dead || m.Panel == null);
+            g.Members.RemoveAll(m => m.Gone || m.Panel == null);
             if (g.Members.Count < 2) { DissolveGroup(g); return; }
             var grid = GroupGrid(g.Members.Count);
-            if (g.Panel == null || grid.cols != g.Cols || grid.rows != g.Rows || !g.UserScaled && Mathf.Abs(DefaultGroupScale(g.Members.Count) - g.Scale) > 1e-3f)
+            var cell = CellSizeFor(g);
+            if (g.Panel == null || grid.cols != g.Cols || grid.rows != g.Rows || Mathf.Abs(cell.x - g.CellW) > 1e-4f || Mathf.Abs(cell.y - g.CellH) > 1e-4f
+                || !g.UserScaled && Mathf.Abs(DefaultGroupScale(g.Members.Count) - g.Scale) > 1e-3f)
             {
                 BuildGroupPanel(g);
                 return;
@@ -304,7 +400,7 @@ namespace MetaCodex.Shell
         }
 
         /// The group goes; its windows stay where they are, free.
-        private void DissolveGroup(ThreadGroup g)
+        private void DissolveGroup(WindowGroup g)
         {
             g.Closing = true;
             foreach (var m in g.Members.ToList()) DetachFromGroup(m);
@@ -325,7 +421,7 @@ namespace MetaCodex.Shell
         }
 
         /// The group's ✕ (or CLOSE ALL, a layout): its windows close with it.
-        private void OnGroupClosed(ThreadGroup g, UiPanel closed)
+        private void OnGroupClosed(WindowGroup g, UiPanel closed)
         {
             if (g.Panel != closed || g.Closing) return; // an old frame of it (a new grid), or it is dissolving
             g.Closing = true;
@@ -342,21 +438,21 @@ namespace MetaCodex.Shell
         }
 
         /// A window comes out of its group (closed, pulled out, moved to another group).
-        private void RemoveFromGroup(ThreadWindow w, bool pulledOut)
+        private void RemoveFromGroup(GroupMember w, bool pulledOut)
         {
             var g = w.Group;
             if (g == null) return;
-            if (pulledOut && w.threadOpen != null) _pulledOut.Add(w.threadOpen);
+            if (pulledOut && w is ThreadWindow tw && tw.threadOpen != null) _pulledOut.Add(tw.threadOpen);
             DetachFromGroup(w);
             RefreshGroup(g);
         }
 
         /// Two free windows make a group: the target keeps its place (its cell is where it was), the dropped one joins.
-        private ThreadGroup MakeGroup(ThreadWindow target, ThreadWindow joining)
+        private WindowGroup MakeGroup(GroupMember target, GroupMember joining)
         {
             int n = 1;
             while (_groups.Any(x => x.Number == n)) n++;
-            var g = new ThreadGroup(n);
+            var g = new WindowGroup(n);
             g.Members.Add(target);
             g.Members.Add(joining);
             _groups.Add(g);
@@ -369,7 +465,7 @@ namespace MetaCodex.Shell
         }
 
         /// The window joins the group at `index` (-1: at the end); out of its own group first.
-        private bool MoveToGroup(ThreadWindow w, ThreadGroup g, int index)
+        private bool MoveToGroup(GroupMember w, WindowGroup g, int index)
         {
             if (g.Members.Contains(w)) return true;
             if (g.Members.Count >= GroupMax) { Toast($"A group holds {GroupMax} windows", "warn"); return false; }
@@ -383,7 +479,7 @@ namespace MetaCodex.Shell
         }
 
         /// ⇲ UNGROUP: every window free at its full size, side by side where the group was.
-        private void Ungroup(ThreadGroup g)
+        private void Ungroup(WindowGroup g)
         {
             if (g == null || g.Closing) return;
             var ms = g.Members.ToList();
@@ -393,12 +489,12 @@ namespace MetaCodex.Shell
             UiPanel prev = null;
             foreach (var m in ms)
             {
-                if (!WinOpen(m)) continue;
+                if (!MemberOpen(m)) continue;
                 var t = m.Panel.transform;
                 Vector3 fromPos = t.position;
                 Quaternion fromRot = t.rotation;
                 var small = m.Panel.BaseScale;
-                m.Panel.BaseScale = Vector3.one * UiScaleNow; // placed at its full size
+                m.Panel.BaseScale = Vector3.one * (UiScaleNow * m.FreeScale); // placed at its full size
                 if (prev == null) t.SetPositionAndRotation(centre, rot);
                 else PlaceSmart(m.Id, m.Panel, prev);
                 if (!Floating)
@@ -467,13 +563,13 @@ namespace MetaCodex.Shell
             }
         }
 
-        private void SetGroupScale(ThreadGroup g, float s)
+        private void SetGroupScale(WindowGroup g, float s)
         {
             g.Scale = Mathf.Clamp(s, GroupScaleMin, GroupScaleMax);
             if (g.Panel != null) g.Panel.BaseScale = Vector3.one * UiScaleNow * g.Scale;
         }
 
-        private void ResizeStart(ThreadGroup g, UiPointerEvent e)
+        private void ResizeStart(WindowGroup g, UiPointerEvent e)
         {
             if (g.Panel == null) return;
             g.Resizing = true;
@@ -484,7 +580,7 @@ namespace MetaCodex.Shell
 
         /// The grip follows the hand: the group's scale is the hand's distance from the top-left corner over where the
         /// press started (one transform: live); the corner stays where it was.
-        private void ResizeStep(ThreadGroup g, UiPointerEvent e)
+        private void ResizeStep(WindowGroup g, UiPointerEvent e)
         {
             if (!g.Resizing || g.Panel == null) return;
             float d = Vector3.Distance(g.Panel.SurfacePoint(e.Point), g.ResizeAnchor);
@@ -492,7 +588,7 @@ namespace MetaCodex.Shell
             g.Panel.transform.position += g.ResizeAnchor - g.Panel.SurfacePoint(Vector2.zero);
         }
 
-        private void ResizeEnd(ThreadGroup g)
+        private void ResizeEnd(WindowGroup g)
         {
             if (!g.Resizing) return;
             g.Resizing = false;
@@ -502,7 +598,8 @@ namespace MetaCodex.Shell
 
         // ------------------------------------------------------------------ every frame
 
-        /// Drops (a window let go on a window or group), the grids (windows ease to their cells), sizes and glides.
+        /// Drops (a window let go on a window or group), the grids (windows ease to their cells), sizes and glides: the
+        /// thread windows, then the web windows (two loops over the lists: no allocation).
         private void TickThreadGroups(float dt)
         {
             float k = UiTheme.Approach(dt, UiTheme.MotionBase); // settles in about 0.22 s, the shared motion scale
@@ -510,44 +607,59 @@ namespace MetaCodex.Shell
             for (int i = 0; i < Tws.Count; i++)
             {
                 var w = Tws[i];
-                if (!WinOpen(w)) { w.Dragging = false; continue; }
-                bool drag = Router.IsDragging(w.Panel);
-                if (drag)
-                {
-                    w.Dragging = true;
-                    w.Gliding = false;
-                    var (tw, tg) = DropTarget(w, head);
-                    LightDrop(tw != null ? tw.Panel : tg?.Panel);
-                    continue;
-                }
-                if (w.Dragging)
-                {
-                    w.Dragging = false;
-                    LightDrop(null);
-                    Dropped(w, head);
-                    if (Tws.Count <= i || Tws[i] != w) break; // the list changed: the rest next frame
-                }
-                // the size it eases to: full (the UI scale) when free, the group's units (1) in a group
-                var p = w.Panel;
-                if (!p.Transitioning)
-                {
-                    var want = w.Group != null ? Vector3.one : Vector3.one * UiScaleNow;
-                    var bs = p.BaseScale;
-                    if ((bs - want).sqrMagnitude > 1e-8f) p.BaseScale = (bs - want).sqrMagnitude < 1e-6f ? want : Vector3.Lerp(bs, want, k);
-                }
-                if (w.Gliding && w.Group == null)
-                {
-                    var t = p.transform;
-                    if (Floating) w.Gliding = false;
-                    else
-                    {
-                        t.SetPositionAndRotation(Vector3.Lerp(t.position, w.GlidePos, k), Quaternion.Slerp(t.rotation, w.GlideRot, k));
-                        if ((t.position - w.GlidePos).sqrMagnitude < 1e-6f) { t.SetPositionAndRotation(w.GlidePos, w.GlideRot); w.Gliding = false; }
-                    }
-                }
+                TickMember(w, k, head);
+                if (Tws.Count <= i || Tws[i] != w) break; // the list changed: the rest next frame
+            }
+            for (int i = 0; i < _webWins.Count; i++)
+            {
+                var w = _webWins[i];
+                TickMember(w, k, head);
+                if (_webWins.Count <= i || _webWins[i] != w) break;
             }
             // the windows glide to their cells, on the group's curve, with its bend in their units (after their scale eased)
             for (int gi = 0; gi < _groups.Count; gi++) FitGroupMembers(_groups[gi], k);
+        }
+
+        /// One window's frame: its drag (the drop target lit, a drop when it is let go), its size and its glide. A thread
+        /// window's size always eases to its place (as before); a web window's only in a group or just out of one (its
+        /// own scale, a large page's or the code editor's, is the web code's otherwise).
+        private void TickMember(GroupMember w, float k, Transform head)
+        {
+            if (!MemberOpen(w)) { w.Dragging = false; return; }
+            if (Router.IsDragging(w.Panel))
+            {
+                w.Dragging = true;
+                w.Gliding = false;
+                var (tw, tg) = DropTarget(w, head);
+                LightDrop(tw != null ? tw.Panel : tg?.Panel);
+                return;
+            }
+            if (w.Dragging)
+            {
+                w.Dragging = false;
+                LightDrop(null);
+                Dropped(w, head);
+                if (!MemberOpen(w)) return;
+            }
+            // the size it eases to: full (the UI scale, times its own) when free, the group's units (1) in a group
+            var p = w.Panel;
+            if (!p.Transitioning && (w.Group != null || w.Easing || w is ThreadWindow))
+            {
+                var want = w.Group != null ? Vector3.one : Vector3.one * (UiScaleNow * w.FreeScale);
+                var bs = p.BaseScale;
+                if ((bs - want).sqrMagnitude > 1e-8f) p.BaseScale = (bs - want).sqrMagnitude < 1e-6f ? want : Vector3.Lerp(bs, want, k);
+                else w.Easing = false;
+            }
+            if (w.Gliding && w.Group == null)
+            {
+                var t = p.transform;
+                if (Floating) w.Gliding = false;
+                else
+                {
+                    t.SetPositionAndRotation(Vector3.Lerp(t.position, w.GlidePos, k), Quaternion.Slerp(t.rotation, w.GlideRot, k));
+                    if ((t.position - w.GlidePos).sqrMagnitude < 1e-6f) { t.SetPositionAndRotation(w.GlidePos, w.GlideRot); w.Gliding = false; }
+                }
+            }
         }
 
         private void LightDrop(UiPanel p)
@@ -558,28 +670,21 @@ namespace MetaCodex.Shell
             if (p != null) p.SetHighlight(0.9f);
         }
 
-        /// What a window carried by its title bar is over: the window (free, or in a group) or the group the line from
-        /// the eyes through its middle meets, nearest first. A free window counts only well inside it (a near miss does
-        /// not group); its own group's frame is no target (letting go there keeps it in).
-        private (ThreadWindow win, ThreadGroup group) DropTarget(ThreadWindow w, Transform head)
+        /// What a window carried by its title bar is over: the window (free, or in a group; a thread or a web window) or the
+        /// group the line from the eyes through its middle meets, nearest first. A free window counts only well inside it
+        /// (a near miss does not group); its own group's frame is no target (letting go there keeps it in).
+        private (GroupMember win, WindowGroup group) DropTarget(GroupMember w, Transform head)
         {
             if (head == null || w.Panel == null) return (null, null);
             var eye = head.position;
             var dir = w.Panel.transform.position - eye;
             if (dir.sqrMagnitude < 1e-4f) return (null, null);
             var ray = new Ray(eye, dir.normalized);
-            ThreadWindow bestW = null;
-            ThreadGroup bestG = null;
+            GroupMember bestW = null;
+            WindowGroup bestG = null;
             float best = float.MaxValue;
-            for (int i = 0; i < Tws.Count; i++)
-            {
-                var o = Tws[i];
-                if (o == w || !WinOpen(o)) continue;
-                if (!o.Panel.Raycast(ray, out var pt, out float d)) continue;
-                float m = o.Group != null ? 0.1f : 0.18f;
-                if (pt.x < o.Panel.Width * m || pt.x > o.Panel.Width * (1f - m) || pt.y < o.Panel.Height * m || pt.y > o.Panel.Height * (1f - m)) continue;
-                if (d < best) { best = d; bestW = o; }
-            }
+            for (int i = 0; i < Tws.Count; i++) DropCandidate(Tws[i], w, ray, ref bestW, ref best);
+            for (int i = 0; i < _webWins.Count; i++) DropCandidate(_webWins[i], w, ray, ref bestW, ref best);
             if (bestW != null) return (bestW, null);
             for (int i = 0; i < _groups.Count; i++)
             {
@@ -590,9 +695,18 @@ namespace MetaCodex.Shell
             return (null, bestG);
         }
 
-        /// A window let go: swap, join, group or come out (see the class comment). A drop groups across projects: the
-        /// only project rule is AutoGroup (on open).
-        private void Dropped(ThreadWindow w, Transform head)
+        private static void DropCandidate(GroupMember o, GroupMember carried, Ray ray, ref GroupMember bestW, ref float best)
+        {
+            if (o == carried || !MemberOpen(o)) return;
+            if (!o.Panel.Raycast(ray, out var pt, out float d)) return;
+            float m = o.Group != null ? 0.1f : 0.18f;
+            if (pt.x < o.Panel.Width * m || pt.x > o.Panel.Width * (1f - m) || pt.y < o.Panel.Height * m || pt.y > o.Panel.Height * (1f - m)) return;
+            if (d < best) { best = d; bestW = o; }
+        }
+
+        /// A window let go: swap, join, group or come out (see the class comment). A drop groups across projects and kinds
+        /// (a thread beside its code editor, the editor beside a video): the only project rule is AutoGroup (on open).
+        private void Dropped(GroupMember w, Transform head)
         {
             var (tw, tg) = DropTarget(w, head);
             if (tw != null)
@@ -605,12 +719,12 @@ namespace MetaCodex.Shell
                     return;
                 }
                 LogGroupDrop(w, tw, null);
-                if (tw.Group != null) { _pulledOut.Remove(w.threadOpen ?? ""); MoveToGroup(w, tw.Group, tw.Group.Members.IndexOf(tw)); FocusWindow(w); return; }
+                if (tw.Group != null) { ClearPulledOut(w); MoveToGroup(w, tw.Group, tw.Group.Members.IndexOf(tw)); MemberTouched(w); return; }
                 if (w.Group != null) RemoveFromGroup(w, false);
-                if (WinOpen(tw) && tw.Group == null) { _pulledOut.Remove(w.threadOpen ?? ""); MakeGroup(tw, w); FocusWindow(w); }
+                if (MemberOpen(tw) && tw.Group == null) { ClearPulledOut(w); MakeGroup(tw, w); MemberTouched(w); }
                 return;
             }
-            if (tg != null) { LogGroupDrop(w, null, tg); _pulledOut.Remove(w.threadOpen ?? ""); MoveToGroup(w, tg, -1); FocusWindow(w); return; }
+            if (tg != null) { LogGroupDrop(w, null, tg); ClearPulledOut(w); MoveToGroup(w, tg, -1); MemberTouched(w); return; }
             if (w.Group == null) return;
             // let go over its own group: it goes back to its cell; outside it: it comes out where it was let go
             var g = w.Group;
@@ -623,15 +737,19 @@ namespace MetaCodex.Shell
             if (!inside) RemoveFromGroup(w, true);
         }
 
-        /// The drop in the session log: which window was let go, on what, and the projects of both (owner 2026-11-16:
-        /// a drag across projects was reported as not grouping; this line shows what the drop did on the headset).
-        private void LogGroupDrop(ThreadWindow w, ThreadWindow onto, ThreadGroup group)
+        /// The drop in the session log: which window was let go, on what, and what both show (a thread's project, a web
+        /// page, the code editor; owner 2026-11-16: a drag across projects was reported as not grouping; this line shows
+        /// what the drop did on the headset).
+        private void LogGroupDrop(GroupMember w, GroupMember onto, WindowGroup group)
         {
             var with = onto ?? group?.Members.FirstOrDefault(m => m != w);
-            string from = ProjectNameOf(w.threadOpenProject ?? w.draft?.ProjectId) ?? "no project";
-            string to = ProjectNameOf(with?.threadOpenProject ?? with?.draft?.ProjectId) ?? "no project";
-            Log($"thread group: {w.Id} ({from}) let go on {(onto != null ? onto.Id : group.Id)} ({to})");
+            Log($"window group: {w.Id} ({MemberWhat(w)}) let go on {(onto != null ? onto.Id : group.Id)} ({MemberWhat(with)})");
         }
+
+        /// What a window shows, for the log: a thread's project, "web page" or "code editor".
+        private string MemberWhat(GroupMember m) =>
+            m is ThreadWindow tw ? ProjectNameOf(tw.threadOpenProject ?? tw.draft?.ProjectId) ?? "no project"
+            : m is WebWindow ww ? (WebShowsIde(ww) ? "code editor" : "web page") : "nothing";
 
         // ------------------------------------------------------------------ voice (the command registry)
 
@@ -723,26 +841,29 @@ namespace MetaCodex.Shell
         public float GroupScaleForTest(string groupId) => _groups.FirstOrDefault(g => g.Id == groupId)?.Scale ?? 0f;
         public void TickThreadGroupsForTest(float dt, int steps) { for (int i = 0; i < steps; i++) TickThreadGroups(dt); }
 
-        /// Self-tests: the drop of window `id` as if its title bar were let go where it is now.
-        public void DropThreadWindowForTest(string id) { var w = Tws.FirstOrDefault(x => x.Id == id); if (w != null) Dropped(w, Head); }
+        /// Self-tests: a thread or web window by id ("thread-2", "web-2").
+        private GroupMember MemberForTest(string id) => (GroupMember)Tws.FirstOrDefault(x => x.Id == id) ?? _webWins.FirstOrDefault(x => x.Id == id);
+
+        /// Self-tests (thread and web window ids): the drop of window `id` as if its title bar were let go where it is now.
+        public void DropThreadWindowForTest(string id) { var w = MemberForTest(id); if (w != null) Dropped(w, Head); }
         public string DropTargetForTest(string id)
         {
-            var w = Tws.FirstOrDefault(x => x.Id == id);
+            var w = MemberForTest(id);
             if (w == null) return null;
             var (tw, tg) = DropTarget(w, Head);
             return tw?.Id ?? tg?.Id;
         }
         public void MakeGroupForTest(string targetId, string joiningId)
         {
-            var a = Tws.FirstOrDefault(x => x.Id == targetId);
-            var b = Tws.FirstOrDefault(x => x.Id == joiningId);
+            var a = MemberForTest(targetId);
+            var b = MemberForTest(joiningId);
             if (a == null || b == null) return;
             if (a.Group != null) MoveToGroup(b, a.Group, -1); else MakeGroup(a, b);
         }
         public void UngroupForTest(string groupId) => Ungroup(_groups.FirstOrDefault(g => g.Id == groupId));
-        public void PullOutForTest(string id) { var w = Tws.FirstOrDefault(x => x.Id == id); if (w != null) RemoveFromGroup(w, true); }
+        public void PullOutForTest(string id) { var w = MemberForTest(id); if (w != null) RemoveFromGroup(w, true); }
         public void SetGroupScaleForTest(string groupId, float s) { var g = _groups.FirstOrDefault(x => x.Id == groupId); if (g != null) { SetGroupScale(g, s); g.UserScaled = true; } }
-        public string GroupOfWindowForTest(string id) => Tws.FirstOrDefault(x => x.Id == id)?.Group?.Id;
+        public string GroupOfWindowForTest(string id) => MemberForTest(id)?.Group?.Id;
     }
 }
 

@@ -265,7 +265,7 @@ namespace MetaCodex.Shell
             if (named != null) return named;
             // the window pointed at or looked at: a thread window (any of them), the sidebar (its window's), a group (the
             // group's window used last)
-            var fw = WindowOfPanel(focus) ?? GroupOfPanel(focus)?.Members.OrderByDescending(m => m.FocusedAt).FirstOrDefault();
+            var fw = WindowOfPanel(focus) ?? GroupOfPanel(focus)?.Members.OfType<ThreadWindow>().OrderByDescending(m => m.FocusedAt).FirstOrDefault(); // a group may hold web windows too
             if (fw != null && fw.threadOpen != null) return fw.threadOpen;
             if (focus != null && focus.Id == "threads" && _threadSel != null) return _threadSel;
             if (_twFocus.threadOpen != null && WinOpen(_twFocus)) return _twFocus.threadOpen; // the focused window

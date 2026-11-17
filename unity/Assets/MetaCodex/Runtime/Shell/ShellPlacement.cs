@@ -97,9 +97,7 @@ namespace MetaCodex.Shell
         private UiPanel PlacementUnit(UiPanel p)
         {
             if (p == null || !IsGroupedPanel(p)) return p;
-            foreach (var w in Tws)
-                if (w.Panel == p && w.Group != null && w.Group.Panel != null) return w.Group.Panel;
-            return p;
+            return GroupOfMemberPanel(p)?.Panel ?? p; // a thread or a web window in a group (ShellThreadGroups)
         }
 
         /// The window `id` opens beside: the one whose button is being pressed, else the one it belongs to (ContextOpener),
