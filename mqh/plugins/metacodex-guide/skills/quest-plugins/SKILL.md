@@ -100,6 +100,36 @@ declared hosts) are set for it.
 
 ---
 
+## APP: performance rules (read before you write a window)
+
+The headset draws 72 frames a second: 13.9 ms each for everything. A plugin that rebuilds its spec every second
+costs a dropped frame every second (an alarm plugin did: `app.every(1, render)` with a 36-button picker, 28 ms frames).
+
+1. **A per-second tick never calls `ui.panel`.** It changes LIVE texts with `ui.set(window, id, text)`, only when
+   the text changed, and returns at once when `ui.shown(window)` is false.
+2. **`ui.panel` only on real changes**: a tap, a typed text, new data, a phase or an alarm that ends, the window's
+   `open` event (render it fresh there: the tick drew nothing while it was closed).
+3. **No work in timers while the window is closed** except the logic that must run: an alarm that fires, a phase
+   that ends on time. Prefer `app.at(t, fn)` for a moment in time over polling every second.
+4. **Pick the library control for the value, never a wall of buttons**: a time is a `time`, a day a `date`, a
+   number a `stepper` or `slider`, a long choice a `select` (`reference/components.md`). A grid of 36 buttons to
+   pick hours and minutes is the example of what not to do.
+5. One `app.every` a plugin at most, running only while something runs (cancel it when idle).
+
+The host warns when a timer calls `ui.panel` more than 20 times a minute and only LIVE texts change:
+`warn ui.panel main: called every second with only LIVE texts changing: use ui.set(...) and ui.shown(...)`. Fix it
+(rule 1); `check` must show `warnings: 0`.
+
+```lua
+-- the tick of a countdown: logic first, then one label, and only while it shows
+app.every(1, function()
+  if app.clock() >= S.ends then finish(); render(); return end   -- the logic runs, shown or not
+  if not ui.shown("main") then return end                         -- nothing shows: nothing to draw
+  local t = fmt(S.ends - app.clock())
+  if t ~= shown then ui.set("main", "clock", t); shown = t end    -- one LIVE text, no spec
+end)
+```
+
 ## APP: the window, `ui.panel`
 
 ```lua
@@ -128,6 +158,8 @@ Events (`e.type`, `e.id`, `e.value`, `e.window`):
 | `open` / `close` | the window opens / the user closes it | "" | "" |
 
 `ui.open(id)`, `ui.close(id)`, `ui.toggle(id)` take your window's id (`"main"`) as well as the app's panels.
+`ui.set(window, id, text)` changes one LIVE text (below) without a spec; `ui.shown(window)` is true while the window
+shows.
 
 ### Components
 
@@ -179,16 +211,25 @@ They send `toggle` (a checkbox, boolean), `radio`, `segmented`, `select`, `slide
 events, examples, design rules and a checklist: `reference/components.md`; the example `components`
 (`mcx-ui plugin example components`) shows every one working.
 
-### LIVE text: a number every second, for free
+### LIVE text: `ui.set` for what changes every second
 
-A `text` component **with an `id`** is LIVE. When a new spec differs from the shown one only in the `text` of LIVE
-components, the app changes those labels and nothing else. Any other change rebuilds the window (at most once a
-second). So for a countdown: the time in a LIVE text, everything else exactly the same between seconds (same
-components, same order, same labels).
+A `text` component (`text`, `markdown`, `note`) **with an `id`** is LIVE, at the top level or inside a `card`, `row`
+or tab. Build the window with `ui.panel` once and on real changes; per second set the LIVE texts with `ui.set`:
 
 ```lua
-{ type = "text", id = "clock", style = "big", text = string.format("%02d:%02d", m, s) }
+{ type = "text", id = "clock", style = "big", text = fmt(left) }      -- in render(): the text it has now
+
+if ui.shown("main") then ui.set("main", "clock", fmt(left)) end       -- in the tick: that one label
 ```
+- `ui.set(window, id, text)` (text: a string or a number) sets the label and keeps the new text in the window's spec;
+  it returns false when the window or a LIVE text with that id does not exist (yet): no error. The set text stays
+  through later `ui.panel` calls that still give the old text for that id; a new text in the spec wins.
+- `ui.shown(window)`: true while the window shows. While it is closed nothing is drawn; when it opens it shows the
+  newest texts, and its `open` event comes (render it fresh there).
+- The text rules hold for `ui.set` too (a `big` text: one line, 24 characters at most; a warning otherwise).
+- A `ui.panel` whose spec differs only in LIVE texts is cheap too (the app changes those labels, no rebuild), but it
+  still runs your whole `render()` every time: never every second (the host warns). Any other change rebuilds the
+  window (at most once a second).
 
 ## APP: a tile in the main menu, `menu.add`
 
@@ -397,8 +438,9 @@ than the refresh period. The user sees data at once after a restart, and the ser
 
 **6. Refresh with a wall-clock timer.** One `app.at(at + EVERY, fetch)` (`at` = when the result came), set again after
 every reply and at load; a failure sets it to now + 5 minutes. A REFRESH button calls `fetch()` now (do nothing while
-one is out; for data that changes slowly it may also wait a minute after the last try). Show the age as a LIVE text (a `text` with an `id`) updated by `app.every(60, render)`: once a minute only
-that text changes, no rebuild. Call as seldom as the data changes: the weather every 30 minutes, a rate every hour.
+one is out; for data that changes slowly it may also wait a minute after the last try). Show the age as a LIVE text (a `text` with an `id`) set once a minute with
+`app.every(60, function() if ui.shown("main") then ui.set("main", "status", status()) end end)`: no rebuild, and
+nothing while the window is closed (its `open` event renders it fresh). Call as seldom as the data changes: the weather every 30 minutes, a rate every hour.
 More than one call a minute on average is too often (the PC test fails it).
 
 **7. Credits.** When the data's licence asks for a credit (CC BY: "a credit and a link next to the data"), put a dim
@@ -472,15 +514,19 @@ fetch = function()
   return true
 end
 
+local function status()
+  local w = S.wx
+  return not w and (reqId and "Getting the weather…" or "No weather yet") or
+         ("Updated " .. ago() .. (reqId and " · updating…" or "") .. (problem and (" · no update: " .. problem) or ""))
+end
+
 render = function()
   local w = S.wx
-  local status = not w and (reqId and "Getting the weather…" or "No weather yet") or
-                 ("Updated " .. ago() .. (reqId and " · updating…" or "") .. (problem and (" · no update: " .. problem) or ""))
   ui.panel{ id = "main", title = "Weather", components = {
     { type = "text", id = "now", style = "big", text = w and string.format("%d°C", math.floor(w.temp + 0.5)) or "--" },
     { type = "text", id = "sky", text = w and ((SKY[w.code] or "-") .. " · wind " .. math.floor((w.wind or 0) + 0.5) .. " km/h · Paris") or "Paris" },
     { type = "buttons", items = { { id = "refresh", label = "REFRESH", tone = "accent" }, { id = "source", label = "SOURCE" } } },
-    { type = "text", id = "status", text = status },
+    { type = "text", id = "status", text = status() },
     { type = "text", tone = "dim", text = "Weather data by Open-Meteo.com (CC BY 4.0)" },
   }, on = function(e)
     if e.type == "button" and e.id == "refresh" then if not fetch() then ui.toast("Already updating") end
@@ -492,14 +538,17 @@ end
 menu.add{ id = "weather", label = "WEATHER", glyph = "◐", icon = "bolt", panel = "main" }
 load(); render()
 if not S.wx or app.clock() - S.at >= EVERY then fetch() else arm() end   -- cached and fresh: show it, wait
-app.every(60, render)                                                     -- the age line, a LIVE text
+app.every(60, function()                                                  -- the age line: one LIVE text,
+  if ui.shown("main") then ui.set("main", "status", status()) end         -- only while the window shows
+end)
 ```
 
 ## APP: patterns
 
 - **Countdown**: save `ends`; one `app.every(1, tick)` only while something runs (cancel it when idle); `tick`
-  computes `left = ends - app.clock()`, updates only the LIVE text through `render()`, and when `left <= 0` moves to the
-  next state and calls `ui.notify`.
+  computes `left = ends - app.clock()`; when `left <= 0` it moves to the next state, calls `ui.notify` and `render()`;
+  else it returns when `ui.shown("main")` is false and sets the LIVE text with `ui.set("main", "clock", ...)` when the
+  text changed (the performance rules' example above). Never `render()` every second.
 - **Alarms at a time**: save `{at, text}` items; on load and after each change, `app.cancel` the old ids and `app.at`
   every future one; past ones: notify once ("... while MetaCodex was closed") and drop them.
 - **Input**: the field empties when the window is rebuilt; when you reject the text, change nothing in the spec (the
@@ -560,7 +609,9 @@ end)
    option of a command); a removed feature takes its command with it.
 5. Raise `version` (1.0.0 -> 1.1.0), then the loop: check, try (every new or changed button, cell, toggle, input,
    and the voice commands that changed), commit, report.
-- Any change of the spec other than LIVE texts rebuilds the window: fine after a tap, never every second.
+- Any change of the spec other than LIVE texts rebuilds the window: fine after a tap, never every second. A plugin
+  whose tick calls `render()` / `ui.panel` every second (the host's `warn ui.panel ...: called every second` line):
+  change the tick to `ui.set` + `ui.shown` (performance rules), keep `render()` for real changes and the `open` event.
 
 ## Turn off or remove
 
@@ -578,7 +629,11 @@ end)
 - [ ] `mcx-ui plugin check <id>`: `loaded`, the windows, the tile (apps only), the voice commands, `warnings: 0`.
 - [ ] Every button pressed once (`mcx-ui ui click`), every input, cell and toggle sent once (`mcx-ui plugin event`),
       every gesture simulated; `check` still says `loaded`.
-- [ ] A countdown or clock is a LIVE text; nothing else in the spec changes every second.
+- [ ] Performance: no timer calls `ui.panel` / `render()` every second; a countdown or clock is a LIVE text set with
+      `ui.set` only when it changed; the tick returns at once when `ui.shown` is false (only logic that must run,
+      like an alarm firing, runs while closed); `render()` runs on real changes and on the `open` event.
+- [ ] Values are picked with the library's controls (`time`, `date`, `select`, `stepper`), not grids of buttons.
+- [ ] `check` has no `warn ui.panel ...: called every second` line.
 - [ ] State in `store` as JSON; saved times are `app.clock()` times; `load()` handles a missing or older store.
 - [ ] Alarms and timers are set again on load; what ended while the app was closed is told once.
 - [ ] Voice: every command complete, 4+ samples, no `voice.command` warning in `check`.

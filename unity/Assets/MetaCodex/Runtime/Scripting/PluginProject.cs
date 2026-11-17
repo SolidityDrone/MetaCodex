@@ -251,7 +251,9 @@ end)
                   .Append("  and a dim \"+3 more\" line. Any rebuild empties `input` fields.\n")
                   .Append("- What must survive a restart is saved with `store.set(\"state\", json.encode(S))` after every change and read back\n")
                   .Append("  when `main.lua` loads (missing fields keep their defaults); times are `app.clock()` seconds; timers are set\n")
-                  .Append("  again at load. Anything that changes every second is a LIVE text (a `text` with an `id`).\n")
+                  .Append("  again at load. Anything that changes every second is a LIVE text (a `text` with an `id`) set with\n")
+                  .Append("  `ui.set(\"main\", id, text)`; a per-second tick never calls `ui.panel` and returns at once when `ui.shown(\"main\")`\n")
+                  .Append("  is false (skill `quest-plugins`, APP: performance rules).\n")
                   .Append("- Every voice command is complete (description, typed params, phrases, 4+ English samples).\n\n");
 
             sb.Append("## The loop (every change)\n\n")
@@ -290,7 +292,8 @@ end)
               .Append("  over 200,000 instructions stops the plugin.\n")
               .Append("- The network: only `net.get` / `net.post` (https, a callback, never waiting) to the hosts `plugin.json` \"network\" lists\n")
               .Append("  (skill `quest-plugins`, Network). Never put a key in a file: the user types it, the plugin keeps it in `store`.\n")
-              .Append("- The app keeps 72 frames a second: nothing heavy in a callback; a countdown changes only a LIVE text (a `text` with an `id`).\n");
+              .Append("- The app keeps 72 frames a second: nothing heavy in a callback; a countdown changes only a LIVE text (a `text` with an `id`)\n")
+              .Append("  with `ui.set`, never a whole `ui.panel` every second (skill `quest-plugins`, APP: performance rules).\n");
             if (kind == "gesture")
                 sb.Append("- React only to gestures this plugin defines or to the built-ins (`pinch grab point open palm-up clap select`): the examples'\n")
                   .Append("  poses (thumbs-up, victory...) are not on every headset. Start your gesture names with `").Append(id).Append("-`.\n");

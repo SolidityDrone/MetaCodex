@@ -322,7 +322,9 @@ compares the new spec with the built one:
   rebuilt (at most once a second).
 
 So keep the structure stable: the same components in the same order, the same options; change values. A
-countdown is a `text` with an `id` (LIVE: only that label changes every second).
+countdown or clock is a `text` with an `id` (LIVE), but never `render()` every second for it: the tick sets that
+label with `ui.set("main", "clock", text)` when it changed and returns at once when `ui.shown("main")` is false
+(quest-plugins: Performance rules); `render()` runs on real changes and on the window's `open` event.
 
 A control the user just changed keeps the user's value for a second, so a slow `render()` never makes it jump back.
 
