@@ -12,6 +12,23 @@ You control them with your hands and your voice.
 Local AI models run the interface. An optional local coding model can run agent threads offline.
 Coding agents work in the Linux, and they can build native headset apps on the headset itself.
 
+> [!IMPORTANT]
+> **A hackathon submission and a proof of concept.**
+> This repository is my entry to a 2026 developer competition for VR apps (a hackathon).
+> I built it in the contest window, from 2026-11-07 to 2026-11-18.
+> MetaCodex is a proof of concept. It is **not ready for production use**:
+>
+> - It runs well on my test headset, but it has had no wide test on other headsets, accounts or networks.
+> - Some parts are not verified on the headset, and some known limits are still open. See [Status and limits](#status-and-limits).
+> - There is no sandbox between the coding agents and the files of the Linux, and the app is not ready for a store.
+> - The next features and the clean-up work are in [Next steps](#next-steps).
+
+### Demo video
+
+<a href="https://youtu.be/zBXX7B3QTag"><img alt="The MetaCodex demo video (about 3 minutes): play it on YouTube." src="https://img.youtube.com/vi/zBXX7B3QTag/maxresdefault.jpg" width="720"></a>
+
+[Watch the demo on YouTube](https://youtu.be/zBXX7B3QTag) (about 3 minutes).
+
 ## What is MetaCodex
 
 MetaCodex is a workstation for software work that you wear.
@@ -26,7 +43,7 @@ You talk to the app, and it answers with a voice.
 Inside the app there is a full Debian Linux system.
 Coding agents work in that Linux system for you.
 They read and change code, run builds and tests, and use git.
-They can also make native apps for the headset, and the headset installs and runs those apps.
+They can also make native apps for the headset, and the headset installs and runs those apps (in the sideload build: see [Native apps built on the headset](#native-apps-built-on-the-headset)).
 
 ## Productivity in the metacoding era
 
@@ -48,7 +65,7 @@ MetaCodex gives you the space and the controls that metacoding needs:
 | Know what an agent did | Ask "give me a recap of the login thread". The app speaks the answer by default. The side bar of a thread window shows a live map of the changed files and their diffs. |
 | Run agents in parallel safely | Threads that work in the same folder wait for each other. You can send a waiting turn IN A WORKTREE, so its agent works on its own git branch. A dry run shows merge conflicts before you merge. |
 | Control without a keyboard | Hands and voice do the common actions: open, close, switch, find a thread. Only your hands approve. The headset's system keyboard is there for real typing. |
-| Close the loop on one device | An agent builds a native app on the headset. You launch it, test it and go back to the thread. One tap sends a picture and the logs back to the agent. |
+| Close the loop on one device | An agent builds a native app on the headset. You launch it, test it and go back to the thread. One tap sends a picture and the logs back to the agent. The install step needs the sideload build. |
 | Work offline and in private | Local models run the voice interface on the headset. An optional local coding model lets agents work with no network. Keys stay sealed in a vault, and the agents' sign-ins stay inside their own tools. |
 
 MetaCodex does not replace your coding agents.
@@ -75,6 +92,7 @@ It is the place where you work with them: a desk that is always with you and as 
 - [Build and run](#build-and-run)
 - [Testing](#testing)
 - [Status and limits](#status-and-limits)
+- [Next steps](#next-steps)
 - [License](#license)
 
 ## Highlights
@@ -300,6 +318,12 @@ None of them needs an APK rebuild.
 An agent in a native project builds a real headset app, on the headset, and you test it at once.
 Unless you ask for VR or controllers, a new native app uses hands only and mixed reality. A mandatory skill sets this rule for the agent.
 
+> [!NOTE]
+> **The release-channel build cannot install the apps it builds.**
+> The upload check of the headset store rejects the permission to install packages, so the build on the release channel (the one for the contest judges) leaves it out.
+> In that build an agent still checks, builds and verifies a native app on the headset. The install step then reports that this build cannot install apps.
+> The sideload build (made without `MCX_STORE=1` and installed over USB with `tools/release/install-metacodex.sh`) has the full loop: build, install, launch, back. The demo video shows the full loop.
+
 > [!WARNING]
 > **Before you try native apps, check these four things.**
 >
@@ -390,7 +414,7 @@ A built app declares its own permissions. `mcx-app verify` lists them. The heads
 - **Not claimed.**
   - No sandbox separates agents from the files of the Linux. They share one Android user.
   - A debuggable APK lets anyone with `adb` use the Keystore key of the app. Make a release build before you store real keys.
-  - This build declares the permission to install packages. A store build must not.
+  - The sideload build declares the permission to install packages. The release-channel build leaves it out, so it cannot install the apps it builds.
 
 ## Repository layout
 
@@ -486,7 +510,10 @@ The version is in `ProjectSettings/ProjectVersion.txt` inside the app project fo
 
 ## Status and limits
 
-This README describes MetaCodex 0.8.0 (versionCode 27).
+This README describes MetaCodex 0.8.0 (versionCode 27), the build of the contest submission.
+It is a release build: it is not debuggable, and it is signed with the project's release key.
+It is the release-channel variant, without the permission to install packages (see [Native apps built on the headset](#native-apps-built-on-the-headset)).
+It targets two headset models only, the ones it was tested on.
 
 **Not built**
 
@@ -497,7 +524,7 @@ This README describes MetaCodex 0.8.0 (versionCode 27).
 
 **Not verified on the headset**
 
-- The staged start, the guide card, the Whisp's body and the app plugins have no headset run yet. Their checks are in the device checklist.
+- The first start (the staged start, the setup and the guide card) and the two example app plugins ran on the test headset on 2026-11-15 and 2026-11-16. The release build of 0.8.0 had no headset run before the submission: its code is the same as the last tested development build.
 - The effect of the foreground service and of the build wake lock while a built app is in front.
 - REPORT from a built app back to its thread. BACK works on the headset.
 - The depth view of the Night Vision example. Built apps with passthrough run on the headset. The camera, depth, hand and controller features of the native layer build there, but their runtime is not verified.
@@ -516,8 +543,44 @@ This README describes MetaCodex 0.8.0 (versionCode 27).
 - After a crash of a built app, MetaCodex cannot come forward by itself. Open it from the headset's app list.
 - Hand tracking is the only pointing input in the shell. There is no controller mapping.
 - The text-to-speech model has use restrictions that apply to users.
-- The app is not store-ready. It declares the permission to install packages.
+- The app is not store-ready. The release-channel build leaves out the permission to install packages, so it builds native apps but cannot install them.
 - A network is needed only for what you add: agent CLIs, the native toolchain, the local coding model and packages.
+
+## Next steps
+
+MetaCodex is a proof of concept. This is the work that comes next, most important first.
+
+**Stability and performance**
+
+- [ ] Find and fix the memory growth after repeated switches between MetaCodex and the apps built in it.
+- [ ] Move the Linux and its processes off the cores of the frame loop, where possible.
+- [ ] Make the shaders and the depth passes cheaper, and measure each change on the headset.
+- [ ] Replace the polling of MQH with a WebSocket.
+- [ ] Measure the decision model and the local coding model on the headset, and fix the frame drops of local coding threads.
+
+**Production readiness**
+
+- [ ] A sandbox between the coding agents and the files of the Linux.
+- [ ] A store build: the store checks, an age rating, and a way to run the native apps an agent builds without the permission to install packages.
+- [ ] Close the open licence gaps in [docs/LICENSES.md](docs/LICENSES.md): the corresponding-source offer for the copyleft binaries, and the use restrictions of the text-to-speech model shown in the app.
+- [ ] Wide tests: other headsets of the two supported models, other accounts, slow and no network, a clean first start of every release build.
+- [ ] Fix the failing Editor self-test checks, and tick the open lines of the device checklist.
+
+**Features**
+
+- [ ] A community marketplace for plugins, skills and gestures: signed, versioned, with the permissions shown before install, and a way for agents to publish what they make.
+- [ ] Fine-tuned small models: low-rank adapters (QLoRA) for the command router and the local coding model, trained on the command registry and on tool-call formats. A tuned model needs a shorter prompt, so it uses less context and answers faster.
+- [ ] A stronger local coding model, when larger quantized models fit the frame budget.
+- [ ] Plugin panels: render the `spatial.json` panels, so a plugin can show its own window with no APK build.
+- [ ] MQH tools in the voice command registry, and "point and say" to send a prompt about what you look at.
+- [ ] Windows of a PC or a remote machine in the room, so the headset is the desk for projects that live elsewhere.
+- [ ] Shared rooms and shared threads, so two people can review the work of one agent together.
+- [ ] On-device perception: the passthrough camera and local models, so agents can see the room they build for.
+
+**Clean-up**
+
+- [ ] A pass over the code comments and the design documents, so that each one matches the code of the release.
+- [ ] Move the internal device checklist out of the main documentation.
 
 ## License
 

@@ -143,6 +143,11 @@ namespace MetaCodex.EditorTools
             // XR session to the scene in the 2026-11-15 log); the app's own splash (ShellSplash) is the first thing seen
             PlayerSettings.SplashScreen.show = false;
             PlayerSettings.SplashScreen.showUnityLogo = false;
+            // the store's upload check (2026-11-18) rejects an APK whose install location is not "auto" (Unity's default
+            // preferExternal fails) and whose activity is not landscape (AutoRotation gave fullUser); the headset shows the
+            // app in its own XR view either way
+            PlayerSettings.Android.preferredInstallLocation = AndroidPreferredInstallLocation.Auto;
+            PlayerSettings.defaultInterfaceOrientation = UIOrientation.LandscapeLeft;
             PlayerSettings.Android.minSdkVersion = AndroidSdkVersions.AndroidApiLevel32;
             PlayerSettings.Android.targetSdkVersion = AndroidSdkVersions.AndroidApiLevel34;
             PlayerSettings.Android.applicationEntry = AndroidApplicationEntry.Activity;

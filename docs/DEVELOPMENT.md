@@ -134,6 +134,8 @@ Inside the headset, in a terminal:
 - `MCX_RELEASE=1 MCX_KEYSTORE='C:\Users\<you>\.metacodex-release\metacodex-release.keystore' tools/unity-batch.sh BatchBuild` makes a release APK: not debuggable, with optimised C++ (IL2CPP Release; a development APK keeps the Debug configuration), signed with the release key (alias `metacodex`; the password is in `<keystore>.pass` beside it). The build stops if the key is missing: a release is never signed with the debug key. Every later release must use the same key, so keep a copy of both files. Use a release APK before you store real keys on a shared device, for the release channel and for the release folder: `tools/release/make-release.sh` packs whatever `unity/Builds/MetaCodex.apk` is.
 - A development APK is signed with the engine's debug key. A release APK has another signature, so it installs only after the development APK is uninstalled (which deletes the app's data).
 - Target devices: Quest 3 and Quest 3S only (`com.oculus.supportedDevices` = `quest3|quest3s`).
+- Release channel / store build: add `MCX_STORE=1`. The upload check of the store rejects `REQUEST_INSTALL_PACKAGES` and `UPDATE_PACKAGES_WITHOUT_USER_ACTION`, so `Editor/StoreManifest.cs` removes them from the generated manifest (the sideload build keeps them). That build cannot install the apps it builds. Every build sets the install location to `auto` and the activity to landscape, which the upload check also requires.
+- Upload: `metavr store dist upload --app-id <id> --channel <channel> --apk <apk> --publish` (the build goes live in that channel only; the app stays unpublished).
 - The manifest declares `REQUEST_INSTALL_PACKAGES`. A store build must not declare it.
 
 ## Test suites
