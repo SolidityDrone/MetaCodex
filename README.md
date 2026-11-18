@@ -416,6 +416,38 @@ A built app declares its own permissions. `mcx-app verify` lists them. The heads
   - A debuggable APK lets anyone with `adb` use the Keystore key of the app. Make a release build before you store real keys.
   - The sideload build declares the permission to install packages. The release-channel build leaves it out, so it cannot install the apps it builds.
 
+### Store security scan: two findings that are false positives
+
+The store runs an automatic security scan on every build in a release channel.
+For the 0.8.0 build it reported two findings:
+
+- "Vulnerable libssh2 library in use": libssh2 up to 1.10.0.
+- "Vulnerable OpenSSL library in use": OpenSSL before 1.0.2f / 1.0.1r, from 1.1.1b to 1.1.1h, or from 3.0.0 to 3.0.6.
+
+Both libraries are in the Debian system that the APK carries (`assets/linux/rootfs.tar`).
+`git`, `curl` and Python need them for HTTPS and SSH.
+The versions in the build are not in the reported ranges:
+
+| Library | File in the Debian system | Version in the build | Where the version comes from |
+|---|---|---|---|
+| libssh2 | `usr/lib/aarch64-linux-gnu/libssh2.so.1.0.1` | **1.11.1** (Debian package `libssh2-1t64` 1.11.1-1+deb13u2) | The package database (`var/lib/dpkg/status`) and the library's own string `SSH-2.0-libssh2_1.11.1` |
+| OpenSSL | `usr/lib/aarch64-linux-gnu/libssl.so.3`, `libcrypto.so.3` | **3.5.7** (Debian packages `libssl3t64` and `openssl` 3.5.7-1~deb13u3) | The package database and the library's own string `OpenSSL 3.5.7 9 Jun 2026` |
+
+The probable cause is the file names.
+`1.0.1` in `libssh2.so.1.0.1` and `3` in `libssl.so.3` are the numbers of the library interface (the soname), not the release versions.
+A scanner that reads the version from the file name sees libssh2 1.0.1 and OpenSSL 3.
+Debian also fixes security issues in its stable packages without a change of the upstream version, so a version number alone does not show the fixes.
+
+To check this yourself, with the APK in the current folder:
+
+```bash
+unzip -p MetaCodex.apk assets/linux/rootfs.tar | tar -xO ./var/lib/dpkg/status \
+  | awk '/^Package: (libssh2-1t64|libssl3t64|openssl)$/{p=$2} p&&/^Version:/{print p, $2; p=""}'
+unzip -p MetaCodex.apk assets/linux/rootfs.tar | tar -xO ./usr/lib/aarch64-linux-gnu/libcrypto.so.3 | strings | grep -m1 '^OpenSSL [0-9]'
+```
+
+Two ways to remove the findings from later builds are open (see [Next steps](#next-steps)): an appeal to the store as a false positive, or a Debian system without these packages in the APK, with the packages installed from the Debian mirrors at the first start.
+
 ## Repository layout
 
 | Path | What | Language |
@@ -562,6 +594,7 @@ MetaCodex is a proof of concept. This is the work that comes next, most importan
 
 - [ ] A sandbox between the coding agents and the files of the Linux.
 - [ ] A store build: the store checks, an age rating, and a way to run the native apps an agent builds without the permission to install packages.
+- [ ] Clear the two false positives of the store security scan (libssh2 and OpenSSL, see [Store security scan](#store-security-scan-two-findings-that-are-false-positives)): an appeal, or the Debian system without these packages in the APK.
 - [ ] Close the open licence gaps in [docs/LICENSES.md](docs/LICENSES.md): the corresponding-source offer for the copyleft binaries, and the use restrictions of the text-to-speech model shown in the app.
 - [ ] Wide tests: other headsets of the two supported models, other accounts, slow and no network, a clean first start of every release build.
 - [ ] Fix the failing Editor self-test checks, and tick the open lines of the device checklist.
