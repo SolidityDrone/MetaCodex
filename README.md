@@ -17,6 +17,16 @@
 >
 > This is a temporary step. We are looking for a correct and safe way to install the apps that MetaCodex builds from the release-channel build too.
 
+> [!TIP]
+> **For the judges: you can code with agents without any account or key.**
+> OpenCode has free models that need no sign-in and no API key (tested on the headset on 2026-11-18).
+>
+> 1. **CONTROL > AGENTS > GET** OpenCode (about a minute).
+> 2. **NEW THREAD**: pick **OpenCode**, then a free model, for example **`opencode/big-pickle`** or one whose name ends in **`-free`**.
+> 3. Give it a task, for example *"Create index.html: a landing page with a heading that says Hello World."*
+>
+> The local coding model on the headset is only an experiment (see [How to code with the local model](#how-to-code-with-the-local-model)). Use a free or your own cloud model for real work.
+
 # MetaCodex
 
 **A coding-agent workstation inside a standalone mixed-reality headset.**
@@ -251,7 +261,9 @@ The local coding model works through **OpenCode** only. The other two agent CLIs
 **It is experimental.** It is a 0.5B model: it answers short questions well, but it is not reliable for agent work with tools.
 In a headset test on 2026-11-18 it answered a direct question in 1.4 s, but on a one-file task in an OpenCode thread it called the shell tool with empty commands, wrote no file and stopped after a few steps.
 Each step also waits 45-55 s while the model reads OpenCode's long prompt (2,000-4,000 tokens).
-It shows that agent threads can run with no network; for real coding, use an agent CLI with a cloud model. If OpenCode is switched off in CONTROL > AGENTS, a new thread reports `provider_disabled`: switch it on again.
+It is a test: it shows that agent threads can run with no network. For real coding, use an agent CLI with a cloud model: OpenCode's free models need no account (see the tip at the top).
+
+**The plan: delegated inference.** The local AI runtime has a peer-to-peer network. The next step is to send the coding model's requests over it to a stronger machine that you own and trust: your PC, or an inference station on your desk or in your home. The headset keeps the threads, the tools and the files; only the model's work moves to the stronger machine, so a larger model can run with no cloud account. If OpenCode is switched off in CONTROL > AGENTS, a new thread reports `provider_disabled`: switch it on again.
 - The runtime exposes HTTP APIs on loopback, in chat-completions, Responses and Messages styles. In the Linux, `mcx-ai` uses the chat-completions API.
 - In NEW THREAD, the local model is the first row of the model list. It is marked LOCAL and never becomes the default.
 
@@ -634,6 +646,7 @@ MetaCodex is a proof of concept. This is the work that comes next, most importan
 
 - [ ] A community marketplace for plugins, skills and gestures: signed, versioned, with the permissions shown before install, and a way for agents to publish what they make.
 - [ ] Fine-tuned small models: low-rank adapters (QLoRA) for the command router and the local coding model, trained on the command registry and on tool-call formats. A tuned model needs a shorter prompt, so it uses less context and answers faster.
+- [ ] Delegated inference: the local AI runtime sends the coding model's requests over its peer-to-peer network to a stronger machine the user owns (a PC, an inference station), so a larger model codes for the headset with no cloud account.
 - [ ] A stronger local coding model, when larger quantized models fit the frame budget.
 - [ ] Plugin panels: render the `spatial.json` panels, so a plugin can show its own window with no APK build.
 - [ ] MQH tools in the voice command registry, and "point and say" to send a prompt about what you look at.
