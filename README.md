@@ -128,7 +128,7 @@ The test headset has 6 cores and 7.9 GB RAM.
 | Default gesture | Pinch | Selects, drags and scrolls. No gesture opens or closes a window by default. |
 | Dock and wrist menu tiles | 11 | The same tiles in both places. Plugins can add up to 6 more. |
 | Text input | System keyboard | Each text field opens the headset's system keyboard. |
-| Local coding model | Optional | Runs agent threads on the headset, offline. It needs the OpenCode agent CLI: see [How to code with the local model](#how-to-code-with-the-local-model). |
+| Local coding model | Optional, experimental | Runs agent threads on the headset, offline. It needs the OpenCode agent CLI and suits only very small tasks: see [How to code with the local model](#how-to-code-with-the-local-model). |
 
 ## How it works
 
@@ -248,7 +248,10 @@ The local coding model works through **OpenCode** only. The other two agent CLIs
 3. **NEW THREAD**: pick **OpenCode**, then the model **"Local coder (this headset, slow)"** (the first row, ⌂ LOCAL).
 4. Type a small, explicit task: one file, one command. For example: *"Create index.html: a landing page with a heading that says Hello World."* Type it rather than dictate it, so that no word is lost.
 
-It is a 0.5B model: a turn takes from seconds to minutes, and it is good for small tasks, not for long agent work. If OpenCode is switched off in CONTROL > AGENTS, a new thread reports `provider_disabled`: switch it on again.
+**It is experimental.** It is a 0.5B model: it answers short questions well, but it is not reliable for agent work with tools.
+In a headset test on 2026-11-18 it answered a direct question in 1.4 s, but on a one-file task in an OpenCode thread it called the shell tool with empty commands, wrote no file and stopped after a few steps.
+Each step also waits 45-55 s while the model reads OpenCode's long prompt (2,000-4,000 tokens).
+It shows that agent threads can run with no network; for real coding, use an agent CLI with a cloud model. If OpenCode is switched off in CONTROL > AGENTS, a new thread reports `provider_disabled`: switch it on again.
 - The runtime exposes HTTP APIs on loopback, in chat-completions, Responses and Messages styles. In the Linux, `mcx-ai` uses the chat-completions API.
 - In NEW THREAD, the local model is the first row of the model list. It is marked LOCAL and never becomes the default.
 
