@@ -1,5 +1,22 @@
 <p align="center"><img alt="MetaCodex: metacoding in XR. A faceted silver M with blue light over the name." src="docs/assets/brand/metacodex-logo.webp" width="720"></p>
 
+> [!WARNING]
+> **For the judges: the release-channel build cannot install the native apps it builds.**
+>
+> The store does not allow the permission to install packages in a release-channel build, so the 0.8.0 build in the contest channel leaves it out.
+> In that build everything else works, and an agent still writes, builds and verifies a native app on the headset. Only the last step stops: the app reports that this build cannot install apps, so you cannot launch the new app or come back from it.
+> The demo video shows the full loop.
+>
+> **To test the install, launch and return of native apps, sideload the full build for now:**
+>
+> 1. Turn on **developer mode** for the headset in the headset's companion app on your phone. ADB (USB debugging) must be on.
+> 2. Connect the headset over USB and accept **"Allow USB debugging"** in the headset.
+> 3. Download **`MetaCodex-0.8.0-sideload.apk`** from the [Releases](https://github.com/SolidityDrone/MetaCodex/releases) of this repository (923,228,197 bytes). Check its SHA-256: `c8af33609b4844be77d50a9e4fbda6dc1dce364f3ba2f134077d12cad6eb8837`.
+> 4. Install it: `adb install -r -g MetaCodex-0.8.0-sideload.apk`, or run [`tools/release/install-metacodex.sh`](tools/release/install-metacodex.sh). It is the same version (0.8.0) signed with the same key as the channel build, so it installs over it and keeps the app's data.
+> 5. At the first install of a built app, MetaCodex opens the "Install unknown apps" page once: allow it for MetaCodex.
+>
+> This is a temporary step. We are looking for a correct and safe way to install the apps that MetaCodex builds from the release-channel build too.
+
 # MetaCodex
 
 **A coding-agent workstation inside a standalone mixed-reality headset.**
