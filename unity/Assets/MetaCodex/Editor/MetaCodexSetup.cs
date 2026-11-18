@@ -33,8 +33,8 @@ namespace MetaCodex.EditorTools
         public const string ApkPath = "Builds/MetaCodex.apk";
         /// Where Unity's Gradle project leaves its APK before copying it to ApkPath.
         private const string GradleApkDir = "Library/Bee/Android/Prj/IL2CPP/Gradle/launcher/build/outputs/apk";
-        public const string Version = "0.7.19";
-        public const int VersionCode = 26;
+        public const string Version = "0.8.0";
+        public const int VersionCode = 27;
         public const string PanelMaterialPath = "Assets/MetaCodex/Materials/Panel.mat";
         public const string ShapeMaterialPath = "Assets/MetaCodex/Materials/SciFiUI.mat";
         public const string BeamMaterialPath = "Assets/MetaCodex/Materials/Beam.mat";
@@ -120,6 +120,23 @@ namespace MetaCodex.EditorTools
             // C++. Its first build compiles every C++ file again and needs more memory per compiler job (kept at 2 jobs).
             bool release = Environment.GetEnvironmentVariable("MCX_RELEASE") == "1";
             PlayerSettings.SetIl2CppCompilerConfiguration(android, release ? Il2CppCompilerConfiguration.Release : Il2CppCompilerConfiguration.Debug);
+            // signing: a release APK (the one for the release channel and the judges) is signed with the release key that
+            // MCX_KEYSTORE names (a Windows path outside the repo; its password is in "<keystore>.pass" beside it, never in
+            // the repo or the environment); every app update must keep that key. A development APK keeps Unity's debug key,
+            // so update installs on the test headset go on working.
+            if (release)
+            {
+                string ks = Environment.GetEnvironmentVariable("MCX_KEYSTORE");
+                if (string.IsNullOrEmpty(ks) || !File.Exists(ks) || !File.Exists(ks + ".pass"))
+                    throw new Exception("[MetaCodex] a release APK needs MCX_KEYSTORE=<keystore> with <keystore>.pass beside it: " + (ks ?? "not set"));
+                string pass = File.ReadAllText(ks + ".pass").Trim();
+                PlayerSettings.Android.useCustomKeystore = true;
+                PlayerSettings.Android.keystoreName = ks;
+                PlayerSettings.Android.keystorePass = pass;
+                PlayerSettings.Android.keyaliasName = "metacodex";
+                PlayerSettings.Android.keyaliasPass = pass;
+            }
+            else PlayerSettings.Android.useCustomKeystore = false;
             PlayerSettings.SetIl2CppCodeGeneration(android, Il2CppCodeGeneration.OptimizeSize);
             // no engine splash before the scene (Unity 6: optional on every plan): it showed the engine's logo, a brand mark
             // the contest rules forbid in the app, and the scene waits for its animation (at least 2 s of the 3.6 s from the
@@ -196,12 +213,14 @@ namespace MetaCodex.EditorTools
             Bool("lateLatchingMode", true);
             Bool("lateLatchingDebug", false);
             Bool("m_optimizeBufferDiscards", true);
-            // the first Quest has no symmetric projection: Unity's build check fails while it is a target device
+            // target devices: Quest 3 ("eureka") and Quest 3S only, the headsets MetaCodex is tested on (depth, passthrough
+            // camera, 8 GB for the Linux and the local models); the first Quest has no symmetric projection either
             var devices = so.FindProperty("targetDevices");
             for (int i = 0; devices != null && i < devices.arraySize; i++)
             {
                 var d = devices.GetArrayElementAtIndex(i);
-                if (d.FindPropertyRelative("manifestName")?.stringValue == "quest") d.FindPropertyRelative("enabled").boolValue = false;
+                string name = d.FindPropertyRelative("manifestName")?.stringValue;
+                d.FindPropertyRelative("enabled").boolValue = name == "eureka" || name == "quest3s";
             }
             var mvrr = so.FindProperty("m_multiviewRenderRegionsOptimizationMode");
             if (mvrr != null) mvrr.intValue = 1; // FinalPass (None 0, FinalPass 1, AllPasses 2)
@@ -224,6 +243,8 @@ namespace MetaCodex.EditorTools
         private static void ConfigureMetaProjectConfig()
         {
             var config = OVRProjectConfig.CachedProjectConfig;
+            // Quest 3 and Quest 3S only (the manifest's com.oculus.supportedDevices says the same: quest3|quest3s)
+            config.targetDeviceTypes = new List<OVRProjectConfig.DeviceType> { OVRProjectConfig.DeviceType.Quest3, OVRProjectConfig.DeviceType.Quest3S };
             // hands are enough for everything (contest rule); controllers stay usable while developing
             config.handTrackingSupport = OVRProjectConfig.HandTrackingSupport.ControllersAndHands;
             // the default hand tracking (30 poses a second), not HIGH: HIGH is Fast Motion Mode, made for fitness and

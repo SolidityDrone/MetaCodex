@@ -486,7 +486,7 @@ The version is in `ProjectSettings/ProjectVersion.txt` inside the app project fo
 
 ## Status and limits
 
-This README describes MetaCodex 0.7.19 (versionCode 26).
+This README describes MetaCodex 0.8.0 (versionCode 27).
 
 **Not built**
 

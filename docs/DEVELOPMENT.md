@@ -52,7 +52,7 @@ The README uses neutral terms. This table maps them to the real names.
 | OpenXR | OpenXR plugin 1.18.0, vendor OpenXR plugin 2.6.1 |
 | Headset SDK | Meta XR SDK 205.0.0 (core, interaction, MR Utility Kit) |
 | Scripting | IL2CPP, ARM64 only, Vulkan, multithreaded rendering on |
-| Android | package `com.pnncl.metacodex`, versionName 0.7.19, versionCode 26, minSdk 32, targetSdk 34 |
+| Android | package `com.pnncl.metacodex`, versionName 0.8.0, versionCode 27, minSdk 32, targetSdk 34 |
 | Native pty library | C, Android NDK r27c (`native/pty/build.sh`) |
 | MQH | Node.js 24, TypeScript, SQLite |
 | Tests | .NET 8 (the version that the engine ships) |
@@ -131,7 +131,9 @@ Inside the headset, in a terminal:
 ## Release build and debuggable build
 
 - `tools/unity-batch.sh BatchBuild` makes a development (debuggable) APK. Anyone with `adb` can `run-as` the app and use its Keystore key.
-- `MCX_RELEASE=1 tools/unity-batch.sh BatchBuild` makes a release APK: not debuggable, with optimised C++ (IL2CPP Release; a development APK keeps the Debug configuration). Use it before you store real keys on a shared device, and for the release folder: `tools/release/make-release.sh` packs whatever `unity/Builds/MetaCodex.apk` is.
+- `MCX_RELEASE=1 MCX_KEYSTORE='C:\Users\<you>\.metacodex-release\metacodex-release.keystore' tools/unity-batch.sh BatchBuild` makes a release APK: not debuggable, with optimised C++ (IL2CPP Release; a development APK keeps the Debug configuration), signed with the release key (alias `metacodex`; the password is in `<keystore>.pass` beside it). The build stops if the key is missing: a release is never signed with the debug key. Every later release must use the same key, so keep a copy of both files. Use a release APK before you store real keys on a shared device, for the release channel and for the release folder: `tools/release/make-release.sh` packs whatever `unity/Builds/MetaCodex.apk` is.
+- A development APK is signed with the engine's debug key. A release APK has another signature, so it installs only after the development APK is uninstalled (which deletes the app's data).
+- Target devices: Quest 3 and Quest 3S only (`com.oculus.supportedDevices` = `quest3|quest3s`).
 - The manifest declares `REQUEST_INSTALL_PACKAGES`. A store build must not declare it.
 
 ## Test suites

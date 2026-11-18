@@ -20,8 +20,9 @@ if [[ "${UNSAFE_GUARDS:-0}" != 1 ]]; then
   if [[ "$MIN_MB" -lt 3000 ]]; then echo "MIN_MB=$MIN_MB raised to 3000 (a UI test needs ~2.3 GB + bb's headroom)"; MIN_MB=3000; fi
 fi
 # variables the Windows Editor must see (WSL passes only those listed in WSLENV): MCX_RELEASE=1 builds a release
-# (non-debuggable) APK, MCX_UITEST_ONLY picks self-test sections, BEE_BUILD_THREADS caps the build's compile threads
-for v in MCX_RELEASE MCX_UITEST_ONLY BEE_BUILD_THREADS; do
+# (non-debuggable) APK signed with the release key MCX_KEYSTORE names (a Windows path), MCX_UITEST_ONLY picks
+# self-test sections, BEE_BUILD_THREADS caps the build's compile threads
+for v in MCX_RELEASE MCX_KEYSTORE MCX_UITEST_ONLY BEE_BUILD_THREADS; do
   if [[ -n "${!v:-}" && ":${WSLENV:-}:" != *":$v"* ]]; then export WSLENV="${WSLENV:+$WSLENV:}$v/w"; fi
 done
 VER=$(sed -n 's/^m_EditorVersion: //p' "$ROOT/ProjectSettings/ProjectVersion.txt")
