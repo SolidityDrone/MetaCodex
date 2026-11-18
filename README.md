@@ -18,14 +18,17 @@
 > This is a temporary step. We are looking for a correct and safe way to install the apps that MetaCodex builds from the release-channel build too.
 
 > [!TIP]
-> **For the judges: you can code with agents without any account or key.**
-> OpenCode has free models that need no sign-in and no API key (tested on the headset on 2026-11-18).
+> **For the judges: try the coding agents for free, with no account.**
 >
-> 1. **CONTROL > AGENTS > GET** OpenCode (about a minute).
-> 2. **NEW THREAD**: pick **OpenCode**, then a free model, for example **`opencode/big-pickle`** or one whose name ends in **`-free`**.
-> 3. Give it a task, for example *"Create index.html: a landing page with a heading that says Hello World."*
+> 1. In MetaCodex, open **CONTROL > AGENTS > GET** and install **OpenCode** (about a minute).
+> 2. Open **NEW THREAD**, choose **OpenCode**, then the free model **`opencode/big-pickle`**.
+> 3. Type: *"Create index.html: a landing page with a heading that says Hello World."*
 >
-> The local coding model on the headset is only an experiment (see [How to code with the local model](#how-to-code-with-the-local-model)). Use a free or your own cloud model for real work.
+> The file appears in the thread's side bar (CHANGES / FILES) in under a minute.
+> **No sign-in and no API key are needed for this model.** After the install the app says "add an API key or SIGN IN": you can ignore it for `opencode/big-pickle`.
+> OpenCode offers this model and the other free ones (names that end in `-free`); tested on the headset on 2026-11-18 with no key and no account.
+>
+> The small local model on the headset is an experiment and is slow (see [How to code with the local model](#how-to-code-with-the-local-model)). Use `opencode/big-pickle`, or your own Claude Code or OpenCode account, for real work.
 
 # MetaCodex
 
